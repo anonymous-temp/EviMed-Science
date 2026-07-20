@@ -102,11 +102,13 @@ async function ensureAdministrator(password) {
   await request("/api/v1/users", {
     method: "POST",
     body: {
-      username,
-      password,
-      role: "ADMIN",
-      state: "NORMAL",
-      displayName: "EviMed Memory Integration",
+      user: {
+        username,
+        password,
+        role: "ADMIN",
+        state: "NORMAL",
+        displayName: "EviMed Memory Integration",
+      },
     },
     accept: [409],
   });
