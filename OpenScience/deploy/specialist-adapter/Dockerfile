@@ -39,7 +39,7 @@ RUN set -eux; \
         build-essential git libcurl4-openssl-dev libfontconfig1-dev libssl-dev libuv1-dev libxml2-dev \
         r-base-core r-recommended r-cran-cowplot r-cran-data.table r-cran-dplyr \
         r-cran-ggplot2 r-cran-glmnet r-cran-httr r-cran-jsonlite r-cran-magrittr \
-        r-cran-remotes r-cran-reshape2; \
+        r-cran-mnormt r-cran-psych r-cran-remotes r-cran-reshape2; \
     fi; \
     if [ "${AGENT_KIND}" = "peer-review" ]; then \
       apt-get install -y --no-install-recommends poppler-utils; \
