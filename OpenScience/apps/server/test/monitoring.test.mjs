@@ -84,9 +84,11 @@ test("monitoring configuration generator writes private validated secrets", asyn
     assert.equal(generated.stdout.includes("token=secret"), false);
 
     const tokenFile = path.join(outputDir, "operator-metrics-token.txt");
+    const prometheusTokenFile = path.join(outputDir, "prometheus-operator-metrics-token.txt");
     const passwordFile = path.join(outputDir, "grafana-admin-password.txt");
     const alertmanagerFile = path.join(outputDir, "alertmanager.json");
     assert.equal((await readFile(tokenFile, "utf8")).trim(), validEnv.OPEN_SCIENCE_OPERATOR_METRICS_TOKEN);
+    assert.equal((await readFile(prometheusTokenFile, "utf8")).trim(), validEnv.OPEN_SCIENCE_OPERATOR_METRICS_TOKEN);
     assert.equal((await readFile(passwordFile, "utf8")).trim(), validEnv.OPEN_SCIENCE_GRAFANA_ADMIN_PASSWORD);
     const alertmanager = JSON.parse(await readFile(alertmanagerFile, "utf8"));
     assert.equal(alertmanager.route.receiver, "operator-webhook");
@@ -95,7 +97,7 @@ test("monitoring configuration generator writes private validated secrets", asyn
 
     if (process.platform !== "win32") {
       assert.equal((await lstat(outputDir)).mode & 0o077, 0);
-      for (const file of [tokenFile, passwordFile, alertmanagerFile]) {
+      for (const file of [tokenFile, prometheusTokenFile, passwordFile, alertmanagerFile]) {
         assert.equal((await lstat(file)).mode & 0o077, 0);
       }
     }
@@ -105,7 +107,12 @@ test("monitoring configuration generator writes private validated secrets", asyn
       ok: true,
       mode: "check",
       directory: outputDir,
-      files: ["operator-metrics-token.txt", "grafana-admin-password.txt", "alertmanager.json"],
+      files: [
+        "operator-metrics-token.txt",
+        "prometheus-operator-metrics-token.txt",
+        "grafana-admin-password.txt",
+        "alertmanager.json",
+      ],
     });
   } finally {
     await rm(tmp, { recursive: true, force: true });

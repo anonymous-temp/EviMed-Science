@@ -15,6 +15,7 @@ const jsonOutput = process.argv.includes("--json");
 
 const files = {
   metricsToken: path.join(outputDir, "operator-metrics-token.txt"),
+  prometheusMetricsToken: path.join(outputDir, "prometheus-operator-metrics-token.txt"),
   grafanaPassword: path.join(outputDir, "grafana-admin-password.txt"),
   alertmanager: path.join(outputDir, "alertmanager.json"),
 };
@@ -160,6 +161,7 @@ async function generate() {
   await assertNoSymlinkPath(outputDir);
   await fsp.chmod(outputDir, 0o700);
   await writePrivateFile(files.metricsToken, `${metricsToken}\n`);
+  await writePrivateFile(files.prometheusMetricsToken, `${metricsToken}\n`);
   await writePrivateFile(files.grafanaPassword, `${grafanaPassword}\n`);
   await writePrivateFile(files.alertmanager, `${JSON.stringify(alertmanagerConfig(webhookUrl), null, 2)}\n`);
 }
@@ -167,8 +169,13 @@ async function generate() {
 async function check() {
   await assertNoSymlinkPath(outputDir);
   const metricsToken = (await readRegularFile(files.metricsToken)).replace(/\r?\n$/, "");
+  const prometheusMetricsToken = (await readRegularFile(files.prometheusMetricsToken)).replace(/\r?\n$/, "");
   const grafanaPassword = (await readRegularFile(files.grafanaPassword)).replace(/\r?\n$/, "");
   validateSecret(metricsToken, "Metrics token", 32);
+  validateSecret(prometheusMetricsToken, "Prometheus metrics token", 32);
+  if (prometheusMetricsToken !== metricsToken) {
+    fail("monitoring_metrics_token_mismatch", "Web and Prometheus metrics token files must contain the same value.");
+  }
   validateSecret(grafanaPassword, "Grafana password", 24);
   let config;
   try {
