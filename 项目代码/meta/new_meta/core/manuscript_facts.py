@@ -3911,10 +3911,11 @@ def _ensure_pipeline_warning_note(manuscript: str, facts: dict[str, Any]) -> tup
         return manuscript, []
     if facts.get("report_type", "meta") != "evidence_gap":
         return manuscript, []
+    normalized_manuscript = manuscript.casefold()
     if (
-        "Pipeline warnings:" in manuscript
-        or "## Pipeline Warnings" in manuscript
-        or "Retrieval and processing notes" in manuscript
+        "pipeline warnings:" in normalized_manuscript
+        or "## pipeline warnings" in normalized_manuscript
+        or "retrieval and processing notes" in normalized_manuscript
     ):
         return manuscript, []
 

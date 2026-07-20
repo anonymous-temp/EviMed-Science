@@ -21,6 +21,7 @@ from new_meta.core.grade_inputs import (
 from new_meta.core.manuscript_facts import (
     _compact_background_evidence_context,
     _domain_controversy_candidates,
+    _ensure_pipeline_warning_note,
     _merge_evidence_understanding_study_cards,
     build_manuscript_facts,
     validate_and_repair_manuscript,
@@ -2874,6 +2875,27 @@ def test_writing_agent_routes_evidence_gap_to_deterministic_report_without_llm(t
     assert validation["passed"] is False
     assert validation["facts_summary"]["report_type"] == "evidence_gap"
     assert saved == manuscript
+
+
+def test_evidence_gap_warning_note_is_idempotent_across_validation_passes() -> None:
+    manuscript = """# Evidence-gap report
+
+## Retrieval and Processing Notes
+1 run-level warning was recorded.
+
+## Recommended Next Actions
+Recover the primary sources.
+"""
+    repaired, issues = _ensure_pipeline_warning_note(
+        manuscript,
+        {
+            "report_type": "evidence_gap",
+            "pipeline_warnings": [{"stage": "retrieval", "code": "source_unavailable"}],
+        },
+    )
+    assert repaired == manuscript
+    assert issues == []
+    assert repaired.count("## Retrieval and Processing Notes") == 1
 
 
 def test_writing_agent_falls_back_to_deterministic_meta_report_when_llm_fails(tmp_path: Path) -> None:
