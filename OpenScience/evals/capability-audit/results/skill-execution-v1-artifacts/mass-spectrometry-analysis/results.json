@@ -1,0 +1,11 @@
+{
+  "spectra": [
+    {
+      "basePeakMz": 200.2,
+      "peakCount": 3,
+      "precursorMz": 445.12,
+      "spectrum": 1,
+      "totalIonCurrent": 140.0
+    }
+  ]
+}

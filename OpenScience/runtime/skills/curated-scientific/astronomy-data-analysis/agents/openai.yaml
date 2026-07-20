@@ -1,0 +1,4 @@
+interface:
+  display_name: "Astronomy Data Analysis"
+  short_description: "Analyze astronomical observations reproducibly"
+  default_prompt: "Use $astronomy-data-analysis to process and interpret these astronomy data."

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "tool": "evimed_meta_analysis",
+  "project": "default",
+  "jobId": "meta-20260718155105-ef907392db63",
+  "jobStatus": "succeeded",
+  "summary": "MetaAgent job meta-20260718155105-ef907392db63 completed with release status blocked.",
+  "releaseStatus": "blocked",
+  "releaseDecision": null,
+  "error": null,
+  "artifacts": [
+    {
+      "kind": "manuscript",
+      "path": "meta-analysis-runs/meta-20260718155105-ef907392db63/output/20260718_155106_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.md"
+    },
+    {
+      "kind": "manuscript_pdf",
+      "path": "meta-analysis-runs/meta-20260718155105-ef907392db63/output/20260718_155106_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.pdf"
+    },
+    {
+      "kind": "manuscript_docx",
+      "path": "meta-analysis-runs/meta-20260718155105-ef907392db63/output/20260718_155106_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.docx"
+    },
+    {
+      "kind": "release_decision",
+      "path": "meta-analysis-runs/meta-20260718155105-ef907392db63/output/20260718_155106_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/release_decision.json"
+    },
+    {
+      "kind": "review_package",
+      "path": "meta-analysis-runs/meta-20260718155105-ef907392db63/output/20260718_155106_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip"
+    }
+  ],
+  "elapsedSeconds": 1338.224,
+  "completedAt": "2026-07-18T08:13:23.560124Z"
+}

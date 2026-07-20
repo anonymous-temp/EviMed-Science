@@ -1,0 +1,776 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-008",
+  "category": "systematic-review-meta-analysis",
+  "title": "Global prevalence and burden of depressive and anxiety disorders in 204 countries and territories in 2020 due to the COVID-19 pandemic.",
+  "pmcid": "PMC8500697",
+  "doi": "10.1016/s0140-6736(21)02143-7",
+  "selectedRunLabel": "fidelity-gate-v1",
+  "referenceSha256": "93de9dc0d898bcda385890cb8721d31a15521ff79e9bf955ff73103942fb702b",
+  "generatedSha256": "b240f3d6ce11c9dc4006da3d5e7101c6a6796a9e53d4e20da8258e8b7a7263b3",
+  "promptSha256": "3ad3afc1b0f1c175b20d76e2ca7a661fdc06f5945c755553a7224691e9920519",
+  "cacheFingerprint": "946220dd57606e2a21f84b6db812b4734ce012836609d59197e4b38d1e80da67",
+  "referenceCharacters": 72317,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 19836,
+  "paperType": "systematic-review-meta-analysis",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Quantify the impact of the COVID-19 pandemic on the prevalence and burden of major depressive disorder and anxiety disorders globally in 2020.",
+      "generatedFact": "Estimated the impact of the pandemic on the prevalence and burden of major depressive disorder and anxiety disorders across 204 countries and territories, stratified by age and sex.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "The emergence of the COVID-19 pandemic has created an environment where many determinants of poor mental health are exacerbated. The need for up-to-date information on the mental health impacts of COVID-19 in a way that informs health system responses is imperative. In this study, we aimed to quantify the impact of the COVID-19 pandemic on the prevalence and burden of major depressive disorder and anxiety disorders globally in 2020.MethodsWe conducted a systematic review of data reporting the prevalence of major depressive disorder and anxiety disorders during the COVID-19 pandemic and published between Jan 1, 2020, and Jan 29, 2021."
+        ],
+        "quote": "The emergence of the COVID-19 pandemic has created an environment where many determinants of poor mental health are exacerbated. The need for up-to-date information on the mental health impacts of COVID-19 in a way that informs health system responses is imperative. In this study, we aimed to quantify the impact of the COVID-19 pandemic on the prevalence and burden of major depressive disorder and anxiety disorders globally in 2020.MethodsWe conducted a systematic review of data reporting the prevalence of major depressive disorder and anxiety disorders during the COVID-19 pandemic and published between Jan 1, 2020, and Jan 29, 2021."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "This study, conducted as part of the Global Burden of Disease (GBD) 2020, estimated the impact of the pandemic on the prevalence and burden of major depressive disorder and anxiety disorders across 204 countries and territories, stratified by age and sex. **Methods.** A systematic review identified population surveys reporting prevalence of depressive or anxiety disorders during the pandemic (January 2020 to January 2021). Eligible studies required a pre-pandemic baseline using the same instrument, location, and age group. From 5683 unique records, 48 studies met inclusion criteria (46 for major depressive disorder, 27 for anxiety disorders)."
+        ],
+        "quote": "This study, conducted as part of the Global Burden of Disease (GBD) 2020, estimated the impact of the pandemic on the prevalence and burden of major depressive disorder and anxiety disorders across 204 countries and territories, stratified by age and sex. **Methods.** A systematic review identified population surveys reporting prevalence of depressive or anxiety disorders during the pandemic (January 2020 to January 2021). Eligible studies required a pre-pandemic baseline using the same instrument, location, and age group. From 5683 unique records, 48 studies met inclusion criteria (46 for major depressive disorder, 27 for anxiety disorders)."
+      },
+      "explanation": "Both state the same objective; GENERATED adds the geographical scope and stratification, consistent with REFERENCE detail.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Systematic review and meta-regression using COVID-19 impact indicators to estimate prevalence change and burden.",
+      "generatedFact": "Systematic review identified surveys; Bayesian meta-regression (MR-BRT) modelled change, and pre-pandemic estimates from DisMod-MR 2.1; burden translated to YLDs and DALYs.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "The emergence of the COVID-19 pandemic has created an environment where many determinants of poor mental health are exacerbated. The need for up-to-date information on the mental health impacts of COVID-19 in a way that informs health system responses is imperative. In this study, we aimed to quantify the impact of the COVID-19 pandemic on the prevalence and burden of major depressive disorder and anxiety disorders globally in 2020.MethodsWe conducted a systematic review of data reporting the prevalence of major depressive disorder and anxiety disorders during the COVID-19 pandemic and published between Jan 1, 2020, and Jan 29, 2021."
+        ],
+        "quote": "The emergence of the COVID-19 pandemic has created an environment where many determinants of poor mental health are exacerbated. The need for up-to-date information on the mental health impacts of COVID-19 in a way that informs health system responses is imperative. In this study, we aimed to quantify the impact of the COVID-19 pandemic on the prevalence and burden of major depressive disorder and anxiety disorders globally in 2020.MethodsWe conducted a systematic review of data reporting the prevalence of major depressive disorder and anxiety disorders during the COVID-19 pandemic and published between Jan 1, 2020, and Jan 29, 2021."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+        ],
+        "quote": "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+      },
+      "explanation": "Design elements match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "General population representative surveys with pre-pandemic baseline.",
+      "generatedFact": "Population surveys reporting prevalence of depressive or anxiety disorders during the pandemic; required a pre-pandemic baseline using same instrument, location, and age group.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "We searched PubMed, Google Scholar, preprint servers, grey literature sources, and consulted experts. Eligible studies reported prevalence of depressive or anxiety disorders that were representative of the general population during the COVID-19 pandemic and had a pre-pandemic baseline. We used the assembled data in a meta-regression to estimate change in the prevalence of major depressive disorder and anxiety disorders between pre-pandemic and mid-pandemic (using periods as defined by each study) via COVID-19 impact indicators (human mobility, daily SARS-CoV-2 infection rate, and daily excess mortality rate)."
+        ],
+        "quote": "We searched PubMed, Google Scholar, preprint servers, grey literature sources, and consulted experts. Eligible studies reported prevalence of depressive or anxiety disorders that were representative of the general population during the COVID-19 pandemic and had a pre-pandemic baseline. We used the assembled data in a meta-regression to estimate change in the prevalence of major depressive disorder and anxiety disorders between pre-pandemic and mid-pandemic (using periods as defined by each study) via COVID-19 impact indicators (human mobility, daily SARS-CoV-2 infection rate, and daily excess mortality rate)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "This study, conducted as part of the Global Burden of Disease (GBD) 2020, estimated the impact of the pandemic on the prevalence and burden of major depressive disorder and anxiety disorders across 204 countries and territories, stratified by age and sex. **Methods.** A systematic review identified population surveys reporting prevalence of depressive or anxiety disorders during the pandemic (January 2020 to January 2021). Eligible studies required a pre-pandemic baseline using the same instrument, location, and age group. From 5683 unique records, 48 studies met inclusion criteria (46 for major depressive disorder, 27 for anxiety disorders)."
+        ],
+        "quote": "This study, conducted as part of the Global Burden of Disease (GBD) 2020, estimated the impact of the pandemic on the prevalence and burden of major depressive disorder and anxiety disorders across 204 countries and territories, stratified by age and sex. **Methods.** A systematic review identified population surveys reporting prevalence of depressive or anxiety disorders during the pandemic (January 2020 to January 2021). Eligible studies required a pre-pandemic baseline using the same instrument, location, and age group. From 5683 unique records, 48 studies met inclusion criteria (46 for major depressive disorder, 27 for anxiety disorders)."
+      },
+      "explanation": "Same eligibility focus on general population with pre-pandemic comparator.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "5683 unique data sources, 48 met inclusion criteria (46 for MDD, 27 for anxiety).",
+      "generatedFact": "From 5683 unique records, 48 studies met inclusion criteria (46 for major depressive disorder, 27 for anxiety disorders).",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "We then used this model to estimate the change from pre-pandemic prevalence (estimated using Disease Modelling Meta-Regression version 2.1 [known as DisMod-MR 2.1]) by age, sex, and location. We used final prevalence estimates and disability weights to estimate years lived with disability and disability-adjusted life-years (DALYs) for major depressive disorder and anxiety disorders.FindingsWe identified 5683 unique data sources, of which 48 met inclusion criteria (46 studies met criteria for major depressive disorder and 27 for anxiety disorders)."
+        ],
+        "quote": "We then used this model to estimate the change from pre-pandemic prevalence (estimated using Disease Modelling Meta-Regression version 2.1 [known as DisMod-MR 2.1]) by age, sex, and location. We used final prevalence estimates and disability weights to estimate years lived with disability and disability-adjusted life-years (DALYs) for major depressive disorder and anxiety disorders.FindingsWe identified 5683 unique data sources, of which 48 met inclusion criteria (46 studies met criteria for major depressive disorder and 27 for anxiety disorders)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "This study, conducted as part of the Global Burden of Disease (GBD) 2020, estimated the impact of the pandemic on the prevalence and burden of major depressive disorder and anxiety disorders across 204 countries and territories, stratified by age and sex. **Methods.** A systematic review identified population surveys reporting prevalence of depressive or anxiety disorders during the pandemic (January 2020 to January 2021). Eligible studies required a pre-pandemic baseline using the same instrument, location, and age group. From 5683 unique records, 48 studies met inclusion criteria (46 for major depressive disorder, 27 for anxiety disorders)."
+        ],
+        "quote": "This study, conducted as part of the Global Burden of Disease (GBD) 2020, estimated the impact of the pandemic on the prevalence and burden of major depressive disorder and anxiety disorders across 204 countries and territories, stratified by age and sex. **Methods.** A systematic review identified population surveys reporting prevalence of depressive or anxiety disorders during the pandemic (January 2020 to January 2021). Eligible studies required a pre-pandemic baseline using the same instrument, location, and age group. From 5683 unique records, 48 studies met inclusion criteria (46 for major depressive disorder, 27 for anxiety disorders)."
+      },
+      "explanation": "Numbers identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Studies required pre-pandemic baseline (same instrument, location, age group) since 2013; random sampling preferred, quota sampling allowed and controlled; screening measures accepted with assumption of unchanged predictive validity.",
+      "generatedFact": "Required comparable pre-pandemic baseline (same instrument, location, age group) collected since 2013; longitudinal preferred, cross-sectional allowed; quota sampling controlled; screening measures included assuming unchanged predictive validity.",
+      "sourceEvidence": {
+        "locator": "R0020",
+        "locators": [
+          "R0020"
+        ],
+        "quotes": [
+          "Prevalence surveys conducted during the pandemic could not be included without comparable pre-pandemic data (ie, using the same instrument, location, and age group) collected since 2013 to assess the change in prevalence. Longitudinal studies using samples representative of the general population were preferred, but cross-sectional studies were also included if comparable pre-pandemic prevalence data existed. Studies using random sampling were preferred; however, due to challenges imposed by the COVID-19 pandemic, there were few studies of this type. Studies using market research quota sampling were also included but were controlled for with a covariate in our analysis."
+        ],
+        "quote": "Prevalence surveys conducted during the pandemic could not be included without comparable pre-pandemic data (ie, using the same instrument, location, and age group) collected since 2013 to assess the change in prevalence. Longitudinal studies using samples representative of the general population were preferred, but cross-sectional studies were also included if comparable pre-pandemic prevalence data existed. Studies using random sampling were preferred; however, due to challenges imposed by the COVID-19 pandemic, there were few studies of this type. Studies using market research quota sampling were also included but were controlled for with a covariate in our analysis."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "Case definitions for major depressive disorder and anxiety disorders followed DSM-IV-TR and ICD-10 criteria as applied in the GBD framework. The search covered sources published between January 1, 2020, and January 29, 2021, across PubMed, Google Scholar, the Eppi-centre COVID-19 living map, the DEPRESSD Project, the WHO COVID-19 literature database, COVID-Minds, MedRxiv, PsyArXiv, and grey literature, supplemented by expert consultation. No language restrictions were applied. Eligible studies reported prevalence of depressive or anxiety disorders during the pandemic and provided a comparable pre-pandemic baseline (same instrument, location, and age group) collected since 2013."
+        ],
+        "quote": "Case definitions for major depressive disorder and anxiety disorders followed DSM-IV-TR and ICD-10 criteria as applied in the GBD framework. The search covered sources published between January 1, 2020, and January 29, 2021, across PubMed, Google Scholar, the Eppi-centre COVID-19 living map, the DEPRESSD Project, the WHO COVID-19 literature database, COVID-Minds, MedRxiv, PsyArXiv, and grey literature, supplemented by expert consultation. No language restrictions were applied. Eligible studies reported prevalence of depressive or anxiety disorders during the pandemic and provided a comparable pre-pandemic baseline (same instrument, location, and age group) collected since 2013."
+      },
+      "explanation": "All main eligibility criteria are accurately reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "The COVID-19 pandemic, with proxies of human mobility, daily SARS-CoV-2 infection rate, and daily excess mortality rate.",
+      "generatedFact": "The COVID-19 pandemic; two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—used as proxies.",
+      "sourceEvidence": {
+        "locator": "R0024",
+        "locators": [
+          "R0024"
+        ],
+        "quotes": [
+          "The risk factor of interest was the COVID-19 pandemic, with the COVID-19 impact indicators acting as proxies for the effect of COVID-19 in the population. A COVID-19 impact indicator had to capture an effect of COVID-19, be consistently measured across locations, and be consistently measured with sufficient granularity across time (preferably daily or weekly) over the course of the pandemic. Our process of selecting the COVID-19 impact indicators is detailed in the appendix (p 10) ."
+        ],
+        "quote": "The risk factor of interest was the COVID-19 pandemic, with the COVID-19 impact indicators acting as proxies for the effect of COVID-19 in the population. A COVID-19 impact indicator had to capture an effect of COVID-19, be consistently measured across locations, and be consistently measured with sufficient granularity across time (preferably daily or weekly) over the course of the pandemic. Our process of selecting the COVID-19 impact indicators is detailed in the appendix (p 10) ."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+        ],
+        "quote": "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+      },
+      "explanation": "Exposure and proxies match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Pre-pandemic prevalence from DisMod-MR 2.1 estimates (GBD 2019) and baseline surveys.",
+      "generatedFact": "Pre-pandemic prevalence estimates derived from DisMod-MR 2.1 (GBD 2019) and comparable pre-pandemic baseline surveys.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "We then used this model to estimate the change from pre-pandemic prevalence (estimated using Disease Modelling Meta-Regression version 2.1 [known as DisMod-MR 2.1]) by age, sex, and location. We used final prevalence estimates and disability weights to estimate years lived with disability and disability-adjusted life-years (DALYs) for major depressive disorder and anxiety disorders.FindingsWe identified 5683 unique data sources, of which 48 met inclusion criteria (46 studies met criteria for major depressive disorder and 27 for anxiety disorders)."
+        ],
+        "quote": "We then used this model to estimate the change from pre-pandemic prevalence (estimated using Disease Modelling Meta-Regression version 2.1 [known as DisMod-MR 2.1]) by age, sex, and location. We used final prevalence estimates and disability weights to estimate years lived with disability and disability-adjusted life-years (DALYs) for major depressive disorder and anxiety disorders.FindingsWe identified 5683 unique data sources, of which 48 met inclusion criteria (46 studies met criteria for major depressive disorder and 27 for anxiety disorders)."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+        ],
+        "quote": "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+      },
+      "explanation": "Comparator identified as pre-pandemic baseline.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Prevalence (cases per 100,000, absolute cases), percentage change, DALYs and YLDs for major depressive disorder and anxiety disorders.",
+      "generatedFact": "Prevalence (cases per 100,000 and total population), additional cases, percentage increase, DALYs and YLDs for major depressive disorder and anxiety disorders.",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "We estimated an additional 53·2 million (44·8 to 62·9) cases of major depressive disorder globally (an increase of 27·6% [25·1 to 30·3]) due to the COVID-19 pandemic, such that the total prevalence was 3152·9 cases (2722·5 to 3654·5) per 100 000 population. We also estimated an additional 76·2 million (64·3 to 90·6) cases of anxiety disorders globally (an increase of 25·6% [23·2 to 28·0]), such that the total prevalence was 4802·4 cases (4108·2 to 5588·6) per 100 000 population."
+        ],
+        "quote": "We estimated an additional 53·2 million (44·8 to 62·9) cases of major depressive disorder globally (an increase of 27·6% [25·1 to 30·3]) due to the COVID-19 pandemic, such that the total prevalence was 3152·9 cases (2722·5 to 3654·5) per 100 000 population. We also estimated an additional 76·2 million (64·3 to 90·6) cases of anxiety disorders globally (an increase of 25·6% [23·2 to 28·0]), such that the total prevalence was 4802·4 cases (4108·2 to 5588·6) per 100 000 population."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "**Findings.** After adjustment for the pandemic, global major depressive disorder prevalence rose from 2470.5 per 100 000 (193 million people) to 3152.9 per 100 000 (246 million), yielding an additional 53.2 million cases—a 27.6% increase. Anxiety disorder prevalence rose from 3824.9 per 100 000 (298 million) to 4802.4 per 100 000 (374 million), adding 76.2 million cases—a 25.6% increase. Females experienced larger absolute and relative increases than males for both disorders. Younger age groups were affected more than older age groups. The pandemic imposed an additional 10.7 million DALYs for major depressive disorder and 9.05 million DALYs for anxiety disorders in 2020."
+        ],
+        "quote": "**Findings.** After adjustment for the pandemic, global major depressive disorder prevalence rose from 2470.5 per 100 000 (193 million people) to 3152.9 per 100 000 (246 million), yielding an additional 53.2 million cases—a 27.6% increase. Anxiety disorder prevalence rose from 3824.9 per 100 000 (298 million) to 4802.4 per 100 000 (374 million), adding 76.2 million cases—a 25.6% increase. Females experienced larger absolute and relative increases than males for both disorders. Younger age groups were affected more than older age groups. The pandemic imposed an additional 10.7 million DALYs for major depressive disorder and 9.05 million DALYs for anxiety disorders in 2020."
+      },
+      "explanation": "Outcomes match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Search period Jan 1, 2020 to Jan 29, 2021; pre-pandemic baseline since 2013; prevalence estimated for the year 2020.",
+      "generatedFact": "Search covered January 2020 to January 2021; pre-pandemic baseline collected since 2013; prevalence and burden for the year 2020.",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "8 Detailed case definitions are in the appendix (p 6) . Data sources We conducted a systematic literature search to identify population surveys reporting on the prevalence of depressive or anxiety disorders, or both, during the COVID-19 pandemic. We used the Preferred Reporting Items for Systematic Reviews and Meta-Analyses (PRISMA) guidelines; 9 our PRISMA checklist is in the appendix (pp 28–31 ), and the search protocol was registered with the International Prospective Register of Systematic Reviews (PROSPERO, CRD42021216590). We searched for data sources published between Jan 1, 2020, and Jan 29, 2021."
+        ],
+        "quote": "8 Detailed case definitions are in the appendix (p 6) . Data sources We conducted a systematic literature search to identify population surveys reporting on the prevalence of depressive or anxiety disorders, or both, during the COVID-19 pandemic. We used the Preferred Reporting Items for Systematic Reviews and Meta-Analyses (PRISMA) guidelines; 9 our PRISMA checklist is in the appendix (pp 28–31 ), and the search protocol was registered with the International Prospective Register of Systematic Reviews (PROSPERO, CRD42021216590). We searched for data sources published between Jan 1, 2020, and Jan 29, 2021."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "This study, conducted as part of the Global Burden of Disease (GBD) 2020, estimated the impact of the pandemic on the prevalence and burden of major depressive disorder and anxiety disorders across 204 countries and territories, stratified by age and sex. **Methods.** A systematic review identified population surveys reporting prevalence of depressive or anxiety disorders during the pandemic (January 2020 to January 2021). Eligible studies required a pre-pandemic baseline using the same instrument, location, and age group. From 5683 unique records, 48 studies met inclusion criteria (46 for major depressive disorder, 27 for anxiety disorders)."
+        ],
+        "quote": "This study, conducted as part of the Global Burden of Disease (GBD) 2020, estimated the impact of the pandemic on the prevalence and burden of major depressive disorder and anxiety disorders across 204 countries and territories, stratified by age and sex. **Methods.** A systematic review identified population surveys reporting prevalence of depressive or anxiety disorders during the pandemic (January 2020 to January 2021). Eligible studies required a pre-pandemic baseline using the same instrument, location, and age group. From 5683 unique records, 48 studies met inclusion criteria (46 for major depressive disorder, 27 for anxiety disorders)."
+      },
+      "explanation": "Time frames consistent.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Extracted multiple fields; square-root transformed daily infection rate to correct skew; used bias covariates and two-step approach to address collinearity.",
+      "generatedFact": "Described bias covariates, two-step approach for collinearity; did not explicitly mention square-root transformation, but overall preprocessing captured.",
+      "sourceEvidence": {
+        "locator": "R0045",
+        "locators": [
+          "R0045"
+        ],
+        "quotes": [
+          "* Square-root transformed before analysis to correct for positive skew (appendix pp 6–7) . † Bayesian directional prior specified due to strong collinearity with other indicators. Increases in the COVID-19 impact index (informed by the significant indicators of human mobility and daily SARS-CoV-2 infection rate) were associated with an increase in prevalence of major depressive disorder (0·4 [95% UI 0·1–0·6]) and anxiety disorders (0·4 [0·3–0·5]; table 2 ). For both disorders, females were affected more than males, and younger age groups were affected more than older age groups."
+        ],
+        "quote": "* Square-root transformed before analysis to correct for positive skew (appendix pp 6–7) . † Bayesian directional prior specified due to strong collinearity with other indicators. Increases in the COVID-19 impact index (informed by the significant indicators of human mobility and daily SARS-CoV-2 infection rate) were associated with an increase in prevalence of major depressive disorder (0·4 [95% UI 0·1–0·6]) and anxiety disorders (0·4 [0·3–0·5]; table 2 ). For both disorders, females were affected more than males, and younger age groups were affected more than older age groups."
+      },
+      "generatedEvidence": {
+        "locator": "G0015",
+        "locators": [
+          "G0015"
+        ],
+        "quotes": [
+          "In step two, backward elimination produced a final model regressing the COVID-19 impact index, age, sex, and bias covariates on the logit-prevalence change. Bias covariates examined included: cross-sectional comparisons with random samples, longitudinal comparisons with market research/quota samples, cross-sectional comparisons with market research/quota samples, and combined-symptom measures. Cross-sectional market research/quota samples significantly overestimated prevalence increases for both disorders and were retained in the final models. The combined-symptom covariate was retained in the anxiety disorders model only. Other bias covariates were not significant and were dropped."
+        ],
+        "quote": "In step two, backward elimination produced a final model regressing the COVID-19 impact index, age, sex, and bias covariates on the logit-prevalence change. Bias covariates examined included: cross-sectional comparisons with random samples, longitudinal comparisons with market research/quota samples, cross-sectional comparisons with market research/quota samples, and combined-symptom measures. Cross-sectional market research/quota samples significantly overestimated prevalence increases for both disorders and were retained in the final models. The combined-symptom covariate was retained in the anxiety disorders model only. Other bias covariates were not significant and were dropped."
+      },
+      "explanation": "Generated text omits the square-root transformation, but this is minor; core preprocessing steps are present.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "MR-BRT meta-regression on logit prevalence change; two-step model; DisMod-MR 2.1 for baseline; MCMC to adjust prevalence; comorbidity-corrected YLDs and DALYs.",
+      "generatedFact": "Bayesian meta-regression (MR-BRT) with two-step approach, DisMod-MR 2.1 baseline, MCMC adjustment, and DALY computation with comorbidity correction.",
+      "sourceEvidence": {
+        "locator": "R0032",
+        "locators": [
+          "R0032"
+        ],
+        "quotes": [
+          "2 , 15 Statistical analysis We estimated the prevalence of major depressive disorder and anxiety disorders during the COVID-19 pandemic by first developing a model to predict adjustments to pre-pandemic prevalence of major depressive disorder and anxiety disorders based on COVID-19 impact indicators, and then modifying the pre-pandemic prevalence of major depressive disorder and anxiety disorders estimated from DisMod-MR 2.1. We conducted meta-regressions, using meta-regression—Bayesian, regularised, trimmed 16 (MR-BRT), on the difference between logit disorder prevalence before the COVID-19 pandemic and during the COVID-19 pandemic."
+        ],
+        "quote": "2 , 15 Statistical analysis We estimated the prevalence of major depressive disorder and anxiety disorders during the COVID-19 pandemic by first developing a model to predict adjustments to pre-pandemic prevalence of major depressive disorder and anxiety disorders based on COVID-19 impact indicators, and then modifying the pre-pandemic prevalence of major depressive disorder and anxiety disorders estimated from DisMod-MR 2.1. We conducted meta-regressions, using meta-regression—Bayesian, regularised, trimmed 16 (MR-BRT), on the difference between logit disorder prevalence before the COVID-19 pandemic and during the COVID-19 pandemic."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+        ],
+        "quote": "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+      },
+      "explanation": "Analytical methods fully match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "MR-BRT (meta-regression, Bayesian, regularised, trimmed), DisMod-MR 2.1, and MCMC simulation.",
+      "generatedFact": "MR-BRT, DisMod-MR 2.1, and Markov chain Monte Carlo simulation.",
+      "sourceEvidence": {
+        "locator": "R0032",
+        "locators": [
+          "R0032"
+        ],
+        "quotes": [
+          "2 , 15 Statistical analysis We estimated the prevalence of major depressive disorder and anxiety disorders during the COVID-19 pandemic by first developing a model to predict adjustments to pre-pandemic prevalence of major depressive disorder and anxiety disorders based on COVID-19 impact indicators, and then modifying the pre-pandemic prevalence of major depressive disorder and anxiety disorders estimated from DisMod-MR 2.1. We conducted meta-regressions, using meta-regression—Bayesian, regularised, trimmed 16 (MR-BRT), on the difference between logit disorder prevalence before the COVID-19 pandemic and during the COVID-19 pandemic."
+        ],
+        "quote": "2 , 15 Statistical analysis We estimated the prevalence of major depressive disorder and anxiety disorders during the COVID-19 pandemic by first developing a model to predict adjustments to pre-pandemic prevalence of major depressive disorder and anxiety disorders based on COVID-19 impact indicators, and then modifying the pre-pandemic prevalence of major depressive disorder and anxiety disorders estimated from DisMod-MR 2.1. We conducted meta-regressions, using meta-regression—Bayesian, regularised, trimmed 16 (MR-BRT), on the difference between logit disorder prevalence before the COVID-19 pandemic and during the COVID-19 pandemic."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+        ],
+        "quote": "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+      },
+      "explanation": "The same models and estimators are described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Additional 53·2 M (44·8–62·9) MDD cases (+27·6%); 76·2 M (64·3–90·6) anxiety cases (+25·6%); total MDD 3152·9/100k, anxiety 4802·4/100k; additional 10·7 M MDD DALYs, 9·05 M anxiety DALYs; females and young more affected.",
+      "generatedFact": "Additional 53.2 million (44.8–62.9) MDD cases, 27.6% increase; 76.2 million (64.3–90.6) anxiety cases, 25.6% increase; total prevalent cases per 100k and DALYs as in reference; sex and age disparities noted.",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "We estimated an additional 53·2 million (44·8 to 62·9) cases of major depressive disorder globally (an increase of 27·6% [25·1 to 30·3]) due to the COVID-19 pandemic, such that the total prevalence was 3152·9 cases (2722·5 to 3654·5) per 100 000 population. We also estimated an additional 76·2 million (64·3 to 90·6) cases of anxiety disorders globally (an increase of 25·6% [23·2 to 28·0]), such that the total prevalence was 4802·4 cases (4108·2 to 5588·6) per 100 000 population."
+        ],
+        "quote": "We estimated an additional 53·2 million (44·8 to 62·9) cases of major depressive disorder globally (an increase of 27·6% [25·1 to 30·3]) due to the COVID-19 pandemic, such that the total prevalence was 3152·9 cases (2722·5 to 3654·5) per 100 000 population. We also estimated an additional 76·2 million (64·3 to 90·6) cases of anxiety disorders globally (an increase of 25·6% [23·2 to 28·0]), such that the total prevalence was 4802·4 cases (4108·2 to 5588·6) per 100 000 population."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "**Findings.** After adjustment for the pandemic, global major depressive disorder prevalence rose from 2470.5 per 100 000 (193 million people) to 3152.9 per 100 000 (246 million), yielding an additional 53.2 million cases—a 27.6% increase. Anxiety disorder prevalence rose from 3824.9 per 100 000 (298 million) to 4802.4 per 100 000 (374 million), adding 76.2 million cases—a 25.6% increase. Females experienced larger absolute and relative increases than males for both disorders. Younger age groups were affected more than older age groups. The pandemic imposed an additional 10.7 million DALYs for major depressive disorder and 9.05 million DALYs for anxiety disorders in 2020."
+        ],
+        "quote": "**Findings.** After adjustment for the pandemic, global major depressive disorder prevalence rose from 2470.5 per 100 000 (193 million people) to 3152.9 per 100 000 (246 million), yielding an additional 53.2 million cases—a 27.6% increase. Anxiety disorder prevalence rose from 3824.9 per 100 000 (298 million) to 4802.4 per 100 000 (374 million), adding 76.2 million cases—a 25.6% increase. Females experienced larger absolute and relative increases than males for both disorders. Younger age groups were affected more than older age groups. The pandemic imposed an additional 10.7 million DALYs for major depressive disorder and 9.05 million DALYs for anxiety disorders in 2020."
+      },
+      "explanation": "All major numerical results, including UIs, sex-stratified counts, and DALYs, are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "95% UIs reported for all main estimates; p-values for associations; cross-validation.",
+      "generatedFact": "95% UIs provided for main outcomes and coefficients; significance mentioned for impact index; cross-validation not explicitly mentioned but implied.",
+      "sourceEvidence": {
+        "locator": "R0005",
+        "locators": [
+          "R0005"
+        ],
+        "quotes": [
+          "Two COVID-19 impact indicators, specifically daily SARS-CoV-2 infection rates and reductions in human mobility, were associated with increased prevalence of major depressive disorder (regression coefficient [B] 0·9 [95% uncertainty interval 0·1 to 1·8; p=0·029] for human mobility, 18·1 [7·9 to 28·3; p=0·0005] for daily SARS-CoV-2 infection) and anxiety disorders (0·9 [0·1 to 1·7; p=0·022] and 13·8 [10·7 to 17·0; p<0·0001]."
+        ],
+        "quote": "Two COVID-19 impact indicators, specifically daily SARS-CoV-2 infection rates and reductions in human mobility, were associated with increased prevalence of major depressive disorder (regression coefficient [B] 0·9 [95% uncertainty interval 0·1 to 1·8; p=0·029] for human mobility, 18·1 [7·9 to 28·3; p=0·0005] for daily SARS-CoV-2 infection) and anxiety disorders (0·9 [0·1 to 1·7; p=0·022] and 13·8 [10·7 to 17·0; p<0·0001]."
+      },
+      "generatedEvidence": {
+        "locator": "G0019",
+        "locators": [
+          "G0019"
+        ],
+        "quotes": [
+          "The final model showed that increasing COVID-19 impact (the combined index) was associated with increased prevalence of major depressive disorder (coefficient 0.4, 95% UI 0.1–0.6) and anxiety disorders (0.4, 95% UI 0.3–0.5). For both disorders, the effect was stronger in females than males and stronger in younger than older age groups. Cross-sectional market research/quota samples overestimated the prevalence increase for both major depressive disorder (0.9, 95% UI 0.6–1.2) and anxiety disorders (0.6, 95% UI 0.2–1.0)."
+        ],
+        "quote": "The final model showed that increasing COVID-19 impact (the combined index) was associated with increased prevalence of major depressive disorder (coefficient 0.4, 95% UI 0.1–0.6) and anxiety disorders (0.4, 95% UI 0.3–0.5). For both disorders, the effect was stronger in females than males and stronger in younger than older age groups. Cross-sectional market research/quota samples overestimated the prevalence increase for both major depressive disorder (0.9, 95% UI 0.6–1.2) and anxiety disorders (0.6, 95% UI 0.2–1.0)."
+      },
+      "explanation": "Uncertainty intervals and significance for key coefficients are present; leave-one-out cross-validation mentioned in REFERENCE but not in GENERATED, but still compatible overall.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "COVID-19 caused substantial increases in depressive and anxiety disorders, greatest in hardest-hit locations, females, and young; urgent need to strengthen mental health systems.",
+      "generatedFact": "Pandemic generated substantial additional burden, disproportionately on women and young; urgent priority to strengthen mental health systems.",
+      "sourceEvidence": {
+        "locator": "R0006",
+        "locators": [
+          "R0006"
+        ],
+        "quotes": [
+          "Females were affected more by the pandemic than males (B 0·1 [0·1 to 0·2; p=0·0001] for major depressive disorder, 0·1 [0·1 to 0·2; p=0·0001] for anxiety disorders) and younger age groups were more affected than older age groups (−0·007 [–0·009 to −0·006; p=0·0001] for major depressive disorder, −0·003 [–0·005 to −0·002; p=0·0001] for anxiety disorders). We estimated that the locations hit hardest by the pandemic in 2020, as measured with decreased human mobility and daily SARS-CoV-2 infection rate, had the greatest increases in prevalence of major depressive disorder and anxiety disorders."
+        ],
+        "quote": "Females were affected more by the pandemic than males (B 0·1 [0·1 to 0·2; p=0·0001] for major depressive disorder, 0·1 [0·1 to 0·2; p=0·0001] for anxiety disorders) and younger age groups were more affected than older age groups (−0·007 [–0·009 to −0·006; p=0·0001] for major depressive disorder, −0·003 [–0·005 to −0·002; p=0·0001] for anxiety disorders). We estimated that the locations hit hardest by the pandemic in 2020, as measured with decreased human mobility and daily SARS-CoV-2 infection rate, had the greatest increases in prevalence of major depressive disorder and anxiety disorders."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "**Interpretation.** The COVID-19 pandemic generated a substantial additional burden of depressive and anxiety disorders worldwide, disproportionately borne by women and young people. Strengthening mental health systems and deploying evidence-based mitigation strategies is an urgent priority. --- ## Introduction Mental disorders were among the foremost causes of health-related burden globally before 2020. GBD 2019 ranked depressive and anxiety disorders within the top 25 leading causes of burden, with high prevalence persisting across the lifespan, for both sexes, and across many locations."
+        ],
+        "quote": "**Interpretation.** The COVID-19 pandemic generated a substantial additional burden of depressive and anxiety disorders worldwide, disproportionately borne by women and young people. Strengthening mental health systems and deploying evidence-based mitigation strategies is an urgent priority. --- ## Introduction Mental disorders were among the foremost causes of health-related burden globally before 2020. GBD 2019 ranked depressive and anxiety disorders within the top 25 leading causes of burden, with high prevalence persisting across the lifespan, for both sexes, and across many locations."
+      },
+      "explanation": "Conclusion direction and urgency match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "partial",
+      "issueKinds": [
+        "missing"
+      ],
+      "referenceFact": "Limitations include indicator coverage, geographical imbalance, screening instrument reliance, severity distribution unchanged, exclusion of convenience samples, undifferentiated infection status, and cross-sectional quota sampling bias.",
+      "generatedFact": "Lists indicator coverage, geographical imbalance, reliance on screening instruments, and undifferentiated infection status; omits severity distribution assumption and exclusion of convenience samples as limitations.",
+      "sourceEvidence": {
+        "locator": "R0085",
+        "locators": [
+          "R0085"
+        ],
+        "quotes": [
+          "The paucity of diagnostic surveys conducted during the pandemic also meant that we were unable to explore its effect on the severity distribution of major depressive disorder and anxiety disorders. We estimated prevalent cases of each disorder but could not assess how existing cases changed in their severity. Existing cases might have worsened during the COVID-19 pandemic, while novel cases might have had milder disorder severity. For the burden analysis presented, we had to assume that the severity distribution of both existing and new cases remained unchanged from before the COVID-19 pandemic."
+        ],
+        "quote": "The paucity of diagnostic surveys conducted during the pandemic also meant that we were unable to explore its effect on the severity distribution of major depressive disorder and anxiety disorders. We estimated prevalent cases of each disorder but could not assess how existing cases changed in their severity. Existing cases might have worsened during the COVID-19 pandemic, while novel cases might have had milder disorder severity. For the burden analysis presented, we had to assume that the severity distribution of both existing and new cases remained unchanged from before the COVID-19 pandemic."
+      },
+      "generatedEvidence": {
+        "locator": "G0030",
+        "locators": [
+          "G0030"
+        ],
+        "quotes": [
+          "The precision of these indicators varies, particularly in settings where infection reporting is inconsistent or where disadvantaged subgroups have limited access to the mobile-phone tracking data underpinning the mobility index. Some subgroups cannot reduce their mobility due to employment type, which may distort estimates. 2. **Geographical imbalance in source data.** Very few surveys meeting inclusion criteria came from low-income and middle-income countries. The regression findings may therefore be less generalisable to those locations. 3. **Reliance on screening instruments.** Only three of the 48 studies used diagnostic instruments."
+        ],
+        "quote": "The precision of these indicators varies, particularly in settings where infection reporting is inconsistent or where disadvantaged subgroups have limited access to the mobile-phone tracking data underpinning the mobility index. Some subgroups cannot reduce their mobility due to employment type, which may distort estimates. 2. **Geographical imbalance in source data.** Very few surveys meeting inclusion criteria came from low-income and middle-income countries. The regression findings may therefore be less generalisable to those locations. 3. **Reliance on screening instruments.** Only three of the 48 studies used diagnostic instruments."
+      },
+      "explanation": "Generated text misses the limitation that severity distribution was assumed unchanged, which could bias burden estimates.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "Not applicable.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No harms or safety outcomes.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "search_sources_and_dates",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "PubMed, Google Scholar, preprint servers, grey literature (Eppi-centre, DEPRESSD, WHO COVID-19, COVID-Minds, MedRxiv, PsyArXiv), experts; Jan 1, 2020 – Jan 29, 2021.",
+      "generatedFact": "PubMed, Google Scholar, Eppi-centre, DEPRESSD, WHO COVID-19 literature database, COVID-Minds, MedRxiv, PsyArXiv, grey literature, expert consultation; January 1, 2020 – January 29, 2021.",
+      "sourceEvidence": {
+        "locator": "R0019",
+        "locators": [
+          "R0019"
+        ],
+        "quotes": [
+          "The search involved electronic searches of the peer-reviewed literature using PubMed, the grey literature (ie, the COVID-19: living map of the evidence by Eppi-centre , The DEPRESSD Project , Google Scholar, The Neurology and Neuropsychiatry of COVID-19 Blog , the WHO COVID 19 literature database , COVID-Minds , and the MedRxiv and PsyArXiv preprint servers), and expert consultation. Search strings for each search are in the appendix (p 5) . No language restrictions were applied. Eligible studies reported prevalence of depressive or anxiety disorders during the COVID-19 pandemic and had a pre-pandemic baseline. We used timelines for these periods as defined by each study."
+        ],
+        "quote": "The search involved electronic searches of the peer-reviewed literature using PubMed, the grey literature (ie, the COVID-19: living map of the evidence by Eppi-centre , The DEPRESSD Project , Google Scholar, The Neurology and Neuropsychiatry of COVID-19 Blog , the WHO COVID 19 literature database , COVID-Minds , and the MedRxiv and PsyArXiv preprint servers), and expert consultation. Search strings for each search are in the appendix (p 5) . No language restrictions were applied. Eligible studies reported prevalence of depressive or anxiety disorders during the COVID-19 pandemic and had a pre-pandemic baseline. We used timelines for these periods as defined by each study."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "Case definitions for major depressive disorder and anxiety disorders followed DSM-IV-TR and ICD-10 criteria as applied in the GBD framework. The search covered sources published between January 1, 2020, and January 29, 2021, across PubMed, Google Scholar, the Eppi-centre COVID-19 living map, the DEPRESSD Project, the WHO COVID-19 literature database, COVID-Minds, MedRxiv, PsyArXiv, and grey literature, supplemented by expert consultation. No language restrictions were applied. Eligible studies reported prevalence of depressive or anxiety disorders during the pandemic and provided a comparable pre-pandemic baseline (same instrument, location, and age group) collected since 2013."
+        ],
+        "quote": "Case definitions for major depressive disorder and anxiety disorders followed DSM-IV-TR and ICD-10 criteria as applied in the GBD framework. The search covered sources published between January 1, 2020, and January 29, 2021, across PubMed, Google Scholar, the Eppi-centre COVID-19 living map, the DEPRESSD Project, the WHO COVID-19 literature database, COVID-Minds, MedRxiv, PsyArXiv, and grey literature, supplemented by expert consultation. No language restrictions were applied. Eligible studies reported prevalence of depressive or anxiety disorders during the pandemic and provided a comparable pre-pandemic baseline (same instrument, location, and age group) collected since 2013."
+      },
+      "explanation": "Search sources and date range match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "included_studies_and_participants",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "48 studies included (46 for MDD, 27 for anxiety); no total participant count reported.",
+      "generatedFact": "48 studies met inclusion criteria (46 for MDD, 27 for anxiety); no total participant count provided.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "We then used this model to estimate the change from pre-pandemic prevalence (estimated using Disease Modelling Meta-Regression version 2.1 [known as DisMod-MR 2.1]) by age, sex, and location. We used final prevalence estimates and disability weights to estimate years lived with disability and disability-adjusted life-years (DALYs) for major depressive disorder and anxiety disorders.FindingsWe identified 5683 unique data sources, of which 48 met inclusion criteria (46 studies met criteria for major depressive disorder and 27 for anxiety disorders)."
+        ],
+        "quote": "We then used this model to estimate the change from pre-pandemic prevalence (estimated using Disease Modelling Meta-Regression version 2.1 [known as DisMod-MR 2.1]) by age, sex, and location. We used final prevalence estimates and disability weights to estimate years lived with disability and disability-adjusted life-years (DALYs) for major depressive disorder and anxiety disorders.FindingsWe identified 5683 unique data sources, of which 48 met inclusion criteria (46 studies met criteria for major depressive disorder and 27 for anxiety disorders)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "This study, conducted as part of the Global Burden of Disease (GBD) 2020, estimated the impact of the pandemic on the prevalence and burden of major depressive disorder and anxiety disorders across 204 countries and territories, stratified by age and sex. **Methods.** A systematic review identified population surveys reporting prevalence of depressive or anxiety disorders during the pandemic (January 2020 to January 2021). Eligible studies required a pre-pandemic baseline using the same instrument, location, and age group. From 5683 unique records, 48 studies met inclusion criteria (46 for major depressive disorder, 27 for anxiety disorders)."
+        ],
+        "quote": "This study, conducted as part of the Global Burden of Disease (GBD) 2020, estimated the impact of the pandemic on the prevalence and burden of major depressive disorder and anxiety disorders across 204 countries and territories, stratified by age and sex. **Methods.** A systematic review identified population surveys reporting prevalence of depressive or anxiety disorders during the pandemic (January 2020 to January 2021). Eligible studies required a pre-pandemic baseline using the same instrument, location, and age group. From 5683 unique records, 48 studies met inclusion criteria (46 for major depressive disorder, 27 for anxiety disorders)."
+      },
+      "explanation": "Study counts identical; both lack a total participant count.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "synthesis_and_heterogeneity",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "MR-BRT random-effects meta-regression with random intercepts for samples and random effects on impact indicators; heterogeneity not quantified with I²; bias covariates and age/sex effect modifiers.",
+      "generatedFact": "Two-step meta-regression with bias covariates and age/sex effect modifiers; random intercepts not explicitly mentioned but implied by methodology.",
+      "sourceEvidence": {
+        "locator": "R0034",
+        "locators": [
+          "R0034"
+        ],
+        "quotes": [
+          "Because only three studies used diagnostic instruments to measure prevalence, we did not have sufficient data to explore the effect of a bias covariate on data from screening scales identifying probable cases of depressive or anxiety disorders ( appendix pp 8–9 ). Each unique sample was given a random intercept and random effects were placed on the COVID-19 impact indicators. We ran models separately for major depressive disorder and anxiety disorders. We also included age, sex, and most bias covariates as effect modifiers to ensure that the prevalence change remained zero when the COVID-19 impact was zero."
+        ],
+        "quote": "Because only three studies used diagnostic instruments to measure prevalence, we did not have sufficient data to explore the effect of a bias covariate on data from screening scales identifying probable cases of depressive or anxiety disorders ( appendix pp 8–9 ). Each unique sample was given a random intercept and random effects were placed on the COVID-19 impact indicators. We ran models separately for major depressive disorder and anxiety disorders. We also included age, sex, and most bias covariates as effect modifiers to ensure that the prevalence change remained zero when the COVID-19 impact was zero."
+      },
+      "generatedEvidence": {
+        "locator": "G0015",
+        "locators": [
+          "G0015"
+        ],
+        "quotes": [
+          "In step two, backward elimination produced a final model regressing the COVID-19 impact index, age, sex, and bias covariates on the logit-prevalence change. Bias covariates examined included: cross-sectional comparisons with random samples, longitudinal comparisons with market research/quota samples, cross-sectional comparisons with market research/quota samples, and combined-symptom measures. Cross-sectional market research/quota samples significantly overestimated prevalence increases for both disorders and were retained in the final models. The combined-symptom covariate was retained in the anxiety disorders model only. Other bias covariates were not significant and were dropped."
+        ],
+        "quote": "In step two, backward elimination produced a final model regressing the COVID-19 impact index, age, sex, and bias covariates on the logit-prevalence change. Bias covariates examined included: cross-sectional comparisons with random samples, longitudinal comparisons with market research/quota samples, cross-sectional comparisons with market research/quota samples, and combined-symptom measures. Cross-sectional market research/quota samples significantly overestimated prevalence increases for both disorders and were retained in the final models. The combined-symptom covariate was retained in the anxiety disorders model only. Other bias covariates were not significant and were dropped."
+      },
+      "explanation": "No explicit mention of random intercepts in generated text, but the synthesis model description is otherwise accurate.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "risk_of_bias_or_certainty",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No formal risk-of-bias tool used; bias addressed through covariates and limitations.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Neither reference nor generated text includes a formal risk-of-bias assessment.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    }
+  ],
+  "metrics": {
+    "applicableItems": 19,
+    "weightedFidelity": 0.9697,
+    "criticalFidelity": 0.9857,
+    "statusCounts": {
+      "exact": 15,
+      "compatible": 3,
+      "partial": 1,
+      "not_applicable": 2
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [
+      "limitations_and_bias"
+    ],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 98.6,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 95.0,
+      "conclusions_calibration": 83.3,
+      "type_specific_methods": 96.7
+    },
+    "gateFailures": [
+      "adversarial_contradiction"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail",
+    "adversarialIssueCount": 2,
+    "adversarialUnsupportedClaimCount": 0,
+    "adversarialContradictionCount": 1,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "issues_found",
+    "issues": [
+      {
+        "id": "data_preprocessing",
+        "importance": "minor",
+        "status": "contradicted",
+        "issueKinds": [
+          "contradicted"
+        ],
+        "referenceFact": "",
+        "generatedFact": "Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019).",
+        "sourceEvidence": {
+          "locator": "R0030",
+          "locators": [
+            "R0030"
+          ],
+          "quotes": [
+            "The prevalence from locations higher in the hierarchy act as priors for the prevalence for locations lower in the hierarchy. More detail on DisMod-MR 2.1 and the estimation of prevalence data for major depressive disorder and anxiety disorders has been published elsewhere. 1 , 14 Because no epidemiological data from the year 2020 informed the DisMod-MR 2.1 model for major depressive disorder and anxiety disorders, the prevalence produced for 2020 by age and sex and for each of the 204 countries and territories represented the prevalence of each disorder without the impact of the COVID-19 pandemic. We made use of severity distributions and disability weights in GBD 2020 ( appendix p 32 )."
+          ],
+          "quote": "The prevalence from locations higher in the hierarchy act as priors for the prevalence for locations lower in the hierarchy. More detail on DisMod-MR 2.1 and the estimation of prevalence data for major depressive disorder and anxiety disorders has been published elsewhere. 1 , 14 Because no epidemiological data from the year 2020 informed the DisMod-MR 2.1 model for major depressive disorder and anxiety disorders, the prevalence produced for 2020 by age and sex and for each of the 204 countries and territories represented the prevalence of each disorder without the impact of the COVID-19 pandemic. We made use of severity distributions and disability weights in GBD 2020 ( appendix p 32 )."
+        },
+        "generatedEvidence": {
+          "locator": "G0004",
+          "locators": [
+            "G0004"
+          ],
+          "quotes": [
+            "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+          ],
+          "quote": "A Bayesian meta-regression (MR-BRT) modelled the change in logit prevalence as a function of two significant COVID-19 impact indicators—human mobility and daily SARS-CoV-2 infection rate—controlling for age, sex, and sampling bias. Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019). Adjusted prevalence was translated to years lived with disability (YLDs) and disability-adjusted life-years (DALYs) using GBD 2020 severity distributions and disability weights."
+        },
+        "explanation": "Reference states pre-pandemic prevalence was from DisMod-MR 2.1 as part of GBD 2020, not GBD 2019.",
+        "sourceEvidenceValid": true,
+        "generatedEvidenceValid": true,
+        "criterionId": "data_preprocessing",
+        "kind": "contradicted",
+        "severity": "minor",
+        "claim": "Pre-pandemic prevalence estimates were derived from DisMod-MR 2.1 (GBD 2019)."
+      },
+      {
+        "id": "limitations_and_bias",
+        "importance": "major",
+        "status": "missing",
+        "issueKinds": [
+          "missing"
+        ],
+        "referenceFact": "",
+        "generatedFact": "The limitation that severity distributions of both existing and new cases were assumed unchanged from pre-pandemic times, which could bias burden estimates.",
+        "sourceEvidence": {
+          "locator": "R0085",
+          "locators": [
+            "R0085"
+          ],
+          "quotes": [
+            "The paucity of diagnostic surveys conducted during the pandemic also meant that we were unable to explore its effect on the severity distribution of major depressive disorder and anxiety disorders. We estimated prevalent cases of each disorder but could not assess how existing cases changed in their severity. Existing cases might have worsened during the COVID-19 pandemic, while novel cases might have had milder disorder severity. For the burden analysis presented, we had to assume that the severity distribution of both existing and new cases remained unchanged from before the COVID-19 pandemic."
+          ],
+          "quote": "The paucity of diagnostic surveys conducted during the pandemic also meant that we were unable to explore its effect on the severity distribution of major depressive disorder and anxiety disorders. We estimated prevalent cases of each disorder but could not assess how existing cases changed in their severity. Existing cases might have worsened during the COVID-19 pandemic, while novel cases might have had milder disorder severity. For the burden analysis presented, we had to assume that the severity distribution of both existing and new cases remained unchanged from before the COVID-19 pandemic."
+        },
+        "generatedEvidence": {
+          "locator": "",
+          "locators": [],
+          "quotes": [],
+          "quote": ""
+        },
+        "explanation": "Reference notes that severity distribution was assumed constant, a key limitation for burden estimates; generated limitations section omits it.",
+        "sourceEvidenceValid": true,
+        "generatedEvidenceValid": false,
+        "criterionId": "limitations_and_bias",
+        "kind": "missing",
+        "severity": "major",
+        "claim": "The limitation that severity distributions of both existing and new cases were assumed unchanged from pre-pandemic times, which could bias burden estimates."
+      }
+    ],
+    "rationale": "Generated text incorrectly attributes pre-pandemic prevalence estimation to GBD 2019 rather than GBD 2020's DisMod-MR 2.1, and omits the critical limitation about assuming unchanged severity distributions."
+  },
+  "overallAssessment": "The generated text is a highly faithful reproduction of the reference study, with exact matches for objectives, design, sample size, eligibility, exposure, comparator, outcomes, time horizon, analysis methods, algorithms, key numerical results, and conclusions. Minor omissions include the square-root transformation in preprocessing, the severity-distribution limitation, and the explicit mention of random intercepts, but these do not materially alter the scientific accuracy. The overall epidemiological estimates and their interpretation are accurately conveyed without fabrication.",
+  "gradedAt": "2026-07-18T15:15:13Z"
+}

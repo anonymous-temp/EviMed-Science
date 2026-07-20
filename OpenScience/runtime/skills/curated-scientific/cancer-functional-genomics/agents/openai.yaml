@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cancer Functional Genomics"
+  short_description: "Analyze dependency screens with context controls"
+  default_prompt: "Use $cancer-functional-genomics to analyze these dependency-screen data."

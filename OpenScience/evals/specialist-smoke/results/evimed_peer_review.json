@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "tool": "evimed_peer_review",
+  "project": "default",
+  "jobId": "review-20260718135532-6815761637ba",
+  "jobStatus": "succeeded",
+  "summary": "Peer review job review-20260718135532-6815761637ba completed.",
+  "error": null,
+  "artifacts": [
+    {
+      "kind": "md",
+      "path": "peer-review-runs/review-20260718135532-6815761637ba/output/peer-review-report.md"
+    },
+    {
+      "kind": "json",
+      "path": "peer-review-runs/review-20260718135532-6815761637ba/output/peer-review-run.json"
+    },
+    {
+      "kind": "json",
+      "path": "peer-review-runs/review-20260718135532-6815761637ba/output/request.json"
+    },
+    {
+      "kind": "json",
+      "path": "peer-review-runs/review-20260718135532-6815761637ba/output/result.json"
+    }
+  ],
+  "elapsedSeconds": 490.242,
+  "completedAt": "2026-07-18T06:03:42.407880Z"
+}

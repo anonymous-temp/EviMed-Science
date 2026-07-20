@@ -1,0 +1,4479 @@
+{
+  "schemaVersion": 3,
+  "probedAt": "2026-07-19T19:31:53.709270Z",
+  "summary": {
+    "registered": 64,
+    "registrySha256": "8cf3ee7871def20a9072d5495576a1e5c2f36f3199e84167e20cdedf7dbf4491",
+    "registrySourceSha256": "9f2106edd102a4eb3e9625d516b2d7f14a0b82b3f8135961db2cfa2a05d6ffca",
+    "qualityPass": 64,
+    "qualityFail": 0,
+    "queriesExecuted": 128,
+    "productionRoute": "controlled_connector_routes",
+    "productionRoutes": [
+      "bundled_verified_dataset",
+      "server_allowlisted_gateway"
+    ],
+    "productionGatewayUsed": true,
+    "directSourceRequests": false,
+    "runtimeArbitraryEgress": false,
+    "bundledDatasetSources": [
+      "sider"
+    ],
+    "bundledDatasets": [
+      {
+        "source": "sider",
+        "path": "runtime/mcp/evimed-research/data/sider-4.1.sqlite",
+        "bytes": 7884800,
+        "sha256": "26274902d38b0bc999503623f8e59209a613821bf27f593656ed39443994cde4",
+        "licensePath": "runtime/mcp/evimed-research/data/sider-4.1.LICENSE.json"
+      }
+    ],
+    "claimBoundary": "This certifies two distinct traceable queries and response-contract quality per connector at the recorded time. It does not certify every query shape, recall, ranking quality, or future upstream availability.",
+    "gatewayEvidence": {
+      "handler": "apps/server/src/publicSourceGateway.mjs",
+      "forwardedRequests": 147,
+      "allowedHostsReached": [
+        "alphafold.ebi.ac.uk",
+        "api.biorxiv.org",
+        "api.crossref.org",
+        "api.fda.gov",
+        "api.gdc.cancer.gov",
+        "api.genome.ucsc.edu",
+        "api.monarchinitiative.org",
+        "api.openalex.org",
+        "api.pharmgkb.org",
+        "api.platform.opentargets.org",
+        "bindingdb.org",
+        "civicdb.org",
+        "clinicaltrials.gov",
+        "dailymed.nlm.nih.gov",
+        "data.rcsb.org",
+        "dgidb.org",
+        "eutils.ncbi.nlm.nih.gov",
+        "export.arxiv.org",
+        "ghoapi.azureedge.net",
+        "gnomad.broadinstitute.org",
+        "gtexportal.org",
+        "jaspar.elixir.no",
+        "maayanlab.cloud",
+        "mygene.info",
+        "myvariant.info",
+        "openneuro.org",
+        "pubchem.ncbi.nlm.nih.gov",
+        "reactome.org",
+        "rest.ensembl.org",
+        "rest.uniprot.org",
+        "rummageo.com",
+        "rxnav.nlm.nih.gov",
+        "service.azul.data.humancellatlas.org",
+        "sparql.wikipathways.org",
+        "string-db.org",
+        "www.cbioportal.org",
+        "www.ebi.ac.uk",
+        "www.encodeproject.org",
+        "www.guidetopharmacology.org",
+        "www.isrctn.com",
+        "www.metabolomicsworkbench.org",
+        "www.mousemine.org",
+        "www.proteinatlas.org"
+      ],
+      "methods": {
+        "GET": 135,
+        "POST": 12
+      },
+      "allRequestsAllowlistedHttpsRead": true
+    }
+  },
+  "results": [
+    {
+      "source": "arxiv",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "protein structure machine learning",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from arxiv.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "2006.16189v4",
+            "2306.04338v1",
+            "http://arxiv.org/abs/2006.16189v4",
+            "http://arxiv.org/abs/2306.04338v1"
+          ],
+          "elapsedMs": 1399,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "climate change population health",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from arxiv.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "1503.07557v1",
+            "2008.01035v1",
+            "http://arxiv.org/abs/1503.07557v1",
+            "http://arxiv.org/abs/2008.01035v1"
+          ],
+          "elapsedMs": 667,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2066
+    },
+    {
+      "source": "cbioportal",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from cbioportal.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "egc_msk_tp53_ccr_2022",
+            "https://www.cbioportal.org/study/summary?id=egc_msk_tp53_ccr_2022"
+          ],
+          "elapsedMs": 1754,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "lung",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from cbioportal.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "asclc_msk_2024",
+            "https://www.cbioportal.org/study/summary?id=asclc_msk_2024",
+            "https://www.cbioportal.org/study/summary?id=luad_broad",
+            "luad_broad"
+          ],
+          "elapsedMs": 264,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 3,
+      "sources": 3,
+      "elapsedMs": 2018
+    },
+    {
+      "source": "chebi",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "aspirin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from chebi.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "CHEBI:138614",
+            "CHEBI:747596",
+            "http://purl.obolibrary.org/obo/CHEBI_138614",
+            "http://purl.obolibrary.org/obo/CHEBI_747596"
+          ],
+          "elapsedMs": 1196,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "glucose",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from chebi.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "CHEBI:17234",
+            "CHEBI:176594",
+            "http://purl.obolibrary.org/obo/CHEBI_17234",
+            "http://purl.obolibrary.org/obo/CHEBI_176594"
+          ],
+          "elapsedMs": 1318,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2514
+    },
+    {
+      "source": "clinvar",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1 pathogenic",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from clinvar.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "3344405",
+            "3350129",
+            "https://www.ncbi.nlm.nih.gov/clinvar/3344405/",
+            "https://www.ncbi.nlm.nih.gov/clinvar/3350129/"
+          ],
+          "elapsedMs": 939,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "CFTR pathogenic",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from clinvar.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "818150",
+            "818151",
+            "https://www.ncbi.nlm.nih.gov/clinvar/818150/",
+            "https://www.ncbi.nlm.nih.gov/clinvar/818151/"
+          ],
+          "elapsedMs": 782,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1721
+    },
+    {
+      "source": "crossref",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "aspirin cardiovascular randomized trial",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from crossref.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "DOI:10.1016/j.phymed.2025.157500",
+            "DOI:10.1080/14017430410024324",
+            "https://doi.org/10.1016/j.phymed.2025.157500",
+            "https://doi.org/10.1080/14017430410024324"
+          ],
+          "elapsedMs": 1638,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "diabetes systematic review",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from crossref.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "DOI:10.1111/jan.16423/v1/review2",
+            "DOI:10.1111/jan.16423/v2/review1",
+            "https://doi.org/10.1111/jan.16423/v1/review2",
+            "https://doi.org/10.1111/jan.16423/v2/review1"
+          ],
+          "elapsedMs": 435,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2073
+    },
+    {
+      "source": "dailymed",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "metformin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from dailymed.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "a086cc29-cb5d-40d0-a57d-8e91f1aa9158",
+            "b5ccf5da-cbe1-4009-ba1c-990050838ee9",
+            "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=a086cc29-cb5d-40d0-a57d-8e91f1aa9158",
+            "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=b5ccf5da-cbe1-4009-ba1c-990050838ee9"
+          ],
+          "elapsedMs": 2348,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "atorvastatin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from dailymed.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "56a9e58f-567e-30cc-e063-6294a90a290f",
+            "7bd0f0ec-f7a3-4403-9a1a-11f18213631f",
+            "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=56a9e58f-567e-30cc-e063-6294a90a290f",
+            "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=7bd0f0ec-f7a3-4403-9a1a-11f18213631f"
+          ],
+          "elapsedMs": 598,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2946
+    },
+    {
+      "source": "dbsnp",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "rs429358",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from dbsnp.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "61228756",
+            "630496",
+            "https://www.ncbi.nlm.nih.gov/snp/61228756/",
+            "https://www.ncbi.nlm.nih.gov/snp/630496/"
+          ],
+          "elapsedMs": 723,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "rs7903146",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from dbsnp.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "60693287",
+            "7903146",
+            "https://www.ncbi.nlm.nih.gov/snp/60693287/",
+            "https://www.ncbi.nlm.nih.gov/snp/7903146/"
+          ],
+          "elapsedMs": 2210,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2933
+    },
+    {
+      "source": "ena",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "breast cancer",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from ena.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "PRJNA454751",
+            "PRJNA454752",
+            "https://www.ebi.ac.uk/ena/browser/view/PRJNA454751",
+            "https://www.ebi.ac.uk/ena/browser/view/PRJNA454752"
+          ],
+          "elapsedMs": 1178,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "type 2 diabetes",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from ena.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "PRJNA268369",
+            "PRJNA268370",
+            "https://www.ebi.ac.uk/ena/browser/view/PRJNA268369",
+            "https://www.ebi.ac.uk/ena/browser/view/PRJNA268370"
+          ],
+          "elapsedMs": 285,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1463
+    },
+    {
+      "source": "europe-pmc",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "aspirin cardiovascular prevention",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from europe-pmc.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "42241004",
+            "42359632",
+            "https://europepmc.org/article/MED/42241004",
+            "https://europepmc.org/article/MED/42359632"
+          ],
+          "elapsedMs": 433,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "diabetes precision medicine",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from europe-pmc.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "39308915",
+            "PPR719282",
+            "https://europepmc.org/article/MED/39308915",
+            "https://europepmc.org/article/PPR/PPR719282"
+          ],
+          "elapsedMs": 458,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 891
+    },
+    {
+      "source": "gdc-tcga",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "TCGA-BRCA",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from gdc-tcga.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "TCGA-BRCA",
+            "https://portal.gdc.cancer.gov/projects/TCGA-BRCA"
+          ],
+          "elapsedMs": 1446,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TCGA-LUAD",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from gdc-tcga.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "TCGA-LUAD",
+            "https://portal.gdc.cancer.gov/projects/TCGA-LUAD"
+          ],
+          "elapsedMs": 315,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1761
+    },
+    {
+      "source": "hpo",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "hypertension",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from hpo.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "HP:0002092",
+            "HP:0100817",
+            "http://purl.obolibrary.org/obo/HP_0002092",
+            "http://purl.obolibrary.org/obo/HP_0100817"
+          ],
+          "elapsedMs": 506,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "epileptic seizure",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from hpo.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "HP:0032662",
+            "HP:0033052",
+            "http://purl.obolibrary.org/obo/HP_0032662",
+            "http://purl.obolibrary.org/obo/HP_0033052"
+          ],
+          "elapsedMs": 365,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 871
+    },
+    {
+      "source": "interpro",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "protein kinase",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from interpro.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "cd00029",
+            "cd00089",
+            "https://www.ebi.ac.uk/interpro/entry/InterPro/cd00029/",
+            "https://www.ebi.ac.uk/interpro/entry/InterPro/cd00089/"
+          ],
+          "elapsedMs": 278,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "DNA repair",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from interpro.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "cd01121",
+            "cd06444",
+            "https://www.ebi.ac.uk/interpro/entry/InterPro/cd01121/",
+            "https://www.ebi.ac.uk/interpro/entry/InterPro/cd06444/"
+          ],
+          "elapsedMs": 275,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 553
+    },
+    {
+      "source": "jaspar",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from jaspar.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "MA0106.1",
+            "MA0106.2",
+            "https://jaspar.elixir.no/matrix/MA0106.1/",
+            "https://jaspar.elixir.no/matrix/MA0106.2/"
+          ],
+          "elapsedMs": 3924,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "STAT3",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from jaspar.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "MA0144.2",
+            "MA0144.3",
+            "https://jaspar.elixir.no/matrix/MA0144.2/",
+            "https://jaspar.elixir.no/matrix/MA0144.3/"
+          ],
+          "elapsedMs": 3288,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 7212
+    },
+    {
+      "source": "mesh",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "diabetes mellitus",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from mesh.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "68003920",
+            "68003924",
+            "https://www.ncbi.nlm.nih.gov/mesh/68003920/",
+            "https://www.ncbi.nlm.nih.gov/mesh/68003924/"
+          ],
+          "elapsedMs": 1531,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "essential hypertension",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from mesh.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "2023415",
+            "https://www.ncbi.nlm.nih.gov/mesh/2023415/"
+          ],
+          "elapsedMs": 881,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 3,
+      "sources": 3,
+      "elapsedMs": 2412
+    },
+    {
+      "source": "monarch",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "diabetes mellitus",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from monarch.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "MONDO:0005015",
+            "MONDO:0016391",
+            "https://monarchinitiative.org/MONDO:0005015",
+            "https://monarchinitiative.org/MONDO:0016391"
+          ],
+          "elapsedMs": 765,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "epileptic seizure",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from monarch.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "HP:0011097",
+            "HP:0033052",
+            "https://monarchinitiative.org/HP:0011097",
+            "https://monarchinitiative.org/HP:0033052"
+          ],
+          "elapsedMs": 270,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1035
+    },
+    {
+      "source": "mygene",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from mygene.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "12189",
+            "672",
+            "https://mygene.info/v3/gene/12189",
+            "https://mygene.info/v3/gene/672"
+          ],
+          "elapsedMs": 1228,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from mygene.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "24842",
+            "7157",
+            "https://mygene.info/v3/gene/24842",
+            "https://mygene.info/v3/gene/7157"
+          ],
+          "elapsedMs": 234,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1462
+    },
+    {
+      "source": "myvariant",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "rs429358",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from myvariant.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "chr19:g.45411941T>C",
+            "chr19:g.45411941T>T",
+            "https://myvariant.info/v1/variant/chr19:g.45411941T>C",
+            "https://myvariant.info/v1/variant/chr19:g.45411941T>T"
+          ],
+          "elapsedMs": 931,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "rs7903146",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from myvariant.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "chr10:g.114758349C>G",
+            "chr10:g.114758349C>T",
+            "https://myvariant.info/v1/variant/chr10:g.114758349C>G",
+            "https://myvariant.info/v1/variant/chr10:g.114758349C>T"
+          ],
+          "elapsedMs": 225,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1156
+    },
+    {
+      "source": "ncbi-gene",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1 human",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from ncbi-gene.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "12189",
+            "672",
+            "https://www.ncbi.nlm.nih.gov/gene/12189/",
+            "https://www.ncbi.nlm.nih.gov/gene/672/"
+          ],
+          "elapsedMs": 982,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TP53 human",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from ncbi-gene.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "24842",
+            "7157",
+            "https://www.ncbi.nlm.nih.gov/gene/24842/",
+            "https://www.ncbi.nlm.nih.gov/gene/7157/"
+          ],
+          "elapsedMs": 776,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1758
+    },
+    {
+      "source": "ncbi-geo",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "breast cancer expression",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from ncbi-geo.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "200272618",
+            "200338456",
+            "https://www.ncbi.nlm.nih.gov/gds/200272618/",
+            "https://www.ncbi.nlm.nih.gov/gds/200338456/"
+          ],
+          "elapsedMs": 1050,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "type 2 diabetes expression",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from ncbi-geo.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "200331205",
+            "200332732",
+            "https://www.ncbi.nlm.nih.gov/gds/200331205/",
+            "https://www.ncbi.nlm.nih.gov/gds/200332732/"
+          ],
+          "elapsedMs": 808,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1858
+    },
+    {
+      "source": "ncbi-protein",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1 human",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from ncbi-protein.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "1698399",
+            "2616260805",
+            "https://www.ncbi.nlm.nih.gov/protein/1698399/",
+            "https://www.ncbi.nlm.nih.gov/protein/2616260805/"
+          ],
+          "elapsedMs": 881,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TP53 human",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from ncbi-protein.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "1472901974",
+            "1486783307",
+            "https://www.ncbi.nlm.nih.gov/protein/1472901974/",
+            "https://www.ncbi.nlm.nih.gov/protein/1486783307/"
+          ],
+          "elapsedMs": 1030,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1911
+    },
+    {
+      "source": "ncbi-taxonomy",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "Homo sapiens",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from ncbi-taxonomy.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "9606",
+            "https://www.ncbi.nlm.nih.gov/taxonomy/9606/"
+          ],
+          "elapsedMs": 714,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "Mus musculus",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from ncbi-taxonomy.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "10090",
+            "https://www.ncbi.nlm.nih.gov/taxonomy/10090/"
+          ],
+          "elapsedMs": 798,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1512
+    },
+    {
+      "source": "openalex",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "aspirin cardiovascular prevention",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from openalex.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "https://doi.org/10.1001/jama.295.3.306",
+            "https://doi.org/10.1056/nejmoa050613",
+            "https://openalex.org/W2025039880",
+            "https://openalex.org/W2138597449"
+          ],
+          "elapsedMs": 884,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "diabetes machine learning",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from openalex.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "https://doi.org/10.1016/j.csbj.2016.12.005",
+            "https://doi.org/10.3389/fgene.2018.00515",
+            "https://openalex.org/W2569214105",
+            "https://openalex.org/W2900329012"
+          ],
+          "elapsedMs": 448,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1332
+    },
+    {
+      "source": "openfda",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "metformin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from openfda.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "0098dec4-f0e5-45d5-8aa4-5d0faf9ab142",
+            "011de1a5-1ac0-4831-9e8d-26ec79ba2205"
+          ],
+          "elapsedMs": 3349,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "atorvastatin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from openfda.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "00afce9b-48c9-487a-a738-e359c005c707",
+            "01eadde8-37f3-4474-995f-22c1a65adf12"
+          ],
+          "elapsedMs": 524,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 3873
+    },
+    {
+      "source": "pmc",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "aspirin cardiovascular prevention",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from pmc.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "6741347",
+            "7729916",
+            "https://www.ncbi.nlm.nih.gov/pmc/6741347/",
+            "https://www.ncbi.nlm.nih.gov/pmc/7729916/"
+          ],
+          "elapsedMs": 1632,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "diabetes precision medicine",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from pmc.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "6293289",
+            "7843214",
+            "https://www.ncbi.nlm.nih.gov/pmc/6293289/",
+            "https://www.ncbi.nlm.nih.gov/pmc/7843214/"
+          ],
+          "elapsedMs": 1143,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2775
+    },
+    {
+      "source": "pride",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "breast cancer proteomics",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from pride.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "PXD038543",
+            "PXD059920",
+            "https://www.ebi.ac.uk/pride/archive/projects/PXD038543",
+            "https://www.ebi.ac.uk/pride/archive/projects/PXD059920"
+          ],
+          "elapsedMs": 1418,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "diabetes proteomics",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from pride.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "PXD015101",
+            "PXD020055",
+            "https://www.ebi.ac.uk/pride/archive/projects/PXD015101",
+            "https://www.ebi.ac.uk/pride/archive/projects/PXD020055"
+          ],
+          "elapsedMs": 524,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1942
+    },
+    {
+      "source": "pubchem",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "aspirin",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from pubchem.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "2244",
+            "https://pubchem.ncbi.nlm.nih.gov/compound/2244"
+          ],
+          "elapsedMs": 1064,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "metformin",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from pubchem.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "4091",
+            "https://pubchem.ncbi.nlm.nih.gov/compound/4091"
+          ],
+          "elapsedMs": 380,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1444
+    },
+    {
+      "source": "pubmed",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "aspirin cardiovascular prevention",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from pubmed.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "32580960",
+            "38839268",
+            "https://www.ncbi.nlm.nih.gov/pubmed/32580960/",
+            "https://www.ncbi.nlm.nih.gov/pubmed/38839268/"
+          ],
+          "elapsedMs": 1283,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "diabetes precision medicine",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from pubmed.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "33529164",
+            "35994083",
+            "https://www.ncbi.nlm.nih.gov/pubmed/33529164/",
+            "https://www.ncbi.nlm.nih.gov/pubmed/35994083/"
+          ],
+          "elapsedMs": 1350,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2633
+    },
+    {
+      "source": "quickgo",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from quickgo.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "GO:0030330",
+            "https://www.ebi.ac.uk/QuickGO/term/GO:0030330"
+          ],
+          "elapsedMs": 1167,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from quickgo.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "GO:0070531",
+            "GO:0070533",
+            "https://www.ebi.ac.uk/QuickGO/term/GO:0070531",
+            "https://www.ebi.ac.uk/QuickGO/term/GO:0070533"
+          ],
+          "elapsedMs": 278,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 3,
+      "sources": 3,
+      "elapsedMs": 1445
+    },
+    {
+      "source": "reactome",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "DNA repair",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from reactome.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "R-HSA-73894",
+            "R-HSA-9675135",
+            "https://reactome.org/content/detail/R-HSA-73894",
+            "https://reactome.org/content/detail/R-HSA-9675135"
+          ],
+          "elapsedMs": 1326,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "insulin signaling",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from reactome.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "R-HSA-264876",
+            "R-HSA-74752",
+            "https://reactome.org/content/detail/R-HSA-264876",
+            "https://reactome.org/content/detail/R-HSA-74752"
+          ],
+          "elapsedMs": 866,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2192
+    },
+    {
+      "source": "rxnorm",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "metformin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from rxnorm.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "1043567",
+            "1043574",
+            "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=1043567",
+            "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=1043574"
+          ],
+          "elapsedMs": 1997,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "atorvastatin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from rxnorm.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "262095",
+            "2631867",
+            "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=262095",
+            "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=2631867"
+          ],
+          "elapsedMs": 253,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2250
+    },
+    {
+      "source": "sra",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "breast cancer RNA sequencing",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from sra.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "45730394",
+            "45730395",
+            "https://www.ncbi.nlm.nih.gov/sra/45730394/",
+            "https://www.ncbi.nlm.nih.gov/sra/45730395/"
+          ],
+          "elapsedMs": 1346,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "diabetes RNA sequencing",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from sra.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "45616403",
+            "45616404",
+            "https://www.ncbi.nlm.nih.gov/sra/45616403/",
+            "https://www.ncbi.nlm.nih.gov/sra/45616404/"
+          ],
+          "elapsedMs": 882,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2228
+    },
+    {
+      "source": "string",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from string.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "9606.ENSP00000269305",
+            "https://string-db.org/network/9606.ENSP00000269305"
+          ],
+          "elapsedMs": 917,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from string.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "9606.ENSP00000418960",
+            "https://string-db.org/network/9606.ENSP00000418960"
+          ],
+          "elapsedMs": 397,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1314
+    },
+    {
+      "source": "uniprot",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "TP53 human",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from uniprot.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "P04637",
+            "Q9Y2B4",
+            "https://www.uniprot.org/uniprotkb/P04637/entry",
+            "https://www.uniprot.org/uniprotkb/Q9Y2B4/entry"
+          ],
+          "elapsedMs": 1213,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "BRCA1 human",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from uniprot.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "P38398",
+            "Q9BX63",
+            "https://www.uniprot.org/uniprotkb/P38398/entry",
+            "https://www.uniprot.org/uniprotkb/Q9BX63/entry"
+          ],
+          "elapsedMs": 221,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1434
+    },
+    {
+      "source": "who-gho",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "maternal mortality",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from who-gho.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "MDG_0000000026",
+            "MDG_0000000032",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000026",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000032"
+          ],
+          "elapsedMs": 1747,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "life expectancy",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from who-gho.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "WHOSIS_000001",
+            "WHOSIS_000002",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000001",
+            "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000002"
+          ],
+          "elapsedMs": 1341,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 3088
+    },
+    {
+      "source": "clinicaltrials-gov",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "metformin type 2 diabetes",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from clinicaltrials-gov.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "NCT01789957",
+            "NCT03958591",
+            "https://clinicaltrials.gov/study/NCT01789957",
+            "https://clinicaltrials.gov/study/NCT03958591"
+          ],
+          "elapsedMs": 985,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "aspirin cardiovascular prevention",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from clinicaltrials-gov.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "NCT00425074",
+            "NCT05632445",
+            "https://clinicaltrials.gov/study/NCT00425074",
+            "https://clinicaltrials.gov/study/NCT05632445"
+          ],
+          "elapsedMs": 422,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1407
+    },
+    {
+      "source": "isrctn",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "diabetes",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from isrctn.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "ISRCTN15312527",
+            "ISRCTN39970779",
+            "https://www.isrctn.com/ISRCTN15312527",
+            "https://www.isrctn.com/ISRCTN39970779"
+          ],
+          "elapsedMs": 922,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "asthma",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from isrctn.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "ISRCTN17148628",
+            "ISRCTN83930526",
+            "https://www.isrctn.com/ISRCTN17148628",
+            "https://www.isrctn.com/ISRCTN83930526"
+          ],
+          "elapsedMs": 619,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1541
+    },
+    {
+      "source": "biorxiv",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "10.64898/2026.06.26.734908",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from biorxiv.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "10.64898/2026.06.26.734908",
+            "https://doi.org/10.64898/2026.06.26.734908"
+          ],
+          "elapsedMs": 1182,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "10.64898/2026.01.24.701325",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from biorxiv.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "10.64898/2026.01.24.701325",
+            "https://doi.org/10.64898/2026.01.24.701325"
+          ],
+          "elapsedMs": 690,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 3,
+      "sources": 3,
+      "elapsedMs": 1872
+    },
+    {
+      "source": "medrxiv",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "10.1101/2025.08.29.25334726",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from medrxiv.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "10.1101/2025.08.29.25334726",
+            "https://doi.org/10.1101/2025.08.29.25334726"
+          ],
+          "elapsedMs": 280,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "10.1101/2025.10.19.25337876",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from medrxiv.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "10.1101/2025.10.19.25337876",
+            "https://doi.org/10.1101/2025.10.19.25337876"
+          ],
+          "elapsedMs": 371,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 651
+    },
+    {
+      "source": "bindingdb",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "P23219",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from bindingdb.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "50174201",
+            "85511",
+            "https://www.bindingdb.org/rwd/bind/chemsearch/marvin/MolStructure.jsp?monomerid=50174201",
+            "https://www.bindingdb.org/rwd/bind/chemsearch/marvin/MolStructure.jsp?monomerid=85511"
+          ],
+          "elapsedMs": 1670,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "P35354",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from bindingdb.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "50089653",
+            "50174201",
+            "https://www.bindingdb.org/rwd/bind/chemsearch/marvin/MolStructure.jsp?monomerid=50089653",
+            "https://www.bindingdb.org/rwd/bind/chemsearch/marvin/MolStructure.jsp?monomerid=50174201"
+          ],
+          "elapsedMs": 1254,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2924
+    },
+    {
+      "source": "chembl",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "aspirin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from chembl.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "CHEMBL25",
+            "CHEMBL5314595",
+            "https://www.ebi.ac.uk/chembl/explore/compound/CHEMBL25",
+            "https://www.ebi.ac.uk/chembl/explore/compound/CHEMBL5314595"
+          ],
+          "elapsedMs": 1240,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "metformin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from chembl.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "CHEMBL1431",
+            "CHEMBL1703",
+            "https://www.ebi.ac.uk/chembl/explore/compound/CHEMBL1431",
+            "https://www.ebi.ac.uk/chembl/explore/compound/CHEMBL1703"
+          ],
+          "elapsedMs": 366,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1606
+    },
+    {
+      "source": "clinpgx-pharmgkb",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "warfarin",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from clinpgx-pharmgkb.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "PA451906",
+            "https://www.clinpgx.org/chemical/PA451906"
+          ],
+          "elapsedMs": 893,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "clopidogrel",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from clinpgx-pharmgkb.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "PA449053",
+            "https://www.clinpgx.org/chemical/PA449053"
+          ],
+          "elapsedMs": 203,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1096
+    },
+    {
+      "source": "gwas-catalog-ebi",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "type 2 diabetes",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from gwas-catalog-ebi.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "GCST90077724",
+            "GCST90837510",
+            "https://www.ebi.ac.uk/gwas/studies/GCST90077724",
+            "https://www.ebi.ac.uk/gwas/studies/GCST90837510"
+          ],
+          "elapsedMs": 525,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "breast cancer",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from gwas-catalog-ebi.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "GCST90837512",
+            "GCST90840648",
+            "https://www.ebi.ac.uk/gwas/studies/GCST90837512",
+            "https://www.ebi.ac.uk/gwas/studies/GCST90840648"
+          ],
+          "elapsedMs": 546,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1071
+    },
+    {
+      "source": "alphafold-db-predicted-protein-structures",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "P38398",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from alphafold-db-predicted-protein-structures.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "AF-P38398-8-F1",
+            "AF-P38398-F1",
+            "https://alphafold.ebi.ac.uk/entry/P38398"
+          ],
+          "elapsedMs": 270,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "P04637",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from alphafold-db-predicted-protein-structures.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "AF-P04637-9-F1",
+            "AF-P04637-F1",
+            "https://alphafold.ebi.ac.uk/entry/P04637"
+          ],
+          "elapsedMs": 130,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 400
+    },
+    {
+      "source": "emdb-electron-microscopy-data-bank",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "ribosome",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from emdb-electron-microscopy-data-bank.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "EMD-62900",
+            "EMD-71690",
+            "https://www.ebi.ac.uk/emdb/EMD-62900",
+            "https://www.ebi.ac.uk/emdb/EMD-71690"
+          ],
+          "elapsedMs": 1170,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "hemoglobin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from emdb-electron-microscopy-data-bank.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "EMD-76802",
+            "EMD-76804",
+            "https://www.ebi.ac.uk/emdb/EMD-76802",
+            "https://www.ebi.ac.uk/emdb/EMD-76804"
+          ],
+          "elapsedMs": 322,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1492
+    },
+    {
+      "source": "encode-encyclopedia-of-dna-elements",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from encode-encyclopedia-of-dna-elements.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "ENCSR000EBX",
+            "ENCSR857KDI",
+            "https://www.encodeproject.org/experiments/ENCSR000EBX/",
+            "https://www.encodeproject.org/experiments/ENCSR857KDI/"
+          ],
+          "elapsedMs": 1085,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from encode-encyclopedia-of-dna-elements.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "ENCSR760GZL",
+            "ENCSR980EGJ",
+            "https://www.encodeproject.org/experiments/ENCSR760GZL/",
+            "https://www.encodeproject.org/experiments/ENCSR980EGJ/"
+          ],
+          "elapsedMs": 237,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1322
+    },
+    {
+      "source": "ensembl",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from ensembl.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "ENSG00000012048",
+            "https://www.ensembl.org/Homo_sapiens/Gene/Summary?g=ENSG00000012048"
+          ],
+          "elapsedMs": 2246,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from ensembl.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "ENSG00000141510",
+            "https://www.ensembl.org/Homo_sapiens/Gene/Summary?g=ENSG00000141510"
+          ],
+          "elapsedMs": 361,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 2607
+    },
+    {
+      "source": "gtex-genotype-tissue-expression",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from gtex-genotype-tissue-expression.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "ENSG00000012048.20",
+            "https://gtexportal.org/home/gene/BRCA1"
+          ],
+          "elapsedMs": 1211,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from gtex-genotype-tissue-expression.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "ENSG00000141510.16",
+            "https://gtexportal.org/home/gene/TP53"
+          ],
+          "elapsedMs": 266,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1477
+    },
+    {
+      "source": "human-protein-atlas-hpa",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from human-protein-atlas-hpa.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "BARD1",
+            "BRCA1",
+            "https://www.proteinatlas.org/BARD1",
+            "https://www.proteinatlas.org/BRCA1"
+          ],
+          "elapsedMs": 1305,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from human-protein-atlas-hpa.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "TP53",
+            "TP53INP1",
+            "https://www.proteinatlas.org/TP53",
+            "https://www.proteinatlas.org/TP53INP1"
+          ],
+          "elapsedMs": 526,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1831
+    },
+    {
+      "source": "mousemine-mouse-genome-informatics-intermine-based",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from mousemine-mouse-genome-informatics-intermine-based.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "403437",
+            "672",
+            "https://www.mousemine.org/mousemine/report.do?id=78136473",
+            "https://www.mousemine.org/mousemine/report.do?id=82800350"
+          ],
+          "elapsedMs": 1450,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from mousemine-mouse-genome-informatics-intermine-based.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "431679",
+            "7157",
+            "https://www.mousemine.org/mousemine/report.do?id=78135027",
+            "https://www.mousemine.org/mousemine/report.do?id=83484526"
+          ],
+          "elapsedMs": 1592,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 3042
+    },
+    {
+      "source": "metabolomics-workbench",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "ST000001",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from metabolomics-workbench.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "ST000001",
+            "https://www.metabolomicsworkbench.org/data/DRCCMetadata.php?StudyID=ST000001"
+          ],
+          "elapsedMs": 935,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "ST000002",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from metabolomics-workbench.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "ST000002",
+            "https://www.metabolomicsworkbench.org/data/DRCCMetadata.php?StudyID=ST000002"
+          ],
+          "elapsedMs": 216,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1151
+    },
+    {
+      "source": "rcsb-protein-data-bank-pdb",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "4HHB",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from rcsb-protein-data-bank-pdb.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "4HHB",
+            "https://www.rcsb.org/structure/4HHB"
+          ],
+          "elapsedMs": 950,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "1TUP",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from rcsb-protein-data-bank-pdb.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "1TUP",
+            "https://www.rcsb.org/structure/1TUP"
+          ],
+          "elapsedMs": 210,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1160
+    },
+    {
+      "source": "ucsc-genome-browser",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from ucsc-genome-browser.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "ENST00000357654.9",
+            "HGNC%3A1100",
+            "https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=chr17%3A43044295-43125364",
+            "https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=chr17%3A43044295-43170245"
+          ],
+          "elapsedMs": 1466,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from ucsc-genome-browser.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "ENST00000238721.9",
+            "ENST00000269305.9",
+            "https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=chr17%3A7668421-7687490",
+            "https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=chr2%3A24077433-24084834"
+          ],
+          "elapsedMs": 2837,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 4303
+    },
+    {
+      "source": "wikipathways",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "insulin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from wikipathways.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "https://identifiers.org/wikipathways/WP3850_r141685",
+            "https://identifiers.org/wikipathways/WP3855_r128795"
+          ],
+          "elapsedMs": 829,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "apoptosis",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from wikipathways.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "https://identifiers.org/wikipathways/WP2036_r137884",
+            "https://identifiers.org/wikipathways/WP2864_r140956"
+          ],
+          "elapsedMs": 175,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1004
+    },
+    {
+      "source": "iuphar-bps-guide-to-pharmacology",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from iuphar-bps-guide-to-pharmacology.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "2332",
+            "https://www.guidetopharmacology.org/GRAC/ObjectDisplayForward?objectId=2332"
+          ],
+          "elapsedMs": 1307,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "EGFR",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from iuphar-bps-guide-to-pharmacology.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "1797",
+            "https://www.guidetopharmacology.org/GRAC/ObjectDisplayForward?objectId=1797"
+          ],
+          "elapsedMs": 345,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1652
+    },
+    {
+      "source": "open-targets",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from open-targets.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "ENSG00000012048",
+            "MONDO_0700268",
+            "https://platform.opentargets.org/disease/MONDO_0700268",
+            "https://platform.opentargets.org/target/ENSG00000012048"
+          ],
+          "elapsedMs": 522,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from open-targets.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "ENSG00000141510",
+            "MONDO_0013876",
+            "https://platform.opentargets.org/disease/MONDO_0013876",
+            "https://platform.opentargets.org/target/ENSG00000141510"
+          ],
+          "elapsedMs": 348,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 870
+    },
+    {
+      "source": "dgidb",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from dgidb.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "hgnc:11998|rxcui:32592",
+            "hgnc:11998|rxcui:33764",
+            "https://dgidb.org/results?genes=TP53"
+          ],
+          "elapsedMs": 1209,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "EGFR",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from dgidb.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "hgnc:3236|ncit:C133691",
+            "hgnc:3236|rxcui:1430438",
+            "https://dgidb.org/results?genes=EGFR"
+          ],
+          "elapsedMs": 291,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 1500
+    },
+    {
+      "source": "gnomad",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRCA1",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from gnomad.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "ENSG00000012048",
+            "https://gnomad.broadinstitute.org/gene/ENSG00000012048?dataset=gnomad_r4"
+          ],
+          "elapsedMs": 777,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "TP53",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from gnomad.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "ENSG00000141510",
+            "https://gnomad.broadinstitute.org/gene/ENSG00000141510?dataset=gnomad_r4"
+          ],
+          "elapsedMs": 269,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1046
+    },
+    {
+      "source": "openneuro",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "ds000224",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from openneuro.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "ds000224",
+            "https://openneuro.org/datasets/ds000224"
+          ],
+          "elapsedMs": 524,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "ds000001",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from openneuro.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "ds000001",
+            "https://openneuro.org/datasets/ds000001"
+          ],
+          "elapsedMs": 232,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 756
+    },
+    {
+      "source": "civic",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "BRAF",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from civic.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "5",
+            "https://civicdb.org/genes/5/summary"
+          ],
+          "elapsedMs": 817,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "EGFR",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from civic.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "19",
+            "https://civicdb.org/genes/19/summary"
+          ],
+          "elapsedMs": 213,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1030
+    },
+    {
+      "source": "human-cell-atlas",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "74b6d569-3b11-42ef-b6b1-a0454522b4a0",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from human-cell-atlas.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "74b6d569-3b11-42ef-b6b1-a0454522b4a0",
+            "https://explore.data.humancellatlas.org/projects/74b6d569-3b11-42ef-b6b1-a0454522b4a0"
+          ],
+          "elapsedMs": 889,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "53c53cd4-8127-4e12-bc7f-8fe1610a715c",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from human-cell-atlas.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "53c53cd4-8127-4e12-bc7f-8fe1610a715c",
+            "https://explore.data.humancellatlas.org/projects/53c53cd4-8127-4e12-bc7f-8fe1610a715c"
+          ],
+          "elapsedMs": 1026,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1915
+    },
+    {
+      "source": "1000-genomes-project",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "PRJEB31736",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from 1000-genomes-project.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "PRJEB31736",
+            "https://www.ebi.ac.uk/ena/browser/view/PRJEB31736"
+          ],
+          "elapsedMs": 1142,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "PRJNA262923",
+          "status": "warning",
+          "summary": "Retrieved 1 traceable records from 1000-genomes-project.",
+          "errorCode": null,
+          "records": 1,
+          "sources": 1,
+          "identifiers": [
+            "PRJNA262923",
+            "https://www.ebi.ac.uk/ena/browser/view/PRJNA262923"
+          ],
+          "elapsedMs": 287,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 2,
+      "sources": 2,
+      "elapsedMs": 1429
+    },
+    {
+      "source": "archs4",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "kidney",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from archs4.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "GSM1095127",
+            "GSM1095131",
+            "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM1095127",
+            "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM1095131"
+          ],
+          "elapsedMs": 5100,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "glioblastoma",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from archs4.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "GSM1185877",
+            "GSM1185879",
+            "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM1185877",
+            "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM1185879"
+          ],
+          "elapsedMs": 4190,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 9290
+    },
+    {
+      "source": "rummageo-geo-gene-set-enrichment-search",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "kidney",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from rummageo-geo-gene-set-enrichment-search.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "00091721-773e-4bf1-9aa8-079d05e30e53",
+            "000ad9ea-3317-4103-8846-5fb6f6fc4fe2",
+            "https://rummageo.com/term-search?terms=kidney"
+          ],
+          "elapsedMs": 1367,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "glioblastoma",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from rummageo-geo-gene-set-enrichment-search.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "000a17de-6065-4916-939f-b4e211911205",
+            "002c435c-679d-4c96-a72b-049e0f407335",
+            "https://rummageo.com/term-search?terms=glioblastoma"
+          ],
+          "elapsedMs": 815,
+          "attempts": 1,
+          "executionRoute": "server_allowlisted_gateway",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 2182
+    },
+    {
+      "source": "sider",
+      "status": "quality_pass",
+      "cases": [
+        {
+          "query": "aspirin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from sider.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "CID100002244|C0001122",
+            "CID100002244|C0268030",
+            "https://sideeffects.embl.de/drugs/CID100002244/"
+          ],
+          "elapsedMs": 6,
+          "attempts": 1,
+          "executionRoute": "bundled_verified_dataset",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        },
+        {
+          "query": "metformin",
+          "status": "warning",
+          "summary": "Retrieved 2 traceable records from sider.",
+          "errorCode": null,
+          "records": 2,
+          "sources": 2,
+          "identifiers": [
+            "CID100004091|C0232487",
+            "CID100004091|C1291077",
+            "https://sideeffects.embl.de/drugs/CID100004091/"
+          ],
+          "elapsedMs": 1,
+          "attempts": 1,
+          "executionRoute": "bundled_verified_dataset",
+          "checks": {
+            "toolResult": true,
+            "recordsPresent": true,
+            "sourceCountPresent": true,
+            "traceableSources": true,
+            "connectorIdentity": true,
+            "requestProvenance": true,
+            "recordIdentifiers": true
+          },
+          "pass": true
+        }
+      ],
+      "qualityChecks": {
+        "twoQueriesExecuted": true,
+        "allCasesPassedContract": true,
+        "distinctQueryResults": true,
+        "controlledProductionRoute": true,
+        "runtimeArbitraryEgressNotRequired": true
+      },
+      "records": 4,
+      "sources": 4,
+      "elapsedMs": 7
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Citation Integrity"
+  short_description: "Manage and verify scientific citations and identifiers"
+  default_prompt: "Use $citation-integrity to verify and reconcile the citations in this research package."

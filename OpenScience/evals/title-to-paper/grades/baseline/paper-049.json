@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-049",
+  "category": "methods-software",
+  "title": "The updated Consolidated Framework for Implementation Research based on user feedback.",
+  "pmcid": "PMC9617234",
+  "doi": "10.1186/s13012-022-01245-0",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 8167,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 52,
+    "supportedUniqueNumbers": 52,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.0007665772326561902,
+    "toolCalls": 7,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "所有声称均可在参考文献 XML 中找到直接、准确的支持：研究设计、样本量（334 名作者，40% 完成，59 篇反馈文章等）、方法细节（系统性检索、编码者一致性、共识会议频率与时段）、结果数字（27% 非医疗、8% LMIC、50% 易用、58% 复杂、48 构念等）、具体引用语、局限性三要点以及未来研究方向均与原文一致，无捏造或夸大。"
+  },
+  "overallVerdict": "pass"
+}

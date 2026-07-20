@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-033",
+  "category": "pharmacovigilance-drug-safety",
+  "title": "Psychiatric disorders associated with immune checkpoint inhibitors: a pharmacovigilance analysis of the FDA Adverse Event Reporting System (FAERS) database.",
+  "pmcid": "PMC10149185",
+  "doi": "10.1016/j.eclinm.2023.101967",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 7821,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 137,
+    "supportedUniqueNumbers": 137,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.003097573567372225,
+    "toolCalls": 19,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "生成文本中的所有声明均准确来自于参考文献，没有发现任何虚构或未经验证的信息。重述内容忠实地反映了研究的设计、方法、结果和结论。"
+  },
+  "overallVerdict": "pass"
+}

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="EviMed">
+  <defs>
+    <linearGradient id="evimed" x1="72" y1="48" x2="440" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4F8BFF" />
+      <stop offset="1" stop-color="#1D4ED8" />
+    </linearGradient>
+  </defs>
+  <rect x="28" y="28" width="456" height="456" rx="116" fill="url(#evimed)" />
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round" stroke-width="34">
+    <path d="M210 286 124 200M210 286 326 140M210 286l166 72" />
+  </g>
+  <g fill="#FFFFFF">
+    <circle cx="120" cy="196" r="49" />
+    <circle cx="210" cy="286" r="55" />
+    <circle cx="330" cy="136" r="49" />
+    <circle cx="380" cy="360" r="49" />
+  </g>
+</svg>

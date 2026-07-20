@@ -1,0 +1,31 @@
+id: peer-review
+version: 1.0.1
+title: 论文同行评审
+category: 研究质量
+description: 按研究类型匹配报告规范，对上传论文的方法学、统计学、完整性和证据位置进行审查，并给出可执行的修改建议。
+skill: peer-review
+estimatedMinutes: [20, 120]
+starterPrompts:
+  - 审查我上传的论文，定位方法学、统计学、报告规范和科研诚信问题。
+requiredInputs:
+  - manuscript
+optionalInputs:
+  - articleType
+  - outputLanguage
+requiredTools:
+  - evimed_peer_review
+optionalTools:
+  - evimed_data_source_catalog
+  - evimed_literature_search
+dataSources:
+  - uploaded-files
+  - reporting-guidelines
+  - literature
+outputs:
+  - path: peer-review-report.md
+    required: true
+  - path: peer-review-run.json
+    required: true
+completionChecks:
+  - requiredOutputsExist
+  - citationsResolvable

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scientific Deep Learning"
+  short_description: "Train and evaluate scientific deep learning models"
+  default_prompt: "Use $scientific-deep-learning to develop this reproducible scientific model."

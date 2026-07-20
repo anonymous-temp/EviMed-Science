@@ -1,0 +1,12 @@
+{
+  "posterior": {
+    "alpha": 33.0,
+    "beta": 19.0,
+    "credibleInterval95": [
+      0.500681979116747,
+      0.7587375703599883
+    ],
+    "distribution": "Beta",
+    "mean": 0.6346153846153846
+  }
+}

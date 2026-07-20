@@ -1,0 +1,634 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 4,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-041",
+  "category": "biomedical-ai",
+  "title": "Text Data Augmentation for Deep Learning.",
+  "pmcid": "PMC8287113",
+  "doi": "10.1186/s40537-021-00492-0",
+  "selectedRunLabel": "fidelity-gate-v1",
+  "referenceSha256": "d15edb056db9efbe37035b8c707fd0ef7f8abe4e640457683be14033adb4b4c4",
+  "generatedSha256": "12b9376c2706dc35f929967c8c612b41bff228ec154001ea4edccd2caddf4934",
+  "promptSha256": "e92e66318ea4bb660cfb587e005b59343a181656700d0d2d450ecde86efb7311",
+  "cacheFingerprint": "18973df3452e679cee7760cca0d93cec796fe7971c382b3a16647dc49359d768",
+  "referenceCharacters": 121853,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 18413,
+  "paperType": "survey",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Survey examining text data augmentation for NLP, covering motifs, frameworks, practical implementation, generalization, and future directions.",
+      "generatedFact": "Survey examines data augmentation as a strategy for text-based deep learning, covering motifs, frameworks, generalization testing, and comparisons.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Text Data Augmentation for Deep Learning.\", \"pmcid\": \"PMC8287113\", \"pmid\": \"34306963\", \"doi\": \"10.1186/s40537-021-00492-0\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-07-19\"} [ABSTRACT] AbstractNatural Language Processing (NLP) is one of the most captivating applications of Deep Learning. In this survey, we consider how the Data Augmentation training strategy can aid in its development. We begin with the major motifs of Data Augmentation summarized into strengthening local decision boundaries, brute force training, causality and counterfactual examples, and the distinction between meaning and form."
+        ],
+        "quote": "[METADATA] {\"title\": \"Text Data Augmentation for Deep Learning.\", \"pmcid\": \"PMC8287113\", \"pmid\": \"34306963\", \"doi\": \"10.1186/s40537-021-00492-0\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-07-19\"} [ABSTRACT] AbstractNatural Language Processing (NLP) is one of the most captivating applications of Deep Learning. In this survey, we consider how the Data Augmentation training strategy can aid in its development. We begin with the major motifs of Data Augmentation summarized into strengthening local decision boundaries, brute force training, causality and counterfactual examples, and the distinction between meaning and form."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# Restatement: Text Data Augmentation for Deep Learning **Source paper:** - Authors: Connor Shorten, Taghi M. Khoshgoftaar, Borko Furht - Journal: Journal of Big Data, 2021 - DOI: [10.1186/s40537-021-00492-0](https://doi.org/10.1186/s40537-021-00492-0) - PMCID: [PMC8287113](https://europepmc.org/articles/PMC8287113) - Primary source: https://europepmc.org/articles/PMC8287113 **Paper type:** Narrative survey / review — not an original experimental study. --- ## Abstract Natural language processing relies heavily on supervised learning, which is bottlenecked by the difficulty of curating large annotated datasets."
+        ],
+        "quote": "# Restatement: Text Data Augmentation for Deep Learning **Source paper:** - Authors: Connor Shorten, Taghi M. Khoshgoftaar, Borko Furht - Journal: Journal of Big Data, 2021 - DOI: [10.1186/s40537-021-00492-0](https://doi.org/10.1186/s40537-021-00492-0) - PMCID: [PMC8287113](https://europepmc.org/articles/PMC8287113) - Primary source: https://europepmc.org/articles/PMC8287113 **Paper type:** Narrative survey / review — not an original experimental study. --- ## Abstract Natural language processing relies heavily on supervised learning, which is bottlenecked by the difficulty of curating large annotated datasets."
+      },
+      "explanation": "Both state the survey objective and scope match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Narrative survey without systematic protocol or quantitative synthesis.",
+      "generatedFact": "Narrative literature review; no systematic search, inclusion criteria, or quantitative synthesis.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Text Data Augmentation for Deep Learning.\", \"pmcid\": \"PMC8287113\", \"pmid\": \"34306963\", \"doi\": \"10.1186/s40537-021-00492-0\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-07-19\"} [ABSTRACT] AbstractNatural Language Processing (NLP) is one of the most captivating applications of Deep Learning. In this survey, we consider how the Data Augmentation training strategy can aid in its development. We begin with the major motifs of Data Augmentation summarized into strengthening local decision boundaries, brute force training, causality and counterfactual examples, and the distinction between meaning and form."
+        ],
+        "quote": "[METADATA] {\"title\": \"Text Data Augmentation for Deep Learning.\", \"pmcid\": \"PMC8287113\", \"pmid\": \"34306963\", \"doi\": \"10.1186/s40537-021-00492-0\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-07-19\"} [ABSTRACT] AbstractNatural Language Processing (NLP) is one of the most captivating applications of Deep Learning. In this survey, we consider how the Data Augmentation training strategy can aid in its development. We begin with the major motifs of Data Augmentation summarized into strengthening local decision boundaries, brute force training, causality and counterfactual examples, and the distinction between meaning and form."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "They define data augmentation as a set of algorithms that construct synthetic data from an available dataset, typically imposing small, label-preserving changes. Augmentation is presented as an intuitive regularization interface — more interpretable than dropout or weight penalties — that explicitly encodes semantic invariances. The survey builds on the authors' prior work on image data augmentation and acknowledges the contemporaneous survey by Feng et al., noting that the present work adds the meaning-versus-form debate, counterfactual examples, and prompt-based generative augmentation. --- ## Methods **Study design.** This is a narrative literature review."
+        ],
+        "quote": "They define data augmentation as a set of algorithms that construct synthetic data from an available dataset, typically imposing small, label-preserving changes. Augmentation is presented as an intuitive regularization interface — more interpretable than dropout or weight penalties — that explicitly encodes semantic invariances. The survey builds on the authors' prior work on image data augmentation and acknowledges the contemporaneous survey by Feng et al., noting that the present work adds the meaning-versus-form debate, counterfactual examples, and prompt-based generative augmentation. --- ## Methods **Study design.** This is a narrative literature review."
+      },
+      "explanation": "Design described identically as narrative review with no systematic protocol.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No empirical population or data source; survey only.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No sample size; survey has no original experiments.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "No eligibility or selection criteria described.",
+      "generatedFact": "No database query strings, screening flow, or selection criteria specified.",
+      "sourceEvidence": {
+        "locator": "R0146",
+        "locators": [
+          "R0146"
+        ],
+        "quotes": [
+          "Acknowledgements We would like to thank the reviewers in the Data Mining and Machine Learning Laboratory at Florida Atlantic University. Additionally, we acknowledge partial support by the NSF (IIS-2027890). Opinions, findings, conclusions, or recommendations in this paper are the authors’ and do not reflect the views of the NSF. Authors' contributions CS performed the literature review and drafted the manuscript. TMK worked with CS to develop the article’s framework and focus. TMK introduced this topic to CS. All authors read and approved the final manuscript. Funding NSF RAPID (IIS-2027890). Availability of data and materials Not applicable."
+        ],
+        "quote": "Acknowledgements We would like to thank the reviewers in the Data Mining and Machine Learning Laboratory at Florida Atlantic University. Additionally, we acknowledge partial support by the NSF (IIS-2027890). Opinions, findings, conclusions, or recommendations in this paper are the authors’ and do not reflect the views of the NSF. Authors' contributions CS performed the literature review and drafted the manuscript. TMK worked with CS to develop the article’s framework and focus. TMK introduced this topic to CS. All authors read and approved the final manuscript. Funding NSF RAPID (IIS-2027890). Availability of data and materials Not applicable."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "No systematic search protocol, inclusion/exclusion criteria, or quantitative synthesis is reported. **Literature review procedure.** The paper states: \"CS performed the literature review and drafted the manuscript. TMK worked with CS to develop the article's framework and focus. TMK introduced this topic to CS. All authors read and approved the final manuscript.\" No database query strings, screening flow, or selection criteria are specified. **Categorization framework.** Augmentations are organized along two primary axes: 1. **Symbolic vs. Neural** — whether an auxiliary neural network is used to generate new examples, or whether rule-based / graph-structured methods suffice. 2."
+        ],
+        "quote": "No systematic search protocol, inclusion/exclusion criteria, or quantitative synthesis is reported. **Literature review procedure.** The paper states: \"CS performed the literature review and drafted the manuscript. TMK worked with CS to develop the article's framework and focus. TMK introduced this topic to CS. All authors read and approved the final manuscript.\" No database query strings, screening flow, or selection criteria are specified. **Categorization framework.** Augmentations are organized along two primary axes: 1. **Symbolic vs. Neural** — whether an auxiliary neural network is used to generate new examples, or whether rule-based / graph-structured methods suffice. 2."
+      },
+      "explanation": "Both indicate absence of selection criteria in the survey methodology.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No intervention in a survey.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No comparator or reference standard for a survey.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No primary outcomes measured; survey synthesizes literature.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No follow-up or study period in a survey.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No data preprocessing described for the survey itself.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Narrative synthesis without statistical analysis.",
+      "generatedFact": "Narrative literature review; no quantitative synthesis.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Text Data Augmentation for Deep Learning.\", \"pmcid\": \"PMC8287113\", \"pmid\": \"34306963\", \"doi\": \"10.1186/s40537-021-00492-0\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-07-19\"} [ABSTRACT] AbstractNatural Language Processing (NLP) is one of the most captivating applications of Deep Learning. In this survey, we consider how the Data Augmentation training strategy can aid in its development. We begin with the major motifs of Data Augmentation summarized into strengthening local decision boundaries, brute force training, causality and counterfactual examples, and the distinction between meaning and form."
+        ],
+        "quote": "[METADATA] {\"title\": \"Text Data Augmentation for Deep Learning.\", \"pmcid\": \"PMC8287113\", \"pmid\": \"34306963\", \"doi\": \"10.1186/s40537-021-00492-0\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-07-19\"} [ABSTRACT] AbstractNatural Language Processing (NLP) is one of the most captivating applications of Deep Learning. In this survey, we consider how the Data Augmentation training strategy can aid in its development. We begin with the major motifs of Data Augmentation summarized into strengthening local decision boundaries, brute force training, causality and counterfactual examples, and the distinction between meaning and form."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "They define data augmentation as a set of algorithms that construct synthetic data from an available dataset, typically imposing small, label-preserving changes. Augmentation is presented as an intuitive regularization interface — more interpretable than dropout or weight penalties — that explicitly encodes semantic invariances. The survey builds on the authors' prior work on image data augmentation and acknowledges the contemporaneous survey by Feng et al., noting that the present work adds the meaning-versus-form debate, counterfactual examples, and prompt-based generative augmentation. --- ## Methods **Study design.** This is a narrative literature review."
+        ],
+        "quote": "They define data augmentation as a set of algorithms that construct synthetic data from an available dataset, typically imposing small, label-preserving changes. Augmentation is presented as an intuitive regularization interface — more interpretable than dropout or weight penalties — that explicitly encodes semantic invariances. The survey builds on the authors' prior work on image data augmentation and acknowledges the contemporaneous survey by Feng et al., noting that the present work adds the meaning-versus-form debate, counterfactual examples, and prompt-based generative augmentation. --- ## Methods **Study design.** This is a narrative literature review."
+      },
+      "explanation": "Both state narrative synthesis and absence of quantitative analysis.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Survey does not present a new original algorithm or model.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No original numerical results; the survey only quotes literature.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No uncertainty measures for original findings.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Text data augmentation is promising, prevents overfitting, injects priors, tests generalization; still immature vs vision; aims to inspire research.",
+      "generatedFact": "Data augmentation is interpretable, prevents overfitting, simulates shift; immature vs vision; advancing rapidly; aims to stimulate research.",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "This is a very interesting idea encompassing papers such as POET [ 11 ], Generative Teaching Networks [ 12 ], and the Synthetic Petri Dish [ 13 ] which describe algorithms that learn the environment to learn from. We present how this differs from augmentation controllers or curriculum learning, the idea of skill acquisition from artificial data, and opportunities to test these ideas in NLP. Data Augmentation for NLP prevents overfitting, provides the easiest way to inject prior knowledge into a Deep Learning system, and offers a view into the generalization ability of these models."
+        ],
+        "quote": "This is a very interesting idea encompassing papers such as POET [ 11 ], Generative Teaching Networks [ 12 ], and the Synthetic Petri Dish [ 13 ] which describe algorithms that learn the environment to learn from. We present how this differs from augmentation controllers or curriculum learning, the idea of skill acquisition from artificial data, and opportunities to test these ideas in NLP. Data Augmentation for NLP prevents overfitting, provides the easiest way to inject prior knowledge into a Deep Learning system, and offers a view into the generalization ability of these models."
+      },
+      "generatedEvidence": {
+        "locator": "G0023",
+        "locators": [
+          "G0023"
+        ],
+        "quotes": [
+          "--- ## Conclusion The authors reiterate that data augmentation provides an interpretable interface to inject domain priors, prevent overfitting, and simulate distribution shift. They characterize text data augmentation as immature compared to computer vision but advancing rapidly, propelled by improvements in generative modeling and prompting techniques. The paper aims to stimulate further research in this area. --- ## Limitations **Limitations explicitly stated by the authors:** The paper does not include a dedicated limitations section."
+        ],
+        "quote": "--- ## Conclusion The authors reiterate that data augmentation provides an interpretable interface to inject domain priors, prevent overfitting, and simulate distribution shift. They characterize text data augmentation as immature compared to computer vision but advancing rapidly, propelled by improvements in generative modeling and prompting techniques. The paper aims to stimulate further research in this area. --- ## Limitations **Limitations explicitly stated by the authors:** The paper does not include a dedicated limitations section."
+      },
+      "explanation": "Conclusion direction and strength match the reference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "No dedicated limitations section; informally acknowledges early stage, difficulty of label-preserving text transformations, lack of controller adoption in NLP, and comparison with Feng et al.",
+      "generatedFact": "No dedicated limitations section; scattered constraints: early stage, harder label-preserving, controllers not adopted, Feng et al. deeper enumeration.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "We follow these motifs with a concrete list of augmentation frameworks that have been developed for text data. Deep Learning generally struggles with the measurement of generalization and characterization of overfitting. We highlight studies that cover how augmentations can construct test sets for generalization. NLP is at an early stage in applying Data Augmentation compared to Computer Vision. We highlight the key differences and promising ideas that have yet to be tested in NLP."
+        ],
+        "quote": "We follow these motifs with a concrete list of augmentation frameworks that have been developed for text data. Deep Learning generally struggles with the measurement of generalization and characterization of overfitting. We highlight studies that cover how augmentations can construct test sets for generalization. NLP is at an early stage in applying Data Augmentation compared to Computer Vision. We highlight the key differences and promising ideas that have yet to be tested in NLP."
+      },
+      "generatedEvidence": {
+        "locator": "G0024",
+        "locators": [
+          "G0024"
+        ],
+        "quotes": [
+          "The following constraints are acknowledged throughout the text: - Text data augmentation \"is still at an early stage\" relative to computer vision (Introduction, Image vs. Text Augmentation). - It is \"much harder\" to define label-preserving transformations for text than for images because text perturbations can more easily alter the ground-truth label (Image vs. Text Augmentation section). - Controllers developed for images (AutoAugment, Population-Based Augmentation, RandAugment) \"have not yet seen large-scale adoption in NLP\" (Augmentation Controllers section). - The paper acknowledges Feng et al."
+        ],
+        "quote": "The following constraints are acknowledged throughout the text: - Text data augmentation \"is still at an early stage\" relative to computer vision (Introduction, Image vs. Text Augmentation). - It is \"much harder\" to define label-preserving transformations for text than for images because text perturbations can more easily alter the ground-truth label (Image vs. Text Augmentation section). - Controllers developed for images (AutoAugment, Population-Based Augmentation, RandAugment) \"have not yet seen large-scale adoption in NLP\" (Augmentation Controllers section). - The paper acknowledges Feng et al."
+      },
+      "explanation": "Limitations acknowledged in both are the same.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No safety or harms discussed in this survey.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "datasets_and_splits",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No original dataset splits in a survey.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "architecture_and_training",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No novel architecture or training setup presented.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "baselines_and_ablation",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No baseline comparisons or ablations in a survey.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "evaluation_metrics_and_external_validation",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No evaluation of original model; survey only.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    }
+  ],
+  "metrics": {
+    "applicableItems": 6,
+    "weightedFidelity": 1.0,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 6,
+      "not_applicable": 15
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": null,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": null,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": null
+    },
+    "gateFailures": [
+      "adversarial_unsupported_claim",
+      "adversarial_unverifiable_evidence"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail",
+    "adversarialIssueCount": 1,
+    "adversarialUnsupportedClaimCount": 1,
+    "adversarialContradictionCount": 0,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 1
+  },
+  "adversarialAudit": {
+    "verdict": "issues_found",
+    "issues": [
+      {
+        "id": "key_numerical_results",
+        "importance": "minor",
+        "status": "unsupported",
+        "issueKinds": [
+          "unsupported"
+        ],
+        "referenceFact": "",
+        "generatedFact": "tuned-prompt ensembling raised average SuperGLUE performance from 88.5 (single prompt) to 90.5",
+        "sourceEvidence": {
+          "locator": "R0077",
+          "locators": [
+            "R0077"
+          ],
+          "quotes": [
+            "Performance can be further improved by ensembling optimized prompts and running inference as a single batch of the input and the appended prompts. Tuned prompt ensembling improves the average performance of the prompts on SuperGLUE from 88.5, and the best performing individual prompt at 89.8, to 90.5. The authors further highlight that analysis of the optimized prompt embedding can aid in task complexity and similarity metrics, as well as Meta-Learning. Prompt tuning shares the same underlying concept of prepending context to the input of downstream tasks to facilitate fine-tuning, however this technique is more in line with research on Transfer Learning with minimal modifications."
+          ],
+          "quote": "Performance can be further improved by ensembling optimized prompts and running inference as a single batch of the input and the appended prompts. Tuned prompt ensembling improves the average performance of the prompts on SuperGLUE from 88.5, and the best performing individual prompt at 89.8, to 90.5. The authors further highlight that analysis of the optimized prompt embedding can aid in task complexity and similarity metrics, as well as Meta-Learning. Prompt tuning shares the same underlying concept of prepending context to the input of downstream tasks to facilitate fine-tuning, however this technique is more in line with research on Transfer Learning with minimal modifications."
+        },
+        "generatedEvidence": {
+          "locator": "G0015",
+          "locators": [
+            "G0015"
+          ],
+          "quotes": [
+            "reported that scale (175B parameters) is critical — performance drops substantially at 13B. - Scao & Rush (2021): a prompt is \"worth 100s of data points\" on SuperGLUE compared to head-based fine-tuning. - *Prompt tuning* (Lester et al., 2021): optimizes a continuous prompt embedding while freezing the model; tuned-prompt ensembling raised average SuperGLUE performance from 88.5 (single prompt) to 90.5. - *Pattern-exploiting training (PET)* (Schick & Schütze, 2021): converts supervised tasks into language-modeling tasks via templates and a verbalizer. ADAPET (Tam et al., 2021) improves PET with dense supervision on the full vocabulary and conditional masked-token prediction."
+          ],
+          "quote": "reported that scale (175B parameters) is critical — performance drops substantially at 13B. - Scao & Rush (2021): a prompt is \"worth 100s of data points\" on SuperGLUE compared to head-based fine-tuning. - *Prompt tuning* (Lester et al., 2021): optimizes a continuous prompt embedding while freezing the model; tuned-prompt ensembling raised average SuperGLUE performance from 88.5 (single prompt) to 90.5. - *Pattern-exploiting training (PET)* (Schick & Schütze, 2021): converts supervised tasks into language-modeling tasks via templates and a verbalizer. ADAPET (Tam et al., 2021) improves PET with dense supervision on the full vocabulary and conditional masked-token prediction."
+        },
+        "explanation": "Reference states average prompt performance was 88.5 and best individual prompt was 89.8, thus 88.5 is not a single prompt's performance.",
+        "sourceEvidenceValid": true,
+        "generatedEvidenceValid": true,
+        "criterionId": "key_numerical_results",
+        "kind": "unsupported",
+        "severity": "minor",
+        "claim": "tuned-prompt ensembling raised average SuperGLUE performance from 88.5 (single prompt) to 90.5"
+      }
+    ],
+    "rationale": "Minor numeric inaccuracy: prompt tuning improvement is stated as from 88.5 (single prompt) to 90.5, but the source reports 88.5 as average prompt performance, not a single prompt. All other factual claims are consistent with the reference."
+  },
+  "overallAssessment": "The generated restatement accurately reproduces the reference survey. It faithfully identifies the paper as a narrative review without original experiments, correctly summarizing the covered motifs, augmentation catalog, practical considerations, and limitations. All numerical claims quoted from the literature match the reference precisely. The conclusions and identified limitations (e.g., no systematic review, early stage, difficulty of label-preserving transformations) are exact. No contradictions or unsupported claims are present. The restatement is a reliable and complete summary of the original survey.",
+  "gradedAt": "2026-07-18T15:00:27Z"
+}

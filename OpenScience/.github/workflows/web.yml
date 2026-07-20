@@ -1,0 +1,391 @@
+name: web
+
+on:
+  pull_request:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl \
+            wget file libxdo-dev libssl-dev libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch bundled OpenCode sidecar
+        shell: bash
+        run: bash scripts/dev/fetch-opencode.sh x86_64-unknown-linux-gnu
+
+      - name: Fetch bundled ai4s-skills pack
+        shell: bash
+        run: bash scripts/dev/fetch-skills.sh
+
+      - name: Fetch bundled uv sidecar
+        shell: bash
+        run: bash scripts/dev/fetch-uv.sh x86_64-unknown-linux-gnu
+
+      - name: Test Hosted Web API
+        run: |
+          CI=true pnpm test:mcp
+          CI=true pnpm --filter @ai4s/server test
+
+      - name: Test DeepSeek compatibility and real OpenCode fake-chain gates
+        run: >-
+          CI=true pnpm --filter @ai4s/server exec node --test
+          test/deepseekCompatibility.test.mjs
+          test/deepseekOpenCodeReleaseGate.test.mjs
+
+      - name: Test mock hosted API contract
+        run: CI=true pnpm --filter @ai4s/server test:contract
+
+      - name: Audit hosted compliance and monitoring baseline
+        run: pnpm audit:hosted-compliance
+
+      - name: Audit production dependencies
+        run: pnpm audit:dependencies
+
+      - name: Typecheck frontend
+        run: pnpm --filter @ai4s/desktop typecheck
+
+      - name: Test frontend
+        run: CI=true pnpm --filter @ai4s/desktop test
+
+      - name: Build hosted frontend
+        run: CI=true VITE_OPEN_SCIENCE_API_URL=/api pnpm --filter @ai4s/desktop build
+
+      - name: Check Tauri backend
+        working-directory: apps/desktop/src-tauri
+        run: cargo check
+
+  docker-hosted:
+    runs-on: ubuntu-22.04
+    needs: web
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Define immutable CI release
+        shell: bash
+        run: |
+          echo "OPEN_SCIENCE_APP_VERSION=0.1.3" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_RELEASE_ID=ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_SOURCE_REVISION=${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_BUILD_CREATED=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_WEB_CONTAINER_IMAGE=open-science-web:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-opencode:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_CADDY_VERSION=2.11.4-alpine" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=ci-metrics-token-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-0123456789abcdef" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_GRAFANA_ADMIN_PASSWORD=ci-grafana-password-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-0123456789" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_ALERT_WEBHOOK_URL=https://alerts.example.test/open-science-ci" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/bootstrap-password.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/backup-passphrase.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR=${GITHUB_WORKSPACE}/deploy/web/secrets" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/postgres-password.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/database-url.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/memos-dsn.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/memos-admin-password.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/deepseek-api-key.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/model-gateway-signing-key.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/materials-project-api-key.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/evimed-workload-signing-key.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/deepseek-release-receipt.json" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DOCKER_SOCKET_GID=$(stat -c '%g' /var/run/docker.sock)" >> "$GITHUB_ENV"
+
+      - name: Write CI Compose environment
+        shell: bash
+        run: |
+          mkdir -p deploy/web/secrets
+          umask 077
+          printf '%s\n' 'ci-fake-deepseek-key-no-external-calls' > deploy/web/secrets/deepseek-api-key.txt
+          printf '%s\n' 'ci-model-gateway-signing-secret-0123456789abcdef' > deploy/web/secrets/model-gateway-signing-key.txt
+          printf '%s\n' 'ci-fake-materials-project-key-no-external-calls' > deploy/web/secrets/materials-project-api-key.txt
+          printf '%s\n' 'ci-evimed-workload-signing-secret-0123456789abcdef' > deploy/web/secrets/evimed-workload-signing-key.txt
+          printf '%s\n' '{}' > deploy/web/secrets/deepseek-release-receipt.json
+          {
+            echo "NODE_ENV=production"
+            echo "OPEN_SCIENCE_PUBLIC_URL=https://localhost"
+            echo "OPEN_SCIENCE_DOMAIN=localhost"
+            echo "OPEN_SCIENCE_CADDY_VERSION=${OPEN_SCIENCE_CADDY_VERSION}"
+            echo "OPEN_SCIENCE_PREFLIGHT_MONITORING=true"
+            echo "OPEN_SCIENCE_PREFLIGHT_ALERT_DELIVERY=false"
+            echo "OPEN_SCIENCE_PREFLIGHT_OBJECT_STORAGE=false"
+            echo "OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES=1073741824"
+            echo "OPEN_SCIENCE_APP_VERSION=${OPEN_SCIENCE_APP_VERSION}"
+            echo "OPEN_SCIENCE_RELEASE_ID=${OPEN_SCIENCE_RELEASE_ID}"
+            echo "OPEN_SCIENCE_SOURCE_REVISION=${OPEN_SCIENCE_SOURCE_REVISION}"
+            echo "OPEN_SCIENCE_BUILD_CREATED=${OPEN_SCIENCE_BUILD_CREATED}"
+            echo "OPEN_SCIENCE_WEB_CONTAINER_IMAGE=${OPEN_SCIENCE_WEB_CONTAINER_IMAGE}"
+            echo "OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE}"
+            echo "OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE=./release-manifest.json"
+            echo "OPEN_SCIENCE_DOCKER_SOCKET_GID=${OPEN_SCIENCE_DOCKER_SOCKET_GID}"
+            echo "OPEN_SCIENCE_AUTH_MODE=local"
+            echo "OPEN_SCIENCE_BOOTSTRAP_USER=ci-admin"
+            echo "OPEN_SCIENCE_BOOTSTRAP_PASSWORD="
+            echo "OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE=${OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE}"
+            echo "OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR=${OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR}"
+            echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE}"
+            echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${OPEN_SCIENCE_DATABASE_URL_HOST_FILE}"
+            echo "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE=${OPEN_SCIENCE_MEMOS_DSN_HOST_FILE}"
+            echo "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE=${OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE}"
+            echo "OPEN_SCIENCE_MEMOS_ADMIN_USER=evimed-memory"
+            echo "OPEN_SCIENCE_MEMOS_PUBLIC_URL=https://localhost/memos"
+            echo "OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN}"
+            echo "OPEN_SCIENCE_BACKUP_MODE=local"
+            echo "OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK=true"
+            echo "OPEN_SCIENCE_BACKUP_DIR=/backups"
+            echo "OPEN_SCIENCE_BACKUP_RETENTION_DAYS=7"
+            echo "OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE=${OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE}"
+            echo "OPEN_SCIENCE_BACKUP_INTERVAL_SECONDS=3600"
+            echo "OPEN_SCIENCE_BACKUP_HEALTH_GRACE_SECONDS=600"
+            echo "OPEN_SCIENCE_BACKUP_RETRY_SECONDS=10"
+            echo "OPEN_SCIENCE_BACKUP_MAX_FAILURES=3"
+            echo "OPEN_SCIENCE_BACKUP_RESTORE_DRILL_EVERY=1"
+            echo "OPEN_SCIENCE_RESTORE_DRILL_ACK=true"
+            echo "OPEN_SCIENCE_RUNTIME_MODE=opencode"
+            echo "OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker"
+            echo "OPEN_SCIENCE_RUNTIME_TRANSPORT=unix"
+            echo "OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal"
+            echo "OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME=open-science-runtime-internal"
+            echo "OPEN_SCIENCE_DEEPSEEK_PROVIDER_ENABLED=false"
+            echo "OPEN_SCIENCE_REQUIRE_ALL_SPECIALIST_ADAPTERS=false"
+            echo "OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE=${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}"
+            echo "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE=${OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE}"
+            echo "OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_HOST_FILE=${OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_HOST_FILE}"
+            echo "OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE=${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}"
+            echo "OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE=${OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE}"
+            echo "OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=true"
+            echo "OPEN_SCIENCE_ENABLE_KERNEL=true"
+            echo "OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker"
+            echo "OPEN_SCIENCE_TRUST_PROXY=true"
+            echo "OPEN_SCIENCE_MONITORING_SECRETS_DIR=./secrets"
+          } > deploy/web/.env.ci
+          chmod 600 deploy/web/.env.ci
+
+      - name: Generate and validate local-auth secret
+        run: |
+          pnpm configure:local-auth
+          pnpm check:local-auth
+
+      - name: Generate and validate PostgreSQL and Memos secrets
+        run: |
+          pnpm configure:production-state
+          pnpm check:production-state
+
+      - name: Build hosted Web and OpenCode runtime images
+        run: >-
+          docker compose --env-file deploy/web/.env.ci
+          -f deploy/web/docker-compose.yml
+          -f deploy/web/docker-compose.local-auth.yml
+          -f deploy/web/docker-compose.backup.yml
+          --profile backup --profile runtime-image build
+
+      - name: Verify runtime binaries and preserved licenses
+        run: >-
+          docker run --rm --network none
+          "${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE}"
+          sh -ec 'test -x /usr/local/bin/opencode && test -x /usr/local/bin/uv &&
+          test -s /usr/share/licenses/opencode/LICENSE &&
+          test -s /usr/share/licenses/uv/LICENSE-MIT &&
+          opencode --version && uv --version'
+
+      - name: Pull pinned TLS proxy image
+        run: docker pull "caddy:${OPEN_SCIENCE_CADDY_VERSION}"
+
+      - name: Generate and verify deployment release manifest
+        run: |
+          pnpm release:manifest
+          pnpm verify:release-manifest
+
+      - name: Generate monitoring secrets
+        run: pnpm configure:monitoring
+
+      - name: Generate and validate backup secret
+        run: |
+          pnpm configure:backup
+          pnpm check:backup
+
+      - name: Verify production host prerequisites
+        run: pnpm preflight:host --env-file deploy/web/.env.ci
+
+      - name: Start production Compose stack
+        run: >-
+          docker compose --env-file deploy/web/.env.ci
+          -f deploy/web/docker-compose.yml
+          -f deploy/web/docker-compose.local-auth.yml
+          -f deploy/web/docker-compose.backup.yml
+          -f deploy/web/docker-compose.monitoring.yml
+          --profile backup --profile monitoring --profile tls up -d
+
+      - name: Wait for API and monitoring readiness
+        shell: bash
+        run: |
+          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml --profile backup --profile monitoring --profile tls)
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8787/api/ready >/dev/null \
+              && curl -kfsS https://localhost/api/ready >/dev/null \
+              && curl -fsS http://127.0.0.1:9090/-/ready >/dev/null \
+              && curl -fsS http://127.0.0.1:9093/-/ready >/dev/null \
+              && curl -fsS http://127.0.0.1:3000/api/health >/dev/null \
+              && "${compose[@]}" exec -T open-science-backup node scripts/ops/backup-scheduler.mjs health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          "${compose[@]}" ps
+          exit 1
+
+      - name: Trust CI Caddy root and verify public HTTPS preflight
+        shell: bash
+        run: |
+          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml --profile backup --profile monitoring --profile tls)
+          "${compose[@]}" cp caddy:/data/caddy/pki/authorities/local/root.crt /tmp/open-science-caddy-root.crt
+          test -s /tmp/open-science-caddy-root.crt
+          NODE_EXTRA_CA_CERTS=/tmp/open-science-caddy-root.crt pnpm preflight:host --env-file deploy/web/.env.ci --online
+
+      - name: Verify Docker socket privilege boundary
+        shell: bash
+        run: |
+          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml --profile backup --profile monitoring --profile tls)
+          web_id="$("${compose[@]}" ps -q open-science-web)"
+          controller_id="$("${compose[@]}" ps -q open-science-runtime-controller)"
+          backup_id="$("${compose[@]}" ps -q open-science-backup)"
+          test -n "$web_id" && test -n "$controller_id" && test -n "$backup_id"
+          if [ "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$web_id")" != "true" ]; then
+            echo "Web API root filesystem must be read-only" >&2
+            exit 1
+          fi
+          docker inspect --format '{{range .HostConfig.CapDrop}}{{println .}}{{end}}' "$web_id" | grep -Fx ALL
+          docker inspect --format '{{range .HostConfig.SecurityOpt}}{{println .}}{{end}}' "$web_id" | grep -Fx no-new-privileges:true
+          if docker inspect --format '{{range .Mounts}}{{println .Destination}}{{end}}' "$web_id" | grep -Fx /var/run/docker.sock; then
+            echo "Web API container must not mount /var/run/docker.sock" >&2
+            exit 1
+          fi
+          control_mount_rw="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/run/open-science-controller"}}{{.RW}}{{end}}{{end}}' "$web_id")"
+          if [ "$control_mount_rw" != "false" ]; then
+            echo "Web API controller mount must be read-only" >&2
+            exit 1
+          fi
+          docker inspect --format '{{range .Mounts}}{{println .Destination}}{{end}}' "$controller_id" | grep -Fx /var/run/docker.sock
+          docker inspect --format '{{range .HostConfig.GroupAdd}}{{println .}}{{end}}' "$controller_id" | grep -Fx "$OPEN_SCIENCE_DOCKER_SOCKET_GID"
+          if docker inspect --format '{{range .Mounts}}{{println .Destination}}{{end}}' "$backup_id" | grep -Fx /var/run/docker.sock; then
+            echo "Backup container must not mount /var/run/docker.sock" >&2
+            exit 1
+          fi
+          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/backups"}}{{.RW}}{{end}}{{end}}' "$web_id")" = "false"
+          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.RW}}{{end}}{{end}}' "$backup_id")" = "false"
+          "${compose[@]}" exec -T open-science-web test -S /run/open-science-controller/controller.sock
+
+      - name: Smoke real hosted runtime and kernel boundaries
+        env:
+          NODE_EXTRA_CA_CERTS: /tmp/open-science-caddy-root.crt
+          OPEN_SCIENCE_SMOKE_BASE_URL: https://localhost
+          OPEN_SCIENCE_SMOKE_USERNAME: ci-admin
+          OPEN_SCIENCE_SMOKE_METRICS_TOKEN_FILE: deploy/web/secrets/operator-metrics-token.txt
+          OPEN_SCIENCE_SMOKE_RUNTIME: "true"
+          OPEN_SCIENCE_SMOKE_RUNTIME_PROMPT: "false"
+          OPEN_SCIENCE_SMOKE_KERNEL: "true"
+          OPEN_SCIENCE_SMOKE_REQUIRE_DOCKER_KERNEL: "true"
+        run: |
+          OPEN_SCIENCE_SMOKE_PASSWORD="$(tr -d '\r\n' < deploy/web/secrets/bootstrap-password.txt)" \
+            pnpm smoke:deployment
+
+      - name: Verify runtime and kernel cleanup
+        shell: bash
+        run: |
+          test -z "$(docker ps -aq --filter label=open-science.web.runtime=true)"
+          test -z "$(docker ps -aq --filter label=open-science.web.kernel=true)"
+
+      - name: Verify scheduled encrypted backup
+        run: >-
+          docker compose --env-file deploy/web/.env.ci
+          -f deploy/web/docker-compose.yml
+          -f deploy/web/docker-compose.local-auth.yml
+          -f deploy/web/docker-compose.backup.yml
+          --profile backup exec -T open-science-backup
+          node -e "const fs=require('node:fs');const names=fs.readdirSync('/backups');process.exit(names.some(n=>n.endsWith('.tar.gz.enc'))&&names.includes('.open-science-backup-state.json')?0:1)"
+
+      - name: Print Compose logs on failure
+        if: failure()
+        run: >-
+          docker compose --env-file deploy/web/.env.ci
+          -f deploy/web/docker-compose.yml
+          -f deploy/web/docker-compose.local-auth.yml
+          -f deploy/web/docker-compose.backup.yml
+          -f deploy/web/docker-compose.monitoring.yml
+          --profile backup --profile monitoring --profile tls logs --no-color
+
+      - name: Stop Compose stack
+        if: always()
+        run: >-
+          docker compose --env-file deploy/web/.env.ci
+          -f deploy/web/docker-compose.yml
+          -f deploy/web/docker-compose.local-auth.yml
+          -f deploy/web/docker-compose.backup.yml
+          -f deploy/web/docker-compose.monitoring.yml
+          --profile backup --profile monitoring --profile tls down -v --remove-orphans
+
+  hosted-production-e2e:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test real deployed OpenCode, DeepSeek, specialist, Memos, RAG, and kernels
+        env:
+          OPEN_SCIENCE_E2E_BASE_URL: ${{ secrets.OPEN_SCIENCE_E2E_BASE_URL }}
+          OPEN_SCIENCE_E2E_USERNAME: ${{ secrets.OPEN_SCIENCE_E2E_USERNAME }}
+          OPEN_SCIENCE_E2E_PASSWORD: ${{ secrets.OPEN_SCIENCE_E2E_PASSWORD }}
+        run: pnpm test:web:e2e

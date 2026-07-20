@@ -1,0 +1,705 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-016",
+  "category": "diagnostic-prognostic",
+  "title": "Diagnostic accuracy of non-invasive tests for advanced fibrosis in patients with NAFLD: an individual patient data meta-analysis.",
+  "pmcid": "PMC8995830",
+  "doi": "10.1136/gutjnl-2021-324243",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "c2ffc69d35bb0c1e623e3fc6f2d33ad7057faa105b55b632c2391e00a21c3d5c",
+  "generatedSha256": "8084b85311d6ffc9e9a0d31c2b67e25d333d2284d7b879abf4fb874b9e6fe4c7",
+  "promptSha256": "e230c8acfe0cc48c0b0725f38c532cc37ea5ea7ef01cd63664e2c401a54b8f47",
+  "cacheFingerprint": "3ca0141be4129de398f7a807d3624d431fe904382018d52cef61005bc140c89f",
+  "referenceCharacters": 84810,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 9492,
+  "paperType": "diagnostic-prognostic",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Evaluate individual diagnostic performance of LSM-VCTE, FIB-4, and NFS; derive sequential strategies to reduce liver biopsy need in NAFLD advanced fibrosis (IPDMA).",
+      "generatedFact": "评估 LSM-VCTE、FIB-4、NFS 各自诊断表现并推导可减少肝活检需求的序贯诊断策略。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "The aims of this study were to evaluate the individual diagnostic performance of liver stiffness measurement by vibration controlled transient elastography (LSM-VCTE), Fibrosis-4 Index (FIB-4) and NAFLD (non-alcoholic fatty liver disease) Fibrosis Score (NFS) and to derive diagnostic strategies that could reduce the need for liver biopsies.DesignIndividual patient data meta-analysis of studies evaluating LSM-VCTE against liver histology was conducted. FIB-4 and NFS were computed where possible. Sensitivity, specificity and area under the receiver operating curve (AUROC) were calculated."
+        ],
+        "quote": "The aims of this study were to evaluate the individual diagnostic performance of liver stiffness measurement by vibration controlled transient elastography (LSM-VCTE), Fibrosis-4 Index (FIB-4) and NAFLD (non-alcoholic fatty liver disease) Fibrosis Score (NFS) and to derive diagnostic strategies that could reduce the need for liver biopsies.DesignIndividual patient data meta-analysis of studies evaluating LSM-VCTE against liver histology was conducted. FIB-4 and NFS were computed where possible. Sensitivity, specificity and area under the receiver operating curve (AUROC) were calculated."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+        ],
+        "quote": "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+      },
+      "explanation": "Both texts state identical research aims.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Individual patient data meta-analysis (IPDMA) of studies evaluating LSM-VCTE vs liver histology; computed FIB-4 and NFS where possible.",
+      "generatedFact": "个体患者数据荟萃分析（IPDMA），以肝组织学为参考评估 LSM-VCTE，计算 FIB-4、NFS。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "The aims of this study were to evaluate the individual diagnostic performance of liver stiffness measurement by vibration controlled transient elastography (LSM-VCTE), Fibrosis-4 Index (FIB-4) and NAFLD (non-alcoholic fatty liver disease) Fibrosis Score (NFS) and to derive diagnostic strategies that could reduce the need for liver biopsies.DesignIndividual patient data meta-analysis of studies evaluating LSM-VCTE against liver histology was conducted. FIB-4 and NFS were computed where possible. Sensitivity, specificity and area under the receiver operating curve (AUROC) were calculated."
+        ],
+        "quote": "The aims of this study were to evaluate the individual diagnostic performance of liver stiffness measurement by vibration controlled transient elastography (LSM-VCTE), Fibrosis-4 Index (FIB-4) and NAFLD (non-alcoholic fatty liver disease) Fibrosis Score (NFS) and to derive diagnostic strategies that could reduce the need for liver biopsies.DesignIndividual patient data meta-analysis of studies evaluating LSM-VCTE against liver histology was conducted. FIB-4 and NFS were computed where possible. Sensitivity, specificity and area under the receiver operating curve (AUROC) were calculated."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+        ],
+        "quote": "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+      },
+      "explanation": "Both describe identical study design.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "37 primary studies, 5735 NAFLD patients: 45% women, median age 54 years, median BMI 30 kg/m², 33% type 2 diabetes, 30% advanced fibrosis.",
+      "generatedFact": "37 项原始研究，5735 例患者，女性 45%，中位年龄 54 岁，中位 BMI 30 kg/m²，33% T2DM，30% 晚期纤维化。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Biomarkers were assessed individually and in sequential combinations.ResultsData were included from 37 primary studies (n=5735; 45% women; median age: 54 years; median body mass index: 30 kg/m2; 33% had type 2 diabetes; 30% had advanced fibrosis). AUROCs of individual LSM-VCTE, FIB-4 and NFS for advanced fibrosis were 0.85, 0.76 and 0.73. Sequential combination of FIB-4 cut-offs (<1.3; ≥2.67) followed by LSM-VCTE cut-offs (<8.0; ≥10.0 kPa) to rule-in or rule-out advanced fibrosis had sensitivity and specificity (95% CI) of 66% (63–68) and 86% (84–87) with 33% needing a biopsy to establish a final diagnosis."
+        ],
+        "quote": "Biomarkers were assessed individually and in sequential combinations.ResultsData were included from 37 primary studies (n=5735; 45% women; median age: 54 years; median body mass index: 30 kg/m2; 33% had type 2 diabetes; 30% had advanced fibrosis). AUROCs of individual LSM-VCTE, FIB-4 and NFS for advanced fibrosis were 0.85, 0.76 and 0.73. Sequential combination of FIB-4 cut-offs (<1.3; ≥2.67) followed by LSM-VCTE cut-offs (<8.0; ≥10.0 kPa) to rule-in or rule-out advanced fibrosis had sensitivity and specificity (95% CI) of 66% (63–68) and 86% (84–87) with 33% needing a biopsy to establish a final diagnosis."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+        ],
+        "quote": "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+      },
+      "explanation": "Population characteristics identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Final dataset of 5735 unique patients after removing duplicates and missing data.",
+      "generatedFact": "最终数据集包含 5735 例独立患者。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Biomarkers were assessed individually and in sequential combinations.ResultsData were included from 37 primary studies (n=5735; 45% women; median age: 54 years; median body mass index: 30 kg/m2; 33% had type 2 diabetes; 30% had advanced fibrosis). AUROCs of individual LSM-VCTE, FIB-4 and NFS for advanced fibrosis were 0.85, 0.76 and 0.73. Sequential combination of FIB-4 cut-offs (<1.3; ≥2.67) followed by LSM-VCTE cut-offs (<8.0; ≥10.0 kPa) to rule-in or rule-out advanced fibrosis had sensitivity and specificity (95% CI) of 66% (63–68) and 86% (84–87) with 33% needing a biopsy to establish a final diagnosis."
+        ],
+        "quote": "Biomarkers were assessed individually and in sequential combinations.ResultsData were included from 37 primary studies (n=5735; 45% women; median age: 54 years; median body mass index: 30 kg/m2; 33% had type 2 diabetes; 30% had advanced fibrosis). AUROCs of individual LSM-VCTE, FIB-4 and NFS for advanced fibrosis were 0.85, 0.76 and 0.73. Sequential combination of FIB-4 cut-offs (<1.3; ≥2.67) followed by LSM-VCTE cut-offs (<8.0; ≥10.0 kPa) to rule-in or rule-out advanced fibrosis had sensitivity and specificity (95% CI) of 66% (63–68) and 86% (84–87) with 33% needing a biopsy to establish a final diagnosis."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+        ],
+        "quote": "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+      },
+      "explanation": "Sample size matches exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Adults ≥18 with NAFLD, paired histology (NASH CRN) and LSM-VCTE within 6 months; no language restriction; only NAFLD IPD sought from mixed-etiology studies.",
+      "generatedFact": "成年 NAFLD 患者（≥18 岁），具备肝组织学与 LSM-VCTE 数据；仅提取 NAFLD 患者；无语言限制，活检前后 6 个月内。",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "Criteria for considering studies for the IPD meta-analysis Patients Studies reporting data on adults (≥18 years) with NAFLD and paired liver histology and LSM-VCTE were eligible. When studies reported study groups of participants with unselected aetiologies, only IPD of those with NAFLD were sought. Index tests The index test of main interest was LSM-VCTE performed with FibroScan (Echosens, France). Results for serum-based biomarkers NSF, 16 FIB-4, 17 aspartate aminotransferase (AST) to alanine aminotransferase (ALT) ratio 18 and AST-to-platelet ratio index (APRI) 19 ) were also computed where data were available."
+        ],
+        "quote": "Criteria for considering studies for the IPD meta-analysis Patients Studies reporting data on adults (≥18 years) with NAFLD and paired liver histology and LSM-VCTE were eligible. When studies reported study groups of participants with unselected aetiologies, only IPD of those with NAFLD were sought. Index tests The index test of main interest was LSM-VCTE performed with FibroScan (Echosens, France). Results for serum-based biomarkers NSF, 16 FIB-4, 17 aspartate aminotransferase (AST) to alanine aminotransferase (ALT) ratio 18 and AST-to-platelet ratio index (APRI) 19 ) were also computed where data were available."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "然而，这些方法的若干应用方面仍需进一步明确。首先，关于应使用哪些 NIT 阈值尚无共识——如 FIB-4 的上切点有 3.25 和 2.67 等不同报道。其次，NITs 在特定患者亚组（如糖尿病或肥胖患者）中的表现仍存在不确定性。此外，对于被判定为晚期肝纤维化高风险的患者，仍需通过肝活检识别肝硬化以进行 HCC 监测。因此，开发可减少二级诊疗中肝活检需求的策略是一个尚未满足的需求。 为此，本研究开展了一项 IPDMA，主要目的有三：（1）评估 LSM-VCTE 的诊断表现，并与 FIB-4 和 NFS 作为排除晚期肝纤维化的筛查工具进行比较；（2）评估 NIT 联合策略以最小化二级诊疗中需肝活检的病例数；（3）探索影响诊断准确性的因素。 --- ## 方法 ### 方案注册与报告规范 本 IPDMA 依照 PRISMA-IPD 声明进行报告，并在 PROSPERO 注册（CRD42019157661）。 ### 纳入标准 **受试者**: 报告有 NAFLD 且同时具备肝组织学和 LSM-VCTE 数据的成年患者（≥18 岁）的研究均可纳入。若研究纳入混合病因的患者，仅提取其中 NAFLD 患者的个体数据。 **目标检测**: 主要目标检测为使用 FibroScan（Echosens，法国）进行的 LSM-VCTE。在数据可获取的情况下，同时计算血清学生物标志物 NFS、FIB-4、AST/ALT 比值和 APRI。对于 LSM-VCTE，最常使用的排除和纳入晚期肝纤维化的切点分别为 <7.9 kPa 和 ≥9.6 kPa。"
+        ],
+        "quote": "然而，这些方法的若干应用方面仍需进一步明确。首先，关于应使用哪些 NIT 阈值尚无共识——如 FIB-4 的上切点有 3.25 和 2.67 等不同报道。其次，NITs 在特定患者亚组（如糖尿病或肥胖患者）中的表现仍存在不确定性。此外，对于被判定为晚期肝纤维化高风险的患者，仍需通过肝活检识别肝硬化以进行 HCC 监测。因此，开发可减少二级诊疗中肝活检需求的策略是一个尚未满足的需求。 为此，本研究开展了一项 IPDMA，主要目的有三：（1）评估 LSM-VCTE 的诊断表现，并与 FIB-4 和 NFS 作为排除晚期肝纤维化的筛查工具进行比较；（2）评估 NIT 联合策略以最小化二级诊疗中需肝活检的病例数；（3）探索影响诊断准确性的因素。 --- ## 方法 ### 方案注册与报告规范 本 IPDMA 依照 PRISMA-IPD 声明进行报告，并在 PROSPERO 注册（CRD42019157661）。 ### 纳入标准 **受试者**: 报告有 NAFLD 且同时具备肝组织学和 LSM-VCTE 数据的成年患者（≥18 岁）的研究均可纳入。若研究纳入混合病因的患者，仅提取其中 NAFLD 患者的个体数据。 **目标检测**: 主要目标检测为使用 FibroScan（Echosens，法国）进行的 LSM-VCTE。在数据可获取的情况下，同时计算血清学生物标志物 NFS、FIB-4、AST/ALT 比值和 APRI。对于 LSM-VCTE，最常使用的排除和纳入晚期肝纤维化的切点分别为 <7.9 kPa 和 ≥9.6 kPa。"
+      },
+      "explanation": "Eligibility criteria accurately restated.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Index test of main interest: LSM-VCTE by FibroScan; serum biomarkers FIB-4, NFS, AST/ALT ratio, APRI computed where data available.",
+      "generatedFact": "主要目标检测为 FibroScan LSM-VCTE；同时计算 FIB-4、NFS、AST/ALT 比值、APRI。",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "Criteria for considering studies for the IPD meta-analysis Patients Studies reporting data on adults (≥18 years) with NAFLD and paired liver histology and LSM-VCTE were eligible. When studies reported study groups of participants with unselected aetiologies, only IPD of those with NAFLD were sought. Index tests The index test of main interest was LSM-VCTE performed with FibroScan (Echosens, France). Results for serum-based biomarkers NSF, 16 FIB-4, 17 aspartate aminotransferase (AST) to alanine aminotransferase (ALT) ratio 18 and AST-to-platelet ratio index (APRI) 19 ) were also computed where data were available."
+        ],
+        "quote": "Criteria for considering studies for the IPD meta-analysis Patients Studies reporting data on adults (≥18 years) with NAFLD and paired liver histology and LSM-VCTE were eligible. When studies reported study groups of participants with unselected aetiologies, only IPD of those with NAFLD were sought. Index tests The index test of main interest was LSM-VCTE performed with FibroScan (Echosens, France). Results for serum-based biomarkers NSF, 16 FIB-4, 17 aspartate aminotransferase (AST) to alanine aminotransferase (ALT) ratio 18 and AST-to-platelet ratio index (APRI) 19 ) were also computed where data were available."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "然而，这些方法的若干应用方面仍需进一步明确。首先，关于应使用哪些 NIT 阈值尚无共识——如 FIB-4 的上切点有 3.25 和 2.67 等不同报道。其次，NITs 在特定患者亚组（如糖尿病或肥胖患者）中的表现仍存在不确定性。此外，对于被判定为晚期肝纤维化高风险的患者，仍需通过肝活检识别肝硬化以进行 HCC 监测。因此，开发可减少二级诊疗中肝活检需求的策略是一个尚未满足的需求。 为此，本研究开展了一项 IPDMA，主要目的有三：（1）评估 LSM-VCTE 的诊断表现，并与 FIB-4 和 NFS 作为排除晚期肝纤维化的筛查工具进行比较；（2）评估 NIT 联合策略以最小化二级诊疗中需肝活检的病例数；（3）探索影响诊断准确性的因素。 --- ## 方法 ### 方案注册与报告规范 本 IPDMA 依照 PRISMA-IPD 声明进行报告，并在 PROSPERO 注册（CRD42019157661）。 ### 纳入标准 **受试者**: 报告有 NAFLD 且同时具备肝组织学和 LSM-VCTE 数据的成年患者（≥18 岁）的研究均可纳入。若研究纳入混合病因的患者，仅提取其中 NAFLD 患者的个体数据。 **目标检测**: 主要目标检测为使用 FibroScan（Echosens，法国）进行的 LSM-VCTE。在数据可获取的情况下，同时计算血清学生物标志物 NFS、FIB-4、AST/ALT 比值和 APRI。对于 LSM-VCTE，最常使用的排除和纳入晚期肝纤维化的切点分别为 <7.9 kPa 和 ≥9.6 kPa。"
+        ],
+        "quote": "然而，这些方法的若干应用方面仍需进一步明确。首先，关于应使用哪些 NIT 阈值尚无共识——如 FIB-4 的上切点有 3.25 和 2.67 等不同报道。其次，NITs 在特定患者亚组（如糖尿病或肥胖患者）中的表现仍存在不确定性。此外，对于被判定为晚期肝纤维化高风险的患者，仍需通过肝活检识别肝硬化以进行 HCC 监测。因此，开发可减少二级诊疗中肝活检需求的策略是一个尚未满足的需求。 为此，本研究开展了一项 IPDMA，主要目的有三：（1）评估 LSM-VCTE 的诊断表现，并与 FIB-4 和 NFS 作为排除晚期肝纤维化的筛查工具进行比较；（2）评估 NIT 联合策略以最小化二级诊疗中需肝活检的病例数；（3）探索影响诊断准确性的因素。 --- ## 方法 ### 方案注册与报告规范 本 IPDMA 依照 PRISMA-IPD 声明进行报告，并在 PROSPERO 注册（CRD42019157661）。 ### 纳入标准 **受试者**: 报告有 NAFLD 且同时具备肝组织学和 LSM-VCTE 数据的成年患者（≥18 岁）的研究均可纳入。若研究纳入混合病因的患者，仅提取其中 NAFLD 患者的个体数据。 **目标检测**: 主要目标检测为使用 FibroScan（Echosens，法国）进行的 LSM-VCTE。在数据可获取的情况下，同时计算血清学生物标志物 NFS、FIB-4、AST/ALT 比值和 APRI。对于 LSM-VCTE，最常使用的排除和纳入晚期肝纤维化的切点分别为 <7.9 kPa 和 ≥9.6 kPa。"
+      },
+      "explanation": "Index tests are the same.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Reference standard: histological classification of liver fibrosis based on NASH CRN staging system.",
+      "generatedFact": "参考标准：基于 NASH CRN 分期系统的肝纤维化组织学分级。",
+      "sourceEvidence": {
+        "locator": "R0016",
+        "locators": [
+          "R0016"
+        ],
+        "quotes": [
+          "Online supplemental table 1 summarises the definition of NITs considered in this IPDMA. Supplementary data gutjnl-2021-324243supp001.pdf Universally accepted cut-offs for diagnosing different groups of fibrosis stages do not exist (several suggested cut-offs are presented in online supplemental table 2 ). For LSM-VCTE, <7.9 kPa and ≥9.6 kPa are the most used for respectively ruling out and in, advanced fibrosis. 20 Reference standard Only studies reporting histological classification of liver fibrosis based on the non-alcoholic steatohepatitis Clinical Research Network (NASH CRN) staging system were considered."
+        ],
+        "quote": "Online supplemental table 1 summarises the definition of NITs considered in this IPDMA. Supplementary data gutjnl-2021-324243supp001.pdf Universally accepted cut-offs for diagnosing different groups of fibrosis stages do not exist (several suggested cut-offs are presented in online supplemental table 2 ). For LSM-VCTE, <7.9 kPa and ≥9.6 kPa are the most used for respectively ruling out and in, advanced fibrosis. 20 Reference standard Only studies reporting histological classification of liver fibrosis based on the non-alcoholic steatohepatitis Clinical Research Network (NASH CRN) staging system were considered."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "**参考标准**: 仅纳入基于 NASH 临床研究网络（NASH CRN）分期系统报告肝纤维化组织学分级的研究。 **目标状态**: 晚期肝纤维化（F3–4）和肝硬化（F4）。为达成研究目标，切点分别用于排除或纳入晚期肝纤维化，以及排除晚期肝纤维化或纳入肝硬化。 **研究设计**: 所有报告 NAFLD 患者在肝活检前后 6 个月内接受 LSM-VCTE 检查的研究均可纳入，无语言限制。 ### 合作建立 通过电子邮件联系合格研究的作者，若 2 周内未收到回复则发送提醒。仅使用已获伦理批准的研究数据。由于仅接收匿名数据，本荟萃分析未另行申请伦理批准。 ### 数据验证 对研究者提供的个体患者测量值进行范围检查，必要时要求作者澄清。缺失数据持续追踪直至收到或确认不可获取，分析中采用成对删除法处理缺失数据。 将中位硬度 ≥7.1 kPa 且 IQR/中位 LSM 比值 >30% 的测量视为不可靠。这些数据纳入主要分析，随后在亚组分析中与可靠测量进行比较，以评估其是否可用于可靠诊断晚期肝纤维化。 向作者提供数据模板并要求在可能的情况下去重。同时检查是否存在重复条目，如发现则予以删除。 ### 数据分析 **质量与偏倚评估**: 使用 QUADAS-2 工具评估研究质量。 **IPD 荟萃分析**: 合并原始数据集并添加研究识别变量，进行描述性统计分析。分类变量以百分比表示，连续变量以均数 ± 标准差或中位数与四分位距报告。"
+        ],
+        "quote": "**参考标准**: 仅纳入基于 NASH 临床研究网络（NASH CRN）分期系统报告肝纤维化组织学分级的研究。 **目标状态**: 晚期肝纤维化（F3–4）和肝硬化（F4）。为达成研究目标，切点分别用于排除或纳入晚期肝纤维化，以及排除晚期肝纤维化或纳入肝硬化。 **研究设计**: 所有报告 NAFLD 患者在肝活检前后 6 个月内接受 LSM-VCTE 检查的研究均可纳入，无语言限制。 ### 合作建立 通过电子邮件联系合格研究的作者，若 2 周内未收到回复则发送提醒。仅使用已获伦理批准的研究数据。由于仅接收匿名数据，本荟萃分析未另行申请伦理批准。 ### 数据验证 对研究者提供的个体患者测量值进行范围检查，必要时要求作者澄清。缺失数据持续追踪直至收到或确认不可获取，分析中采用成对删除法处理缺失数据。 将中位硬度 ≥7.1 kPa 且 IQR/中位 LSM 比值 >30% 的测量视为不可靠。这些数据纳入主要分析，随后在亚组分析中与可靠测量进行比较，以评估其是否可用于可靠诊断晚期肝纤维化。 向作者提供数据模板并要求在可能的情况下去重。同时检查是否存在重复条目，如发现则予以删除。 ### 数据分析 **质量与偏倚评估**: 使用 QUADAS-2 工具评估研究质量。 **IPD 荟萃分析**: 合并原始数据集并添加研究识别变量，进行描述性统计分析。分类变量以百分比表示，连续变量以均数 ± 标准差或中位数与四分位距报告。"
+      },
+      "explanation": "Reference standard identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary outcomes: sensitivity, specificity, AUROC for advanced fibrosis (F3-4) and cirrhosis (F4); sequential combination performance; proportion needing biopsy.",
+      "generatedFact": "计算灵敏度、特异度、AUROC；评估单独及序贯联合使用；评估肝活检需求比例。",
+      "sourceEvidence": {
+        "locator": "R0017",
+        "locators": [
+          "R0017"
+        ],
+        "quotes": [
+          "21 Target conditions Advanced fibrosis (F3–4) and cirrhosis (F4) were the target conditions of interest. To fulfil the aims of the study, cut-offs were selected to rule out or rule in advanced fibrosis, and to rule out advanced fibrosis or rule in cirrhosis. Study design All study designs were considered if they were reporting on patients with NAFLD undergoing both liver biopsy and LSM-VCTE within 6 months. No language restrictions were applied. Establishing collaborations Authors of eligible studies were contacted by email and reminders were sent if a response was not received within 2 weeks. Only data from studies that received ethical approval were used."
+        ],
+        "quote": "21 Target conditions Advanced fibrosis (F3–4) and cirrhosis (F4) were the target conditions of interest. To fulfil the aims of the study, cut-offs were selected to rule out or rule in advanced fibrosis, and to rule out advanced fibrosis or rule in cirrhosis. Study design All study designs were considered if they were reporting on patients with NAFLD undergoing both liver biopsy and LSM-VCTE within 6 months. No language restrictions were applied. Establishing collaborations Authors of eligible studies were contacted by email and reminders were sent if a response was not received within 2 weeks. Only data from studies that received ethical approval were used."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+        ],
+        "quote": "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+      },
+      "explanation": "Outcomes and endpoints match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Liver biopsy and LSM-VCTE must be within 6 months.",
+      "generatedFact": "肝活检前后 6 个月内接受 LSM-VCTE。",
+      "sourceEvidence": {
+        "locator": "R0017",
+        "locators": [
+          "R0017"
+        ],
+        "quotes": [
+          "21 Target conditions Advanced fibrosis (F3–4) and cirrhosis (F4) were the target conditions of interest. To fulfil the aims of the study, cut-offs were selected to rule out or rule in advanced fibrosis, and to rule out advanced fibrosis or rule in cirrhosis. Study design All study designs were considered if they were reporting on patients with NAFLD undergoing both liver biopsy and LSM-VCTE within 6 months. No language restrictions were applied. Establishing collaborations Authors of eligible studies were contacted by email and reminders were sent if a response was not received within 2 weeks. Only data from studies that received ethical approval were used."
+        ],
+        "quote": "21 Target conditions Advanced fibrosis (F3–4) and cirrhosis (F4) were the target conditions of interest. To fulfil the aims of the study, cut-offs were selected to rule out or rule in advanced fibrosis, and to rule out advanced fibrosis or rule in cirrhosis. Study design All study designs were considered if they were reporting on patients with NAFLD undergoing both liver biopsy and LSM-VCTE within 6 months. No language restrictions were applied. Establishing collaborations Authors of eligible studies were contacted by email and reminders were sent if a response was not received within 2 weeks. Only data from studies that received ethical approval were used."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "**参考标准**: 仅纳入基于 NASH 临床研究网络（NASH CRN）分期系统报告肝纤维化组织学分级的研究。 **目标状态**: 晚期肝纤维化（F3–4）和肝硬化（F4）。为达成研究目标，切点分别用于排除或纳入晚期肝纤维化，以及排除晚期肝纤维化或纳入肝硬化。 **研究设计**: 所有报告 NAFLD 患者在肝活检前后 6 个月内接受 LSM-VCTE 检查的研究均可纳入，无语言限制。 ### 合作建立 通过电子邮件联系合格研究的作者，若 2 周内未收到回复则发送提醒。仅使用已获伦理批准的研究数据。由于仅接收匿名数据，本荟萃分析未另行申请伦理批准。 ### 数据验证 对研究者提供的个体患者测量值进行范围检查，必要时要求作者澄清。缺失数据持续追踪直至收到或确认不可获取，分析中采用成对删除法处理缺失数据。 将中位硬度 ≥7.1 kPa 且 IQR/中位 LSM 比值 >30% 的测量视为不可靠。这些数据纳入主要分析，随后在亚组分析中与可靠测量进行比较，以评估其是否可用于可靠诊断晚期肝纤维化。 向作者提供数据模板并要求在可能的情况下去重。同时检查是否存在重复条目，如发现则予以删除。 ### 数据分析 **质量与偏倚评估**: 使用 QUADAS-2 工具评估研究质量。 **IPD 荟萃分析**: 合并原始数据集并添加研究识别变量，进行描述性统计分析。分类变量以百分比表示，连续变量以均数 ± 标准差或中位数与四分位距报告。"
+        ],
+        "quote": "**参考标准**: 仅纳入基于 NASH 临床研究网络（NASH CRN）分期系统报告肝纤维化组织学分级的研究。 **目标状态**: 晚期肝纤维化（F3–4）和肝硬化（F4）。为达成研究目标，切点分别用于排除或纳入晚期肝纤维化，以及排除晚期肝纤维化或纳入肝硬化。 **研究设计**: 所有报告 NAFLD 患者在肝活检前后 6 个月内接受 LSM-VCTE 检查的研究均可纳入，无语言限制。 ### 合作建立 通过电子邮件联系合格研究的作者，若 2 周内未收到回复则发送提醒。仅使用已获伦理批准的研究数据。由于仅接收匿名数据，本荟萃分析未另行申请伦理批准。 ### 数据验证 对研究者提供的个体患者测量值进行范围检查，必要时要求作者澄清。缺失数据持续追踪直至收到或确认不可获取，分析中采用成对删除法处理缺失数据。 将中位硬度 ≥7.1 kPa 且 IQR/中位 LSM 比值 >30% 的测量视为不可靠。这些数据纳入主要分析，随后在亚组分析中与可靠测量进行比较，以评估其是否可用于可靠诊断晚期肝纤维化。 向作者提供数据模板并要求在可能的情况下去重。同时检查是否存在重复条目，如发现则予以删除。 ### 数据分析 **质量与偏倚评估**: 使用 QUADAS-2 工具评估研究质量。 **IPD 荟萃分析**: 合并原始数据集并添加研究识别变量，进行描述性统计分析。分类变量以百分比表示，连续变量以均数 ± 标准差或中位数与四分位距报告。"
+      },
+      "explanation": "Time window identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Range checks, missing data pairwise deletion, unreliable LSM defined as median ≥7.1 kPa & IQR/median >30%, deduplication.",
+      "generatedFact": "范围检查，缺失数据成对删除，将中位硬度≥7.1 kPa 且 IQR/中位比值>30% 视为不可靠，去重。",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "Additional ethical approval was not sought for the meta-analysis as only anonymised data were provided. Data verification Range checks of measurement values provided for individual patients were carried out and authors were asked to provide clarifications where necessary. Missing data were queried until received or confirmed as unavailable. Missing data were handled in the analysis by pairwise deletion. LSM-VCTE with median stiffness ≥7.1 kPa and IQR-to-median LSM ratio >30% were considered unreliable. 22 These were included in the main analysis and were later compared in a subgroup analysis to reliable measurements, to assess whether they can be reliably used to diagnose advanced fibrosis."
+        ],
+        "quote": "Additional ethical approval was not sought for the meta-analysis as only anonymised data were provided. Data verification Range checks of measurement values provided for individual patients were carried out and authors were asked to provide clarifications where necessary. Missing data were queried until received or confirmed as unavailable. Missing data were handled in the analysis by pairwise deletion. LSM-VCTE with median stiffness ≥7.1 kPa and IQR-to-median LSM ratio >30% were considered unreliable. 22 These were included in the main analysis and were later compared in a subgroup analysis to reliable measurements, to assess whether they can be reliably used to diagnose advanced fibrosis."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "**参考标准**: 仅纳入基于 NASH 临床研究网络（NASH CRN）分期系统报告肝纤维化组织学分级的研究。 **目标状态**: 晚期肝纤维化（F3–4）和肝硬化（F4）。为达成研究目标，切点分别用于排除或纳入晚期肝纤维化，以及排除晚期肝纤维化或纳入肝硬化。 **研究设计**: 所有报告 NAFLD 患者在肝活检前后 6 个月内接受 LSM-VCTE 检查的研究均可纳入，无语言限制。 ### 合作建立 通过电子邮件联系合格研究的作者，若 2 周内未收到回复则发送提醒。仅使用已获伦理批准的研究数据。由于仅接收匿名数据，本荟萃分析未另行申请伦理批准。 ### 数据验证 对研究者提供的个体患者测量值进行范围检查，必要时要求作者澄清。缺失数据持续追踪直至收到或确认不可获取，分析中采用成对删除法处理缺失数据。 将中位硬度 ≥7.1 kPa 且 IQR/中位 LSM 比值 >30% 的测量视为不可靠。这些数据纳入主要分析，随后在亚组分析中与可靠测量进行比较，以评估其是否可用于可靠诊断晚期肝纤维化。 向作者提供数据模板并要求在可能的情况下去重。同时检查是否存在重复条目，如发现则予以删除。 ### 数据分析 **质量与偏倚评估**: 使用 QUADAS-2 工具评估研究质量。 **IPD 荟萃分析**: 合并原始数据集并添加研究识别变量，进行描述性统计分析。分类变量以百分比表示，连续变量以均数 ± 标准差或中位数与四分位距报告。"
+        ],
+        "quote": "**参考标准**: 仅纳入基于 NASH 临床研究网络（NASH CRN）分期系统报告肝纤维化组织学分级的研究。 **目标状态**: 晚期肝纤维化（F3–4）和肝硬化（F4）。为达成研究目标，切点分别用于排除或纳入晚期肝纤维化，以及排除晚期肝纤维化或纳入肝硬化。 **研究设计**: 所有报告 NAFLD 患者在肝活检前后 6 个月内接受 LSM-VCTE 检查的研究均可纳入，无语言限制。 ### 合作建立 通过电子邮件联系合格研究的作者，若 2 周内未收到回复则发送提醒。仅使用已获伦理批准的研究数据。由于仅接收匿名数据，本荟萃分析未另行申请伦理批准。 ### 数据验证 对研究者提供的个体患者测量值进行范围检查，必要时要求作者澄清。缺失数据持续追踪直至收到或确认不可获取，分析中采用成对删除法处理缺失数据。 将中位硬度 ≥7.1 kPa 且 IQR/中位 LSM 比值 >30% 的测量视为不可靠。这些数据纳入主要分析，随后在亚组分析中与可靠测量进行比较，以评估其是否可用于可靠诊断晚期肝纤维化。 向作者提供数据模板并要求在可能的情况下去重。同时检查是否存在重复条目，如发现则予以删除。 ### 数据分析 **质量与偏倚评估**: 使用 QUADAS-2 工具评估研究质量。 **IPD 荟萃分析**: 合并原始数据集并添加研究识别变量，进行描述性统计分析。分类变量以百分比表示，连续变量以均数 ± 标准差或中位数与四分位距报告。"
+      },
+      "explanation": "Preprocessing steps match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Non-parametric empirical ROC, AUROC (De Long), Youden index, 90% sensitivity/specificity thresholds; derivation/validation (3:2 split); 500 bootstrap CIs; R (pROC).",
+      "generatedFact": "非参数经验 ROC 曲线，De Long AUROC，Youden 指数，90%敏感/特异阈值，推导/验证集随机 3:2 分割，500 次 bootstrap CI，R 包 pROC。",
+      "sourceEvidence": {
+        "locator": "R0020",
+        "locators": [
+          "R0020"
+        ],
+        "quotes": [
+          "Continuous variables are reported as means with SD, or medians with IQRs according to the distribution of the data. Analyses were done per protocol, as we did not have information on failed LSM-VCTE. To express the diagnostic performance of NITs, non-parametric, empirical receiver operating characteristic (ROC) curves were constructed for the target conditions of interest. Diagnostic performance was expressed as the area under the ROC curve (AUROC) with 95% CI, based on De Long’s method. AUROCs were compared using De Long’s test statistic. Thresholds to maximise the Youden index (ie, sensitivity+specificity−1), for 90% sensitivity, and for 90% specificity were reported."
+        ],
+        "quote": "Continuous variables are reported as means with SD, or medians with IQRs according to the distribution of the data. Analyses were done per protocol, as we did not have information on failed LSM-VCTE. To express the diagnostic performance of NITs, non-parametric, empirical receiver operating characteristic (ROC) curves were constructed for the target conditions of interest. Diagnostic performance was expressed as the area under the ROC curve (AUROC) with 95% CI, based on De Long’s method. AUROCs were compared using De Long’s test statistic. Thresholds to maximise the Youden index (ie, sensitivity+specificity−1), for 90% sensitivity, and for 90% specificity were reported."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "分析按方案进行（无失败的 LSM-VCTE 信息）。构建非参数经验 ROC 曲线评估诊断表现，基于 De Long 方法计算 AUROC 及 95% CI。AUROC 的组间比较采用 De Long 检验统计量。 报告最大化 Youden 指数、90% 灵敏度和 90% 特异度对应的切点，同时评估已发表文献切点的诊断表现。通过计算灵敏度、特异度以及误分类和不确定患者的比例来评估血清标志物与 LSM-VCTE 的序贯联合策略。 在原始研究报告的患病率范围内估算 PPV 和 NPV，同时报告每 100 例理论病例中的假阳性和假阴性数。 主要分析对每种 NIT 最大化可用数据。为有效比较 NITs 的诊断表现，在同时拥有 VCTE、FIB-4 和 NFS 数据的患者亚组中进行单独的头对头分析。 为实现减少肝活检需求的策略开发，采用较低切点排除晚期肝纤维化、较高切点纳入肝硬化。肝硬化的上切点从推导集中分别选择 95% 和 98% 特异度所对应的值，并在验证集中检验。推导集和验证集通过从 IPD 研究组中以 3:2 比例随机抽样获得。然后将这些上切点与文献中的晚期肝纤维化排除下切点联合，在整个 IPD 研究组中检验。为便于临床使用，还将 7.9 kPa 和 9.6 kPa 取整为 8.0 kPa 和 10.0 kPa，将肝硬化的切点也取整至最近整数。 仅将检测阳性和阴性的患者纳入诊断性能指标计算，不确定区间内的患者被排除。"
+        ],
+        "quote": "分析按方案进行（无失败的 LSM-VCTE 信息）。构建非参数经验 ROC 曲线评估诊断表现，基于 De Long 方法计算 AUROC 及 95% CI。AUROC 的组间比较采用 De Long 检验统计量。 报告最大化 Youden 指数、90% 灵敏度和 90% 特异度对应的切点，同时评估已发表文献切点的诊断表现。通过计算灵敏度、特异度以及误分类和不确定患者的比例来评估血清标志物与 LSM-VCTE 的序贯联合策略。 在原始研究报告的患病率范围内估算 PPV 和 NPV，同时报告每 100 例理论病例中的假阳性和假阴性数。 主要分析对每种 NIT 最大化可用数据。为有效比较 NITs 的诊断表现，在同时拥有 VCTE、FIB-4 和 NFS 数据的患者亚组中进行单独的头对头分析。 为实现减少肝活检需求的策略开发，采用较低切点排除晚期肝纤维化、较高切点纳入肝硬化。肝硬化的上切点从推导集中分别选择 95% 和 98% 特异度所对应的值，并在验证集中检验。推导集和验证集通过从 IPD 研究组中以 3:2 比例随机抽样获得。然后将这些上切点与文献中的晚期肝纤维化排除下切点联合，在整个 IPD 研究组中检验。为便于临床使用，还将 7.9 kPa 和 9.6 kPa 取整为 8.0 kPa 和 10.0 kPa，将肝硬化的切点也取整至最近整数。 仅将检测阳性和阴性的患者纳入诊断性能指标计算，不确定区间内的患者被排除。"
+      },
+      "explanation": "Statistical analysis methods identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Sequential FIB-4 then LSM-VCTE with cut-offs (<1.3; ≥2.67 then <8.0; ≥10.0 kPa) and hybrid strategies (FIB-4 <1.3; ≥3.48 then LSM <8.0; ≥20.0 kPa) to rule out advanced fibrosis or rule in cirrhosis.",
+      "generatedFact": "序贯联合：FIB-4 (<1.3;≥2.67) 后 LSM-VCTE (<8.0;≥10.0 kPa)；FIB-4 (<1.3;≥3.48) 后 LSM (<8.0;≥20.0 kPa) 排除晚期纤维化或纳入肝硬化。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Biomarkers were assessed individually and in sequential combinations.ResultsData were included from 37 primary studies (n=5735; 45% women; median age: 54 years; median body mass index: 30 kg/m2; 33% had type 2 diabetes; 30% had advanced fibrosis). AUROCs of individual LSM-VCTE, FIB-4 and NFS for advanced fibrosis were 0.85, 0.76 and 0.73. Sequential combination of FIB-4 cut-offs (<1.3; ≥2.67) followed by LSM-VCTE cut-offs (<8.0; ≥10.0 kPa) to rule-in or rule-out advanced fibrosis had sensitivity and specificity (95% CI) of 66% (63–68) and 86% (84–87) with 33% needing a biopsy to establish a final diagnosis."
+        ],
+        "quote": "Biomarkers were assessed individually and in sequential combinations.ResultsData were included from 37 primary studies (n=5735; 45% women; median age: 54 years; median body mass index: 30 kg/m2; 33% had type 2 diabetes; 30% had advanced fibrosis). AUROCs of individual LSM-VCTE, FIB-4 and NFS for advanced fibrosis were 0.85, 0.76 and 0.73. Sequential combination of FIB-4 cut-offs (<1.3; ≥2.67) followed by LSM-VCTE cut-offs (<8.0; ≥10.0 kPa) to rule-in or rule-out advanced fibrosis had sensitivity and specificity (95% CI) of 66% (63–68) and 86% (84–87) with 33% needing a biopsy to establish a final diagnosis."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结论**: 采用较低切点排除晚期肝纤维化、较高切点纳入肝硬化的序贯联合策略，可减少肝活检需求。 --- ## 引言 非酒精性脂肪性肝病（NAFLD）是代谢综合征的肝脏表现，全球患病率较高。大多数患者长期无明显症状且疾病进展缓慢，但少数会进展为肝硬化、肝功能衰竭和肝细胞癌（HCC）。NAFLD 的组织学特征包括单纯性脂肪变性到伴有小叶炎症和肝细胞气球样变的脂肪性肝炎，两者均可伴随不同程度的纤维化。目前公认的 NAFLD 诊断参考标准仍是肝活检，然而肝活检为侵入性检查且存在并发症风险，同时受限于取样变异性和观察者间病理报告的一致性差异。 NAFLD 通常在血液检查中发现肝转氨酶升高，或在影像学检查中发现肝脏脂肪变性或肝硬化后偶然诊断。临床医生面临的挑战之一是识别哪些患者具有较高的进展或临床结局风险，因为这些患者可从专科随访中获益。现有大量证据表明，至少存在晚期肝纤维化（F3–4）的患者在后期发生肝脏相关事件的风险更高。 已有大量证据表明无创检测（NITs）可用于对患者进行晚期肝纤维化风险分层。这些方法通常涉及序贯应用两种 NITs：第一层在社区进行简单、廉价的血清学检测（如 FIB-4 或 NFS），随后第二层进行肝脏硬度测量（LSM）（如 VCTE）或专有血清学检测（如增强肝纤维化检测，ELF）。每层检测通常使用一个下切点和一个上切点来分别排除（NIT 结果低于下切点者）或纳入（NIT 结果高于上切点者）晚期肝纤维化高风险患者。两轮检测结果均处于不确定区间的患者仍需肝活检进行风险分层。这些方法的主要价值在于其高阴性预测值，可用于排除低风险患者，使其在初级保健中安全管理。"
+        ],
+        "quote": "**结论**: 采用较低切点排除晚期肝纤维化、较高切点纳入肝硬化的序贯联合策略，可减少肝活检需求。 --- ## 引言 非酒精性脂肪性肝病（NAFLD）是代谢综合征的肝脏表现，全球患病率较高。大多数患者长期无明显症状且疾病进展缓慢，但少数会进展为肝硬化、肝功能衰竭和肝细胞癌（HCC）。NAFLD 的组织学特征包括单纯性脂肪变性到伴有小叶炎症和肝细胞气球样变的脂肪性肝炎，两者均可伴随不同程度的纤维化。目前公认的 NAFLD 诊断参考标准仍是肝活检，然而肝活检为侵入性检查且存在并发症风险，同时受限于取样变异性和观察者间病理报告的一致性差异。 NAFLD 通常在血液检查中发现肝转氨酶升高，或在影像学检查中发现肝脏脂肪变性或肝硬化后偶然诊断。临床医生面临的挑战之一是识别哪些患者具有较高的进展或临床结局风险，因为这些患者可从专科随访中获益。现有大量证据表明，至少存在晚期肝纤维化（F3–4）的患者在后期发生肝脏相关事件的风险更高。 已有大量证据表明无创检测（NITs）可用于对患者进行晚期肝纤维化风险分层。这些方法通常涉及序贯应用两种 NITs：第一层在社区进行简单、廉价的血清学检测（如 FIB-4 或 NFS），随后第二层进行肝脏硬度测量（LSM）（如 VCTE）或专有血清学检测（如增强肝纤维化检测，ELF）。每层检测通常使用一个下切点和一个上切点来分别排除（NIT 结果低于下切点者）或纳入（NIT 结果高于上切点者）晚期肝纤维化高风险患者。两轮检测结果均处于不确定区间的患者仍需肝活检进行风险分层。这些方法的主要价值在于其高阴性预测值，可用于排除低风险患者，使其在初级保健中安全管理。"
+      },
+      "explanation": "Algorithmic strategies described consistently.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "LSM-VCTE AUROC=0.85, FIB-4=0.76, NFS=0.73. FIB-4 (<1.3;≥2.67)+LSM (<8.0;≥10.0 kPa): sensitivity 66% (63-68), specificity 86% (84-87), 33% biopsy. FIB-4 (<1.3;≥3.48)+LSM (<8.0;≥20.0 kPa): sensitivity 38% (37-39), specificity 90% (89-91), 19% biopsy.",
+      "generatedFact": "LSM-VCTE AUROC 0.85, FIB-4 0.76, NFS 0.73。策略1: 灵敏度 66% (63-68), 特异度 86% (84-87), 33% 需活检。策略2: 灵敏度 38% (37-39), 特异度 90% (89-91), 19% 需活检。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Biomarkers were assessed individually and in sequential combinations.ResultsData were included from 37 primary studies (n=5735; 45% women; median age: 54 years; median body mass index: 30 kg/m2; 33% had type 2 diabetes; 30% had advanced fibrosis). AUROCs of individual LSM-VCTE, FIB-4 and NFS for advanced fibrosis were 0.85, 0.76 and 0.73. Sequential combination of FIB-4 cut-offs (<1.3; ≥2.67) followed by LSM-VCTE cut-offs (<8.0; ≥10.0 kPa) to rule-in or rule-out advanced fibrosis had sensitivity and specificity (95% CI) of 66% (63–68) and 86% (84–87) with 33% needing a biopsy to establish a final diagnosis."
+        ],
+        "quote": "Biomarkers were assessed individually and in sequential combinations.ResultsData were included from 37 primary studies (n=5735; 45% women; median age: 54 years; median body mass index: 30 kg/m2; 33% had type 2 diabetes; 30% had advanced fibrosis). AUROCs of individual LSM-VCTE, FIB-4 and NFS for advanced fibrosis were 0.85, 0.76 and 0.73. Sequential combination of FIB-4 cut-offs (<1.3; ≥2.67) followed by LSM-VCTE cut-offs (<8.0; ≥10.0 kPa) to rule-in or rule-out advanced fibrosis had sensitivity and specificity (95% CI) of 66% (63–68) and 86% (84–87) with 33% needing a biopsy to establish a final diagnosis."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+        ],
+        "quote": "--- ## 摘要 **目的**: 在非酒精性脂肪性肝病（NAFLD）患者中，肝活检目前仍然是纤维化分期的必要手段。本研究旨在评估振动控制瞬时弹性成像测量的肝脏硬度（LSM-VCTE）、Fibrosis-4 指数（FIB-4）和 NAFLD 纤维化评分（NFS）各自的诊断表现，并推导可减少肝活检需求的诊断策略。 **设计**: 对以肝组织学为参考标准评估 LSM-VCTE 的研究进行个体患者数据荟萃分析（IPDMA）。在数据可获取的情况下计算 FIB-4 和 NFS。计算灵敏度、特异度和受试者工作特征曲线下面积（AUROC）。对各标志物单独及序贯联合使用进行评估。 **结果**: 纳入 37 项原始研究的数据（n=5735；女性 45%；中位年龄 54 岁；中位体重指数 30 kg/m²；33% 患有 2 型糖尿病；30% 存在晚期肝纤维化）。LSM-VCTE、FIB-4 和 NFS 单独诊断晚期肝纤维化的 AUROC 分别为 0.85、0.76 和 0.73。序贯联合使用 FIB-4 切点（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）以排除或纳入晚期肝纤维化，灵敏度（95% CI）为 66%（63–68），特异度为 86%（84–87），33% 的患者仍需肝活检以确定最终诊断。FIB-4 切点（<1.3；≥3.48）后接 LSM-VCTE 切点（<8.0；≥20.0 kPa）以排除晚期肝纤维化或纳入肝硬化，灵敏度为 38%（37–39），特异度为 90%（89–91），19% 的患者需肝活检。"
+      },
+      "explanation": "Main numerical findings match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "AUROC (95% CI): LSM-VCTE 0.85 (0.84-0.86), FIB-4 0.76 (0.74-0.77), NFS 0.73 (0.71-0.75). Combination CIs given. LSM-VCTE significantly better (p<10⁻¹⁵).",
+      "generatedFact": "LSM-VCTE AUROC 0.85 (95% CI 0.84–0.86), FIB-4 0.76 (0.74–0.77), NFS 0.73 (0.71–0.75)；LSM-VCTE 显著优于血清学检测 (p<10⁻¹⁵)。",
+      "sourceEvidence": {
+        "locator": "R0041",
+        "locators": [
+          "R0041"
+        ],
+        "quotes": [
+          "Table 3 Diagnostic performance of non-invasive tests for advanced fibrosis (F3–F4) LSM by VCTE (n=5489) FIB-4 (n=5393) NFS (n=3248) APRI (n=5477) AST/ALT (n=5434) Advanced fibrosis, % 30 30 29 30 30 AUROC 0.85 (0.84–0.86) 0.76 (0.74–0.77) 0.73 (0.71–0.75) 0.70 (0.69–0.72) 0.64 (0.62–0.65) YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp Threshold 9.1 7.4 12.1 1.44 0.88 2.31 −1.39 −2.55 0.28 0.49 0.29 0.91 0.64 0.51 1.34 Sensitivity, % 77 (75–79) 90 (89–91) 55 (52–57) 69 (67–72) 90 (88–91) 38 (36–41) 75 (72–78) 90 (88–92) 29 (26–32) 67 (64–69) 90 (89–92) 32 (30–34) 75 (73–77) 90 (87–91) 16 (14–18) Specificity, % 78 (76–79) 60 (59–61) 90 (89–91) 70 (69–72)"
+        ],
+        "quote": "Table 3 Diagnostic performance of non-invasive tests for advanced fibrosis (F3–F4) LSM by VCTE (n=5489) FIB-4 (n=5393) NFS (n=3248) APRI (n=5477) AST/ALT (n=5434) Advanced fibrosis, % 30 30 29 30 30 AUROC 0.85 (0.84–0.86) 0.76 (0.74–0.77) 0.73 (0.71–0.75) 0.70 (0.69–0.72) 0.64 (0.62–0.65) YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp Threshold 9.1 7.4 12.1 1.44 0.88 2.31 −1.39 −2.55 0.28 0.49 0.29 0.91 0.64 0.51 1.34 Sensitivity, % 77 (75–79) 90 (89–91) 55 (52–57) 69 (67–72) 90 (88–91) 38 (36–41) 75 (72–78) 90 (88–92) 29 (26–32) 67 (64–69) 90 (89–92) 32 (30–34) 75 (73–77) 90 (87–91) 16 (14–18) Specificity, % 78 (76–79) 60 (59–61) 90 (89–91) 70 (69–72)"
+      },
+      "generatedEvidence": {
+        "locator": "G0015",
+        "locators": [
+          "G0015"
+        ],
+        "quotes": [
+          "--- ## 关键数值总览表 | 项目 | 数值 | |------|------| | 纳入原始研究数 | 37 项（来自 30 个数据集） | | 独立患者数 | 5735 | | 女性比例 | 45% | | 中位年龄 | 54 岁 | | 中位 BMI | 30 kg/m² | | 2 型糖尿病 | 33% | | BMI ≥30 kg/m² | 43% | | 晚期肝纤维化（F3–4） | 30% | | 肝硬化（F4） | 11% | | LSM-VCTE AUROC（晚期纤维化） | 0.85（95% CI 0.84–0.86） | | FIB-4 AUROC（晚期纤维化） | 0.76（95% CI 0.74–0.77） | | NFS AUROC（晚期纤维化） | 0.73（95% CI 0.71–0.75） | | LSM-VCTE AUROC（肝硬化） | 0.90 | | FIB-4 AUROC（肝硬化） | 0.80 | | NFS AUROC（肝硬化） | 0.78 | | 策略1: FIB-4 (<1.3;≥2.67) + LSM (<8.0;≥10.0 kPa) | 灵敏度 66%, 特异度 86%, 33% 需活检 | | 策略2: FIB-4 (<1.3;≥3.48) + LSM (<8.0;≥20.0 kPa) | 灵敏度 38%, 特异度 90%, 19% 需活检 | | 肝硬化 95% 特异度切点 | VCTE 20.4 kPa, FIB-4 3.48, NFS 1.01 | | 肝硬化 98% 特异度切点 | VCTE 27.6"
+        ],
+        "quote": "--- ## 关键数值总览表 | 项目 | 数值 | |------|------| | 纳入原始研究数 | 37 项（来自 30 个数据集） | | 独立患者数 | 5735 | | 女性比例 | 45% | | 中位年龄 | 54 岁 | | 中位 BMI | 30 kg/m² | | 2 型糖尿病 | 33% | | BMI ≥30 kg/m² | 43% | | 晚期肝纤维化（F3–4） | 30% | | 肝硬化（F4） | 11% | | LSM-VCTE AUROC（晚期纤维化） | 0.85（95% CI 0.84–0.86） | | FIB-4 AUROC（晚期纤维化） | 0.76（95% CI 0.74–0.77） | | NFS AUROC（晚期纤维化） | 0.73（95% CI 0.71–0.75） | | LSM-VCTE AUROC（肝硬化） | 0.90 | | FIB-4 AUROC（肝硬化） | 0.80 | | NFS AUROC（肝硬化） | 0.78 | | 策略1: FIB-4 (<1.3;≥2.67) + LSM (<8.0;≥10.0 kPa) | 灵敏度 66%, 特异度 86%, 33% 需活检 | | 策略2: FIB-4 (<1.3;≥3.48) + LSM (<8.0;≥20.0 kPa) | 灵敏度 38%, 特异度 90%, 19% 需活检 | | 肝硬化 95% 特异度切点 | VCTE 20.4 kPa, FIB-4 3.48, NFS 1.01 | | 肝硬化 98% 特异度切点 | VCTE 27.6"
+      },
+      "explanation": "Confidence intervals and significance levels match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Sequential combinations with lower cut-off to rule out advanced fibrosis and higher cut-off to rule in cirrhosis reduce liver biopsy need; validates FIB-4+LSM-VCTE combination.",
+      "generatedFact": "较低切点排除晚期纤维化、较高切点纳入肝硬化的序贯联合策略可减少肝活检；验证了 FIB-4 与 LSM-VCTE 联合。",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "FIB-4 cut-offs (<1.3; ≥3.48) followed by LSM cut-offs (<8.0; ≥20.0 kPa) to rule out advanced fibrosis or rule in cirrhosis had a sensitivity of 38% (37–39) and specificity of 90% (89–91) with 19% needing biopsy.ConclusionSequential combinations of markers with a lower cut-off to rule-out advanced fibrosis and a higher cut-off to rule-in cirrhosis can reduce the need for liver biopsies.Keywords: hepatic fibrosis, fatty liver, clinical decision making, biostatistics [ARTICLE BODY EVIDENCE COMPLETE=true] Significance of this study What is already known on this subject?"
+        ],
+        "quote": "FIB-4 cut-offs (<1.3; ≥3.48) followed by LSM cut-offs (<8.0; ≥20.0 kPa) to rule out advanced fibrosis or rule in cirrhosis had a sensitivity of 38% (37–39) and specificity of 90% (89–91) with 19% needing biopsy.ConclusionSequential combinations of markers with a lower cut-off to rule-out advanced fibrosis and a higher cut-off to rule-in cirrhosis can reduce the need for liver biopsies.Keywords: hepatic fibrosis, fatty liver, clinical decision making, biostatistics [ARTICLE BODY EVIDENCE COMPLETE=true] Significance of this study What is already known on this subject?"
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结论**: 采用较低切点排除晚期肝纤维化、较高切点纳入肝硬化的序贯联合策略，可减少肝活检需求。 --- ## 引言 非酒精性脂肪性肝病（NAFLD）是代谢综合征的肝脏表现，全球患病率较高。大多数患者长期无明显症状且疾病进展缓慢，但少数会进展为肝硬化、肝功能衰竭和肝细胞癌（HCC）。NAFLD 的组织学特征包括单纯性脂肪变性到伴有小叶炎症和肝细胞气球样变的脂肪性肝炎，两者均可伴随不同程度的纤维化。目前公认的 NAFLD 诊断参考标准仍是肝活检，然而肝活检为侵入性检查且存在并发症风险，同时受限于取样变异性和观察者间病理报告的一致性差异。 NAFLD 通常在血液检查中发现肝转氨酶升高，或在影像学检查中发现肝脏脂肪变性或肝硬化后偶然诊断。临床医生面临的挑战之一是识别哪些患者具有较高的进展或临床结局风险，因为这些患者可从专科随访中获益。现有大量证据表明，至少存在晚期肝纤维化（F3–4）的患者在后期发生肝脏相关事件的风险更高。 已有大量证据表明无创检测（NITs）可用于对患者进行晚期肝纤维化风险分层。这些方法通常涉及序贯应用两种 NITs：第一层在社区进行简单、廉价的血清学检测（如 FIB-4 或 NFS），随后第二层进行肝脏硬度测量（LSM）（如 VCTE）或专有血清学检测（如增强肝纤维化检测，ELF）。每层检测通常使用一个下切点和一个上切点来分别排除（NIT 结果低于下切点者）或纳入（NIT 结果高于上切点者）晚期肝纤维化高风险患者。两轮检测结果均处于不确定区间的患者仍需肝活检进行风险分层。这些方法的主要价值在于其高阴性预测值，可用于排除低风险患者，使其在初级保健中安全管理。"
+        ],
+        "quote": "**结论**: 采用较低切点排除晚期肝纤维化、较高切点纳入肝硬化的序贯联合策略，可减少肝活检需求。 --- ## 引言 非酒精性脂肪性肝病（NAFLD）是代谢综合征的肝脏表现，全球患病率较高。大多数患者长期无明显症状且疾病进展缓慢，但少数会进展为肝硬化、肝功能衰竭和肝细胞癌（HCC）。NAFLD 的组织学特征包括单纯性脂肪变性到伴有小叶炎症和肝细胞气球样变的脂肪性肝炎，两者均可伴随不同程度的纤维化。目前公认的 NAFLD 诊断参考标准仍是肝活检，然而肝活检为侵入性检查且存在并发症风险，同时受限于取样变异性和观察者间病理报告的一致性差异。 NAFLD 通常在血液检查中发现肝转氨酶升高，或在影像学检查中发现肝脏脂肪变性或肝硬化后偶然诊断。临床医生面临的挑战之一是识别哪些患者具有较高的进展或临床结局风险，因为这些患者可从专科随访中获益。现有大量证据表明，至少存在晚期肝纤维化（F3–4）的患者在后期发生肝脏相关事件的风险更高。 已有大量证据表明无创检测（NITs）可用于对患者进行晚期肝纤维化风险分层。这些方法通常涉及序贯应用两种 NITs：第一层在社区进行简单、廉价的血清学检测（如 FIB-4 或 NFS），随后第二层进行肝脏硬度测量（LSM）（如 VCTE）或专有血清学检测（如增强肝纤维化检测，ELF）。每层检测通常使用一个下切点和一个上切点来分别排除（NIT 结果低于下切点者）或纳入（NIT 结果高于上切点者）晚期肝纤维化高风险患者。两轮检测结果均处于不确定区间的患者仍需肝活检进行风险分层。这些方法的主要价值在于其高阴性预测值，可用于排除低风险患者，使其在初级保健中安全管理。"
+      },
+      "explanation": "Conclusion direction and magnitude consistent.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "No US data, few Australian studies; local histology possible bias; VCTE method heterogeneity; one-third studies from France; T2DM/BMI influences; subgroup-specific cut-offs not explored.",
+      "generatedFact": "无美国数据、澳大利亚研究极少；使用当地组织学可能引入偏倚；VCTE 方法随时间变化；三分之一研究来自法国；存在 T2DM/BMI 依赖性；未探索亚组专用切点。",
+      "sourceEvidence": {
+        "locator": "R0074",
+        "locators": [
+          "R0074"
+        ],
+        "quotes": [
+          "In addition, due to the nature of our study, we had to use the locally provided histology results possibly introducing bias. Furthermore, we covered a large chronological period, during which LSM-VCTE application underwent significant changes, initially with the introduction of the XL probe, followed by the advice to measure skin-to-capsule distance (SCD) and the introduction of the Automatic Probe Selection tool. There was therefore some heterogeneity in the performance of LSM-VCTE, with early studies using only the M probe to assess all patients, while only a subset of studies assessed SCD to guide probe selection."
+        ],
+        "quote": "In addition, due to the nature of our study, we had to use the locally provided histology results possibly introducing bias. Furthermore, we covered a large chronological period, during which LSM-VCTE application underwent significant changes, initially with the introduction of the XL probe, followed by the advice to measure skin-to-capsule distance (SCD) and the introduction of the Automatic Probe Selection tool. There was therefore some heterogeneity in the performance of LSM-VCTE, with early studies using only the M probe to assess all patients, while only a subset of studies assessed SCD to guide probe selection."
+      },
+      "generatedEvidence": {
+        "locator": "G0014",
+        "locators": [
+          "G0014"
+        ],
+        "quotes": [
+          "NITs 在较低 BMI 和无糖尿病患者中表现更好，主要由 BMI 驱动（BMI 与 2 型糖尿病间可能存在因果关联）。年龄对 NIT 表现也有影响——FIB-4 和 NFS 的年龄依赖性在意料之中，因年龄是两者算法中的组成部分；但难以解释为何年龄最小组在肝硬化诊断中表现更好。 ### 局限性 本研究存在以下局限：无来自美国的数据且来自澳大利亚的研究极少，因此结果不宜直接外推至全球（人群 BMI 差异）；须使用当地提供的组织学结果，可能引入偏倚；研究跨越较长时间段，期间 LSM-VCTE 应用经历了显著变化（XL 探头的引入、皮肤-包膜距离测量及自动探头选择工具的应用）；早期研究仅使用 M 探头覆盖所有患者，仅部分研究评估皮肤-包膜距离以指导探头选择；三分之一的研究在法国进行，因 VCTE 技术起源于此；NITs 的表现对 2 型糖尿病和 BMI 存在一定依赖性，且在肝硬化检测中亦如此，但本研究未针对亚组优化切点——这应成为未来研究的方向。 本研究考察了一些最为广泛使用的 NITs。虽未穷尽所有检测，但可作为新 NITs 检测的基准——新检测（如 FibroTest-FibroSURE、ELF、FAST 评分、NIS4、cTAG）正不断涌现。 ### 结论 本研究进一步验证了序贯联合使用 FIB-4 和 LSM-VCTE 可有效排除可于初级保健中安全管理的 NAFLD 晚期肝纤维化患者。同时，本研究展示了如何通过联合使用较低切点排除晚期肝纤维化和较高切点纳入肝硬化，来减少需接受肝活检的患者数量。"
+        ],
+        "quote": "NITs 在较低 BMI 和无糖尿病患者中表现更好，主要由 BMI 驱动（BMI 与 2 型糖尿病间可能存在因果关联）。年龄对 NIT 表现也有影响——FIB-4 和 NFS 的年龄依赖性在意料之中，因年龄是两者算法中的组成部分；但难以解释为何年龄最小组在肝硬化诊断中表现更好。 ### 局限性 本研究存在以下局限：无来自美国的数据且来自澳大利亚的研究极少，因此结果不宜直接外推至全球（人群 BMI 差异）；须使用当地提供的组织学结果，可能引入偏倚；研究跨越较长时间段，期间 LSM-VCTE 应用经历了显著变化（XL 探头的引入、皮肤-包膜距离测量及自动探头选择工具的应用）；早期研究仅使用 M 探头覆盖所有患者，仅部分研究评估皮肤-包膜距离以指导探头选择；三分之一的研究在法国进行，因 VCTE 技术起源于此；NITs 的表现对 2 型糖尿病和 BMI 存在一定依赖性，且在肝硬化检测中亦如此，但本研究未针对亚组优化切点——这应成为未来研究的方向。 本研究考察了一些最为广泛使用的 NITs。虽未穷尽所有检测，但可作为新 NITs 检测的基准——新检测（如 FibroTest-FibroSURE、ELF、FAST 评分、NIS4、cTAG）正不断涌现。 ### 结论 本研究进一步验证了序贯联合使用 FIB-4 和 LSM-VCTE 可有效排除可于初级保健中安全管理的 NAFLD 晚期肝纤维化患者。同时，本研究展示了如何通过联合使用较低切点排除晚期肝纤维化和较高切点纳入肝硬化，来减少需接受肝活检的患者数量。"
+      },
+      "explanation": "Limitations accurately stated in both.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No safety or harms discussed; diagnostic accuracy study.",
+      "generatedFact": "Not mentioned.",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Neither text addresses adverse events; not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "index_and_reference_tests",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Index tests: LSM-VCTE, FIB-4, NFS, APRI, AST/ALT. Reference standard: liver biopsy with NASH CRN staging.",
+      "generatedFact": "Index test: LSM-VCTE, FIB-4, NFS 等。参考标准：肝活检 NASH CRN 系统。",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "Criteria for considering studies for the IPD meta-analysis Patients Studies reporting data on adults (≥18 years) with NAFLD and paired liver histology and LSM-VCTE were eligible. When studies reported study groups of participants with unselected aetiologies, only IPD of those with NAFLD were sought. Index tests The index test of main interest was LSM-VCTE performed with FibroScan (Echosens, France). Results for serum-based biomarkers NSF, 16 FIB-4, 17 aspartate aminotransferase (AST) to alanine aminotransferase (ALT) ratio 18 and AST-to-platelet ratio index (APRI) 19 ) were also computed where data were available."
+        ],
+        "quote": "Criteria for considering studies for the IPD meta-analysis Patients Studies reporting data on adults (≥18 years) with NAFLD and paired liver histology and LSM-VCTE were eligible. When studies reported study groups of participants with unselected aetiologies, only IPD of those with NAFLD were sought. Index tests The index test of main interest was LSM-VCTE performed with FibroScan (Echosens, France). Results for serum-based biomarkers NSF, 16 FIB-4, 17 aspartate aminotransferase (AST) to alanine aminotransferase (ALT) ratio 18 and AST-to-platelet ratio index (APRI) 19 ) were also computed where data were available."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "然而，这些方法的若干应用方面仍需进一步明确。首先，关于应使用哪些 NIT 阈值尚无共识——如 FIB-4 的上切点有 3.25 和 2.67 等不同报道。其次，NITs 在特定患者亚组（如糖尿病或肥胖患者）中的表现仍存在不确定性。此外，对于被判定为晚期肝纤维化高风险的患者，仍需通过肝活检识别肝硬化以进行 HCC 监测。因此，开发可减少二级诊疗中肝活检需求的策略是一个尚未满足的需求。 为此，本研究开展了一项 IPDMA，主要目的有三：（1）评估 LSM-VCTE 的诊断表现，并与 FIB-4 和 NFS 作为排除晚期肝纤维化的筛查工具进行比较；（2）评估 NIT 联合策略以最小化二级诊疗中需肝活检的病例数；（3）探索影响诊断准确性的因素。 --- ## 方法 ### 方案注册与报告规范 本 IPDMA 依照 PRISMA-IPD 声明进行报告，并在 PROSPERO 注册（CRD42019157661）。 ### 纳入标准 **受试者**: 报告有 NAFLD 且同时具备肝组织学和 LSM-VCTE 数据的成年患者（≥18 岁）的研究均可纳入。若研究纳入混合病因的患者，仅提取其中 NAFLD 患者的个体数据。 **目标检测**: 主要目标检测为使用 FibroScan（Echosens，法国）进行的 LSM-VCTE。在数据可获取的情况下，同时计算血清学生物标志物 NFS、FIB-4、AST/ALT 比值和 APRI。对于 LSM-VCTE，最常使用的排除和纳入晚期肝纤维化的切点分别为 <7.9 kPa 和 ≥9.6 kPa。"
+        ],
+        "quote": "然而，这些方法的若干应用方面仍需进一步明确。首先，关于应使用哪些 NIT 阈值尚无共识——如 FIB-4 的上切点有 3.25 和 2.67 等不同报道。其次，NITs 在特定患者亚组（如糖尿病或肥胖患者）中的表现仍存在不确定性。此外，对于被判定为晚期肝纤维化高风险的患者，仍需通过肝活检识别肝硬化以进行 HCC 监测。因此，开发可减少二级诊疗中肝活检需求的策略是一个尚未满足的需求。 为此，本研究开展了一项 IPDMA，主要目的有三：（1）评估 LSM-VCTE 的诊断表现，并与 FIB-4 和 NFS 作为排除晚期肝纤维化的筛查工具进行比较；（2）评估 NIT 联合策略以最小化二级诊疗中需肝活检的病例数；（3）探索影响诊断准确性的因素。 --- ## 方法 ### 方案注册与报告规范 本 IPDMA 依照 PRISMA-IPD 声明进行报告，并在 PROSPERO 注册（CRD42019157661）。 ### 纳入标准 **受试者**: 报告有 NAFLD 且同时具备肝组织学和 LSM-VCTE 数据的成年患者（≥18 岁）的研究均可纳入。若研究纳入混合病因的患者，仅提取其中 NAFLD 患者的个体数据。 **目标检测**: 主要目标检测为使用 FibroScan（Echosens，法国）进行的 LSM-VCTE。在数据可获取的情况下，同时计算血清学生物标志物 NFS、FIB-4、AST/ALT 比值和 APRI。对于 LSM-VCTE，最常使用的排除和纳入晚期肝纤维化的切点分别为 <7.9 kPa 和 ≥9.6 kPa。"
+      },
+      "explanation": "Index tests and reference standard are the same; reference standard explicitly in G0005 but context clear.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "thresholds_and_validation",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Derivation and validation sets (3:2 split); cirrhosis cut-offs at 95% and 98% specificity derived then validated; literature cut-offs also tested.",
+      "generatedFact": "推导集与验证集 (3:2 随机分割)；在推导集中确定 95% 和 98% 特异度切点，并在验证集中检验。",
+      "sourceEvidence": {
+        "locator": "R0023",
+        "locators": [
+          "R0023"
+        ],
+        "quotes": [
+          "Derivation and validation sets were obtained by random sampling from the IPD study group in a 3:2 ratio. These upper cut-offs were combined with lower cut-offs from the literature for ruling out advanced fibrosis and the algorithm was tested in the whole IPD study group. For ease of reference, we also examined the cut-offs of 8 kPa and 10 kPa (corresponding to the most common VCTE cut-offs in the literature of 7.9 kPa and 9.6 kPa rounded to the nearest integer) and also rounded our cirrhosis cut-offs to the nearest integer to facilitate application in clinical practice."
+        ],
+        "quote": "Derivation and validation sets were obtained by random sampling from the IPD study group in a 3:2 ratio. These upper cut-offs were combined with lower cut-offs from the literature for ruling out advanced fibrosis and the algorithm was tested in the whole IPD study group. For ease of reference, we also examined the cut-offs of 8 kPa and 10 kPa (corresponding to the most common VCTE cut-offs in the literature of 7.9 kPa and 9.6 kPa rounded to the nearest integer) and also rounded our cirrhosis cut-offs to the nearest integer to facilitate application in clinical practice."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "分析按方案进行（无失败的 LSM-VCTE 信息）。构建非参数经验 ROC 曲线评估诊断表现，基于 De Long 方法计算 AUROC 及 95% CI。AUROC 的组间比较采用 De Long 检验统计量。 报告最大化 Youden 指数、90% 灵敏度和 90% 特异度对应的切点，同时评估已发表文献切点的诊断表现。通过计算灵敏度、特异度以及误分类和不确定患者的比例来评估血清标志物与 LSM-VCTE 的序贯联合策略。 在原始研究报告的患病率范围内估算 PPV 和 NPV，同时报告每 100 例理论病例中的假阳性和假阴性数。 主要分析对每种 NIT 最大化可用数据。为有效比较 NITs 的诊断表现，在同时拥有 VCTE、FIB-4 和 NFS 数据的患者亚组中进行单独的头对头分析。 为实现减少肝活检需求的策略开发，采用较低切点排除晚期肝纤维化、较高切点纳入肝硬化。肝硬化的上切点从推导集中分别选择 95% 和 98% 特异度所对应的值，并在验证集中检验。推导集和验证集通过从 IPD 研究组中以 3:2 比例随机抽样获得。然后将这些上切点与文献中的晚期肝纤维化排除下切点联合，在整个 IPD 研究组中检验。为便于临床使用，还将 7.9 kPa 和 9.6 kPa 取整为 8.0 kPa 和 10.0 kPa，将肝硬化的切点也取整至最近整数。 仅将检测阳性和阴性的患者纳入诊断性能指标计算，不确定区间内的患者被排除。"
+        ],
+        "quote": "分析按方案进行（无失败的 LSM-VCTE 信息）。构建非参数经验 ROC 曲线评估诊断表现，基于 De Long 方法计算 AUROC 及 95% CI。AUROC 的组间比较采用 De Long 检验统计量。 报告最大化 Youden 指数、90% 灵敏度和 90% 特异度对应的切点，同时评估已发表文献切点的诊断表现。通过计算灵敏度、特异度以及误分类和不确定患者的比例来评估血清标志物与 LSM-VCTE 的序贯联合策略。 在原始研究报告的患病率范围内估算 PPV 和 NPV，同时报告每 100 例理论病例中的假阳性和假阴性数。 主要分析对每种 NIT 最大化可用数据。为有效比较 NITs 的诊断表现，在同时拥有 VCTE、FIB-4 和 NFS 数据的患者亚组中进行单独的头对头分析。 为实现减少肝活检需求的策略开发，采用较低切点排除晚期肝纤维化、较高切点纳入肝硬化。肝硬化的上切点从推导集中分别选择 95% 和 98% 特异度所对应的值，并在验证集中检验。推导集和验证集通过从 IPD 研究组中以 3:2 比例随机抽样获得。然后将这些上切点与文献中的晚期肝纤维化排除下切点联合，在整个 IPD 研究组中检验。为便于临床使用，还将 7.9 kPa 和 9.6 kPa 取整为 8.0 kPa 和 10.0 kPa，将肝硬化的切点也取整至最近整数。 仅将检测阳性和阴性的患者纳入诊断性能指标计算，不确定区间内的患者被排除。"
+      },
+      "explanation": "Threshold selection and validation process identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "performance_metrics",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Reported AUROC, sensitivity, specificity with 95% CIs for all NITs and combinations; PPV/NPV in supplements.",
+      "generatedFact": "AUROC、灵敏度、特异度及 95% CI 完整报告；补充材料含 PPV/NPV。",
+      "sourceEvidence": {
+        "locator": "R0041",
+        "locators": [
+          "R0041"
+        ],
+        "quotes": [
+          "Table 3 Diagnostic performance of non-invasive tests for advanced fibrosis (F3–F4) LSM by VCTE (n=5489) FIB-4 (n=5393) NFS (n=3248) APRI (n=5477) AST/ALT (n=5434) Advanced fibrosis, % 30 30 29 30 30 AUROC 0.85 (0.84–0.86) 0.76 (0.74–0.77) 0.73 (0.71–0.75) 0.70 (0.69–0.72) 0.64 (0.62–0.65) YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp Threshold 9.1 7.4 12.1 1.44 0.88 2.31 −1.39 −2.55 0.28 0.49 0.29 0.91 0.64 0.51 1.34 Sensitivity, % 77 (75–79) 90 (89–91) 55 (52–57) 69 (67–72) 90 (88–91) 38 (36–41) 75 (72–78) 90 (88–92) 29 (26–32) 67 (64–69) 90 (89–92) 32 (30–34) 75 (73–77) 90 (87–91) 16 (14–18) Specificity, % 78 (76–79) 60 (59–61) 90 (89–91) 70 (69–72)"
+        ],
+        "quote": "Table 3 Diagnostic performance of non-invasive tests for advanced fibrosis (F3–F4) LSM by VCTE (n=5489) FIB-4 (n=5393) NFS (n=3248) APRI (n=5477) AST/ALT (n=5434) Advanced fibrosis, % 30 30 29 30 30 AUROC 0.85 (0.84–0.86) 0.76 (0.74–0.77) 0.73 (0.71–0.75) 0.70 (0.69–0.72) 0.64 (0.62–0.65) YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp YI 90% Se 90% Sp Threshold 9.1 7.4 12.1 1.44 0.88 2.31 −1.39 −2.55 0.28 0.49 0.29 0.91 0.64 0.51 1.34 Sensitivity, % 77 (75–79) 90 (89–91) 55 (52–57) 69 (67–72) 90 (88–91) 38 (36–41) 75 (72–78) 90 (88–92) 29 (26–32) 67 (64–69) 90 (89–92) 32 (30–34) 75 (73–77) 90 (87–91) 16 (14–18) Specificity, % 78 (76–79) 60 (59–61) 90 (89–91) 70 (69–72)"
+      },
+      "generatedEvidence": {
+        "locator": "G0015",
+        "locators": [
+          "G0015"
+        ],
+        "quotes": [
+          "--- ## 关键数值总览表 | 项目 | 数值 | |------|------| | 纳入原始研究数 | 37 项（来自 30 个数据集） | | 独立患者数 | 5735 | | 女性比例 | 45% | | 中位年龄 | 54 岁 | | 中位 BMI | 30 kg/m² | | 2 型糖尿病 | 33% | | BMI ≥30 kg/m² | 43% | | 晚期肝纤维化（F3–4） | 30% | | 肝硬化（F4） | 11% | | LSM-VCTE AUROC（晚期纤维化） | 0.85（95% CI 0.84–0.86） | | FIB-4 AUROC（晚期纤维化） | 0.76（95% CI 0.74–0.77） | | NFS AUROC（晚期纤维化） | 0.73（95% CI 0.71–0.75） | | LSM-VCTE AUROC（肝硬化） | 0.90 | | FIB-4 AUROC（肝硬化） | 0.80 | | NFS AUROC（肝硬化） | 0.78 | | 策略1: FIB-4 (<1.3;≥2.67) + LSM (<8.0;≥10.0 kPa) | 灵敏度 66%, 特异度 86%, 33% 需活检 | | 策略2: FIB-4 (<1.3;≥3.48) + LSM (<8.0;≥20.0 kPa) | 灵敏度 38%, 特异度 90%, 19% 需活检 | | 肝硬化 95% 特异度切点 | VCTE 20.4 kPa, FIB-4 3.48, NFS 1.01 | | 肝硬化 98% 特异度切点 | VCTE 27.6"
+        ],
+        "quote": "--- ## 关键数值总览表 | 项目 | 数值 | |------|------| | 纳入原始研究数 | 37 项（来自 30 个数据集） | | 独立患者数 | 5735 | | 女性比例 | 45% | | 中位年龄 | 54 岁 | | 中位 BMI | 30 kg/m² | | 2 型糖尿病 | 33% | | BMI ≥30 kg/m² | 43% | | 晚期肝纤维化（F3–4） | 30% | | 肝硬化（F4） | 11% | | LSM-VCTE AUROC（晚期纤维化） | 0.85（95% CI 0.84–0.86） | | FIB-4 AUROC（晚期纤维化） | 0.76（95% CI 0.74–0.77） | | NFS AUROC（晚期纤维化） | 0.73（95% CI 0.71–0.75） | | LSM-VCTE AUROC（肝硬化） | 0.90 | | FIB-4 AUROC（肝硬化） | 0.80 | | NFS AUROC（肝硬化） | 0.78 | | 策略1: FIB-4 (<1.3;≥2.67) + LSM (<8.0;≥10.0 kPa) | 灵敏度 66%, 特异度 86%, 33% 需活检 | | 策略2: FIB-4 (<1.3;≥3.48) + LSM (<8.0;≥20.0 kPa) | 灵敏度 38%, 特异度 90%, 19% 需活检 | | 肝硬化 95% 特异度切点 | VCTE 20.4 kPa, FIB-4 3.48, NFS 1.01 | | 肝硬化 98% 特异度切点 | VCTE 27.6"
+      },
+      "explanation": "Performance metrics presented with same metrics and context.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "spectrum_and_verification_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Spectrum bias excluded (similar proportion short biopsies in advanced fibrosis and cirrhosis). Only one study low risk in all QUADAS-2 domains; local histology may introduce bias.",
+      "generatedFact": "光谱偏倚被排除；活检质量短组织比例相近；仅一项研究 QUADAS-2 低风险；当地组织学可能引入偏倚。",
+      "sourceEvidence": {
+        "locator": "R0071",
+        "locators": [
+          "R0071"
+        ],
+        "quotes": [
+          "This finding is difficult to explain but a similar observation was reported previously in a large group of patients screened for clinical trials. 29 The use of local biopsy reports as reference standard and the well-known observer-dependent variability of biopsy interpretation, even among expert pathologists, 7 are factors that may have contributed to our finding. Spectrum bias was excluded as a source of this finding due to a near-identical proportion of patients in both the advanced fibrosis and cirrhosis group having short biopsies ( online supplemental table 5 )."
+        ],
+        "quote": "This finding is difficult to explain but a similar observation was reported previously in a large group of patients screened for clinical trials. 29 The use of local biopsy reports as reference standard and the well-known observer-dependent variability of biopsy interpretation, even among expert pathologists, 7 are factors that may have contributed to our finding. Spectrum bias was excluded as a source of this finding due to a near-identical proportion of patients in both the advanced fibrosis and cirrhosis group having short biopsies ( online supplemental table 5 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0013",
+        "locators": [
+          "G0013"
+        ],
+        "quotes": [
+          "序贯组合策略可提高灵敏度和特异度。FIB-4（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）的灵敏度为 66%、特异度为 86%，33% 的患者需接受肝活检；而采用肝硬化纳入的改良方案——FIB-4（<1.3；≥3.48）后再行 LSM-VCTE（<8.0；≥20.0 kPa）——仅有 19% 的患者需肝活检，但灵敏度降至 38%。当采用 98% 特异度切点（FIB-4 ≥4.63 和 LSM-VCTE ≥28.0 kPa）时，需肝活检比例可进一步降至 24%。 在 \"ruled-in\" 组中，656 例患者中有 345 例实际上组织学上并无肝硬化。对此需从两方面理解：一方面，肝活检本身的局限性可能导致这些患者的假阴性分类；另一方面，这些组织学上无肝硬化但 NIT 值高的患者可能与组织学上确诊肝硬化的患者具有同等的临床风险。既往丙型肝炎文献已表明，肝活检无肝硬化但 FIB-4 >3.25 的患者经抗病毒治疗后仍具有 HCC 发生的显著风险——这表明 NITs 可以带来超出单纯组织学诊断之外的附加价值。 亚组分析发现，NITs 在活检质量较差的病例中诊断准确性反而更高，此前在临床试验筛选人群中也有类似发现。可能与使用当地活检报告作为参考标准以及病理报告观察者间的高变异性有关。光谱偏倚已被排除（活检长度较短者在晚期肝纤维化和肝硬化组中的比例近乎相同）。"
+        ],
+        "quote": "序贯组合策略可提高灵敏度和特异度。FIB-4（<1.3；≥2.67）后再行 LSM-VCTE（<8.0；≥10.0 kPa）的灵敏度为 66%、特异度为 86%，33% 的患者需接受肝活检；而采用肝硬化纳入的改良方案——FIB-4（<1.3；≥3.48）后再行 LSM-VCTE（<8.0；≥20.0 kPa）——仅有 19% 的患者需肝活检，但灵敏度降至 38%。当采用 98% 特异度切点（FIB-4 ≥4.63 和 LSM-VCTE ≥28.0 kPa）时，需肝活检比例可进一步降至 24%。 在 \"ruled-in\" 组中，656 例患者中有 345 例实际上组织学上并无肝硬化。对此需从两方面理解：一方面，肝活检本身的局限性可能导致这些患者的假阴性分类；另一方面，这些组织学上无肝硬化但 NIT 值高的患者可能与组织学上确诊肝硬化的患者具有同等的临床风险。既往丙型肝炎文献已表明，肝活检无肝硬化但 FIB-4 >3.25 的患者经抗病毒治疗后仍具有 HCC 发生的显著风险——这表明 NITs 可以带来超出单纯组织学诊断之外的附加价值。 亚组分析发现，NITs 在活检质量较差的病例中诊断准确性反而更高，此前在临床试验筛选人群中也有类似发现。可能与使用当地活检报告作为参考标准以及病理报告观察者间的高变异性有关。光谱偏倚已被排除（活检长度较短者在晚期肝纤维化和肝硬化组中的比例近乎相同）。"
+      },
+      "explanation": "Discussion of bias and verification issues matches.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 20,
+    "weightedFidelity": 1.0,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 20,
+      "not_applicable": 1
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "pass",
+    "adversarialIssueCount": 0,
+    "adversarialUnsupportedClaimCount": 0,
+    "adversarialContradictionCount": 0,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "clean",
+    "issues": [],
+    "rationale": "Checked all key claims, study design, sample sizes, numeric results (AUROCs, sensitivities, specificities, biopsy proportions, cirrhosis cut-offs), subgroup analyses, and limitations in the generated summary against the reference IPD meta-analysis. All numbers and conclusions match the original; no unsupported, contradicted, or omitted critical facts were found."
+  },
+  "overallAssessment": "The generated restatement faithfully reproduces all critical and major elements of the original IPD meta-analysis. Research objective, study design, population, sample size, index tests, reference standard, outcomes, statistical methods, key numerical results with CIs, threshold derivation/validation, and conclusions are exactly aligned. Limitations and potential biases are accurately reported. No material discrepancies, omissions, or unsupported claims were identified. The restatement meets the highest level of scientific fidelity to the reference.",
+  "gradedAt": "2026-07-18T15:23:47Z"
+}

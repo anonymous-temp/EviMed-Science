@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="EviMed">
+  <g fill="none" stroke="#2563EB" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5">
+    <path d="M18 27 9.5 18.5M18 27 29.5 12.5M18 27l16 7" />
+  </g>
+  <g fill="#2563EB">
+    <circle cx="9" cy="18" r="5" />
+    <circle cx="18" cy="27" r="5.5" />
+    <circle cx="30" cy="12" r="5" />
+    <circle cx="35" cy="34" r="5" />
+  </g>
+</svg>

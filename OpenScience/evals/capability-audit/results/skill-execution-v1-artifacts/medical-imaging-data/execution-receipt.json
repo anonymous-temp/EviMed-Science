@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1321,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/medical-imaging-data/results.json",
+      "sha256": "345c358bf9587875557bc61ec6dcc3c67047ddc51bb43dcb2d5c32687122c1ba"
+    },
+    {
+      "bytes": 1881,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/medical-imaging-data/medical-imaging-data-report.md",
+      "sha256": "f0d539be1c2bd70bdb1ed5f521701d07b3bd9efeed7f6de78fe745dd35d2299c"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:38.550856Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "medical-imaging-data",
+  "startedAt": "2026-07-19T19:31:38.547590Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for medical-imaging-data and wrote 2 verified artifacts.",
+  "warnings": [
+    "This baseline validates derived numeric imaging features; it does not decode DICOM or whole-slide pixels."
+  ]
+}

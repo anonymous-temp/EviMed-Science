@@ -1,0 +1,36 @@
+{
+  "events": 5,
+  "kaplanMeier": [
+    {
+      "atRisk": 8,
+      "events": 1,
+      "survival": 0.875,
+      "time": 5.0
+    },
+    {
+      "atRisk": 7,
+      "events": 1,
+      "survival": 0.75,
+      "time": 6.0
+    },
+    {
+      "atRisk": 5,
+      "events": 1,
+      "survival": 0.6000000000000001,
+      "time": 8.0
+    },
+    {
+      "atRisk": 3,
+      "events": 1,
+      "survival": 0.4000000000000001,
+      "time": 12.0
+    },
+    {
+      "atRisk": 1,
+      "events": 1,
+      "survival": 0.0,
+      "time": 18.0
+    }
+  ],
+  "n": 8
+}

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-035",
+  "category": "pharmacovigilance-drug-safety",
+  "title": "The effect of methotrexate and targeted immunosuppression on humoral and cellular immune responses to the COVID-19 vaccine BNT162b2: a cohort study.",
+  "pmcid": "PMC8266273",
+  "doi": "10.1016/s2665-9913(21)00212-5",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 7305,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 128,
+    "supportedUniqueNumbers": 127,
+    "unsupportedNumberTokens": [
+      "3%"
+    ],
+    "supportedNumericClaimPrecision": 0.9921875,
+    "verbatimEightGramRate": 0.0,
+    "toolCalls": 13,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated Chinese summary faithfully translates the original article's study design, population, methods, and results. All key numbers (seroconversion rates, neutralisation titres, T-cell response rates, safety data) match the reference exactly, and the conclusions are correctly interpreted. No fabricated or unsupported claims are present."
+  },
+  "overallVerdict": "pass"
+}

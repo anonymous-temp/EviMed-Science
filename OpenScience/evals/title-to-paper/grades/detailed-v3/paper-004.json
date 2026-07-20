@@ -1,0 +1,733 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-004",
+  "category": "randomized-trial",
+  "title": "Five-Year Outcomes With Pembrolizumab Versus Chemotherapy for Metastatic Non-Small-Cell Lung Cancer With PD-L1 Tumor Proportion Score ≥ 50.",
+  "pmcid": "PMC8280089",
+  "doi": "10.1200/jco.21.00174",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "bdf275e981c6931fb0fd20ba9351e1014044eba0e5b3f54f34876dd1092b5b5c",
+  "generatedSha256": "94633d89779c2a08ca155408f968d8b79b536cff95adcd5106c1dd2885188732",
+  "promptSha256": "030ec979269211a2989d1d68972b505487d92a7509b5b952bf4d9697d37964a6",
+  "cacheFingerprint": "4b004ff2cdaea3c353874f48dce135a6823b922aa85474eff9aa37033e9237d1",
+  "referenceCharacters": 45684,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 7096,
+  "paperType": "randomized-trial",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Purpose: report the first 5-year follow-up of a first-line phase III immunotherapy trial for NSCLC, examining long-term pembrolizumab benefit vs chemotherapy.",
+      "generatedFact": "Report 5-year follow-up results of KEYNOTE-024, first phase III trial showing immunotherapy superiority over chemotherapy.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Five-Year Outcomes With Pembrolizumab Versus Chemotherapy for Metastatic Non-Small-Cell Lung Cancer With PD-L1 Tumor Proportion Score ≥ 50.\", \"pmcid\": \"PMC8280089\", \"pmid\": \"33872070\", \"doi\": \"10.1200/jco.21.00174\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2021-04-19\"} [ABSTRACT] PURPOSEWe report the first 5-year follow-up of any first-line phase III immunotherapy trial for non–small-cell lung cancer (NSCLC)."
+        ],
+        "quote": "[METADATA] {\"title\": \"Five-Year Outcomes With Pembrolizumab Versus Chemotherapy for Metastatic Non-Small-Cell Lung Cancer With PD-L1 Tumor Proportion Score ≥ 50.\", \"pmcid\": \"PMC8280089\", \"pmid\": \"33872070\", \"doi\": \"10.1200/jco.21.00174\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2021-04-19\"} [ABSTRACT] PURPOSEWe report the first 5-year follow-up of any first-line phase III immunotherapy trial for non–small-cell lung cancer (NSCLC)."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "- 期刊：Journal of Clinical Oncology, 2021;39(21):2339–2349 - DOI：[10.1200/JCO.21.00174](https://doi.org/10.1200/JCO.21.00174) - PMID：[33872070](https://pubmed.ncbi.nlm.nih.gov/33872070/) - PMCID：[PMC8280089](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8280089/) - 临床试验注册：NCT02142738 (KEYNOTE-024) - 资助：Merck Sharp & Dohme Corp（默沙东子公司） - 许可：CC BY-NC-ND 4.0 --- ## 摘要 **背景** 既往未经治疗的转移性非小细胞肺癌（NSCLC）患者长期预后极差。KEYNOTE-024 是首个显示一线免疫治疗优于铂类化疗的 III 期随机对照试验，本研究报道其 5 年随访结果。 **方法** KEYNOTE-024 为开放标签、随机对照 III 期试验。纳入 PD-L1 TPS ≥ 50%、无 EGFR/ALK 敏感突变的初治 IV 期 NSCLC 患者，按 1:1 随机分配至帕博利珠单抗（200 mg 每 3 周一次，最多 35 个周期）或研究者选择的铂类双药化疗（4–6 个周期，非鳞癌患者可接受培美曲塞维持治疗）。化疗组疾病进展后可交叉至帕博利珠单抗治疗。主要终点为无进展生存期（PFS），总生存期（OS）为次要终点。"
+        ],
+        "quote": "- 期刊：Journal of Clinical Oncology, 2021;39(21):2339–2349 - DOI：[10.1200/JCO.21.00174](https://doi.org/10.1200/JCO.21.00174) - PMID：[33872070](https://pubmed.ncbi.nlm.nih.gov/33872070/) - PMCID：[PMC8280089](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8280089/) - 临床试验注册：NCT02142738 (KEYNOTE-024) - 资助：Merck Sharp & Dohme Corp（默沙东子公司） - 许可：CC BY-NC-ND 4.0 --- ## 摘要 **背景** 既往未经治疗的转移性非小细胞肺癌（NSCLC）患者长期预后极差。KEYNOTE-024 是首个显示一线免疫治疗优于铂类化疗的 III 期随机对照试验，本研究报道其 5 年随访结果。 **方法** KEYNOTE-024 为开放标签、随机对照 III 期试验。纳入 PD-L1 TPS ≥ 50%、无 EGFR/ALK 敏感突变的初治 IV 期 NSCLC 患者，按 1:1 随机分配至帕博利珠单抗（200 mg 每 3 周一次，最多 35 个周期）或研究者选择的铂类双药化疗（4–6 个周期，非鳞癌患者可接受培美曲塞维持治疗）。化疗组疾病进展后可交叉至帕博利珠单抗治疗。主要终点为无进展生存期（PFS），总生存期（OS）为次要终点。"
+      },
+      "explanation": "Both state reporting 5-year outcomes and long-term benefit of pembrolizumab vs chemo.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Open-label, randomized controlled trial (KEYNOTE-024).",
+      "generatedFact": "开放标签、随机对照 III 期试验。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "KEYNOTE-024 (ClinicalTrials.gov identifier: NCT02142738) is an open-label, randomized controlled trial of pembrolizumab compared with platinum-based chemotherapy in patients with previously untreated NSCLC with a programmed death ligand-1 (PD-L1) tumor proportion score of at least 50% and no sensitizing EGFR or ALK alterations. Previous analyses showed pembrolizumab significantly improved progression-free survival and overall survival (OS).METHODSEligible patients were randomly assigned (1:1) to pembrolizumab (200 mg once every 3 weeks for up to 35 cycles) or platinum-based chemotherapy. Patients in the chemotherapy group with progressive disease could cross over to pembrolizumab."
+        ],
+        "quote": "KEYNOTE-024 (ClinicalTrials.gov identifier: NCT02142738) is an open-label, randomized controlled trial of pembrolizumab compared with platinum-based chemotherapy in patients with previously untreated NSCLC with a programmed death ligand-1 (PD-L1) tumor proportion score of at least 50% and no sensitizing EGFR or ALK alterations. Previous analyses showed pembrolizumab significantly improved progression-free survival and overall survival (OS).METHODSEligible patients were randomly assigned (1:1) to pembrolizumab (200 mg once every 3 weeks for up to 35 cycles) or platinum-based chemotherapy. Patients in the chemotherapy group with progressive disease could cross over to pembrolizumab."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "- 期刊：Journal of Clinical Oncology, 2021;39(21):2339–2349 - DOI：[10.1200/JCO.21.00174](https://doi.org/10.1200/JCO.21.00174) - PMID：[33872070](https://pubmed.ncbi.nlm.nih.gov/33872070/) - PMCID：[PMC8280089](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8280089/) - 临床试验注册：NCT02142738 (KEYNOTE-024) - 资助：Merck Sharp & Dohme Corp（默沙东子公司） - 许可：CC BY-NC-ND 4.0 --- ## 摘要 **背景** 既往未经治疗的转移性非小细胞肺癌（NSCLC）患者长期预后极差。KEYNOTE-024 是首个显示一线免疫治疗优于铂类化疗的 III 期随机对照试验，本研究报道其 5 年随访结果。 **方法** KEYNOTE-024 为开放标签、随机对照 III 期试验。纳入 PD-L1 TPS ≥ 50%、无 EGFR/ALK 敏感突变的初治 IV 期 NSCLC 患者，按 1:1 随机分配至帕博利珠单抗（200 mg 每 3 周一次，最多 35 个周期）或研究者选择的铂类双药化疗（4–6 个周期，非鳞癌患者可接受培美曲塞维持治疗）。化疗组疾病进展后可交叉至帕博利珠单抗治疗。主要终点为无进展生存期（PFS），总生存期（OS）为次要终点。"
+        ],
+        "quote": "- 期刊：Journal of Clinical Oncology, 2021;39(21):2339–2349 - DOI：[10.1200/JCO.21.00174](https://doi.org/10.1200/JCO.21.00174) - PMID：[33872070](https://pubmed.ncbi.nlm.nih.gov/33872070/) - PMCID：[PMC8280089](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8280089/) - 临床试验注册：NCT02142738 (KEYNOTE-024) - 资助：Merck Sharp & Dohme Corp（默沙东子公司） - 许可：CC BY-NC-ND 4.0 --- ## 摘要 **背景** 既往未经治疗的转移性非小细胞肺癌（NSCLC）患者长期预后极差。KEYNOTE-024 是首个显示一线免疫治疗优于铂类化疗的 III 期随机对照试验，本研究报道其 5 年随访结果。 **方法** KEYNOTE-024 为开放标签、随机对照 III 期试验。纳入 PD-L1 TPS ≥ 50%、无 EGFR/ALK 敏感突变的初治 IV 期 NSCLC 患者，按 1:1 随机分配至帕博利珠单抗（200 mg 每 3 周一次，最多 35 个周期）或研究者选择的铂类双药化疗（4–6 个周期，非鳞癌患者可接受培美曲塞维持治疗）。化疗组疾病进展后可交叉至帕博利珠单抗治疗。主要终点为无进展生存期（PFS），总生存期（OS）为次要终点。"
+      },
+      "explanation": "Design matches exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Eligible: ≥18 yrs, previously untreated stage IV NSCLC, PD-L1 TPS ≥50%, no sensitizing EGFR or ALK alterations, ECOG 0-1, life expectancy ≥3 months.",
+      "generatedFact": "纳入 PD-L1 TPS ≥ 50%、无 EGFR/ALK 敏感突变的初治 IV 期 NSCLC 患者。",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "METHODS Patients As previously described, 4 , 10 eligible patients were ≥ 18 years with previously untreated stage IV NSCLC with PD-L1 TPS of at least 50%, measurable disease by RECIST v1.1, Eastern Cooperative Oncology Group performance status of 0 or 1, and life expectancy of at least 3 months. 4 , 10 Patients with sensitizing EGFR or ALK alterations, untreated brain metastases, or active autoimmune disease requiring systemic treatment or receiving systemic glucocorticoids or immunosuppressive therapy were excluded. The Protocol (online only) was approved by institutional review boards or independent ethics committees at participating institutions."
+        ],
+        "quote": "METHODS Patients As previously described, 4 , 10 eligible patients were ≥ 18 years with previously untreated stage IV NSCLC with PD-L1 TPS of at least 50%, measurable disease by RECIST v1.1, Eastern Cooperative Oncology Group performance status of 0 or 1, and life expectancy of at least 3 months. 4 , 10 Patients with sensitizing EGFR or ALK alterations, untreated brain metastases, or active autoimmune disease requiring systemic treatment or receiving systemic glucocorticoids or immunosuppressive therapy were excluded. The Protocol (online only) was approved by institutional review boards or independent ethics committees at participating institutions."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+        ],
+        "quote": "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+      },
+      "explanation": "Population criteria fully aligned.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "305 patients randomly assigned: 154 to pembrolizumab, 151 to chemotherapy.",
+      "generatedFact": "共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+        ],
+        "quote": "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+        ],
+        "quote": "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+      },
+      "explanation": "Sample size and arm allocation identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Inclusion: ≥18 yrs, previously untreated stage IV NSCLC, PD-L1 TPS ≥50%, measurable disease RECIST v1.1, ECOG 0-1, life expectancy ≥3 months. Exclusions: EGFR/ALK alterations, untreated brain metastases, active autoimmune disease requiring systemic therapy, systemic glucocorticoids/immunosuppressants.",
+      "generatedFact": "纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 0 或 1、预期寿命 ≥ 3 个月。排除标准：EGFR/ALK 突变、未经治疗的脑转移、需要全身治疗的活动性自身免疫病、全身糖皮质激素或免疫抑制治疗。",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "METHODS Patients As previously described, 4 , 10 eligible patients were ≥ 18 years with previously untreated stage IV NSCLC with PD-L1 TPS of at least 50%, measurable disease by RECIST v1.1, Eastern Cooperative Oncology Group performance status of 0 or 1, and life expectancy of at least 3 months. 4 , 10 Patients with sensitizing EGFR or ALK alterations, untreated brain metastases, or active autoimmune disease requiring systemic treatment or receiving systemic glucocorticoids or immunosuppressive therapy were excluded. The Protocol (online only) was approved by institutional review boards or independent ethics committees at participating institutions."
+        ],
+        "quote": "METHODS Patients As previously described, 4 , 10 eligible patients were ≥ 18 years with previously untreated stage IV NSCLC with PD-L1 TPS of at least 50%, measurable disease by RECIST v1.1, Eastern Cooperative Oncology Group performance status of 0 or 1, and life expectancy of at least 3 months. 4 , 10 Patients with sensitizing EGFR or ALK alterations, untreated brain metastases, or active autoimmune disease requiring systemic treatment or receiving systemic glucocorticoids or immunosuppressive therapy were excluded. The Protocol (online only) was approved by institutional review boards or independent ethics committees at participating institutions."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+        ],
+        "quote": "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+      },
+      "explanation": "Eligibility criteria reproduced accurately.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Pembrolizumab 200 mg intravenously once every 3 weeks for up to 35 cycles.",
+      "generatedFact": "帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "KEYNOTE-024 (ClinicalTrials.gov identifier: NCT02142738) is an open-label, randomized controlled trial of pembrolizumab compared with platinum-based chemotherapy in patients with previously untreated NSCLC with a programmed death ligand-1 (PD-L1) tumor proportion score of at least 50% and no sensitizing EGFR or ALK alterations. Previous analyses showed pembrolizumab significantly improved progression-free survival and overall survival (OS).METHODSEligible patients were randomly assigned (1:1) to pembrolizumab (200 mg once every 3 weeks for up to 35 cycles) or platinum-based chemotherapy. Patients in the chemotherapy group with progressive disease could cross over to pembrolizumab."
+        ],
+        "quote": "KEYNOTE-024 (ClinicalTrials.gov identifier: NCT02142738) is an open-label, randomized controlled trial of pembrolizumab compared with platinum-based chemotherapy in patients with previously untreated NSCLC with a programmed death ligand-1 (PD-L1) tumor proportion score of at least 50% and no sensitizing EGFR or ALK alterations. Previous analyses showed pembrolizumab significantly improved progression-free survival and overall survival (OS).METHODSEligible patients were randomly assigned (1:1) to pembrolizumab (200 mg once every 3 weeks for up to 35 cycles) or platinum-based chemotherapy. Patients in the chemotherapy group with progressive disease could cross over to pembrolizumab."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+        ],
+        "quote": "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+      },
+      "explanation": "Intervention, dose, schedule, and duration match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Investigator's choice of platinum-based chemotherapy: carboplatin/cisplatin + pemetrexed or gemcitabine, or carboplatin + paclitaxel for 4–6 cycles; pemetrexed maintenance allowed for nonsquamous tumors.",
+      "generatedFact": "对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。",
+      "sourceEvidence": {
+        "locator": "R0011",
+        "locators": [
+          "R0011"
+        ],
+        "quotes": [
+          "Patients provided written informed consent. Study Design Patients were randomly assigned (1:1) to receive 200 mg of intravenous pembrolizumab once every 3 weeks for 35 cycles or investigator's choice of platinum chemotherapy (carboplatin/cisplatin) plus pemetrexed or gemcitabine, or carboplatin plus paclitaxel for 4 to 6 cycles. 10 Pemetrexed was permitted only for patients with nonsquamous tumors and could be administered as maintenance therapy. Random assignment was stratified by Eastern Cooperative Oncology Group performance status (0 or 1), histology (squamous or nonsquamous), and region (East Asian or non–East Asian enrollment)."
+        ],
+        "quote": "Patients provided written informed consent. Study Design Patients were randomly assigned (1:1) to receive 200 mg of intravenous pembrolizumab once every 3 weeks for 35 cycles or investigator's choice of platinum chemotherapy (carboplatin/cisplatin) plus pemetrexed or gemcitabine, or carboplatin plus paclitaxel for 4 to 6 cycles. 10 Pemetrexed was permitted only for patients with nonsquamous tumors and could be administered as maintenance therapy. Random assignment was stratified by Eastern Cooperative Oncology Group performance status (0 or 1), histology (squamous or nonsquamous), and region (East Asian or non–East Asian enrollment)."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+        ],
+        "quote": "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+      },
+      "explanation": "Comparator details fully correspond.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary endpoint: progression-free survival (PFS); secondary: overall survival (OS), objective response rate, safety.",
+      "generatedFact": "主要终点为无进展生存期（PFS），总生存期（OS）为次要终点。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+        ],
+        "quote": "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "- 期刊：Journal of Clinical Oncology, 2021;39(21):2339–2349 - DOI：[10.1200/JCO.21.00174](https://doi.org/10.1200/JCO.21.00174) - PMID：[33872070](https://pubmed.ncbi.nlm.nih.gov/33872070/) - PMCID：[PMC8280089](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8280089/) - 临床试验注册：NCT02142738 (KEYNOTE-024) - 资助：Merck Sharp & Dohme Corp（默沙东子公司） - 许可：CC BY-NC-ND 4.0 --- ## 摘要 **背景** 既往未经治疗的转移性非小细胞肺癌（NSCLC）患者长期预后极差。KEYNOTE-024 是首个显示一线免疫治疗优于铂类化疗的 III 期随机对照试验，本研究报道其 5 年随访结果。 **方法** KEYNOTE-024 为开放标签、随机对照 III 期试验。纳入 PD-L1 TPS ≥ 50%、无 EGFR/ALK 敏感突变的初治 IV 期 NSCLC 患者，按 1:1 随机分配至帕博利珠单抗（200 mg 每 3 周一次，最多 35 个周期）或研究者选择的铂类双药化疗（4–6 个周期，非鳞癌患者可接受培美曲塞维持治疗）。化疗组疾病进展后可交叉至帕博利珠单抗治疗。主要终点为无进展生存期（PFS），总生存期（OS）为次要终点。"
+        ],
+        "quote": "- 期刊：Journal of Clinical Oncology, 2021;39(21):2339–2349 - DOI：[10.1200/JCO.21.00174](https://doi.org/10.1200/JCO.21.00174) - PMID：[33872070](https://pubmed.ncbi.nlm.nih.gov/33872070/) - PMCID：[PMC8280089](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8280089/) - 临床试验注册：NCT02142738 (KEYNOTE-024) - 资助：Merck Sharp & Dohme Corp（默沙东子公司） - 许可：CC BY-NC-ND 4.0 --- ## 摘要 **背景** 既往未经治疗的转移性非小细胞肺癌（NSCLC）患者长期预后极差。KEYNOTE-024 是首个显示一线免疫治疗优于铂类化疗的 III 期随机对照试验，本研究报道其 5 年随访结果。 **方法** KEYNOTE-024 为开放标签、随机对照 III 期试验。纳入 PD-L1 TPS ≥ 50%、无 EGFR/ALK 敏感突变的初治 IV 期 NSCLC 患者，按 1:1 随机分配至帕博利珠单抗（200 mg 每 3 周一次，最多 35 个周期）或研究者选择的铂类双药化疗（4–6 个周期，非鳞癌患者可接受培美曲塞维持治疗）。化疗组疾病进展后可交叉至帕博利珠单抗治疗。主要终点为无进展生存期（PFS），总生存期（OS）为次要终点。"
+      },
+      "explanation": "Primary and key secondary endpoints correctly stated.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Median time from randomization to data cutoff (June 1, 2020) was 59.9 months (range 55.1–68.4).",
+      "generatedFact": "至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+        ],
+        "quote": "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+        ],
+        "quote": "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+      },
+      "explanation": "Follow-up duration matches exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No explicit data cleaning or preprocessing reported in either text.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Kaplan-Meier method; stratified Cox model with Efron's tie handling; randomization stratification factors applied; ITT for efficacy, as-treated for safety.",
+      "generatedFact": "疗效分析基于意向治疗人群，安全性分析基于实际治疗人群。OS、PFS 及 PFS2 使用 Kaplan-Meier 法估计；分层 Cox 模型（Efron 结处理方法）计算 HR 及 95% CI。",
+      "sourceEvidence": {
+        "locator": "R0017",
+        "locators": [
+          "R0017"
+        ],
+        "quotes": [
+          "Exploratory analyses included outcomes in patients who completed 35 cycles of pembrolizumab and patients who received a second course of pembrolizumab. Superiority of pembrolizumab over chemotherapy for PFS and OS was determined during the second interim analysis. 10 The prespecified alpha was used at the second interim analysis. No alpha was assigned to the current analysis. The Kaplan-Meier method was used to estimate OS, PFS, and PFS2 as previously described. 4 , 10 A stratified Cox model with Efron's method of tie handling was used to determine HRs and 95% CIs; randomization stratification factors were applied to the Cox models."
+        ],
+        "quote": "Exploratory analyses included outcomes in patients who completed 35 cycles of pembrolizumab and patients who received a second course of pembrolizumab. Superiority of pembrolizumab over chemotherapy for PFS and OS was determined during the second interim analysis. 10 The prespecified alpha was used at the second interim analysis. No alpha was assigned to the current analysis. The Kaplan-Meier method was used to estimate OS, PFS, and PFS2 as previously described. 4 , 10 A stratified Cox model with Efron's method of tie handling was used to determine HRs and 95% CIs; randomization stratification factors were applied to the Cox models."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 终点与评估 主要终点为 PFS（随机化至 BICR 评估的疾病进展或全因死亡）。次要终点包括 OS、客观缓解率（ORR，BICR 评估）及安全性。第二次期中分析后 BICR 评估停止（方案第 8 次修订），此后 PFS 和 ORR 均按研究者评估报告。探索性终点 PFS2 定义为随机化至开始新抗肿瘤治疗后再次疾病进展或全因死亡。PD-L1 表达通过免疫组化检测。影像学检查在治疗期每 9 周进行，随访期每 3 个月进行；生存随访每 2 个月联系一次。 ### 统计分析 疗效分析基于意向治疗人群，安全性分析基于实际治疗人群（随机化并接受至少一次研究治疗的患者，按实际接受的治疗分析）。探索性分析包括完成 35 个周期帕博利珠单抗治疗的患者和接受第二疗程患者的结局。帕博利珠单抗在 PFS 和 OS 方面的优效性在第二次期中分析中已确立。当前分析无预设 α 分配。OS、PFS 及 PFS2 使用 Kaplan-Meier 法估计；分层 Cox 模型（Efron 结处理方法）计算 HR 及 95% CI，分层因素同随机化。"
+        ],
+        "quote": "### 终点与评估 主要终点为 PFS（随机化至 BICR 评估的疾病进展或全因死亡）。次要终点包括 OS、客观缓解率（ORR，BICR 评估）及安全性。第二次期中分析后 BICR 评估停止（方案第 8 次修订），此后 PFS 和 ORR 均按研究者评估报告。探索性终点 PFS2 定义为随机化至开始新抗肿瘤治疗后再次疾病进展或全因死亡。PD-L1 表达通过免疫组化检测。影像学检查在治疗期每 9 周进行，随访期每 3 个月进行；生存随访每 2 个月联系一次。 ### 统计分析 疗效分析基于意向治疗人群，安全性分析基于实际治疗人群（随机化并接受至少一次研究治疗的患者，按实际接受的治疗分析）。探索性分析包括完成 35 个周期帕博利珠单抗治疗的患者和接受第二疗程患者的结局。帕博利珠单抗在 PFS 和 OS 方面的优效性在第二次期中分析中已确立。当前分析无预设 α 分配。OS、PFS 及 PFS2 使用 Kaplan-Meier 法估计；分层 Cox 模型（Efron 结处理方法）计算 HR 及 95% CI，分层因素同随机化。"
+      },
+      "explanation": "Statistical methods and analysis populations precisely aligned.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No computational algorithm or model reported.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Median OS 26.3 (95% CI 18.3–40.4) vs 13.4 (9.4–18.3) months, HR 0.62 (0.48–0.81); 5-year OS 31.9% vs 16.3%; median PFS 7.7 vs 5.5 months HR 0.50 (0.39–0.65); ORR 46.1% vs 31.1%.",
+      "generatedFact": "中位 OS 26.3 个月 vs 13.4 个月，HR 0.62；5 年 OS 率 31.9% vs 16.3%；中位 PFS 7.7 个月 vs 5.5 个月 HR 0.50；ORR 46.1% vs 31.1%。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+        ],
+        "quote": "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+        ],
+        "quote": "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+      },
+      "explanation": "Main numerical outcomes match, including OS, PFS, HRs, and ORR.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "OS HR 0.62 (95% CI 0.48–0.81); PFS HR 0.50 (0.39–0.65); no alpha assigned for current analysis.",
+      "generatedFact": "OS HR 0.62 (95% CI 0.48–0.81)，PFS HR 0.50 (95% CI 0.39–0.65)，当前分析未预设 α。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+        ],
+        "quote": "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+        ],
+        "quote": "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+      },
+      "explanation": "Confidence intervals and lack of formal significance testing correctly reported.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Pembrolizumab provides a durable, clinically meaningful long-term OS benefit versus chemotherapy as first-line therapy for metastatic NSCLC with PD-L1 TPS ≥50%.",
+      "generatedFact": "帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "Kaplan-Meier estimates of the 5-year OS rate were 31.9% for the pembrolizumab group and 16.3% for the chemotherapy group. Thirty-nine patients received 35 cycles (ie, approximately 2 years) of pembrolizumab, 82.1% of whom were still alive at data cutoff (approximately 5 years). Toxicity did not increase with longer treatment exposure.CONCLUSIONPembrolizumab provides a durable, clinically meaningful long-term OS benefit versus chemotherapy as first-line therapy for metastatic NSCLC with PD-L1 tumor proportion score of at least 50%."
+        ],
+        "quote": "Kaplan-Meier estimates of the 5-year OS rate were 31.9% for the pembrolizumab group and 16.3% for the chemotherapy group. Thirty-nine patients received 35 cycles (ie, approximately 2 years) of pembrolizumab, 82.1% of whom were still alive at data cutoff (approximately 5 years). Toxicity did not increase with longer treatment exposure.CONCLUSIONPembrolizumab provides a durable, clinically meaningful long-term OS benefit versus chemotherapy as first-line therapy for metastatic NSCLC with PD-L1 tumor proportion score of at least 50%."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+        ],
+        "quote": "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+      },
+      "explanation": "Conclusion direction and strength are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Open-label design, high crossover (66%), no alpha assigned to current analysis, exploratory subgroup analyses, BICR replaced by investigator assessment after second interim.",
+      "generatedFact": "局限性包括开放标签设计、高交叉率、评估方式变更、无预设 α 分配、亚组分析为探索性、数据共享受限。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "KEYNOTE-024 (ClinicalTrials.gov identifier: NCT02142738) is an open-label, randomized controlled trial of pembrolizumab compared with platinum-based chemotherapy in patients with previously untreated NSCLC with a programmed death ligand-1 (PD-L1) tumor proportion score of at least 50% and no sensitizing EGFR or ALK alterations. Previous analyses showed pembrolizumab significantly improved progression-free survival and overall survival (OS).METHODSEligible patients were randomly assigned (1:1) to pembrolizumab (200 mg once every 3 weeks for up to 35 cycles) or platinum-based chemotherapy. Patients in the chemotherapy group with progressive disease could cross over to pembrolizumab."
+        ],
+        "quote": "KEYNOTE-024 (ClinicalTrials.gov identifier: NCT02142738) is an open-label, randomized controlled trial of pembrolizumab compared with platinum-based chemotherapy in patients with previously untreated NSCLC with a programmed death ligand-1 (PD-L1) tumor proportion score of at least 50% and no sensitizing EGFR or ALK alterations. Previous analyses showed pembrolizumab significantly improved progression-free survival and overall survival (OS).METHODSEligible patients were randomly assigned (1:1) to pembrolizumab (200 mg once every 3 weeks for up to 35 cycles) or platinum-based chemotherapy. Patients in the chemotherapy group with progressive disease could cross over to pembrolizumab."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "同期发表的流行病学数据显示，美国肺癌死亡率在 2013 年后加速下降，与靶向治疗及免疫治疗的推广应用时间线一致[25]。KEYNOTE-024 的 5 年数据提示免疫治疗有望进一步改善人群水平的肺癌生存。 ### 局限性 本文所报告的分析存在以下局限： 1. **开放标签设计**：可能引入研究者及患者的评估偏倚。 2. **高交叉率**：化疗组 66.0% 的有效交叉率可能稀释帕博利珠单抗相对于化疗的真实 OS 获益幅度。 3. **评估方式的变更**：第二次期中分析后 BICR 停止，此后 PFS 和 ORR 按研究者评估报告，可能影响与早期分析的可比性。 4. **无预设 α 分配**：当前分析为描述性探索分析，未预先分配统计学检验水准，因此报告的 P 值及置信区间不应理解为确证性统计推断。 5. **亚组分析为探索性**：完成 35 个周期的患者分析及第二疗程分析均为事后探索性亚组分析，样本量小，结果需谨慎解读。 6. **数据共享受限**：个体患者数据需通过默沙东数据共享流程申请获取，当前分析无法被第三方独立重分析。 --- ## 结论 在 KEYNOTE-024 随机 III 期试验的 5 年随访中，一线帕博利珠单抗单药治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久的、具有临床意义的总生存期获益，5 年 OS 率达 31.9%，约为化疗组的两倍。安全性特征与既往报道一致，长期随访未出现新的安全性问题。该研究确立了帕博利珠单抗在该人群中的标准治疗地位。"
+        ],
+        "quote": "同期发表的流行病学数据显示，美国肺癌死亡率在 2013 年后加速下降，与靶向治疗及免疫治疗的推广应用时间线一致[25]。KEYNOTE-024 的 5 年数据提示免疫治疗有望进一步改善人群水平的肺癌生存。 ### 局限性 本文所报告的分析存在以下局限： 1. **开放标签设计**：可能引入研究者及患者的评估偏倚。 2. **高交叉率**：化疗组 66.0% 的有效交叉率可能稀释帕博利珠单抗相对于化疗的真实 OS 获益幅度。 3. **评估方式的变更**：第二次期中分析后 BICR 停止，此后 PFS 和 ORR 按研究者评估报告，可能影响与早期分析的可比性。 4. **无预设 α 分配**：当前分析为描述性探索分析，未预先分配统计学检验水准，因此报告的 P 值及置信区间不应理解为确证性统计推断。 5. **亚组分析为探索性**：完成 35 个周期的患者分析及第二疗程分析均为事后探索性亚组分析，样本量小，结果需谨慎解读。 6. **数据共享受限**：个体患者数据需通过默沙东数据共享流程申请获取，当前分析无法被第三方独立重分析。 --- ## 结论 在 KEYNOTE-024 随机 III 期试验的 5 年随访中，一线帕博利珠单抗单药治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久的、具有临床意义的总生存期获益，5 年 OS 率达 31.9%，约为化疗组的两倍。安全性特征与既往报道一致，长期随访未出现新的安全性问题。该研究确立了帕博利珠单抗在该人群中的标准治疗地位。"
+      },
+      "explanation": "Listed limitations are all supported by REFERENCE (open-label, crossover, no alpha, exploratory nature).",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Treatment-related AEs: pembrolizumab 76.6% (grade 3-5 31.2%), chemo 90.0% (53.3%); immune-mediated AEs 34.4% vs 5.3%; two treatment-related deaths in pembrolizumab group, three in chemo.",
+      "generatedFact": "帕博利珠单抗组治疗相关不良事件 76.6%（3–5 级 31.2%），化疗组 90.0%（53.3%）；免疫介导不良事件 34.4% vs 5.3%；帕博利珠单抗组 2 例治疗相关死亡，化疗组 3 例。",
+      "sourceEvidence": {
+        "locator": "R0026",
+        "locators": [
+          "R0026"
+        ],
+        "quotes": [
+          "Kaplan-Meier estimates of PFS2 for each treatment group, with censoring of data at the time of last contact for patients alive without receiving second-line therapy, stopping second-line therapy without disease progression, and not initiating third-line therapy. Tick marks indicate censoring times. HR, hazard ratio; PFS, progression-free survival. Safety No new safety signals were identified since prior analyses. Incidence of treatment-related AEs was 76.6% (grade 3-5, 31.2%) among patients who received pembrolizumab and 90.0% (grade 3-5, 53.3%) among patients who received chemotherapy (Table 3 )."
+        ],
+        "quote": "Kaplan-Meier estimates of PFS2 for each treatment group, with censoring of data at the time of last contact for patients alive without receiving second-line therapy, stopping second-line therapy without disease progression, and not initiating third-line therapy. Tick marks indicate censoring times. HR, hazard ratio; PFS, progression-free survival. Safety No new safety signals were identified since prior analyses. Incidence of treatment-related AEs was 76.6% (grade 3-5, 31.2%) among patients who received pembrolizumab and 90.0% (grade 3-5, 53.3%) among patients who received chemotherapy (Table 3 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0009",
+        "locators": [
+          "G0009"
+        ],
+        "quotes": [
+          "### 客观缓解与缓解持续时间 帕博利珠单抗组 ORR 为 46.1%（71/154; 95% CI, 38.1–54.3），化疗组为 31.1%（47/151; 95% CI, 23.8–39.2）。帕博利珠单抗组 7 例（4.5%）达到 CR，化疗组无 CR。中位缓解持续时间：帕博利珠单抗组 29.1 个月（范围 2.2–60.8+ 个月），化疗组 6.3 个月（范围 3.1–52.4 个月）。 ### PFS2 帕博利珠单抗组中位 PFS2 为 24.1 个月（95% CI, 15.0–31.4），化疗组为 8.5 个月（95% CI, 7.3–11.4），HR 0.51（95% CI, 0.39–0.67）。3 年 PFS2 率分别为 39.5%（95% CI, 31.4–47.4）和 15.0%（95% CI, 9.4–21.8）。 ### 安全性 长期随访未发现新的安全性信号。帕博利珠单抗组治疗相关不良事件发生率为 76.6%（3–5 级 31.2%），化疗组为 90.0%（3–5 级 53.3%）。严重治疗相关不良事件发生率分别为 22.7% 和 20.7%。帕博利珠单抗组 2 例治疗相关死亡（不明原因猝死、肺炎），化疗组 3 例（肺脓毒症、肺泡出血、不明原因死亡）。免疫介导的不良事件及输液反应发生率：帕博利珠单抗组 34.4%（3–5 级 13.6%），化疗组 5.3%（3–5 级 0.7%）。暴露校正的不良事件发生率随时间推移呈下降趋势。"
+        ],
+        "quote": "### 客观缓解与缓解持续时间 帕博利珠单抗组 ORR 为 46.1%（71/154; 95% CI, 38.1–54.3），化疗组为 31.1%（47/151; 95% CI, 23.8–39.2）。帕博利珠单抗组 7 例（4.5%）达到 CR，化疗组无 CR。中位缓解持续时间：帕博利珠单抗组 29.1 个月（范围 2.2–60.8+ 个月），化疗组 6.3 个月（范围 3.1–52.4 个月）。 ### PFS2 帕博利珠单抗组中位 PFS2 为 24.1 个月（95% CI, 15.0–31.4），化疗组为 8.5 个月（95% CI, 7.3–11.4），HR 0.51（95% CI, 0.39–0.67）。3 年 PFS2 率分别为 39.5%（95% CI, 31.4–47.4）和 15.0%（95% CI, 9.4–21.8）。 ### 安全性 长期随访未发现新的安全性信号。帕博利珠单抗组治疗相关不良事件发生率为 76.6%（3–5 级 31.2%），化疗组为 90.0%（3–5 级 53.3%）。严重治疗相关不良事件发生率分别为 22.7% 和 20.7%。帕博利珠单抗组 2 例治疗相关死亡（不明原因猝死、肺炎），化疗组 3 例（肺脓毒症、肺泡出血、不明原因死亡）。免疫介导的不良事件及输液反应发生率：帕博利珠单抗组 34.4%（3–5 级 13.6%），化疗组 5.3%（3–5 级 0.7%）。暴露校正的不良事件发生率随时间推移呈下降趋势。"
+      },
+      "explanation": "Safety metrics fully consistent with REFERENCE.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "randomization_and_blinding",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "1:1 random assignment, stratified by ECOG (0 vs 1), histology (squamous vs nonsquamous), region (East Asian vs non-East Asian); open-label.",
+      "generatedFact": "按 1:1 随机分配，分层因素为 ECOG 评分、组织学类型和地区；开放标签。",
+      "sourceEvidence": {
+        "locator": "R0011",
+        "locators": [
+          "R0011"
+        ],
+        "quotes": [
+          "Patients provided written informed consent. Study Design Patients were randomly assigned (1:1) to receive 200 mg of intravenous pembrolizumab once every 3 weeks for 35 cycles or investigator's choice of platinum chemotherapy (carboplatin/cisplatin) plus pemetrexed or gemcitabine, or carboplatin plus paclitaxel for 4 to 6 cycles. 10 Pemetrexed was permitted only for patients with nonsquamous tumors and could be administered as maintenance therapy. Random assignment was stratified by Eastern Cooperative Oncology Group performance status (0 or 1), histology (squamous or nonsquamous), and region (East Asian or non–East Asian enrollment)."
+        ],
+        "quote": "Patients provided written informed consent. Study Design Patients were randomly assigned (1:1) to receive 200 mg of intravenous pembrolizumab once every 3 weeks for 35 cycles or investigator's choice of platinum chemotherapy (carboplatin/cisplatin) plus pemetrexed or gemcitabine, or carboplatin plus paclitaxel for 4 to 6 cycles. 10 Pemetrexed was permitted only for patients with nonsquamous tumors and could be administered as maintenance therapy. Random assignment was stratified by Eastern Cooperative Oncology Group performance status (0 or 1), histology (squamous or nonsquamous), and region (East Asian or non–East Asian enrollment)."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+        ],
+        "quote": "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+      },
+      "explanation": "Randomization and blinding (open-label) correctly described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "treatment_arms_and_dose",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Pembrolizumab 200 mg Q3W for up to 35 cycles; chemo options as above; crossover allowed for chemo arm; second course of pembrolizumab possible.",
+      "generatedFact": "帕博利珠单抗 200 mg 每 3 周一次最多 35 个周期；化疗 4–6 个周期可选方案；化疗组可交叉；帕博利珠单抗第二疗程。",
+      "sourceEvidence": {
+        "locator": "R0011",
+        "locators": [
+          "R0011"
+        ],
+        "quotes": [
+          "Patients provided written informed consent. Study Design Patients were randomly assigned (1:1) to receive 200 mg of intravenous pembrolizumab once every 3 weeks for 35 cycles or investigator's choice of platinum chemotherapy (carboplatin/cisplatin) plus pemetrexed or gemcitabine, or carboplatin plus paclitaxel for 4 to 6 cycles. 10 Pemetrexed was permitted only for patients with nonsquamous tumors and could be administered as maintenance therapy. Random assignment was stratified by Eastern Cooperative Oncology Group performance status (0 or 1), histology (squamous or nonsquamous), and region (East Asian or non–East Asian enrollment)."
+        ],
+        "quote": "Patients provided written informed consent. Study Design Patients were randomly assigned (1:1) to receive 200 mg of intravenous pembrolizumab once every 3 weeks for 35 cycles or investigator's choice of platinum chemotherapy (carboplatin/cisplatin) plus pemetrexed or gemcitabine, or carboplatin plus paclitaxel for 4 to 6 cycles. 10 Pemetrexed was permitted only for patients with nonsquamous tumors and could be administered as maintenance therapy. Random assignment was stratified by Eastern Cooperative Oncology Group performance status (0 or 1), histology (squamous or nonsquamous), and region (East Asian or non–East Asian enrollment)."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+        ],
+        "quote": "--- ## 方法 ### 研究设计与患者 KEYNOTE-024 为国际多中心、开放标签、随机对照 III 期临床试验。纳入标准：年龄 ≥ 18 岁、既往未经治疗的 IV 期 NSCLC、PD-L1 TPS ≥ 50%、RECIST v1.1 可测量病灶、ECOG 体能状态评分 0 或 1、预期寿命 ≥ 3 个月。排除标准：携带 EGFR 敏感突变或 ALK 重排、未经治疗的脑转移、需要全身治疗的活动性自身免疫性疾病、正在接受全身糖皮质激素或免疫抑制治疗。 ### 随机化与治疗 患者按 1:1 随机分配，分层因素为 ECOG 评分（0 vs 1）、组织学类型（鳞癌 vs 非鳞癌）和地区（东亚 vs 非东亚）。试验组予帕博利珠单抗 200 mg 静脉注射，每 3 周一次，最多 35 个周期（约 2 年）。对照组予研究者选择的铂类化疗方案：卡铂/顺铂联合培美曲塞或吉西他滨，或卡铂联合紫杉醇，4–6 个周期；非鳞癌患者可接受培美曲塞维持治疗。化疗组患者在疾病进展（PD）且符合安全性标准后可交叉接受帕博利珠单抗治疗：第二次期中分析前需经盲态独立中心审查（BICR）确认 PD，此后以研究者评估为准。 完成 35 个周期帕博利珠单抗后出现 PD 的患者，或确认完全缓解（CR）且完成至少 6 个月治疗及 CR 后额外 2 个周期治疗的患者，若符合方案规定条件，可接受帕博利珠单抗第二疗程治疗（最多 17 个周期）。"
+      },
+      "explanation": "Arms, dose, schedule, and crossover rules accurately stated.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_population",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Efficacy in ITT population, safety in as-treated population.",
+      "generatedFact": "疗效分析基于意向治疗人群，安全性分析基于实际治疗人群。",
+      "sourceEvidence": {
+        "locator": "R0017",
+        "locators": [
+          "R0017"
+        ],
+        "quotes": [
+          "Exploratory analyses included outcomes in patients who completed 35 cycles of pembrolizumab and patients who received a second course of pembrolizumab. Superiority of pembrolizumab over chemotherapy for PFS and OS was determined during the second interim analysis. 10 The prespecified alpha was used at the second interim analysis. No alpha was assigned to the current analysis. The Kaplan-Meier method was used to estimate OS, PFS, and PFS2 as previously described. 4 , 10 A stratified Cox model with Efron's method of tie handling was used to determine HRs and 95% CIs; randomization stratification factors were applied to the Cox models."
+        ],
+        "quote": "Exploratory analyses included outcomes in patients who completed 35 cycles of pembrolizumab and patients who received a second course of pembrolizumab. Superiority of pembrolizumab over chemotherapy for PFS and OS was determined during the second interim analysis. 10 The prespecified alpha was used at the second interim analysis. No alpha was assigned to the current analysis. The Kaplan-Meier method was used to estimate OS, PFS, and PFS2 as previously described. 4 , 10 A stratified Cox model with Efron's method of tie handling was used to determine HRs and 95% CIs; randomization stratification factors were applied to the Cox models."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 终点与评估 主要终点为 PFS（随机化至 BICR 评估的疾病进展或全因死亡）。次要终点包括 OS、客观缓解率（ORR，BICR 评估）及安全性。第二次期中分析后 BICR 评估停止（方案第 8 次修订），此后 PFS 和 ORR 均按研究者评估报告。探索性终点 PFS2 定义为随机化至开始新抗肿瘤治疗后再次疾病进展或全因死亡。PD-L1 表达通过免疫组化检测。影像学检查在治疗期每 9 周进行，随访期每 3 个月进行；生存随访每 2 个月联系一次。 ### 统计分析 疗效分析基于意向治疗人群，安全性分析基于实际治疗人群（随机化并接受至少一次研究治疗的患者，按实际接受的治疗分析）。探索性分析包括完成 35 个周期帕博利珠单抗治疗的患者和接受第二疗程患者的结局。帕博利珠单抗在 PFS 和 OS 方面的优效性在第二次期中分析中已确立。当前分析无预设 α 分配。OS、PFS 及 PFS2 使用 Kaplan-Meier 法估计；分层 Cox 模型（Efron 结处理方法）计算 HR 及 95% CI，分层因素同随机化。"
+        ],
+        "quote": "### 终点与评估 主要终点为 PFS（随机化至 BICR 评估的疾病进展或全因死亡）。次要终点包括 OS、客观缓解率（ORR，BICR 评估）及安全性。第二次期中分析后 BICR 评估停止（方案第 8 次修订），此后 PFS 和 ORR 均按研究者评估报告。探索性终点 PFS2 定义为随机化至开始新抗肿瘤治疗后再次疾病进展或全因死亡。PD-L1 表达通过免疫组化检测。影像学检查在治疗期每 9 周进行，随访期每 3 个月进行；生存随访每 2 个月联系一次。 ### 统计分析 疗效分析基于意向治疗人群，安全性分析基于实际治疗人群（随机化并接受至少一次研究治疗的患者，按实际接受的治疗分析）。探索性分析包括完成 35 个周期帕博利珠单抗治疗的患者和接受第二疗程患者的结局。帕博利珠单抗在 PFS 和 OS 方面的优效性在第二次期中分析中已确立。当前分析无预设 α 分配。OS、PFS 及 PFS2 使用 Kaplan-Meier 法估计；分层 Cox 模型（Efron 结处理方法）计算 HR 及 95% CI，分层因素同随机化。"
+      },
+      "explanation": "Analysis populations exactly match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "effect_estimate_context",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "OS HR 0.62 (95% CI 0.48–0.81) pembrolizumab vs chemotherapy, endpoint overall survival, data cutoff median follow-up 59.9 months.",
+      "generatedFact": "OS HR 0.62 (95% CI 0.48–0.81)，帕博利珠单抗组 vs 化疗组，中位随访 59.9 个月。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+        ],
+        "quote": "The primary end point was progression-free survival; OS was a secondary end point.RESULTSThree hundred five patients were randomly assigned: 154 to pembrolizumab and 151 to chemotherapy. Median (range) time from randomization to data cutoff (June 1, 2020) was 59.9 (55.1-68.4) months. Among patients initially assigned to chemotherapy, 99 received subsequent anti–PD-1 or PD-L1 therapy, representing a 66.0% effective crossover rate. Median OS was 26.3 months (95% CI, 18.3 to 40.4) for pembrolizumab and 13.4 months (9.4-18.3) for chemotherapy (hazard ratio, 0.62; 95% CI, 0.48 to 0.81)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+        ],
+        "quote": "**结果** 共随机 305 例患者（帕博利珠单抗组 154 例，化疗组 151 例）。至数据截止日期（2020 年 6 月 1 日）的中位随访时间为 59.9 个月。化疗组有效交叉率为 66.0%（99 例后续接受了抗 PD-(L)1 治疗）。帕博利珠单抗组中位 OS 为 26.3 个月（95% CI, 18.3–40.4），化疗组为 13.4 个月（95% CI, 9.4–18.3），HR 0.62（95% CI, 0.48–0.81）。5 年 OS 率分别为 31.9% 与 16.3%。中位 PFS 为 7.7 个月 vs 5.5 个月（HR 0.50, 95% CI, 0.39–0.65）。客观缓解率（ORR）为 46.1% vs 31.1%，完全缓解率 4.5% vs 0%。完成 35 个周期帕博利珠单抗治疗的 39 例患者中，82.1% 在数据截止时仍存活。长期随访未发现新的安全性信号，帕博利珠单抗组治疗相关不良事件发生率低于化疗组。 **结论** 帕博利珠单抗单药一线治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久且具有临床意义的长期 OS 获益。"
+      },
+      "explanation": "Effect measure, comparator direction, endpoint, CI, and time point all correct.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 19,
+    "weightedFidelity": 1.0,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 19,
+      "not_applicable": 2
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "adversarial_unsupported_claim"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail",
+    "adversarialIssueCount": 1,
+    "adversarialUnsupportedClaimCount": 1,
+    "adversarialContradictionCount": 0,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "issues_found",
+    "issues": [
+      {
+        "id": "limitations_and_bias",
+        "importance": "minor",
+        "status": "unsupported",
+        "issueKinds": [
+          "unsupported"
+        ],
+        "referenceFact": "",
+        "generatedFact": "当前分析无法被第三方独立重分析",
+        "sourceEvidence": {
+          "locator": "",
+          "locators": [],
+          "quotes": [],
+          "quote": ""
+        },
+        "generatedEvidence": {
+          "locator": "G0012",
+          "locators": [
+            "G0012"
+          ],
+          "quotes": [
+            "同期发表的流行病学数据显示，美国肺癌死亡率在 2013 年后加速下降，与靶向治疗及免疫治疗的推广应用时间线一致[25]。KEYNOTE-024 的 5 年数据提示免疫治疗有望进一步改善人群水平的肺癌生存。 ### 局限性 本文所报告的分析存在以下局限： 1. **开放标签设计**：可能引入研究者及患者的评估偏倚。 2. **高交叉率**：化疗组 66.0% 的有效交叉率可能稀释帕博利珠单抗相对于化疗的真实 OS 获益幅度。 3. **评估方式的变更**：第二次期中分析后 BICR 停止，此后 PFS 和 ORR 按研究者评估报告，可能影响与早期分析的可比性。 4. **无预设 α 分配**：当前分析为描述性探索分析，未预先分配统计学检验水准，因此报告的 P 值及置信区间不应理解为确证性统计推断。 5. **亚组分析为探索性**：完成 35 个周期的患者分析及第二疗程分析均为事后探索性亚组分析，样本量小，结果需谨慎解读。 6. **数据共享受限**：个体患者数据需通过默沙东数据共享流程申请获取，当前分析无法被第三方独立重分析。 --- ## 结论 在 KEYNOTE-024 随机 III 期试验的 5 年随访中，一线帕博利珠单抗单药治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久的、具有临床意义的总生存期获益，5 年 OS 率达 31.9%，约为化疗组的两倍。安全性特征与既往报道一致，长期随访未出现新的安全性问题。该研究确立了帕博利珠单抗在该人群中的标准治疗地位。"
+          ],
+          "quote": "同期发表的流行病学数据显示，美国肺癌死亡率在 2013 年后加速下降，与靶向治疗及免疫治疗的推广应用时间线一致[25]。KEYNOTE-024 的 5 年数据提示免疫治疗有望进一步改善人群水平的肺癌生存。 ### 局限性 本文所报告的分析存在以下局限： 1. **开放标签设计**：可能引入研究者及患者的评估偏倚。 2. **高交叉率**：化疗组 66.0% 的有效交叉率可能稀释帕博利珠单抗相对于化疗的真实 OS 获益幅度。 3. **评估方式的变更**：第二次期中分析后 BICR 停止，此后 PFS 和 ORR 按研究者评估报告，可能影响与早期分析的可比性。 4. **无预设 α 分配**：当前分析为描述性探索分析，未预先分配统计学检验水准，因此报告的 P 值及置信区间不应理解为确证性统计推断。 5. **亚组分析为探索性**：完成 35 个周期的患者分析及第二疗程分析均为事后探索性亚组分析，样本量小，结果需谨慎解读。 6. **数据共享受限**：个体患者数据需通过默沙东数据共享流程申请获取，当前分析无法被第三方独立重分析。 --- ## 结论 在 KEYNOTE-024 随机 III 期试验的 5 年随访中，一线帕博利珠单抗单药治疗为 PD-L1 TPS ≥ 50% 的转移性 NSCLC 患者提供了持久的、具有临床意义的总生存期获益，5 年 OS 率达 31.9%，约为化疗组的两倍。安全性特征与既往报道一致，长期随访未出现新的安全性问题。该研究确立了帕博利珠单抗在该人群中的标准治疗地位。"
+        },
+        "explanation": "REFERENCE states data can be requested for re-analysis, so the claim that independent re-analysis is impossible is not supported.",
+        "sourceEvidenceValid": false,
+        "generatedEvidenceValid": true,
+        "criterionId": "limitations_and_bias",
+        "kind": "unsupported",
+        "severity": "minor",
+        "claim": "当前分析无法被第三方独立重分析"
+      }
+    ],
+    "rationale": "The generated restatement accurately reflects the study design, results, and conclusions, with one unsupported claim about data re-analysis limitations."
+  },
+  "overallAssessment": "All critical and major items are exactly matched. GENERATED accurately reproduces the trial's objective, design, population, size, eligibility, intervention, comparator, endpoints, follow-up, analysis methods, and key numerical findings with proper context and units. Safety, randomization, treatment arms, and analysis populations are faithfully reflected. Limitations mentioned in GENERATED are supported by the REFERENCE. No contradictions, unsupported claims, or missing material facts were identified. The generated summary maintains high scientific fidelity to the source document.",
+  "gradedAt": "2026-07-18T15:10:34Z"
+}

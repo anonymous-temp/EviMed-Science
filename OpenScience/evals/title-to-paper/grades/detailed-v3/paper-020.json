@@ -1,0 +1,683 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-020",
+  "category": "diagnostic-prognostic",
+  "title": "Movie-watching outperforms rest for functional connectivity-based prediction of behavior.",
+  "pmcid": "PMC8204673",
+  "doi": "10.1016/j.neuroimage.2021.117963",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "fba8dfbb563a684b8e32076ce178d891665b69a26586187e5ee96cf7ed728ba9",
+  "generatedSha256": "fbd685e39da89675b82753cde3af22697e3ee0095b439eacdd5530498c778e0a",
+  "promptSha256": "e230c8acfe0cc48c0b0725f38c532cc37ea5ea7ef01cd63664e2c401a54b8f47",
+  "cacheFingerprint": "4b3daa089c96d262c9f660b7bec4ae803bb2b2fd8397bd40cc7e8a6c7136c6f8",
+  "referenceCharacters": 64661,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 17109,
+  "paperType": "diagnostic-prognostic",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Tested hypothesis that movie-watching connectivity improves prediction of trait-like phenotypes compared to rest.",
+      "generatedFact": "Tested the hypothesis that functional connectivity during movie viewing yields more accurate predictions of cognitive and emotional trait scores than rest.",
+      "sourceEvidence": {
+        "locator": "R0012",
+        "locators": [
+          "R0012"
+        ],
+        "quotes": [
+          "Furthermore, there has been relatively less work on how brain state affects connectivity-based predictions of traits outside the cognitive domain—for example, emotion and affect. Naturalistic tasks also raise the intriguing possibility of tailoring stimulus content to the construct to be predicted—for example, using a stimulus that evokes feelings of suspense or unease to predict anxiety, or one that evokes feelings of suspicion to predict paranoia ( Finn et al., 2018 ). Here, we test the hypothesis that data collected during movie watching improves functional connectivity-based behavior prediction compared to data collected at rest."
+        ],
+        "quote": "Furthermore, there has been relatively less work on how brain state affects connectivity-based predictions of traits outside the cognitive domain—for example, emotion and affect. Naturalistic tasks also raise the intriguing possibility of tailoring stimulus content to the construct to be predicted—for example, using a stimulus that evokes feelings of suspense or unease to predict anxiety, or one that evokes feelings of suspicion to predict paranoia ( Finn et al., 2018 ). Here, we test the hypothesis that data collected during movie watching improves functional connectivity-based behavior prediction compared to data collected at rest."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "Whether this benefit extends to naturalistic paradigms, and to non-cognitive domains such as emotional traits, had not been directly tested. The present study tested the hypothesis that functional connectivity recorded during movie viewing yields more accurate predictions of cognitive and emotional trait scores than connectivity measured during rest. Secondary aims included determining the minimum data duration needed for accurate prediction, examining which stimulus features associate with greater predictive accuracy, and evaluating whether any gain could be attributed to differences in arousal between conditions. --- ## 2."
+        ],
+        "quote": "Whether this benefit extends to naturalistic paradigms, and to non-cognitive domains such as emotional traits, had not been directly tested. The present study tested the hypothesis that functional connectivity recorded during movie viewing yields more accurate predictions of cognitive and emotional trait scores than connectivity measured during rest. Secondary aims included determining the minimum data duration needed for accurate prediction, examining which stimulus features associate with greater predictive accuracy, and evaluating whether any gain could be attributed to differences in arousal between conditions. --- ## 2."
+      },
+      "explanation": "Both state the same hypothesis verbatim.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Predictive modeling study using Human Connectome Project 7T fMRI data with cross-validated connectome-based predictive modeling.",
+      "generatedFact": "Predictive modeling study using HCP 7T fMRI data, connectome-based predictive modeling with leave-one-family-out cross-validation.",
+      "sourceEvidence": {
+        "locator": "R0058",
+        "locators": [
+          "R0058"
+        ],
+        "quotes": [
+          "Movie-watching outperforms rest for prediction of behavior traits Our main goal was to compare how well cognition and emotion scores could be predicted based on functional brain connectivity during rest or movie watching. REST runs were 900 TRs, or 15:00, in duration, while MOVIE runs ranged from 769 to 800 TRs (12:49–13:20) following removal of rest periods between clips (see Methods ). For each subject for each run, we created a whole-brain functional connectivity matrix by calculating the Pearson correlation of activity timecourses between each pair of nodes in a predefined 268-node atlas ( Shen et al., 2013 )."
+        ],
+        "quote": "Movie-watching outperforms rest for prediction of behavior traits Our main goal was to compare how well cognition and emotion scores could be predicted based on functional brain connectivity during rest or movie watching. REST runs were 900 TRs, or 15:00, in duration, while MOVIE runs ranged from 769 to 800 TRs (12:49–13:20) following removal of rest periods between clips (see Methods ). For each subject for each run, we created a whole-brain functional connectivity matrix by calculating the Pearson correlation of activity timecourses between each pair of nodes in a predefined 268-node atlas ( Shen et al., 2013 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Connectome-based predictive modeling with leave-one-family-out cross-validation demonstrated that movie-watching connectivity consistently outperformed rest: median Spearman correlations for cognition reached 0.41 for the most predictive movie run, compared with 0.26 for the corresponding rest run, and one movie run yielded significant prediction of emotion score (rs = 0.18) whereas no rest run did. The advantage persisted with as little as approximately 2.5 minutes of data from single video clips. Eye-tracking analyses indicated that differences in arousal could not account for the advantage."
+        ],
+        "quote": "Connectome-based predictive modeling with leave-one-family-out cross-validation demonstrated that movie-watching connectivity consistently outperformed rest: median Spearman correlations for cognition reached 0.41 for the most predictive movie run, compared with 0.26 for the corresponding rest run, and one movie run yielded significant prediction of emotion score (rs = 0.18) whereas no rest run did. The advantage persisted with as little as approximately 2.5 minutes of data from single video clips. Eye-tracking analyses indicated that differences in arousal could not account for the advantage."
+      },
+      "explanation": "Study design matches exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "176 healthy young adults from HCP 7T release (106 female, 70 male, age 22–36, 90 unique families).",
+      "generatedFact": "176 healthy young adults from HCP 7T (106 female, 70 male, mean age 29.4, SD 3.3, range 22–36, 90 families).",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "We limited our analysis to subjects who had complete data for all six functional runs of interest as well as complete data for the phenotypic variables of interest (described further below in the sections fMRI data and Behavioral data , respectively), yielding a set of n = 176. Notably, there were many sets of twins (both mono- and dizygotic) and siblings in this dataset, such that these 176 subjects came from only 90 unique families. Relatedness was taken into account during cross-validation using a leave-one-family-out approach, described further in the section on Connectome-based Predictive Modeling ."
+        ],
+        "quote": "We limited our analysis to subjects who had complete data for all six functional runs of interest as well as complete data for the phenotypic variables of interest (described further below in the sections fMRI data and Behavioral data , respectively), yielding a set of n = 176. Notably, there were many sets of twins (both mono- and dizygotic) and siblings in this dataset, such that these 176 subjects came from only 90 unique families. Relatedness was taken into account during cross-validation using a leave-one-family-out approach, described further in the section on Connectome-based Predictive Modeling ."
+      },
+      "generatedEvidence": {
+        "locator": "G0009",
+        "locators": [
+          "G0009"
+        ],
+        "quotes": [
+          "Methods ### 2.1 Participants and Data Data were drawn from the Human Connectome Project (HCP) 7 Tesla release. From an initial pool of 184 scanned individuals, analyses were restricted to those possessing complete functional runs and phenotypic data for the domains of interest, yielding a final sample of 176 healthy young adults (106 female, 70 male; mean age 29.4 years, SD 3.3, range 22–36). These participants belonged to 90 unique families, a structure addressed during cross-validation. ### 2.2 fMRI Acquisition and Preprocessing Imaging was performed on a 7T Siemens Magnetom scanner at the University of Minnesota."
+        ],
+        "quote": "Methods ### 2.1 Participants and Data Data were drawn from the Human Connectome Project (HCP) 7 Tesla release. From an initial pool of 184 scanned individuals, analyses were restricted to those possessing complete functional runs and phenotypic data for the domains of interest, yielding a final sample of 176 healthy young adults (106 female, 70 male; mean age 29.4 years, SD 3.3, range 22–36). These participants belonged to 90 unique families, a structure addressed during cross-validation. ### 2.2 fMRI Acquisition and Preprocessing Imaging was performed on a 7T Siemens Magnetom scanner at the University of Minnesota."
+      },
+      "explanation": "Sample demographics identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "n = 176.",
+      "generatedFact": "n = 176.",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "We limited our analysis to subjects who had complete data for all six functional runs of interest as well as complete data for the phenotypic variables of interest (described further below in the sections fMRI data and Behavioral data , respectively), yielding a set of n = 176. Notably, there were many sets of twins (both mono- and dizygotic) and siblings in this dataset, such that these 176 subjects came from only 90 unique families. Relatedness was taken into account during cross-validation using a leave-one-family-out approach, described further in the section on Connectome-based Predictive Modeling ."
+        ],
+        "quote": "We limited our analysis to subjects who had complete data for all six functional runs of interest as well as complete data for the phenotypic variables of interest (described further below in the sections fMRI data and Behavioral data , respectively), yielding a set of n = 176. Notably, there were many sets of twins (both mono- and dizygotic) and siblings in this dataset, such that these 176 subjects came from only 90 unique families. Relatedness was taken into account during cross-validation using a leave-one-family-out approach, described further in the section on Connectome-based Predictive Modeling ."
+      },
+      "generatedEvidence": {
+        "locator": "G0009",
+        "locators": [
+          "G0009"
+        ],
+        "quotes": [
+          "Methods ### 2.1 Participants and Data Data were drawn from the Human Connectome Project (HCP) 7 Tesla release. From an initial pool of 184 scanned individuals, analyses were restricted to those possessing complete functional runs and phenotypic data for the domains of interest, yielding a final sample of 176 healthy young adults (106 female, 70 male; mean age 29.4 years, SD 3.3, range 22–36). These participants belonged to 90 unique families, a structure addressed during cross-validation. ### 2.2 fMRI Acquisition and Preprocessing Imaging was performed on a 7T Siemens Magnetom scanner at the University of Minnesota."
+        ],
+        "quote": "Methods ### 2.1 Participants and Data Data were drawn from the Human Connectome Project (HCP) 7 Tesla release. From an initial pool of 184 scanned individuals, analyses were restricted to those possessing complete functional runs and phenotypic data for the domains of interest, yielding a final sample of 176 healthy young adults (106 female, 70 male; mean age 29.4 years, SD 3.3, range 22–36). These participants belonged to 90 unique families, a structure addressed during cross-validation. ### 2.2 fMRI Acquisition and Preprocessing Imaging was performed on a 7T Siemens Magnetom scanner at the University of Minnesota."
+      },
+      "explanation": "Sample size matches.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Subjects with complete data for all six functional runs and complete phenotypic data for the domains of interest.",
+      "generatedFact": "Subjects with complete functional runs and phenotypic data for the domains of interest.",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "We limited our analysis to subjects who had complete data for all six functional runs of interest as well as complete data for the phenotypic variables of interest (described further below in the sections fMRI data and Behavioral data , respectively), yielding a set of n = 176. Notably, there were many sets of twins (both mono- and dizygotic) and siblings in this dataset, such that these 176 subjects came from only 90 unique families. Relatedness was taken into account during cross-validation using a leave-one-family-out approach, described further in the section on Connectome-based Predictive Modeling ."
+        ],
+        "quote": "We limited our analysis to subjects who had complete data for all six functional runs of interest as well as complete data for the phenotypic variables of interest (described further below in the sections fMRI data and Behavioral data , respectively), yielding a set of n = 176. Notably, there were many sets of twins (both mono- and dizygotic) and siblings in this dataset, such that these 176 subjects came from only 90 unique families. Relatedness was taken into account during cross-validation using a leave-one-family-out approach, described further in the section on Connectome-based Predictive Modeling ."
+      },
+      "generatedEvidence": {
+        "locator": "G0009",
+        "locators": [
+          "G0009"
+        ],
+        "quotes": [
+          "Methods ### 2.1 Participants and Data Data were drawn from the Human Connectome Project (HCP) 7 Tesla release. From an initial pool of 184 scanned individuals, analyses were restricted to those possessing complete functional runs and phenotypic data for the domains of interest, yielding a final sample of 176 healthy young adults (106 female, 70 male; mean age 29.4 years, SD 3.3, range 22–36). These participants belonged to 90 unique families, a structure addressed during cross-validation. ### 2.2 fMRI Acquisition and Preprocessing Imaging was performed on a 7T Siemens Magnetom scanner at the University of Minnesota."
+        ],
+        "quote": "Methods ### 2.1 Participants and Data Data were drawn from the Human Connectome Project (HCP) 7 Tesla release. From an initial pool of 184 scanned individuals, analyses were restricted to those possessing complete functional runs and phenotypic data for the domains of interest, yielding a final sample of 176 healthy young adults (106 female, 70 male; mean age 29.4 years, SD 3.3, range 22–36). These participants belonged to 90 unique families, a structure addressed during cross-validation. ### 2.2 fMRI Acquisition and Preprocessing Imaging was performed on a 7T Siemens Magnetom scanner at the University of Minnesota."
+      },
+      "explanation": "Eligibility criteria are the same.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "fMRI during eyes-open rest (REST1, REST4) versus passive movie watching (MOVIE1–4, clips with audiovisual content).",
+      "generatedFact": "Eyes-open rest (REST1, REST4) and passive entertainment (MOVIE1–4).",
+      "sourceEvidence": {
+        "locator": "R0053",
+        "locators": [
+          "R0053"
+        ],
+        "quotes": [
+          "Results We used fMRI and behavioral data from 176 healthy subjects made available as part of the Human Connectome Project 7T dataset ( Van Essen et al., 2013 ). Functional runs of interest included two resting-state runs and four movie-watching runs, each approximately 15 min in duration. While data were acquired in four separate sessions, we focused on the two sessions that contained movie-watching runs (first and fourth). For each subject, REST1, MOVIE1 and MOVIE2 were acquired together in that order in a single session (referred to here as “Session 1″), and REST4, MOVIE3 and MOVIE4 were acquired in that order in a separate session (“Session 2″) on the following day or two days later."
+        ],
+        "quote": "Results We used fMRI and behavioral data from 176 healthy subjects made available as part of the Human Connectome Project 7T dataset ( Van Essen et al., 2013 ). Functional runs of interest included two resting-state runs and four movie-watching runs, each approximately 15 min in duration. While data were acquired in four separate sessions, we focused on the two sessions that contained movie-watching runs (first and fourth). For each subject, REST1, MOVIE1 and MOVIE2 were acquired together in that order in a single session (referred to here as “Session 1″), and REST4, MOVIE3 and MOVIE4 were acquired in that order in a separate session (“Session 2″) on the following day or two days later."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "Functional runs used a gradient-echo EPI sequence: TR = 1000 ms, TE = 22.2 ms, flip angle = 45°, 1.6 mm isotropic voxels, 85 slices, multiband factor 5. Two resting-state runs (REST1, REST4; each 900 TRs / 15:00 min) and four movie-watching runs (MOVIE1–4; between 901 and 921 TRs before clip-parsing) were analyzed. During rest, participants fixated on a central crosshair. During movie runs, participants passively viewed 4–5 audiovisual clips drawn from independent and Hollywood films (individual clip duration range: 1:03–4:19 min:sec), separated by 20-second rest blocks."
+        ],
+        "quote": "Functional runs used a gradient-echo EPI sequence: TR = 1000 ms, TE = 22.2 ms, flip angle = 45°, 1.6 mm isotropic voxels, 85 slices, multiband factor 5. Two resting-state runs (REST1, REST4; each 900 TRs / 15:00 min) and four movie-watching runs (MOVIE1–4; between 901 and 921 TRs before clip-parsing) were analyzed. During rest, participants fixated on a central crosshair. During movie runs, participants passively viewed 4–5 audiovisual clips drawn from independent and Hollywood films (individual clip duration range: 1:03–4:19 min:sec), separated by 20-second rest blocks."
+      },
+      "explanation": "The two conditions match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Rest condition (fixation on crosshair) as baseline.",
+      "generatedFact": "Rest condition (fixation on crosshair) as comparator.",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "During REST runs, subjects were instructed to keep their eyes open and maintain relaxed fixation on a projected bright crosshair on a dark background. While four REST runs were collected, here we use only data from REST1 and REST4, as these were acquired in the same scan sessions as MOVIE1/MOVIE2 and MOVIE3/MOVIE4, respectively. Within a session, REST runs were always acquired first, followed by the movie runs in a fixed order, such that session 1 consisted of REST1, MOVIE1, and MOVIE3, and session 2 consisted of REST4, MOVIE3, and MOVIE4. During MOVIE runs, subjects passively viewed a series of video clips with audiovisual content."
+        ],
+        "quote": "During REST runs, subjects were instructed to keep their eyes open and maintain relaxed fixation on a projected bright crosshair on a dark background. While four REST runs were collected, here we use only data from REST1 and REST4, as these were acquired in the same scan sessions as MOVIE1/MOVIE2 and MOVIE3/MOVIE4, respectively. Within a session, REST runs were always acquired first, followed by the movie runs in a fixed order, such that session 1 consisted of REST1, MOVIE1, and MOVIE3, and session 2 consisted of REST4, MOVIE3, and MOVIE4. During MOVIE runs, subjects passively viewed a series of video clips with audiovisual content."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "Functional runs used a gradient-echo EPI sequence: TR = 1000 ms, TE = 22.2 ms, flip angle = 45°, 1.6 mm isotropic voxels, 85 slices, multiband factor 5. Two resting-state runs (REST1, REST4; each 900 TRs / 15:00 min) and four movie-watching runs (MOVIE1–4; between 901 and 921 TRs before clip-parsing) were analyzed. During rest, participants fixated on a central crosshair. During movie runs, participants passively viewed 4–5 audiovisual clips drawn from independent and Hollywood films (individual clip duration range: 1:03–4:19 min:sec), separated by 20-second rest blocks."
+        ],
+        "quote": "Functional runs used a gradient-echo EPI sequence: TR = 1000 ms, TE = 22.2 ms, flip angle = 45°, 1.6 mm isotropic voxels, 85 slices, multiband factor 5. Two resting-state runs (REST1, REST4; each 900 TRs / 15:00 min) and four movie-watching runs (MOVIE1–4; between 901 and 921 TRs before clip-parsing) were analyzed. During rest, participants fixated on a central crosshair. During movie runs, participants passively viewed 4–5 audiovisual clips drawn from independent and Hollywood films (individual clip duration range: 1:03–4:19 min:sec), separated by 20-second rest blocks."
+      },
+      "explanation": "Comparator is identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Prediction accuracy (median Spearman rank correlation between predicted and observed cognition/emotion PC scores).",
+      "generatedFact": "Accuracy quantified as Spearman rank correlation between predicted and observed scores.",
+      "sourceEvidence": {
+        "locator": "R0060",
+        "locators": [
+          "R0060"
+        ],
+        "quotes": [
+          "Model accuracy was assessed using Spearman (rank) correlation between predicted and observed scores across all subjects, resulting in one accuracy ( r s value) for each of the 100 iterations. Cognition scores could be predicted with significant accuracy from all four MOVIE runs ( Fig. 2a ): MOVIE1 (median r = 0.29, permutation-based p = 0.0009), MOVIE2 ( r = 0.41, p = 0.0001), MOVIE3 ( r = 0.23, p = 0.011), and MOVIE4 ( r = 0.17, p = 0.048), as well as from REST1 (median r = 0.26, p = 0.003), but not from REST4 ( r = 0.12, p = 0.13)."
+        ],
+        "quote": "Model accuracy was assessed using Spearman (rank) correlation between predicted and observed scores across all subjects, resulting in one accuracy ( r s value) for each of the 100 iterations. Cognition scores could be predicted with significant accuracy from all four MOVIE runs ( Fig. 2a ): MOVIE1 (median r = 0.29, permutation-based p = 0.0009), MOVIE2 ( r = 0.41, p = 0.0001), MOVIE3 ( r = 0.23, p = 0.011), and MOVIE4 ( r = 0.17, p = 0.048), as well as from REST1 (median r = 0.26, p = 0.003), but not from REST4 ( r = 0.12, p = 0.13)."
+      },
+      "generatedEvidence": {
+        "locator": "G0015",
+        "locators": [
+          "G0015"
+        ],
+        "quotes": [
+          "Statistical significance was evaluated against a null distribution generated from 10,000 permutations in which scores were randomly shuffled relative to connectivity matrices. ### 2.5 Stimulus Feature and Eye-Tracking Analyses Video clip features were characterized via two complementary pipelines: (a) WordNet-based semantic category labels provided by the HCP (859 categories) were analyzed using partial least-squares regression against prediction accuracy; (b) low-level audiovisual features (brightness, optical flow, audio RMS) and the mid-level presence of faces were extracted using the *pliers* toolbox."
+        ],
+        "quote": "Statistical significance was evaluated against a null distribution generated from 10,000 permutations in which scores were randomly shuffled relative to connectivity matrices. ### 2.5 Stimulus Feature and Eye-Tracking Analyses Video clip features were characterized via two complementary pipelines: (a) WordNet-based semantic category labels provided by the HCP (859 categories) were analyzed using partial least-squares regression against prediction accuracy; (b) low-level audiovisual features (brightness, optical flow, audio RMS) and the mid-level presence of faces were extracted using the *pliers* toolbox."
+      },
+      "explanation": "Primary outcome metric the same.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "missing",
+      "issueKinds": [
+        "missing"
+      ],
+      "referenceFact": "Data acquired in two separate sessions (session 1: REST1, MOVIE1, MOVIE2; session 2: REST4, MOVIE3, MOVIE4) over two or three days.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "R0016",
+        "locators": [
+          "R0016"
+        ],
+        "quotes": [
+          "All subjects were generally healthy young adults between 22 and 36 years old (mean age = 29.4, standard deviation = 3.3). There were 106 females and 70 males. 2.1.2. fMRI data All fMRI data were acquired on a 7 Tesla Siemens Magnetom scanner at the Center for Magnetic Resonance Research at the University of Minnesota. There were four total scan sessions acquired over two or three days; we focus here on the first and last session (which we refer to as session 1 and session 2), since these contained the movie-watching runs."
+        ],
+        "quote": "All subjects were generally healthy young adults between 22 and 36 years old (mean age = 29.4, standard deviation = 3.3). There were 106 females and 70 males. 2.1.2. fMRI data All fMRI data were acquired on a 7 Tesla Siemens Magnetom scanner at the Center for Magnetic Resonance Research at the University of Minnesota. There were four total scan sessions acquired over two or three days; we focus here on the first and last session (which we refer to as session 1 and session 2), since these contained the movie-watching runs."
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "GENERATED omits the between-session timing and session structure of data collection.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "FIX-denoised fMRI (motion correction, distortion correction, high-pass filter, MNI alignment, 24 motion parameter regression, ICA denoising) plus global signal regression. Phenotype scores residualized for head motion and time of day.",
+      "generatedFact": "FIX-denoised pipeline with motion correction, distortion correction, high-pass filtering, MNI alignment, 24 motion estimate regression, ICA removal, plus global signal regression. Scores residualized for head motion and time of day.",
+      "sourceEvidence": {
+        "locator": "R0023",
+        "locators": [
+          "R0023"
+        ],
+        "quotes": [
+          "All analyses began with the FIX-denoised data in volume space (e.g., rfMRI_REST1_7T_PA_hp2000_clean.nii.gz; tfMRI_MOVIE1_7T_AP_hp2000_clean.nii.gz ), which includes standard preprocessing (motion correction, distortion correction, high-pass filtering, and nonlinear alignment to MNI template space; Glasser et al., 2013 ) plus regression of 24 framewise motion estimates (six rigid-body motion parameters and their derivatives and the squares of those) and regression of confound timeseries identified via independent components analysis ( Griffanti et al., 2014 ; Salimi-Khorshidi et al., 2014 )."
+        ],
+        "quote": "All analyses began with the FIX-denoised data in volume space (e.g., rfMRI_REST1_7T_PA_hp2000_clean.nii.gz; tfMRI_MOVIE1_7T_AP_hp2000_clean.nii.gz ), which includes standard preprocessing (motion correction, distortion correction, high-pass filtering, and nonlinear alignment to MNI template space; Glasser et al., 2013 ) plus regression of 24 framewise motion estimates (six rigid-body motion parameters and their derivatives and the squares of those) and regression of confound timeseries identified via independent components analysis ( Griffanti et al., 2014 ; Salimi-Khorshidi et al., 2014 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0011",
+        "locators": [
+          "G0011"
+        ],
+        "quotes": [
+          "Preprocessing employed the HCP FIX-denoised pipeline (motion correction, distortion correction, high-pass filtering, MNI alignment, regression of 24 framewise motion estimates, and ICA-based artifact removal) plus investigator-applied global signal regression. ### 2.3 Behavioral Phenotypes and Target Score Derivation Two behavioral domains were targeted: cognition (12 measures, including NIH Toolbox tasks for reading, vocabulary, and fluid intelligence) and emotion (17 self-report scales from the NIH Emotion Toolbox, covering life satisfaction, positive affect, sadness, and perceived stress)."
+        ],
+        "quote": "Preprocessing employed the HCP FIX-denoised pipeline (motion correction, distortion correction, high-pass filtering, MNI alignment, regression of 24 framewise motion estimates, and ICA-based artifact removal) plus investigator-applied global signal regression. ### 2.3 Behavioral Phenotypes and Target Score Derivation Two behavioral domains were targeted: cognition (12 measures, including NIH Toolbox tasks for reading, vocabulary, and fluid intelligence) and emotion (17 self-report scales from the NIH Emotion Toolbox, covering life satisfaction, positive affect, sadness, and perceived stress)."
+      },
+      "explanation": "Preprocessing steps are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "CPM: mass univariate edge-behavior correlations, feature selection (|r|>0.2), positive/negative network strengths, linear model, 10-fold family-respecting CV repeated 100 times, Spearman correlation, 10,000-permutation null.",
+      "generatedFact": "CPM: 10-fold family-respecting CV, |r|>0.2 threshold, positive/negative tail networks, linear model, 100 iterations, Spearman correlation, 10,000-permutation null.",
+      "sourceEvidence": {
+        "locator": "R0040",
+        "locators": [
+          "R0040"
+        ],
+        "quotes": [
+          "For purposes of model building, we extracted and vectorized the upper triangle of these matrices (35,778 total connections, or edges) to use as input features. 2.4. Connectome-based predictive modeling 2.4.1. Overview Connectome-based predictive modeling (CPM) is a data-driven approach that uses whole-brain functional connectivity to predict behavior ( Finn et al., 2015 ; Shen et al., 2017 )."
+        ],
+        "quote": "For purposes of model building, we extracted and vectorized the upper triangle of these matrices (35,778 total connections, or edges) to use as input features. 2.4. Connectome-based predictive modeling 2.4.1. Overview Connectome-based predictive modeling (CPM) is a data-driven approach that uses whole-brain functional connectivity to predict behavior ( Finn et al., 2015 ; Shen et al., 2017 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0014",
+        "locators": [
+          "G0014"
+        ],
+        "quotes": [
+          "The procedure involved: (1) dividing subjects into 10 family-respecting folds; (2) within the training set, correlating each edge with the target score; (3) selecting edges exceeding |r| > 0.2; (4) separating selected edges into positive- and negative-tail networks based on the sign of their association with behavior; (5) building a linear model relating summed network strengths to scores; and (6) applying the model to the held-out fold. This 10-fold cross-validation was repeated 100 times with distinct fold splits. Accuracy was quantified as the Spearman rank correlation between predicted and observed scores."
+        ],
+        "quote": "The procedure involved: (1) dividing subjects into 10 family-respecting folds; (2) within the training set, correlating each edge with the target score; (3) selecting edges exceeding |r| > 0.2; (4) separating selected edges into positive- and negative-tail networks based on the sign of their association with behavior; (5) building a linear model relating summed network strengths to scores; and (6) applying the model to the held-out fold. This 10-fold cross-validation was repeated 100 times with distinct fold splits. Accuracy was quantified as the Spearman rank correlation between predicted and observed scores."
+      },
+      "explanation": "The analysis procedure matches exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Linear model: y = β0 + β1(Xpos) + β2(Xneg) + ε, with Xpos/Xneg from edges selected by |r|>0.2 threshold.",
+      "generatedFact": "Linear model relating summed positive and negative network strengths to scores, with edges selected by |r|>0.2 threshold.",
+      "sourceEvidence": {
+        "locator": "R0043",
+        "locators": [
+          "R0043"
+        ],
+        "quotes": [
+          "Divide edges from (3) into two tails (positive and negative) based on the sign of their correlation with behavior, then for each subject, calculate the summed strength across all edges in a given tail (X pos and X neg ). Build a linear model relating the positive and negative network strengths calculated in (4) to behavior score (y): y = β 0 + β 1 ( X pos ) + β 2 ( X neg ) + ϵ Calculate positive and negative network strength (X pos and X neg ) for each subject in the test set by applying the masks defined in (3) to their functional connectivity data, and use these as input to the linear model in (5) to generate predicted behavior scores."
+        ],
+        "quote": "Divide edges from (3) into two tails (positive and negative) based on the sign of their correlation with behavior, then for each subject, calculate the summed strength across all edges in a given tail (X pos and X neg ). Build a linear model relating the positive and negative network strengths calculated in (4) to behavior score (y): y = β 0 + β 1 ( X pos ) + β 2 ( X neg ) + ϵ Calculate positive and negative network strength (X pos and X neg ) for each subject in the test set by applying the masks defined in (3) to their functional connectivity data, and use these as input to the linear model in (5) to generate predicted behavior scores."
+      },
+      "generatedEvidence": {
+        "locator": "G0014",
+        "locators": [
+          "G0014"
+        ],
+        "quotes": [
+          "The procedure involved: (1) dividing subjects into 10 family-respecting folds; (2) within the training set, correlating each edge with the target score; (3) selecting edges exceeding |r| > 0.2; (4) separating selected edges into positive- and negative-tail networks based on the sign of their association with behavior; (5) building a linear model relating summed network strengths to scores; and (6) applying the model to the held-out fold. This 10-fold cross-validation was repeated 100 times with distinct fold splits. Accuracy was quantified as the Spearman rank correlation between predicted and observed scores."
+        ],
+        "quote": "The procedure involved: (1) dividing subjects into 10 family-respecting folds; (2) within the training set, correlating each edge with the target score; (3) selecting edges exceeding |r| > 0.2; (4) separating selected edges into positive- and negative-tail networks based on the sign of their association with behavior; (5) building a linear model relating summed network strengths to scores; and (6) applying the model to the held-out fold. This 10-fold cross-validation was repeated 100 times with distinct fold splits. Accuracy was quantified as the Spearman rank correlation between predicted and observed scores."
+      },
+      "explanation": "The computational model is identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Cognition runs: MOVIE2 median rs=0.41, MOVIE1=0.29, REST1=0.26, MOVIE3=0.23, MOVIE4=0.17, REST4=0.12 (non-significant).",
+      "generatedFact": "Cognition: MOVIE2 rs=0.41, MOVIE1 0.29, REST1 0.26, MOVIE3 0.23, MOVIE4 0.17, REST4 0.12; emotion: MOVIE1 rs=0.18 (others non-significant).",
+      "sourceEvidence": {
+        "locator": "R0060",
+        "locators": [
+          "R0060"
+        ],
+        "quotes": [
+          "Model accuracy was assessed using Spearman (rank) correlation between predicted and observed scores across all subjects, resulting in one accuracy ( r s value) for each of the 100 iterations. Cognition scores could be predicted with significant accuracy from all four MOVIE runs ( Fig. 2a ): MOVIE1 (median r = 0.29, permutation-based p = 0.0009), MOVIE2 ( r = 0.41, p = 0.0001), MOVIE3 ( r = 0.23, p = 0.011), and MOVIE4 ( r = 0.17, p = 0.048), as well as from REST1 (median r = 0.26, p = 0.003), but not from REST4 ( r = 0.12, p = 0.13)."
+        ],
+        "quote": "Model accuracy was assessed using Spearman (rank) correlation between predicted and observed scores across all subjects, resulting in one accuracy ( r s value) for each of the 100 iterations. Cognition scores could be predicted with significant accuracy from all four MOVIE runs ( Fig. 2a ): MOVIE1 (median r = 0.29, permutation-based p = 0.0009), MOVIE2 ( r = 0.41, p = 0.0001), MOVIE3 ( r = 0.23, p = 0.011), and MOVIE4 ( r = 0.17, p = 0.048), as well as from REST1 (median r = 0.26, p = 0.003), but not from REST4 ( r = 0.12, p = 0.13)."
+      },
+      "generatedEvidence": {
+        "locator": "G0016",
+        "locators": [
+          "G0016"
+        ],
+        "quotes": [
+          "Eye-tracking data (EyeLink S1000, 1000 Hz for the majority of runs) supplied measures of blink rate, blink duration, microsleeps, and intersubject correlation (ISC) of horizontal gaze position during individual clips. --- ## 3. Results ### 3.1 Whole-Run Predictions Cognition scores were predicted significantly from all four movie runs: MOVIE1 (median rs = 0.29, p = 0.0009), MOVIE2 (rs = 0.41, p = 0.0001), MOVIE3 (rs = 0.23, p = 0.011), and MOVIE4 (rs = 0.17, p = 0.048), and from REST1 (rs = 0.26, p = 0.003), but not from REST4 (rs = 0.12, p = 0.13). Within sessions, movie runs significantly outperformed rest (permutation tests for difference in medians, all p < 10^-5)."
+        ],
+        "quote": "Eye-tracking data (EyeLink S1000, 1000 Hz for the majority of runs) supplied measures of blink rate, blink duration, microsleeps, and intersubject correlation (ISC) of horizontal gaze position during individual clips. --- ## 3. Results ### 3.1 Whole-Run Predictions Cognition scores were predicted significantly from all four movie runs: MOVIE1 (median rs = 0.29, p = 0.0009), MOVIE2 (rs = 0.41, p = 0.0001), MOVIE3 (rs = 0.23, p = 0.011), and MOVIE4 (rs = 0.17, p = 0.048), and from REST1 (rs = 0.26, p = 0.003), but not from REST4 (rs = 0.12, p = 0.13). Within sessions, movie runs significantly outperformed rest (permutation tests for difference in medians, all p < 10^-5)."
+      },
+      "explanation": "Cognitive numbers match; GENERATED also reports emotion result (MOVIE1 r=0.18) which is correct per the reference; thus compatible overall.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "P-values from permutation tests: e.g., cognition MOVIE2 p=0.0001, MOVIE1 p=0.0009, REST1 p=0.003; emotion MOVIE1 p=0.049; difference in medians p<10^-5.",
+      "generatedFact": "P-values: MOVIE1 p=0.0009, MOVIE2 p=0.0001, MOVIE3 p=0.011, MOVIE4 p=0.048, REST1 p=0.003; emotion MOVIE1 p=0.049; difference in medians p<10^-5.",
+      "sourceEvidence": {
+        "locator": "R0060",
+        "locators": [
+          "R0060"
+        ],
+        "quotes": [
+          "Model accuracy was assessed using Spearman (rank) correlation between predicted and observed scores across all subjects, resulting in one accuracy ( r s value) for each of the 100 iterations. Cognition scores could be predicted with significant accuracy from all four MOVIE runs ( Fig. 2a ): MOVIE1 (median r = 0.29, permutation-based p = 0.0009), MOVIE2 ( r = 0.41, p = 0.0001), MOVIE3 ( r = 0.23, p = 0.011), and MOVIE4 ( r = 0.17, p = 0.048), as well as from REST1 (median r = 0.26, p = 0.003), but not from REST4 ( r = 0.12, p = 0.13)."
+        ],
+        "quote": "Model accuracy was assessed using Spearman (rank) correlation between predicted and observed scores across all subjects, resulting in one accuracy ( r s value) for each of the 100 iterations. Cognition scores could be predicted with significant accuracy from all four MOVIE runs ( Fig. 2a ): MOVIE1 (median r = 0.29, permutation-based p = 0.0009), MOVIE2 ( r = 0.41, p = 0.0001), MOVIE3 ( r = 0.23, p = 0.011), and MOVIE4 ( r = 0.17, p = 0.048), as well as from REST1 (median r = 0.26, p = 0.003), but not from REST4 ( r = 0.12, p = 0.13)."
+      },
+      "generatedEvidence": {
+        "locator": "G0016",
+        "locators": [
+          "G0016"
+        ],
+        "quotes": [
+          "Eye-tracking data (EyeLink S1000, 1000 Hz for the majority of runs) supplied measures of blink rate, blink duration, microsleeps, and intersubject correlation (ISC) of horizontal gaze position during individual clips. --- ## 3. Results ### 3.1 Whole-Run Predictions Cognition scores were predicted significantly from all four movie runs: MOVIE1 (median rs = 0.29, p = 0.0009), MOVIE2 (rs = 0.41, p = 0.0001), MOVIE3 (rs = 0.23, p = 0.011), and MOVIE4 (rs = 0.17, p = 0.048), and from REST1 (rs = 0.26, p = 0.003), but not from REST4 (rs = 0.12, p = 0.13). Within sessions, movie runs significantly outperformed rest (permutation tests for difference in medians, all p < 10^-5)."
+        ],
+        "quote": "Eye-tracking data (EyeLink S1000, 1000 Hz for the majority of runs) supplied measures of blink rate, blink duration, microsleeps, and intersubject correlation (ISC) of horizontal gaze position during individual clips. --- ## 3. Results ### 3.1 Whole-Run Predictions Cognition scores were predicted significantly from all four movie runs: MOVIE1 (median rs = 0.29, p = 0.0009), MOVIE2 (rs = 0.41, p = 0.0001), MOVIE3 (rs = 0.23, p = 0.011), and MOVIE4 (rs = 0.17, p = 0.048), and from REST1 (rs = 0.26, p = 0.003), but not from REST4 (rs = 0.12, p = 0.13). Within sessions, movie runs significantly outperformed rest (permutation tests for difference in medians, all p < 10^-5)."
+      },
+      "explanation": "All p-values and significance statements match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Movie-watching connectivity yields more accurate prediction of cognitive and emotion traits than rest, with social-content clips performing best; not driven by arousal differences.",
+      "generatedFact": "Movie watching enables more accurate prediction of cognitive and emotional phenotypes than rest, with socially rich clips most informative; arousal could not explain the advantage.",
+      "sourceEvidence": {
+        "locator": "R0088",
+        "locators": [
+          "R0088"
+        ],
+        "quotes": [
+          "The relationships among gaze trajectory, functional connectivity, and trait-like phenotypes—and whether certain types of content elicit more variance in gaze trajectory across subjects—should be investigated in future work. 4. Discussion Here, we demonstrated that functional connectivity during movie watching outperforms rest for predicting trait-like behavior in both the cognition and emotion domains. There was no evidence that this effect was driven by differences in overall alertness across states, suggesting that the advantage for movies may stem from a shift in ongoing mental processes rather than low-level arousal changes."
+        ],
+        "quote": "The relationships among gaze trajectory, functional connectivity, and trait-like phenotypes—and whether certain types of content elicit more variance in gaze trajectory across subjects—should be investigated in future work. 4. Discussion Here, we demonstrated that functional connectivity during movie watching outperforms rest for predicting trait-like behavior in both the cognition and emotion domains. There was no evidence that this effect was driven by differences in overall alertness across states, suggesting that the advantage for movies may stem from a shift in ongoing mental processes rather than low-level arousal changes."
+      },
+      "generatedEvidence": {
+        "locator": "G0022",
+        "locators": [
+          "G0022"
+        ],
+        "quotes": [
+          "This metric was not strongly correlated with the number of face-containing TRs (r11 = 0.32, p = 0.28). --- ## 4. Discussion This study demonstrates that functional connectivity measured during movie watching enables more accurate prediction of trait-level cognitive and emotional phenotypes than connectivity acquired during rest. The advantage generalized across all comparisons within matched scanning sessions and could not be attributed to lower arousal or poorer data quality during rest."
+        ],
+        "quote": "This metric was not strongly correlated with the number of face-containing TRs (r11 = 0.32, p = 0.28). --- ## 4. Discussion This study demonstrates that functional connectivity measured during movie watching enables more accurate prediction of trait-level cognitive and emotional phenotypes than connectivity acquired during rest. The advantage generalized across all comparisons within matched scanning sessions and could not be attributed to lower arousal or poorer data quality during rest."
+      },
+      "explanation": "Main conclusion and its direction/magnitude are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Stimulus order not counterbalanced (rest always before movies within session, session 2 was the fourth overall) introducing potential fatigue and order effects.",
+      "generatedFact": "Fourth limitation: stimulus order was not counterbalanced: rest runs always preceded movie runs, and session 2 was the fourth session overall, introducing possible cumulative fatigue.",
+      "sourceEvidence": {
+        "locator": "R0104",
+        "locators": [
+          "R0104"
+        ],
+        "quotes": [
+          "Finally, perhaps the biggest limitations stem from experimental design and data collection for this study, which was not necessarily designed to test these hypotheses. The order of video clips within runs as well as the order of runs themselves were not counterbalanced, raising the possibility that runs and/or clips in session 2 (which was actually the fourth session in the overall protocol) performed worse for prediction simply due to fatigue effects and not differences in clip content."
+        ],
+        "quote": "Finally, perhaps the biggest limitations stem from experimental design and data collection for this study, which was not necessarily designed to test these hypotheses. The order of video clips within runs as well as the order of runs themselves were not counterbalanced, raising the possibility that runs and/or clips in session 2 (which was actually the fourth session in the overall protocol) performed worse for prediction simply due to fatigue effects and not differences in clip content."
+      },
+      "generatedEvidence": {
+        "locator": "G0026",
+        "locators": [
+          "G0026"
+        ],
+        "quotes": [
+          "First, a single group-level functional atlas was used to define network nodes; individual- or state-specific parcellations might capture additional behavioral variance. Second, only one predictive algorithm (CPM) was tested, and only with Spearman correlation as the accuracy metric. Third, preprocessing followed a specific pipeline (FIX denoising plus global signal regression), and alternative choices could alter outcomes. Fourth, and perhaps most consequential, stimulus order was not counterbalanced: rest runs always preceded movie runs within a session, and session 2 in this analysis was the fourth session of the overall HCP protocol, introducing possible cumulative fatigue."
+        ],
+        "quote": "First, a single group-level functional atlas was used to define network nodes; individual- or state-specific parcellations might capture additional behavioral variance. Second, only one predictive algorithm (CPM) was tested, and only with Spearman correlation as the accuracy metric. Third, preprocessing followed a specific pipeline (FIX denoising plus global signal regression), and alternative choices could alter outcomes. Fourth, and perhaps most consequential, stimulus order was not counterbalanced: rest runs always preceded movie runs within a session, and session 2 in this analysis was the fourth session of the overall HCP protocol, introducing possible cumulative fatigue."
+      },
+      "explanation": "Both texts highlight the same critical limitation.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No intervention with potential harms; safety not discussed.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "index_and_reference_tests",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Not a diagnostic test accuracy study; no index test vs reference standard framework.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "thresholds_and_validation",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Feature selection threshold |r|>0.2; internal 10-fold cross-validation respecting family structure; no external validation.",
+      "generatedFact": "Threshold |r|>0.2; internal 10-fold family-respecting cross-validation repeated 100 times.",
+      "sourceEvidence": {
+        "locator": "R0044",
+        "locators": [
+          "R0044"
+        ],
+        "quotes": [
+          "For further details and comparisons with other predictive modeling approaches, see Shen et al. (2017) . 2.4.2. Cross validation Cross-validation was performed as follows. For each iteration of model building, we first divided the full set of n = 176 subjects into 10 folds respecting family structure, such that sets of siblings were always together in either the train set or the test set (never split with one sibling in the train set and another in the test set). We then trained a CPM using 9 of the 10 folds, and applied the resulting model to data from the held-out fold to generate predicted behavioral scores for all subjects in that fold (i.e., 17–18 at a time)."
+        ],
+        "quote": "For further details and comparisons with other predictive modeling approaches, see Shen et al. (2017) . 2.4.2. Cross validation Cross-validation was performed as follows. For each iteration of model building, we first divided the full set of n = 176 subjects into 10 folds respecting family structure, such that sets of siblings were always together in either the train set or the test set (never split with one sibling in the train set and another in the test set). We then trained a CPM using 9 of the 10 folds, and applied the resulting model to data from the held-out fold to generate predicted behavioral scores for all subjects in that fold (i.e., 17–18 at a time)."
+      },
+      "generatedEvidence": {
+        "locator": "G0014",
+        "locators": [
+          "G0014"
+        ],
+        "quotes": [
+          "The procedure involved: (1) dividing subjects into 10 family-respecting folds; (2) within the training set, correlating each edge with the target score; (3) selecting edges exceeding |r| > 0.2; (4) separating selected edges into positive- and negative-tail networks based on the sign of their association with behavior; (5) building a linear model relating summed network strengths to scores; and (6) applying the model to the held-out fold. This 10-fold cross-validation was repeated 100 times with distinct fold splits. Accuracy was quantified as the Spearman rank correlation between predicted and observed scores."
+        ],
+        "quote": "The procedure involved: (1) dividing subjects into 10 family-respecting folds; (2) within the training set, correlating each edge with the target score; (3) selecting edges exceeding |r| > 0.2; (4) separating selected edges into positive- and negative-tail networks based on the sign of their association with behavior; (5) building a linear model relating summed network strengths to scores; and (6) applying the model to the held-out fold. This 10-fold cross-validation was repeated 100 times with distinct fold splits. Accuracy was quantified as the Spearman rank correlation between predicted and observed scores."
+      },
+      "explanation": "Threshold and cross-validation details match; absence of external validation is consistent.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "performance_metrics",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The study used rank correlation, not sensitivity, specificity, AUC, calibration, or prediction error as specified.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "spectrum_and_verification_bias",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Spectrum bias, verification bias are not explicitly discussed; overfitting is addressed via cross-validation but not labeled as bias.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    }
+  ],
+  "metrics": {
+    "applicableItems": 17,
+    "weightedFidelity": 0.9586,
+    "criticalFidelity": 0.9917,
+    "statusCounts": {
+      "exact": 15,
+      "missing": 1,
+      "compatible": 1,
+      "not_applicable": 4
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [
+      "follow_up_or_time_horizon"
+    ],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 85.7,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 95.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "pass",
+    "adversarialIssueCount": 0,
+    "adversarialUnsupportedClaimCount": 0,
+    "adversarialContradictionCount": 0,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "clean",
+    "issues": [],
+    "rationale": "The generated text accurately reproduces all key claims, numerical results, methods, limitations, and conclusions from the reference. No unsupported, contradicted, or critically missing facts were found. All reported metrics (e.g., rs values, p-values, edge counts, feature correlations) match the original article exactly. The omission of the matched rest-block comparison for clips is not critical to the overall interpretation and does not alter conclusions. The summary faithfully reflects the study's design, results, and implications."
+  },
+  "overallAssessment": "The GENERATED document accurately reproduces the critical scientific content of the REFERENCE article. All major design elements (population, exposures, predictive modeling, results, conclusions, and key limitations) are faithfully represented with matching numerical values and significance levels. The only minor omission is the detailed session timing (acquisition over two to three days), which does not materially affect the scientific validity. No unsupported claims or contradictions were detected.",
+  "gradedAt": "2026-07-18T15:31:02Z"
+}

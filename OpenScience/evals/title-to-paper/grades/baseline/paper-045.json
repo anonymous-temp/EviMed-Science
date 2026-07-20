@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-045",
+  "category": "biomedical-ai",
+  "title": "Review of deep learning: concepts, CNN architectures, challenges, applications, future directions.",
+  "pmcid": "PMC8010506",
+  "doi": "10.1186/s40537-021-00444-8",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 116,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": false,
+      "introduction": false,
+      "methods": false,
+      "results": false,
+      "discussion": false
+    },
+    "sectionCoverageRate": 0.0,
+    "generatedUniqueNumbers": 7,
+    "supportedUniqueNumbers": 7,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.0,
+    "toolCalls": 9,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": false,
+    "failures": [
+      "output_too_short",
+      "required_sections_missing"
+    ]
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text only states finding the paper and retrieving the full text; it makes no factual claims about the review's design, sample, methods, or conclusions. Therefore, there are no unsupported statements."
+  },
+  "overallVerdict": "fail"
+}

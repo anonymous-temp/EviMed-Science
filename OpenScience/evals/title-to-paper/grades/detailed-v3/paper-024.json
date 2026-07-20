@@ -1,0 +1,680 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-024",
+  "category": "case-report",
+  "title": "Case report: Transplantation of human induced pluripotent stem cell-derived cardiomyocyte patches for ischemic cardiomyopathy.",
+  "pmcid": "PMC9426776",
+  "doi": "10.3389/fcvm.2022.950829",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "a9dfbe69de6c11cbf118a21f2c1fd6592bb20aa661957d953a1440cbfd90c952",
+  "generatedSha256": "ede685f433ca1b6ac685a34548f355ff6a3aeba18111cc6e993d7caa8d5ba7cc",
+  "promptSha256": "ce7b94802c75797524119327f9bef453ae46c6e2f35a1f4f6e36003ae58ac967",
+  "cacheFingerprint": "df7a746f59cbbe8e2632b755b1fc3d3e3c4180c106aec063658c766844c4c476",
+  "referenceCharacters": 30211,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 14005,
+  "paperType": "case-report",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Report the first implantation of allogeneic hiPSC-CM patches in a patient with ischemic cardiomyopathy to evaluate safety and potential efficacy.",
+      "generatedFact": "First-in-human case report of hiPSC-CM patch transplantation for ischemic cardiomyopathy.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Based on preclinical studies, allogenic human induced pluripotent stem cell-derived cardiomyocyte (hiPSC-CM) patches have been proposed as a potential therapeutic candidate for heart failure. We report the implantation of allogeneic hiPSC-CM patches in a patient with ischemic cardiomyopathy (ClinicalTrials.gov, #jRCT2053190081). The patches were produced under clinical-grade conditions and displayed cardiogenic phenotypes and safety in vivo (severe immunodeficient mice) without any genetic mutations in cancer-related genes. The patches were then implanted via thoracotomy into the left ventricle epicardium of the patient under immunosuppressive agents."
+        ],
+        "quote": "Based on preclinical studies, allogenic human induced pluripotent stem cell-derived cardiomyocyte (hiPSC-CM) patches have been proposed as a potential therapeutic candidate for heart failure. We report the implantation of allogeneic hiPSC-CM patches in a patient with ischemic cardiomyopathy (ClinicalTrials.gov, #jRCT2053190081). The patches were produced under clinical-grade conditions and displayed cardiogenic phenotypes and safety in vivo (severe immunodeficient mice) without any genetic mutations in cancer-related genes. The patches were then implanted via thoracotomy into the left ventricle epicardium of the patient under immunosuppressive agents."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**DOI:** [10.3389/fcvm.2022.950829](https://doi.org/10.3389/fcvm.2022.950829) **PMID:** [36051285](https://pubmed.ncbi.nlm.nih.gov/36051285/) **Source (Open Access):** [Frontiers full text](https://www.frontiersin.org/articles/10.3389/fcvm.2022.950829/full) **Clinical Trial Registration:** Japan Registry of Clinical Trials, [jRCT2053190081](https://jrct.niph.go.jp/en-latest-detail/jRCT2053190081) --- ## Abstract Heart failure persists as a condition with high worldwide mortality, exceeding cancer-related deaths among approximately 26 million patients."
+        ],
+        "quote": "**DOI:** [10.3389/fcvm.2022.950829](https://doi.org/10.3389/fcvm.2022.950829) **PMID:** [36051285](https://pubmed.ncbi.nlm.nih.gov/36051285/) **Source (Open Access):** [Frontiers full text](https://www.frontiersin.org/articles/10.3389/fcvm.2022.950829/full) **Clinical Trial Registration:** Japan Registry of Clinical Trials, [jRCT2053190081](https://jrct.niph.go.jp/en-latest-detail/jRCT2053190081) --- ## Abstract Heart failure persists as a condition with high worldwide mortality, exceeding cancer-related deaths among approximately 26 million patients."
+      },
+      "explanation": "Both state the objective is to report a first human transplantation of hiPSC-CM patches; wording differs slightly but the aim is identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Case report (single patient).",
+      "generatedFact": "Case report (first-in-human, single-patient design).",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Case report: Transplantation of human induced pluripotent stem cell-derived cardiomyocyte patches for ischemic cardiomyopathy.\", \"pmcid\": \"PMC9426776\", \"pmid\": \"36051285\", \"doi\": \"10.3389/fcvm.2022.950829\", \"publicationTypes\": [\"Journal Article\", \"Case Reports\", \"case-report\"], \"publicationDate\": \"2022-08-16\"} [ABSTRACT] AbstractDespite major therapeutic advances, heart failure, as a non-communicable disease, remains a life-threatening disorder, with 26 million patients worldwide, causing more deaths than cancer. Therefore, novel strategies for the treatment of heart failure continue to be an important clinical need."
+        ],
+        "quote": "[METADATA] {\"title\": \"Case report: Transplantation of human induced pluripotent stem cell-derived cardiomyocyte patches for ischemic cardiomyopathy.\", \"pmcid\": \"PMC9426776\", \"pmid\": \"36051285\", \"doi\": \"10.3389/fcvm.2022.950829\", \"publicationTypes\": [\"Journal Article\", \"Case Reports\", \"case-report\"], \"publicationDate\": \"2022-08-16\"} [ABSTRACT] AbstractDespite major therapeutic advances, heart failure, as a non-communicable disease, remains a life-threatening disorder, with 26 million patients worldwide, causing more deaths than cancer. Therefore, novel strategies for the treatment of heart failure continue to be an important clinical need."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# Rewritten Structured Research Report *Based on:* Miyagawa S, Kainuma S, Kawamura T, Suzuki K, Ito Y, Iseoka H, Ito E, Takeda M, Sasai M, Mochizuki-Oda N, Shimamoto T, Nitta Y, Dohi H, Watabe T, Sakata Y, Toda K, Sawa Y. Case report: Transplantation of human induced pluripotent stem cell-derived cardiomyocyte patches for ischemic cardiomyopathy. *Frontiers in Cardiovascular Medicine*. 2022;9:950829."
+        ],
+        "quote": "# Rewritten Structured Research Report *Based on:* Miyagawa S, Kainuma S, Kawamura T, Suzuki K, Ito Y, Iseoka H, Ito E, Takeda M, Sasai M, Mochizuki-Oda N, Shimamoto T, Nitta Y, Dohi H, Watabe T, Sakata Y, Toda K, Sawa Y. Case report: Transplantation of human induced pluripotent stem cell-derived cardiomyocyte patches for ischemic cardiomyopathy. *Frontiers in Cardiovascular Medicine*. 2022;9:950829."
+      },
+      "explanation": "Both explicitly identify the design as a case report.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "51-year-old male with ischemic cardiomyopathy, NYHA class III, LVEF 30% on maximal medical therapy.",
+      "generatedFact": "51-year-old male with NYHA class III ischemic cardiomyopathy (baseline LV ejection fraction 30%).",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "These iPSC-derived cardiomyocytes beat spontaneously and produce and release cytokines that induce angiogenesis. Thus, it is conceivable that iPSCs may be used to achieve cardiomyogenesis to form cardiomyocytes that can mechanically contract and repair myocardial tissue via paracrine angiogenic factors. Here, we report the case of a 51-year-old male patient with ischemic cardiomyopathy who had already received maximum anti-heart failure medications such as digitalis, diuretics, angiotensin-converting-enzyme (ACE) inhibitors, angiotensin receptor blockers, beta-blockers, anti-aldosterone drugs, and oral cardiotonic."
+        ],
+        "quote": "These iPSC-derived cardiomyocytes beat spontaneously and produce and release cytokines that induce angiogenesis. Thus, it is conceivable that iPSCs may be used to achieve cardiomyogenesis to form cardiomyocytes that can mechanically contract and repair myocardial tissue via paracrine angiogenic factors. Here, we report the case of a 51-year-old male patient with ischemic cardiomyopathy who had already received maximum anti-heart failure medications such as digitalis, diuretics, angiotensin-converting-enzyme (ACE) inhibitors, angiotensin receptor blockers, beta-blockers, anti-aldosterone drugs, and oral cardiotonic."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "Allogeneic human induced pluripotent stem cell-derived cardiomyocyte (hiPSC-CM) patches, produced under clinical-grade protocols, were investigated as a regenerative approach for ischemic cardiomyopathy. We report a first-in-human case in which three hiPSC-CM patches (3.3 × 10⁷ cells per patch) were implanted onto the left ventricular (LV) epicardium of a 51-year-old male with NYHA class III ischemic cardiomyopathy (baseline LV ejection fraction 30%) via thoracotomy, under intra-aortic balloon pumping (IABP) support and a three-month immunosuppressive regimen."
+        ],
+        "quote": "Allogeneic human induced pluripotent stem cell-derived cardiomyocyte (hiPSC-CM) patches, produced under clinical-grade protocols, were investigated as a regenerative approach for ischemic cardiomyopathy. We report a first-in-human case in which three hiPSC-CM patches (3.3 × 10⁷ cells per patch) were implanted onto the left ventricular (LV) epicardium of a 51-year-old male with NYHA class III ischemic cardiomyopathy (baseline LV ejection fraction 30%) via thoracotomy, under intra-aortic balloon pumping (IABP) support and a three-month immunosuppressive regimen."
+      },
+      "explanation": "Patient description matches exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "One patient.",
+      "generatedFact": "N=1 (single patient).",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "These iPSC-derived cardiomyocytes beat spontaneously and produce and release cytokines that induce angiogenesis. Thus, it is conceivable that iPSCs may be used to achieve cardiomyogenesis to form cardiomyocytes that can mechanically contract and repair myocardial tissue via paracrine angiogenic factors. Here, we report the case of a 51-year-old male patient with ischemic cardiomyopathy who had already received maximum anti-heart failure medications such as digitalis, diuretics, angiotensin-converting-enzyme (ACE) inhibitors, angiotensin receptor blockers, beta-blockers, anti-aldosterone drugs, and oral cardiotonic."
+        ],
+        "quote": "These iPSC-derived cardiomyocytes beat spontaneously and produce and release cytokines that induce angiogenesis. Thus, it is conceivable that iPSCs may be used to achieve cardiomyogenesis to form cardiomyocytes that can mechanically contract and repair myocardial tissue via paracrine angiogenic factors. Here, we report the case of a 51-year-old male patient with ischemic cardiomyopathy who had already received maximum anti-heart failure medications such as digitalis, diuretics, angiotensin-converting-enzyme (ACE) inhibitors, angiotensin receptor blockers, beta-blockers, anti-aldosterone drugs, and oral cardiotonic."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "Allogeneic human induced pluripotent stem cell-derived cardiomyocyte (hiPSC-CM) patches, produced under clinical-grade protocols, were investigated as a regenerative approach for ischemic cardiomyopathy. We report a first-in-human case in which three hiPSC-CM patches (3.3 × 10⁷ cells per patch) were implanted onto the left ventricular (LV) epicardium of a 51-year-old male with NYHA class III ischemic cardiomyopathy (baseline LV ejection fraction 30%) via thoracotomy, under intra-aortic balloon pumping (IABP) support and a three-month immunosuppressive regimen."
+        ],
+        "quote": "Allogeneic human induced pluripotent stem cell-derived cardiomyocyte (hiPSC-CM) patches, produced under clinical-grade protocols, were investigated as a regenerative approach for ischemic cardiomyopathy. We report a first-in-human case in which three hiPSC-CM patches (3.3 × 10⁷ cells per patch) were implanted onto the left ventricular (LV) epicardium of a 51-year-old male with NYHA class III ischemic cardiomyopathy (baseline LV ejection fraction 30%) via thoracotomy, under intra-aortic balloon pumping (IABP) support and a three-month immunosuppressive regimen."
+      },
+      "explanation": "Both indicate a single patient.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Patient with severe ischemic cardiomyopathy (NYHA III, EF 30%) on maximal anti-heart failure medications, enrolled in clinical trial jRCT2053190081.",
+      "generatedFact": "Patient with chronic ischemic cardiomyopathy, symptomatic NYHA III despite maximal medical therapy, enrolled in approved clinical trial.",
+      "sourceEvidence": {
+        "locator": "R0011",
+        "locators": [
+          "R0011"
+        ],
+        "quotes": [
+          "Positron emission tomography (PET) further revealed ischemia in the middle-apex (anterior wall) and the base-apex (posterior-lateral wall); an infarcted area in the inferior wall was observed despite the absence of significant stenosis in all coronary arteries. The patient was then treated with anti-heart failure medications (maximum dosages), such as beta-blockers, ACE inhibitors, and diuretics. Finally, hiPSC-CM transplantation was considered a therapeutic option. Figure 1 Timeline of symptoms and treatment and the clinical trial flowchart of the human induced pluripotent stem (iPS) cell-derived cardiomyocyte (hiPSC-CM) patches."
+        ],
+        "quote": "Positron emission tomography (PET) further revealed ischemia in the middle-apex (anterior wall) and the base-apex (posterior-lateral wall); an infarcted area in the inferior wall was observed despite the absence of significant stenosis in all coronary arteries. The patient was then treated with anti-heart failure medications (maximum dosages), such as beta-blockers, ACE inhibitors, and diuretics. Finally, hiPSC-CM transplantation was considered a therapeutic option. Figure 1 Timeline of symptoms and treatment and the clinical trial flowchart of the human induced pluripotent stem (iPS) cell-derived cardiomyocyte (hiPSC-CM) patches."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "The present report describes the first-in-human transplantation of clinical-grade allogeneic hiPSC-CM patches in a patient with chronic ischemic cardiomyopathy who remained symptomatic (NYHA III) despite maximal guideline-directed medical therapy. The intervention was conducted within a formally approved clinical trial protocol (jRCT2053190081) after written informed consent. --- ## Methods ### Case and Baseline Assessment A 51-year-old male with ischemic cardiomyopathy was enrolled. In 2019, he experienced an acute myocardial infarction treated by percutaneous coronary intervention (PCI) targeting all three major coronary arteries."
+        ],
+        "quote": "The present report describes the first-in-human transplantation of clinical-grade allogeneic hiPSC-CM patches in a patient with chronic ischemic cardiomyopathy who remained symptomatic (NYHA III) despite maximal guideline-directed medical therapy. The intervention was conducted within a formally approved clinical trial protocol (jRCT2053190081) after written informed consent. --- ## Methods ### Case and Baseline Assessment A 51-year-old male with ischemic cardiomyopathy was enrolled. In 2019, he experienced an acute myocardial infarction treated by percutaneous coronary intervention (PCI) targeting all three major coronary arteries."
+      },
+      "explanation": "Selection criteria are described identically; trial registration is mentioned in both.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Transplantation of 3 allogeneic hiPSC-CM patches (3.3×10⁷ cells/patch) onto LV anterior and lateral epicardium via thoracotomy under IABP support, with 3-month immunosuppression (prednisolone, tacrolimus, mycophenolate mofetil).",
+      "generatedFact": "Three hiPSC-CM patches (3.3×10⁷ cells/patch) implanted onto LV epicardium via thoracotomy under IABP support, with three-month immunosuppressive regimen.",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "Clinical trial We prepared three allogeneic iPSC-CM patches (3.3 × 10 7 cells/patch) that were successfully transplanted into the epicardium of the LV anterior and lateral walls ( Figure 2A ) through the fourth intercostal space under IABP support; no other surgical procedures, including coronary artery bypass grafting, were performed. The IABP support was withdrawn the day after surgery, and the catecholamine infusion was discontinued 8 days post transplantation. During the first 3 months after transplantation, the patient received immunosuppressant drugs, including prednisolone, tacrolimus, and mycophenolate mofetil; thereafter, these drugs were discontinued ( Supplementary Figure 2 )."
+        ],
+        "quote": "Clinical trial We prepared three allogeneic iPSC-CM patches (3.3 × 10 7 cells/patch) that were successfully transplanted into the epicardium of the LV anterior and lateral walls ( Figure 2A ) through the fourth intercostal space under IABP support; no other surgical procedures, including coronary artery bypass grafting, were performed. The IABP support was withdrawn the day after surgery, and the catecholamine infusion was discontinued 8 days post transplantation. During the first 3 months after transplantation, the patient received immunosuppressant drugs, including prednisolone, tacrolimus, and mycophenolate mofetil; thereafter, these drugs were discontinued ( Supplementary Figure 2 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "Allogeneic human induced pluripotent stem cell-derived cardiomyocyte (hiPSC-CM) patches, produced under clinical-grade protocols, were investigated as a regenerative approach for ischemic cardiomyopathy. We report a first-in-human case in which three hiPSC-CM patches (3.3 × 10⁷ cells per patch) were implanted onto the left ventricular (LV) epicardium of a 51-year-old male with NYHA class III ischemic cardiomyopathy (baseline LV ejection fraction 30%) via thoracotomy, under intra-aortic balloon pumping (IABP) support and a three-month immunosuppressive regimen."
+        ],
+        "quote": "Allogeneic human induced pluripotent stem cell-derived cardiomyocyte (hiPSC-CM) patches, produced under clinical-grade protocols, were investigated as a regenerative approach for ischemic cardiomyopathy. We report a first-in-human case in which three hiPSC-CM patches (3.3 × 10⁷ cells per patch) were implanted onto the left ventricular (LV) epicardium of a 51-year-old male with NYHA class III ischemic cardiomyopathy (baseline LV ejection fraction 30%) via thoracotomy, under intra-aortic balloon pumping (IABP) support and a three-month immunosuppressive regimen."
+      },
+      "explanation": "All details (number of patches, dose, site, surgical approach, support, immunosuppression) match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Case report has no comparator group; baseline serves as reference.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Safety (arrhythmias, tumorigenesis, adverse events) and functional outcomes (NYHA class, LVESVI, peak VO₂, regional wall motion, myocardial blood flow, coronary flow reserve, end-systolic wall stress).",
+      "generatedFact": "Safety (arrythmias, tumor formation, adverse events) and functional measures (NYHA class, LVESVI, peak VO₂, regional wall motion, myocardial blood flow, coronary flow reserve, end-systolic wall stress).",
+      "sourceEvidence": {
+        "locator": "R0019",
+        "locators": [
+          "R0019"
+        ],
+        "quotes": [
+          "The patient underwent standard rehabilitation after surgery. Arrhythmia was constantly monitored with a 24-h electrocardiogram (ECG) monitor, and Holter ECG was also measured at the required timing to check for arrhythmias. The cardiac function and myocardial blood perfusion were measured using cardiac CT, wall stress measurements, and MBF PET. Tumorigenesis (safety) was investigated via fluorodeoxyglucose-PET (FDG-PET). Figure 2 Transplantation of hiPSC-CM and cardiac moving pattern before and after surgery. (A) First transplantation of hiPSC-CM patches onto the heart surface of a patient with severe cardiomyopathy."
+        ],
+        "quote": "The patient underwent standard rehabilitation after surgery. Arrhythmia was constantly monitored with a 24-h electrocardiogram (ECG) monitor, and Holter ECG was also measured at the required timing to check for arrhythmias. The cardiac function and myocardial blood perfusion were measured using cardiac CT, wall stress measurements, and MBF PET. Tumorigenesis (safety) was investigated via fluorodeoxyglucose-PET (FDG-PET). Figure 2 Transplantation of hiPSC-CM and cardiac moving pattern before and after surgery. (A) First transplantation of hiPSC-CM patches onto the heart surface of a patient with severe cardiomyopathy."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "No lethal arrhythmias, tumor formation, or immunosuppression-related serious adverse events were detected over a one-year observation period. NYHA functional class improved from III to II at both 6 months and 1 year. Four-dimensional computed tomography demonstrated enhanced regional wall motion at the grafted sites, while ¹³N-ammonia PET imaging showed that whole-heart coronary flow reserve increased from 2.16 at 6 months to 5.30 at 1 year post-implantation. Fluorodeoxyglucose-PET revealed no evidence of tumorigenesis. These initial findings suggest the procedure was well tolerated and associated with functional recovery, although the single-patient design precludes causal inference."
+        ],
+        "quote": "No lethal arrhythmias, tumor formation, or immunosuppression-related serious adverse events were detected over a one-year observation period. NYHA functional class improved from III to II at both 6 months and 1 year. Four-dimensional computed tomography demonstrated enhanced regional wall motion at the grafted sites, while ¹³N-ammonia PET imaging showed that whole-heart coronary flow reserve increased from 2.16 at 6 months to 5.30 at 1 year post-implantation. Fluorodeoxyglucose-PET revealed no evidence of tumorigenesis. These initial findings suggest the procedure was well tolerated and associated with functional recovery, although the single-patient design precludes causal inference."
+      },
+      "explanation": "The same set of safety and efficacy endpoints is described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Follow-up assessments at 6 months and 1 year after transplantation.",
+      "generatedFact": "One-year observation period with assessments at 6 months and 1 year.",
+      "sourceEvidence": {
+        "locator": "R0025",
+        "locators": [
+          "R0025"
+        ],
+        "quotes": [
+          "However, 1 year after transplantation, the MBF at rest showed a slight decline (LAD 0.65; Cx 0.54; RCA 0.50 ml/g/min) ( Figure 4B ). The MBF under stress was LAD 1.80, Cx 1.58, and RCA 1.49 ml/g/min at 6 months after transplantation but improved 1 year after transplantation (LAD 3.19; Cx 2.93; RCA 3.17 ml/g/min) ( Figure 4B ). Moreover, from 6 months to 1 year after transplantation, the coronary flow reserves in the whole myocardium greatly improved from 2.16 to 5.30, and the coronary flow reserves in all segmental regions of LV were also dramatically ameliorated (6 months vs. 1 year: LAD 2.12 vs. 4.90; Cx 2.27 vs. 5.40; RCA 2.21 vs. 6.47) ( Figure 4C )."
+        ],
+        "quote": "However, 1 year after transplantation, the MBF at rest showed a slight decline (LAD 0.65; Cx 0.54; RCA 0.50 ml/g/min) ( Figure 4B ). The MBF under stress was LAD 1.80, Cx 1.58, and RCA 1.49 ml/g/min at 6 months after transplantation but improved 1 year after transplantation (LAD 3.19; Cx 2.93; RCA 3.17 ml/g/min) ( Figure 4B ). Moreover, from 6 months to 1 year after transplantation, the coronary flow reserves in the whole myocardium greatly improved from 2.16 to 5.30, and the coronary flow reserves in all segmental regions of LV were also dramatically ameliorated (6 months vs. 1 year: LAD 2.12 vs. 4.90; Cx 2.27 vs. 5.40; RCA 2.21 vs. 6.47) ( Figure 4C )."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "No lethal arrhythmias, tumor formation, or immunosuppression-related serious adverse events were detected over a one-year observation period. NYHA functional class improved from III to II at both 6 months and 1 year. Four-dimensional computed tomography demonstrated enhanced regional wall motion at the grafted sites, while ¹³N-ammonia PET imaging showed that whole-heart coronary flow reserve increased from 2.16 at 6 months to 5.30 at 1 year post-implantation. Fluorodeoxyglucose-PET revealed no evidence of tumorigenesis. These initial findings suggest the procedure was well tolerated and associated with functional recovery, although the single-patient design precludes causal inference."
+        ],
+        "quote": "No lethal arrhythmias, tumor formation, or immunosuppression-related serious adverse events were detected over a one-year observation period. NYHA functional class improved from III to II at both 6 months and 1 year. Four-dimensional computed tomography demonstrated enhanced regional wall motion at the grafted sites, while ¹³N-ammonia PET imaging showed that whole-heart coronary flow reserve increased from 2.16 at 6 months to 5.30 at 1 year post-implantation. Fluorodeoxyglucose-PET revealed no evidence of tumorigenesis. These initial findings suggest the procedure was well tolerated and associated with functional recovery, although the single-patient design precludes causal inference."
+      },
+      "explanation": "Both report the same follow‑up time points.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No explicit data cleaning or preprocessing is described; clinical measurements were used directly.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Regional myocardial displacement by 4DCT; end-systolic wall stress, tumor formation, and myocardial blood flow evaluated by PET/CT.",
+      "generatedFact": "4DCT with 320‑slice CT for regional displacement and wall stress; ¹³N‑ammonia PET for rest/stress MBF; FDG‑PET for tumor surveillance.",
+      "sourceEvidence": {
+        "locator": "R0017",
+        "locators": [
+          "R0017"
+        ],
+        "quotes": [
+          "Measurement of cardiac function Regional myocardial displacement was assessed using four-dimensional computed tomography (4DCT), as described in the Supplementary Methods . The methods for evaluating end-systolic wall stress (ESS), tumor formation, and myocardial blood flow (MBF), including the acquisition of PET/computed tomography (CT) imaging, are also described in Supplementary Methods ."
+        ],
+        "quote": "Measurement of cardiac function Regional myocardial displacement was assessed using four-dimensional computed tomography (4DCT), as described in the Supplementary Methods . The methods for evaluating end-systolic wall stress (ESS), tumor formation, and myocardial blood flow (MBF), including the acquisition of PET/computed tomography (CT) imaging, are also described in Supplementary Methods ."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "Four-dimensional computed tomography (4DCT) employing 320 cardiac CT images was used to evaluate regional myocardial displacement and end-systolic wall stress (ESS). Myocardial blood flow (MBF) at rest and under pharmacological stress was measured by ¹³N-ammonia PET at 6 months and 1 year. Tumor surveillance was conducted with fluorodeoxyglucose-PET (FDG-PET). NYHA functional classification, LV end-systolic volume index (LVESVI), and peak oxygen uptake (peak VO₂) were recorded and presented in detail in the original supplementary material."
+        ],
+        "quote": "Four-dimensional computed tomography (4DCT) employing 320 cardiac CT images was used to evaluate regional myocardial displacement and end-systolic wall stress (ESS). Myocardial blood flow (MBF) at rest and under pharmacological stress was measured by ¹³N-ammonia PET at 6 months and 1 year. Tumor surveillance was conducted with fluorodeoxyglucose-PET (FDG-PET). NYHA functional classification, LV end-systolic volume index (LVESVI), and peak oxygen uptake (peak VO₂) were recorded and presented in detail in the original supplementary material."
+      },
+      "explanation": "Imaging methods are identical; generated text adds the specific CT slice count which is consistent with the original Supplementary Methods.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No computational model or algorithm is employed; standard clinical imaging analyses are used.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "NYHA III → II; LVESVI increased then decreased; peak VO₂ improved; MBF (ml/g/min) rest: LAD 0.85 → 0.65, Cx 0.69 → 0.54, RCA 0.66 → 0.50; stress: LAD 1.80 → 3.19, Cx 1.58 → 2.93, RCA 1.49 → 3.17; whole‑heart CFR 2.16 → 5.30; segmental CFR LAD 2.12 → 4.90, Cx 2.27 → 5.40, RCA 2.21 → 6.47.",
+      "generatedFact": "NYHA III → II; LVESVI increased then decreased; peak VO₂ improved; MBF rest/stress values and CFR values identical to reference; wall stress reduction >20% and 10‑20% in regions.",
+      "sourceEvidence": {
+        "locator": "R0025",
+        "locators": [
+          "R0025"
+        ],
+        "quotes": [
+          "However, 1 year after transplantation, the MBF at rest showed a slight decline (LAD 0.65; Cx 0.54; RCA 0.50 ml/g/min) ( Figure 4B ). The MBF under stress was LAD 1.80, Cx 1.58, and RCA 1.49 ml/g/min at 6 months after transplantation but improved 1 year after transplantation (LAD 3.19; Cx 2.93; RCA 3.17 ml/g/min) ( Figure 4B ). Moreover, from 6 months to 1 year after transplantation, the coronary flow reserves in the whole myocardium greatly improved from 2.16 to 5.30, and the coronary flow reserves in all segmental regions of LV were also dramatically ameliorated (6 months vs. 1 year: LAD 2.12 vs. 4.90; Cx 2.27 vs. 5.40; RCA 2.21 vs. 6.47) ( Figure 4C )."
+        ],
+        "quote": "However, 1 year after transplantation, the MBF at rest showed a slight decline (LAD 0.65; Cx 0.54; RCA 0.50 ml/g/min) ( Figure 4B ). The MBF under stress was LAD 1.80, Cx 1.58, and RCA 1.49 ml/g/min at 6 months after transplantation but improved 1 year after transplantation (LAD 3.19; Cx 2.93; RCA 3.17 ml/g/min) ( Figure 4B ). Moreover, from 6 months to 1 year after transplantation, the coronary flow reserves in the whole myocardium greatly improved from 2.16 to 5.30, and the coronary flow reserves in all segmental regions of LV were also dramatically ameliorated (6 months vs. 1 year: LAD 2.12 vs. 4.90; Cx 2.27 vs. 5.40; RCA 2.21 vs. 6.47) ( Figure 4C )."
+      },
+      "generatedEvidence": {
+        "locator": "G0016",
+        "locators": [
+          "G0016"
+        ],
+        "quotes": [
+          "5.40; RCA 2.21 vs. 6.47. The one-year CFR values approached those reported for healthy individuals. LV wall motion at the grafted site showed marked augmentation under stress conditions compared to rest. ### Tumorigenicity Surveillance FDG-PET imaging at 6 months post-transplantation demonstrated no evidence of tumor formation in the heart or any other organ, consistent with preclinical tumorigenicity testing results."
+        ],
+        "quote": "5.40; RCA 2.21 vs. 6.47. The one-year CFR values approached those reported for healthy individuals. LV wall motion at the grafted site showed marked augmentation under stress conditions compared to rest. ### Tumorigenicity Surveillance FDG-PET imaging at 6 months post-transplantation demonstrated no evidence of tumor formation in the heart or any other organ, consistent with preclinical tumorigenicity testing results."
+      },
+      "explanation": "All reported numbers (MBF, CFR) match exactly. LVESVI and peak VO₂ are described directionally in both, with exact values available only in the original Supplementary Table.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No inferential statistics, P‑values, or confidence intervals are reported in this case report.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "First successful transplant of hiPSC‑CM patches for ischemic cardiomyopathy; well‑tolerated with potential efficacy and favorable prognosis; further investigation needed.",
+      "generatedFact": "Feasible, associated with clinical improvement and no serious adverse events; hypothesis‑generating single‑patient evidence requiring confirmation.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "This study is the first report of a successful transplant of hiPSC-CMs for severe ischemic cardiomyopathy.Keywords: human induced pluripotent stem cell-derived cardiomyocyte, ischemic cardiomyopathy, transplantation, regenerative therapy, clinical trial [ARTICLE BODY EVIDENCE COMPLETE=true] Introduction Severe heart failure is a lethal disease with high mortality, and patients' quality of life is significantly reduced despite the development of medical treatments ( 1 ). When severe heart failure is reversible, drug treatment is prioritized; however, at the irreversible stage, a left ventricular assist device (LVAD) or heart transplantation is considered to be the first-line therapy."
+        ],
+        "quote": "This study is the first report of a successful transplant of hiPSC-CMs for severe ischemic cardiomyopathy.Keywords: human induced pluripotent stem cell-derived cardiomyocyte, ischemic cardiomyopathy, transplantation, regenerative therapy, clinical trial [ARTICLE BODY EVIDENCE COMPLETE=true] Introduction Severe heart failure is a lethal disease with high mortality, and patients' quality of life is significantly reduced despite the development of medical treatments ( 1 ). When severe heart failure is reversible, drug treatment is prioritized; however, at the irreversible stage, a left ventricular assist device (LVAD) or heart transplantation is considered to be the first-line therapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0022",
+        "locators": [
+          "G0022"
+        ],
+        "quotes": [
+          "### Conclusion This case report provides initial human evidence that clinical-grade allogeneic hiPSC-CM patch transplantation is feasible and was associated with clinical improvement and no detected serious adverse events through one year in a single patient with ischemic cardiomyopathy refractory to maximal medical therapy. Given the N = 1 design, these findings are hypothesis-generating and require confirmation in larger controlled studies. --- ## Source Verification Note All numerical values, clinical details, and limitations in this report are derived from the open-access full text of the original article and its associated supplementary materials (PDF)."
+        ],
+        "quote": "### Conclusion This case report provides initial human evidence that clinical-grade allogeneic hiPSC-CM patch transplantation is feasible and was associated with clinical improvement and no detected serious adverse events through one year in a single patient with ischemic cardiomyopathy refractory to maximal medical therapy. Given the N = 1 design, these findings are hypothesis-generating and require confirmation in larger controlled studies. --- ## Source Verification Note All numerical values, clinical details, and limitations in this report are derived from the open-access full text of the original article and its associated supplementary materials (PDF)."
+      },
+      "explanation": "Both convey a cautiously positive conclusion without overstating the evidence.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "partial",
+      "issueKinds": [
+        "unsupported"
+      ],
+      "referenceFact": "Unable to determine graft survival; further research needed for immune control and efficacy; mechanistic contribution of transplanted cells uncertain.",
+      "generatedFact": "Explicitly lists limitations: N=1, graft survival unknown, mechanistic ambiguity, no control, short follow‑up, limited generalizability.",
+      "sourceEvidence": {
+        "locator": "R0034",
+        "locators": [
+          "R0034"
+        ],
+        "quotes": [
+          "In this clinical trial, we suspended the administration of immunosuppressant drugs 3 months after transplantation. Notably, we could not clearly elucidate whether transplanted patches survived in the human heart. However, we speculate that the changes in cardiac function, as well as the preserved coronary flow reserve, were mainly dependent on the angiogenic action, which was sufficient to achieve the clinical needs in the treatment of severe heart failure. Further research is warranted to increase the effectiveness of hiPSC transplantation therapy."
+        ],
+        "quote": "In this clinical trial, we suspended the administration of immunosuppressant drugs 3 months after transplantation. Notably, we could not clearly elucidate whether transplanted patches survived in the human heart. However, we speculate that the changes in cardiac function, as well as the preserved coronary flow reserve, were mainly dependent on the angiogenic action, which was sufficient to achieve the clinical needs in the treatment of severe heart failure. Further research is warranted to increase the effectiveness of hiPSC transplantation therapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0019",
+        "locators": [
+          "G0019"
+        ],
+        "quotes": [
+          "The observed improvements in CFR, wall motion under stress, and the gradual decline in resting MBF (suggesting more efficient myocardial oxygen utilization at rest) are consistent with the angiogenesis hypothesis. The authors' preclinical study demonstrated new functional vessel formation and implicated the angiopoietin family in vessel maturation. ### Limitations This study has critical limitations, explicitly stated in the original publication: 1. **Sample size**: A single-patient case report (N = 1) precludes generalization, causal attribution, or statistical inference regarding efficacy. 2."
+        ],
+        "quote": "The observed improvements in CFR, wall motion under stress, and the gradual decline in resting MBF (suggesting more efficient myocardial oxygen utilization at rest) are consistent with the angiogenesis hypothesis. The authors' preclinical study demonstrated new functional vessel formation and implicated the angiopoietin family in vessel maturation. ### Limitations This study has critical limitations, explicitly stated in the original publication: 1. **Sample size**: A single-patient case report (N = 1) precludes generalization, causal attribution, or statistical inference regarding efficacy. 2."
+      },
+      "explanation": "Reference implicitly acknowledges graft survival uncertainty and need for more work; generated report adds several explicit limitations not stated in the source (N=1, no control, short follow‑up, generalizability).",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "No lethal arrhythmias, tumor formation, or immunosuppression‑related severe adverse events.",
+      "generatedFact": "No lethal arrhythmias, tumor formation, or immunosuppression‑related serious adverse events over one year.",
+      "sourceEvidence": {
+        "locator": "R0021",
+        "locators": [
+          "R0021"
+        ],
+        "quotes": [
+          "hiPSC-CM, human induced pluripotent stem cell-derived cardiomyocyte; LV, left ventricle; IABP, intra-aortic balloon pumping; CT, computed tomography. The patient was extubated the day after surgery, stayed in the ICU for 3 days, including the day of surgery, and was discharged 1 month after surgery. He underwent standard rehabilitation after surgery. We did not detect any complications, including arrhythmias, tumor formation, or immunosuppression-related severe adverse events. Importantly, the patients' symptoms improved from NYHA III to II at 6 months and 1 year after transplantation ( Supplementary Table 2 )."
+        ],
+        "quote": "hiPSC-CM, human induced pluripotent stem cell-derived cardiomyocyte; LV, left ventricle; IABP, intra-aortic balloon pumping; CT, computed tomography. The patient was extubated the day after surgery, stayed in the ICU for 3 days, including the day of surgery, and was discharged 1 month after surgery. He underwent standard rehabilitation after surgery. We did not detect any complications, including arrhythmias, tumor formation, or immunosuppression-related severe adverse events. Importantly, the patients' symptoms improved from NYHA III to II at 6 months and 1 year after transplantation ( Supplementary Table 2 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "No lethal arrhythmias, tumor formation, or immunosuppression-related serious adverse events were detected over a one-year observation period. NYHA functional class improved from III to II at both 6 months and 1 year. Four-dimensional computed tomography demonstrated enhanced regional wall motion at the grafted sites, while ¹³N-ammonia PET imaging showed that whole-heart coronary flow reserve increased from 2.16 at 6 months to 5.30 at 1 year post-implantation. Fluorodeoxyglucose-PET revealed no evidence of tumorigenesis. These initial findings suggest the procedure was well tolerated and associated with functional recovery, although the single-patient design precludes causal inference."
+        ],
+        "quote": "No lethal arrhythmias, tumor formation, or immunosuppression-related serious adverse events were detected over a one-year observation period. NYHA functional class improved from III to II at both 6 months and 1 year. Four-dimensional computed tomography demonstrated enhanced regional wall motion at the grafted sites, while ¹³N-ammonia PET imaging showed that whole-heart coronary flow reserve increased from 2.16 at 6 months to 5.30 at 1 year post-implantation. Fluorodeoxyglucose-PET revealed no evidence of tumorigenesis. These initial findings suggest the procedure was well tolerated and associated with functional recovery, although the single-patient design precludes causal inference."
+      },
+      "explanation": "Safety outcome descriptions match identically.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "patient_and_timeline",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "51‑year‑old male, two MIs treated with PCI/IABP/Impella, withdrawal of support day 21, persistent NYHA III EF 30%, transplantation with IABP, extubation day 1, catecholamines off day 8, discharge 1 month, follow‑up at 6 and 12 months.",
+      "generatedFact": "Same age, MI history, support timeline, NYHA and EF, peri‑operative course (IABP, extubation day 1, catecholamines discontinued day 8, discharge 1 month), 6‑month and 1‑year follow‑up.",
+      "sourceEvidence": {
+        "locator": "R0009",
+        "locators": [
+          "R0009"
+        ],
+        "quotes": [
+          "He was successfully treated with clinical-grade human induced pluripotent stem cell-derived cardiomyocyte (hiPSC-CM) patches with typical cardiogenic phenotypic properties in a first-in-human clinical trial. Case description A 51-year-old male patient was repeatedly admitted to the hospital owing to severe heart failure due to ischemic cardiomyopathy ( Figure 1A ). In 2019, he suffered an acute myocardial infarction and was treated via percutaneous coronary intervention (PCI) targeting the three major coronary arteries. Six months after treatment, he complained of chest pain."
+        ],
+        "quote": "He was successfully treated with clinical-grade human induced pluripotent stem cell-derived cardiomyocyte (hiPSC-CM) patches with typical cardiogenic phenotypic properties in a first-in-human clinical trial. Case description A 51-year-old male patient was repeatedly admitted to the hospital owing to severe heart failure due to ischemic cardiomyopathy ( Figure 1A ). In 2019, he suffered an acute myocardial infarction and was treated via percutaneous coronary intervention (PCI) targeting the three major coronary arteries. Six months after treatment, he complained of chest pain."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "Six months later, a second infarction occurred, complicated by ventricular fibrillation requiring IABP and percutaneous cardiopulmonary support, as well as catecholamine infusion and Impella® support. Circulatory support was withdrawn on day 21 after the second event, but heart failure persisted (NYHA III). Echocardiography demonstrated severe global LV asynergy with an ejection fraction of 30%. PET imaging revealed ischemia in the mid-apical anterior wall and base-apical posterolateral wall, along with an inferior-wall infarct, despite angiographically patent coronary arteries."
+        ],
+        "quote": "Six months later, a second infarction occurred, complicated by ventricular fibrillation requiring IABP and percutaneous cardiopulmonary support, as well as catecholamine infusion and Impella® support. Circulatory support was withdrawn on day 21 after the second event, but heart failure persisted (NYHA III). Echocardiography demonstrated severe global LV asynergy with an ejection fraction of 30%. PET imaging revealed ischemia in the mid-apical anterior wall and base-apical posterolateral wall, along with an inferior-wall infarct, despite angiographically patent coronary arteries."
+      },
+      "explanation": "Clinical details and timeline are reproduced exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "diagnostic_workup",
+      "importance": "major",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Echocardiography (severe LV asynergy, EF 30%), PET (ischemia antero‑apical and posterolateral walls, inferior infarct), angiography (patent coronaries).",
+      "generatedFact": "Echocardiography (severe global LV asynergy, EF 30%), PET (mid‑apical anterior and base‑apical posterolateral ischemia, inferior‑wall infarct despite patent coronaries).",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "A second acute myocardial infarction episode was diagnosed; PCI was introduced via intra-aortic balloon pumping (IABP), and percutaneous cardiopulmonary support was administered due to ventricular fibrillation. However, his condition worsened, and catecholamine and Impella® were then used as therapeutic agents. Although catecholamine treatment and circulatory support could eventually be withdrawn on day 21 after the second attack ( Figure 1A ), the heart failure persisted (New York Heart Association [NYHA] classification = III). Ultrasonography revealed severe asynergy throughout the wall of the left ventricle (LV) (ejection fraction [EF] = 30%)."
+        ],
+        "quote": "A second acute myocardial infarction episode was diagnosed; PCI was introduced via intra-aortic balloon pumping (IABP), and percutaneous cardiopulmonary support was administered due to ventricular fibrillation. However, his condition worsened, and catecholamine and Impella® were then used as therapeutic agents. Although catecholamine treatment and circulatory support could eventually be withdrawn on day 21 after the second attack ( Figure 1A ), the heart failure persisted (New York Heart Association [NYHA] classification = III). Ultrasonography revealed severe asynergy throughout the wall of the left ventricle (LV) (ejection fraction [EF] = 30%)."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "Six months later, a second infarction occurred, complicated by ventricular fibrillation requiring IABP and percutaneous cardiopulmonary support, as well as catecholamine infusion and Impella® support. Circulatory support was withdrawn on day 21 after the second event, but heart failure persisted (NYHA III). Echocardiography demonstrated severe global LV asynergy with an ejection fraction of 30%. PET imaging revealed ischemia in the mid-apical anterior wall and base-apical posterolateral wall, along with an inferior-wall infarct, despite angiographically patent coronary arteries."
+        ],
+        "quote": "Six months later, a second infarction occurred, complicated by ventricular fibrillation requiring IABP and percutaneous cardiopulmonary support, as well as catecholamine infusion and Impella® support. Circulatory support was withdrawn on day 21 after the second event, but heart failure persisted (NYHA III). Echocardiography demonstrated severe global LV asynergy with an ejection fraction of 30%. PET imaging revealed ischemia in the mid-apical anterior wall and base-apical posterolateral wall, along with an inferior-wall infarct, despite angiographically patent coronary arteries."
+      },
+      "explanation": "The same diagnostic exams and findings are described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "treatment_and_outcome",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Three allogeneic hiPSC‑CM patches (3.3×10⁷ cells each) on LV anterior/lateral wall, triple immunosuppression for 3 months then stopped; NYHA III→II, improved wall motion and CFR, no adverse events.",
+      "generatedFact": "Three patches (3.3×10⁷ cells/patch), immunosuppression with prednisolone/tacrolimus/mycophenolate mofetil for 3 months then discontinued; NYHA III→II, enhanced wall motion, CFR increased from 2.16 to 5.30, no complications.",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "Clinical trial We prepared three allogeneic iPSC-CM patches (3.3 × 10 7 cells/patch) that were successfully transplanted into the epicardium of the LV anterior and lateral walls ( Figure 2A ) through the fourth intercostal space under IABP support; no other surgical procedures, including coronary artery bypass grafting, were performed. The IABP support was withdrawn the day after surgery, and the catecholamine infusion was discontinued 8 days post transplantation. During the first 3 months after transplantation, the patient received immunosuppressant drugs, including prednisolone, tacrolimus, and mycophenolate mofetil; thereafter, these drugs were discontinued ( Supplementary Figure 2 )."
+        ],
+        "quote": "Clinical trial We prepared three allogeneic iPSC-CM patches (3.3 × 10 7 cells/patch) that were successfully transplanted into the epicardium of the LV anterior and lateral walls ( Figure 2A ) through the fourth intercostal space under IABP support; no other surgical procedures, including coronary artery bypass grafting, were performed. The IABP support was withdrawn the day after surgery, and the catecholamine infusion was discontinued 8 days post transplantation. During the first 3 months after transplantation, the patient received immunosuppressant drugs, including prednisolone, tacrolimus, and mycophenolate mofetil; thereafter, these drugs were discontinued ( Supplementary Figure 2 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0011",
+        "locators": [
+          "G0011"
+        ],
+        "quotes": [
+          "The patient was extubated on postoperative day 1, remained in the intensive care unit for three days (including the day of surgery), and was discharged one month after the procedure with standard rehabilitation. ### Immunosuppression Protocol A triple immunosuppressive regimen (prednisolone, tacrolimus, and mycophenolate mofetil) was administered during the first three postoperative months and then discontinued entirely. ### Outcome Assessment Cardiac rhythm was monitored continuously via 24-hour ECG and additionally assessed with Holter monitoring at prespecified intervals."
+        ],
+        "quote": "The patient was extubated on postoperative day 1, remained in the intensive care unit for three days (including the day of surgery), and was discharged one month after the procedure with standard rehabilitation. ### Immunosuppression Protocol A triple immunosuppressive regimen (prednisolone, tacrolimus, and mycophenolate mofetil) was administered during the first three postoperative months and then discontinued entirely. ### Outcome Assessment Cardiac rhythm was monitored continuously via 24-hour ECG and additionally assessed with Holter monitoring at prespecified intervals."
+      },
+      "explanation": "Intervention and outcome are reported identically.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "causal_calibration",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "No causal claim; only suggestions of favorable prognosis and potential exercise tolerance are made.",
+      "generatedFact": "Single‑patient design precludes causal inference; findings are hypothesis‑generating.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Positron emission tomography and computed tomography confirmed the potential efficacy and did not detect tumorigenesis in either the heart or other organs. The clinical symptoms improved 6 months after surgery, without any major adverse events, suggesting that the patches were well-tolerated. Furthermore, changes in the wall motion in the transplanted site were recovered, suggesting a favorable prognosis and the potential tolerance to exercise."
+        ],
+        "quote": "Positron emission tomography and computed tomography confirmed the potential efficacy and did not detect tumorigenesis in either the heart or other organs. The clinical symptoms improved 6 months after surgery, without any major adverse events, suggesting that the patches were well-tolerated. Furthermore, changes in the wall motion in the transplanted site were recovered, suggesting a favorable prognosis and the potential tolerance to exercise."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "No lethal arrhythmias, tumor formation, or immunosuppression-related serious adverse events were detected over a one-year observation period. NYHA functional class improved from III to II at both 6 months and 1 year. Four-dimensional computed tomography demonstrated enhanced regional wall motion at the grafted sites, while ¹³N-ammonia PET imaging showed that whole-heart coronary flow reserve increased from 2.16 at 6 months to 5.30 at 1 year post-implantation. Fluorodeoxyglucose-PET revealed no evidence of tumorigenesis. These initial findings suggest the procedure was well tolerated and associated with functional recovery, although the single-patient design precludes causal inference."
+        ],
+        "quote": "No lethal arrhythmias, tumor formation, or immunosuppression-related serious adverse events were detected over a one-year observation period. NYHA functional class improved from III to II at both 6 months and 1 year. Four-dimensional computed tomography demonstrated enhanced regional wall motion at the grafted sites, while ¹³N-ammonia PET imaging showed that whole-heart coronary flow reserve increased from 2.16 at 6 months to 5.30 at 1 year post-implantation. Fluorodeoxyglucose-PET revealed no evidence of tumorigenesis. These initial findings suggest the procedure was well tolerated and associated with functional recovery, although the single-patient design precludes causal inference."
+      },
+      "explanation": "Both explicitly avoid causal overstatement.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 17,
+    "weightedFidelity": 0.9414,
+    "criticalFidelity": 0.9583,
+    "statusCounts": {
+      "compatible": 7,
+      "exact": 9,
+      "not_applicable": 4,
+      "partial": 1
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [
+      "limitations_and_bias"
+    ],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 95.0,
+      "data_population": 98.3,
+      "intervention_comparator_outcomes": 95.0,
+      "methods_algorithm_process": 90.0,
+      "results_uncertainty": 90.0,
+      "conclusions_calibration": 82.5,
+      "type_specific_methods": 98.6
+    },
+    "gateFailures": [
+      "unsupported_claim"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail"
+  },
+  "adversarialAudit": null,
+  "overallAssessment": "The generated report accurately reproduces all critical scientific facts from the reference case report. Patient characteristics, clinical timeline, intervention details, safety outcomes, and quantitative imaging results (MBF, CFR) agree exactly or compatibly. The only discrepancy is in the limitations section: the generated text enumerates several explicit limitations (N=1, absence of control, short follow-up, limited generalizability) that are not directly voiced in the reference, though they are consistent with the study design; the reference itself acknowledges only the inability to determine graft survival and the need for further research. This yields a partial classification for the limitations item due to unsupported additions. All other items show no contradictions or missing essential data.",
+  "gradedAt": "2026-07-18T15:34:42Z"
+}

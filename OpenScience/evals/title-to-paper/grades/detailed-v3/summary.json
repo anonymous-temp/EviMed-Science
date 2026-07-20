@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 4,
+  "model": "deepseek-v4-pro",
+  "expectedCases": 5,
+  "gradedCases": 5,
+  "passedCases": 2,
+  "passRate": 0.4,
+  "weightedFidelityMean": 0.9287599999999999,
+  "criticalFidelityMean": 0.9352599999999999,
+  "criticalContradictionCount": 0,
+  "criticalUnsupportedClaimCount": 0,
+  "criticalMissingFactCount": 3,
+  "invalidEvidenceItemCount": 0,
+  "statusCounts": {
+    "exact": 55,
+    "not_applicable": 25,
+    "partial": 5,
+    "compatible": 18,
+    "missing": 2
+  },
+  "dimensionScoreMeans": {
+    "conclusions_calibration": 95.5,
+    "data_population": 94.38,
+    "identity_design": 97.0,
+    "intervention_comparator_outcomes": 96.5,
+    "methods_algorithm_process": 97.0,
+    "results_uncertainty": 81.25,
+    "type_specific_methods": 84.0
+  },
+  "byCategory": {
+    "biomedical-ai": {
+      "cases": 1,
+      "passed": 0,
+      "passRate": 0.0,
+      "weightedFidelityMean": 1.0
+    },
+    "diagnostic-prognostic": {
+      "cases": 1,
+      "passed": 1,
+      "passRate": 1.0,
+      "weightedFidelityMean": 1.0
+    },
+    "methods-software": {
+      "cases": 1,
+      "passed": 0,
+      "passRate": 0.0,
+      "weightedFidelityMean": 0.7741
+    },
+    "randomized-trial": {
+      "cases": 1,
+      "passed": 0,
+      "passRate": 0.0,
+      "weightedFidelityMean": 0.9853
+    },
+    "systematic-review-meta-analysis": {
+      "cases": 1,
+      "passed": 1,
+      "passRate": 1.0,
+      "weightedFidelityMean": 0.8844
+    }
+  },
+  "cases": [
+    {
+      "caseId": "paper-001",
+      "category": "randomized-trial",
+      "title": "Empagliflozin in Patients with Chronic Kidney Disease.",
+      "selectedRunLabel": "baseline",
+      "applicableItems": 20,
+      "weightedFidelity": 0.9853,
+      "criticalFidelity": 1.0,
+      "statusCounts": {
+        "exact": 19,
+        "not_applicable": 1,
+        "partial": 1
+      },
+      "criticalContradictions": [],
+      "criticalUnsupportedClaims": [],
+      "criticalMissingFacts": [],
+      "contradictionItems": [],
+      "unsupportedClaimItems": [
+        "limitations_and_bias"
+      ],
+      "missingFactItems": [],
+      "invalidEvidenceItems": [],
+      "dimensionScores": {
+        "identity_design": 100.0,
+        "data_population": 100.0,
+        "intervention_comparator_outcomes": 100.0,
+        "methods_algorithm_process": 100.0,
+        "results_uncertainty": 100.0,
+        "conclusions_calibration": 87.5,
+        "type_specific_methods": 100.0
+      },
+      "gateFailures": [
+        "unsupported_claim"
+      ],
+      "usabilityGateFailures": [],
+      "usabilityVerdict": "pass",
+      "verdict": "fail"
+    },
+    {
+      "caseId": "paper-006",
+      "category": "systematic-review-meta-analysis",
+      "title": "Global burden of bacterial antimicrobial resistance in 2019: a systematic analysis.",
+      "selectedRunLabel": "baseline",
+      "applicableItems": 19,
+      "weightedFidelity": 0.8844,
+      "criticalFidelity": 0.8846,
+      "statusCounts": {
+        "compatible": 7,
+        "exact": 10,
+        "partial": 1,
+        "not_applicable": 2,
+        "missing": 1
+      },
+      "criticalContradictions": [],
+      "criticalUnsupportedClaims": [],
+      "criticalMissingFacts": [
+        "search_sources_and_dates"
+      ],
+      "contradictionItems": [],
+      "unsupportedClaimItems": [],
+      "missingFactItems": [
+        "eligibility_or_selection",
+        "search_sources_and_dates"
+      ],
+      "invalidEvidenceItems": [],
+      "dimensionScores": {
+        "identity_design": 95.0,
+        "data_population": 88.6,
+        "intervention_comparator_outcomes": 96.0,
+        "methods_algorithm_process": 95.0,
+        "results_uncertainty": 100.0,
+        "conclusions_calibration": 100.0,
+        "type_specific_methods": 54.0
+      },
+      "gateFailures": [],
+      "usabilityGateFailures": [],
+      "usabilityVerdict": "pass",
+      "verdict": "pass",
+      "adversarialIssueCount": 0,
+      "adversarialUnsupportedClaimCount": 0,
+      "adversarialContradictionCount": 0,
+      "adversarialCriticalMissingFactCount": 0,
+      "adversarialInvalidEvidenceCount": 0
+    },
+    {
+      "caseId": "paper-016",
+      "category": "diagnostic-prognostic",
+      "title": "Diagnostic accuracy of non-invasive tests for advanced fibrosis in patients with NAFLD: an individual patient data meta-analysis.",
+      "selectedRunLabel": "baseline",
+      "applicableItems": 20,
+      "weightedFidelity": 1.0,
+      "criticalFidelity": 1.0,
+      "statusCounts": {
+        "exact": 20,
+        "not_applicable": 1
+      },
+      "criticalContradictions": [],
+      "criticalUnsupportedClaims": [],
+      "criticalMissingFacts": [],
+      "contradictionItems": [],
+      "unsupportedClaimItems": [],
+      "missingFactItems": [],
+      "invalidEvidenceItems": [],
+      "dimensionScores": {
+        "identity_design": 100.0,
+        "data_population": 100.0,
+        "intervention_comparator_outcomes": 100.0,
+        "methods_algorithm_process": 100.0,
+        "results_uncertainty": 100.0,
+        "conclusions_calibration": 100.0,
+        "type_specific_methods": 100.0
+      },
+      "gateFailures": [],
+      "usabilityGateFailures": [],
+      "usabilityVerdict": "pass",
+      "verdict": "pass",
+      "adversarialIssueCount": 0,
+      "adversarialUnsupportedClaimCount": 0,
+      "adversarialContradictionCount": 0,
+      "adversarialCriticalMissingFactCount": 0,
+      "adversarialInvalidEvidenceCount": 0
+    },
+    {
+      "caseId": "paper-041",
+      "category": "biomedical-ai",
+      "title": "Text Data Augmentation for Deep Learning.",
+      "selectedRunLabel": "fidelity-gate-v1",
+      "applicableItems": 6,
+      "weightedFidelity": 1.0,
+      "criticalFidelity": 1.0,
+      "statusCounts": {
+        "exact": 6,
+        "not_applicable": 15
+      },
+      "criticalContradictions": [],
+      "criticalUnsupportedClaims": [],
+      "criticalMissingFacts": [],
+      "contradictionItems": [],
+      "unsupportedClaimItems": [],
+      "missingFactItems": [],
+      "invalidEvidenceItems": [],
+      "dimensionScores": {
+        "identity_design": 100.0,
+        "data_population": 100.0,
+        "intervention_comparator_outcomes": null,
+        "methods_algorithm_process": 100.0,
+        "results_uncertainty": null,
+        "conclusions_calibration": 100.0,
+        "type_specific_methods": null
+      },
+      "gateFailures": [
+        "adversarial_unsupported_claim",
+        "adversarial_unverifiable_evidence"
+      ],
+      "usabilityGateFailures": [],
+      "usabilityVerdict": "pass",
+      "verdict": "fail",
+      "adversarialIssueCount": 1,
+      "adversarialUnsupportedClaimCount": 1,
+      "adversarialContradictionCount": 0,
+      "adversarialCriticalMissingFactCount": 0,
+      "adversarialInvalidEvidenceCount": 1
+    },
+    {
+      "caseId": "paper-046",
+      "category": "methods-software",
+      "title": "clusterProfiler 4.0: A universal enrichment tool for interpreting omics data.",
+      "selectedRunLabel": "baseline",
+      "applicableItems": 15,
+      "weightedFidelity": 0.7741,
+      "criticalFidelity": 0.7917,
+      "statusCounts": {
+        "compatible": 11,
+        "partial": 3,
+        "not_applicable": 6,
+        "missing": 1
+      },
+      "criticalContradictions": [],
+      "criticalUnsupportedClaims": [],
+      "criticalMissingFacts": [
+        "key_numerical_results",
+        "uncertainty_and_significance"
+      ],
+      "contradictionItems": [],
+      "unsupportedClaimItems": [],
+      "missingFactItems": [
+        "eligibility_or_selection",
+        "key_numerical_results",
+        "uncertainty_and_significance",
+        "reproducibility_and_availability"
+      ],
+      "invalidEvidenceItems": [],
+      "dimensionScores": {
+        "identity_design": 90.0,
+        "data_population": 83.3,
+        "intervention_comparator_outcomes": 90.0,
+        "methods_algorithm_process": 90.0,
+        "results_uncertainty": 25.0,
+        "conclusions_calibration": 90.0,
+        "type_specific_methods": 82.0
+      },
+      "gateFailures": [
+        "critical_fidelity_below_0.80"
+      ],
+      "usabilityGateFailures": [
+        "critical_fidelity_below_0.80"
+      ],
+      "usabilityVerdict": "fail",
+      "verdict": "fail"
+    }
+  ],
+  "generatedAt": "2026-07-18T15:02:28Z"
+}

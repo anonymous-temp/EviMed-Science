@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cheminformatics"
+  short_description: "Analyze chemical structures without clinical overclaiming"
+  default_prompt: "Use $cheminformatics to normalize and analyze these chemical structures."

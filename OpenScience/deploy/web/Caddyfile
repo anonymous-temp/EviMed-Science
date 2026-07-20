@@ -1,0 +1,15 @@
+{$OPEN_SCIENCE_DOMAIN} {
+  request_body {
+    max_size {$OPEN_SCIENCE_PROXY_MAX_BODY_SIZE:73408512}
+  }
+
+  encode gzip zstd
+  @internal path /internal/*
+  respond @internal 404
+
+  reverse_proxy open-science-web:8787 {
+    # Replace any browser-supplied chain before the API uses this address for
+    # login and request rate limits.
+    header_up X-Forwarded-For {remote_host}
+  }
+}

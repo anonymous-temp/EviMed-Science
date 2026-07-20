@@ -1,0 +1,35 @@
+id: mendelian-randomization
+version: 1.0.1
+title: 孟德尔随机化
+category: 因果推断
+description: 使用 GWAS 工具变量开展可追溯的孟德尔随机化、敏感性分析和 STROBE-MR 报告，并生成完整研究包。
+skill: mendelian-randomization
+estimatedMinutes: [30, 180]
+starterPrompts:
+  - 使用孟德尔随机化评估体重指数对冠心病的因果效应。
+requiredInputs:
+  - exposure
+  - outcome
+optionalInputs:
+  - outputLanguage
+  - analysisDirection
+  - uploadedFiles
+requiredTools:
+  - evimed_mendelian_randomization
+optionalTools:
+  - evimed_data_source_catalog
+  - evimed_biomedical_source_search
+  - evimed_literature_search
+dataSources:
+  - opengwas
+  - local-gwas
+  - literature
+  - uploaded-files
+outputs:
+  - path: mendelian-randomization-report.md
+    required: true
+  - path: mendelian-randomization-run.json
+    required: true
+completionChecks:
+  - requiredOutputsExist
+  - citationsResolvable

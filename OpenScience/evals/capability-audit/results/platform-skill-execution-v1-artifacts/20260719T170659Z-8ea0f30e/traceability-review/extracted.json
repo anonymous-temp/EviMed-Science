@@ -1,0 +1,12 @@
+{
+  "backend": "pypdf",
+  "pages": 1,
+  "chars": 40,
+  "citations": {
+    "dois": [],
+    "arxiv": [],
+    "pmids": []
+  },
+  "claims": [],
+  "text": "EviMed evidence report\nTraceable result\n"
+}

@@ -1,0 +1,63 @@
+{
+  "status": "success",
+  "summary": "Retrieved 2 registered clinical trials.",
+  "data": {
+    "items": [
+      {
+        "id": "NCT01789957",
+        "title": "Extension Study for 2993-112",
+        "status": "COMPLETED",
+        "conditions": [
+          "Type 2 Diabetes Mellitus"
+        ],
+        "interventions": [
+          "AC2993"
+        ],
+        "url": "https://clinicaltrials.gov/study/NCT01789957"
+      },
+      {
+        "id": "NCT03958591",
+        "title": "Impact of Short-term Intensive De-escalation Therapy on Long-term Regimen Simplification",
+        "status": "COMPLETED",
+        "conditions": [
+          "Diabetes type2"
+        ],
+        "interventions": [
+          "CSII and thereafter combination therapy, followed up with wearable devices",
+          "CSII and thereafter combination therapy",
+          "Basal insulin treatment without wearables"
+        ],
+        "url": "https://clinicaltrials.gov/study/NCT03958591"
+      }
+    ],
+    "provenance": {
+      "tool": "evimed_clinical_trial_search",
+      "arguments": {
+        "query": "type 2 diabetes metformin",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "NCT01789957",
+      "url": "https://clinicaltrials.gov/study/NCT01789957",
+      "source": "clinicaltrials.gov",
+      "retrievedAt": "2026-07-19T20:08:53.834486Z",
+      "title": "Extension Study for 2993-112"
+    },
+    {
+      "id": "NCT03958591",
+      "url": "https://clinicaltrials.gov/study/NCT03958591",
+      "source": "clinicaltrials.gov",
+      "retrievedAt": "2026-07-19T20:08:53.834497Z",
+      "title": "Impact of Short-term Intensive De-escalation Therapy on Long-term Regimen Simplification"
+    }
+  ]
+}

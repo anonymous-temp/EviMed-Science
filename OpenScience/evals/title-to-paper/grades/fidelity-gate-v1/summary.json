@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "label": "fidelity-gate-v1",
+  "expectedCases": 50,
+  "gradedCases": 9,
+  "modelGradedCases": 9,
+  "terminalSuccessRate": 1.0,
+  "resolvedPrimarySourceRate": 1.0,
+  "requiredSectionCoverageRate": 1.0,
+  "supportedNumericClaimPrecisionMean": 0.9199465877695546,
+  "verbatimEightGramRateMean": 0.01808095926741192,
+  "modelPassRate": 1.0,
+  "overallPassRate": 1.0,
+  "studyDesignScoreMean": 5.0,
+  "populationSampleScoreMean": 5.0,
+  "methodsScoreMean": 5.0,
+  "resultsConclusionScoreMean": 4.888888888888889,
+  "majorUnsupportedClaimCount": 0,
+  "byCategory": {
+    "biomedical-ai": {
+      "cases": 2,
+      "terminalSuccess": 2,
+      "modelPass": 2,
+      "overallPass": 2
+    },
+    "case-report": {
+      "cases": 2,
+      "terminalSuccess": 2,
+      "modelPass": 2,
+      "overallPass": 2
+    },
+    "diagnostic-prognostic": {
+      "cases": 1,
+      "terminalSuccess": 1,
+      "modelPass": 1,
+      "overallPass": 1
+    },
+    "methods-software": {
+      "cases": 1,
+      "terminalSuccess": 1,
+      "modelPass": 1,
+      "overallPass": 1
+    },
+    "pharmacovigilance-drug-safety": {
+      "cases": 2,
+      "terminalSuccess": 2,
+      "modelPass": 2,
+      "overallPass": 2
+    },
+    "systematic-review-meta-analysis": {
+      "cases": 1,
+      "terminalSuccess": 1,
+      "modelPass": 1,
+      "overallPass": 1
+    }
+  },
+  "generatedAt": "2026-07-18T04:19:33Z"
+}

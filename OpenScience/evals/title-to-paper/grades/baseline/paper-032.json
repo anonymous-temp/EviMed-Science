@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-032",
+  "category": "pharmacovigilance-drug-safety",
+  "title": "Real-World Evidence: A Primer.",
+  "pmcid": "PMC9815890",
+  "doi": "10.1007/s40290-022-00456-6",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 5298,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 27,
+    "supportedUniqueNumbers": 27,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.0,
+    "toolCalls": 10,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "生成的文本完全忠实于原复习，所有声称均可在全文证据中验证，无编造或误导信息。"
+  },
+  "overallVerdict": "pass"
+}

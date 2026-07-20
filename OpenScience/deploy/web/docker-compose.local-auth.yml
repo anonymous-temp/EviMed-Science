@@ -1,0 +1,15 @@
+services:
+  open-science-web:
+    environment:
+      OPEN_SCIENCE_AUTH_MODE: local
+      OPEN_SCIENCE_DEV_AUTH: "false"
+      OPEN_SCIENCE_BOOTSTRAP_PASSWORD: ""
+      OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE: /run/secrets/bootstrap-password
+    secrets:
+      - source: open-science-bootstrap-password
+        target: bootstrap-password
+        mode: 0400
+
+secrets:
+  open-science-bootstrap-password:
+    file: ${OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE:-./secrets/bootstrap-password.txt}

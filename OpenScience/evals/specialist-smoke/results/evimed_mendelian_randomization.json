@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "tool": "evimed_mendelian_randomization",
+  "project": "default",
+  "jobId": "mr-20260718161807-94e3e80ee14b",
+  "jobStatus": "succeeded",
+  "summary": "Mendelian randomization job mr-20260718161807-94e3e80ee14b completed.",
+  "releaseStatus": null,
+  "releaseDecision": null,
+  "error": null,
+  "artifacts": [
+    {
+      "kind": "md",
+      "path": "mendelian-randomization-runs/mr-20260718161807-94e3e80ee14b/output/mendelian-randomization-report.md"
+    },
+    {
+      "kind": "json",
+      "path": "mendelian-randomization-runs/mr-20260718161807-94e3e80ee14b/output/mendelian-randomization-run.json"
+    },
+    {
+      "kind": "json",
+      "path": "mendelian-randomization-runs/mr-20260718161807-94e3e80ee14b/output/request.json"
+    },
+    {
+      "kind": "json",
+      "path": "mendelian-randomization-runs/mr-20260718161807-94e3e80ee14b/output/result.json"
+    }
+  ],
+  "elapsedSeconds": 1052.627,
+  "completedAt": "2026-07-18T08:35:40.516061Z"
+}

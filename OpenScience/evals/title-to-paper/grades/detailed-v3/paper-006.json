@@ -1,0 +1,703 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-006",
+  "category": "systematic-review-meta-analysis",
+  "title": "Global burden of bacterial antimicrobial resistance in 2019: a systematic analysis.",
+  "pmcid": "PMC8841637",
+  "doi": "10.1016/s0140-6736(21)02724-0",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "8ac0f8767f83faae87f3d407f278cfc68f3bec9faace8a5c4b28359230f70b22",
+  "generatedSha256": "c665c7ee0e30dee5e96ade6002393f1bb346dde3099aeb0abb5445c3956430e6",
+  "promptSha256": "3ad3afc1b0f1c175b20d76e2ca7a661fdc06f5945c755553a7224691e9920519",
+  "cacheFingerprint": "8b4ecebf9cca0e24d5983551d8c49df2e99d7f6d85bdde3178fe68117272df07",
+  "referenceCharacters": 118773,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 7883,
+  "paperType": "systematic-review-meta-analysis",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Comprehensive estimates of bacterial AMR burden (deaths and DALYs) attributable to and associated with 23 pathogens and 88 pathogen–drug combinations in 204 countries/territories in 2019.",
+      "generatedFact": "系统分析 2019 年全球细菌耐药负担，覆盖 23 种病原体、88 个病原体-药物组合，估算归因和相关死亡与 DALY。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "To our knowledge, this study presents the most comprehensive estimates of AMR burden to date.MethodsWe estimated deaths and disability-adjusted life-years (DALYs) attributable to and associated with bacterial AMR for 23 pathogens and 88 pathogen–drug combinations in 204 countries and territories in 2019. We obtained data from systematic literature reviews, hospital systems, surveillance systems, and other sources, covering 471 million individual records or isolates and 7585 study-location-years. We used predictive statistical modelling to produce estimates of AMR burden for all locations, including for locations with no data."
+        ],
+        "quote": "To our knowledge, this study presents the most comprehensive estimates of AMR burden to date.MethodsWe estimated deaths and disability-adjusted life-years (DALYs) attributable to and associated with bacterial AMR for 23 pathogens and 88 pathogen–drug combinations in 204 countries and territories in 2019. We obtained data from systematic literature reviews, hospital systems, surveillance systems, and other sources, covering 471 million individual records or isolates and 7585 study-location-years. We used predictive statistical modelling to produce estimates of AMR burden for all locations, including for locations with no data."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 总体框架 本研究以 GBD 2019 为基础，整合来自文献系统评价、医院信息系统、微生物监测网络、全球抗菌药物耐药研究（GRAM）项目合作者及 GBD 合作者网络的多源数据。分析框架分为五个建模模块、十个估算步骤，覆盖 12 个主要感染综合征（下呼吸道感染及胸腔相关感染、血流感染、腹膜及腹腔内感染、脑膜炎及其他细菌性中枢神经系统感染、伤寒/副伤寒及侵袭性非伤寒沙门菌、尿路感染及肾盂肾炎、腹泻、结核病、皮肤及皮下组织细菌感染、心内膜炎及其他心脏感染、骨关节及相关器官感染、淋病及衣原体感染）及一个残余类别。最终估计覆盖 23 种细菌病原体、18 个药物类别或类别组合，以及 88 个病原体—药物组合。 ### 输入数据 数据总量为 4.71 亿条个体记录或分离株，覆盖 7585 个研究—地区—年份数据点。数据类型包括：制药公司监测网络数据、诊断实验室和临床试验数据、多中心研究合作与小型研究数据、公立及私立医院诊断检测数据、全球和国家监测系统数据、特定生物体（如结核分枝杆菌、淋病奈瑟菌）监测数据等。五个建模模块中，有两个模块的数据覆盖所有 GBD 区域，两个覆盖 21 个区域中的 19 个。败血症和感染综合征模型的数据最为稀疏，仅覆盖 10 个区域的 16 个国家。"
+        ],
+        "quote": "--- ## 方法 ### 总体框架 本研究以 GBD 2019 为基础，整合来自文献系统评价、医院信息系统、微生物监测网络、全球抗菌药物耐药研究（GRAM）项目合作者及 GBD 合作者网络的多源数据。分析框架分为五个建模模块、十个估算步骤，覆盖 12 个主要感染综合征（下呼吸道感染及胸腔相关感染、血流感染、腹膜及腹腔内感染、脑膜炎及其他细菌性中枢神经系统感染、伤寒/副伤寒及侵袭性非伤寒沙门菌、尿路感染及肾盂肾炎、腹泻、结核病、皮肤及皮下组织细菌感染、心内膜炎及其他心脏感染、骨关节及相关器官感染、淋病及衣原体感染）及一个残余类别。最终估计覆盖 23 种细菌病原体、18 个药物类别或类别组合，以及 88 个病原体—药物组合。 ### 输入数据 数据总量为 4.71 亿条个体记录或分离株，覆盖 7585 个研究—地区—年份数据点。数据类型包括：制药公司监测网络数据、诊断实验室和临床试验数据、多中心研究合作与小型研究数据、公立及私立医院诊断检测数据、全球和国家监测系统数据、特定生物体（如结核分枝杆菌、淋病奈瑟菌）监测数据等。五个建模模块中，有两个模块的数据覆盖所有 GBD 区域，两个覆盖 21 个区域中的 19 个。败血症和感染综合征模型的数据最为稀疏，仅覆盖 10 个区域的 16 个国家。"
+      },
+      "explanation": "Research question and scope match exactly with the reference's stated objective.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Systematic analysis using predictive statistical modelling built on GBD 2019 with five broad components and two counterfactual scenarios.",
+      "generatedFact": "基于 GBD 2019 的全球建模研究，采用预测统计模型，包含五个建模模块、十个估算步骤和两种反事实情景。",
+      "sourceEvidence": {
+        "locator": "R0020",
+        "locators": [
+          "R0020"
+        ],
+        "quotes": [
+          "In this study, we present the first global estimates of the burden of bacterial AMR covering an extensive set of pathogens and pathogen–drug combinations using consistent methods for both counterfactual scenarios. Methods Overview We developed an approach for estimating the burden of AMR that makes use of all available data and builds on death and incidence estimates for different underlying conditions from the Global Burden of Diseases, Injuries, and Risk Factors Study (GBD) 2019, which provides age-specific and sex-specific estimates of disease burden for 369 diseases and injuries in 204 countries and territories in 1990–2019."
+        ],
+        "quote": "In this study, we present the first global estimates of the burden of bacterial AMR covering an extensive set of pathogens and pathogen–drug combinations using consistent methods for both counterfactual scenarios. Methods Overview We developed an approach for estimating the burden of AMR that makes use of all available data and builds on death and incidence estimates for different underlying conditions from the Global Burden of Diseases, Injuries, and Risk Factors Study (GBD) 2019, which provides age-specific and sex-specific estimates of disease burden for 369 diseases and injuries in 204 countries and territories in 1990–2019."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# 2019 年全球细菌耐药负担的系统分析 —— 结构化科研正文 **来源论文：** > Antimicrobial Resistance Collaborators. Global burden of bacterial antimicrobial resistance in 2019: a systematic analysis. *Lancet*. 2022;399(10325):629–655. > DOI: [10.1016/S0140-6736(21)02724-0](https://doi.org/10.1016/S0140-6736\\(21\\)02724-0) > PMCID: [PMC8841637](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8841637/) > PMID: [35065702](https://pubmed.ncbi.nlm.nih.gov/35065702/) **说明：** 本文为上述已发表论文的结构化重写，保留原文方法、数值、局限性和结论，但不逐字复制。所有数据均来自可核验原文。 --- ## 摘要 **背景** 细菌耐药是全球公共卫生的重大威胁，但此前缺乏覆盖全球范围、涵盖多种病原体—药物组合的综合性负担评估。"
+        ],
+        "quote": "# 2019 年全球细菌耐药负担的系统分析 —— 结构化科研正文 **来源论文：** > Antimicrobial Resistance Collaborators. Global burden of bacterial antimicrobial resistance in 2019: a systematic analysis. *Lancet*. 2022;399(10325):629–655. > DOI: [10.1016/S0140-6736(21)02724-0](https://doi.org/10.1016/S0140-6736\\(21\\)02724-0) > PMCID: [PMC8841637](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8841637/) > PMID: [35065702](https://pubmed.ncbi.nlm.nih.gov/35065702/) **说明：** 本文为上述已发表论文的结构化重写，保留原文方法、数值、局限性和结论，但不逐字复制。所有数据均来自可核验原文。 --- ## 摘要 **背景** 细菌耐药是全球公共卫生的重大威胁，但此前缺乏覆盖全球范围、涵盖多种病原体—药物组合的综合性负担评估。"
+      },
+      "explanation": "Both describe the same overall study design of a systematic analysis with GBD-based modelling and counterfactuals.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Input data from systematic reviews, hospital systems, surveillance networks, and collaborators, covering 471 million individual records/isolates and 7585 study-location-years globally.",
+      "generatedFact": "整合文献系统评价、医院信息系统、监测网络及合作者数据，覆盖 4.71 亿条个体记录/分离株及 7585 个研究-地区-年份数据点。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "To our knowledge, this study presents the most comprehensive estimates of AMR burden to date.MethodsWe estimated deaths and disability-adjusted life-years (DALYs) attributable to and associated with bacterial AMR for 23 pathogens and 88 pathogen–drug combinations in 204 countries and territories in 2019. We obtained data from systematic literature reviews, hospital systems, surveillance systems, and other sources, covering 471 million individual records or isolates and 7585 study-location-years. We used predictive statistical modelling to produce estimates of AMR burden for all locations, including for locations with no data."
+        ],
+        "quote": "To our knowledge, this study presents the most comprehensive estimates of AMR burden to date.MethodsWe estimated deaths and disability-adjusted life-years (DALYs) attributable to and associated with bacterial AMR for 23 pathogens and 88 pathogen–drug combinations in 204 countries and territories in 2019. We obtained data from systematic literature reviews, hospital systems, surveillance systems, and other sources, covering 471 million individual records or isolates and 7585 study-location-years. We used predictive statistical modelling to produce estimates of AMR burden for all locations, including for locations with no data."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+        ],
+        "quote": "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+      },
+      "explanation": "Population/data sources and total size match the reference exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "471 million individual records or isolates and 7585 study-location-years.",
+      "generatedFact": "4.71 亿条个体记录或分离株及 7585 个研究-地区-年份数据点。",
+      "sourceEvidence": {
+        "locator": "R0027",
+        "locators": [
+          "R0027"
+        ],
+        "quotes": [
+          "listed by data type in the appendix pp 8–15 ). Figure 1 shows a summary of the distinct data types gathered and for which estimation step each data type was used. Also shown in figure 1 is the number of unique study-location-years and individual records or isolates available for each data type. Location-years of data refer to unique GBD locations and years for which we have records or isolates. In total, 471 million individual records or isolates covering 7585 study-location-years were used as input data to the estimation process."
+        ],
+        "quote": "listed by data type in the appendix pp 8–15 ). Figure 1 shows a summary of the distinct data types gathered and for which estimation step each data type was used. Also shown in figure 1 is the number of unique study-location-years and individual records or isolates available for each data type. Location-years of data refer to unique GBD locations and years for which we have records or isolates. In total, 471 million individual records or isolates covering 7585 study-location-years were used as input data to the estimation process."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+        ],
+        "quote": "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+      },
+      "explanation": "Exact numerical match of total records and location-years.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "missing",
+      "issueKinds": [
+        "missing"
+      ],
+      "referenceFact": "88 pathogen-drug combinations chosen from an exhaustive list by eliminating combinations not meeting minimum data availability and computational feasibility; other explicit inclusion/exclusion criteria for data sources and components.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "R0052",
+        "locators": [
+          "R0052"
+        ],
+        "quotes": [
+          "Estimation steps five to seven: prevalence of resistance by pathogen We used data from 52·8 million isolates to analyse the proportion of phenotypic AMR for each pathogen—the proportion of infections that were drug resistant, hereafter referred to as prevalence of resistance—for 88 pathogen–drug combinations. We chose these 88 combinations by first creating an exhaustive list of all clinically relevant combinations for which we had any data and then eliminating combinations that did not meet minimum data availability and computational feasibility requirements for accurate statistical modelling ( appendix pp 59–60 )."
+        ],
+        "quote": "Estimation steps five to seven: prevalence of resistance by pathogen We used data from 52·8 million isolates to analyse the proportion of phenotypic AMR for each pathogen—the proportion of infections that were drug resistant, hereafter referred to as prevalence of resistance—for 88 pathogen–drug combinations. We chose these 88 combinations by first creating an exhaustive list of all clinically relevant combinations for which we had any data and then eliminating combinations that did not meet minimum data availability and computational feasibility requirements for accurate statistical modelling ( appendix pp 59–60 )."
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "GENERATED omits the explicit eligibility rule for selecting the 88 pathogen–drug combinations.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Exposure: bacterial antimicrobial resistance in 88 pathogen–drug combinations.",
+      "generatedFact": "88 个病原体-药物组合的耐药状态。",
+      "sourceEvidence": {
+        "locator": "R0052",
+        "locators": [
+          "R0052"
+        ],
+        "quotes": [
+          "Estimation steps five to seven: prevalence of resistance by pathogen We used data from 52·8 million isolates to analyse the proportion of phenotypic AMR for each pathogen—the proportion of infections that were drug resistant, hereafter referred to as prevalence of resistance—for 88 pathogen–drug combinations. We chose these 88 combinations by first creating an exhaustive list of all clinically relevant combinations for which we had any data and then eliminating combinations that did not meet minimum data availability and computational feasibility requirements for accurate statistical modelling ( appendix pp 59–60 )."
+        ],
+        "quote": "Estimation steps five to seven: prevalence of resistance by pathogen We used data from 52·8 million isolates to analyse the proportion of phenotypic AMR for each pathogen—the proportion of infections that were drug resistant, hereafter referred to as prevalence of resistance—for 88 pathogen–drug combinations. We chose these 88 combinations by first creating an exhaustive list of all clinically relevant combinations for which we had any data and then eliminating combinations that did not meet minimum data availability and computational feasibility requirements for accurate statistical modelling ( appendix pp 59–60 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+        ],
+        "quote": "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+      },
+      "explanation": "Exposure definition matches.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Two counterfactuals: drug-susceptible infection (attributable burden) and no infection (associated burden).",
+      "generatedFact": "两种反事实情景：耐药感染被药物敏感感染替代（归因负担）和被完全消除（相关负担）。",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "Using these components, we estimated disease burden based on two counterfactuals: deaths attributable to AMR (based on an alternative scenario in which all drug-resistant infections were replaced by drug-susceptible infections), and deaths associated with AMR (based on an alternative scenario in which all drug-resistant infections were replaced by no infection). We generated 95% uncertainty intervals (UIs) for final estimates as the 25th and 975th ordered values across 1000 posterior draws, and models were cross-validated for out-of-sample predictive validity."
+        ],
+        "quote": "Using these components, we estimated disease burden based on two counterfactuals: deaths attributable to AMR (based on an alternative scenario in which all drug-resistant infections were replaced by drug-susceptible infections), and deaths associated with AMR (based on an alternative scenario in which all drug-resistant infections were replaced by no infection). We generated 95% uncertainty intervals (UIs) for final estimates as the 25th and 975th ordered values across 1000 posterior draws, and models were cross-validated for out-of-sample predictive validity."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+        ],
+        "quote": "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+      },
+      "explanation": "Counterfactual comparators are described identically.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary outcomes: deaths, DALYs, YLLs, YLDs attributable to and associated with AMR, in counts and all-age rates.",
+      "generatedFact": "死亡和 DALY 的归因与相关计数及全年龄率。",
+      "sourceEvidence": {
+        "locator": "R0005",
+        "locators": [
+          "R0005"
+        ],
+        "quotes": [
+          "We present final estimates aggregated to the global and regional level.FindingsOn the basis of our predictive statistical models, there were an estimated 4·95 million (3·62–6·57) deaths associated with bacterial AMR in 2019, including 1·27 million (95% UI 0·911–1·71) deaths attributable to bacterial AMR. At the regional level, we estimated the all-age death rate attributable to resistance to be highest in western sub-Saharan Africa, at 27·3 deaths per 100 000 (20·9–35·3), and lowest in Australasia, at 6·5 deaths (4·3–9·4) per 100 000. Lower respiratory infections accounted for more than 1·5 million deaths associated with resistance in 2019, making it the most burdensome infectious syndrome."
+        ],
+        "quote": "We present final estimates aggregated to the global and regional level.FindingsOn the basis of our predictive statistical models, there were an estimated 4·95 million (3·62–6·57) deaths associated with bacterial AMR in 2019, including 1·27 million (95% UI 0·911–1·71) deaths attributable to bacterial AMR. At the regional level, we estimated the all-age death rate attributable to resistance to be highest in western sub-Saharan Africa, at 27·3 deaths per 100 000 (20·9–35·3), and lowest in Australasia, at 6·5 deaths (4·3–9·4) per 100 000. Lower respiratory infections accounted for more than 1·5 million deaths associated with resistance in 2019, making it the most burdensome infectious syndrome."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+        ],
+        "quote": "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+      },
+      "explanation": "Same primary outcomes and measures.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Data and estimates for the year 2019; prevalence of resistance assumed unchanged from 2018.",
+      "generatedFact": "2019 年数据；假定 2018-2019 年耐药率不变。",
+      "sourceEvidence": {
+        "locator": "R0055",
+        "locators": [
+          "R0055"
+        ],
+        "quotes": [
+          "Given the many challenges to data collection and reporting caused by the COVID-19 pandemic, 32 , 33 as well as our collaborators' process of data collation and cleaning, we were unable to collect more contemporary data; we assumed no change in prevalence of resistance for 2019. First, we fitted a stacked ensemble model between the input data and selected covariates from the list of plausible and health-related covariates available in GBD 2019 ( appendix pp 48–49, 92–93 ); the estimates from the stacked ensemble model were then inputted into a spatiotemporal Gaussian process regression model 31 to smooth the estimates in space and time."
+        ],
+        "quote": "Given the many challenges to data collection and reporting caused by the COVID-19 pandemic, 32 , 33 as well as our collaborators' process of data collation and cleaning, we were unable to collect more contemporary data; we assumed no change in prevalence of resistance for 2019. First, we fitted a stacked ensemble model between the input data and selected covariates from the list of plausible and health-related covariates available in GBD 2019 ( appendix pp 48–49, 92–93 ); the estimates from the stacked ensemble model were then inputted into a spatiotemporal Gaussian process regression model 31 to smooth the estimates in space and time."
+      },
+      "generatedEvidence": {
+        "locator": "G0013",
+        "locators": [
+          "G0013"
+        ],
+        "quotes": [
+          "**相对风险假设。** 由于缺乏将实验室结果与结局联系起来的数据，本研究假定各病原体—药物组合的相对死亡风险在不同地区、年龄组和感染综合征中恒定。这可能低估中低收入国家的 AMR 负担（因为这些地区二线和三线抗生素可及性更差），也可能在特定综合征中造成高估。多重耐药感染的相对风险被假定为等于各单药耐药风险中的最大值，这很可能低估了多重耐药的真实额外风险——因为随着耐药谱扩大，有效抗生素选项愈发减少。 3. **分类偏倚。** 社区获得性与医院获得性感染的区分基于多死因和出院数据编码，存在错分风险。实验室耐药与敏感的分类尚无国际统一标准，不同实验室使用不同折点，而许多数据集缺乏足够信息进行回顾性重新分类。 4. **选择偏倚。** 被动微生物监测数据可能存在偏倚：在特定环境下培养仅在初始治疗无效时采集，可能高估耐药率；中低收入国家的医院微生物数据可能偏向城市人群或重症患者，未必代表一般人群。 5. **覆盖范围局限。** 分析限于 88 个病原体—药物组合，未纳入病毒、寄生虫和真菌的耐药性，这可能低估 AMR 的总体负担。 6. **时间假设。** 因 COVID-19 大流行导致数据采集和整理延迟，本研究假定 2018 年至 2019 年耐药率未发生变化。 --- ## 参考资料 1. Antimicrobial Resistance Collaborators. Global burden of bacterial antimicrobial resistance in 2019: a systematic analysis. *Lancet*."
+        ],
+        "quote": "**相对风险假设。** 由于缺乏将实验室结果与结局联系起来的数据，本研究假定各病原体—药物组合的相对死亡风险在不同地区、年龄组和感染综合征中恒定。这可能低估中低收入国家的 AMR 负担（因为这些地区二线和三线抗生素可及性更差），也可能在特定综合征中造成高估。多重耐药感染的相对风险被假定为等于各单药耐药风险中的最大值，这很可能低估了多重耐药的真实额外风险——因为随着耐药谱扩大，有效抗生素选项愈发减少。 3. **分类偏倚。** 社区获得性与医院获得性感染的区分基于多死因和出院数据编码，存在错分风险。实验室耐药与敏感的分类尚无国际统一标准，不同实验室使用不同折点，而许多数据集缺乏足够信息进行回顾性重新分类。 4. **选择偏倚。** 被动微生物监测数据可能存在偏倚：在特定环境下培养仅在初始治疗无效时采集，可能高估耐药率；中低收入国家的医院微生物数据可能偏向城市人群或重症患者，未必代表一般人群。 5. **覆盖范围局限。** 分析限于 88 个病原体—药物组合，未纳入病毒、寄生虫和真菌的耐药性，这可能低估 AMR 的总体负担。 6. **时间假设。** 因 COVID-19 大流行导致数据采集和整理延迟，本研究假定 2018 年至 2019 年耐药率未发生变化。 --- ## 参考资料 1. Antimicrobial Resistance Collaborators. Global burden of bacterial antimicrobial resistance in 2019: a systematic analysis. *Lancet*."
+      },
+      "explanation": "Time horizon and assumption match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Preprocessing includes susceptibility classification (CLSI breakpoints), crosswalking for tertiary-care bias, age/sex/diagnosis adjustment, and mapping of data to syndromes.",
+      "generatedFact": "耐药分类采用 CLSI 折点，三级医疗机构偏倚通过 MR-BRT 交叉校准，调整年龄、入院诊断等因素。",
+      "sourceEvidence": {
+        "locator": "R0054",
+        "locators": [
+          "R0054"
+        ],
+        "quotes": [
+          "When only a phenotypic disk interpretation was available, we used the interpretation as provided. We used two categories of susceptibility: susceptible and non-susceptible. The non-susceptible group includes isolates reported as “non-susceptible”, “intermediate”, and “resistant”. To account for bias in resistance data provided by tertiary care facilities, we adjusted tertiary rates of resistance by crosswalking them to data from non-tertiary and mixed facilities using MR-BRT as described in the appendix (pp 45–48 ). 31 We used a two-stage spatiotemporal modelling framework to estimate the prevalence of resistance in each pathogen–drug combination by location for 2018."
+        ],
+        "quote": "When only a phenotypic disk interpretation was available, we used the interpretation as provided. We used two categories of susceptibility: susceptible and non-susceptible. The non-susceptible group includes isolates reported as “non-susceptible”, “intermediate”, and “resistant”. To account for bias in resistance data provided by tertiary care facilities, we adjusted tertiary rates of resistance by crosswalking them to data from non-tertiary and mixed facilities using MR-BRT as described in the appendix (pp 45–48 ). 31 We used a two-stage spatiotemporal modelling framework to estimate the prevalence of resistance in each pathogen–drug combination by location for 2018."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "**步骤五至七：耐药率估算与多重耐药建模。** 使用 5280 万分离株数据，对 88 个病原体—药物组合估计耐药率。耐药分类采用 CLSI 指南定义的最低抑菌浓度折点，并将分离株分为“敏感”和“非敏感”（包括中间和耐药）两类。针对三级医疗机构的偏倚，使用 MR-BRT 与混合机构数据进行交叉校准。采用两阶段时空建模框架：先拟合堆叠集成模型，再使用时空高斯过程回归进行平滑；抗生素消费量（整合 65 项人口与健康调查、138 项多指标整群调查以及 IQVIA/WHO/ECDC 药品销售数据）作为协变量。多重耐药部分通过微生物线级数据计算 Pearson 相关系数，使用优化方法求解多元二项分布以得到各耐药组合的耐药率。 **步骤八至九：相对死亡风险估计。** 使用 164 个来源、511870 名已知结局和耐药信息的患者数据，通过 MR-BRT 估计各病原体—药物组合耐药感染相对于敏感感染的死亡风险比。采用两阶段嵌套混合效应元回归，调整年龄、入院诊断、医院获得与社区获得状态及感染部位。由于数据稀疏，假定相对风险在同一病原体—药物组合的各综合征、地区和年龄组间一致。针对非致死性超额负担，从 59 个来源、455906 例入院记录中估计耐药感染相对于敏感感染的住院时间增加倍数。"
+        ],
+        "quote": "**步骤五至七：耐药率估算与多重耐药建模。** 使用 5280 万分离株数据，对 88 个病原体—药物组合估计耐药率。耐药分类采用 CLSI 指南定义的最低抑菌浓度折点，并将分离株分为“敏感”和“非敏感”（包括中间和耐药）两类。针对三级医疗机构的偏倚，使用 MR-BRT 与混合机构数据进行交叉校准。采用两阶段时空建模框架：先拟合堆叠集成模型，再使用时空高斯过程回归进行平滑；抗生素消费量（整合 65 项人口与健康调查、138 项多指标整群调查以及 IQVIA/WHO/ECDC 药品销售数据）作为协变量。多重耐药部分通过微生物线级数据计算 Pearson 相关系数，使用优化方法求解多元二项分布以得到各耐药组合的耐药率。 **步骤八至九：相对死亡风险估计。** 使用 164 个来源、511870 名已知结局和耐药信息的患者数据，通过 MR-BRT 估计各病原体—药物组合耐药感染相对于敏感感染的死亡风险比。采用两阶段嵌套混合效应元回归，调整年龄、入院诊断、医院获得与社区获得状态及感染部位。由于数据稀疏，假定相对风险在同一病原体—药物组合的各综合征、地区和年龄组间一致。针对非致死性超额负担，从 59 个来源、455906 例入院记录中估计耐药感染相对于敏感感染的住院时间增加倍数。"
+      },
+      "explanation": "Key preprocessing steps are covered, though not all minor details are replicated; still compatible.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Predictive modelling with random effects logistic regression, MR-BRT meta-regression, stacked ensemble, spatiotemporal Gaussian process regression, PAF computation, and uncertainty propagation via 1000 posterior draws.",
+      "generatedFact": "随机效应 logistic 回归、MR-BRT、堆叠集成模型、时空高斯过程回归、人群归因分值计算，从 1000 次后验分布传递不确定性。",
+      "sourceEvidence": {
+        "locator": "R0055",
+        "locators": [
+          "R0055"
+        ],
+        "quotes": [
+          "Given the many challenges to data collection and reporting caused by the COVID-19 pandemic, 32 , 33 as well as our collaborators' process of data collation and cleaning, we were unable to collect more contemporary data; we assumed no change in prevalence of resistance for 2019. First, we fitted a stacked ensemble model between the input data and selected covariates from the list of plausible and health-related covariates available in GBD 2019 ( appendix pp 48–49, 92–93 ); the estimates from the stacked ensemble model were then inputted into a spatiotemporal Gaussian process regression model 31 to smooth the estimates in space and time."
+        ],
+        "quote": "Given the many challenges to data collection and reporting caused by the COVID-19 pandemic, 32 , 33 as well as our collaborators' process of data collation and cleaning, we were unable to collect more contemporary data; we assumed no change in prevalence of resistance for 2019. First, we fitted a stacked ensemble model between the input data and selected covariates from the list of plausible and health-related covariates available in GBD 2019 ( appendix pp 48–49, 92–93 ); the estimates from the stacked ensemble model were then inputted into a spatiotemporal Gaussian process regression model 31 to smooth the estimates in space and time."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "### 估算步骤 **步骤一至二：感染相关死亡按感染综合征分解。** 使用 GBD 2019 死因估计确定感染性基础死因或通过败血症途径死亡的数量。利用覆盖 1.21 亿例死亡的多死因数据、554 万例以死亡为结局的出院记录及来自 10 个国家和地区的 26.4 万条多死因—医院记录链接数据，建立随机效应 logistic 回归模型，预测非感染性基础死因中发生败血症的比例，进一步将败血症死亡和感染性基础死因分配到各感染综合征。此外，对下呼吸道及胸腔感染和尿路感染进一步区分社区获得性和医院获得性。 **步骤三至四：病原体分布估算。** 使用 MR-BRT 贝叶斯元回归工具估计病原体特异性的病死率（CFR），以医疗可及性与质量指数为主要协变量，将不同来源中按死亡或发病报告的病原体数据整合为 1.57 亿例分离株和病例，覆盖 118 个国家和地区，采用多类别估算与部分及复合观察值建模框架估计各感染综合征的病原体分布。"
+        ],
+        "quote": "### 估算步骤 **步骤一至二：感染相关死亡按感染综合征分解。** 使用 GBD 2019 死因估计确定感染性基础死因或通过败血症途径死亡的数量。利用覆盖 1.21 亿例死亡的多死因数据、554 万例以死亡为结局的出院记录及来自 10 个国家和地区的 26.4 万条多死因—医院记录链接数据，建立随机效应 logistic 回归模型，预测非感染性基础死因中发生败血症的比例，进一步将败血症死亡和感染性基础死因分配到各感染综合征。此外，对下呼吸道及胸腔感染和尿路感染进一步区分社区获得性和医院获得性。 **步骤三至四：病原体分布估算。** 使用 MR-BRT 贝叶斯元回归工具估计病原体特异性的病死率（CFR），以医疗可及性与质量指数为主要协变量，将不同来源中按死亡或发病报告的病原体数据整合为 1.57 亿例分离株和病例，覆盖 118 个国家和地区，采用多类别估算与部分及复合观察值建模框架估计各感染综合征的病原体分布。"
+      },
+      "explanation": "All major analysis methods are present and correctly described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Models: MR-BRT, multinomial estimation with partial observations, stacked ensemble, spatiotemporal Gaussian process regression, optimization for multivariate binomial distributions, mixed-effects meta-regression for relative risk.",
+      "generatedFact": "MR-BRT、多类别部分观察值模型、堆叠集成、时空高斯过程回归、多元二项分布优化、混合效应元回归。",
+      "sourceEvidence": {
+        "locator": "R0050",
+        "locators": [
+          "R0050"
+        ],
+        "quotes": [
+          "After mapping, we had 157 million isolates and cases from 118 countries and territories to estimate the pathogen distribution of each infectious syndrome (estimation step four), with each dataset including a unique spectrum of pathogens and groups of pathogens. To incorporate all these heterogeneous data, we used a new modelling environment, termed multinomial estimation with partial and composite observations. This modelling environment allows for the inclusion of covariates in the network analysis 29 and for Bayesian prior probability distributions to be incorporated."
+        ],
+        "quote": "After mapping, we had 157 million isolates and cases from 118 countries and territories to estimate the pathogen distribution of each infectious syndrome (estimation step four), with each dataset including a unique spectrum of pathogens and groups of pathogens. To incorporate all these heterogeneous data, we used a new modelling environment, termed multinomial estimation with partial and composite observations. This modelling environment allows for the inclusion of covariates in the network analysis 29 and for Bayesian prior probability distributions to be incorporated."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "**步骤五至七：耐药率估算与多重耐药建模。** 使用 5280 万分离株数据，对 88 个病原体—药物组合估计耐药率。耐药分类采用 CLSI 指南定义的最低抑菌浓度折点，并将分离株分为“敏感”和“非敏感”（包括中间和耐药）两类。针对三级医疗机构的偏倚，使用 MR-BRT 与混合机构数据进行交叉校准。采用两阶段时空建模框架：先拟合堆叠集成模型，再使用时空高斯过程回归进行平滑；抗生素消费量（整合 65 项人口与健康调查、138 项多指标整群调查以及 IQVIA/WHO/ECDC 药品销售数据）作为协变量。多重耐药部分通过微生物线级数据计算 Pearson 相关系数，使用优化方法求解多元二项分布以得到各耐药组合的耐药率。 **步骤八至九：相对死亡风险估计。** 使用 164 个来源、511870 名已知结局和耐药信息的患者数据，通过 MR-BRT 估计各病原体—药物组合耐药感染相对于敏感感染的死亡风险比。采用两阶段嵌套混合效应元回归，调整年龄、入院诊断、医院获得与社区获得状态及感染部位。由于数据稀疏，假定相对风险在同一病原体—药物组合的各综合征、地区和年龄组间一致。针对非致死性超额负担，从 59 个来源、455906 例入院记录中估计耐药感染相对于敏感感染的住院时间增加倍数。"
+        ],
+        "quote": "**步骤五至七：耐药率估算与多重耐药建模。** 使用 5280 万分离株数据，对 88 个病原体—药物组合估计耐药率。耐药分类采用 CLSI 指南定义的最低抑菌浓度折点，并将分离株分为“敏感”和“非敏感”（包括中间和耐药）两类。针对三级医疗机构的偏倚，使用 MR-BRT 与混合机构数据进行交叉校准。采用两阶段时空建模框架：先拟合堆叠集成模型，再使用时空高斯过程回归进行平滑；抗生素消费量（整合 65 项人口与健康调查、138 项多指标整群调查以及 IQVIA/WHO/ECDC 药品销售数据）作为协变量。多重耐药部分通过微生物线级数据计算 Pearson 相关系数，使用优化方法求解多元二项分布以得到各耐药组合的耐药率。 **步骤八至九：相对死亡风险估计。** 使用 164 个来源、511870 名已知结局和耐药信息的患者数据，通过 MR-BRT 估计各病原体—药物组合耐药感染相对于敏感感染的死亡风险比。采用两阶段嵌套混合效应元回归，调整年龄、入院诊断、医院获得与社区获得状态及感染部位。由于数据稀疏，假定相对风险在同一病原体—药物组合的各综合征、地区和年龄组间一致。针对非致死性超额负担，从 59 个来源、455906 例入院记录中估计耐药感染相对于敏感感染的住院时间增加倍数。"
+      },
+      "explanation": "Algorithm/model names and specifications align.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Global 4.95 million (3.62–6.57) associated deaths, 1.27 million (0.911–1.71) attributable deaths; highest attributable rate western sub-Saharan Africa 27.3/100,000; six pathogens 929,000 attributable deaths; MRSA >100,000 attributable deaths, six combinations 50,000–100,000 each.",
+      "generatedFact": "全球 495 万 (362 万-657 万) 相关死亡，127 万 (91.1 万-171 万) 归因死亡；西撒哈拉以南非洲最高 27.3/10 万；六种病原体 92.9 万归因死亡；MRSA 超 10 万, 6 个组合各 5 万-10 万。",
+      "sourceEvidence": {
+        "locator": "R0005",
+        "locators": [
+          "R0005"
+        ],
+        "quotes": [
+          "We present final estimates aggregated to the global and regional level.FindingsOn the basis of our predictive statistical models, there were an estimated 4·95 million (3·62–6·57) deaths associated with bacterial AMR in 2019, including 1·27 million (95% UI 0·911–1·71) deaths attributable to bacterial AMR. At the regional level, we estimated the all-age death rate attributable to resistance to be highest in western sub-Saharan Africa, at 27·3 deaths per 100 000 (20·9–35·3), and lowest in Australasia, at 6·5 deaths (4·3–9·4) per 100 000. Lower respiratory infections accounted for more than 1·5 million deaths associated with resistance in 2019, making it the most burdensome infectious syndrome."
+        ],
+        "quote": "We present final estimates aggregated to the global and regional level.FindingsOn the basis of our predictive statistical models, there were an estimated 4·95 million (3·62–6·57) deaths associated with bacterial AMR in 2019, including 1·27 million (95% UI 0·911–1·71) deaths attributable to bacterial AMR. At the regional level, we estimated the all-age death rate attributable to resistance to be highest in western sub-Saharan Africa, at 27·3 deaths per 100 000 (20·9–35·3), and lowest in Australasia, at 6·5 deaths (4·3–9·4) per 100 000. Lower respiratory infections accounted for more than 1·5 million deaths associated with resistance in 2019, making it the most burdensome infectious syndrome."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+        ],
+        "quote": "**方法** 基于 2019 年全球疾病负担研究（GBD 2019）的死亡和发病估计，本研究整合来自文献系统评价、医院信息系统、监测网络及合作者直接提供的数据，覆盖 4.71 亿条个体记录或分离株及 7585 个研究—地区—年份数据点，采用预测统计模型估算了 204 个国家和地区中 23 种细菌病原体、88 个病原体—药物组合的耐药负担。评估框架包含五个建模模块、十个估算步骤，采用两种反事实情景分别计算耐药归因死亡（假设耐药感染均被药物敏感感染替代）和耐药相关死亡（假设耐药感染均能被消除）。 **结果** 2019 年，全球约 495 万（95% UI 362 万—657 万）死亡与细菌耐药相关，其中 127 万（91.1 万—171 万）死亡直接归因于耐药。耐药归因全年龄死亡率在西撒哈拉以南非洲最高（27.3/10 万，95% UI 20.9—35.3），在澳大利亚西亚最低（6.5/10 万，4.3—9.4）。下呼吸道感染是与耐药相关死亡负担最重的感染综合征（超过 150 万例相关死亡）。六种主要病原体（大肠杆菌、金黄色葡萄球菌、肺炎克雷伯菌、肺炎链球菌、鲍曼不动杆菌、铜绿假单胞菌）合计造成 92.9 万例归因死亡和 357 万例相关死亡，占归因死亡总数的 73.4%。耐甲氧西林金黄色葡萄球菌（MRSA）是单一归因死亡超过 10 万例的病原体—药物组合；另有 6 个组合各导致 5 万—10 万例归因死亡。"
+      },
+      "explanation": "Exact numerical concordance with correct units and context.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "95% uncertainty intervals from 1000 posterior draws; out-of-sample validation performed.",
+      "generatedFact": "95% UI 基于 1000 次后验分布抽取；进行了外样本验证。",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "Using these components, we estimated disease burden based on two counterfactuals: deaths attributable to AMR (based on an alternative scenario in which all drug-resistant infections were replaced by drug-susceptible infections), and deaths associated with AMR (based on an alternative scenario in which all drug-resistant infections were replaced by no infection). We generated 95% uncertainty intervals (UIs) for final estimates as the 25th and 975th ordered values across 1000 posterior draws, and models were cross-validated for out-of-sample predictive validity."
+        ],
+        "quote": "Using these components, we estimated disease burden based on two counterfactuals: deaths attributable to AMR (based on an alternative scenario in which all drug-resistant infections were replaced by drug-susceptible infections), and deaths associated with AMR (based on an alternative scenario in which all drug-resistant infections were replaced by no infection). We generated 95% uncertainty intervals (UIs) for final estimates as the 25th and 975th ordered values across 1000 posterior draws, and models were cross-validated for out-of-sample predictive validity."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "**步骤十：归因负担与相关负担的计算。** 归因负担通过将各层次比例（感染相关死亡比例、感染综合征占比、病原体占比、耐药谱的人群归因分值）相乘计算；相关负担以耐药率替代人群归因分值。YLL 使用标准反事实预期寿命计算；YLD 通过感染综合征发病率乘病原体分布和 YLD/发病比例计算；DALY 为 YLL 与 YLD 之和。 ### 不确定性分析与外样本验证 从 1000 次后验分布中取第 25 和第 975 个有序值形成 95% 不确定性区间。败血症、感染综合征分布、病原体分布、耐药率和相对风险模型均进行了外样本预测效度验证。 --- ## 结果 ### 全球总体负担 2019 年，在 88 个病原体—药物组合的分析范围内，全球估计有 127 万（95% UI 91.1 万—171 万）例死亡直接归因于细菌耐药，495 万（362 万—657 万）例死亡与细菌耐药相关。归因于耐药的 DALY 为 4790 万（3530 万—6370 万），与耐药相关的 DALY 为 1.92 亿（1.46 亿—2.48 亿）。以无感染反事实情景计，AMR 在 2019 年 GBD 3 级死因中排名第三，仅次于缺血性心脏病和脑卒中；以敏感感染反事实情景计排名第 12，高于 HIV 和疟疾。"
+        ],
+        "quote": "**步骤十：归因负担与相关负担的计算。** 归因负担通过将各层次比例（感染相关死亡比例、感染综合征占比、病原体占比、耐药谱的人群归因分值）相乘计算；相关负担以耐药率替代人群归因分值。YLL 使用标准反事实预期寿命计算；YLD 通过感染综合征发病率乘病原体分布和 YLD/发病比例计算；DALY 为 YLL 与 YLD 之和。 ### 不确定性分析与外样本验证 从 1000 次后验分布中取第 25 和第 975 个有序值形成 95% 不确定性区间。败血症、感染综合征分布、病原体分布、耐药率和相对风险模型均进行了外样本预测效度验证。 --- ## 结果 ### 全球总体负担 2019 年，在 88 个病原体—药物组合的分析范围内，全球估计有 127 万（95% UI 91.1 万—171 万）例死亡直接归因于细菌耐药，495 万（362 万—657 万）例死亡与细菌耐药相关。归因于耐药的 DALY 为 4790 万（3530 万—6370 万），与耐药相关的 DALY 为 1.92 亿（1.46 亿—2.48 亿）。以无感染反事实情景计，AMR 在 2019 年 GBD 3 级死因中排名第三，仅次于缺血性心脏病和脑卒中；以敏感感染反事实情景计排名第 12，高于 HIV 和疟疾。"
+      },
+      "explanation": "Uncertainty methodology and validation are correctly reported.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Bacterial AMR is a leading global cause of death, with highest burden in low-resource settings, requiring expanded infection prevention, access to essential antibiotics, vaccine/antibiotic R&D, and improved laboratory capacity.",
+      "generatedFact": "细菌耐药已是全球主要死因之一，负担最重在资源有限地区，需加强感染防控、改善抗生素可及性、加速疫苗/新药研发并提升实验室能力。",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "AMR is a leading cause of death around the world, with the highest burdens in low-resource settings. Understanding the burden of AMR and the leading pathogen–drug combinations contributing to it is crucial to making informed and location-specific policy decisions, particularly about infection prevention and control programmes, access to essential antibiotics, and research and development of new vaccines and antibiotics."
+        ],
+        "quote": "AMR is a leading cause of death around the world, with the highest burdens in low-resource settings. Understanding the burden of AMR and the leading pathogen–drug combinations contributing to it is crucial to making informed and location-specific policy decisions, particularly about infection prevention and control programmes, access to essential antibiotics, and research and development of new vaccines and antibiotics."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结论** 细菌耐药已是全球主要死亡原因之一，负担最重的地区集中在资源有限的环境中。需针对主导病原体—药物组合实施感染防控、改善二线抗生素可及性并加速疫苗与新型抗生素研发；同时应大幅提升低收入国家的微生物实验室能力和数据采集系统。 --- ## 引言 细菌耐药——即细菌发生变异导致抗感染药物疗效下降——已被广泛认为 21 世纪最重要的公共卫生威胁之一。英国政府委托的《耐药评估报告》曾提出，到 2050 年 AMR 每年可能造成 1000 万人死亡。尽管该预测受到部分学者质疑，WHO 及众多研究机构一致认为 AMR 的蔓延需要全球协调行动加以应对。 理解 AMR 的真实负担，尤其是在监测薄弱、数据稀缺的地区，是应对这一挑战的核心障碍。此前已有区域性评估——如美国 CDC 针对 18 种耐药威胁的国内报告（2019）、Cassini 等关于欧盟/欧洲经济区 8 种病原体和 16 种病原体—药物组合的估计、Lim 等对泰国六种病原体多重耐药的分析，以及 Temkin 等对 193 个国家第三代头孢菌素和碳青霉烯类耐药大肠杆菌和肺炎克雷伯菌发病率的估计。但这些研究在覆盖范围、病原体—药物组合数量和反事实情景完整性方面均不足以构成全球性理解。 此外，已有研究通常仅采用单一 AMR 负担度量方式。由于在消除耐药的情景下，耐药感染被药物敏感感染替代的程度尚不清楚，同时使用两种反事实情景——耐药感染被敏感感染替代（归因负担）或被完全消除（相关负担）——进行定量评估十分必要。 本研究呈现了首个覆盖广泛病原体和病原体—药物组合、使用统一方法的全球细菌耐药负担估计。"
+        ],
+        "quote": "**结论** 细菌耐药已是全球主要死亡原因之一，负担最重的地区集中在资源有限的环境中。需针对主导病原体—药物组合实施感染防控、改善二线抗生素可及性并加速疫苗与新型抗生素研发；同时应大幅提升低收入国家的微生物实验室能力和数据采集系统。 --- ## 引言 细菌耐药——即细菌发生变异导致抗感染药物疗效下降——已被广泛认为 21 世纪最重要的公共卫生威胁之一。英国政府委托的《耐药评估报告》曾提出，到 2050 年 AMR 每年可能造成 1000 万人死亡。尽管该预测受到部分学者质疑，WHO 及众多研究机构一致认为 AMR 的蔓延需要全球协调行动加以应对。 理解 AMR 的真实负担，尤其是在监测薄弱、数据稀缺的地区，是应对这一挑战的核心障碍。此前已有区域性评估——如美国 CDC 针对 18 种耐药威胁的国内报告（2019）、Cassini 等关于欧盟/欧洲经济区 8 种病原体和 16 种病原体—药物组合的估计、Lim 等对泰国六种病原体多重耐药的分析，以及 Temkin 等对 193 个国家第三代头孢菌素和碳青霉烯类耐药大肠杆菌和肺炎克雷伯菌发病率的估计。但这些研究在覆盖范围、病原体—药物组合数量和反事实情景完整性方面均不足以构成全球性理解。 此外，已有研究通常仅采用单一 AMR 负担度量方式。由于在消除耐药的情景下，耐药感染被药物敏感感染替代的程度尚不清楚，同时使用两种反事实情景——耐药感染被敏感感染替代（归因负担）或被完全消除（相关负担）——进行定量评估十分必要。 本研究呈现了首个覆盖广泛病原体和病原体—药物组合、使用统一方法的全球细菌耐药负担估计。"
+      },
+      "explanation": "Conclusion direction and strength match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Limitations: data sparsity in LMICs, assumed constant relative risk, potential misclassification of community/hospital-acquired infections, selection bias in passive surveillance, coverage limited to 88 bacterial combinations, and assumption of unchanged resistance from 2018 to 2019.",
+      "generatedFact": "六项主要局限：数据稀疏性、相对风险恒定假设、社区/医院获得性错分、被动监测选择偏倚、仅覆盖 88 个组合、耐药率不变的时间假设。",
+      "sourceEvidence": {
+        "locator": "R0118",
+        "locators": [
+          "R0118"
+        ],
+        "quotes": [
+          "This study has several limitations, the most important being the sparsity of data from many LMICs on the distribution of pathogens by infectious syndrome, the prevalence of resistance for key pathogen–drug combinations, and the number of deaths involving infection; and the severe scarcity of data linking laboratory results to outcomes such as death. 19 of 204 countries and territories had no data available for any of our modelling components."
+        ],
+        "quote": "This study has several limitations, the most important being the sparsity of data from many LMICs on the distribution of pathogens by infectious syndrome, the prevalence of resistance for key pathogen–drug combinations, and the number of deaths involving infection; and the severe scarcity of data linking laboratory results to outcomes such as death. 19 of 204 countries and territories had no data available for any of our modelling components."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "### 两种反事实情景的意义 本研究同时估计了耐药相关负担和耐药归因负担，两者在数值上相差近四倍。MRSA 与甲氧西林敏感金黄色葡萄球菌的流行关系表明耐药感染并非简单地替代敏感感染，但这一结论未必可推广至所有病原体和耐药机制。两种度量方式提供的信息用途各异：讨论各耐药组合的具体负担时，归因度量更为适当（可避免因高水平共耐药导致的重复计数）；讨论疫苗作用时，无感染反事实更为适当；抗菌药物管理的评估可能更适合采用敏感感染反事实。无论采用哪种度量，全球细菌耐药问题的规模均极为庞大，两种估计值大致界定了其真实范围。 ### 与已有估计的比较 由于此前缺乏覆盖全球的按病原体—药物组合划分的死亡估计，可比性有限。《耐药评估报告》估计 2014 年六种病原体耐药归因死亡为 70 万，本研究针对其中四种重合病原体估计 2019 年为 67 万。与 Cassini 等对欧盟的估计（约 3 万例死亡、79.6 万 DALY）相比，本研究对欧洲西部和中部 11 种重合病原体—药物组合的估计为 23100 例死亡（14600—34600）和 39.3 万 DALY。差异部分源于反事实情景选择和研究范围的不同。 ### 局限性 本研究存在以下主要局限： 1. **数据稀疏性。** 中低收入国家在病原体分布、关键病原体—药物组合耐药率及感染相关死亡数方面的数据严重不足；204 个国家和地区中有 19 个在任何一个建模模块中均无可用数据。这对耐药率和相对风险建模组件影响尤为显著。 2."
+        ],
+        "quote": "### 两种反事实情景的意义 本研究同时估计了耐药相关负担和耐药归因负担，两者在数值上相差近四倍。MRSA 与甲氧西林敏感金黄色葡萄球菌的流行关系表明耐药感染并非简单地替代敏感感染，但这一结论未必可推广至所有病原体和耐药机制。两种度量方式提供的信息用途各异：讨论各耐药组合的具体负担时，归因度量更为适当（可避免因高水平共耐药导致的重复计数）；讨论疫苗作用时，无感染反事实更为适当；抗菌药物管理的评估可能更适合采用敏感感染反事实。无论采用哪种度量，全球细菌耐药问题的规模均极为庞大，两种估计值大致界定了其真实范围。 ### 与已有估计的比较 由于此前缺乏覆盖全球的按病原体—药物组合划分的死亡估计，可比性有限。《耐药评估报告》估计 2014 年六种病原体耐药归因死亡为 70 万，本研究针对其中四种重合病原体估计 2019 年为 67 万。与 Cassini 等对欧盟的估计（约 3 万例死亡、79.6 万 DALY）相比，本研究对欧洲西部和中部 11 种重合病原体—药物组合的估计为 23100 例死亡（14600—34600）和 39.3 万 DALY。差异部分源于反事实情景选择和研究范围的不同。 ### 局限性 本研究存在以下主要局限： 1. **数据稀疏性。** 中低收入国家在病原体分布、关键病原体—药物组合耐药率及感染相关死亡数方面的数据严重不足；204 个国家和地区中有 19 个在任何一个建模模块中均无可用数据。这对耐药率和相对风险建模组件影响尤为显著。 2."
+      },
+      "explanation": "All key limitations enumerated with fidelity.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Neither text addresses harms or adverse events; the study is a global burden analysis without direct safety outcomes.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "search_sources_and_dates",
+      "importance": "critical",
+      "status": "missing",
+      "issueKinds": [
+        "missing"
+      ],
+      "referenceFact": "Systematic review of previous AMR burden estimates conducted by searching PubMed for human-focused publications with >10 cases, all ages and genders.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "We searched the evidence available in PubMed for published works that evaluate exposure to antimicrobial resistant organisms (bacteria only) and evaluated all human-focused publications with more than ten cases, all genders, and all age groups. From these findings, we extracted study type, pathogen–drug combinations, counterfactuals, locations, methods, outcomes, and population. Extensive literature exists estimating incidence, deaths, hospital length of stay, and health-care costs associated with AMR from a small number of drug-resistant infections in select locations. There is widespread agreement that AMR poses a serious potential threat to human health around the world."
+        ],
+        "quote": "We searched the evidence available in PubMed for published works that evaluate exposure to antimicrobial resistant organisms (bacteria only) and evaluated all human-focused publications with more than ten cases, all genders, and all age groups. From these findings, we extracted study type, pathogen–drug combinations, counterfactuals, locations, methods, outcomes, and population. Extensive literature exists estimating incidence, deaths, hospital length of stay, and health-care costs associated with AMR from a small number of drug-resistant infections in select locations. There is widespread agreement that AMR poses a serious potential threat to human health around the world."
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "GENERATED omits the systematic PubMed search that identified prior estimates, which is reported in the REFERENCE.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "included_studies_and_participants",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Total input data 471 million records/isolates; relative risk analysis used 164 sources with 511,870 patients and excess length of stay used 59 sources with 455,906 admissions.",
+      "generatedFact": "总数据 4.71 亿条；相对风险分析 164 个来源 511870 名患者；住院时间分析 59 个来源 455906 例入院。",
+      "sourceEvidence": {
+        "locator": "R0060",
+        "locators": [
+          "R0060"
+        ],
+        "quotes": [
+          "Estimation steps eight and nine: relative risk of death for drug-resistant infection compared with drug-sensitive infections Using data from 164 sources representing 511 870 patients with known outcome and resistance information, we estimated the relative risk of death for each pathogen–drug combination for a resistant infection compared with that of a drug-sensitive infection using MR-BRT. Because of data sparsity, we assumed the relative risk was the same for every syndrome, location, and age group; the assumptions on location and age group risk are consistent with those in the estimation process previously used by Cassini and colleagues."
+        ],
+        "quote": "Estimation steps eight and nine: relative risk of death for drug-resistant infection compared with drug-sensitive infections Using data from 164 sources representing 511 870 patients with known outcome and resistance information, we estimated the relative risk of death for each pathogen–drug combination for a resistant infection compared with that of a drug-sensitive infection using MR-BRT. Because of data sparsity, we assumed the relative risk was the same for every syndrome, location, and age group; the assumptions on location and age group risk are consistent with those in the estimation process previously used by Cassini and colleagues."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "**步骤十：归因负担与相关负担的计算。** 归因负担通过将各层次比例（感染相关死亡比例、感染综合征占比、病原体占比、耐药谱的人群归因分值）相乘计算；相关负担以耐药率替代人群归因分值。YLL 使用标准反事实预期寿命计算；YLD 通过感染综合征发病率乘病原体分布和 YLD/发病比例计算；DALY 为 YLL 与 YLD 之和。 ### 不确定性分析与外样本验证 从 1000 次后验分布中取第 25 和第 975 个有序值形成 95% 不确定性区间。败血症、感染综合征分布、病原体分布、耐药率和相对风险模型均进行了外样本预测效度验证。 --- ## 结果 ### 全球总体负担 2019 年，在 88 个病原体—药物组合的分析范围内，全球估计有 127 万（95% UI 91.1 万—171 万）例死亡直接归因于细菌耐药，495 万（362 万—657 万）例死亡与细菌耐药相关。归因于耐药的 DALY 为 4790 万（3530 万—6370 万），与耐药相关的 DALY 为 1.92 亿（1.46 亿—2.48 亿）。以无感染反事实情景计，AMR 在 2019 年 GBD 3 级死因中排名第三，仅次于缺血性心脏病和脑卒中；以敏感感染反事实情景计排名第 12，高于 HIV 和疟疾。"
+        ],
+        "quote": "**步骤十：归因负担与相关负担的计算。** 归因负担通过将各层次比例（感染相关死亡比例、感染综合征占比、病原体占比、耐药谱的人群归因分值）相乘计算；相关负担以耐药率替代人群归因分值。YLL 使用标准反事实预期寿命计算；YLD 通过感染综合征发病率乘病原体分布和 YLD/发病比例计算；DALY 为 YLL 与 YLD 之和。 ### 不确定性分析与外样本验证 从 1000 次后验分布中取第 25 和第 975 个有序值形成 95% 不确定性区间。败血症、感染综合征分布、病原体分布、耐药率和相对风险模型均进行了外样本预测效度验证。 --- ## 结果 ### 全球总体负担 2019 年，在 88 个病原体—药物组合的分析范围内，全球估计有 127 万（95% UI 91.1 万—171 万）例死亡直接归因于细菌耐药，495 万（362 万—657 万）例死亡与细菌耐药相关。归因于耐药的 DALY 为 4790 万（3530 万—6370 万），与耐药相关的 DALY 为 1.92 亿（1.46 亿—2.48 亿）。以无感染反事实情景计，AMR 在 2019 年 GBD 3 级死因中排名第三，仅次于缺血性心脏病和脑卒中；以敏感感染反事实情景计排名第 12，高于 HIV 和疟疾。"
+      },
+      "explanation": "Participant and source counts for key analyses are reported accurately.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "synthesis_and_heterogeneity",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Synthesis via MR-BRT meta-regression (nested mixed-effects) accounting for covariates; heterogeneity handled through random effects and covariates; multiple components integrated via PAF and target counterfactuals.",
+      "generatedFact": "MR-BRT 混合效应元回归调整协变量；通过随机效应和协变量处理变异；各模块通过 PAF 和反事实整合。",
+      "sourceEvidence": {
+        "locator": "R0060",
+        "locators": [
+          "R0060"
+        ],
+        "quotes": [
+          "Estimation steps eight and nine: relative risk of death for drug-resistant infection compared with drug-sensitive infections Using data from 164 sources representing 511 870 patients with known outcome and resistance information, we estimated the relative risk of death for each pathogen–drug combination for a resistant infection compared with that of a drug-sensitive infection using MR-BRT. Because of data sparsity, we assumed the relative risk was the same for every syndrome, location, and age group; the assumptions on location and age group risk are consistent with those in the estimation process previously used by Cassini and colleagues."
+        ],
+        "quote": "Estimation steps eight and nine: relative risk of death for drug-resistant infection compared with drug-sensitive infections Using data from 164 sources representing 511 870 patients with known outcome and resistance information, we estimated the relative risk of death for each pathogen–drug combination for a resistant infection compared with that of a drug-sensitive infection using MR-BRT. Because of data sparsity, we assumed the relative risk was the same for every syndrome, location, and age group; the assumptions on location and age group risk are consistent with those in the estimation process previously used by Cassini and colleagues."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "**步骤五至七：耐药率估算与多重耐药建模。** 使用 5280 万分离株数据，对 88 个病原体—药物组合估计耐药率。耐药分类采用 CLSI 指南定义的最低抑菌浓度折点，并将分离株分为“敏感”和“非敏感”（包括中间和耐药）两类。针对三级医疗机构的偏倚，使用 MR-BRT 与混合机构数据进行交叉校准。采用两阶段时空建模框架：先拟合堆叠集成模型，再使用时空高斯过程回归进行平滑；抗生素消费量（整合 65 项人口与健康调查、138 项多指标整群调查以及 IQVIA/WHO/ECDC 药品销售数据）作为协变量。多重耐药部分通过微生物线级数据计算 Pearson 相关系数，使用优化方法求解多元二项分布以得到各耐药组合的耐药率。 **步骤八至九：相对死亡风险估计。** 使用 164 个来源、511870 名已知结局和耐药信息的患者数据，通过 MR-BRT 估计各病原体—药物组合耐药感染相对于敏感感染的死亡风险比。采用两阶段嵌套混合效应元回归，调整年龄、入院诊断、医院获得与社区获得状态及感染部位。由于数据稀疏，假定相对风险在同一病原体—药物组合的各综合征、地区和年龄组间一致。针对非致死性超额负担，从 59 个来源、455906 例入院记录中估计耐药感染相对于敏感感染的住院时间增加倍数。"
+        ],
+        "quote": "**步骤五至七：耐药率估算与多重耐药建模。** 使用 5280 万分离株数据，对 88 个病原体—药物组合估计耐药率。耐药分类采用 CLSI 指南定义的最低抑菌浓度折点，并将分离株分为“敏感”和“非敏感”（包括中间和耐药）两类。针对三级医疗机构的偏倚，使用 MR-BRT 与混合机构数据进行交叉校准。采用两阶段时空建模框架：先拟合堆叠集成模型，再使用时空高斯过程回归进行平滑；抗生素消费量（整合 65 项人口与健康调查、138 项多指标整群调查以及 IQVIA/WHO/ECDC 药品销售数据）作为协变量。多重耐药部分通过微生物线级数据计算 Pearson 相关系数，使用优化方法求解多元二项分布以得到各耐药组合的耐药率。 **步骤八至九：相对死亡风险估计。** 使用 164 个来源、511870 名已知结局和耐药信息的患者数据，通过 MR-BRT 估计各病原体—药物组合耐药感染相对于敏感感染的死亡风险比。采用两阶段嵌套混合效应元回归，调整年龄、入院诊断、医院获得与社区获得状态及感染部位。由于数据稀疏，假定相对风险在同一病原体—药物组合的各综合征、地区和年龄组间一致。针对非致死性超额负担，从 59 个来源、455906 例入院记录中估计耐药感染相对于敏感感染的住院时间增加倍数。"
+      },
+      "explanation": "Synthesis approach is described, though explicit heterogeneity statistics are not given in either; compatible overview.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "risk_of_bias_or_certainty",
+      "importance": "major",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Acknowledges data gaps, selection bias, and limitations; uses cross-validation; no formal GRADE assessment.",
+      "generatedFact": "讨论数据缺口、选择偏倚等局限性；进行外样本验证；未进行 GRADE 评级。",
+      "sourceEvidence": {
+        "locator": "R0118",
+        "locators": [
+          "R0118"
+        ],
+        "quotes": [
+          "This study has several limitations, the most important being the sparsity of data from many LMICs on the distribution of pathogens by infectious syndrome, the prevalence of resistance for key pathogen–drug combinations, and the number of deaths involving infection; and the severe scarcity of data linking laboratory results to outcomes such as death. 19 of 204 countries and territories had no data available for any of our modelling components."
+        ],
+        "quote": "This study has several limitations, the most important being the sparsity of data from many LMICs on the distribution of pathogens by infectious syndrome, the prevalence of resistance for key pathogen–drug combinations, and the number of deaths involving infection; and the severe scarcity of data linking laboratory results to outcomes such as death. 19 of 204 countries and territories had no data available for any of our modelling components."
+      },
+      "generatedEvidence": {
+        "locator": "G0013",
+        "locators": [
+          "G0013"
+        ],
+        "quotes": [
+          "**相对风险假设。** 由于缺乏将实验室结果与结局联系起来的数据，本研究假定各病原体—药物组合的相对死亡风险在不同地区、年龄组和感染综合征中恒定。这可能低估中低收入国家的 AMR 负担（因为这些地区二线和三线抗生素可及性更差），也可能在特定综合征中造成高估。多重耐药感染的相对风险被假定为等于各单药耐药风险中的最大值，这很可能低估了多重耐药的真实额外风险——因为随着耐药谱扩大，有效抗生素选项愈发减少。 3. **分类偏倚。** 社区获得性与医院获得性感染的区分基于多死因和出院数据编码，存在错分风险。实验室耐药与敏感的分类尚无国际统一标准，不同实验室使用不同折点，而许多数据集缺乏足够信息进行回顾性重新分类。 4. **选择偏倚。** 被动微生物监测数据可能存在偏倚：在特定环境下培养仅在初始治疗无效时采集，可能高估耐药率；中低收入国家的医院微生物数据可能偏向城市人群或重症患者，未必代表一般人群。 5. **覆盖范围局限。** 分析限于 88 个病原体—药物组合，未纳入病毒、寄生虫和真菌的耐药性，这可能低估 AMR 的总体负担。 6. **时间假设。** 因 COVID-19 大流行导致数据采集和整理延迟，本研究假定 2018 年至 2019 年耐药率未发生变化。 --- ## 参考资料 1. Antimicrobial Resistance Collaborators. Global burden of bacterial antimicrobial resistance in 2019: a systematic analysis. *Lancet*."
+        ],
+        "quote": "**相对风险假设。** 由于缺乏将实验室结果与结局联系起来的数据，本研究假定各病原体—药物组合的相对死亡风险在不同地区、年龄组和感染综合征中恒定。这可能低估中低收入国家的 AMR 负担（因为这些地区二线和三线抗生素可及性更差），也可能在特定综合征中造成高估。多重耐药感染的相对风险被假定为等于各单药耐药风险中的最大值，这很可能低估了多重耐药的真实额外风险——因为随着耐药谱扩大，有效抗生素选项愈发减少。 3. **分类偏倚。** 社区获得性与医院获得性感染的区分基于多死因和出院数据编码，存在错分风险。实验室耐药与敏感的分类尚无国际统一标准，不同实验室使用不同折点，而许多数据集缺乏足够信息进行回顾性重新分类。 4. **选择偏倚。** 被动微生物监测数据可能存在偏倚：在特定环境下培养仅在初始治疗无效时采集，可能高估耐药率；中低收入国家的医院微生物数据可能偏向城市人群或重症患者，未必代表一般人群。 5. **覆盖范围局限。** 分析限于 88 个病原体—药物组合，未纳入病毒、寄生虫和真菌的耐药性，这可能低估 AMR 的总体负担。 6. **时间假设。** 因 COVID-19 大流行导致数据采集和整理延迟，本研究假定 2018 年至 2019 年耐药率未发生变化。 --- ## 参考资料 1. Antimicrobial Resistance Collaborators. Global burden of bacterial antimicrobial resistance in 2019: a systematic analysis. *Lancet*."
+      },
+      "explanation": "Both acknowledge risk of bias and data quality issues without a formal certainty framework; compatible in scope.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 20,
+    "weightedFidelity": 0.9,
+    "criticalFidelity": 0.9214,
+    "statusCounts": {
+      "exact": 15,
+      "missing": 2,
+      "compatible": 3,
+      "not_applicable": 1
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [
+      "search_sources_and_dates"
+    ],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [
+      "eligibility_or_selection",
+      "search_sources_and_dates"
+    ],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 84.3,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 67.1
+    },
+    "gateFailures": [
+      "critical_missing_fact"
+    ],
+    "usabilityGateFailures": [
+      "critical_missing_fact"
+    ],
+    "usabilityVerdict": "fail",
+    "verdict": "fail"
+  },
+  "adversarialAudit": null,
+  "overallAssessment": "The GENERATED text is a faithful structured summary of the REFERENCE article, accurately mirroring its research question, design, data sources, sample sizes, outcomes, key numbers, and main conclusions. Minor omissions (eligibility rule for pathogen–drug combinations, explicit PubMed search for prior estimates) are noted, but they do not distort the scientific findings. All major methods, uncertainty quantification, and limitations are reproduced without contradiction. The paper type correctly describes the study as a global burden analysis within the systematic-review-meta-analysis framework.",
+  "gradedAt": "2026-07-18T15:10:44Z"
+}

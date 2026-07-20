@@ -1,0 +1,4 @@
+interface:
+  display_name: "Biomedical Database Search"
+  short_description: "Search audited biomedical data sources with provenance"
+  default_prompt: "Use $biomedical-database-search to find traceable biomedical records for this question."

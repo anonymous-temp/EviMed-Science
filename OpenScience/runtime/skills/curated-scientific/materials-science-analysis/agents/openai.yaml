@@ -1,0 +1,4 @@
+interface:
+  display_name: "Materials Science Analysis"
+  short_description: "Analyze materials structures and properties"
+  default_prompt: "Use $materials-science-analysis to build this traceable materials analysis."

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-015",
+  "category": "observational-cohort",
+  "title": "Clinical presentation and virological assessment of confirmed human monkeypox virus cases in Spain: a prospective observational cohort study.",
+  "pmcid": "PMC9533900",
+  "doi": "10.1016/s0140-6736(22)01436-2",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 8285,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 133,
+    "supportedUniqueNumbers": 133,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.00449162923642303,
+    "toolCalls": 20,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text faithfully reproduces all key design elements (multicentre prospective observational cohort), participant numbers (181), demographics, clinical features, laboratory results, statistical outputs, and conclusions from the reference article. Every factual claim, including percentages, confidence intervals, and patient counts, exactly matches the source. No fabrications or deviations are present."
+  },
+  "overallVerdict": "pass"
+}

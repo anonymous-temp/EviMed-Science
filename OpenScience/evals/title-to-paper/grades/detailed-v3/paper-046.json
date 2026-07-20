@@ -1,0 +1,674 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 4,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-046",
+  "category": "methods-software",
+  "title": "clusterProfiler 4.0: A universal enrichment tool for interpreting omics data.",
+  "pmcid": "PMC8454663",
+  "doi": "10.1016/j.xinn.2021.100141",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "43941c8bf9eba9d036cdddc522a3bf47186b599cb207c9c1a22d782743fe4cdd",
+  "generatedSha256": "b265115ca5650599c28a95b7df5fb1444ed7c141d8f08c171a52a5cc58d30b6d",
+  "promptSha256": "0cd6fb7178c67fd2f26ad96be0f335b98465323386d9b601224ce7a96ae47356",
+  "cacheFingerprint": "4037efc05cdceb87354bed5ea3189dc6cad95c7ff85a8d1a4ff05b625cf55db2",
+  "referenceCharacters": 46012,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 6855,
+  "paperType": "methods-software",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Present clusterProfiler 4.0, an updated universal enrichment tool with new features including universal interface, GSEA, tidy interface, and visualization.",
+      "generatedFact": "Introduce the comprehensively upgraded version of clusterProfiler, which provides a universal interface, supports thousands of organisms, and adds GSEA and comparison functions.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"clusterProfiler 4.0: A universal enrichment tool for interpreting omics data.\", \"pmcid\": \"PMC8454663\", \"pmid\": \"34557778\", \"doi\": \"10.1016/j.xinn.2021.100141\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-07-01\"} [ABSTRACT] SummaryFunctional enrichment analysis is pivotal for interpreting high-throughput omics data in life science. It is crucial for this type of tool to use the latest annotation databases for as many organisms as possible. To meet these requirements, we present here an updated version of our popular Bioconductor package, clusterProfiler 4.0."
+        ],
+        "quote": "[METADATA] {\"title\": \"clusterProfiler 4.0: A universal enrichment tool for interpreting omics data.\", \"pmcid\": \"PMC8454663\", \"pmid\": \"34557778\", \"doi\": \"10.1016/j.xinn.2021.100141\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-07-01\"} [ABSTRACT] SummaryFunctional enrichment analysis is pivotal for interpreting high-throughput omics data in life science. It is crucial for this type of tool to use the latest annotation databases for as many organisms as possible. To meet these requirements, we present here an updated version of our popular Bioconductor package, clusterProfiler 4.0."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "功能富集分析是解释生命科学中高通量组学数据的关键方法，其有效性高度依赖于是否使用最新且覆盖广泛物种的注释数据库。本文介绍 clusterProfiler 4.0，这是其 9 年前首次发表的 Bioconductor 软件包的全面升级版。新版本提供通用接口，可基于内部支持的本体与通路注释以及用户自提供或来自在线数据库的注释数据，对数千种生物进行功能富集分析。该版本还扩展了 dplyr 和 ggplot2 的功能，为数据操作和可视化提供了一致的数据框式接口，并新增了基因集富集分析及多基因列表富集结果比较功能。clusterProfiler 4.0 适用于跨物种的广泛研究场景。 ## 引言 高通量技术在生命科学领域的广泛应用产生了大量的基因列表和基因组兴趣区域（ROI），功能富集分析正是从中提取生物学意义的核心手段。虽然已有多种工具被开发用于基因中心或表观基因组富集分析，但多数工具仅为模式物种或特定领域（如真菌、植物）设计，且仅嵌入有限的本体注释（如 Gene Ontology [GO] 和 KEGG）。非模式物种及 GO 和 KEGG 之外的功能注释支持严重不足。"
+        ],
+        "quote": "功能富集分析是解释生命科学中高通量组学数据的关键方法，其有效性高度依赖于是否使用最新且覆盖广泛物种的注释数据库。本文介绍 clusterProfiler 4.0，这是其 9 年前首次发表的 Bioconductor 软件包的全面升级版。新版本提供通用接口，可基于内部支持的本体与通路注释以及用户自提供或来自在线数据库的注释数据，对数千种生物进行功能富集分析。该版本还扩展了 dplyr 和 ggplot2 的功能，为数据操作和可视化提供了一致的数据框式接口，并新增了基因集富集分析及多基因列表富集结果比较功能。clusterProfiler 4.0 适用于跨物种的广泛研究场景。 ## 引言 高通量技术在生命科学领域的广泛应用产生了大量的基因列表和基因组兴趣区域（ROI），功能富集分析正是从中提取生物学意义的核心手段。虽然已有多种工具被开发用于基因中心或表观基因组富集分析，但多数工具仅为模式物种或特定领域（如真菌、植物）设计，且仅嵌入有限的本体注释（如 Gene Ontology [GO] 和 KEGG）。非模式物种及 GO 和 KEGG 之外的功能注释支持严重不足。"
+      },
+      "explanation": "Both state the objective is to describe the upgraded tool with universal interface, GSEA, tidy interface, and expanded organism support.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Software description paper presenting an updated Bioconductor package with new features and example analyses.",
+      "generatedFact": "Tool article describing the methodology, functions, and example applications of clusterProfiler 4.0.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"clusterProfiler 4.0: A universal enrichment tool for interpreting omics data.\", \"pmcid\": \"PMC8454663\", \"pmid\": \"34557778\", \"doi\": \"10.1016/j.xinn.2021.100141\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-07-01\"} [ABSTRACT] SummaryFunctional enrichment analysis is pivotal for interpreting high-throughput omics data in life science. It is crucial for this type of tool to use the latest annotation databases for as many organisms as possible. To meet these requirements, we present here an updated version of our popular Bioconductor package, clusterProfiler 4.0."
+        ],
+        "quote": "[METADATA] {\"title\": \"clusterProfiler 4.0: A universal enrichment tool for interpreting omics data.\", \"pmcid\": \"PMC8454663\", \"pmid\": \"34557778\", \"doi\": \"10.1016/j.xinn.2021.100141\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-07-01\"} [ABSTRACT] SummaryFunctional enrichment analysis is pivotal for interpreting high-throughput omics data in life science. It is crucial for this type of tool to use the latest annotation databases for as many organisms as possible. To meet these requirements, we present here an updated version of our popular Bioconductor package, clusterProfiler 4.0."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# clusterProfiler 4.0：面向组学数据解释的通用富集工具 ## 源文信息 - **题名**：clusterProfiler 4.0: A universal enrichment tool for interpreting omics data - **作者**：Tianzhi Wu, Erqiang Hu, Shuangbin Xu, Meijun Chen, Pingfan Guo, Zehan Dai, Tingze Feng, Lang Zhou, Wenli Tang, Li Zhan, Xiaocong Fu, Shanshan Liu, Xiaochen Bo, Guangchuang Yu - **期刊**：The Innovation, 2021; 2(3): 100141 - **DOI**：[10.1016/j.xinn.2021.100141](https://doi.org/10.1016/j.xinn.2021.100141) - **PMID**：34557778 - **PMCID**：PMC8454663 - **全文获取来源**：[https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8454663/](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8454663/) - **许可协议**：CC BY-NC-ND 4.0 - **机构**：南方医科大学基础医学院生物信息学系；北京放射医学研究所生物技术研究室 --- ## 摘要"
+        ],
+        "quote": "# clusterProfiler 4.0：面向组学数据解释的通用富集工具 ## 源文信息 - **题名**：clusterProfiler 4.0: A universal enrichment tool for interpreting omics data - **作者**：Tianzhi Wu, Erqiang Hu, Shuangbin Xu, Meijun Chen, Pingfan Guo, Zehan Dai, Tingze Feng, Lang Zhou, Wenli Tang, Li Zhan, Xiaocong Fu, Shanshan Liu, Xiaochen Bo, Guangchuang Yu - **期刊**：The Innovation, 2021; 2(3): 100141 - **DOI**：[10.1016/j.xinn.2021.100141](https://doi.org/10.1016/j.xinn.2021.100141) - **PMID**：34557778 - **PMCID**：PMC8454663 - **全文获取来源**：[https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8454663/](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8454663/) - **许可协议**：CC BY-NC-ND 4.0 - **机构**：南方医科大学基础医学院生物信息学系；北京放射医学研究所生物技术研究室 --- ## 摘要"
+      },
+      "explanation": "Both identify the study as a software description and demonstration, with no experimental or clinical design; exact match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Uses public datasets for demonstration: geneList from DOSE (breast cancer), GEO GSE8057 (ovarian cancer time-course), GEO GSE1295076 (CBX6 ChIP-seq), GTEx.",
+      "generatedFact": "Uses the same public datasets: geneList from DOSE, GSE8057, GSE1295076, and mentions GTEx reanalysis.",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "The following example shows an ORA on Biological Process (BP) to identify significant BP terms associated with the differentially expressed genes (DEGs). The geneList dataset, which contains fold change of gene expression levels between breast tumor and normal samples and is provided by the DOSE package, was used in this example. The DEGs were identified by a criterion of fold change >2. As demonstrated in Figure 1 A, the top 30 enriched terms are highly connected, and it seems that the DEGs are associated with a single functional module. Visualizing top enriched terms is a common approach to present and interpret the enrichment result."
+        ],
+        "quote": "The following example shows an ORA on Biological Process (BP) to identify significant BP terms associated with the differentially expressed genes (DEGs). The geneList dataset, which contains fold change of gene expression levels between breast tumor and normal samples and is provided by the DOSE package, was used in this example. The DEGs were identified by a criterion of fold change >2. As demonstrated in Figure 1 A, the top 30 enriched terms are highly connected, and it seems that the DEGs are associated with a single functional module. Visualizing top enriched terms is a common approach to present and interpret the enrichment result."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "| 函数 | 描述 | |---|---| | `enrichGO` / `gseGO` | 基于 GO 的 ORA / GSEA | | `enrichKEGG` / `gseKEGG` | 基于 KEGG 通路的 ORA / GSEA | | `enrichMKEGG` / `gseMKEGG` | 基于 KEGG 模块的 ORA / GSEA | | `enrichWP` / `gseWP` | 基于 WikiPathways 的 ORA / GSEA | | `enricher` / `GSEA` | 通用 ORA / GSEA 接口 | | `compareCluster` | 多条件功能谱比较 | | `simplify` | 基于语义相似度去除冗余 GO 术语 | | `read.gmt` / `read.gmt.wp` | GMT 格式基因集文件解析 | | `bitr` / `bitr_kegg` | 生物标识符转换 | ### GO 富集分析中的冗余消除 以来自 DOSE 包的乳腺肿瘤 vs. 正常组织差异表达基因（DEGs）数据集为例（筛选标准：fold change > 2），通过 `enrichGO` 进行 Biological Process 过表达分析后，前 30 个富集术语高度关联，看似集中于单一功能模块。应用 `simplify` 函数（cutoff = 0.7）去除冗余后，结果揭示了多个不同的功能模块，给出了更全面的功能图像。"
+        ],
+        "quote": "| 函数 | 描述 | |---|---| | `enrichGO` / `gseGO` | 基于 GO 的 ORA / GSEA | | `enrichKEGG` / `gseKEGG` | 基于 KEGG 通路的 ORA / GSEA | | `enrichMKEGG` / `gseMKEGG` | 基于 KEGG 模块的 ORA / GSEA | | `enrichWP` / `gseWP` | 基于 WikiPathways 的 ORA / GSEA | | `enricher` / `GSEA` | 通用 ORA / GSEA 接口 | | `compareCluster` | 多条件功能谱比较 | | `simplify` | 基于语义相似度去除冗余 GO 术语 | | `read.gmt` / `read.gmt.wp` | GMT 格式基因集文件解析 | | `bitr` / `bitr_kegg` | 生物标识符转换 | ### GO 富集分析中的冗余消除 以来自 DOSE 包的乳腺肿瘤 vs. 正常组织差异表达基因（DEGs）数据集为例（筛选标准：fold change > 2），通过 `enrichGO` 进行 Biological Process 过表达分析后，前 30 个富集术语高度关联，看似集中于单一功能模块。应用 `simplify` 函数（cutoff = 0.7）去除冗余后，结果揭示了多个不同的功能模块，给出了更全面的功能图像。"
+      },
+      "explanation": "Both cite identical data sources; no discrepancy.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Over 6,000 KEGG species, 20 Bioconductor OrgDb packages, >30 dependent R packages.",
+      "generatedFact": "Over 6,000 KEGG species, 20 OrgDb packages, more than 30 downstream R packages.",
+      "sourceEvidence": {
+        "locator": "R0019",
+        "locators": [
+          "R0019"
+        ],
+        "quotes": [
+          "The clusterProfiler package does not pack any KEGG data. Instead, it queries the latest online KEGG database through web API to perform functional analysis. The advantage of this feature is obvious: it allows clusterProfiler to use up-to-date data and support all the species that have KEGG annotation (more than 6,000 species are listed in http://www.genome.jp/kegg/catalog/org_list.html ). Moreover, clusterProfiler supports the KEGG Orthology database and can be used to perform functional characterization of the microbiomes. 20 In the following example, GSEA was performed with KEGG pathway."
+        ],
+        "quote": "The clusterProfiler package does not pack any KEGG data. Instead, it queries the latest online KEGG database through web API to perform functional analysis. The advantage of this feature is obvious: it allows clusterProfiler to use up-to-date data and support all the species that have KEGG annotation (more than 6,000 species are listed in http://www.genome.jp/kegg/catalog/org_list.html ). Moreover, clusterProfiler supports the KEGG Orthology database and can be used to perform functional characterization of the microbiomes. 20 In the following example, GSEA was performed with KEGG pathway."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "### KEGG 通路与模块分析 与其他打包静态 KEGG 数据的工具不同，clusterProfiler 通过 KEGG Web API 实时查询最新在线数据库，支持 KEGG 通路和 KEGG 模块两种层次的富集分析。这一设计使其兼容 KEGG 注释的全部物种（超过 6,000 种），并支持通过 KEGG Orthology 数据库进行微生物组功能特征分析。 ### 通用基因集接口 clusterProfiler 提供 `enricher` 和 `GSEA` 两个通用函数，接受用户自提供的基因注释（两列数据框：基因集名称-基因符号对）。该接口可直接导入 GMT 格式的基因集库文件（通过 `read.gmt` 解析），以利用 MSigDB、Disease Signatures、CCLE 等外部数据库，或人工注释进行定制化分析。 ### 基因组 ROI 的功能注释 通过与 ChIPseeker 包的 `seq2gene` 函数集成，clusterProfiler 支持将基因组兴趣区域（如 ChIP-seq 峰、DNase-seq 或 ATAC-seq 开放染色质区域）映射到编码基因（考虑宿主基因、启动子区和上下游侧翼区域的多种对应关系），再将映射所得基因列表用于功能富集分析。该方法可兼容 UCSC（TxDb）或 Ensembl（EnsDb）来源的基因组注释。 ### 多条件比较框架 `compareCluster` 函数接受若干基因列表或公式指定的分组设计，对每个列表/分组调用指定的富集函数，并将结果汇总为单一对象，支持跨实验条件或时间点的功能谱差异比较。"
+        ],
+        "quote": "### KEGG 通路与模块分析 与其他打包静态 KEGG 数据的工具不同，clusterProfiler 通过 KEGG Web API 实时查询最新在线数据库，支持 KEGG 通路和 KEGG 模块两种层次的富集分析。这一设计使其兼容 KEGG 注释的全部物种（超过 6,000 种），并支持通过 KEGG Orthology 数据库进行微生物组功能特征分析。 ### 通用基因集接口 clusterProfiler 提供 `enricher` 和 `GSEA` 两个通用函数，接受用户自提供的基因注释（两列数据框：基因集名称-基因符号对）。该接口可直接导入 GMT 格式的基因集库文件（通过 `read.gmt` 解析），以利用 MSigDB、Disease Signatures、CCLE 等外部数据库，或人工注释进行定制化分析。 ### 基因组 ROI 的功能注释 通过与 ChIPseeker 包的 `seq2gene` 函数集成，clusterProfiler 支持将基因组兴趣区域（如 ChIP-seq 峰、DNase-seq 或 ATAC-seq 开放染色质区域）映射到编码基因（考虑宿主基因、启动子区和上下游侧翼区域的多种对应关系），再将映射所得基因列表用于功能富集分析。该方法可兼容 UCSC（TxDb）或 Ensembl（EnsDb）来源的基因组注释。 ### 多条件比较框架 `compareCluster` 函数接受若干基因列表或公式指定的分组设计，对每个列表/分组调用指定的富集函数，并将结果汇总为单一对象，支持跨实验条件或时间点的功能谱差异比较。"
+      },
+      "explanation": "Key size-related facts (species count, OrgDb number, package count) are accurately reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "partial",
+      "issueKinds": [
+        "missing"
+      ],
+      "referenceFact": "DEGs identified by fold change >2; genomic ROI mapping uses tssRegion=c(-1000,1000) and flankDistance=3000.",
+      "generatedFact": "Describes DEG filtering by fold change >2 and the seq2gene mapping strategy but does not provide the numeric tssRegion and flankDistance parameters.",
+      "sourceEvidence": {
+        "locator": "R0032",
+        "locators": [
+          "R0032"
+        ],
+        "quotes": [
+          "library(ChIPseeker) ## the file can be downloaded using ‘downloadGSMbedFiles(\" GSM1295076 \")’ file <- \"GSM1295076_CBX6_BF_ChipSeq_mergedReps_peaks.bed.gz\" gr <- readPeakFile(file) library(TxDb.Hsapiens.UCSC.hg19.knownGene) TxDb <- TxDb.Hsapiens.UCSC.hg19.knownGene genes <- seq2gene(gr, tssRegion=c(-1000, 1000), flankDistance = 3000, TxDb) library(clusterProfiler) g <- bitr(genes, ‘ENTREZID’, ‘SYMBOL’, ‘org.Hs.eg.db’) ## downloaded from https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=ENCODE_and_ChEA_Consensus_TFs_from_ChIP-X encode <- read.gmt(\"ENCODE_and_ChEA_Consensus_TFs_from_ChIP-X.txt\") enricher(g$SYMBOL, TERM2GENE=encode) A dataset of ChIP-seq with antibody against"
+        ],
+        "quote": "library(ChIPseeker) ## the file can be downloaded using ‘downloadGSMbedFiles(\" GSM1295076 \")’ file <- \"GSM1295076_CBX6_BF_ChipSeq_mergedReps_peaks.bed.gz\" gr <- readPeakFile(file) library(TxDb.Hsapiens.UCSC.hg19.knownGene) TxDb <- TxDb.Hsapiens.UCSC.hg19.knownGene genes <- seq2gene(gr, tssRegion=c(-1000, 1000), flankDistance = 3000, TxDb) library(clusterProfiler) g <- bitr(genes, ‘ENTREZID’, ‘SYMBOL’, ‘org.Hs.eg.db’) ## downloaded from https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=ENCODE_and_ChEA_Consensus_TFs_from_ChIP-X encode <- read.gmt(\"ENCODE_and_ChEA_Consensus_TFs_from_ChIP-X.txt\") enricher(g$SYMBOL, TERM2GENE=encode) A dataset of ChIP-seq with antibody against"
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "### KEGG 通路与模块分析 与其他打包静态 KEGG 数据的工具不同，clusterProfiler 通过 KEGG Web API 实时查询最新在线数据库，支持 KEGG 通路和 KEGG 模块两种层次的富集分析。这一设计使其兼容 KEGG 注释的全部物种（超过 6,000 种），并支持通过 KEGG Orthology 数据库进行微生物组功能特征分析。 ### 通用基因集接口 clusterProfiler 提供 `enricher` 和 `GSEA` 两个通用函数，接受用户自提供的基因注释（两列数据框：基因集名称-基因符号对）。该接口可直接导入 GMT 格式的基因集库文件（通过 `read.gmt` 解析），以利用 MSigDB、Disease Signatures、CCLE 等外部数据库，或人工注释进行定制化分析。 ### 基因组 ROI 的功能注释 通过与 ChIPseeker 包的 `seq2gene` 函数集成，clusterProfiler 支持将基因组兴趣区域（如 ChIP-seq 峰、DNase-seq 或 ATAC-seq 开放染色质区域）映射到编码基因（考虑宿主基因、启动子区和上下游侧翼区域的多种对应关系），再将映射所得基因列表用于功能富集分析。该方法可兼容 UCSC（TxDb）或 Ensembl（EnsDb）来源的基因组注释。 ### 多条件比较框架 `compareCluster` 函数接受若干基因列表或公式指定的分组设计，对每个列表/分组调用指定的富集函数，并将结果汇总为单一对象，支持跨实验条件或时间点的功能谱差异比较。"
+        ],
+        "quote": "### KEGG 通路与模块分析 与其他打包静态 KEGG 数据的工具不同，clusterProfiler 通过 KEGG Web API 实时查询最新在线数据库，支持 KEGG 通路和 KEGG 模块两种层次的富集分析。这一设计使其兼容 KEGG 注释的全部物种（超过 6,000 种），并支持通过 KEGG Orthology 数据库进行微生物组功能特征分析。 ### 通用基因集接口 clusterProfiler 提供 `enricher` 和 `GSEA` 两个通用函数，接受用户自提供的基因注释（两列数据框：基因集名称-基因符号对）。该接口可直接导入 GMT 格式的基因集库文件（通过 `read.gmt` 解析），以利用 MSigDB、Disease Signatures、CCLE 等外部数据库，或人工注释进行定制化分析。 ### 基因组 ROI 的功能注释 通过与 ChIPseeker 包的 `seq2gene` 函数集成，clusterProfiler 支持将基因组兴趣区域（如 ChIP-seq 峰、DNase-seq 或 ATAC-seq 开放染色质区域）映射到编码基因（考虑宿主基因、启动子区和上下游侧翼区域的多种对应关系），再将映射所得基因列表用于功能富集分析。该方法可兼容 UCSC（TxDb）或 Ensembl（EnsDb）来源的基因组注释。 ### 多条件比较框架 `compareCluster` 函数接受若干基因列表或公式指定的分组设计，对每个列表/分组调用指定的富集函数，并将结果汇总为单一对象，支持跨实验条件或时间点的功能谱差异比较。"
+      },
+      "explanation": "Exact parameter values for seq2gene (-1000, 1000, 3000) are omitted.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "clusterProfiler 4.0 package providing functions for ORA and GSEA using various biological databases.",
+      "generatedFact": "clusterProfiler 4.0 with ORA and GSEA methods for multiple ontologies and pathways.",
+      "sourceEvidence": {
+        "locator": "R0009",
+        "locators": [
+          "R0009"
+        ],
+        "quotes": [
+          "Table 1 Major clusterProfiler functions Function Description enrichGO ORA using GO enrichKEGG ORA using KEGG pathway enrichMKEGG ORA using KEGG module enrichWP ORA using WikiPathways enricher general interface for ORA gseGO GSEA using GO gseKEGG GSEA using KEGG pathway gseMKEGG GSEA using KEGG module gseWP GSEA using WikiPathways GSEA general interface for GSEA compareCluster compare functional profiles for genes obtained from different conditions merge_result merge enrichment results for comparison read.gmt parse gene set file in GMT format read.gmt.wp parse WikiPathways GMT file download_KEGG download the latest version of the KEGG pathway/module get_wp_organism list supported organisms of"
+        ],
+        "quote": "Table 1 Major clusterProfiler functions Function Description enrichGO ORA using GO enrichKEGG ORA using KEGG pathway enrichMKEGG ORA using KEGG module enrichWP ORA using WikiPathways enricher general interface for ORA gseGO GSEA using GO gseKEGG GSEA using KEGG pathway gseMKEGG GSEA using KEGG module gseWP GSEA using WikiPathways GSEA general interface for GSEA compareCluster compare functional profiles for genes obtained from different conditions merge_result merge enrichment results for comparison read.gmt parse gene set file in GMT format read.gmt.wp parse WikiPathways GMT file download_KEGG download the latest version of the KEGG pathway/module get_wp_organism list supported organisms of"
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 数据操作与可视化接口 clusterProfiler 扩展了 dplyr 动词（`filter`、`mutate`、`arrange`、`group_by`、`select`、`summarise` 等），使其兼容 `enrichResult`、`gseaResult` 和 `compareClusterResult` 对象，允许通过管道操作符构建可复现的数据操作工作流。同时，扩展 ggplot2 使其直接支持对富集结果对象的绘图，用户无需编写中间转换代码即可生成定制化图形。 ## 结果 ### 核心功能矩阵 clusterProfiler 4.0 提供按分析方法和数据源类型分类的 30 余个主要函数（表 1），涵盖 GO、KEGG 通路、KEGG 模块、WikiPathways 的 ORA 和 GSEA，以及通用富集接口、多列表比较、生物标识符转换、结果简化和数据操作功能。"
+        ],
+        "quote": "### 数据操作与可视化接口 clusterProfiler 扩展了 dplyr 动词（`filter`、`mutate`、`arrange`、`group_by`、`select`、`summarise` 等），使其兼容 `enrichResult`、`gseaResult` 和 `compareClusterResult` 对象，允许通过管道操作符构建可复现的数据操作工作流。同时，扩展 ggplot2 使其直接支持对富集结果对象的绘图，用户无需编写中间转换代码即可生成定制化图形。 ## 结果 ### 核心功能矩阵 clusterProfiler 4.0 提供按分析方法和数据源类型分类的 30 余个主要函数（表 1），涵盖 GO、KEGG 通路、KEGG 模块、WikiPathways 的 ORA 和 GSEA，以及通用富集接口、多列表比较、生物标识符转换、结果简化和数据操作功能。"
+      },
+      "explanation": "Both describe the same software tool and its core analytical functions.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No formal comparator or control group; tool description paper.",
+      "generatedFact": "Notes absence of benchmark against other tools but no comparator is present in the study.",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The study design does not involve a comparator; the item is not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No primary outcome defined; demonstration outputs include enriched terms and pathways.",
+      "generatedFact": "Outputs are enrichment results and visualizations, not formal endpoints.",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "This is a software tool paper without predefined clinical or experimental endpoints; item not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No study-level follow-up; example data uses time points 0–24 h, but paper is a software description.",
+      "generatedFact": "Mentions time points in example but no overarching follow-up period.",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The paper does not have a biological follow-up design; time horizon is not a relevant characteristic.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Preprocessing steps: DEG identification by fold change >2, GMT parsing, gene ID conversion, genomic region mapping.",
+      "generatedFact": "Describes DEG selection by fold change >2, GMT file parsing, and seq2gene mapping.",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "The following example shows an ORA on Biological Process (BP) to identify significant BP terms associated with the differentially expressed genes (DEGs). The geneList dataset, which contains fold change of gene expression levels between breast tumor and normal samples and is provided by the DOSE package, was used in this example. The DEGs were identified by a criterion of fold change >2. As demonstrated in Figure 1 A, the top 30 enriched terms are highly connected, and it seems that the DEGs are associated with a single functional module. Visualizing top enriched terms is a common approach to present and interpret the enrichment result."
+        ],
+        "quote": "The following example shows an ORA on Biological Process (BP) to identify significant BP terms associated with the differentially expressed genes (DEGs). The geneList dataset, which contains fold change of gene expression levels between breast tumor and normal samples and is provided by the DOSE package, was used in this example. The DEGs were identified by a criterion of fold change >2. As demonstrated in Figure 1 A, the top 30 enriched terms are highly connected, and it seems that the DEGs are associated with a single functional module. Visualizing top enriched terms is a common approach to present and interpret the enrichment result."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "| 函数 | 描述 | |---|---| | `enrichGO` / `gseGO` | 基于 GO 的 ORA / GSEA | | `enrichKEGG` / `gseKEGG` | 基于 KEGG 通路的 ORA / GSEA | | `enrichMKEGG` / `gseMKEGG` | 基于 KEGG 模块的 ORA / GSEA | | `enrichWP` / `gseWP` | 基于 WikiPathways 的 ORA / GSEA | | `enricher` / `GSEA` | 通用 ORA / GSEA 接口 | | `compareCluster` | 多条件功能谱比较 | | `simplify` | 基于语义相似度去除冗余 GO 术语 | | `read.gmt` / `read.gmt.wp` | GMT 格式基因集文件解析 | | `bitr` / `bitr_kegg` | 生物标识符转换 | ### GO 富集分析中的冗余消除 以来自 DOSE 包的乳腺肿瘤 vs. 正常组织差异表达基因（DEGs）数据集为例（筛选标准：fold change > 2），通过 `enrichGO` 进行 Biological Process 过表达分析后，前 30 个富集术语高度关联，看似集中于单一功能模块。应用 `simplify` 函数（cutoff = 0.7）去除冗余后，结果揭示了多个不同的功能模块，给出了更全面的功能图像。"
+        ],
+        "quote": "| 函数 | 描述 | |---|---| | `enrichGO` / `gseGO` | 基于 GO 的 ORA / GSEA | | `enrichKEGG` / `gseKEGG` | 基于 KEGG 通路的 ORA / GSEA | | `enrichMKEGG` / `gseMKEGG` | 基于 KEGG 模块的 ORA / GSEA | | `enrichWP` / `gseWP` | 基于 WikiPathways 的 ORA / GSEA | | `enricher` / `GSEA` | 通用 ORA / GSEA 接口 | | `compareCluster` | 多条件功能谱比较 | | `simplify` | 基于语义相似度去除冗余 GO 术语 | | `read.gmt` / `read.gmt.wp` | GMT 格式基因集文件解析 | | `bitr` / `bitr_kegg` | 生物标识符转换 | ### GO 富集分析中的冗余消除 以来自 DOSE 包的乳腺肿瘤 vs. 正常组织差异表达基因（DEGs）数据集为例（筛选标准：fold change > 2），通过 `enrichGO` 进行 Biological Process 过表达分析后，前 30 个富集术语高度关联，看似集中于单一功能模块。应用 `simplify` 函数（cutoff = 0.7）去除冗余后，结果揭示了多个不同的功能模块，给出了更全面的功能图像。"
+      },
+      "explanation": "All preprocessing steps mentioned in the reference appear in the generated text.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Over-representation analysis (hypergeometric test) and gene set enrichment analysis (Kolmogorov-Smirnov type).",
+      "generatedFact": "ORA uses hypergeometric distribution; GSEA uses Kolmogorov-Smirnov rank statistic.",
+      "sourceEvidence": {
+        "locator": "R0054",
+        "locators": [
+          "R0054"
+        ],
+        "quotes": [
+          "GO analysis relies on GO annotation maintained by the community, and the enrichment analysis for genomic regions relies on genomic annotation maintained by UCSC and Ensembl. There are R packages that contain gene set annotation (e.g., msigdbr) and R client libraries for accessing pathway data (e.g., rWikiPathways). These data can be used directly as background annotation in clusterProfiler through the universal interface to characterize the functional profile of omics data. The ORA algorithm is implemented in the DOSE package 21 developed in-house, and the GSEA algorithm is implemented in DOSE and fgsea 39 packages."
+        ],
+        "quote": "GO analysis relies on GO annotation maintained by the community, and the enrichment analysis for genomic regions relies on genomic annotation maintained by UCSC and Ensembl. There are R packages that contain gene set annotation (e.g., msigdbr) and R client libraries for accessing pathway data (e.g., rWikiPathways). These data can be used directly as background annotation in clusterProfiler through the universal interface to characterize the functional profile of omics data. The ORA algorithm is implemented in the DOSE package 21 developed in-house, and the GSEA algorithm is implemented in DOSE and fgsea 39 packages."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "## 方法 ### 软件架构与算法基础 clusterProfiler 4.0 以 R 语言实现，作为 Bioconductor 生态系统的一部分发布，遵循 Bioconductor 的面向对象设计规范。该软件包基于两类核心统计方法提供富集分析能力：过表达分析（ORA）采用超几何分布检验，评估输入基因列表中特异性注释到某功能类别的基因比例是否显著高于背景；基因集富集分析（GSEA）基于 Kolmogorov-Smirnov 型排序统计量，利用预排序的全基因组度量（如差异表达倍数的对数）计算富集分数（ES）和标准化富集分数（NES），识别基因集在排名两端的偏移趋势。 ### GO 富集分析 对于 GO 注释，clusterProfiler 依赖 Bioconductor 项目发布的基因组范围注释包（OrgDb）。Bioconductor 核心仓库中提供 20 个物种的 OrgDb 包（每半年更新），非模式生物的 GO 注释可通过 AnnotationHub 在线查询。用户也可利用 AnnotationForge 将自获取的 GO 注释数据框构造为 OrgDb 对象，或直接通过通用接口传入注释。 clusterProfiler 内嵌基于 GOSemSim 包的 `simplify` 函数，通过计算富集 GO 术语间的语义相似度（支持基于信息含量和图结构的多种度量方法）来去除冗余 GO 条目；相似度高于阈值（如 0.7）的术语组中仅保留最具代表性的条目。"
+        ],
+        "quote": "## 方法 ### 软件架构与算法基础 clusterProfiler 4.0 以 R 语言实现，作为 Bioconductor 生态系统的一部分发布，遵循 Bioconductor 的面向对象设计规范。该软件包基于两类核心统计方法提供富集分析能力：过表达分析（ORA）采用超几何分布检验，评估输入基因列表中特异性注释到某功能类别的基因比例是否显著高于背景；基因集富集分析（GSEA）基于 Kolmogorov-Smirnov 型排序统计量，利用预排序的全基因组度量（如差异表达倍数的对数）计算富集分数（ES）和标准化富集分数（NES），识别基因集在排名两端的偏移趋势。 ### GO 富集分析 对于 GO 注释，clusterProfiler 依赖 Bioconductor 项目发布的基因组范围注释包（OrgDb）。Bioconductor 核心仓库中提供 20 个物种的 OrgDb 包（每半年更新），非模式生物的 GO 注释可通过 AnnotationHub 在线查询。用户也可利用 AnnotationForge 将自获取的 GO 注释数据框构造为 OrgDb 对象，或直接通过通用接口传入注释。 clusterProfiler 内嵌基于 GOSemSim 包的 `simplify` 函数，通过计算富集 GO 术语间的语义相似度（支持基于信息含量和图结构的多种度量方法）来去除冗余 GO 条目；相似度高于阈值（如 0.7）的术语组中仅保留最具代表性的条目。"
+      },
+      "explanation": "The statistical methods are correctly described in both texts.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Core algorithms are ORA and GSEA; also semantic similarity-based redundancy removal (simplify).",
+      "generatedFact": "Implements ORA, GSEA, and simplify using GOSemSim.",
+      "sourceEvidence": {
+        "locator": "R0014",
+        "locators": [
+          "R0014"
+        ],
+        "quotes": [
+          "A parent term might be significantly enriched only because it contains all the genes of a significantly over-represented child term. Consequently, the list of enriched GO terms is often too long and contains redundant terms, which hinders effective interpretation. Therefore, clusterProfiler integrates a simplify function to eliminate such redundant GO terms. This function employs the GOSemSim 17 package to calculate semantic similarities among enriched GO terms using multiple methods based on information content or graph structure. Highly similar GO terms (e.g., >0.7) will be removed by applying the simplify function to retain a representative term (e.g., the most significant term)."
+        ],
+        "quote": "A parent term might be significantly enriched only because it contains all the genes of a significantly over-represented child term. Consequently, the list of enriched GO terms is often too long and contains redundant terms, which hinders effective interpretation. Therefore, clusterProfiler integrates a simplify function to eliminate such redundant GO terms. This function employs the GOSemSim 17 package to calculate semantic similarities among enriched GO terms using multiple methods based on information content or graph structure. Highly similar GO terms (e.g., >0.7) will be removed by applying the simplify function to retain a representative term (e.g., the most significant term)."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "## 方法 ### 软件架构与算法基础 clusterProfiler 4.0 以 R 语言实现，作为 Bioconductor 生态系统的一部分发布，遵循 Bioconductor 的面向对象设计规范。该软件包基于两类核心统计方法提供富集分析能力：过表达分析（ORA）采用超几何分布检验，评估输入基因列表中特异性注释到某功能类别的基因比例是否显著高于背景；基因集富集分析（GSEA）基于 Kolmogorov-Smirnov 型排序统计量，利用预排序的全基因组度量（如差异表达倍数的对数）计算富集分数（ES）和标准化富集分数（NES），识别基因集在排名两端的偏移趋势。 ### GO 富集分析 对于 GO 注释，clusterProfiler 依赖 Bioconductor 项目发布的基因组范围注释包（OrgDb）。Bioconductor 核心仓库中提供 20 个物种的 OrgDb 包（每半年更新），非模式生物的 GO 注释可通过 AnnotationHub 在线查询。用户也可利用 AnnotationForge 将自获取的 GO 注释数据框构造为 OrgDb 对象，或直接通过通用接口传入注释。 clusterProfiler 内嵌基于 GOSemSim 包的 `simplify` 函数，通过计算富集 GO 术语间的语义相似度（支持基于信息含量和图结构的多种度量方法）来去除冗余 GO 条目；相似度高于阈值（如 0.7）的术语组中仅保留最具代表性的条目。"
+        ],
+        "quote": "## 方法 ### 软件架构与算法基础 clusterProfiler 4.0 以 R 语言实现，作为 Bioconductor 生态系统的一部分发布，遵循 Bioconductor 的面向对象设计规范。该软件包基于两类核心统计方法提供富集分析能力：过表达分析（ORA）采用超几何分布检验，评估输入基因列表中特异性注释到某功能类别的基因比例是否显著高于背景；基因集富集分析（GSEA）基于 Kolmogorov-Smirnov 型排序统计量，利用预排序的全基因组度量（如差异表达倍数的对数）计算富集分数（ES）和标准化富集分数（NES），识别基因集在排名两端的偏移趋势。 ### GO 富集分析 对于 GO 注释，clusterProfiler 依赖 Bioconductor 项目发布的基因组范围注释包（OrgDb）。Bioconductor 核心仓库中提供 20 个物种的 OrgDb 包（每半年更新），非模式生物的 GO 注释可通过 AnnotationHub 在线查询。用户也可利用 AnnotationForge 将自获取的 GO 注释数据框构造为 OrgDb 对象，或直接通过通用接口传入注释。 clusterProfiler 内嵌基于 GOSemSim 包的 `simplify` 函数，通过计算富集 GO 术语间的语义相似度（支持基于信息含量和图结构的多种度量方法）来去除冗余 GO 条目；相似度高于阈值（如 0.7）的术语组中仅保留最具代表性的条目。"
+      },
+      "explanation": "Algorithmic components match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "partial",
+      "issueKinds": [
+        "missing"
+      ],
+      "referenceFact": "42% tools outdated >5 years, 26% pathway capture, >6000 KEGG species, >30 packages, example p=2.17e-26, GeneRatio 34/194.",
+      "generatedFact": "Includes 42% outdated, 26% captured, >6000 species, >30 packages, but omits specific enrichment statistics (p-value, GeneRatio).",
+      "sourceEvidence": {
+        "locator": "R0005",
+        "locators": [
+          "R0005"
+        ],
+        "quotes": [
+          "A previous study 5 reported that about 42% of the tools were outdated by more than 5 years and that functional significance was severely underestimated, with only 26% of biological processes or pathways captured in comparison with those employing up-to-date annotation. Such negative impacts of outdated annotation can be propagated for years and can hinder follow-up studies."
+        ],
+        "quote": "A previous study 5 reported that about 42% of the tools were outdated by more than 5 years and that functional significance was severely underestimated, with only 26% of biological processes or pathways captured in comparison with those employing up-to-date annotation. Such negative impacts of outdated annotation can be propagated for years and can hinder follow-up studies."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "此外，注释数据库更新周期差异悬殊，许多工具未能及时同步最新信息。一项既往研究报道，约 42% 的分析工具所依赖的注释数据已过期超过 5 年，且仅捕获了 26% 的生物学过程或通路，显著低估了功能信号。此类过时注释的负面影响可能持续数年，阻碍后续研究。在利用 clusterProfiler 对 ENCODE 联盟发布的 GTEx 数据集进行基于最新注释的重新分析时，研究者发现了大量由过时注释遗漏的新通路，并据此产生了新的科学假说。 clusterProfiler 最初于 2012 年发布，旨在基于 GO 和 KEGG 为若干模式物种执行过表达分析（ORA）并在单一水平上比较不同条件的功能谱。经过长期迭代，clusterProfiler 现已支持多种本体和通路注释、数千种物种的最新基因注释、用户对新物种的自定义注释以及新兴注释类型，同时支持 ORA 和基因集富集分析（GSEA），其比较功能也扩展至多层次复杂实验设计的支持。clusterProfiler 还被超过 30 个 CRAN 和 Bioconductor 软件包、多个分析流程（如 TCGA Workflow 和 ViralLink）以及在线平台（如 NASQAR 和 ABioTrans）集成。"
+        ],
+        "quote": "此外，注释数据库更新周期差异悬殊，许多工具未能及时同步最新信息。一项既往研究报道，约 42% 的分析工具所依赖的注释数据已过期超过 5 年，且仅捕获了 26% 的生物学过程或通路，显著低估了功能信号。此类过时注释的负面影响可能持续数年，阻碍后续研究。在利用 clusterProfiler 对 ENCODE 联盟发布的 GTEx 数据集进行基于最新注释的重新分析时，研究者发现了大量由过时注释遗漏的新通路，并据此产生了新的科学假说。 clusterProfiler 最初于 2012 年发布，旨在基于 GO 和 KEGG 为若干模式物种执行过表达分析（ORA）并在单一水平上比较不同条件的功能谱。经过长期迭代，clusterProfiler 现已支持多种本体和通路注释、数千种物种的最新基因注释、用户对新物种的自定义注释以及新兴注释类型，同时支持 ORA 和基因集富集分析（GSEA），其比较功能也扩展至多层次复杂实验设计的支持。clusterProfiler 还被超过 30 个 CRAN 和 Bioconductor 软件包、多个分析流程（如 TCGA Workflow 和 ViralLink）以及在线平台（如 NASQAR 和 ABioTrans）集成。"
+      },
+      "explanation": "Generated lacks the p-value and gene counts from the demonstration example, which are key numerical findings.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "missing",
+      "issueKinds": [
+        "missing"
+      ],
+      "referenceFact": "Enrichment results include p-value and adjusted p-value (e.g., p=2.17e-26, p.adjust=6.70e-23).",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "R0042",
+        "locators": [
+          "R0042"
+        ],
+        "quotes": [
+          "## head or tail to print first or last n rows head (ego, 2) ## ID Description GeneRatio BgRatio pvalue ## GO:0140014 GO:0140014 mitotic nuclear division 34/194 286/18866 2.171838e-26 ## GO:0000280 GO:0000280 nuclear division 36/194 428/18866 1.099719e-22 ## p.adjust qvalue ## GO:0140014 6.700119e-23 5.710790e-23 ## GO:0000280 1.696316e-19 1.445841e-19 ## geneID ## GO:0140014 CDCA8/CDC20/KIF23/CENPE/MYBL2/CCNB2/NDC80/NCAPH/DLGAP5/UBE2C/NUSAP1/TPX2/TACC3/NEK2/UBE2S/CDK1/MAD2L1/KIF18A/CDT1/BIRC5/KIF11/TTK/NCAPG/AURKB/CHEK1/TRIP13/PRC1/KIFC1/KIF18B/AURKA/CCNB1/KIF4A/PTTG1/BMP4 ## GO:0000280"
+        ],
+        "quote": "## head or tail to print first or last n rows head (ego, 2) ## ID Description GeneRatio BgRatio pvalue ## GO:0140014 GO:0140014 mitotic nuclear division 34/194 286/18866 2.171838e-26 ## GO:0000280 GO:0000280 nuclear division 36/194 428/18866 1.099719e-22 ## p.adjust qvalue ## GO:0140014 6.700119e-23 5.710790e-23 ## GO:0000280 1.696316e-19 1.445841e-19 ## geneID ## GO:0140014 CDCA8/CDC20/KIF23/CENPE/MYBL2/CCNB2/NDC80/NCAPH/DLGAP5/UBE2C/NUSAP1/TPX2/TACC3/NEK2/UBE2S/CDK1/MAD2L1/KIF18A/CDT1/BIRC5/KIF11/TTK/NCAPG/AURKB/CHEK1/TRIP13/PRC1/KIFC1/KIF18B/AURKA/CCNB1/KIF4A/PTTG1/BMP4 ## GO:0000280"
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Generated text contains no p-values or confidence intervals; completely omits the uncertainty information present in the reference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "clusterProfiler 4.0 is a powerful, up-to-date enrichment tool supporting thousands of organisms, tidy interface, and broad integration.",
+      "generatedFact": "clusterProfiler 4.0 is a comprehensive upgrade forming a complete toolchain with wide applicability and full backward compatibility.",
+      "sourceEvidence": {
+        "locator": "R0058",
+        "locators": [
+          "R0058"
+        ],
+        "quotes": [
+          "Compared with many other tools that do not update background annotation databases in timely fashion and only support a limited number of organisms, clusterProfiler uses up-to-date biological knowledge of genes and biological processes (GO and KEGG) and supports thousands of organisms. In addition, clusterProfiler provides a universal interface for functional analysis with user-provided annotations. This creates the possibility to apply clusterProfiler on functional characterization of different types of data with different biological knowledge."
+        ],
+        "quote": "Compared with many other tools that do not update background annotation databases in timely fashion and only support a limited number of organisms, clusterProfiler uses up-to-date biological knowledge of genes and biological processes (GO and KEGG) and supports thousands of organisms. In addition, clusterProfiler provides a universal interface for functional analysis with user-provided annotations. This creates the possibility to apply clusterProfiler on functional characterization of different types of data with different biological knowledge."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "## 结论 clusterProfiler 4.0 是 clusterProfiler 发布 9 年后的全面重构版本，在保持对原有 ORA 和比较分析功能的完全向后兼容的同时，新增了面向数万种物种的最新注释、通用基因集富集接口、对 dplyr 和 ggplot2 的扩展支持以及多层次条件比较框架，形成了从基因标识转换到功能注释再到可视化解释的完整工具链。该包以自由开源形式通过 Bioconductor（https://www.bioconductor.org/packages/clusterProfiler）分发，开发版本托管于 GitHub（https://github.com/YuLab-SMU/clusterProfiler），配有在线参考书（https://yulab-smu.top/biomedical-knowledge-mining-book/）提供详尽的用例和解析。预计该工具将继续为跨物种和跨实验类型的生物学机制发现提供关键支持。 --- > **来源声明**：本文基于 PubMed Central 提供的开放获取全文（PMCID: PMC8454663; PMID: 34557778）重写，所有方法描述、功能名称、分析示例和数据结论均可从原文核验。本文未引入原文中未出现的数据、方法或结论性论断。"
+        ],
+        "quote": "## 结论 clusterProfiler 4.0 是 clusterProfiler 发布 9 年后的全面重构版本，在保持对原有 ORA 和比较分析功能的完全向后兼容的同时，新增了面向数万种物种的最新注释、通用基因集富集接口、对 dplyr 和 ggplot2 的扩展支持以及多层次条件比较框架，形成了从基因标识转换到功能注释再到可视化解释的完整工具链。该包以自由开源形式通过 Bioconductor（https://www.bioconductor.org/packages/clusterProfiler）分发，开发版本托管于 GitHub（https://github.com/YuLab-SMU/clusterProfiler），配有在线参考书（https://yulab-smu.top/biomedical-knowledge-mining-book/）提供详尽的用例和解析。预计该工具将继续为跨物种和跨实验类型的生物学机制发现提供关键支持。 --- > **来源声明**：本文基于 PubMed Central 提供的开放获取全文（PMCID: PMC8454663; PMID: 34557778）重写，所有方法描述、功能名称、分析示例和数据结论均可从原文核验。本文未引入原文中未出现的数据、方法或结论性论断。"
+      },
+      "explanation": "The main conclusion about the tool's value, up-to-date annotations, and broad scope is preserved identically.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No explicit limitations section; discussion covers maintenance and compatibility but not formal limitations.",
+      "generatedFact": "Adds a detailed limitation paragraph not present in the original.",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The reference paper does not contain a limitations section; therefore, comparing limitations is not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No safety or adverse events pertain to this software tool.",
+      "generatedFact": "No mention of harms.",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The study is a computational method with no biological or clinical safety considerations.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "inputs_outputs_and_scope",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Inputs: gene lists, genomic regions, annotation data. Outputs: enrichment tables, plots. Scope: cross-species functional enrichment.",
+      "generatedFact": "Inputs include gene lists, genomic regions, user annotations; outputs are enrichment results and visualizations; scope is thousands of organisms.",
+      "sourceEvidence": {
+        "locator": "R0005",
+        "locators": [
+          "R0005"
+        ],
+        "quotes": [
+          "A previous study 5 reported that about 42% of the tools were outdated by more than 5 years and that functional significance was severely underestimated, with only 26% of biological processes or pathways captured in comparison with those employing up-to-date annotation. Such negative impacts of outdated annotation can be propagated for years and can hinder follow-up studies."
+        ],
+        "quote": "A previous study 5 reported that about 42% of the tools were outdated by more than 5 years and that functional significance was severely underestimated, with only 26% of biological processes or pathways captured in comparison with those employing up-to-date annotation. Such negative impacts of outdated annotation can be propagated for years and can hinder follow-up studies."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "## 方法 ### 软件架构与算法基础 clusterProfiler 4.0 以 R 语言实现，作为 Bioconductor 生态系统的一部分发布，遵循 Bioconductor 的面向对象设计规范。该软件包基于两类核心统计方法提供富集分析能力：过表达分析（ORA）采用超几何分布检验，评估输入基因列表中特异性注释到某功能类别的基因比例是否显著高于背景；基因集富集分析（GSEA）基于 Kolmogorov-Smirnov 型排序统计量，利用预排序的全基因组度量（如差异表达倍数的对数）计算富集分数（ES）和标准化富集分数（NES），识别基因集在排名两端的偏移趋势。 ### GO 富集分析 对于 GO 注释，clusterProfiler 依赖 Bioconductor 项目发布的基因组范围注释包（OrgDb）。Bioconductor 核心仓库中提供 20 个物种的 OrgDb 包（每半年更新），非模式生物的 GO 注释可通过 AnnotationHub 在线查询。用户也可利用 AnnotationForge 将自获取的 GO 注释数据框构造为 OrgDb 对象，或直接通过通用接口传入注释。 clusterProfiler 内嵌基于 GOSemSim 包的 `simplify` 函数，通过计算富集 GO 术语间的语义相似度（支持基于信息含量和图结构的多种度量方法）来去除冗余 GO 条目；相似度高于阈值（如 0.7）的术语组中仅保留最具代表性的条目。"
+        ],
+        "quote": "## 方法 ### 软件架构与算法基础 clusterProfiler 4.0 以 R 语言实现，作为 Bioconductor 生态系统的一部分发布，遵循 Bioconductor 的面向对象设计规范。该软件包基于两类核心统计方法提供富集分析能力：过表达分析（ORA）采用超几何分布检验，评估输入基因列表中特异性注释到某功能类别的基因比例是否显著高于背景；基因集富集分析（GSEA）基于 Kolmogorov-Smirnov 型排序统计量，利用预排序的全基因组度量（如差异表达倍数的对数）计算富集分数（ES）和标准化富集分数（NES），识别基因集在排名两端的偏移趋势。 ### GO 富集分析 对于 GO 注释，clusterProfiler 依赖 Bioconductor 项目发布的基因组范围注释包（OrgDb）。Bioconductor 核心仓库中提供 20 个物种的 OrgDb 包（每半年更新），非模式生物的 GO 注释可通过 AnnotationHub 在线查询。用户也可利用 AnnotationForge 将自获取的 GO 注释数据框构造为 OrgDb 对象，或直接通过通用接口传入注释。 clusterProfiler 内嵌基于 GOSemSim 包的 `simplify` 函数，通过计算富集 GO 术语间的语义相似度（支持基于信息含量和图结构的多种度量方法）来去除冗余 GO 条目；相似度高于阈值（如 0.7）的术语组中仅保留最具代表性的条目。"
+      },
+      "explanation": "Input, output, and scope descriptions are consistent.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "implementation_and_dependencies",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "R package on Bioconductor, depends on OrgDb, GOSemSim, DOSE, fgsea, dplyr, ggplot2, ChIPseeker, etc.",
+      "generatedFact": "R package on Bioconductor, uses OrgDb, GOSemSim, dplyr, ggplot2, KEGG API; companion packages listed.",
+      "sourceEvidence": {
+        "locator": "R0054",
+        "locators": [
+          "R0054"
+        ],
+        "quotes": [
+          "GO analysis relies on GO annotation maintained by the community, and the enrichment analysis for genomic regions relies on genomic annotation maintained by UCSC and Ensembl. There are R packages that contain gene set annotation (e.g., msigdbr) and R client libraries for accessing pathway data (e.g., rWikiPathways). These data can be used directly as background annotation in clusterProfiler through the universal interface to characterize the functional profile of omics data. The ORA algorithm is implemented in the DOSE package 21 developed in-house, and the GSEA algorithm is implemented in DOSE and fgsea 39 packages."
+        ],
+        "quote": "GO analysis relies on GO annotation maintained by the community, and the enrichment analysis for genomic regions relies on genomic annotation maintained by UCSC and Ensembl. There are R packages that contain gene set annotation (e.g., msigdbr) and R client libraries for accessing pathway data (e.g., rWikiPathways). These data can be used directly as background annotation in clusterProfiler through the universal interface to characterize the functional profile of omics data. The ORA algorithm is implemented in the DOSE package 21 developed in-house, and the GSEA algorithm is implemented in DOSE and fgsea 39 packages."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "## 方法 ### 软件架构与算法基础 clusterProfiler 4.0 以 R 语言实现，作为 Bioconductor 生态系统的一部分发布，遵循 Bioconductor 的面向对象设计规范。该软件包基于两类核心统计方法提供富集分析能力：过表达分析（ORA）采用超几何分布检验，评估输入基因列表中特异性注释到某功能类别的基因比例是否显著高于背景；基因集富集分析（GSEA）基于 Kolmogorov-Smirnov 型排序统计量，利用预排序的全基因组度量（如差异表达倍数的对数）计算富集分数（ES）和标准化富集分数（NES），识别基因集在排名两端的偏移趋势。 ### GO 富集分析 对于 GO 注释，clusterProfiler 依赖 Bioconductor 项目发布的基因组范围注释包（OrgDb）。Bioconductor 核心仓库中提供 20 个物种的 OrgDb 包（每半年更新），非模式生物的 GO 注释可通过 AnnotationHub 在线查询。用户也可利用 AnnotationForge 将自获取的 GO 注释数据框构造为 OrgDb 对象，或直接通过通用接口传入注释。 clusterProfiler 内嵌基于 GOSemSim 包的 `simplify` 函数，通过计算富集 GO 术语间的语义相似度（支持基于信息含量和图结构的多种度量方法）来去除冗余 GO 条目；相似度高于阈值（如 0.7）的术语组中仅保留最具代表性的条目。"
+        ],
+        "quote": "## 方法 ### 软件架构与算法基础 clusterProfiler 4.0 以 R 语言实现，作为 Bioconductor 生态系统的一部分发布，遵循 Bioconductor 的面向对象设计规范。该软件包基于两类核心统计方法提供富集分析能力：过表达分析（ORA）采用超几何分布检验，评估输入基因列表中特异性注释到某功能类别的基因比例是否显著高于背景；基因集富集分析（GSEA）基于 Kolmogorov-Smirnov 型排序统计量，利用预排序的全基因组度量（如差异表达倍数的对数）计算富集分数（ES）和标准化富集分数（NES），识别基因集在排名两端的偏移趋势。 ### GO 富集分析 对于 GO 注释，clusterProfiler 依赖 Bioconductor 项目发布的基因组范围注释包（OrgDb）。Bioconductor 核心仓库中提供 20 个物种的 OrgDb 包（每半年更新），非模式生物的 GO 注释可通过 AnnotationHub 在线查询。用户也可利用 AnnotationForge 将自获取的 GO 注释数据框构造为 OrgDb 对象，或直接通过通用接口传入注释。 clusterProfiler 内嵌基于 GOSemSim 包的 `simplify` 函数，通过计算富集 GO 术语间的语义相似度（支持基于信息含量和图结构的多种度量方法）来去除冗余 GO 条目；相似度高于阈值（如 0.7）的术语组中仅保留最具代表性的条目。"
+      },
+      "explanation": "Dependencies and implementation environment match identically.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "benchmark_and_comparators",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No benchmark against other tools is performed.",
+      "generatedFact": "Mentions lack of benchmark as a limitation, but the original paper contains no benchmark.",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The study does not include a systematic comparison of tools, so this item is not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "reproducibility_and_availability",
+      "importance": "major",
+      "status": "partial",
+      "issueKinds": [
+        "missing"
+      ],
+      "referenceFact": "Package freely available on Bioconductor and GitHub; code to reproduce figures in supplemental information, online book.",
+      "generatedFact": "Package on Bioconductor and GitHub, online book with examples, but does not mention that figure reproduction code is in supplemental information.",
+      "sourceEvidence": {
+        "locator": "R0061",
+        "locators": [
+          "R0061"
+        ],
+        "quotes": [
+          "After long-term maintenance, clusterProfiler is mature and unlikely to introduce significant API changes in future development. In the event of an API change, we will maintain backward compatibility for at least 1 year and provide a warning message about the change. The clusterProfiler library is freely available at https://www.bioconductor.org/packages/clusterProfiler . The development version of clusterProfiler is hosted on GitHub ( https://github.com/YuLab-SMU/clusterProfiler ), with many active users."
+        ],
+        "quote": "After long-term maintenance, clusterProfiler is mature and unlikely to introduce significant API changes in future development. In the event of an API change, we will maintain backward compatibility for at least 1 year and provide a warning message about the change. The clusterProfiler library is freely available at https://www.bioconductor.org/packages/clusterProfiler . The development version of clusterProfiler is hosted on GitHub ( https://github.com/YuLab-SMU/clusterProfiler ), with many active users."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "## 结论 clusterProfiler 4.0 是 clusterProfiler 发布 9 年后的全面重构版本，在保持对原有 ORA 和比较分析功能的完全向后兼容的同时，新增了面向数万种物种的最新注释、通用基因集富集接口、对 dplyr 和 ggplot2 的扩展支持以及多层次条件比较框架，形成了从基因标识转换到功能注释再到可视化解释的完整工具链。该包以自由开源形式通过 Bioconductor（https://www.bioconductor.org/packages/clusterProfiler）分发，开发版本托管于 GitHub（https://github.com/YuLab-SMU/clusterProfiler），配有在线参考书（https://yulab-smu.top/biomedical-knowledge-mining-book/）提供详尽的用例和解析。预计该工具将继续为跨物种和跨实验类型的生物学机制发现提供关键支持。 --- > **来源声明**：本文基于 PubMed Central 提供的开放获取全文（PMCID: PMC8454663; PMID: 34557778）重写，所有方法描述、功能名称、分析示例和数据结论均可从原文核验。本文未引入原文中未出现的数据、方法或结论性论断。"
+        ],
+        "quote": "## 结论 clusterProfiler 4.0 是 clusterProfiler 发布 9 年后的全面重构版本，在保持对原有 ORA 和比较分析功能的完全向后兼容的同时，新增了面向数万种物种的最新注释、通用基因集富集接口、对 dplyr 和 ggplot2 的扩展支持以及多层次条件比较框架，形成了从基因标识转换到功能注释再到可视化解释的完整工具链。该包以自由开源形式通过 Bioconductor（https://www.bioconductor.org/packages/clusterProfiler）分发，开发版本托管于 GitHub（https://github.com/YuLab-SMU/clusterProfiler），配有在线参考书（https://yulab-smu.top/biomedical-knowledge-mining-book/）提供详尽的用例和解析。预计该工具将继续为跨物种和跨实验类型的生物学机制发现提供关键支持。 --- > **来源声明**：本文基于 PubMed Central 提供的开放获取全文（PMCID: PMC8454663; PMID: 34557778）重写，所有方法描述、功能名称、分析示例和数据结论均可从原文核验。本文未引入原文中未出现的数据、方法或结论性论断。"
+      },
+      "explanation": "Generated omits the explicit statement that code to reproduce figures is available in supplements.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 15,
+    "weightedFidelity": 0.7741,
+    "criticalFidelity": 0.7917,
+    "statusCounts": {
+      "compatible": 11,
+      "partial": 3,
+      "not_applicable": 6,
+      "missing": 1
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [
+      "key_numerical_results",
+      "uncertainty_and_significance"
+    ],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [
+      "eligibility_or_selection",
+      "key_numerical_results",
+      "uncertainty_and_significance",
+      "reproducibility_and_availability"
+    ],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 90.0,
+      "data_population": 83.3,
+      "intervention_comparator_outcomes": 90.0,
+      "methods_algorithm_process": 90.0,
+      "results_uncertainty": 25.0,
+      "conclusions_calibration": 90.0,
+      "type_specific_methods": 82.0
+    },
+    "gateFailures": [
+      "critical_fidelity_below_0.80"
+    ],
+    "usabilityGateFailures": [
+      "critical_fidelity_below_0.80"
+    ],
+    "usabilityVerdict": "fail",
+    "verdict": "fail"
+  },
+  "adversarialAudit": null,
+  "overallAssessment": "The generated text faithfully conveys the main purpose, functions, examples, and conclusions of the original clusterProfiler 4.0 paper. Key numerical facts such as species count and background statistics are correctly reproduced. Minor omissions include missing exact parameters for the seq2gene function, absence of p-values from the demonstration example, and failure to note that figure reproduction code is in the supplement. Additionally, the generated text adds a limitations section not present in the original, but all factual claims are verifiable against the reference. Overall fidelity is high.",
+  "gradedAt": "2026-07-18T15:02:28Z"
+}

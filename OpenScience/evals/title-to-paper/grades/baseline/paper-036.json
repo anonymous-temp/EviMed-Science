@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-036",
+  "category": "genomics-omics",
+  "title": "Integrated analysis of multimodal single-cell data.",
+  "pmcid": "PMC8238499",
+  "doi": "10.1016/j.cell.2021.04.048",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 7583,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 87,
+    "supportedUniqueNumbers": 77,
+    "unsupportedNumberTokens": [
+      "2.1",
+      "2.3",
+      "2.4",
+      "3.3",
+      "3.4",
+      "3.5",
+      "3.6",
+      "3.7",
+      "4.4",
+      "9.5"
+    ],
+    "supportedNumericClaimPrecision": 0.8850574712643678,
+    "verbatimEightGramRate": 0.0,
+    "toolCalls": 18,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "所有事实性主张（研究设计、人群、样本量、方法细节、结果和结论）均在REFERENCE全文证据中得到直接支持。未检测到虚构或未被支持的内容。"
+  },
+  "overallVerdict": "pass"
+}

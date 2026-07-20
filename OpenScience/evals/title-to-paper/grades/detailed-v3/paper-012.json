@@ -1,0 +1,656 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-012",
+  "category": "observational-cohort",
+  "title": "Clinical features and management of human monkeypox: a retrospective observational study in the UK.",
+  "pmcid": "PMC9300470",
+  "doi": "10.1016/s1473-3099(22)00228-6",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "f9824debcd3a907b4f928c55a23ac62f031f1ebf0d7cb1e1ea7f068252702eed",
+  "generatedSha256": "19531f3f07900658e24ec286e7d901a26c8d49780eb49e0d7e5c683efe9e0a65",
+  "promptSha256": "148d5af2de1370a0fd869aaebe6fb33bff7a45b340bd98ed18b1b21d3d997421",
+  "cacheFingerprint": "6e38b350ea5a0392308c5b4f0d59ff81f35363c692cb2cb344a00af989bb88e4",
+  "referenceCharacters": 48425,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 6294,
+  "paperType": "observational-cohort",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "missing",
+      "issueKinds": [
+        "missing"
+      ],
+      "referenceFact": "To describe the longitudinal clinical course of monkeypox in a high-income setting, coupled with viral dynamics, and any adverse events related to novel antiviral therapies.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Two oral drugs, brincidofovir and tecovirimat, have been approved for treatment of smallpox and have demonstrated efficacy against monkeypox in animals. Our aim was to describe the longitudinal clinical course of monkeypox in a high-income setting, coupled with viral dynamics, and any adverse events related to novel antiviral therapies.MethodsIn this retrospective observational study, we report the clinical features, longitudinal virological findings, and response to off-label antivirals in seven patients with monkeypox who were diagnosed in the UK between 2018 and 2021, identified through retrospective case-note review."
+        ],
+        "quote": "Two oral drugs, brincidofovir and tecovirimat, have been approved for treatment of smallpox and have demonstrated efficacy against monkeypox in animals. Our aim was to describe the longitudinal clinical course of monkeypox in a high-income setting, coupled with viral dynamics, and any adverse events related to novel antiviral therapies.MethodsIn this retrospective observational study, we report the clinical features, longitudinal virological findings, and response to off-label antivirals in seven patients with monkeypox who were diagnosed in the UK between 2018 and 2021, identified through retrospective case-note review."
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Reference explicitly states the research aim; generated text lacks a corresponding objective statement.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Retrospective observational study (chart review) of 7 patients diagnosed in UK HCID centres between Aug 15, 2018 and Sept 10, 2021.",
+      "generatedFact": "Retrospective observational study including all 7 PCR-confirmed monkeypox patients in three HCID centres from Aug 15, 2018 to Sept 10, 2021, retrospective chart review.",
+      "sourceEvidence": {
+        "locator": "R0017",
+        "locators": [
+          "R0017"
+        ],
+        "quotes": [
+          "Methods Study design and participants In this retrospective observational study, we did a retrospective chart review of all patients admitted to any HCID centre in the UK with confirmed monkeypox (defined as a compatible clinical illness with positive monkeypox viral PCR from any anatomical site) between Aug 15, 2018, and Sept 10, 2021. We extracted clinical data (including demographic variables, symptoms and signs at presentation, complications of illness, and any antiviral treatments received) and laboratory results (including routine biochemical tests and monkeypox virus PCR results)."
+        ],
+        "quote": "Methods Study design and participants In this retrospective observational study, we did a retrospective chart review of all patients admitted to any HCID centre in the UK with confirmed monkeypox (defined as a compatible clinical illness with positive monkeypox viral PCR from any anatomical site) between Aug 15, 2018, and Sept 10, 2021. We extracted clinical data (including demographic variables, symptoms and signs at presentation, complications of illness, and any antiviral treatments received) and laboratory results (including routine biochemical tests and monkeypox virus PCR results)."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+        ],
+        "quote": "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+      },
+      "explanation": "Both identify the study as retrospective observational with identical study period and setting.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "All patients managed in dedicated HCID centres in Liverpool, London, and Newcastle, coordinated via national HCID network, with PCR-confirmed monkeypox.",
+      "generatedFact": "All 7 PCR-confirmed monkeypox patients admitted to the three HCID centres (Liverpool, London, Newcastle) during the same period.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "This study included all patients who were managed in dedicated high consequence infectious diseases (HCID) centres in Liverpool, London, and Newcastle, coordinated via a national HCID network.FindingsWe reviewed all cases since the inception of the HCID (airborne) network between Aug 15, 2018, and Sept 10, 2021, identifying seven patients. Of the seven patients, four were men and three were women. Three acquired monkeypox in the UK: one patient was a health-care worker who acquired the virus nosocomially, and one patient who acquired the virus abroad transmitted it to an adult and child within their household cluster."
+        ],
+        "quote": "This study included all patients who were managed in dedicated high consequence infectious diseases (HCID) centres in Liverpool, London, and Newcastle, coordinated via a national HCID network.FindingsWe reviewed all cases since the inception of the HCID (airborne) network between Aug 15, 2018, and Sept 10, 2021, identifying seven patients. Of the seven patients, four were men and three were women. Three acquired monkeypox in the UK: one patient was a health-care worker who acquired the virus nosocomially, and one patient who acquired the virus abroad transmitted it to an adult and child within their household cluster."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+        ],
+        "quote": "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+      },
+      "explanation": "Population description identical, including the three centres and confirmation by PCR.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Seven patients.",
+      "generatedFact": "7 patients.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "This study included all patients who were managed in dedicated high consequence infectious diseases (HCID) centres in Liverpool, London, and Newcastle, coordinated via a national HCID network.FindingsWe reviewed all cases since the inception of the HCID (airborne) network between Aug 15, 2018, and Sept 10, 2021, identifying seven patients. Of the seven patients, four were men and three were women. Three acquired monkeypox in the UK: one patient was a health-care worker who acquired the virus nosocomially, and one patient who acquired the virus abroad transmitted it to an adult and child within their household cluster."
+        ],
+        "quote": "This study included all patients who were managed in dedicated high consequence infectious diseases (HCID) centres in Liverpool, London, and Newcastle, coordinated via a national HCID network.FindingsWe reviewed all cases since the inception of the HCID (airborne) network between Aug 15, 2018, and Sept 10, 2021, identifying seven patients. Of the seven patients, four were men and three were women. Three acquired monkeypox in the UK: one patient was a health-care worker who acquired the virus nosocomially, and one patient who acquired the virus abroad transmitted it to an adult and child within their household cluster."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+        ],
+        "quote": "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+      },
+      "explanation": "Both state seven patients.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "All patients with compatible clinical illness and positive monkeypox viral PCR from any anatomical site, admitted to any UK HCID centre during the study period, included.",
+      "generatedFact": "All PCR-confirmed monkeypox patients admitted to the three HCID centres during the same period, retrospective inclusion.",
+      "sourceEvidence": {
+        "locator": "R0017",
+        "locators": [
+          "R0017"
+        ],
+        "quotes": [
+          "Methods Study design and participants In this retrospective observational study, we did a retrospective chart review of all patients admitted to any HCID centre in the UK with confirmed monkeypox (defined as a compatible clinical illness with positive monkeypox viral PCR from any anatomical site) between Aug 15, 2018, and Sept 10, 2021. We extracted clinical data (including demographic variables, symptoms and signs at presentation, complications of illness, and any antiviral treatments received) and laboratory results (including routine biochemical tests and monkeypox virus PCR results)."
+        ],
+        "quote": "Methods Study design and participants In this retrospective observational study, we did a retrospective chart review of all patients admitted to any HCID centre in the UK with confirmed monkeypox (defined as a compatible clinical illness with positive monkeypox viral PCR from any anatomical site) between Aug 15, 2018, and Sept 10, 2021. We extracted clinical data (including demographic variables, symptoms and signs at presentation, complications of illness, and any antiviral treatments received) and laboratory results (including routine biochemical tests and monkeypox virus PCR results)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "猴痘的人传人已被充分描述，包括院内和家庭内传播，家庭接触者中的二代发病率估计约为 8%（范围 0–11%）。对体内病毒动力学和传染性的了解十分有限，持续性病毒血症和皮损排毒的临床意义仍不明确。2003 年美国曾发生一次人畜共患暴发（47 例确诊或疑似病例），但无人传人的确认病例。此后输入性病例在以色列、新加坡和美国等国家亦有报告。 目前尚无针对人猴痘的获批治疗药物；布林西多福韦和替考韦瑞均未在人体疗效试验中进行评估，但均在动物模型中显示对正痘病毒（含猴痘病毒）有效。英国将猴痘归类为高后果传染病，患者由全国性 HCID 网络协调在指定中心管理。本研究描述了 7 例患者的临床表现、演变过程、并发症、管理策略及两种新型抗病毒药物的首次人体应用数据。 --- ## 方法 ### 研究设计与受试者 本研究为回顾性观察研究，对 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国全部 HCID 中心收治的所有经 PCR 确诊的猴痘患者进行回顾性病历分析。从病历中提取的数据包括：人口学变量、起病时症状与体征、疾病并发症及接受的抗病毒治疗；实验室数据包括常规生化检查和猴痘病毒 PCR 结果。样本量小且部分患者诊断时已处于病程中晚期，故未进行假设检验，以个体患者数据而非汇总统计的方式呈现结果。"
+        ],
+        "quote": "猴痘的人传人已被充分描述，包括院内和家庭内传播，家庭接触者中的二代发病率估计约为 8%（范围 0–11%）。对体内病毒动力学和传染性的了解十分有限，持续性病毒血症和皮损排毒的临床意义仍不明确。2003 年美国曾发生一次人畜共患暴发（47 例确诊或疑似病例），但无人传人的确认病例。此后输入性病例在以色列、新加坡和美国等国家亦有报告。 目前尚无针对人猴痘的获批治疗药物；布林西多福韦和替考韦瑞均未在人体疗效试验中进行评估，但均在动物模型中显示对正痘病毒（含猴痘病毒）有效。英国将猴痘归类为高后果传染病，患者由全国性 HCID 网络协调在指定中心管理。本研究描述了 7 例患者的临床表现、演变过程、并发症、管理策略及两种新型抗病毒药物的首次人体应用数据。 --- ## 方法 ### 研究设计与受试者 本研究为回顾性观察研究，对 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国全部 HCID 中心收治的所有经 PCR 确诊的猴痘患者进行回顾性病历分析。从病历中提取的数据包括：人口学变量、起病时症状与体征、疾病并发症及接受的抗病毒治疗；实验室数据包括常规生化检查和猴痘病毒 PCR 结果。样本量小且部分患者诊断时已处于病程中晚期，故未进行假设检验，以个体患者数据而非汇总统计的方式呈现结果。"
+      },
+      "explanation": "Both indicate inclusion of all confirmed patients in the given timeframe and centres, with no additional exclusions.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Off-label antivirals: three patients received brincidofovir (200 mg once weekly), one received tecovirimat (600 mg twice daily for 2 weeks); others untreated.",
+      "generatedFact": "Three patients received brincidofovir (200 mg once weekly), one received tecovirimat (600 mg bid for 2 weeks); off-label use described.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "Notable disease features included viraemia, prolonged monkeypox virus DNA detection in upper respiratory tract swabs, reactive low mood, and one patient had a monkeypox virus PCR-positive deep tissue abscess. Five patients spent more than 3 weeks (range 22–39 days) in isolation due to prolonged PCR positivity. Three patients were treated with brincidofovir (200 mg once a week orally), all of whom developed elevated liver enzymes resulting in cessation of therapy."
+        ],
+        "quote": "Notable disease features included viraemia, prolonged monkeypox virus DNA detection in upper respiratory tract swabs, reactive low mood, and one patient had a monkeypox virus PCR-positive deep tissue abscess. Five patients spent more than 3 weeks (range 22–39 days) in isolation due to prolonged PCR positivity. Three patients were treated with brincidofovir (200 mg once a week orally), all of whom developed elevated liver enzymes resulting in cessation of therapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+        ],
+        "quote": "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+      },
+      "explanation": "Treatments and dosing match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No control or comparator group; case series.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Study is a case series without a comparator; not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Descriptive outcomes: clinical features, viral kinetics (PCR positivity duration, shedding), complications, adverse events of antivirals.",
+      "generatedFact": "Clinical features, longitudinal virological results, and response to off-label antivirals.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Two oral drugs, brincidofovir and tecovirimat, have been approved for treatment of smallpox and have demonstrated efficacy against monkeypox in animals. Our aim was to describe the longitudinal clinical course of monkeypox in a high-income setting, coupled with viral dynamics, and any adverse events related to novel antiviral therapies.MethodsIn this retrospective observational study, we report the clinical features, longitudinal virological findings, and response to off-label antivirals in seven patients with monkeypox who were diagnosed in the UK between 2018 and 2021, identified through retrospective case-note review."
+        ],
+        "quote": "Two oral drugs, brincidofovir and tecovirimat, have been approved for treatment of smallpox and have demonstrated efficacy against monkeypox in animals. Our aim was to describe the longitudinal clinical course of monkeypox in a high-income setting, coupled with viral dynamics, and any adverse events related to novel antiviral therapies.MethodsIn this retrospective observational study, we report the clinical features, longitudinal virological findings, and response to off-label antivirals in seven patients with monkeypox who were diagnosed in the UK between 2018 and 2021, identified through retrospective case-note review."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+        ],
+        "quote": "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+      },
+      "explanation": "Generated description matches the reported outcomes, though phrased slightly differently.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Study period Aug 15, 2018–Sept 10, 2021; outpatient follow-up offered but no extended follow-up after full recovery.",
+      "generatedFact": "Study period Aug 15, 2018–Sept 10, 2021; outpatient follow-up offered, no extended follow-up after full recovery.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "This study included all patients who were managed in dedicated high consequence infectious diseases (HCID) centres in Liverpool, London, and Newcastle, coordinated via a national HCID network.FindingsWe reviewed all cases since the inception of the HCID (airborne) network between Aug 15, 2018, and Sept 10, 2021, identifying seven patients. Of the seven patients, four were men and three were women. Three acquired monkeypox in the UK: one patient was a health-care worker who acquired the virus nosocomially, and one patient who acquired the virus abroad transmitted it to an adult and child within their household cluster."
+        ],
+        "quote": "This study included all patients who were managed in dedicated high consequence infectious diseases (HCID) centres in Liverpool, London, and Newcastle, coordinated via a national HCID network.FindingsWe reviewed all cases since the inception of the HCID (airborne) network between Aug 15, 2018, and Sept 10, 2021, identifying seven patients. Of the seven patients, four were men and three were women. Three acquired monkeypox in the UK: one patient was a health-care worker who acquired the virus nosocomially, and one patient who acquired the virus abroad transmitted it to an adult and child within their household cluster."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "临床采样与记录作为常规患者诊疗的一部分。全部患者（或儿童患者的监护人）均提供了生物样本保存的书面知情同意，该同意书基于国际严重急性呼吸道和新发感染联盟（ISARIC）方案（经英国牛津 C 研究伦理委员会 13/SC/0149 及 WHO 伦理审查委员会 RPC571、RPC572 批准），并同意以匿名形式发表临床详情。临床影像的发表获得了额外的书面知情同意。 ### 流程 病毒学采样和实验室检测由临床指征驱动，未遵循固定方案。猴痘 PCR 检测在英国罕见及输入性病原体实验室进行。样本（EDTA 血液、尿液、持续性皮损或皮损液拭子及上呼吸道拭子）通常每 48–72 小时采集一次，直至每个解剖部位（皮肤、血液、呼吸道）获得连续两次阴性结果。HCID 网络以这些阴性结果、所有可见皮损脱屑、无新发皮损及无活动性黏膜病变作为患者出院至社区的联合标准。 血清学检测因 PCR 高特异性而非常规开展，但对 4 名接触者的血清进行了正痘病毒 IgG 和 IgM 免疫荧光法检测（慕尼黑德国联邦国防军微生物研究所）。 新型抗病毒药物在向患者充分说明潜在风险与获益、治疗目标、支持证据并明确告知其仍为未获批且对猴痘的获益不确定后提供。所有临床决策（包括新型治疗药物使用）由主管临床医生与 HCID 网络共同制定，并经过相关 NHS 信托机构的药品管理小组批准。所有患者在出院后均获邀进行门诊随访，但完全康复后未进行延长随访。 ### 资金来源 本研究无资金来源。"
+        ],
+        "quote": "临床采样与记录作为常规患者诊疗的一部分。全部患者（或儿童患者的监护人）均提供了生物样本保存的书面知情同意，该同意书基于国际严重急性呼吸道和新发感染联盟（ISARIC）方案（经英国牛津 C 研究伦理委员会 13/SC/0149 及 WHO 伦理审查委员会 RPC571、RPC572 批准），并同意以匿名形式发表临床详情。临床影像的发表获得了额外的书面知情同意。 ### 流程 病毒学采样和实验室检测由临床指征驱动，未遵循固定方案。猴痘 PCR 检测在英国罕见及输入性病原体实验室进行。样本（EDTA 血液、尿液、持续性皮损或皮损液拭子及上呼吸道拭子）通常每 48–72 小时采集一次，直至每个解剖部位（皮肤、血液、呼吸道）获得连续两次阴性结果。HCID 网络以这些阴性结果、所有可见皮损脱屑、无新发皮损及无活动性黏膜病变作为患者出院至社区的联合标准。 血清学检测因 PCR 高特异性而非常规开展，但对 4 名接触者的血清进行了正痘病毒 IgG 和 IgM 免疫荧光法检测（慕尼黑德国联邦国防军微生物研究所）。 新型抗病毒药物在向患者充分说明潜在风险与获益、治疗目标、支持证据并明确告知其仍为未获批且对猴痘的获益不确定后提供。所有临床决策（包括新型治疗药物使用）由主管临床医生与 HCID 网络共同制定，并经过相关 NHS 信托机构的药品管理小组批准。所有患者在出院后均获邀进行门诊随访，但完全康复后未进行延长随访。 ### 资金来源 本研究无资金来源。"
+      },
+      "explanation": "Both specify the same study period and follow-up limitations.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No data preprocessing described; retrospective chart review with routine clinical data.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Neither text mentions data preprocessing; not applicable to this chart review design.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "No formal hypothesis testing; individual patient results presented due to small sample.",
+      "generatedFact": "No hypothesis testing; individual patient data presented because of small sample and late diagnosis.",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "Our sample size was small and some patients were diagnosed later in the course of illness than others; therefore, we did not carry out formal hypothesis testing, and we present individual patient results rather than aggregate data. Clinical sampling and documentation were conducted as part of routine patient care. All patients (or guardians of children) provided written informed consent for storage of biological samples under the International Severe Acute Respiratory and Emerging Infection Consortium protocol, 27 approved by the South Central – Oxford C Research Ethics Committee in England (13/SC/0149) and the WHO Ethics Review Committee (RPC571 and RPC572)."
+        ],
+        "quote": "Our sample size was small and some patients were diagnosed later in the course of illness than others; therefore, we did not carry out formal hypothesis testing, and we present individual patient results rather than aggregate data. Clinical sampling and documentation were conducted as part of routine patient care. All patients (or guardians of children) provided written informed consent for storage of biological samples under the International Severe Acute Respiratory and Emerging Infection Consortium protocol, 27 approved by the South Central – Oxford C Research Ethics Committee in England (13/SC/0149) and the WHO Ethics Review Committee (RPC571 and RPC572)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "猴痘的人传人已被充分描述，包括院内和家庭内传播，家庭接触者中的二代发病率估计约为 8%（范围 0–11%）。对体内病毒动力学和传染性的了解十分有限，持续性病毒血症和皮损排毒的临床意义仍不明确。2003 年美国曾发生一次人畜共患暴发（47 例确诊或疑似病例），但无人传人的确认病例。此后输入性病例在以色列、新加坡和美国等国家亦有报告。 目前尚无针对人猴痘的获批治疗药物；布林西多福韦和替考韦瑞均未在人体疗效试验中进行评估，但均在动物模型中显示对正痘病毒（含猴痘病毒）有效。英国将猴痘归类为高后果传染病，患者由全国性 HCID 网络协调在指定中心管理。本研究描述了 7 例患者的临床表现、演变过程、并发症、管理策略及两种新型抗病毒药物的首次人体应用数据。 --- ## 方法 ### 研究设计与受试者 本研究为回顾性观察研究，对 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国全部 HCID 中心收治的所有经 PCR 确诊的猴痘患者进行回顾性病历分析。从病历中提取的数据包括：人口学变量、起病时症状与体征、疾病并发症及接受的抗病毒治疗；实验室数据包括常规生化检查和猴痘病毒 PCR 结果。样本量小且部分患者诊断时已处于病程中晚期，故未进行假设检验，以个体患者数据而非汇总统计的方式呈现结果。"
+        ],
+        "quote": "猴痘的人传人已被充分描述，包括院内和家庭内传播，家庭接触者中的二代发病率估计约为 8%（范围 0–11%）。对体内病毒动力学和传染性的了解十分有限，持续性病毒血症和皮损排毒的临床意义仍不明确。2003 年美国曾发生一次人畜共患暴发（47 例确诊或疑似病例），但无人传人的确认病例。此后输入性病例在以色列、新加坡和美国等国家亦有报告。 目前尚无针对人猴痘的获批治疗药物；布林西多福韦和替考韦瑞均未在人体疗效试验中进行评估，但均在动物模型中显示对正痘病毒（含猴痘病毒）有效。英国将猴痘归类为高后果传染病，患者由全国性 HCID 网络协调在指定中心管理。本研究描述了 7 例患者的临床表现、演变过程、并发症、管理策略及两种新型抗病毒药物的首次人体应用数据。 --- ## 方法 ### 研究设计与受试者 本研究为回顾性观察研究，对 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国全部 HCID 中心收治的所有经 PCR 确诊的猴痘患者进行回顾性病历分析。从病历中提取的数据包括：人口学变量、起病时症状与体征、疾病并发症及接受的抗病毒治疗；实验室数据包括常规生化检查和猴痘病毒 PCR 结果。样本量小且部分患者诊断时已处于病程中晚期，故未进行假设检验，以个体患者数据而非汇总统计的方式呈现结果。"
+      },
+      "explanation": "Analytical approach matches exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No algorithm or model used.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Observational study with no computational model; not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Three brincidofovir patients all developed elevated ALT (peak 331, 550, 127 U/L); five patients isolated >3 weeks (22–39 days); tecovirimat patient hospitalized 10 days; one mild relapse 6 weeks post-discharge; all recovered.",
+      "generatedFact": "ALT peaks 331, 550, 127 U/L; 5 patients isolated 22–39 days; tecovirimat patient hospitalized 10 days; relapse 6 weeks after discharge; all recovered.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "Notable disease features included viraemia, prolonged monkeypox virus DNA detection in upper respiratory tract swabs, reactive low mood, and one patient had a monkeypox virus PCR-positive deep tissue abscess. Five patients spent more than 3 weeks (range 22–39 days) in isolation due to prolonged PCR positivity. Three patients were treated with brincidofovir (200 mg once a week orally), all of whom developed elevated liver enzymes resulting in cessation of therapy."
+        ],
+        "quote": "Notable disease features included viraemia, prolonged monkeypox virus DNA detection in upper respiratory tract swabs, reactive low mood, and one patient had a monkeypox virus PCR-positive deep tissue abscess. Five patients spent more than 3 weeks (range 22–39 days) in isolation due to prolonged PCR positivity. Three patients were treated with brincidofovir (200 mg once a week orally), all of whom developed elevated liver enzymes resulting in cessation of therapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+        ],
+        "quote": "# 结构化科研重写 **原始文献**: Adler H, Gould S, Hine P, et al. Clinical features and management of human monkeypox: a retrospective observational study in the UK. *Lancet Infect Dis*. 2022;22(8):1153-1162. **DOI**: [10.1016/S1473-3099(22)00228-6](https://doi.org/10.1016/S1473-3099(22)00228-6) **PMID**: 35623380 **PMCID**: PMC9300470 **来源全文链接**: https://pmc.ncbi.nlm.nih.gov/articles/PMC9300470/ --- ## 摘要 **背景** 人猴痘病例在西部和中部非洲以外地区罕见。关于病毒动力学和排毒持续时间的数据匮乏，且尚无已获批的治疗方法。布林西多福韦（brincidofovir）和替考韦瑞（tecovirimat）已在美国获批用于天花的治疗，并在动物模型中显示出抗猴痘活性。 **方法** 本回顾性观察研究纳入 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国利物浦、伦敦和纽卡斯尔的三所高后果传染病（HCID）定点中心收治的全部 7 例经 PCR 确诊的猴痘患者，回顾性收集其临床特征、纵向病毒学结果及超说明书抗病毒治疗的应答。"
+      },
+      "explanation": "All key numeric values (ALT peaks, isolation duration, hospitalization days, relapse timing) are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No statistical uncertainty estimates; descriptive study.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No hypothesis testing or confidence intervals; uncertainty metrics not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Monkeypox challenging in high-resource settings; prolonged respiratory shedding challenges IPC; brincidofovir no clear benefit with liver toxicity; tecovirimat well-tolerated and promising; urgent need for prospective antiviral studies.",
+      "generatedFact": "Challenges even with HCID networks; prolonged respiratory shedding undermines IPC; brincidofovir ineffective with hepatotoxicity; tecovirimat well-tolerated and temporally associated with improvement; prospective studies urgently needed.",
+      "sourceEvidence": {
+        "locator": "R0005",
+        "locators": [
+          "R0005"
+        ],
+        "quotes": [
+          "One patient was treated with tecovirimat (600 mg twice daily for 2 weeks orally), experienced no adverse effects, and had a shorter duration of viral shedding and illness (10 days hospitalisation) compared with the other six patients. One patient experienced a mild relapse 6 weeks after hospital discharge.InterpretationHuman monkeypox poses unique challenges, even to well resourced health-care systems with HCID networks. Prolonged upper respiratory tract viral DNA shedding after skin lesion resolution challenged current infection prevention and control guidance. There is an urgent need for prospective studies of antivirals for this disease.FundingNone."
+        ],
+        "quote": "One patient was treated with tecovirimat (600 mg twice daily for 2 weeks orally), experienced no adverse effects, and had a shorter duration of viral shedding and illness (10 days hospitalisation) compared with the other six patients. One patient experienced a mild relapse 6 weeks after hospital discharge.InterpretationHuman monkeypox poses unique challenges, even to well resourced health-care systems with HCID networks. Prolonged upper respiratory tract viral DNA shedding after skin lesion resolution challenged current infection prevention and control guidance. There is an urgent need for prospective studies of antivirals for this disease.FundingNone."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "--- ## 结论 即使在配备 HCID 网络的资源充裕医疗体系中，人猴痘依然带来巨大的临床和感染控制挑战。皮损消退后上呼吸道病毒 DNA 的长期脱落对现有感染控制策略构成实质性挑战。布林西多福韦在此小样本中未显示明显临床获益，且伴有普遍的肝毒性；而替考韦瑞在单例使用中表现出良好的耐受性和与临床应答的时间关联。鉴于全球猴痘跨界播散和继发传播的现实风险，亟需针对此被忽视热带疾病开展抗病毒药物前瞻性研究，并明确上呼吸道排毒的传染性意义。 -------------------------------------------------------------------------------- **重写声明**：本文基于上述已发表原始文献的开放获取全文（PMCID: PMC9300470）进行重写。研究设计、样本量、数值数据、局限性和结论均来自可核验的原始全文，并以不同措辞重新组织表述。未对原始文献中未提供的数据或结论进行任何推断或补充。"
+        ],
+        "quote": "--- ## 结论 即使在配备 HCID 网络的资源充裕医疗体系中，人猴痘依然带来巨大的临床和感染控制挑战。皮损消退后上呼吸道病毒 DNA 的长期脱落对现有感染控制策略构成实质性挑战。布林西多福韦在此小样本中未显示明显临床获益，且伴有普遍的肝毒性；而替考韦瑞在单例使用中表现出良好的耐受性和与临床应答的时间关联。鉴于全球猴痘跨界播散和继发传播的现实风险，亟需针对此被忽视热带疾病开展抗病毒药物前瞻性研究，并明确上呼吸道排毒的传染性意义。 -------------------------------------------------------------------------------- **重写声明**：本文基于上述已发表原始文献的开放获取全文（PMCID: PMC9300470）进行重写。研究设计、样本量、数值数据、局限性和结论均来自可核验的原始全文，并以不同措辞重新组织表述。未对原始文献中未提供的数据或结论进行任何推断或补充。"
+      },
+      "explanation": "The direction, magnitude, and strength of the conclusion are fully aligned.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Observational, small sample (7), inability to confirm viable virus via culture, no hypothesis testing, potential confounding.",
+      "generatedFact": "Retrospective observational design, small sample (n=7), inability to culture virus to demonstrate infectivity, no hypothesis testing, incomplete brincidofovir courses, single tecovirimat case, no post-treatment viral clearance data.",
+      "sourceEvidence": {
+        "locator": "R0061",
+        "locators": [
+          "R0061"
+        ],
+        "quotes": [
+          "32 We cannot definitively exclude a bacterial cause for our patient's abscess (he was also treated with broad spectrum antimicrobials), but the low monkeypox viral PCR cycle threshold in the abscess fluid is compelling. The limitations of this study are its observational nature, the small number of cases, and our inability to confirm positive PCR results with viral culture assays to demonstrate ongoing shedding of viable virus. This case series highlights the value of maintaining a collaborative network of centres on standby to manage sporadic, small numbers of patients with high consequence pathogens."
+        ],
+        "quote": "32 We cannot definitively exclude a bacterial cause for our patient's abscess (he was also treated with broad spectrum antimicrobials), but the low monkeypox viral PCR cycle threshold in the abscess fluid is compelling. The limitations of this study are its observational nature, the small number of cases, and our inability to confirm positive PCR results with viral culture assays to demonstrate ongoing shedding of viable virus. This case series highlights the value of maintaining a collaborative network of centres on standby to manage sporadic, small numbers of patients with high consequence pathogens."
+      },
+      "generatedEvidence": {
+        "locator": "G0009",
+        "locators": [
+          "G0009"
+        ],
+        "quotes": [
+          "家庭聚集病例引发了关于儿科猴痘管理和感染控制的多重伦理难题。母亲在知晓风险的情况下同意继续陪伴患儿、此前已有密切接触、以及在无家长情况下管理幼儿长期隔离的实际困难等因素被纳入权衡。该幼儿（患者 6）是 2003 年以来首个非洲以外的儿科猴痘病例，也是英国 HCID 网络管理的首个儿科患者。 --- ## 局限性 本研究的局限性来自原始文献的明确陈述（原文）：研究为回顾性观察设计，病例数极少量（n=7），且无法通过病毒培养确认 PCR 阳性检出的病毒具有活力（原文：\"our inability to confirm positive PCR results with viral culture assays to demonstrate ongoing shedding of viable virus\"）。 此外，原文指出，部分患者在病程较晚阶段才被诊断，因此未进行正式的假设检验，数据以个体化方式呈现而非汇总统计。抗病毒治疗结果的推断因无对照组、样本量极小及治疗启动时间不同而受限。布林西多福韦治疗患者的肝酶升高导致全疗程未完成的偏倚无法排除；替考韦瑞仅用于 1 例患者，且缺乏停药后长期随访的病毒清除数据（原文指出因患者住地远离 HCID 中心而未进行停药后额外采样）。"
+        ],
+        "quote": "家庭聚集病例引发了关于儿科猴痘管理和感染控制的多重伦理难题。母亲在知晓风险的情况下同意继续陪伴患儿、此前已有密切接触、以及在无家长情况下管理幼儿长期隔离的实际困难等因素被纳入权衡。该幼儿（患者 6）是 2003 年以来首个非洲以外的儿科猴痘病例，也是英国 HCID 网络管理的首个儿科患者。 --- ## 局限性 本研究的局限性来自原始文献的明确陈述（原文）：研究为回顾性观察设计，病例数极少量（n=7），且无法通过病毒培养确认 PCR 阳性检出的病毒具有活力（原文：\"our inability to confirm positive PCR results with viral culture assays to demonstrate ongoing shedding of viable virus\"）。 此外，原文指出，部分患者在病程较晚阶段才被诊断，因此未进行正式的假设检验，数据以个体化方式呈现而非汇总统计。抗病毒治疗结果的推断因无对照组、样本量极小及治疗启动时间不同而受限。布林西多福韦治疗患者的肝酶升高导致全疗程未完成的偏倚无法排除；替考韦瑞仅用于 1 例患者，且缺乏停药后长期随访的病毒清除数据（原文指出因患者住地远离 HCID 中心而未进行停药后额外采样）。"
+      },
+      "explanation": "Generated limitations accurately capture all stated limitations, with identical core points.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Brincidofovir: all 3 developed transaminitis (peak 331, 550, 127 U/L), treatment stopped; tecovirimat: no adverse events; other complications: abscess, low mood, conjunctivitis, relapse, etc.",
+      "generatedFact": "Brincidofovir: ALT elevations (331, 550, 127 U/L) led to cessation; tecovirimat: no adverse events; specific complications detailed for each patient.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "Notable disease features included viraemia, prolonged monkeypox virus DNA detection in upper respiratory tract swabs, reactive low mood, and one patient had a monkeypox virus PCR-positive deep tissue abscess. Five patients spent more than 3 weeks (range 22–39 days) in isolation due to prolonged PCR positivity. Three patients were treated with brincidofovir (200 mg once a week orally), all of whom developed elevated liver enzymes resulting in cessation of therapy."
+        ],
+        "quote": "Notable disease features included viraemia, prolonged monkeypox virus DNA detection in upper respiratory tract swabs, reactive low mood, and one patient had a monkeypox virus PCR-positive deep tissue abscess. Five patients spent more than 3 weeks (range 22–39 days) in isolation due to prolonged PCR positivity. Three patients were treated with brincidofovir (200 mg once a week orally), all of whom developed elevated liver enzymes resulting in cessation of therapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "--- ## 结果 病历审查涵盖 2018 年 8 月 15 日至 2021 年 9 月 10 日，共确定 7 例在英格兰 HCID 单元接受治疗的猴痘患者。4 例在英国境外感染（患者 1、2、4、5），3 例在英国境内感染（患者 3、6、7）。其中 2018–2019 年发生 4 例，2021 年发生包含 3 例的家庭聚集病例。 患者 1 和 2 在从尼日利亚抵达英国后不久被确诊。患者 3（2018）是一名医护人员，在未佩戴个人防护装备的情况下暴露于患者 2（2018）后 18 天出现皮疹、头痛和咽喉痛，尽管在暴露后第 6 天曾接受过一剂天花疫苗（改良安卡拉痘苗病毒，Imvanex）。 全部 7 例患者均出现多形性皮损（包括丘疹、水疱、脓疱、脐凹性脓疱、溃疡性病变和结痂），皮损猴痘病毒 PCR 均呈阳性。全部患者的上呼吸道拭子均检出病毒 DNA，6 例患者血液中检出，4 例患者尿液中检出。 ### 布林西多福韦治疗 前三例患者（患者 1、2、3）接受了口服布林西多福韦治疗，均在皮疹出现后约第 7 天开始给药。计划疗程为三周、每周一次 200 mg。全部三例患者均出现丙氨酸氨基转移酶（ALT）升高（峰值分别为 331 U/L、550 U/L 和 127 U/L；正常值 <30 U/L），无一人完成全疗程。未观察到其他具有临床意义的生化或血液学异常。布林西多福韦给药与临床或病毒学参数之间未显示一致关联；尽管患者 2 和 3 在第二剂给药前后上呼吸道病毒载量出现一过性降低，但所有患者最终均完全康复。"
+        ],
+        "quote": "--- ## 结果 病历审查涵盖 2018 年 8 月 15 日至 2021 年 9 月 10 日，共确定 7 例在英格兰 HCID 单元接受治疗的猴痘患者。4 例在英国境外感染（患者 1、2、4、5），3 例在英国境内感染（患者 3、6、7）。其中 2018–2019 年发生 4 例，2021 年发生包含 3 例的家庭聚集病例。 患者 1 和 2 在从尼日利亚抵达英国后不久被确诊。患者 3（2018）是一名医护人员，在未佩戴个人防护装备的情况下暴露于患者 2（2018）后 18 天出现皮疹、头痛和咽喉痛，尽管在暴露后第 6 天曾接受过一剂天花疫苗（改良安卡拉痘苗病毒，Imvanex）。 全部 7 例患者均出现多形性皮损（包括丘疹、水疱、脓疱、脐凹性脓疱、溃疡性病变和结痂），皮损猴痘病毒 PCR 均呈阳性。全部患者的上呼吸道拭子均检出病毒 DNA，6 例患者血液中检出，4 例患者尿液中检出。 ### 布林西多福韦治疗 前三例患者（患者 1、2、3）接受了口服布林西多福韦治疗，均在皮疹出现后约第 7 天开始给药。计划疗程为三周、每周一次 200 mg。全部三例患者均出现丙氨酸氨基转移酶（ALT）升高（峰值分别为 331 U/L、550 U/L 和 127 U/L；正常值 <30 U/L），无一人完成全疗程。未观察到其他具有临床意义的生化或血液学异常。布林西多福韦给药与临床或病毒学参数之间未显示一致关联；尽管患者 2 和 3 在第二剂给药前后上呼吸道病毒载量出现一过性降低，但所有患者最终均完全康复。"
+      },
+      "explanation": "Adverse events and complications correspond exactly in nature and numeric values.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "cohort_construction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "All patients with PCR-confirmed monkeypox managed in UK HCID centres between Aug 15, 2018, and Sept 10, 2021; no exclusions.",
+      "generatedFact": "All 7 PCR-confirmed patients admitted to the three HCID centres during the same period, without exclusions.",
+      "sourceEvidence": {
+        "locator": "R0017",
+        "locators": [
+          "R0017"
+        ],
+        "quotes": [
+          "Methods Study design and participants In this retrospective observational study, we did a retrospective chart review of all patients admitted to any HCID centre in the UK with confirmed monkeypox (defined as a compatible clinical illness with positive monkeypox viral PCR from any anatomical site) between Aug 15, 2018, and Sept 10, 2021. We extracted clinical data (including demographic variables, symptoms and signs at presentation, complications of illness, and any antiviral treatments received) and laboratory results (including routine biochemical tests and monkeypox virus PCR results)."
+        ],
+        "quote": "Methods Study design and participants In this retrospective observational study, we did a retrospective chart review of all patients admitted to any HCID centre in the UK with confirmed monkeypox (defined as a compatible clinical illness with positive monkeypox viral PCR from any anatomical site) between Aug 15, 2018, and Sept 10, 2021. We extracted clinical data (including demographic variables, symptoms and signs at presentation, complications of illness, and any antiviral treatments received) and laboratory results (including routine biochemical tests and monkeypox virus PCR results)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "猴痘的人传人已被充分描述，包括院内和家庭内传播，家庭接触者中的二代发病率估计约为 8%（范围 0–11%）。对体内病毒动力学和传染性的了解十分有限，持续性病毒血症和皮损排毒的临床意义仍不明确。2003 年美国曾发生一次人畜共患暴发（47 例确诊或疑似病例），但无人传人的确认病例。此后输入性病例在以色列、新加坡和美国等国家亦有报告。 目前尚无针对人猴痘的获批治疗药物；布林西多福韦和替考韦瑞均未在人体疗效试验中进行评估，但均在动物模型中显示对正痘病毒（含猴痘病毒）有效。英国将猴痘归类为高后果传染病，患者由全国性 HCID 网络协调在指定中心管理。本研究描述了 7 例患者的临床表现、演变过程、并发症、管理策略及两种新型抗病毒药物的首次人体应用数据。 --- ## 方法 ### 研究设计与受试者 本研究为回顾性观察研究，对 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国全部 HCID 中心收治的所有经 PCR 确诊的猴痘患者进行回顾性病历分析。从病历中提取的数据包括：人口学变量、起病时症状与体征、疾病并发症及接受的抗病毒治疗；实验室数据包括常规生化检查和猴痘病毒 PCR 结果。样本量小且部分患者诊断时已处于病程中晚期，故未进行假设检验，以个体患者数据而非汇总统计的方式呈现结果。"
+        ],
+        "quote": "猴痘的人传人已被充分描述，包括院内和家庭内传播，家庭接触者中的二代发病率估计约为 8%（范围 0–11%）。对体内病毒动力学和传染性的了解十分有限，持续性病毒血症和皮损排毒的临床意义仍不明确。2003 年美国曾发生一次人畜共患暴发（47 例确诊或疑似病例），但无人传人的确认病例。此后输入性病例在以色列、新加坡和美国等国家亦有报告。 目前尚无针对人猴痘的获批治疗药物；布林西多福韦和替考韦瑞均未在人体疗效试验中进行评估，但均在动物模型中显示对正痘病毒（含猴痘病毒）有效。英国将猴痘归类为高后果传染病，患者由全国性 HCID 网络协调在指定中心管理。本研究描述了 7 例患者的临床表现、演变过程、并发症、管理策略及两种新型抗病毒药物的首次人体应用数据。 --- ## 方法 ### 研究设计与受试者 本研究为回顾性观察研究，对 2018 年 8 月 15 日至 2021 年 9 月 10 日期间在英国全部 HCID 中心收治的所有经 PCR 确诊的猴痘患者进行回顾性病历分析。从病历中提取的数据包括：人口学变量、起病时症状与体征、疾病并发症及接受的抗病毒治疗；实验室数据包括常规生化检查和猴痘病毒 PCR 结果。样本量小且部分患者诊断时已处于病程中晚期，故未进行假设检验，以个体患者数据而非汇总统计的方式呈现结果。"
+      },
+      "explanation": "Cohort construction identical: complete capture of cases in the network with no exclusions.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "confounding_adjustment",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No covariate adjustment, weighting, or matching performed; descriptive case series.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Study lacks any confounding adjustment; not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "missing_data_and_censoring",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No discussion of missing data; minimal loss to follow-up (no extended follow-up after recovery).",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No missing data handling described; not applicable in this small descriptive series.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "association_measure_context",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No association measure, reference group, CI, or defined time point; purely descriptive reporting.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No association measure reported; not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    }
+  ],
+  "metrics": {
+    "applicableItems": 14,
+    "weightedFidelity": 0.9083,
+    "criticalFidelity": 0.89,
+    "statusCounts": {
+      "missing": 1,
+      "exact": 12,
+      "not_applicable": 7,
+      "compatible": 1
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [
+      "research_objective"
+    ],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [
+      "research_objective"
+    ],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 50.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 95.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "critical_missing_fact"
+    ],
+    "usabilityGateFailures": [
+      "critical_missing_fact"
+    ],
+    "usabilityVerdict": "fail",
+    "verdict": "fail"
+  },
+  "adversarialAudit": null,
+  "overallAssessment": "The generated article accurately reflects the reference study, with all critical facts (sample size, treatments, outcomes, limitations) precisely reproduced. The only notable omission is the explicit statement of the research objective, which is missing in the generated text. All other items are exact or compatible, and there are no unsupported or contradicted claims. The rewrite effectively rephrases content without altering scientific meaning.",
+  "gradedAt": "2026-07-18T15:19:05Z"
+}

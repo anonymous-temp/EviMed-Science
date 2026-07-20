@@ -1,0 +1,6 @@
+{
+  "diagram": {
+    "mermaid": "flowchart LR\n    N0[\"Question\"] --> N1[\"Evidence\"]\n    N1[\"Evidence\"] --> N2[\"Analysis\"]\n    N2[\"Analysis\"] --> N3[\"Conclusion\"]",
+    "title": "Research flow"
+  }
+}

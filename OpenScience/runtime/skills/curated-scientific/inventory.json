@@ -1,0 +1,1024 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "package": "scientific-agent-skills",
+    "localSnapshot": "项目代码/scientific-agent-skills-main",
+    "license": "MIT",
+    "licenseSha256": "09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1",
+    "securityReportDate": "2026-07-13"
+  },
+  "policy": {
+    "selection": "Audited SAFE skills plus EviMed-rehabilitated gap fillers with bounded tools, provenance, dependency preflight, and fail-closed safety rules",
+    "digestAlgorithm": "release-directory-v1",
+    "rejectedWholePack": true,
+    "wholePackTest": {
+      "passed": 144,
+      "failed": 21
+    },
+    "wholePackSecurity": {
+      "critical": 63,
+      "high": 38
+    },
+    "delivery": {
+      "contractVersion": 1,
+      "defaultEnabledTier": "executable",
+      "supportDirs": [
+        "_runtime"
+      ],
+      "executable": {
+          "astronomy-data-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "astronomy-data-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill astronomy-data-analysis --smoke"
+          },
+          "bayesian-modeling": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "bayesian-modeling-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill bayesian-modeling --smoke"
+          },
+          "biomedical-database-search": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "biomedical-database-search-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill biomedical-database-search --smoke"
+          },
+          "biomedical-knowledge-graph": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "biomedical-knowledge-graph-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill biomedical-knowledge-graph --smoke"
+          },
+          "biomedical-signal-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "biomedical-signal-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill biomedical-signal-analysis --smoke"
+          },
+          "biosequence-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "biosequence-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill biosequence-analysis --smoke"
+          },
+          "bulk-rna-seq": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "bulk-rna-seq-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill bulk-rna-seq --smoke"
+          },
+          "cancer-functional-genomics": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "cancer-functional-genomics-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill cancer-functional-genomics --smoke"
+          },
+          "cheminformatics": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "cheminformatics-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill cheminformatics --smoke"
+          },
+          "citation-integrity": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "citation-integrity-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill citation-integrity --smoke"
+          },
+          "clinical-machine-learning": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "clinical-machine-learning-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill clinical-machine-learning --smoke"
+          },
+          "digital-pathology-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "digital-pathology-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill digital-pathology-analysis --smoke"
+          },
+          "drug-discovery-data": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "drug-discovery-data-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill drug-discovery-data --smoke"
+          },
+          "experimental-design": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "experimental-design-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill experimental-design --smoke"
+          },
+          "exploratory-data-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "exploratory-data-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill exploratory-data-analysis --smoke"
+          },
+          "flow-cytometry-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "flow-cytometry-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill flow-cytometry-analysis --smoke"
+          },
+          "genome-variant-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "genome-variant-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill genome-variant-analysis --smoke"
+          },
+          "geospatial-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "geospatial-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill geospatial-analysis --smoke"
+          },
+          "hypothesis-development": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "hypothesis-development-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill hypothesis-development --smoke"
+          },
+          "markdown-mermaid-writing": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "markdown-mermaid-writing-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill markdown-mermaid-writing --smoke"
+          },
+          "mass-spectrometry-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "mass-spectrometry-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill mass-spectrometry-analysis --smoke"
+          },
+          "materials-science-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "materials-science-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill materials-science-analysis --smoke"
+          },
+          "medical-imaging-data": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "medical-imaging-data-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill medical-imaging-data --smoke"
+          },
+          "metabolic-network-modeling": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "metabolic-network-modeling-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill metabolic-network-modeling --smoke"
+          },
+          "pathway-enrichment": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "pathway-enrichment-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill pathway-enrichment --smoke"
+          },
+          "phylogenetic-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "phylogenetic-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill phylogenetic-analysis --smoke"
+          },
+          "quantum-computing-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "quantum-computing-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill quantum-computing-analysis --smoke"
+          },
+          "reproducible-workflows": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "reproducible-workflows-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill reproducible-workflows --smoke"
+          },
+          "research-grant-development": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "research-grant-development-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill research-grant-development --smoke"
+          },
+          "scientific-data-engineering": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "scientific-data-engineering-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill scientific-data-engineering --smoke"
+          },
+          "scientific-deep-learning": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "scientific-deep-learning-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill scientific-deep-learning --smoke"
+          },
+          "simulation-optimization": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "simulation-optimization-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill simulation-optimization --smoke"
+          },
+          "single-cell-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "single-cell-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill single-cell-analysis --smoke"
+          },
+          "statistical-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "statistical-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill statistical-analysis --smoke"
+          },
+          "survival-analysis": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "survival-analysis-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill survival-analysis --smoke"
+          },
+          "time-series-forecasting": {
+            "entrypoints": [
+              "../_runtime/execute_skill.py"
+            ],
+            "dependencies": [
+              "python>=3.11",
+              "numpy==2.2.6",
+              "pandas==2.2.3",
+              "scipy==1.15.3",
+              "scikit-learn==1.6.1"
+            ],
+            "artifacts": [
+              "results.json",
+              "time-series-forecasting-report.md",
+              "execution-receipt.json"
+            ],
+            "smoke": "--skill time-series-forecasting --smoke"
+          },
+        "matplotlib": {
+          "entrypoints": [
+            "scripts/plot_template.py",
+            "scripts/style_configurator.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "matplotlib==3.10.3"
+          ],
+          "artifacts": [
+            "figure.png",
+            "figure.svg"
+          ],
+          "smoke": "plot-template"
+        },
+        "statistical-power": {
+          "entrypoints": [
+            "scripts/power.py",
+            "scripts/simulate_power.py",
+            "scripts/export_power_analysis.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "scipy==1.15.3",
+            "statsmodels==0.14.6",
+            "matplotlib==3.10.3"
+          ],
+          "artifacts": [
+            "power-analysis.md",
+            "power-curve.csv",
+            "power-curve.png"
+          ],
+          "smoke": "closed-form-power-artifacts"
+        }
+      },
+      "conditional": {},
+      "instructionOnly": []
+    }
+  },
+  "skills": [
+    {
+      "name": "biomedical-database-search",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/database-lookup",
+      "digest": "sha256:205bed698f0c5a54355cb3a31bc7562ec407a749b3e6fd71c460bdf613afb9b6",
+      "fills": "Audited multi-database retrieval through EviMed source tools"
+    },
+    {
+      "name": "biomedical-knowledge-graph",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/networkx+primekg",
+      "digest": "sha256:44f707c43bff0a15488944c6604e2973fd7923fa40bf430004c72d2f1ebdf4f5",
+      "fills": "Provenance-preserving biomedical graph construction and analysis"
+    },
+    {
+      "name": "biosequence-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/biopython",
+      "digest": "sha256:4809d1e1337114848da027b835dbfa7a33df80068e3d3059b18910e8ef94fbc2",
+      "fills": "Bounded local sequence analysis and traceable record retrieval"
+    },
+    {
+      "name": "bulk-rna-seq",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/bulk-rnaseq+pydeseq2",
+      "digest": "sha256:f9831f21866fe2a03f45a5cb58bc38de49b142998777e83238997d24447a774f",
+      "fills": "Design-aware bulk RNA-seq QC and differential expression"
+    },
+    {
+      "name": "cancer-functional-genomics",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/depmap",
+      "digest": "sha256:8148dbf11c5bd9d386ef69e64e9f7d23b70b07a16fd3545a2eaeecac796d295f",
+      "fills": "Context-aware dependency-screen analysis without clinical overclaiming"
+    },
+    {
+      "name": "cheminformatics",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/rdkit+medchem",
+      "digest": "sha256:ebfd375b1c0aaeacf631699f7a1406cb926533cc7d32a14fb728d7ecc026dba6",
+      "fills": "Structure normalization, descriptors, similarity, and chemical QC"
+    },
+    {
+      "name": "drug-discovery-data",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/therapeutics-data-commons+deepchem",
+      "digest": "sha256:ded2f36478010585f6a1a325866722aed20f5234a41e60644d025eeea4bdb639",
+      "fills": "Leakage-aware drug-discovery datasets and benchmarks"
+    },
+    {
+      "name": "experimental-design",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/experimental-design",
+      "digest": "sha256:36697649955cc1d6a9eda315e9c8ff2184172f89b731072aff80a0aee561a1f2",
+      "fills": "Design-first reproducibility, controls, replication, and analysis planning"
+    },
+    {
+      "name": "exploratory-data-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/exploratory-data-analysis",
+      "digest": "sha256:69149fa59f9cfd3171cbc8c3acf15baa336d2014407b9e0c5c78942c49d2b48a",
+      "fills": "Non-destructive dataset profiling, validation, and leakage checks"
+    },
+    {
+      "name": "markdown-mermaid-writing",
+      "security": "SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/markdown-mermaid-writing",
+      "digest": "sha256:50c7edf8ec1b09688ded601fa6fbdd5b801e9ae91ebd078244ff9ae685535df7",
+      "fills": "Accessible source-controlled scientific diagrams"
+    },
+    {
+      "name": "matplotlib",
+      "security": "SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/matplotlib",
+      "digest": "sha256:0040c311493fa995d0e0405c58393b6c8a2c0109a581d08c590fa304840ef5e0",
+      "fills": "Fine-grained publication figure implementation"
+    },
+    {
+      "name": "medical-imaging-data",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/pydicom+imaging-data-commons",
+      "digest": "sha256:5a9364479e1e997f85832d1111d4e98c959c56040925b5e9c7377d1810f8aca1",
+      "fills": "Privacy-gated imaging inventory, QC, and reproducible analysis"
+    },
+    {
+      "name": "pathway-enrichment",
+      "security": "SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/pathway-enrichment",
+      "digest": "sha256:834b7feddbfb292046fc82880f9515b865627254299711ab977cbcb365b4a9e2",
+      "fills": "Traceable pathway and gene-set enrichment analysis"
+    },
+    {
+      "name": "single-cell-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/anndata+scanpy+cellxgene-census",
+      "digest": "sha256:fc65ca7af361dc94e6482c9d374801cf1f9e78990cf8490e694aea76b079baab",
+      "fills": "Sample-aware single-cell QC, integration, annotation, and inference"
+    },
+    {
+      "name": "statistical-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/statistical-analysis",
+      "digest": "sha256:acbc7656f8edaaaf8b1ea581b75065aba47d18cd1c67328cf5f55f84b3ae7cac",
+      "fills": "Assumption-aware estimation, multiplicity, missingness, and diagnostics"
+    },
+    {
+      "name": "statistical-power",
+      "security": "SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/statistical-power",
+      "digest": "sha256:0c09244b9f449a0db8d80ef650c83d345da829e2ab864383757cab0af94eb84a",
+      "fills": "Reproducible sample-size, MDE, and simulation-based power analysis"
+    },
+    {
+      "name": "astronomy-data-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/astropy",
+      "digest": "sha256:9238d751843dbaee58c732ba40099627ba1df6c7028ca767976b2f639238dced",
+      "fills": "Calibrated astronomy data analysis with uncertainty and provenance"
+    },
+    {
+      "name": "bayesian-modeling",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/pymc",
+      "digest": "sha256:ca4f429549d17980fad0724c630e1581d5e0ae6d886d45d9e4fb579763c62993",
+      "fills": "Diagnosed Bayesian modeling, prediction, sensitivity, and uncertainty"
+    },
+    {
+      "name": "biomedical-signal-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/neurokit2+neuropixels-analysis",
+      "digest": "sha256:e8a14d8fde10effb56491e3baececf58eac92c3dc1d7bfacb33ea02607bc2c38",
+      "fills": "Artifact-aware physiological signal processing and validation"
+    },
+    {
+      "name": "citation-integrity",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/citation-management+paper-lookup+pyzotero",
+      "digest": "sha256:6baefa6fe0dcbeb3044e8566c66e8f9a146643bd7769137057da04d5662d958b",
+      "fills": "Exact-record resolution and claim-to-source fidelity auditing"
+    },
+    {
+      "name": "clinical-machine-learning",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/pyhealth+scikit-learn+shap",
+      "digest": "sha256:8bf87bc0573ce10340fcf8c0cc5346cf7ec15d985752b9632ed7910abeac381d",
+      "fills": "Leakage-resistant clinical prediction validation and model reporting"
+    },
+    {
+      "name": "digital-pathology-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/histolab+pathml",
+      "digest": "sha256:e5868d6048038901948b3402eb20801c88602379da60ca85adbb2fdcc9e71a30",
+      "fills": "Whole-slide quality control, tiling, and patient-safe evaluation"
+    },
+    {
+      "name": "flow-cytometry-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/flowio",
+      "digest": "sha256:4ec90bc73109680d80252c0b9547678eab82c941b8ad3f8ff1ce9bdf16c32018",
+      "fills": "Control-aware cytometry compensation, gating, QC, and provenance"
+    },
+    {
+      "name": "genome-variant-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/pysam+tiledbvcf+geniml+gtars",
+      "digest": "sha256:e8afb6908624dccfe55d7d92bd96b0f19f43c7c96a5ded155de691d842687fd0",
+      "fills": "Build-aware variant normalization, cohort QC, and annotation"
+    },
+    {
+      "name": "geospatial-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/geomaster+geopandas",
+      "digest": "sha256:865415ac01896214daaccf43d3dd1546e046e719aef2e297750b209fb09ee35a",
+      "fills": "CRS-safe spatial analysis, uncertainty, privacy, and mapping"
+    },
+    {
+      "name": "hypothesis-development",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/hypogenic+hypothesis-generation",
+      "digest": "sha256:0286f19a1083e10f0bc491fae68a5d7cf094e5d88cf88a5ba85f2bd4bbfdd6d5",
+      "fills": "Falsifiable hypotheses, alternatives, and discriminating experiments"
+    },
+    {
+      "name": "mass-spectrometry-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/matchms+pyopenms",
+      "digest": "sha256:6c8d559cc7f0fb31d6e3da2049a7d753437d6de424f8b9f43d6dead50eb99df3",
+      "fills": "Traceable spectral processing, identification, quantification, and FDR"
+    },
+    {
+      "name": "materials-science-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/pymatgen+molecular-dynamics",
+      "digest": "sha256:3c8a03d9537d16b63c30ac0ed5372a242511e7732e58d10cb5b5741edcb6a0da",
+      "fills": "Structure-aware materials analysis with convergence provenance"
+    },
+    {
+      "name": "metabolic-network-modeling",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/cobrapy",
+      "digest": "sha256:9c1daaa357d05922c9d880bf713488b3fefa890c48eb7e6f3ebac588872f6e3b",
+      "fills": "Constraint-based metabolic modeling with solver and feasibility checks"
+    },
+    {
+      "name": "phylogenetic-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/etetoolkit+phylogenetics+scikit-bio",
+      "digest": "sha256:fec8ca8a2adabaede51798fcfed29a38160998713c982f59bbe6a9bf12335d3c",
+      "fills": "Reproducible alignment, tree inference, support, and sensitivity"
+    },
+    {
+      "name": "quantum-computing-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/cirq+pennylane+qiskit+qutip",
+      "digest": "sha256:2de8989533bee01ece4862ea19bb47bbb88d65eda8300feec353dc1d15ef0678",
+      "fills": "Backend-explicit quantum experiments with classical reference checks"
+    },
+    {
+      "name": "reproducible-workflows",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/nextflow+pacsomatic",
+      "digest": "sha256:bf191fb4a5eee26b874afd22166f4d4e913f43de6527fe4d8943fe3f9a2311fc",
+      "fills": "Portable DAG execution, recovery, caching, and lineage"
+    },
+    {
+      "name": "research-grant-development",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/research-grants",
+      "digest": "sha256:0e561a87e0e3874fcde1cf7b13179df9f994851b0fcb71cef4b749900bb50882",
+      "fills": "Evidence-grounded aims, approach, milestones, risks, and audit"
+    },
+    {
+      "name": "scientific-data-engineering",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/dask+polars+vaex+zarr-python",
+      "digest": "sha256:1f441488f6930e272cea0b0900df4c189a5120fc5e5fbf276bbc1499a3fc737d",
+      "fills": "Bounded-memory scientific transforms with schema and round-trip validation"
+    },
+    {
+      "name": "scientific-deep-learning",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/pytorch-lightning+transformers+torch-geometric",
+      "digest": "sha256:3594a26cc3f70858634426be70273465a619e474fbc46fa48045af0c8dd96eff",
+      "fills": "Leakage-aware scientific deep learning and reproducible model cards"
+    },
+    {
+      "name": "simulation-optimization",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/simpy+pymoo+fluidsim",
+      "digest": "sha256:46d890c0f771b96310a24562e326ae39b7c6245eb48ce07cfbeee002dd720d08",
+      "fills": "Validated simulation, sensitivity, feasibility, and trade-off analysis"
+    },
+    {
+      "name": "survival-analysis",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/scikit-survival",
+      "digest": "sha256:88c6e7ee91d356a119bc615681862c9d35ab3a01f0f4e4100d1b5a0ef16a809b",
+      "fills": "Estimand-driven time-to-event modeling and sensitivity analysis"
+    },
+    {
+      "name": "time-series-forecasting",
+      "security": "REHABILITATED_SAFE",
+      "reviewed": true,
+      "derivedFrom": "scientific-agent-skills/aeon+statsmodels+timesfm-forecasting",
+      "digest": "sha256:c03093e8e281c5dfbdbb4dc4b2b766f660c71da10003fd1bf08f3a16aac8f2c3",
+      "fills": "Rolling-origin forecasts, calibrated uncertainty, and drift analysis"
+    }
+  ]
+}

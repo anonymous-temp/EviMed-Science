@@ -1,0 +1,55 @@
+id: drug-selection
+version: 2.1.0
+title: Drug Selection Evaluation
+category: Formulary Decision Support
+description: Compare candidate medicines across pharmaceutical properties, effectiveness, safety, economics, and other formulary attributes.
+skill: drug-selection
+estimatedMinutes: [20, 50]
+starterPrompts:
+  - Compare candidate medicines for a hospital formulary decision in one indication.
+  - Build an evidence-backed scorecard for selecting among equivalent medicines.
+requiredInputs:
+  - candidateDrugs
+  - indication
+optionalInputs:
+  - population
+  - jurisdiction
+  - selectionCriteria
+  - selectionDomains
+  - scoringRubric
+  - scoringPolicyVersion
+  - economicContext
+  - productSpecifications
+  - careSetting
+  - decisionDate
+  - budgetContext
+  - uploadedFiles
+requiredTools:
+  - evimed_drug_term_normalize
+  - evimed_drug_selection_evaluation
+optionalTools:
+  - evimed_data_source_catalog
+  - evimed_biomedical_source_search
+  - evimed_drug_label_search
+  - evimed_guideline_search
+  - evimed_clinical_trial_search
+  - evimed_literature_search
+dataSources:
+  - drug-labels
+  - guidelines
+  - clinical-trials
+  - literature
+  - internal-evidence
+  - uploaded-files
+outputs:
+  - path: drug-selection-report.md
+    required: true
+  - path: selection-scorecard.csv
+    required: true
+  - path: decision-summary.json
+    required: true
+  - path: evidence-snapshot.json
+    required: true
+completionChecks:
+  - requiredOutputsExist
+  - citationsResolvable

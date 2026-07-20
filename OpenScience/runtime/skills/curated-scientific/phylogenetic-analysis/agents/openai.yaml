@@ -1,0 +1,4 @@
+interface:
+  display_name: "Phylogenetic Analysis"
+  short_description: "Run reproducible sequence and phylogenetic analyses"
+  default_prompt: "Use $phylogenetic-analysis to build and validate a phylogeny from these sequences."

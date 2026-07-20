@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-022",
+  "category": "case-report",
+  "title": "New challenges in human monkeypox outside Africa: A review and case report from Italy.",
+  "pmcid": "PMC9528171",
+  "doi": "10.1016/j.tmaid.2022.102386",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 6777,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 105,
+    "supportedUniqueNumbers": 86,
+    "unsupportedNumberTokens": [
+      "-2007",
+      "-2019",
+      "-2022",
+      "-35",
+      "-36",
+      "-55",
+      "-66%",
+      "-90%",
+      "10000",
+      "1416",
+      "1460",
+      "272",
+      "3040",
+      "3340",
+      "49%",
+      "5355",
+      "5455",
+      "733",
+      "840"
+    ],
+    "supportedNumericClaimPrecision": 0.819047619047619,
+    "verbatimEightGramRate": 0.005745554035567715,
+    "toolCalls": 11,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 4,
+    "majorUnsupportedClaims": [
+      "葡萄牙272例中有详细信息的27例全部为男性——原文葡萄牙仅报告96例确诊而非272例。"
+    ],
+    "minorUnsupportedClaims": [
+      "将原著中0‑4岁家庭接触者的续发率11.7%泛化为“未接种疫苗的家庭接触者续发率可达11.7%”，略失精淮。"
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "fail",
+    "rationale": "生成文本几乎完全忠实于原文，方法、病例与综述要点均与参考文献一致。但结果部分出现一处明显的数值捏造（葡萄牙272例），实际原文仅96例，属重大失实，故判定为fail。"
+  },
+  "overallVerdict": "fail"
+}

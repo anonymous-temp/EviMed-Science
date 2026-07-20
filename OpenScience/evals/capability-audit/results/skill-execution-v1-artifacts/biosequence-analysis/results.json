@@ -1,0 +1,19 @@
+{
+  "sequences": {
+    "sample-a": {
+      "ambiguous": 0,
+      "gcFraction": 0.4166666666666667,
+      "length": 12
+    },
+    "sample-b": {
+      "ambiguous": 0,
+      "gcFraction": 0.4166666666666667,
+      "length": 12
+    },
+    "sample-c": {
+      "ambiguous": 0,
+      "gcFraction": 0.3333333333333333,
+      "length": 12
+    }
+  }
+}

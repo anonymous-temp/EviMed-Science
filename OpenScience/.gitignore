@@ -1,0 +1,69 @@
+# OS
+.DS_Store
+*.swp
+*.swo
+*~
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+.turbo/
+*.tsbuildinfo
+coverage/
+
+# Rust / Tauri
+target/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.uv/
+.pytest_cache/
+
+# Logs & caches
+*.log
+.cache/
+.eslintcache
+.superpowers/
+
+# Local runtime & secrets (never commit)
+.ai4s-workbench/
+.openscience-web-data/
+secrets/
+deploy/web/release-manifest.json
+*.key
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Build artifacts / installers
+*.dmg
+*.app
+*.exe
+*.msi
+
+# Bundled sidecar binaries (fetched per-platform; too large for git)
+apps/desktop/src-tauri/binaries/
+
+# Third-party skill packs (fetched by scripts/dev/fetch-skills.sh)
+runtime/skills/external/
+
+# Local demo recordings (too large for git)
+videos/
+
+# Local video-production tooling (fetched hyperframes skill packs)
+.agents/
+skills-lock.json

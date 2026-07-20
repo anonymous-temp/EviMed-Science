@@ -1,0 +1,12 @@
+{
+  "findings": [
+    {
+      "level": "warn",
+      "check": "integrity",
+      "tag": "stats · seed",
+      "title": "Randomised analysis with no fixed seed",
+      "evidence": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T171732Z-be6ca31f/stats-integrity/analysis.py:2  values = np.random.normal(size=10)\n  this uses randomness but sets no seed (np.random.seed / random_state= / set.seed) — the estimates won't reproduce run to run. Fix a seed so the result is reproducible."
+    }
+  ],
+  "note": "Analysis-integrity gate — flags over-interpretation, unregistered analyses, and missing seeds. It checks these specific risks only; absence of findings does not certify the analysis is sound or the conclusions valid."
+}

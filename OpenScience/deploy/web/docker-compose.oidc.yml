@@ -1,0 +1,21 @@
+services:
+  open-science-web:
+    environment:
+      OPEN_SCIENCE_AUTH_MODE: oidc
+      OPEN_SCIENCE_DEV_AUTH: "false"
+      OPEN_SCIENCE_BOOTSTRAP_USER: ""
+      OPEN_SCIENCE_BOOTSTRAP_PASSWORD: ""
+      OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE: ""
+      OPEN_SCIENCE_OIDC_CLIENT_SECRET: ""
+      OPEN_SCIENCE_OIDC_CLIENT_SECRET_FILE: /run/secrets/oidc_client_secret
+      OPEN_SCIENCE_OIDC_FLOW_SECRET: ""
+      OPEN_SCIENCE_OIDC_FLOW_SECRET_FILE: /run/secrets/oidc_flow_secret
+    secrets:
+      - oidc_client_secret
+      - oidc_flow_secret
+
+secrets:
+  oidc_client_secret:
+    file: ${OPEN_SCIENCE_OIDC_SECRETS_DIR:-./secrets}/oidc-client-secret.txt
+  oidc_flow_secret:
+    file: ${OPEN_SCIENCE_OIDC_SECRETS_DIR:-./secrets}/oidc-flow-secret.txt

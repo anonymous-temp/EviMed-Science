@@ -1,0 +1,7 @@
+services:
+  open-science-web:
+    environment:
+      OPEN_SCIENCE_DEPLOYMENT_PROFILE: individual-saas
+      OPEN_SCIENCE_BACKUP_MODE: external
+      OPEN_SCIENCE_BACKUP_EXTERNAL_ACK: ${OPEN_SCIENCE_BACKUP_EXTERNAL_ACK:?acknowledge external backup ownership}
+      OPEN_SCIENCE_RESTORE_DRILL_ACK: ${OPEN_SCIENCE_RESTORE_DRILL_ACK:?acknowledge a completed restore drill}

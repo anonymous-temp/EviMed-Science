@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-042",
+  "category": "biomedical-ai",
+  "title": "CARD 2023: expanded curation, support for machine learning, and resistome prediction at the Comprehensive Antibiotic Resistance Database.",
+  "pmcid": "PMC9825576",
+  "doi": "10.1093/nar/gkac920",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 8985,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 86,
+    "supportedUniqueNumbers": 77,
+    "unsupportedNumberTokens": [
+      "-1",
+      "-10",
+      "-11",
+      "-18",
+      "-6",
+      "-7",
+      "13000",
+      "2134",
+      "2291"
+    ],
+    "supportedNumericClaimPrecision": 0.8953488372093024,
+    "verbatimEightGramRate": 0.002082899395959175,
+    "toolCalls": 9,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "All factual claims in the generated text are directly supported by the reference article's abstract and full text evidence. Key numbers, methods, and conclusions are accurately reproduced without fabrication or distortion. No unsupported claims, major or minor, were detected. The rewrite faithfully summarizes the paper's content."
+  },
+  "overallVerdict": "pass"
+}

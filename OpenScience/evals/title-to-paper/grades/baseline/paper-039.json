@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-039",
+  "category": "genomics-omics",
+  "title": "Large-scale cis- and trans-eQTL analyses identify thousands of genetic loci and polygenic scores that regulate blood gene expression.",
+  "pmcid": "PMC8432599",
+  "doi": "10.1038/s41588-021-00913-z",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 6357,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 132,
+    "supportedUniqueNumbers": 129,
+    "unsupportedNumberTokens": [
+      "-29.6%",
+      "-35",
+      "92%"
+    ],
+    "supportedNumericClaimPrecision": 0.9772727272727273,
+    "verbatimEightGramRate": 0.002385008517887564,
+    "toolCalls": 8,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "所有事实性表述均与参考文献的摘要、方法、结果和讨论严格一致。研究设计、样本构成、分析流程、关键数字（如88.2%基因有cis-eQTL、37%性状相关变异有trans-eQTL、13%基因有eQTS效应等）均得到正文和全文证据的准确支撑。无任何编造或未经支持的声明。"
+  },
+  "overallVerdict": "pass"
+}

@@ -1,0 +1,29 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1038,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/hypothesis-development/results.json",
+      "sha256": "168e95644426bf95ee326d98c31879cc48207e523acd603d5f2e7c9df0fee589"
+    },
+    {
+      "bytes": 1461,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/hypothesis-development/hypothesis-development-report.md",
+      "sha256": "d920f0b5ba72c8e35ac2adaedb0a24e3ec6597003bef9c6cf2b7ce279fca3e97"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:34.761868Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "hypothesis-development",
+  "startedAt": "2026-07-19T19:31:34.761296Z",
+  "status": "success",
+  "summary": "Executed the bounded deterministic baseline for hypothesis-development and wrote 2 verified artifacts.",
+  "warnings": []
+}

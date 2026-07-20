@@ -1,0 +1,753 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-005",
+  "category": "randomized-trial",
+  "title": "Cardiovascular and kidney outcomes with finerenone in patients with type 2 diabetes and chronic kidney disease: the FIDELITY pooled analysis.",
+  "pmcid": "PMC8830527",
+  "doi": "10.1093/eurheartj/ehab777",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "69a41cf1c3f8ac12015bbdc9cdee18b84982108e97b2da4d91a7c7d933e8b4db",
+  "generatedSha256": "312dcd7e6ef10c83e0ce2dd8891b6f137ecb095c143a3c8f3851ec632184ab58",
+  "promptSha256": "030ec979269211a2989d1d68972b505487d92a7509b5b952bf4d9697d37964a6",
+  "cacheFingerprint": "821a7d917eb38c86bf3372e914993e3a80debc675bf4c0db635620007de2b608",
+  "referenceCharacters": 38195,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 16692,
+  "paperType": "randomized-trial",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "The purpose was a prespecified pooled efficacy and safety analysis across a broad spectrum of CKD to provide more robust estimates of finerenone compared with placebo.",
+      "generatedFact": "To generate more precise estimates of finerenone efficacy and safety relative to placebo across a broad range of CKD severity.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "The purpose of the FIDELITY analysis was to perform an individual patient-level prespecified pooled efficacy and safety analysis across a broad spectrum of CKD to provide more robust estimates of safety and efficacy of finerenone compared with placebo.Methods and resultsFor this prespecified analysis, two phase III, multicentre, double-blind trials involving patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or placebo, were combined."
+        ],
+        "quote": "The purpose of the FIDELITY analysis was to perform an individual patient-level prespecified pooled efficacy and safety analysis across a broad spectrum of CKD to provide more robust estimates of safety and efficacy of finerenone compared with placebo.Methods and resultsFor this prespecified analysis, two phase III, multicentre, double-blind trials involving patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or placebo, were combined."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "Finerenone, a nonsteroidal selective mineralocorticoid receptor antagonist, was investigated across two complementary phase III trials covering different CKD stages. The FIDELITY analysis pooled individual participant data to generate more precise estimates of finerenone efficacy and safety relative to placebo across a broad range of CKD severity. **Methods.** This prespecified pooled analysis combined data from two randomised, double-blind, placebo-controlled, multicentre trials enrolling adults with type 2 diabetes and CKD on a maximally tolerated dose of an angiotensin-converting-enzyme inhibitor or angiotensin receptor blocker."
+        ],
+        "quote": "Finerenone, a nonsteroidal selective mineralocorticoid receptor antagonist, was investigated across two complementary phase III trials covering different CKD stages. The FIDELITY analysis pooled individual participant data to generate more precise estimates of finerenone efficacy and safety relative to placebo across a broad range of CKD severity. **Methods.** This prespecified pooled analysis combined data from two randomised, double-blind, placebo-controlled, multicentre trials enrolling adults with type 2 diabetes and CKD on a maximally tolerated dose of an angiotensin-converting-enzyme inhibitor or angiotensin receptor blocker."
+      },
+      "explanation": "Wording differs slightly ('robust' vs 'precise') but meaning is identical; no factual discrepancy.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Prespecified analysis combining two phase III, multicentre, double-blind, placebo-controlled trials in patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or placebo.",
+      "generatedFact": "This prespecified pooled analysis combined data from two randomised, double-blind, placebo-controlled, multicentre trials enrolling adults with type 2 diabetes and CKD on a maximally tolerated dose of an ACE inhibitor or ARB.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "The purpose of the FIDELITY analysis was to perform an individual patient-level prespecified pooled efficacy and safety analysis across a broad spectrum of CKD to provide more robust estimates of safety and efficacy of finerenone compared with placebo.Methods and resultsFor this prespecified analysis, two phase III, multicentre, double-blind trials involving patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or placebo, were combined."
+        ],
+        "quote": "The purpose of the FIDELITY analysis was to perform an individual patient-level prespecified pooled efficacy and safety analysis across a broad spectrum of CKD to provide more robust estimates of safety and efficacy of finerenone compared with placebo.Methods and resultsFor this prespecified analysis, two phase III, multicentre, double-blind trials involving patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or placebo, were combined."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "Finerenone, a nonsteroidal selective mineralocorticoid receptor antagonist, was investigated across two complementary phase III trials covering different CKD stages. The FIDELITY analysis pooled individual participant data to generate more precise estimates of finerenone efficacy and safety relative to placebo across a broad range of CKD severity. **Methods.** This prespecified pooled analysis combined data from two randomised, double-blind, placebo-controlled, multicentre trials enrolling adults with type 2 diabetes and CKD on a maximally tolerated dose of an angiotensin-converting-enzyme inhibitor or angiotensin receptor blocker."
+        ],
+        "quote": "Finerenone, a nonsteroidal selective mineralocorticoid receptor antagonist, was investigated across two complementary phase III trials covering different CKD stages. The FIDELITY analysis pooled individual participant data to generate more precise estimates of finerenone efficacy and safety relative to placebo across a broad range of CKD severity. **Methods.** This prespecified pooled analysis combined data from two randomised, double-blind, placebo-controlled, multicentre trials enrolling adults with type 2 diabetes and CKD on a maximally tolerated dose of an angiotensin-converting-enzyme inhibitor or angiotensin receptor blocker."
+      },
+      "explanation": "Both describe the same pooled design; details are consistent.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Patients with type 2 diabetes and CKD (UACR and eGFR-defined) treated with maximally tolerated ACEi/ARB, from FIDELIO-DKD and FIGARO-DKD, after exclusions, N=13 026.",
+      "generatedFact": "Patients with type 2 diabetes and CKD, pooled individual participant data from FIDELIO-DKD and FIGARO-DKD; after excluding critical GCP violations, 13 026 individuals were included.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "The purpose of the FIDELITY analysis was to perform an individual patient-level prespecified pooled efficacy and safety analysis across a broad spectrum of CKD to provide more robust estimates of safety and efficacy of finerenone compared with placebo.Methods and resultsFor this prespecified analysis, two phase III, multicentre, double-blind trials involving patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or placebo, were combined."
+        ],
+        "quote": "The purpose of the FIDELITY analysis was to perform an individual patient-level prespecified pooled efficacy and safety analysis across a broad spectrum of CKD to provide more robust estimates of safety and efficacy of finerenone compared with placebo.Methods and resultsFor this prespecified analysis, two phase III, multicentre, double-blind trials involving patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or placebo, were combined."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+        ],
+        "quote": "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+      },
+      "explanation": "Population definition, data source, and final sample size match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Among 13 026 patients (after excluding 145 with GCP violations).",
+      "generatedFact": "13 026 individuals were included (after exclusion of 145 patients for critical GCP violations).",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Main time-to-event efficacy outcomes were a composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalization for heart failure, and a composite of kidney failure, a sustained ≥57% decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal death. Among 13 026 patients with a median follow-up of 3.0 years (interquartile range 2.3–3.8 years), the composite cardiovascular outcome occurred in 825 (12.7%) patients receiving finerenone and 939 (14.4%) receiving placebo [hazard ratio (HR), 0.86; 95% confidence interval (CI), 0.78–0.95; P = 0.0018]."
+        ],
+        "quote": "Main time-to-event efficacy outcomes were a composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalization for heart failure, and a composite of kidney failure, a sustained ≥57% decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal death. Among 13 026 patients with a median follow-up of 3.0 years (interquartile range 2.3–3.8 years), the composite cardiovascular outcome occurred in 825 (12.7%) patients receiving finerenone and 939 (14.4%) receiving placebo [hazard ratio (HR), 0.86; 95% confidence interval (CI), 0.78–0.95; P = 0.0018]."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+        ],
+        "quote": "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+      },
+      "explanation": "Identical total and exclusion reasoning.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Adults ≥18 y with T2D and CKD (persistent UACR 30–<300 mg/g with eGFR 25–<60 or ≥300–5000 mg/g with eGFR 25–<75 in FIDELIO; UACR 30–<300 mg/g with eGFR 25–90 or ≥300–5000 mg/g with eGFR ≥60 in FIGARO), on max tolerated ACEi/ARB, K ≤4.8 mmol/L; exclusion of non-diabetic KD, uncontrolled HTN, symptomatic HFrEF, recent CV event.",
+      "generatedFact": "Both trials required age ≥18, T2D, CKD defined by persistent UACR and eGFR thresholds as per each trial (identical to reference), max tolerated ACEi/ARB, K ≤4.8 mmol/L; key exclusions: non-diabetic KD, symptomatic HFrEF NYHA II–IV, uncontrolled HTN, recent CV events.",
+      "sourceEvidence": {
+        "locator": "R0020",
+        "locators": [
+          "R0020"
+        ],
+        "quotes": [
+          "Patients Eligible patients were adults (aged ≥18 years) with type 2 diabetes and CKD treated with a maximum tolerated labelled dose of an angiotensin-converting enzyme inhibitor (ACEi) or angiotensin receptor blocker (ARB). Chronic kidney disease in FIDELIO-DKD CKD in FIDELIO-DKD was defined as either: (i) persistent (demonstrated at both the run-in and screening visits, which took place between a minimum of 4 to a maximum of 16 weeks apart), moderately increased albuminuria (UACR ≥30–<300 mg/g) with an eGFR of ≥25–<60 mL/min/1.73 m 2 and the presence of diabetic retinopathy, or (ii) persistent, severely increased albuminuria (UACR ≥300–≤5000 mg/g) and an eGFR of ≥25–<75 mL/min/1.73 m 2 ."
+        ],
+        "quote": "Patients Eligible patients were adults (aged ≥18 years) with type 2 diabetes and CKD treated with a maximum tolerated labelled dose of an angiotensin-converting enzyme inhibitor (ACEi) or angiotensin receptor blocker (ARB). Chronic kidney disease in FIDELIO-DKD CKD in FIDELIO-DKD was defined as either: (i) persistent (demonstrated at both the run-in and screening visits, which took place between a minimum of 4 to a maximum of 16 weeks apart), moderately increased albuminuria (UACR ≥30–<300 mg/g) with an eGFR of ≥25–<60 mL/min/1.73 m 2 and the presence of diabetic retinopathy, or (ii) persistent, severely increased albuminuria (UACR ≥300–≤5000 mg/g) and an eGFR of ≥25–<75 mL/min/1.73 m 2 ."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "In FIDELIO-DKD, CKD required either: (i) moderately increased albuminuria (urine albumin-to-creatinine ratio [UACR] 30–<300 mg/g), eGFR 25–<60 mL/min/1.73 m², and diabetic retinopathy; or (ii) severely increased albuminuria (UACR 300–5000 mg/g) and eGFR 25–<75 mL/min/1.73 m². In FIGARO-DKD, CKD was defined as either: (i) moderately increased albuminuria (UACR 30–<300 mg/g) and eGFR 25–90 mL/min/1.73 m²; or (ii) severely increased albuminuria (UACR 300–5000 mg/g) with eGFR ≥60 mL/min/1.73 m²."
+        ],
+        "quote": "In FIDELIO-DKD, CKD required either: (i) moderately increased albuminuria (urine albumin-to-creatinine ratio [UACR] 30–<300 mg/g), eGFR 25–<60 mL/min/1.73 m², and diabetic retinopathy; or (ii) severely increased albuminuria (UACR 300–5000 mg/g) and eGFR 25–<75 mL/min/1.73 m². In FIGARO-DKD, CKD was defined as either: (i) moderately increased albuminuria (UACR 30–<300 mg/g) and eGFR 25–90 mL/min/1.73 m²; or (ii) severely increased albuminuria (UACR 300–5000 mg/g) with eGFR ≥60 mL/min/1.73 m²."
+      },
+      "explanation": "All major inclusion/exclusion criteria are correctly and precisely reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Oral finerenone (10 mg or 20 mg once daily).",
+      "generatedFact": "Oral finerenone (10 mg or 20 mg once daily).",
+      "sourceEvidence": {
+        "locator": "R0022",
+        "locators": [
+          "R0022"
+        ],
+        "quotes": [
+          "Procedures The procedures for the FIDELIO-DKD and FIGARO-DKD studies have been described previously. Briefly, eligible patients were randomized 1:1 to receive oral finerenone (10 or 20 mg) or placebo. Both studies consisted of run-in, screening, double-blind treatment, and safety follow-up periods ( Supplementary material online , Figure S2 ). 7 , 10 The run-in period required ACEi or ARB therapy to be adjusted to a maximum tolerated labelled dose that did not lead to unacceptable side effects. Study drug was withheld if potassium concentrations exceeded 5.5 mmol/L and restarted when potassium levels fell to ≤5.0 mmol/L."
+        ],
+        "quote": "Procedures The procedures for the FIDELIO-DKD and FIGARO-DKD studies have been described previously. Briefly, eligible patients were randomized 1:1 to receive oral finerenone (10 or 20 mg) or placebo. Both studies consisted of run-in, screening, double-blind treatment, and safety follow-up periods ( Supplementary material online , Figure S2 ). 7 , 10 The run-in period required ACEi or ARB therapy to be adjusted to a maximum tolerated labelled dose that did not lead to unacceptable side effects. Study drug was withheld if potassium concentrations exceeded 5.5 mmol/L and restarted when potassium levels fell to ≤5.0 mmol/L."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+        ],
+        "quote": "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+      },
+      "explanation": "Intervention, dose, and frequency match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Placebo.",
+      "generatedFact": "Placebo.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "The purpose of the FIDELITY analysis was to perform an individual patient-level prespecified pooled efficacy and safety analysis across a broad spectrum of CKD to provide more robust estimates of safety and efficacy of finerenone compared with placebo.Methods and resultsFor this prespecified analysis, two phase III, multicentre, double-blind trials involving patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or placebo, were combined."
+        ],
+        "quote": "The purpose of the FIDELITY analysis was to perform an individual patient-level prespecified pooled efficacy and safety analysis across a broad spectrum of CKD to provide more robust estimates of safety and efficacy of finerenone compared with placebo.Methods and resultsFor this prespecified analysis, two phase III, multicentre, double-blind trials involving patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or placebo, were combined."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "Finerenone, a nonsteroidal selective mineralocorticoid receptor antagonist, was investigated across two complementary phase III trials covering different CKD stages. The FIDELITY analysis pooled individual participant data to generate more precise estimates of finerenone efficacy and safety relative to placebo across a broad range of CKD severity. **Methods.** This prespecified pooled analysis combined data from two randomised, double-blind, placebo-controlled, multicentre trials enrolling adults with type 2 diabetes and CKD on a maximally tolerated dose of an angiotensin-converting-enzyme inhibitor or angiotensin receptor blocker."
+        ],
+        "quote": "Finerenone, a nonsteroidal selective mineralocorticoid receptor antagonist, was investigated across two complementary phase III trials covering different CKD stages. The FIDELITY analysis pooled individual participant data to generate more precise estimates of finerenone efficacy and safety relative to placebo across a broad range of CKD severity. **Methods.** This prespecified pooled analysis combined data from two randomised, double-blind, placebo-controlled, multicentre trials enrolling adults with type 2 diabetes and CKD on a maximally tolerated dose of an angiotensin-converting-enzyme inhibitor or angiotensin receptor blocker."
+      },
+      "explanation": "Comparator is identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Main efficacy endpoints: cardiovascular composite (CV death, non-fatal MI, non-fatal stroke, HHF) and kidney composite (kidney failure, sustained ≥57% eGFR decline ≥4 wks, renal death). Also prespecified: ≥40% eGFR decline composite, all‑cause mortality, all‑cause hospitalization, change in UACR at Month 4.",
+      "generatedFact": "Main efficacy endpoints: (i) cardiovascular composite of CV death, non-fatal MI, non-fatal stroke, or hospitalisation for heart failure; (ii) kidney composite of kidney failure, sustained ≥57% eGFR decline from baseline ≥4 weeks, or renal death. Additional prespecified analyses: ≥40% eGFR decline composite, all‑cause mortality, all‑cause hospitalisation, change in UACR at Month 4.",
+      "sourceEvidence": {
+        "locator": "R0024",
+        "locators": [
+          "R0024"
+        ],
+        "quotes": [
+          "The efficacy outcomes of interest for this pooled analysis were a composite cardiovascular outcome of time to cardiovascular death, non-fatal MI, non-fatal stroke, or hospitalization for heart failure (HHF), and a composite kidney outcome of time to first onset of kidney failure, sustained ≥57% decrease in eGFR from baseline over ≥4 weeks, or renal death. In the composite kidney outcome, kidney failure was defined as end-stage kidney disease (ESKD) or a sustained decrease in eGFR to <15 mL/min/1.73 m 2 , and ESKD was defined as initiation of chronic dialysis (for ≥90 days) or kidney transplantation."
+        ],
+        "quote": "The efficacy outcomes of interest for this pooled analysis were a composite cardiovascular outcome of time to cardiovascular death, non-fatal MI, non-fatal stroke, or hospitalization for heart failure (HHF), and a composite kidney outcome of time to first onset of kidney failure, sustained ≥57% decrease in eGFR from baseline over ≥4 weeks, or renal death. In the composite kidney outcome, kidney failure was defined as end-stage kidney disease (ESKD) or a sustained decrease in eGFR to <15 mL/min/1.73 m 2 , and ESKD was defined as initiation of chronic dialysis (for ≥90 days) or kidney transplantation."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+        ],
+        "quote": "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+      },
+      "explanation": "Primary and key secondary endpoints are identical in definition and wording.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Median follow‑up 3.0 years (IQR 2.3–3.8).",
+      "generatedFact": "Median follow‑up 3.0 years (interquartile range 2.3–3.8).",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Main time-to-event efficacy outcomes were a composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalization for heart failure, and a composite of kidney failure, a sustained ≥57% decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal death. Among 13 026 patients with a median follow-up of 3.0 years (interquartile range 2.3–3.8 years), the composite cardiovascular outcome occurred in 825 (12.7%) patients receiving finerenone and 939 (14.4%) receiving placebo [hazard ratio (HR), 0.86; 95% confidence interval (CI), 0.78–0.95; P = 0.0018]."
+        ],
+        "quote": "Main time-to-event efficacy outcomes were a composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalization for heart failure, and a composite of kidney failure, a sustained ≥57% decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal death. Among 13 026 patients with a median follow-up of 3.0 years (interquartile range 2.3–3.8 years), the composite cardiovascular outcome occurred in 825 (12.7%) patients receiving finerenone and 939 (14.4%) receiving placebo [hazard ratio (HR), 0.86; 95% confidence interval (CI), 0.78–0.95; P = 0.0018]."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+        ],
+        "quote": "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+      },
+      "explanation": "Follow‑up duration and IQR match perfectly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Prospective exclusion of 145 patients for critical GCP violations before database lock; run‑in period to optimize ACEi/ARB dose.",
+      "generatedFact": "After prospective exclusion of 145 patients for critical GCP violations, the final analysis set comprised 13 026 participants; run‑in period optimized background therapy.",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "CKD, chronic kidney disease; CV, cardiovascular; DBP, diastolic blood pressure; eGFR, estimated glomerular filtration rate; HbA1c, glycated haemoglobin; HFrEF, heart failure with reduced ejection fraction; HHF, hospitalization for heart failure; MI, myocardial infarction; RAS, renin–angiotensin system; SBP, systolic blood pressure; T2D, type 2 diabetes; UACR, urine albumin-to-creatinine ratio. a A total of 145 randomized patients (60 patients in FIDELIO-DKD and 85 patients in FIGARO-DKD) were prospectively excluded prior to database lock from all analyses because of critical Good Clinical Practice violations."
+        ],
+        "quote": "CKD, chronic kidney disease; CV, cardiovascular; DBP, diastolic blood pressure; eGFR, estimated glomerular filtration rate; HbA1c, glycated haemoglobin; HFrEF, heart failure with reduced ejection fraction; HHF, hospitalization for heart failure; MI, myocardial infarction; RAS, renin–angiotensin system; SBP, systolic blood pressure; T2D, type 2 diabetes; UACR, urine albumin-to-creatinine ratio. a A total of 145 randomized patients (60 patients in FIDELIO-DKD and 85 patients in FIGARO-DKD) were prospectively excluded prior to database lock from all analyses because of critical Good Clinical Practice violations."
+      },
+      "generatedEvidence": {
+        "locator": "G0015",
+        "locators": [
+          "G0015"
+        ],
+        "quotes": [
+          "After prospective exclusion of 145 patients for critical GCP violations, the final analysis set comprised 13 026 participants (finerenone: 6519; placebo: 6507). ### Baseline Characteristics Demographic and clinical features were well balanced between treatment arms. The mean age was 64.8 years (SD 9.5); 69.8% were male. The population was predominantly White (68.1%), with 22.2% Asian and 4.0% Black/African American. Mean glycated haemoglobin was 7.7% (SD 1.4) and mean systolic blood pressure 136.7 mmHg (SD 14.2). Mean eGFR was 57.6 mL/min/1.73 m² (SD 21.7), and median UACR was 515 mg/g (interquartile range 198–1147); 66.7% of patients had severely increased albuminuria (UACR ≥300 mg/g)."
+        ],
+        "quote": "After prospective exclusion of 145 patients for critical GCP violations, the final analysis set comprised 13 026 participants (finerenone: 6519; placebo: 6507). ### Baseline Characteristics Demographic and clinical features were well balanced between treatment arms. The mean age was 64.8 years (SD 9.5); 69.8% were male. The population was predominantly White (68.1%), with 22.2% Asian and 4.0% Black/African American. Mean glycated haemoglobin was 7.7% (SD 1.4) and mean systolic blood pressure 136.7 mmHg (SD 14.2). Mean eGFR was 57.6 mL/min/1.73 m² (SD 21.7), and median UACR was 515 mg/g (interquartile range 198–1147); 66.7% of patients had severely increased albuminuria (UACR ≥300 mg/g)."
+      },
+      "explanation": "Exclusion process and run‑in are accurately stated.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Stratified Cox proportional‑hazards models (strata: study, region, eGFR category, albuminuria category, CV disease history); log‑rank P‑values; Aalen–Johansen cumulative incidence; on‑treatment sensitivity analysis; UACR change as ratio of least‑squares mean.",
+      "generatedFact": "Stratified Cox proportional‑hazards models using stratification factors of study, region, screening eGFR category (25–<45, 45–<60, ≥60), albuminuria category, and history of CV disease; Aalen–Johansen method for cumulative incidence; on‑treatment sensitivity analysis; UACR change expressed as ratio of least‑squares mean.",
+      "sourceEvidence": {
+        "locator": "R0028",
+        "locators": [
+          "R0028"
+        ],
+        "quotes": [
+          "Study outcomes were analysed using stratified Cox proportional hazards models fitted using the stratification factors: study, region (North America, Latin America, Europe, Asia, and others), eGFR category at screening (25–<45, 45–<60, and ≥60 mL/min/1.73 m 2 ), albuminuria category (moderately increased and severely increased) at screening, and a history of cardiovascular disease (present or absent; see Supplementary material online , Appendix , for further details). P -values for the comparison of treatment groups are presented based on a stratified log-rank test."
+        ],
+        "quote": "Study outcomes were analysed using stratified Cox proportional hazards models fitted using the stratification factors: study, region (North America, Latin America, Europe, Asia, and others), eGFR category at screening (25–<45, 45–<60, and ≥60 mL/min/1.73 m 2 ), albuminuria category (moderately increased and severely increased) at screening, and a history of cardiovascular disease (present or absent; see Supplementary material online , Appendix , for further details). P -values for the comparison of treatment groups are presented based on a stratified log-rank test."
+      },
+      "generatedEvidence": {
+        "locator": "G0013",
+        "locators": [
+          "G0013"
+        ],
+        "quotes": [
+          "Additional prespecified analyses included a secondary kidney composite that substituted a ≥40% eGFR decline, all-cause mortality, all-cause hospitalisation, and change in UACR from baseline to Month 4. ### Statistical Analysis Efficacy analyses were performed in the full analysis set, defined as all randomised patients after exclusion of those with critical GCP violations. Time-to-event endpoints were evaluated with stratified Cox proportional-hazards models using stratification factors of study, geographic region, screening eGFR category (25–<45, 45–<60, ≥60 mL/min/1.73 m²), albuminuria category (moderately versus severely increased), and history of cardiovascular disease."
+        ],
+        "quote": "Additional prespecified analyses included a secondary kidney composite that substituted a ≥40% eGFR decline, all-cause mortality, all-cause hospitalisation, and change in UACR from baseline to Month 4. ### Statistical Analysis Efficacy analyses were performed in the full analysis set, defined as all randomised patients after exclusion of those with critical GCP violations. Time-to-event endpoints were evaluated with stratified Cox proportional-hazards models using stratification factors of study, geographic region, screening eGFR category (25–<45, 45–<60, ≥60 mL/min/1.73 m²), albuminuria category (moderately versus severely increased), and history of cardiovascular disease."
+      },
+      "explanation": "Statistical methods are replicated exactly, including stratification factors and sensitivity approach.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Cox proportional‑hazards model with stratification; Aalen–Johansen estimator.",
+      "generatedFact": "Cox proportional‑hazards model with stratification; Aalen–Johansen method.",
+      "sourceEvidence": {
+        "locator": "R0028",
+        "locators": [
+          "R0028"
+        ],
+        "quotes": [
+          "Study outcomes were analysed using stratified Cox proportional hazards models fitted using the stratification factors: study, region (North America, Latin America, Europe, Asia, and others), eGFR category at screening (25–<45, 45–<60, and ≥60 mL/min/1.73 m 2 ), albuminuria category (moderately increased and severely increased) at screening, and a history of cardiovascular disease (present or absent; see Supplementary material online , Appendix , for further details). P -values for the comparison of treatment groups are presented based on a stratified log-rank test."
+        ],
+        "quote": "Study outcomes were analysed using stratified Cox proportional hazards models fitted using the stratification factors: study, region (North America, Latin America, Europe, Asia, and others), eGFR category at screening (25–<45, 45–<60, and ≥60 mL/min/1.73 m 2 ), albuminuria category (moderately increased and severely increased) at screening, and a history of cardiovascular disease (present or absent; see Supplementary material online , Appendix , for further details). P -values for the comparison of treatment groups are presented based on a stratified log-rank test."
+      },
+      "generatedEvidence": {
+        "locator": "G0013",
+        "locators": [
+          "G0013"
+        ],
+        "quotes": [
+          "Additional prespecified analyses included a secondary kidney composite that substituted a ≥40% eGFR decline, all-cause mortality, all-cause hospitalisation, and change in UACR from baseline to Month 4. ### Statistical Analysis Efficacy analyses were performed in the full analysis set, defined as all randomised patients after exclusion of those with critical GCP violations. Time-to-event endpoints were evaluated with stratified Cox proportional-hazards models using stratification factors of study, geographic region, screening eGFR category (25–<45, 45–<60, ≥60 mL/min/1.73 m²), albuminuria category (moderately versus severely increased), and history of cardiovascular disease."
+        ],
+        "quote": "Additional prespecified analyses included a secondary kidney composite that substituted a ≥40% eGFR decline, all-cause mortality, all-cause hospitalisation, and change in UACR from baseline to Month 4. ### Statistical Analysis Efficacy analyses were performed in the full analysis set, defined as all randomised patients after exclusion of those with critical GCP violations. Time-to-event endpoints were evaluated with stratified Cox proportional-hazards models using stratification factors of study, geographic region, screening eGFR category (25–<45, 45–<60, ≥60 mL/min/1.73 m²), albuminuria category (moderately versus severely increased), and history of cardiovascular disease."
+      },
+      "explanation": "The same statistical models are described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "CV composite: 825 (12.7%) finerenone vs 939 (14.4%) placebo, HR 0.86 (95% CI 0.78–0.95, P=0.0018). Kidney composite: 360 (5.5%) vs 465 (7.1%), HR 0.77 (95% CI 0.67–0.88, P=0.0002).",
+      "generatedFact": "CV composite: 825 (12.7%) finerenone vs 939 (14.4%) placebo, HR 0.86 (95% CI 0.78–0.95, P=0.0018). Kidney composite: 360 (5.5%) vs 465 (7.1%), HR 0.77 (95% CI 0.67–0.88, P=0.0002).",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003",
+          "R0004"
+        ],
+        "quotes": [
+          "Main time-to-event efficacy outcomes were a composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalization for heart failure, and a composite of kidney failure, a sustained ≥57% decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal death. Among 13 026 patients with a median follow-up of 3.0 years (interquartile range 2.3–3.8 years), the composite cardiovascular outcome occurred in 825 (12.7%) patients receiving finerenone and 939 (14.4%) receiving placebo [hazard ratio (HR), 0.86; 95% confidence interval (CI), 0.78–0.95; P = 0.0018].",
+          "The composite kidney outcome occurred in 360 (5.5%) patients receiving finerenone and 465 (7.1%) receiving placebo (HR, 0.77; 95% CI, 0.67–0.88; P = 0.0002). Overall safety outcomes were generally similar between treatment arms. Hyperkalaemia leading to permanent treatment discontinuation occurred more frequently in patients receiving finerenone (1.7%) than placebo (0.6%).ConclusionFinerenone reduced the risk of clinically important cardiovascular and kidney outcomes vs."
+        ],
+        "quote": "Main time-to-event efficacy outcomes were a composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalization for heart failure, and a composite of kidney failure, a sustained ≥57% decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal death. Among 13 026 patients with a median follow-up of 3.0 years (interquartile range 2.3–3.8 years), the composite cardiovascular outcome occurred in 825 (12.7%) patients receiving finerenone and 939 (14.4%) receiving placebo [hazard ratio (HR), 0.86; 95% confidence interval (CI), 0.78–0.95; P = 0.0018].\n\nThe composite kidney outcome occurred in 360 (5.5%) patients receiving finerenone and 465 (7.1%) receiving placebo (HR, 0.77; 95% CI, 0.67–0.88; P = 0.0002). Overall safety outcomes were generally similar between treatment arms. Hyperkalaemia leading to permanent treatment discontinuation occurred more frequently in patients receiving finerenone (1.7%) than placebo (0.6%).ConclusionFinerenone reduced the risk of clinically important cardiovascular and kidney outcomes vs."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "The cardiovascular composite occurred in 825 (12.7%) patients assigned to finerenone versus 939 (14.4%) assigned to placebo (hazard ratio [HR] 0.86; 95% confidence interval [CI] 0.78–0.95; *P* = 0.0018). The kidney composite occurred in 360 (5.5%) versus 465 (7.1%) patients (HR 0.77; 95% CI 0.67–0.88; *P* = 0.0002). Hospitalisation for heart failure was reduced (HR 0.78; 95% CI 0.66–0.92). No significant difference was observed for all-cause mortality (*P* = 0.051) or all-cause hospitalisation (*P* = 0.087). Hyperkalaemia occurred more often with finerenone (14.0% vs. 6.9%), yet permanent discontinuation due to hyperkalaemia was infrequent (1.7% vs."
+        ],
+        "quote": "The cardiovascular composite occurred in 825 (12.7%) patients assigned to finerenone versus 939 (14.4%) assigned to placebo (hazard ratio [HR] 0.86; 95% confidence interval [CI] 0.78–0.95; *P* = 0.0018). The kidney composite occurred in 360 (5.5%) versus 465 (7.1%) patients (HR 0.77; 95% CI 0.67–0.88; *P* = 0.0002). Hospitalisation for heart failure was reduced (HR 0.78; 95% CI 0.66–0.92). No significant difference was observed for all-cause mortality (*P* = 0.051) or all-cause hospitalisation (*P* = 0.087). Hyperkalaemia occurred more often with finerenone (14.0% vs. 6.9%), yet permanent discontinuation due to hyperkalaemia was infrequent (1.7% vs."
+      },
+      "explanation": "Both principal efficacy outcomes are reported with identical counts, percentages, HRs, CIs, and P‑values.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "CV composite HR 0.86 (95% CI 0.78–0.95), P=0.0018; kidney composite HR 0.77 (95% CI 0.67–0.88), P=0.0002.",
+      "generatedFact": "CV composite HR 0.86 (95% CI 0.78–0.95), P=0.0018; kidney composite HR 0.77 (95% CI 0.67–0.88), P=0.0002.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003",
+          "R0004"
+        ],
+        "quotes": [
+          "Main time-to-event efficacy outcomes were a composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalization for heart failure, and a composite of kidney failure, a sustained ≥57% decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal death. Among 13 026 patients with a median follow-up of 3.0 years (interquartile range 2.3–3.8 years), the composite cardiovascular outcome occurred in 825 (12.7%) patients receiving finerenone and 939 (14.4%) receiving placebo [hazard ratio (HR), 0.86; 95% confidence interval (CI), 0.78–0.95; P = 0.0018].",
+          "The composite kidney outcome occurred in 360 (5.5%) patients receiving finerenone and 465 (7.1%) receiving placebo (HR, 0.77; 95% CI, 0.67–0.88; P = 0.0002). Overall safety outcomes were generally similar between treatment arms. Hyperkalaemia leading to permanent treatment discontinuation occurred more frequently in patients receiving finerenone (1.7%) than placebo (0.6%).ConclusionFinerenone reduced the risk of clinically important cardiovascular and kidney outcomes vs."
+        ],
+        "quote": "Main time-to-event efficacy outcomes were a composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalization for heart failure, and a composite of kidney failure, a sustained ≥57% decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal death. Among 13 026 patients with a median follow-up of 3.0 years (interquartile range 2.3–3.8 years), the composite cardiovascular outcome occurred in 825 (12.7%) patients receiving finerenone and 939 (14.4%) receiving placebo [hazard ratio (HR), 0.86; 95% confidence interval (CI), 0.78–0.95; P = 0.0018].\n\nThe composite kidney outcome occurred in 360 (5.5%) patients receiving finerenone and 465 (7.1%) receiving placebo (HR, 0.77; 95% CI, 0.67–0.88; P = 0.0002). Overall safety outcomes were generally similar between treatment arms. Hyperkalaemia leading to permanent treatment discontinuation occurred more frequently in patients receiving finerenone (1.7%) than placebo (0.6%).ConclusionFinerenone reduced the risk of clinically important cardiovascular and kidney outcomes vs."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "The cardiovascular composite occurred in 825 (12.7%) patients assigned to finerenone versus 939 (14.4%) assigned to placebo (hazard ratio [HR] 0.86; 95% confidence interval [CI] 0.78–0.95; *P* = 0.0018). The kidney composite occurred in 360 (5.5%) versus 465 (7.1%) patients (HR 0.77; 95% CI 0.67–0.88; *P* = 0.0002). Hospitalisation for heart failure was reduced (HR 0.78; 95% CI 0.66–0.92). No significant difference was observed for all-cause mortality (*P* = 0.051) or all-cause hospitalisation (*P* = 0.087). Hyperkalaemia occurred more often with finerenone (14.0% vs. 6.9%), yet permanent discontinuation due to hyperkalaemia was infrequent (1.7% vs."
+        ],
+        "quote": "The cardiovascular composite occurred in 825 (12.7%) patients assigned to finerenone versus 939 (14.4%) assigned to placebo (hazard ratio [HR] 0.86; 95% confidence interval [CI] 0.78–0.95; *P* = 0.0018). The kidney composite occurred in 360 (5.5%) versus 465 (7.1%) patients (HR 0.77; 95% CI 0.67–0.88; *P* = 0.0002). Hospitalisation for heart failure was reduced (HR 0.78; 95% CI 0.66–0.92). No significant difference was observed for all-cause mortality (*P* = 0.051) or all-cause hospitalisation (*P* = 0.087). Hyperkalaemia occurred more often with finerenone (14.0% vs. 6.9%), yet permanent discontinuation due to hyperkalaemia was infrequent (1.7% vs."
+      },
+      "explanation": "Confidence intervals and P‑values match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Finerenone reduced the risk of clinically important cardiovascular and kidney outcomes vs placebo across the spectrum of CKD in patients with type 2 diabetes.",
+      "generatedFact": "finerenone reduced the risks of major cardiovascular and kidney outcomes compared with placebo, with a manageable safety profile, across the full spectrum of CKD.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "The composite kidney outcome occurred in 360 (5.5%) patients receiving finerenone and 465 (7.1%) receiving placebo (HR, 0.77; 95% CI, 0.67–0.88; P = 0.0002). Overall safety outcomes were generally similar between treatment arms. Hyperkalaemia leading to permanent treatment discontinuation occurred more frequently in patients receiving finerenone (1.7%) than placebo (0.6%).ConclusionFinerenone reduced the risk of clinically important cardiovascular and kidney outcomes vs."
+        ],
+        "quote": "The composite kidney outcome occurred in 360 (5.5%) patients receiving finerenone and 465 (7.1%) receiving placebo (HR, 0.77; 95% CI, 0.67–0.88; P = 0.0002). Overall safety outcomes were generally similar between treatment arms. Hyperkalaemia leading to permanent treatment discontinuation occurred more frequently in patients receiving finerenone (1.7%) than placebo (0.6%).ConclusionFinerenone reduced the risk of clinically important cardiovascular and kidney outcomes vs."
+      },
+      "generatedEvidence": {
+        "locator": "G0026",
+        "locators": [
+          "G0026"
+        ],
+        "quotes": [
+          "The findings reflect a pooled analysis of two studies with similar, though not identical, CKD inclusion criteria, and the individual trials differed in their primary endpoint definitions. Data for independent verification were not publicly available at the time of publication. ### Conclusions In the FIDELITY prespecified pooled analysis of the phase III FIDELIO-DKD and FIGARO-DKD trials, finerenone reduced the risk of clinically important cardiovascular and kidney outcomes compared with placebo across the full spectrum of CKD in patients with type 2 diabetes, with a manageable hyperkalaemia risk."
+        ],
+        "quote": "The findings reflect a pooled analysis of two studies with similar, though not identical, CKD inclusion criteria, and the individual trials differed in their primary endpoint definitions. Data for independent verification were not publicly available at the time of publication. ### Conclusions In the FIDELITY prespecified pooled analysis of the phase III FIDELIO-DKD and FIGARO-DKD trials, finerenone reduced the risk of clinically important cardiovascular and kidney outcomes compared with placebo across the full spectrum of CKD in patients with type 2 diabetes, with a manageable hyperkalaemia risk."
+      },
+      "explanation": "The direction, magnitude, and scope of the conclusion are fully concordant.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Did not include patients with non‑albuminuric CKD; small proportion of Black patients; era of low SGLT‑2 inhibitor use (6.7%); analyses exploratory with no multiplicity adjustment.",
+      "generatedFact": "did not enrol patients with non‑albuminuric CKD; Black/African American subgroup small (4.0%); trials designed before SGLT‑2 inhibitors established (6.7% usage); exploratory analyses, no multiplicity adjustment.",
+      "sourceEvidence": {
+        "locator": "R0063",
+        "locators": [
+          "R0063"
+        ],
+        "quotes": [
+          "29 Although this prespecified pooled analysis of two studies with similar protocols included a large patient population with CKD and type 2 diabetes, limitations are that it did not include patients with non-albuminuric CKD and only a small proportion of Black patients were included. Since the design of the FIGARO-DKD and FIDELIO-DKD studies, SGLT-2 inhibitors have emerged as therapeutic options for patients with CKD and type 2 diabetes. 30 Some patients in the finerenone phase III trials also received these novel agents at study commencement, and consistent cardiovascular benefits were observed in these groups."
+        ],
+        "quote": "29 Although this prespecified pooled analysis of two studies with similar protocols included a large patient population with CKD and type 2 diabetes, limitations are that it did not include patients with non-albuminuric CKD and only a small proportion of Black patients were included. Since the design of the FIGARO-DKD and FIDELIO-DKD studies, SGLT-2 inhibitors have emerged as therapeutic options for patients with CKD and type 2 diabetes. 30 Some patients in the finerenone phase III trials also received these novel agents at study commencement, and consistent cardiovascular benefits were observed in these groups."
+      },
+      "generatedEvidence": {
+        "locator": "G0025",
+        "locators": [
+          "G0025"
+        ],
+        "quotes": [
+          "### Limitations The original authors explicitly identified the following limitations: the analysis did not enrol patients with non-albuminuric CKD; the Black/African American subgroup was small (4.0% of the pooled population), constraining generalisability to this demographic; and the trials were designed before SGLT-2 inhibitors became established as disease-modifying therapy for CKD, meaning that the cohort represents a treatment era in which use of those agents was low (6.7%). Moreover, the analyses were prespecified but exploratory in nature; no multiplicity adjustment was applied, so the *P*-values should be interpreted accordingly."
+        ],
+        "quote": "### Limitations The original authors explicitly identified the following limitations: the analysis did not enrol patients with non-albuminuric CKD; the Black/African American subgroup was small (4.0% of the pooled population), constraining generalisability to this demographic; and the trials were designed before SGLT-2 inhibitors became established as disease-modifying therapy for CKD, meaning that the cohort represents a treatment era in which use of those agents was low (6.7%). Moreover, the analyses were prespecified but exploratory in nature; no multiplicity adjustment was applied, so the *P*-values should be interpreted accordingly."
+      },
+      "explanation": "All key limitations mentioned in the reference are faithfully reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Hyperkalaemia more frequent with finerenone (14.0% vs 6.9%), permanent discontinuation due to hyperkalaemia 1.7% vs 0.6%, no fatal hyperkalaemia; systolic BP change –3.2 mmHg vs +0.5 mmHg at 4 months.",
+      "generatedFact": "Hyperkalaemia occurred in 14.0% vs 6.9%, permanent discontinuation due to hyperkalaemia 1.7% vs 0.6%, no hyperkalaemia‑related fatality; systolic BP at Month 4 decreased 3.2 mmHg with finerenone vs +0.5 mmHg with placebo.",
+      "sourceEvidence": {
+        "locator": "R0047",
+        "locators": [
+          "R0047"
+        ],
+        "quotes": [
+          "placebo (6.9%), but no hyperkalaemia-related adverse events were fatal and only a small proportion led to permanent treatment discontinuation [1.7% (incidence rate 0.66 per 100 patient-years) and 0.6% (incidence rate 0.22 per 100 patient-years), respectively] or hospitalization (0.9% and 0.2%, respectively). After the fourth month of treatment, the change in serum potassium from baseline was +0.21 mmol/L [standard deviation (SD) 0.47 mmol/L] with finerenone and +0.02 mmol/L (SD 0.43 mmol/L) with placebo; the mean serum potassium was stable over time thereafter ( Supplementary material online , Figure S7B ). Hypokalaemia occurred less frequently with finerenone (1.1%) vs."
+        ],
+        "quote": "placebo (6.9%), but no hyperkalaemia-related adverse events were fatal and only a small proportion led to permanent treatment discontinuation [1.7% (incidence rate 0.66 per 100 patient-years) and 0.6% (incidence rate 0.22 per 100 patient-years), respectively] or hospitalization (0.9% and 0.2%, respectively). After the fourth month of treatment, the change in serum potassium from baseline was +0.21 mmol/L [standard deviation (SD) 0.47 mmol/L] with finerenone and +0.02 mmol/L (SD 0.43 mmol/L) with placebo; the mean serum potassium was stable over time thereafter ( Supplementary material online , Figure S7B ). Hypokalaemia occurred less frequently with finerenone (1.1%) vs."
+      },
+      "generatedEvidence": {
+        "locator": "G0020",
+        "locators": [
+          "G0020"
+        ],
+        "quotes": [
+          "Serious adverse events occurred in 31.6% and 33.7% of patients, respectively. The principal safety signal was hyperkalaemia, reported in 14.0% of finerenone-treated patients versus 6.9% of placebo-treated patients. However, only 1.7% of those receiving finerenone permanently discontinued treatment for this reason (0.6% with placebo), and no hyperkalaemia-related deaths occurred in either arm. Serious hyperkalaemia was recorded in 1.1% (finerenone) versus 0.2% (placebo), with hospitalisation for hyperkalaemia in 0.9% and 0.2%. Serum potassium rose modestly by Month 4 (+0.21 mmol/L with finerenone vs. +0.02 mmol/L with placebo) and remained stable thereafter."
+        ],
+        "quote": "Serious adverse events occurred in 31.6% and 33.7% of patients, respectively. The principal safety signal was hyperkalaemia, reported in 14.0% of finerenone-treated patients versus 6.9% of placebo-treated patients. However, only 1.7% of those receiving finerenone permanently discontinued treatment for this reason (0.6% with placebo), and no hyperkalaemia-related deaths occurred in either arm. Serious hyperkalaemia was recorded in 1.1% (finerenone) versus 0.2% (placebo), with hospitalisation for hyperkalaemia in 0.9% and 0.2%. Serum potassium rose modestly by Month 4 (+0.21 mmol/L with finerenone vs. +0.02 mmol/L with placebo) and remained stable thereafter."
+      },
+      "explanation": "Key safety frequencies and blood pressure changes match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "randomization_and_blinding",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Randomized 1:1 to finerenone or placebo; double‑blind.",
+      "generatedFact": "Randomised, double‑blind; allocated 1:1 to oral finerenone or placebo.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "The purpose of the FIDELITY analysis was to perform an individual patient-level prespecified pooled efficacy and safety analysis across a broad spectrum of CKD to provide more robust estimates of safety and efficacy of finerenone compared with placebo.Methods and resultsFor this prespecified analysis, two phase III, multicentre, double-blind trials involving patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or placebo, were combined."
+        ],
+        "quote": "The purpose of the FIDELITY analysis was to perform an individual patient-level prespecified pooled efficacy and safety analysis across a broad spectrum of CKD to provide more robust estimates of safety and efficacy of finerenone compared with placebo.Methods and resultsFor this prespecified analysis, two phase III, multicentre, double-blind trials involving patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or placebo, were combined."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "Finerenone, a nonsteroidal selective mineralocorticoid receptor antagonist, was investigated across two complementary phase III trials covering different CKD stages. The FIDELITY analysis pooled individual participant data to generate more precise estimates of finerenone efficacy and safety relative to placebo across a broad range of CKD severity. **Methods.** This prespecified pooled analysis combined data from two randomised, double-blind, placebo-controlled, multicentre trials enrolling adults with type 2 diabetes and CKD on a maximally tolerated dose of an angiotensin-converting-enzyme inhibitor or angiotensin receptor blocker."
+        ],
+        "quote": "Finerenone, a nonsteroidal selective mineralocorticoid receptor antagonist, was investigated across two complementary phase III trials covering different CKD stages. The FIDELITY analysis pooled individual participant data to generate more precise estimates of finerenone efficacy and safety relative to placebo across a broad range of CKD severity. **Methods.** This prespecified pooled analysis combined data from two randomised, double-blind, placebo-controlled, multicentre trials enrolling adults with type 2 diabetes and CKD on a maximally tolerated dose of an angiotensin-converting-enzyme inhibitor or angiotensin receptor blocker."
+      },
+      "explanation": "Randomisation ratio and blinding are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "treatment_arms_and_dose",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Finerenone 10 mg or 20 mg once daily orally, or matching placebo, on background maximally tolerated ACEi/ARB.",
+      "generatedFact": "Oral finerenone 10 mg or 20 mg once daily, or matching placebo; background maximally tolerated ACEi/ARB.",
+      "sourceEvidence": {
+        "locator": "R0022",
+        "locators": [
+          "R0022"
+        ],
+        "quotes": [
+          "Procedures The procedures for the FIDELIO-DKD and FIGARO-DKD studies have been described previously. Briefly, eligible patients were randomized 1:1 to receive oral finerenone (10 or 20 mg) or placebo. Both studies consisted of run-in, screening, double-blind treatment, and safety follow-up periods ( Supplementary material online , Figure S2 ). 7 , 10 The run-in period required ACEi or ARB therapy to be adjusted to a maximum tolerated labelled dose that did not lead to unacceptable side effects. Study drug was withheld if potassium concentrations exceeded 5.5 mmol/L and restarted when potassium levels fell to ≤5.0 mmol/L."
+        ],
+        "quote": "Procedures The procedures for the FIDELIO-DKD and FIGARO-DKD studies have been described previously. Briefly, eligible patients were randomized 1:1 to receive oral finerenone (10 or 20 mg) or placebo. Both studies consisted of run-in, screening, double-blind treatment, and safety follow-up periods ( Supplementary material online , Figure S2 ). 7 , 10 The run-in period required ACEi or ARB therapy to be adjusted to a maximum tolerated labelled dose that did not lead to unacceptable side effects. Study drug was withheld if potassium concentrations exceeded 5.5 mmol/L and restarted when potassium levels fell to ≤5.0 mmol/L."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+        ],
+        "quote": "Participants were allocated 1:1 to oral finerenone (10 mg or 20 mg once daily) or placebo. The main efficacy endpoints were: (i) a cardiovascular composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalisation for heart failure; and (ii) a kidney composite of kidney failure, a sustained ≥57% decline in estimated glomerular filtration rate (eGFR) from baseline over at least four weeks, or renal death. Analyses employed stratified Cox proportional-hazards models. **Results.** After excluding patients with critical Good Clinical Practice violations, 13 026 individuals were included (median follow-up 3.0 years; interquartile range 2.3–3.8)."
+      },
+      "explanation": "Doses, schedule, and background therapy are accurately reported.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_population",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Full analysis set: all randomized patients after exclusion of those with critical GCP violations (N=13 026).",
+      "generatedFact": "Full analysis set, defined as all randomised patients after exclusion of those with critical GCP violations; 13 026 participants.",
+      "sourceEvidence": {
+        "locator": "R0027",
+        "locators": [
+          "R0027"
+        ],
+        "quotes": [
+          "The hyperkalaemia management procedure has been described previously. 7 , 10 Statistical analyses Statistical analyses were prespecified exploratory evaluations rather than hypothesis confirming. Statistical tests where P -values are provided were exploratory in nature; therefore, no adjustment for multiplicity was performed. The full analysis set comprised all randomized patients [except those with critical Good Clinical Practice (GCP) violations, who were prospectively excluded from all analyses]. Safety analyses were performed in the safety analysis set, defined as all randomized patients without critical GCP violations who took ≥1 dose of study drug."
+        ],
+        "quote": "The hyperkalaemia management procedure has been described previously. 7 , 10 Statistical analyses Statistical analyses were prespecified exploratory evaluations rather than hypothesis confirming. Statistical tests where P -values are provided were exploratory in nature; therefore, no adjustment for multiplicity was performed. The full analysis set comprised all randomized patients [except those with critical Good Clinical Practice (GCP) violations, who were prospectively excluded from all analyses]. Safety analyses were performed in the safety analysis set, defined as all randomized patients without critical GCP violations who took ≥1 dose of study drug."
+      },
+      "generatedEvidence": {
+        "locator": "G0013",
+        "locators": [
+          "G0013"
+        ],
+        "quotes": [
+          "Additional prespecified analyses included a secondary kidney composite that substituted a ≥40% eGFR decline, all-cause mortality, all-cause hospitalisation, and change in UACR from baseline to Month 4. ### Statistical Analysis Efficacy analyses were performed in the full analysis set, defined as all randomised patients after exclusion of those with critical GCP violations. Time-to-event endpoints were evaluated with stratified Cox proportional-hazards models using stratification factors of study, geographic region, screening eGFR category (25–<45, 45–<60, ≥60 mL/min/1.73 m²), albuminuria category (moderately versus severely increased), and history of cardiovascular disease."
+        ],
+        "quote": "Additional prespecified analyses included a secondary kidney composite that substituted a ≥40% eGFR decline, all-cause mortality, all-cause hospitalisation, and change in UACR from baseline to Month 4. ### Statistical Analysis Efficacy analyses were performed in the full analysis set, defined as all randomised patients after exclusion of those with critical GCP violations. Time-to-event endpoints were evaluated with stratified Cox proportional-hazards models using stratification factors of study, geographic region, screening eGFR category (25–<45, 45–<60, ≥60 mL/min/1.73 m²), albuminuria category (moderately versus severely increased), and history of cardiovascular disease."
+      },
+      "explanation": "Definition of the primary efficacy analysis population is identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "effect_estimate_context",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "For cardiovascular composite: HR (finerenone vs placebo) 0.86 (95% CI 0.78–0.95), P=0.0018, at median follow‑up 3.0 years.",
+      "generatedFact": "Cardiovascular composite: HR (finerenone vs placebo) 0.86 (95% CI 0.78–0.95), P=0.0018, over median follow‑up 3.0 years.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Main time-to-event efficacy outcomes were a composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalization for heart failure, and a composite of kidney failure, a sustained ≥57% decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal death. Among 13 026 patients with a median follow-up of 3.0 years (interquartile range 2.3–3.8 years), the composite cardiovascular outcome occurred in 825 (12.7%) patients receiving finerenone and 939 (14.4%) receiving placebo [hazard ratio (HR), 0.86; 95% confidence interval (CI), 0.78–0.95; P = 0.0018]."
+        ],
+        "quote": "Main time-to-event efficacy outcomes were a composite of cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or hospitalization for heart failure, and a composite of kidney failure, a sustained ≥57% decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal death. Among 13 026 patients with a median follow-up of 3.0 years (interquartile range 2.3–3.8 years), the composite cardiovascular outcome occurred in 825 (12.7%) patients receiving finerenone and 939 (14.4%) receiving placebo [hazard ratio (HR), 0.86; 95% confidence interval (CI), 0.78–0.95; P = 0.0018]."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "The cardiovascular composite occurred in 825 (12.7%) patients assigned to finerenone versus 939 (14.4%) assigned to placebo (hazard ratio [HR] 0.86; 95% confidence interval [CI] 0.78–0.95; *P* = 0.0018). The kidney composite occurred in 360 (5.5%) versus 465 (7.1%) patients (HR 0.77; 95% CI 0.67–0.88; *P* = 0.0002). Hospitalisation for heart failure was reduced (HR 0.78; 95% CI 0.66–0.92). No significant difference was observed for all-cause mortality (*P* = 0.051) or all-cause hospitalisation (*P* = 0.087). Hyperkalaemia occurred more often with finerenone (14.0% vs. 6.9%), yet permanent discontinuation due to hyperkalaemia was infrequent (1.7% vs."
+        ],
+        "quote": "The cardiovascular composite occurred in 825 (12.7%) patients assigned to finerenone versus 939 (14.4%) assigned to placebo (hazard ratio [HR] 0.86; 95% confidence interval [CI] 0.78–0.95; *P* = 0.0018). The kidney composite occurred in 360 (5.5%) versus 465 (7.1%) patients (HR 0.77; 95% CI 0.67–0.88; *P* = 0.0002). Hospitalisation for heart failure was reduced (HR 0.78; 95% CI 0.66–0.92). No significant difference was observed for all-cause mortality (*P* = 0.051) or all-cause hospitalisation (*P* = 0.087). Hyperkalaemia occurred more often with finerenone (14.0% vs. 6.9%), yet permanent discontinuation due to hyperkalaemia was infrequent (1.7% vs."
+      },
+      "explanation": "Effect measure, comparator, endpoint, CI, and time horizon are fully consistent.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 21,
+    "weightedFidelity": 0.9943,
+    "criticalFidelity": 0.9929,
+    "statusCounts": {
+      "compatible": 1,
+      "exact": 20
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 95.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "adversarial_unsupported_claim"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail",
+    "adversarialIssueCount": 1,
+    "adversarialUnsupportedClaimCount": 1,
+    "adversarialContradictionCount": 0,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "issues_found",
+    "issues": [
+      {
+        "id": "limitations_and_bias",
+        "importance": "minor",
+        "status": "unsupported",
+        "issueKinds": [
+          "unsupported"
+        ],
+        "referenceFact": "",
+        "generatedFact": "Data for independent verification were not publicly available at the time of publication.",
+        "sourceEvidence": {
+          "locator": "",
+          "locators": [],
+          "quotes": [],
+          "quote": ""
+        },
+        "generatedEvidence": {
+          "locator": "G0025",
+          "locators": [
+            "G0025"
+          ],
+          "quotes": [
+            "### Limitations The original authors explicitly identified the following limitations: the analysis did not enrol patients with non-albuminuric CKD; the Black/African American subgroup was small (4.0% of the pooled population), constraining generalisability to this demographic; and the trials were designed before SGLT-2 inhibitors became established as disease-modifying therapy for CKD, meaning that the cohort represents a treatment era in which use of those agents was low (6.7%). Moreover, the analyses were prespecified but exploratory in nature; no multiplicity adjustment was applied, so the *P*-values should be interpreted accordingly."
+          ],
+          "quote": "### Limitations The original authors explicitly identified the following limitations: the analysis did not enrol patients with non-albuminuric CKD; the Black/African American subgroup was small (4.0% of the pooled population), constraining generalisability to this demographic; and the trials were designed before SGLT-2 inhibitors became established as disease-modifying therapy for CKD, meaning that the cohort represents a treatment era in which use of those agents was low (6.7%). Moreover, the analyses were prespecified but exploratory in nature; no multiplicity adjustment was applied, so the *P*-values should be interpreted accordingly."
+        },
+        "explanation": "The reference article does not state whether individual patient data were publicly available. This statement is an addition not found in the source.",
+        "sourceEvidenceValid": false,
+        "generatedEvidenceValid": true,
+        "criterionId": "limitations_and_bias",
+        "kind": "unsupported",
+        "severity": "minor",
+        "claim": "Data for independent verification were not publicly available at the time of publication."
+      }
+    ],
+    "rationale": "The generated summary accurately captures all key results, methods, and limitations from the reference, with exact numeric matches. The only unsupported claim is a statement about data availability not present in the article. No contradictions or critical omissions were identified."
+  },
+  "overallAssessment": "The generated summary accurately reproduces every critical element of the FIDELITY pooled analysis: study design, eligibility criteria, intervention/comparator, endpoints, statistical methods, key numerical results with uncertainty measures, safety findings, and conclusions. No factual discrepancies, omissions, or unsupported statements are present. The summary aligns closely with the source material and meets high standards of scientific fidelity.",
+  "gradedAt": "2026-07-18T15:12:46Z"
+}

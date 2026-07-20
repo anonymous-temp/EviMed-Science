@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-040",
+  "category": "genomics-omics",
+  "title": "A single-cell type transcriptomics map of human tissues.",
+  "pmcid": "PMC8318366",
+  "doi": "10.1126/sciadv.abh2169",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 5849,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 50,
+    "supportedUniqueNumbers": 48,
+    "unsupportedNumberTokens": [
+      "-10",
+      "1.47"
+    ],
+    "supportedNumericClaimPrecision": 0.96,
+    "verbatimEightGramRate": 0.0005877167205406994,
+    "toolCalls": 14,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "All claims in the generated text are directly supported by the reference, including tissue list, inclusion/exclusion criteria, cell counts, read thresholds, software versions, clustering details, annotation strategy, gene classification numbers (2005/2893/9062/4257), correlation ranges, validation genes, and limitations. No fabricated or unsupported statements were found."
+  },
+  "overallVerdict": "pass"
+}

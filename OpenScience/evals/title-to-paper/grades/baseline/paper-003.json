@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-003",
+  "category": "randomized-trial",
+  "title": "Long-Term Outcomes With Nivolumab Plus Ipilimumab or Nivolumab Alone Versus Ipilimumab in Patients With Advanced Melanoma.",
+  "pmcid": "PMC8718224",
+  "doi": "10.1200/jco.21.02229",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 6440,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 105,
+    "supportedUniqueNumbers": 103,
+    "unsupportedNumberTokens": [
+      "-1546",
+      "29"
+    ],
+    "supportedNumericClaimPrecision": 0.9809523809523809,
+    "verbatimEightGramRate": 0.004451864218141347,
+    "toolCalls": 6,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "All factual claims in the generated text—including study design, population, interventions, endpoints, numerical results, subgroup data, and conclusions—are directly and fully supported by the REFERENCE. No fabrications, misrepresentations, or unsupported claims were detected; the summary is highly faithful to the source article."
+  },
+  "overallVerdict": "pass"
+}

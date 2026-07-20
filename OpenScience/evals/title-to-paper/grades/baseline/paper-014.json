@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-014",
+  "category": "observational-cohort",
+  "title": "An introduction to inverse probability of treatment weighting in observational research.",
+  "pmcid": "PMC8757413",
+  "doi": "10.1093/ckj/sfab158",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 8187,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 25,
+    "supportedUniqueNumbers": 25,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.0006885866758478223,
+    "toolCalls": 13,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text faithfully summarizes the methodological tutorial without introducing fabricated study design, sample, effect estimates, or methods. All key concepts (IPTW calculation, balance assessment, extreme weight handling, causal assumptions, MSM, IPCW, and limitations) are correctly reproduced from the reference."
+  },
+  "overallVerdict": "pass"
+}

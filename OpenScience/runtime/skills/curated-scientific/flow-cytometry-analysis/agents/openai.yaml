@@ -1,0 +1,4 @@
+interface:
+  display_name: "Flow Cytometry Analysis"
+  short_description: "Analyze cytometry experiments with quality control"
+  default_prompt: "Use $flow-cytometry-analysis to analyze this cytometry experiment reproducibly."

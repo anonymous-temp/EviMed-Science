@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 546,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/survival-analysis/results.json",
+      "sha256": "13f757028c87a7ec2a18cd289434ef6d9cbbfb5324ef35799d11f9adf02a3936"
+    },
+    {
+      "bytes": 1121,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/survival-analysis/survival-analysis-report.md",
+      "sha256": "7ac20b05a38b607daf6686620de0faf50ade8067106e03af19a86685d9836970"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:48.959260Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "survival-analysis",
+  "startedAt": "2026-07-19T19:31:48.958581Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for survival-analysis and wrote 2 verified artifacts.",
+  "warnings": [
+    "Check censoring assumptions, delayed entry, competing risks, clustering, and proportional hazards before further inference."
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "productBaseline": {
+    "audience": "individual-researchers",
+    "tenantModel": "individual-account",
+    "projectRole": "isolated-research-workspace",
+    "invariants": [
+      "local-first-desktop-remains-supported",
+      "model-agnostic-runtime",
+      "reproducible-artifacts-and-provenance",
+      "domain-connectors-and-correctness-gates",
+      "no-browser-provider-secrets",
+      "no-unverified-capability-claims"
+    ]
+  },
+  "deliveryProfiles": {
+    "default": "controlled-pilot",
+    "publicTechnicalProfile": "individual-saas",
+    "organizationProfile": null
+  },
+  "claims": {
+    "coreResearchWorkflowAdapted": true,
+    "individualAccountSaasProfileImplemented": true,
+    "controlledPilotIsPublicSaas": false,
+    "publicDeploymentExternallyVerified": false,
+    "organizationSaasReady": false,
+    "commercialSaasReady": false,
+    "horizontalScaleReady": false,
+    "institutionalComplianceReady": false
+  },
+  "modules": [
+    {
+      "id": "research-workbench",
+      "status": "adapted",
+      "evidence": ["apps/desktop/src/app/routes/LiveSessionPage.tsx", "docs/PRD.md"]
+    },
+    {
+      "id": "identity-and-tenancy",
+      "status": "adapted",
+      "evidence": ["apps/server/src/oidc.mjs", "apps/server/src/store.mjs", "apps/server/src/server.mjs"]
+    },
+    {
+      "id": "projects-and-workspaces",
+      "status": "adapted",
+      "evidence": ["apps/server/src/store.mjs", "apps/server/src/runtimeManager.mjs"]
+    },
+    {
+      "id": "agent-runtime",
+      "status": "adapted",
+      "evidence": ["apps/server/src/runtimeManager.mjs", "deploy/runtime-opencode/Dockerfile"]
+    },
+    {
+      "id": "model-gateway",
+      "status": "adapted",
+      "evidence": ["apps/server/src/modelGateway.mjs", "deploy/web/docker-compose.yml"]
+    },
+    {
+      "id": "curated-scientific-skills",
+      "status": "adapted",
+      "evidence": ["runtime/skills/curated-scientific/inventory.json", "runtime/skills/curated-scientific/_runtime/execute_skill.py", "apps/server/test/skillPacks.test.mjs"]
+    },
+    {
+      "id": "office-artifact-exporters",
+      "status": "adapted",
+      "evidence": ["runtime/skills/office/inventory.json", "apps/server/test/skillPacks.test.mjs"]
+    },
+    {
+      "id": "science-connectors",
+      "status": "adapted",
+      "evidence": ["runtime/mcp/evimed-research/science_connectors.py", "runtime/mcp/evimed-research/test/test_science_connectors.py", "runtime/mcp/evimed-research/source_catalog.json", "evals/capability-audit/results/connector-probe-v3.json"]
+    },
+    {
+      "id": "drug-evidence-decision-support",
+      "status": "adapted",
+      "evidence": ["runtime/mcp/evimed-research/drug_assessment.py", "runtime/mcp/evimed-research/test/test_drug_assessment.py", "runtime/skills/evimed/drug-selection/SKILL.md", "runtime/skills/evimed/off-label-analysis/SKILL.md", "runtime/skills/evimed/comprehensive-drug-evaluation/SKILL.md", "apps/server/test/agentRegistry.test.mjs", "docs/DRUG_EVIDENCE_AGENT_ARCHITECTURE.md"]
+    },
+    {
+      "id": "artifacts-and-provenance",
+      "status": "adapted",
+      "evidence": ["apps/desktop/src/lib/artifacts.ts", "apps/desktop/src/lib/provenance.ts"]
+    },
+    {
+      "id": "hosted-notebooks",
+      "status": "adapted",
+      "evidence": ["apps/desktop/src/components/notebook/NotebookEditor.tsx", "apps/server/src/runtimeManager.mjs"]
+    },
+    {
+      "id": "research-memory",
+      "status": "adapted",
+      "evidence": ["apps/server/src/memosClient.mjs", "deploy/web/docker-compose.yml"]
+    },
+    {
+      "id": "account-self-service-and-operations",
+      "status": "adapted",
+      "evidence": ["apps/desktop/src/app/routes/AccountPage.tsx", "apps/desktop/src/components/settings/WebReadinessCard.tsx"]
+    },
+    {
+      "id": "security-and-isolation",
+      "status": "adapted",
+      "evidence": ["apps/server/src/security.mjs", "apps/server/src/runtimeControllerServer.mjs"]
+    },
+    {
+      "id": "release-and-observability",
+      "status": "adapted",
+      "evidence": ["apps/server/src/releaseManifest.mjs", "deploy/web/docker-compose.monitoring.yml"]
+    },
+    {
+      "id": "backup-and-disaster-recovery",
+      "status": "external",
+      "evidence": ["deploy/web/docker-compose.saas.yml", "scripts/ops/object-backup.mjs"],
+      "blockers": ["operator-owned off-host backup evidence", "completed restore-drill evidence"]
+    },
+    {
+      "id": "async-work-and-capacity",
+      "status": "conditional",
+      "evidence": ["apps/server/src/taskManager.mjs", "apps/server/src/runtimeControllerServer.mjs"],
+      "blockers": ["queue and rate-limit state remain node-local for horizontal scaling"]
+    },
+    {
+      "id": "horizontal-scaling",
+      "status": "not-implemented",
+      "evidence": ["apps/server/src/taskManager.mjs"],
+      "blockers": ["distributed queue", "distributed rate limiting", "shared artifact storage and runtime scheduling"]
+    },
+    {
+      "id": "organization-collaboration",
+      "status": "out-of-scope",
+      "evidence": ["docs/PRD.md"],
+      "blockers": ["organization membership", "roles", "invitations", "shared project policy"]
+    },
+    {
+      "id": "commercial-billing",
+      "status": "not-implemented",
+      "evidence": ["docs/WEB_DEPLOYMENT_READINESS_REPORT.md"],
+      "blockers": ["plans", "subscriptions", "metering ledger", "billing lifecycle"]
+    },
+    {
+      "id": "institutional-compliance",
+      "status": "external",
+      "evidence": ["docs/WEB_PRIVACY_AND_COMPLIANCE.md"],
+      "blockers": ["jurisdiction-specific legal review", "data residency decision", "contractual controls and external assurance"]
+    }
+  ]
+}

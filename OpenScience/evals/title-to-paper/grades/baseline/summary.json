@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "label": "baseline",
+  "expectedCases": 50,
+  "gradedCases": 50,
+  "modelGradedCases": 50,
+  "terminalSuccessRate": 1.0,
+  "resolvedPrimarySourceRate": 1.0,
+  "requiredSectionCoverageRate": 0.98,
+  "supportedNumericClaimPrecisionMean": 0.9153778972129758,
+  "verbatimEightGramRateMean": 0.009855994395550668,
+  "modelPassRate": 0.84,
+  "overallPassRate": 0.82,
+  "studyDesignScoreMean": 4.9,
+  "populationSampleScoreMean": 4.92,
+  "methodsScoreMean": 4.9,
+  "resultsConclusionScoreMean": 4.64,
+  "majorUnsupportedClaimCount": 8,
+  "byCategory": {
+    "biomedical-ai": {
+      "cases": 5,
+      "terminalSuccess": 5,
+      "modelPass": 4,
+      "overallPass": 3
+    },
+    "case-report": {
+      "cases": 5,
+      "terminalSuccess": 5,
+      "modelPass": 3,
+      "overallPass": 3
+    },
+    "diagnostic-prognostic": {
+      "cases": 5,
+      "terminalSuccess": 5,
+      "modelPass": 4,
+      "overallPass": 4
+    },
+    "genomics-omics": {
+      "cases": 5,
+      "terminalSuccess": 5,
+      "modelPass": 5,
+      "overallPass": 5
+    },
+    "methods-software": {
+      "cases": 5,
+      "terminalSuccess": 5,
+      "modelPass": 4,
+      "overallPass": 4
+    },
+    "observational-cohort": {
+      "cases": 5,
+      "terminalSuccess": 5,
+      "modelPass": 5,
+      "overallPass": 5
+    },
+    "pharmacovigilance-drug-safety": {
+      "cases": 5,
+      "terminalSuccess": 5,
+      "modelPass": 3,
+      "overallPass": 3
+    },
+    "public-health-epidemiology": {
+      "cases": 5,
+      "terminalSuccess": 5,
+      "modelPass": 5,
+      "overallPass": 5
+    },
+    "randomized-trial": {
+      "cases": 5,
+      "terminalSuccess": 5,
+      "modelPass": 5,
+      "overallPass": 5
+    },
+    "systematic-review-meta-analysis": {
+      "cases": 5,
+      "terminalSuccess": 5,
+      "modelPass": 4,
+      "overallPass": 4
+    }
+  },
+  "generatedAt": "2026-07-18T03:46:08Z"
+}

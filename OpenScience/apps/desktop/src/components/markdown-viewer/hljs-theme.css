@@ -1,0 +1,88 @@
+/* highlight.js palette for markdown code blocks, mapped onto the app design
+   tokens so one file serves both light and dark themes — no stock
+   highlight.js theme CSS is imported here (those set .hljs backgrounds and
+   would fight the chat/document surfaces). Rules only match `.hljs-*`
+   classes inside our code blocks, so nothing leaks globally.
+
+   The document ("paper") variant pins its own fixed hues under `.hljs-paper`:
+   a document keeps its warm light paper in dark mode, so token colors (which
+   would flip to the dark set) are overridden with paper-coordinated hexes. */
+
+.hljs {
+  color: inherit;
+  background: transparent;
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--muted);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-tag,
+.hljs-meta {
+  color: var(--accent);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+  color: var(--ok);
+}
+.hljs-number,
+.hljs-literal {
+  color: var(--warn);
+}
+.hljs-deletion {
+  color: var(--error);
+}
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-built_in {
+  color: var(--link);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}
+
+/* Paper overrides — hues echo the document palette (terracotta keyword like
+   the paper's inline code #a94e2c, quiet warm comments like its h4 #9a8d7c). */
+.hljs-paper .hljs-comment,
+.hljs-paper .hljs-quote {
+  color: #9a8d7c;
+}
+.hljs-paper .hljs-keyword,
+.hljs-paper .hljs-selector-tag,
+.hljs-paper .hljs-tag,
+.hljs-paper .hljs-meta {
+  color: #a94e2c;
+}
+.hljs-paper .hljs-string,
+.hljs-paper .hljs-regexp,
+.hljs-paper .hljs-symbol,
+.hljs-paper .hljs-bullet,
+.hljs-paper .hljs-addition {
+  color: #40784e;
+}
+.hljs-paper .hljs-number,
+.hljs-paper .hljs-literal {
+  color: #96620f;
+}
+.hljs-paper .hljs-deletion {
+  color: #b44c41;
+}
+.hljs-paper .hljs-title,
+.hljs-paper .hljs-section,
+.hljs-paper .hljs-name,
+.hljs-paper .hljs-selector-id,
+.hljs-paper .hljs-selector-class,
+.hljs-paper .hljs-built_in {
+  color: #2869d0;
+}

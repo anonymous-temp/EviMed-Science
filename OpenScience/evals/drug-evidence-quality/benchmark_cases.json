@@ -1,0 +1,138 @@
+{
+  "schemaVersion": "1.0.0",
+  "references": [
+    {
+      "id": "nhc-comprehensive-evaluation-2021",
+      "title": "Notice on Standardizing Clinical Comprehensive Drug Evaluation",
+      "url": "https://www.nhc.gov.cn/yaozs/c100097/202107/d2a45e6ae041423f950b3865e43f5ef6.shtml",
+      "role": "policy_framework"
+    },
+    {
+      "id": "quick-guide-2",
+      "title": "Quick Guide for Drug Evaluation and Selection in Chinese Medical Institutions, Second Edition",
+      "url": "https://www.yydbzz.com/article/2023/1004-0781/1004-0781-42-4-447.shtml",
+      "role": "selection_rubric"
+    },
+    {
+      "id": "jak-selection-2023",
+      "title": "Drug Selection Practice of Janus Kinase Inhibitors for Atopic Dermatitis",
+      "url": "https://www.chinjmap.com/cn/article/pdf/preview/10.13748/j.cnki.issn1007-7693.20232049.pdf",
+      "role": "item_level_selection_reference"
+    },
+    {
+      "id": "jak-selection-cross-publication",
+      "title": "Quantitative Evaluation of Selective Janus Kinase Inhibitors for Atopic Dermatitis",
+      "url": "https://www.sinomed.ac.cn/article.do?ui=2024359665",
+      "role": "score_drift_control"
+    },
+    {
+      "id": "jak-comprehensive-2024",
+      "title": "Comprehensive Clinical Evaluation of Janus Kinase Inhibitors for Atopic Dermatitis",
+      "url": "https://wap.china-pharmacy.com/attached/wenjian/14/202412/20240626_093254_825_162.pdf",
+      "role": "comprehensive_domain_reference"
+    },
+    {
+      "id": "t-gdpa-1-2021",
+      "title": "Evidence-based Evaluation Standard for Off-label Drug Use",
+      "url": "https://www.sinopharmacy.com.cn/uploads/file1/20210826/61274a83f329a.pdf",
+      "role": "off_label_method_reference"
+    }
+  ],
+  "selectionCase": {
+    "id": "jak-atopic-dermatitis-table-9",
+    "referenceId": "jak-selection-2023",
+    "policyVersion": "quick-guide-2-paper-replay",
+    "domains": {
+      "pharmaceutical_properties": 28,
+      "effectiveness": 27,
+      "safety": 25,
+      "economics": 10,
+      "other": 10
+    },
+    "candidateScores": {
+      "abrocitinib": {
+        "pharmaceutical_properties": 25.5,
+        "effectiveness": 21.0,
+        "safety": 10.5,
+        "economics": 9.69,
+        "other": 5.5
+      },
+      "upadacitinib": {
+        "pharmaceutical_properties": 25.5,
+        "effectiveness": 25.0,
+        "safety": 11.5,
+        "economics": 10.0,
+        "other": 5.5
+      },
+      "baricitinib": {
+        "pharmaceutical_properties": 25.0,
+        "effectiveness": 16.5,
+        "safety": 11.0,
+        "economics": 9.86,
+        "other": 4.8
+      }
+    },
+    "reportedTotals": {
+      "abrocitinib": 72.19,
+      "upadacitinib": 77.5,
+      "baricitinib": 67.16
+    },
+    "reportedOrder": [
+      "upadacitinib",
+      "abrocitinib",
+      "baricitinib"
+    ],
+    "reportedSearchCutoff": "2023-06-31",
+    "priceDateReported": false,
+    "crossPublicationScores": {
+      "referenceId": "jak-selection-cross-publication",
+      "upadacitinib": 80.5,
+      "abrocitinib": 80.2
+    }
+  },
+  "comprehensiveCase": {
+    "id": "jak-atopic-dermatitis-six-domains",
+    "referenceId": "jak-comprehensive-2024",
+    "sourceToPlatformDomain": {
+      "efficacy": "effectiveness",
+      "safety": "safety",
+      "economy": "economics",
+      "appropriateness": "applicability",
+      "accessibility": "accessibility",
+      "innovation": "innovation"
+    }
+  },
+  "offLabelCase": {
+    "id": "t-gdpa-1-2021-method-coverage",
+    "referenceId": "t-gdpa-1-2021",
+    "labelDimensions": [
+      "indication",
+      "population",
+      "dose",
+      "route",
+      "frequency",
+      "duration",
+      "formulation"
+    ],
+    "evidenceTypes": [
+      "origin_country_label",
+      "evidence_database",
+      "clinical_guideline",
+      "systematic_review",
+      "randomized_trial",
+      "nonrandomized_study",
+      "case_report_or_series",
+      "reference_work"
+    ],
+    "qualityAppraisalTools": [
+      "agree_ii",
+      "amstar_2",
+      "jadad",
+      "minors",
+      "newcastle_ottawa_scale"
+    ],
+    "licensedSourceGaps": [
+      "Micromedex requires licensed access or a user-provided export."
+    ]
+  }
+}

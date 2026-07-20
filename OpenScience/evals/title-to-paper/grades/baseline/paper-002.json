@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-002",
+  "category": "randomized-trial",
+  "title": "Five-Year Survival Outcomes From the PACIFIC Trial: Durvalumab After Chemoradiotherapy in Stage III Non-Small-Cell Lung Cancer.",
+  "pmcid": "PMC9015199",
+  "doi": "10.1200/jco.21.01308",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 17609,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 141,
+    "supportedUniqueNumbers": 124,
+    "unsupportedNumberTokens": [
+      "-1311",
+      "0.0001",
+      "0.00251",
+      "2.1",
+      "2.2",
+      "2.3",
+      "3.1",
+      "3.2",
+      "3.3",
+      "3.4",
+      "3.5",
+      "3.6",
+      "3.7",
+      "3.8",
+      "3.9",
+      "42",
+      "74.7"
+    ],
+    "supportedNumericClaimPrecision": 0.8794326241134752,
+    "verbatimEightGramRate": 0.04206500956022945,
+    "toolCalls": 17,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "Generated report faithfully reproduces study design, patient characteristics, key outcomes, and safety. All effect estimates, confidence intervals, and landmark survival rates are identical to the source. Limitations accurately noted. No unsupported claims detected."
+  },
+  "overallVerdict": "pass"
+}

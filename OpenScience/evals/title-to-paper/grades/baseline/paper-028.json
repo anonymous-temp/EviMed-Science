@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-028",
+  "category": "public-health-epidemiology",
+  "title": "Global, regional, and national burden of diabetes from 1990 to 2021, with projections of prevalence to 2050: a systematic analysis for the Global Burden of Disease Study 2021.",
+  "pmcid": "PMC10364581",
+  "doi": "10.1016/s0140-6736(23)01301-6",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 8553,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 232,
+    "supportedUniqueNumbers": 220,
+    "unsupportedNumberTokens": [
+      "1.39e+09",
+      "100000",
+      "10540",
+      "2950",
+      "3540",
+      "4.56",
+      "40200000",
+      "5.17e+08",
+      "5.64e+08",
+      "55400000",
+      "6780",
+      "92500000"
+    ],
+    "supportedNumericClaimPrecision": 0.9482758620689655,
+    "verbatimEightGramRate": 0.003770237303171435,
+    "toolCalls": 11,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text accurately mirrors the reference's design, sample, methods, results, and conclusions. All key numbers (prevalence, burden, risk attribution, projections) are faithfully reproduced without fabrication. No unsupported major or minor claims were detected, and no critical facts are missing."
+  },
+  "overallVerdict": "pass"
+}

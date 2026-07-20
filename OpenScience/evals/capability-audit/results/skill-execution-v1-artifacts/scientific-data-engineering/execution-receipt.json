@@ -1,0 +1,29 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1311,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-data-engineering/results.json",
+      "sha256": "2f121cf25b7bc9edfa62cd7491942d2166563bff87116a910d7aa42dd6740610"
+    },
+    {
+      "bytes": 1739,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-data-engineering/scientific-data-engineering-report.md",
+      "sha256": "e8466f848c3e3f53b8e2cba9aad994746c873b33b062fcbc2eaf98c79f5361aa"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:43.845039Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "scientific-data-engineering",
+  "startedAt": "2026-07-19T19:31:43.842307Z",
+  "status": "success",
+  "summary": "Executed the bounded deterministic baseline for scientific-data-engineering and wrote 2 verified artifacts.",
+  "warnings": []
+}

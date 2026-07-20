@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 177,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/cheminformatics/results.json",
+      "sha256": "84ed5f1df2bc933a60f5618a2ae99e1a632dbbd5fc1ed55d2bd4bd20e087588b"
+    },
+    {
+      "bytes": 731,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/cheminformatics/cheminformatics-report.md",
+      "sha256": "1446d44778abb8ec0d1a7f8de07a935ff890bb39bced87750496ac8e273980cc"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:27.249045Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "cheminformatics",
+  "startedAt": "2026-07-19T19:31:27.248518Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for cheminformatics and wrote 2 verified artifacts.",
+  "warnings": [
+    "Formula composition cannot replace structure normalization, stereochemistry, or RDKit-grade descriptors."
+  ]
+}

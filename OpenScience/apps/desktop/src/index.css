@@ -1,0 +1,151 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/source-serif-4/400.css";
+@import "@fontsource/source-serif-4/600.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+[data-theme="light"] {
+  --bg: #f7f5ef;
+  --surface: #ffffff;
+  --surface-2: #f2efe7;
+  --border: #e7e3da;
+  --border-faint: #efece5;
+  --text: #2a2723;
+  /* P1-6 (spec §2.1): the five text-bearing tokens below were below WCAG AA
+     4.5:1 for small text and are deepened along the same hue. Comments give
+     the measured contrast on --surface / --bg / --surface-2 (WCAG 2.1
+     relative-luminance formula). The dark set already passes and stays put. */
+  --muted: #6f6a61; /* 5.37 / 4.93 / 4.67 (was #8c877d: 3.57 / 3.28 / 3.11) */
+  /* Closest step to the original terracotta #c15f3c that clears 4.5:1 on all
+     three surfaces; white --accent-fg on it measures 5.19:1. */
+  --accent: #b24f2a; /* 5.19 / 4.76 / 4.52 (was #c15f3c: 4.23 / 3.88 / 3.68) */
+  --accent-fg: #ffffff;
+  /* Same blue deepened one step so link text clears 4.5:1 on all surfaces. */
+  --link: #2869d0; /* 5.22 / 4.79 / 4.54 (was #2a6fdb: 4.78 / 4.38 / 4.16) */
+  --warn: #96620f; /* 5.18 / 4.76 / 4.51 (was #c98a2b: 2.94 / 2.69 / 2.55) */
+  --ok: #40784e; /* 5.23 / 4.80 / 4.55 (was #4b8b5b: 4.08 / 3.75 / 3.55) */
+  --error: #b44c41; /* 5.18 / 4.76 / 4.51 (was #c0564b: 4.49 / 4.12 / 3.91) */
+  --error-fg: #ffffff;
+  /* Chart design system (P1-5) — validated categorical hues + chart chrome,
+     the single source of truth shared with @ai4s/shared and the matplotlib
+     style. Light surface = --surface (#ffffff). */
+  --series-1: #2a78d6;
+  --series-2: #1baf7a;
+  --series-3: #eda100;
+  --series-4: #008300;
+  --series-5: #4a3aa7;
+  --series-6: #e34948;
+  --series-7: #e87ba4;
+  --series-8: #eb6834;
+  --chart-grid: #e7e3da;
+  --chart-axis: #cbc6bb;
+}
+
+[data-theme="dark"] {
+  --bg: #16151a;
+  --surface: #1e1d24;
+  --surface-2: #26252d;
+  --border: #33313c;
+  --border-faint: #25242b;
+  --text: #ece9e2;
+  --muted: #9a958c;
+  --accent: #d0764f;
+  --accent-fg: #16151a;
+  --link: #7aa5f0;
+  --warn: #d7a24a;
+  --ok: #6bb07d;
+  --error: #d47a70;
+  --error-fg: #16151a;
+  /* Same hues stepped for the dark chart surface (--surface #1e1d24). */
+  --series-1: #3987e5;
+  --series-2: #199e70;
+  --series-3: #c98500;
+  --series-4: #008300;
+  --series-5: #9085e9;
+  --series-6: #e66767;
+  --series-7: #d55181;
+  --series-8: #d95926;
+  --chart-grid: #33313c;
+  --chart-axis: #4a4753;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Thin, calm scrollbars to match the paper aesthetic. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+/* Global keyboard-focus indicator (P1-7, spec §11.2). Placed after the
+   Tailwind utilities so it also wins over `outline-none` on buttons/links.
+   Text fields opt out: they already signal focus with `focus:border-accent`,
+   and an accent outline on top of the accent border reads as a double ring. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable]:focus-visible {
+  outline: none;
+}
+
+/* Honor reduced-motion (spec §11.5): collapse transitions and decorative
+   animations to an instant. Loading indicators keep their meaning — the
+   spinner/pulse icon still renders, it just does not move. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* Sidebar expand button appears after the collapse animation settles. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fade-in {
+  animation: fade-in 150ms ease-out 150ms backwards;
+}

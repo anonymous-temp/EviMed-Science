@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 235,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/simulation-optimization/results.json",
+      "sha256": "962c14648a71b344b021742c5340388b4f42e7f014eadde7b119b1afb4ba7822"
+    },
+    {
+      "bytes": 785,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/simulation-optimization/simulation-optimization-report.md",
+      "sha256": "ea077618b8c45430b64d1935a6edae0f85b45d52a5e65e532fc79e4299d9726f"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:45.884280Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "simulation-optimization",
+  "startedAt": "2026-07-19T19:31:45.879999Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for simulation-optimization and wrote 2 verified artifacts.",
+  "warnings": [
+    "Optimization of a benchmark function does not validate a domain simulation or its objective."
+  ]
+}

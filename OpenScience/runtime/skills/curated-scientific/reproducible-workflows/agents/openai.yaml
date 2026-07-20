@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reproducible Workflows"
+  short_description: "Build portable and traceable scientific workflows"
+  default_prompt: "Use $reproducible-workflows to make this research pipeline portable and reproducible."

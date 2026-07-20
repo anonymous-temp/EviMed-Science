@@ -1,0 +1,627 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-021",
+  "category": "case-report",
+  "title": "The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.",
+  "pmcid": "PMC10389401",
+  "doi": "10.1097/js9.0000000000000373",
+  "selectedRunLabel": "fidelity-gate-v1",
+  "referenceSha256": "988566e40b87ea156db90c7e8a5e0909e5428271ce9c431b1c082ac6f1eaf204",
+  "generatedSha256": "bd2fc8069dfab3aa2cbfafc59d2b20a0fb6769d3b7e7dca3a70fda22ac2f5967",
+  "promptSha256": "ce7b94802c75797524119327f9bef453ae46c6e2f35a1f4f6e36003ae58ac967",
+  "cacheFingerprint": "2d82b4eb79d812f4c4ab7801f2803fbe3b2cf3b06fc465d4a0e2f736bd24853e",
+  "referenceCharacters": 27211,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 3625,
+  "paperType": "case-report",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Update the SCARE guidelines to produce SCARE 2023 through a Delphi consensus exercise.",
+      "generatedFact": "通过 Delphi 共识过程更新 SCARE 2023 指南。",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.\", \"pmcid\": \"PMC10389401\", \"pmid\": \"37013953\", \"doi\": \"10.1097/js9.0000000000000373\", \"publicationTypes\": [\"research-article\", \"Practice Guideline\", \"Journal Article\"], \"publicationDate\": \"2023-05-01\"} [ABSTRACT] Background:The Surgical CAse REport (SCARE) guidelines were first published in 2016 as a tool for surgeons to document and report their surgical cases in a standardised and comprehensive manner."
+        ],
+        "quote": "[METADATA] {\"title\": \"The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.\", \"pmcid\": \"PMC10389401\", \"pmid\": \"37013953\", \"doi\": \"10.1097/js9.0000000000000373\", \"publicationTypes\": [\"research-article\", \"Practice Guideline\", \"Journal Article\"], \"publicationDate\": \"2023-05-01\"} [ABSTRACT] Background:The Surgical CAse REport (SCARE) guidelines were first published in 2016 as a tool for surgeons to document and report their surgical cases in a standardised and comprehensive manner."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# SCARE 2023 指南：外科病例报告共识更新 — 结构化科研正文 > **来源**: Sohrabi C, Mathew G, Maria N, Kerwan A, Franchi T, Agha RA, et al. *The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.* Published online 5 April 2023. > **PMCID**: [PMC10389401](https://europepmc.org/articles/PMC10389401) > **DOI**: [10.1097/js9.0000000000000373](https://doi.org/10.1097/js9.0000000000000373) > **PMID**: 37013953 > **注意**: 以下正文基于以上来源的开放获取全文重写，非逐字复制。 --- ## 摘要 2023 年 SCARE（Surgical CAse REport）指南通过一项 Delphi 共识过程完成更新。共邀请 54 名参与者，其中 44 人（81.5%）完成了在线调查。调查评估了 43 项拟议修改，最终 36 项（83.7%）达到预先定义的纳入阈值（即至少 70% 的评分者打出 7–9 分）。修订后的指南对患者信息部分、随访与结局报告以及新增的优势与局限性条目进行了调整。SCARE 2023 旨在为外科医生提供一个全面、标准化且以患者为中心的病例报告工具。"
+        ],
+        "quote": "# SCARE 2023 指南：外科病例报告共识更新 — 结构化科研正文 > **来源**: Sohrabi C, Mathew G, Maria N, Kerwan A, Franchi T, Agha RA, et al. *The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.* Published online 5 April 2023. > **PMCID**: [PMC10389401](https://europepmc.org/articles/PMC10389401) > **DOI**: [10.1097/js9.0000000000000373](https://doi.org/10.1097/js9.0000000000000373) > **PMID**: 37013953 > **注意**: 以下正文基于以上来源的开放获取全文重写，非逐字复制。 --- ## 摘要 2023 年 SCARE（Surgical CAse REport）指南通过一项 Delphi 共识过程完成更新。共邀请 54 名参与者，其中 44 人（81.5%）完成了在线调查。调查评估了 43 项拟议修改，最终 36 项（83.7%）达到预先定义的纳入阈值（即至少 70% 的评分者打出 7–9 分）。修订后的指南对患者信息部分、随访与结局报告以及新增的优势与局限性条目进行了调整。SCARE 2023 旨在为外科医生提供一个全面、标准化且以患者为中心的病例报告工具。"
+      },
+      "explanation": "Same objective: updating SCARE guidelines via Delphi consensus.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Delphi consensus exercise.",
+      "generatedFact": "Delphi 共识法。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "However, with advances in technology and changes in the healthcare landscape, it is important to revise and update these guidelines to ensure they remain relevant and valuable for surgeons.Materials and methods:The updated guidelines were produced through a Delphi consensus exercise. Members of the SCARE 2020 guidelines Delphi group, editorial board members, and peer reviewers were invited to participate. Potential contributors were contacted by e-mail. An online survey was completed to indicate their agreement with the proposed changes to the guideline items.Results:A total of 54 participants were invited to participate and 44 (81.5%) completed the survey."
+        ],
+        "quote": "However, with advances in technology and changes in the healthcare landscape, it is important to revise and update these guidelines to ensure they remain relevant and valuable for surgeons.Materials and methods:The updated guidelines were produced through a Delphi consensus exercise. Members of the SCARE 2020 guidelines Delphi group, editorial board members, and peer reviewers were invited to participate. Potential contributors were contacted by e-mail. An online survey was completed to indicate their agreement with the proposed changes to the guideline items.Results:A total of 54 participants were invited to participate and 44 (81.5%) completed the survey."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**关键词**: 病例报告，指南，SCARE，外科 --- ## 引言 SCARE 指南最初于 2016 年发布，旨在为外科病例报告提供标准化框架，提升报告的完整性与一致性。该指南随后在 2018 年与 2020 年分别进行了修订。随着医疗知识和技术的发展，有必要再次更新以反映当前的最佳实践。2023 年版本的修订通过 Delphi 共识方法实施，重点是填补前一版本的不足，并提供更详细的病例报告写作指导。 修订后的指南涵盖五个主要部分：引言、患者信息、诊断评估与判读、干预措施以及随访与结局。每个部分都包含具体建议和示例，以帮助作者准确、有效地报告病例。此外，2023 版增加了对外科手术报告的修正——包括术后指导、操作者资质、干预的物理环境、专科协作以及围绕患者结局开展的多学科讨论。这些变动反映了循证医学对更稳健的外科病例报告数据的需求。 --- ## 方法 指南更新采用 Delphi 共识法。邀请对象包括 SCARE 2020 Delphi 组成员、编委会成员及同行审稿人。通过电子邮件联系潜在参与者，在获得参与意愿后发送一份 Google Forms 在线调查，其中列出了对 SCARE 2023 条目清单的拟议修改。 每位参与者使用 1（强烈反对）至 9（强烈同意）的评分量表对各项修改逐项评定。与前一版指南保持一致，共识的达成标准为：某一项修改在评分 7–9 分的参与者中所占比例至少达到 70%。需要注意的是，本文是一件指南方法学论文，不涉及患者样本、干预组或临床结局数据。"
+        ],
+        "quote": "**关键词**: 病例报告，指南，SCARE，外科 --- ## 引言 SCARE 指南最初于 2016 年发布，旨在为外科病例报告提供标准化框架，提升报告的完整性与一致性。该指南随后在 2018 年与 2020 年分别进行了修订。随着医疗知识和技术的发展，有必要再次更新以反映当前的最佳实践。2023 年版本的修订通过 Delphi 共识方法实施，重点是填补前一版本的不足，并提供更详细的病例报告写作指导。 修订后的指南涵盖五个主要部分：引言、患者信息、诊断评估与判读、干预措施以及随访与结局。每个部分都包含具体建议和示例，以帮助作者准确、有效地报告病例。此外，2023 版增加了对外科手术报告的修正——包括术后指导、操作者资质、干预的物理环境、专科协作以及围绕患者结局开展的多学科讨论。这些变动反映了循证医学对更稳健的外科病例报告数据的需求。 --- ## 方法 指南更新采用 Delphi 共识法。邀请对象包括 SCARE 2020 Delphi 组成员、编委会成员及同行审稿人。通过电子邮件联系潜在参与者，在获得参与意愿后发送一份 Google Forms 在线调查，其中列出了对 SCARE 2023 条目清单的拟议修改。 每位参与者使用 1（强烈反对）至 9（强烈同意）的评分量表对各项修改逐项评定。与前一版指南保持一致，共识的达成标准为：某一项修改在评分 7–9 分的参与者中所占比例至少达到 70%。需要注意的是，本文是一件指南方法学论文，不涉及患者样本、干预组或临床结局数据。"
+      },
+      "explanation": "Design identical: Delphi consensus.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "SCARE 2020 Delphi group members, editorial board members, and peer reviewers.",
+      "generatedFact": "SCARE 2020 Delphi 组成员、编委会成员及同行审稿人。",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "These updates reflect the growing importance of evidence-based medicine and the need for more robust data in surgical case reports. We hope that this update will serve as a valuable tool for authors and editors in the surgical community and contribute to the continued advancement of medical knowledge through well-reported and informative case reports. Materials and methods In accordance with the original recommendations, the Delphi approach was used 4 . Members from the SCARE 2020 guidelines Delphi group, editorial board members, and peer reviewers were invited to participate. Potential contributors were contacted by e-mail."
+        ],
+        "quote": "These updates reflect the growing importance of evidence-based medicine and the need for more robust data in surgical case reports. We hope that this update will serve as a valuable tool for authors and editors in the surgical community and contribute to the continued advancement of medical knowledge through well-reported and informative case reports. Materials and methods In accordance with the original recommendations, the Delphi approach was used 4 . Members from the SCARE 2020 guidelines Delphi group, editorial board members, and peer reviewers were invited to participate. Potential contributors were contacted by e-mail."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**关键词**: 病例报告，指南，SCARE，外科 --- ## 引言 SCARE 指南最初于 2016 年发布，旨在为外科病例报告提供标准化框架，提升报告的完整性与一致性。该指南随后在 2018 年与 2020 年分别进行了修订。随着医疗知识和技术的发展，有必要再次更新以反映当前的最佳实践。2023 年版本的修订通过 Delphi 共识方法实施，重点是填补前一版本的不足，并提供更详细的病例报告写作指导。 修订后的指南涵盖五个主要部分：引言、患者信息、诊断评估与判读、干预措施以及随访与结局。每个部分都包含具体建议和示例，以帮助作者准确、有效地报告病例。此外，2023 版增加了对外科手术报告的修正——包括术后指导、操作者资质、干预的物理环境、专科协作以及围绕患者结局开展的多学科讨论。这些变动反映了循证医学对更稳健的外科病例报告数据的需求。 --- ## 方法 指南更新采用 Delphi 共识法。邀请对象包括 SCARE 2020 Delphi 组成员、编委会成员及同行审稿人。通过电子邮件联系潜在参与者，在获得参与意愿后发送一份 Google Forms 在线调查，其中列出了对 SCARE 2023 条目清单的拟议修改。 每位参与者使用 1（强烈反对）至 9（强烈同意）的评分量表对各项修改逐项评定。与前一版指南保持一致，共识的达成标准为：某一项修改在评分 7–9 分的参与者中所占比例至少达到 70%。需要注意的是，本文是一件指南方法学论文，不涉及患者样本、干预组或临床结局数据。"
+        ],
+        "quote": "**关键词**: 病例报告，指南，SCARE，外科 --- ## 引言 SCARE 指南最初于 2016 年发布，旨在为外科病例报告提供标准化框架，提升报告的完整性与一致性。该指南随后在 2018 年与 2020 年分别进行了修订。随着医疗知识和技术的发展，有必要再次更新以反映当前的最佳实践。2023 年版本的修订通过 Delphi 共识方法实施，重点是填补前一版本的不足，并提供更详细的病例报告写作指导。 修订后的指南涵盖五个主要部分：引言、患者信息、诊断评估与判读、干预措施以及随访与结局。每个部分都包含具体建议和示例，以帮助作者准确、有效地报告病例。此外，2023 版增加了对外科手术报告的修正——包括术后指导、操作者资质、干预的物理环境、专科协作以及围绕患者结局开展的多学科讨论。这些变动反映了循证医学对更稳健的外科病例报告数据的需求。 --- ## 方法 指南更新采用 Delphi 共识法。邀请对象包括 SCARE 2020 Delphi 组成员、编委会成员及同行审稿人。通过电子邮件联系潜在参与者，在获得参与意愿后发送一份 Google Forms 在线调查，其中列出了对 SCARE 2023 条目清单的拟议修改。 每位参与者使用 1（强烈反对）至 9（强烈同意）的评分量表对各项修改逐项评定。与前一版指南保持一致，共识的达成标准为：某一项修改在评分 7–9 分的参与者中所占比例至少达到 70%。需要注意的是，本文是一件指南方法学论文，不涉及患者样本、干预组或临床结局数据。"
+      },
+      "explanation": "Exactly the same expert panel.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "54 invited; 44 (81.5%) completed the survey.",
+      "generatedFact": "共邀请 54 名参与者，44 人（81.5%）完成在线调查。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "However, with advances in technology and changes in the healthcare landscape, it is important to revise and update these guidelines to ensure they remain relevant and valuable for surgeons.Materials and methods:The updated guidelines were produced through a Delphi consensus exercise. Members of the SCARE 2020 guidelines Delphi group, editorial board members, and peer reviewers were invited to participate. Potential contributors were contacted by e-mail. An online survey was completed to indicate their agreement with the proposed changes to the guideline items.Results:A total of 54 participants were invited to participate and 44 (81.5%) completed the survey."
+        ],
+        "quote": "However, with advances in technology and changes in the healthcare landscape, it is important to revise and update these guidelines to ensure they remain relevant and valuable for surgeons.Materials and methods:The updated guidelines were produced through a Delphi consensus exercise. Members of the SCARE 2020 guidelines Delphi group, editorial board members, and peer reviewers were invited to participate. Potential contributors were contacted by e-mail. An online survey was completed to indicate their agreement with the proposed changes to the guideline items.Results:A total of 54 participants were invited to participate and 44 (81.5%) completed the survey."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# SCARE 2023 指南：外科病例报告共识更新 — 结构化科研正文 > **来源**: Sohrabi C, Mathew G, Maria N, Kerwan A, Franchi T, Agha RA, et al. *The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.* Published online 5 April 2023. > **PMCID**: [PMC10389401](https://europepmc.org/articles/PMC10389401) > **DOI**: [10.1097/js9.0000000000000373](https://doi.org/10.1097/js9.0000000000000373) > **PMID**: 37013953 > **注意**: 以下正文基于以上来源的开放获取全文重写，非逐字复制。 --- ## 摘要 2023 年 SCARE（Surgical CAse REport）指南通过一项 Delphi 共识过程完成更新。共邀请 54 名参与者，其中 44 人（81.5%）完成了在线调查。调查评估了 43 项拟议修改，最终 36 项（83.7%）达到预先定义的纳入阈值（即至少 70% 的评分者打出 7–9 分）。修订后的指南对患者信息部分、随访与结局报告以及新增的优势与局限性条目进行了调整。SCARE 2023 旨在为外科医生提供一个全面、标准化且以患者为中心的病例报告工具。"
+        ],
+        "quote": "# SCARE 2023 指南：外科病例报告共识更新 — 结构化科研正文 > **来源**: Sohrabi C, Mathew G, Maria N, Kerwan A, Franchi T, Agha RA, et al. *The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.* Published online 5 April 2023. > **PMCID**: [PMC10389401](https://europepmc.org/articles/PMC10389401) > **DOI**: [10.1097/js9.0000000000000373](https://doi.org/10.1097/js9.0000000000000373) > **PMID**: 37013953 > **注意**: 以下正文基于以上来源的开放获取全文重写，非逐字复制。 --- ## 摘要 2023 年 SCARE（Surgical CAse REport）指南通过一项 Delphi 共识过程完成更新。共邀请 54 名参与者，其中 44 人（81.5%）完成了在线调查。调查评估了 43 项拟议修改，最终 36 项（83.7%）达到预先定义的纳入阈值（即至少 70% 的评分者打出 7–9 分）。修订后的指南对患者信息部分、随访与结局报告以及新增的优势与局限性条目进行了调整。SCARE 2023 旨在为外科医生提供一个全面、标准化且以患者为中心的病例报告工具。"
+      },
+      "explanation": "Identical numbers and percentage.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Participants were SCARE 2020 Delphi group members, editorial board members, and peer reviewers; contacted by e-mail and sent a Google Forms survey.",
+      "generatedFact": "邀请对象包括 SCARE 2020 Delphi 组成员、编委会成员及同行审稿人，通过电子邮件联系并发送 Google Forms 调查。",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "These updates reflect the growing importance of evidence-based medicine and the need for more robust data in surgical case reports. We hope that this update will serve as a valuable tool for authors and editors in the surgical community and contribute to the continued advancement of medical knowledge through well-reported and informative case reports. Materials and methods In accordance with the original recommendations, the Delphi approach was used 4 . Members from the SCARE 2020 guidelines Delphi group, editorial board members, and peer reviewers were invited to participate. Potential contributors were contacted by e-mail."
+        ],
+        "quote": "These updates reflect the growing importance of evidence-based medicine and the need for more robust data in surgical case reports. We hope that this update will serve as a valuable tool for authors and editors in the surgical community and contribute to the continued advancement of medical knowledge through well-reported and informative case reports. Materials and methods In accordance with the original recommendations, the Delphi approach was used 4 . Members from the SCARE 2020 guidelines Delphi group, editorial board members, and peer reviewers were invited to participate. Potential contributors were contacted by e-mail."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**关键词**: 病例报告，指南，SCARE，外科 --- ## 引言 SCARE 指南最初于 2016 年发布，旨在为外科病例报告提供标准化框架，提升报告的完整性与一致性。该指南随后在 2018 年与 2020 年分别进行了修订。随着医疗知识和技术的发展，有必要再次更新以反映当前的最佳实践。2023 年版本的修订通过 Delphi 共识方法实施，重点是填补前一版本的不足，并提供更详细的病例报告写作指导。 修订后的指南涵盖五个主要部分：引言、患者信息、诊断评估与判读、干预措施以及随访与结局。每个部分都包含具体建议和示例，以帮助作者准确、有效地报告病例。此外，2023 版增加了对外科手术报告的修正——包括术后指导、操作者资质、干预的物理环境、专科协作以及围绕患者结局开展的多学科讨论。这些变动反映了循证医学对更稳健的外科病例报告数据的需求。 --- ## 方法 指南更新采用 Delphi 共识法。邀请对象包括 SCARE 2020 Delphi 组成员、编委会成员及同行审稿人。通过电子邮件联系潜在参与者，在获得参与意愿后发送一份 Google Forms 在线调查，其中列出了对 SCARE 2023 条目清单的拟议修改。 每位参与者使用 1（强烈反对）至 9（强烈同意）的评分量表对各项修改逐项评定。与前一版指南保持一致，共识的达成标准为：某一项修改在评分 7–9 分的参与者中所占比例至少达到 70%。需要注意的是，本文是一件指南方法学论文，不涉及患者样本、干预组或临床结局数据。"
+        ],
+        "quote": "**关键词**: 病例报告，指南，SCARE，外科 --- ## 引言 SCARE 指南最初于 2016 年发布，旨在为外科病例报告提供标准化框架，提升报告的完整性与一致性。该指南随后在 2018 年与 2020 年分别进行了修订。随着医疗知识和技术的发展，有必要再次更新以反映当前的最佳实践。2023 年版本的修订通过 Delphi 共识方法实施，重点是填补前一版本的不足，并提供更详细的病例报告写作指导。 修订后的指南涵盖五个主要部分：引言、患者信息、诊断评估与判读、干预措施以及随访与结局。每个部分都包含具体建议和示例，以帮助作者准确、有效地报告病例。此外，2023 版增加了对外科手术报告的修正——包括术后指导、操作者资质、干预的物理环境、专科协作以及围绕患者结局开展的多学科讨论。这些变动反映了循证医学对更稳健的外科病例报告数据的需求。 --- ## 方法 指南更新采用 Delphi 共识法。邀请对象包括 SCARE 2020 Delphi 组成员、编委会成员及同行审稿人。通过电子邮件联系潜在参与者，在获得参与意愿后发送一份 Google Forms 在线调查，其中列出了对 SCARE 2023 条目清单的拟议修改。 每位参与者使用 1（强烈反对）至 9（强烈同意）的评分量表对各项修改逐项评定。与前一版指南保持一致，共识的达成标准为：某一项修改在评分 7–9 分的参与者中所占比例至少达到 70%。需要注意的是，本文是一件指南方法学论文，不涉及患者样本、干预组或临床结局数据。"
+      },
+      "explanation": "Selection and recruitment process matched.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Delphi survey rating proposed SCARE 2023 checklist changes on a scale of 1–9.",
+      "generatedFact": "使用 1–9 量表对 SCARE 2023 条目清单的拟议修改进行评分的 Delphi 调查。",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "Once they conveyed their intent to participate, a Google Forms survey comprising suggested changes to the SCARE 2023 checklist was sent. These changes were rated by each participant on a scale of 1 (strongly disagree) to 9 (strongly agree). In line with the previous guidelines, consensus was defined as having a percentage of greater than or including 70% for items scoring between 7 and 9. Results A total of 54 participants were invited to participate and 44 (81.5%) completed the Delphi survey. A summary of scores is shown in Table 1 . A total of 43 items were assessed of which 36 (83.7%) met the threshold for inclusion. The revised SCARE 2023 guidelines is shown in Table 2 ."
+        ],
+        "quote": "Once they conveyed their intent to participate, a Google Forms survey comprising suggested changes to the SCARE 2023 checklist was sent. These changes were rated by each participant on a scale of 1 (strongly disagree) to 9 (strongly agree). In line with the previous guidelines, consensus was defined as having a percentage of greater than or including 70% for items scoring between 7 and 9. Results A total of 54 participants were invited to participate and 44 (81.5%) completed the Delphi survey. A summary of scores is shown in Table 1 . A total of 43 items were assessed of which 36 (83.7%) met the threshold for inclusion. The revised SCARE 2023 guidelines is shown in Table 2 ."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**关键词**: 病例报告，指南，SCARE，外科 --- ## 引言 SCARE 指南最初于 2016 年发布，旨在为外科病例报告提供标准化框架，提升报告的完整性与一致性。该指南随后在 2018 年与 2020 年分别进行了修订。随着医疗知识和技术的发展，有必要再次更新以反映当前的最佳实践。2023 年版本的修订通过 Delphi 共识方法实施，重点是填补前一版本的不足，并提供更详细的病例报告写作指导。 修订后的指南涵盖五个主要部分：引言、患者信息、诊断评估与判读、干预措施以及随访与结局。每个部分都包含具体建议和示例，以帮助作者准确、有效地报告病例。此外，2023 版增加了对外科手术报告的修正——包括术后指导、操作者资质、干预的物理环境、专科协作以及围绕患者结局开展的多学科讨论。这些变动反映了循证医学对更稳健的外科病例报告数据的需求。 --- ## 方法 指南更新采用 Delphi 共识法。邀请对象包括 SCARE 2020 Delphi 组成员、编委会成员及同行审稿人。通过电子邮件联系潜在参与者，在获得参与意愿后发送一份 Google Forms 在线调查，其中列出了对 SCARE 2023 条目清单的拟议修改。 每位参与者使用 1（强烈反对）至 9（强烈同意）的评分量表对各项修改逐项评定。与前一版指南保持一致，共识的达成标准为：某一项修改在评分 7–9 分的参与者中所占比例至少达到 70%。需要注意的是，本文是一件指南方法学论文，不涉及患者样本、干预组或临床结局数据。"
+        ],
+        "quote": "**关键词**: 病例报告，指南，SCARE，外科 --- ## 引言 SCARE 指南最初于 2016 年发布，旨在为外科病例报告提供标准化框架，提升报告的完整性与一致性。该指南随后在 2018 年与 2020 年分别进行了修订。随着医疗知识和技术的发展，有必要再次更新以反映当前的最佳实践。2023 年版本的修订通过 Delphi 共识方法实施，重点是填补前一版本的不足，并提供更详细的病例报告写作指导。 修订后的指南涵盖五个主要部分：引言、患者信息、诊断评估与判读、干预措施以及随访与结局。每个部分都包含具体建议和示例，以帮助作者准确、有效地报告病例。此外，2023 版增加了对外科手术报告的修正——包括术后指导、操作者资质、干预的物理环境、专科协作以及围绕患者结局开展的多学科讨论。这些变动反映了循证医学对更稳健的外科病例报告数据的需求。 --- ## 方法 指南更新采用 Delphi 共识法。邀请对象包括 SCARE 2020 Delphi 组成员、编委会成员及同行审稿人。通过电子邮件联系潜在参与者，在获得参与意愿后发送一份 Google Forms 在线调查，其中列出了对 SCARE 2023 条目清单的拟议修改。 每位参与者使用 1（强烈反对）至 9（强烈同意）的评分量表对各项修改逐项评定。与前一版指南保持一致，共识的达成标准为：某一项修改在评分 7–9 分的参与者中所占比例至少达到 70%。需要注意的是，本文是一件指南方法学论文，不涉及患者样本、干预组或临床结局数据。"
+      },
+      "explanation": "Survey instrument and rating scale identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No comparator or control arm present.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "36 of 43 assessed items (83.7%) met the inclusion threshold (≥70% scoring 7–9).",
+      "generatedFact": "43 项评估中 36 项（83.7%）达到纳入阈值。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "There was a high degree of agreement among reviewers, with 36 items (83.7%) meeting the threshold for inclusion.Conclusion:Through a completed Delphi consensus exercise we present the SCARE 2023 guidelines. This will provide surgeons with a comprehensive and up-to-date tool for documenting and reporting their surgical cases while highlighting the importance of patient-centred care.Keywords: case report, guideline, SCARE, surgery [ARTICLE BODY EVIDENCE COMPLETE=true] Introduction HIGHLIGHTS This paper presents an update to the SCARE guidelines, which were first published in 2016 as a tool for surgeons to document and report their surgical cases in a standardised manner."
+        ],
+        "quote": "There was a high degree of agreement among reviewers, with 36 items (83.7%) meeting the threshold for inclusion.Conclusion:Through a completed Delphi consensus exercise we present the SCARE 2023 guidelines. This will provide surgeons with a comprehensive and up-to-date tool for documenting and reporting their surgical cases while highlighting the importance of patient-centred care.Keywords: case report, guideline, SCARE, surgery [ARTICLE BODY EVIDENCE COMPLETE=true] Introduction HIGHLIGHTS This paper presents an update to the SCARE guidelines, which were first published in 2016 as a tool for surgeons to document and report their surgical cases in a standardised manner."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# SCARE 2023 指南：外科病例报告共识更新 — 结构化科研正文 > **来源**: Sohrabi C, Mathew G, Maria N, Kerwan A, Franchi T, Agha RA, et al. *The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.* Published online 5 April 2023. > **PMCID**: [PMC10389401](https://europepmc.org/articles/PMC10389401) > **DOI**: [10.1097/js9.0000000000000373](https://doi.org/10.1097/js9.0000000000000373) > **PMID**: 37013953 > **注意**: 以下正文基于以上来源的开放获取全文重写，非逐字复制。 --- ## 摘要 2023 年 SCARE（Surgical CAse REport）指南通过一项 Delphi 共识过程完成更新。共邀请 54 名参与者，其中 44 人（81.5%）完成了在线调查。调查评估了 43 项拟议修改，最终 36 项（83.7%）达到预先定义的纳入阈值（即至少 70% 的评分者打出 7–9 分）。修订后的指南对患者信息部分、随访与结局报告以及新增的优势与局限性条目进行了调整。SCARE 2023 旨在为外科医生提供一个全面、标准化且以患者为中心的病例报告工具。"
+        ],
+        "quote": "# SCARE 2023 指南：外科病例报告共识更新 — 结构化科研正文 > **来源**: Sohrabi C, Mathew G, Maria N, Kerwan A, Franchi T, Agha RA, et al. *The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.* Published online 5 April 2023. > **PMCID**: [PMC10389401](https://europepmc.org/articles/PMC10389401) > **DOI**: [10.1097/js9.0000000000000373](https://doi.org/10.1097/js9.0000000000000373) > **PMID**: 37013953 > **注意**: 以下正文基于以上来源的开放获取全文重写，非逐字复制。 --- ## 摘要 2023 年 SCARE（Surgical CAse REport）指南通过一项 Delphi 共识过程完成更新。共邀请 54 名参与者，其中 44 人（81.5%）完成了在线调查。调查评估了 43 项拟议修改，最终 36 项（83.7%）达到预先定义的纳入阈值（即至少 70% 的评分者打出 7–9 分）。修订后的指南对患者信息部分、随访与结局报告以及新增的优势与局限性条目进行了调整。SCARE 2023 旨在为外科医生提供一个全面、标准化且以患者为中心的病例报告工具。"
+      },
+      "explanation": "Primary endpoint and proportion match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No follow-up or defined time horizon; single cross‑sectional Delphi survey.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No data cleaning or preprocessing described; raw survey ratings used.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Consensus defined as ≥70% of participants scoring 7–9.",
+      "generatedFact": "共识标准：评分 7–9 分的参与者比例 ≥70%。",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "Once they conveyed their intent to participate, a Google Forms survey comprising suggested changes to the SCARE 2023 checklist was sent. These changes were rated by each participant on a scale of 1 (strongly disagree) to 9 (strongly agree). In line with the previous guidelines, consensus was defined as having a percentage of greater than or including 70% for items scoring between 7 and 9. Results A total of 54 participants were invited to participate and 44 (81.5%) completed the Delphi survey. A summary of scores is shown in Table 1 . A total of 43 items were assessed of which 36 (83.7%) met the threshold for inclusion. The revised SCARE 2023 guidelines is shown in Table 2 ."
+        ],
+        "quote": "Once they conveyed their intent to participate, a Google Forms survey comprising suggested changes to the SCARE 2023 checklist was sent. These changes were rated by each participant on a scale of 1 (strongly disagree) to 9 (strongly agree). In line with the previous guidelines, consensus was defined as having a percentage of greater than or including 70% for items scoring between 7 and 9. Results A total of 54 participants were invited to participate and 44 (81.5%) completed the Delphi survey. A summary of scores is shown in Table 1 . A total of 43 items were assessed of which 36 (83.7%) met the threshold for inclusion. The revised SCARE 2023 guidelines is shown in Table 2 ."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**关键词**: 病例报告，指南，SCARE，外科 --- ## 引言 SCARE 指南最初于 2016 年发布，旨在为外科病例报告提供标准化框架，提升报告的完整性与一致性。该指南随后在 2018 年与 2020 年分别进行了修订。随着医疗知识和技术的发展，有必要再次更新以反映当前的最佳实践。2023 年版本的修订通过 Delphi 共识方法实施，重点是填补前一版本的不足，并提供更详细的病例报告写作指导。 修订后的指南涵盖五个主要部分：引言、患者信息、诊断评估与判读、干预措施以及随访与结局。每个部分都包含具体建议和示例，以帮助作者准确、有效地报告病例。此外，2023 版增加了对外科手术报告的修正——包括术后指导、操作者资质、干预的物理环境、专科协作以及围绕患者结局开展的多学科讨论。这些变动反映了循证医学对更稳健的外科病例报告数据的需求。 --- ## 方法 指南更新采用 Delphi 共识法。邀请对象包括 SCARE 2020 Delphi 组成员、编委会成员及同行审稿人。通过电子邮件联系潜在参与者，在获得参与意愿后发送一份 Google Forms 在线调查，其中列出了对 SCARE 2023 条目清单的拟议修改。 每位参与者使用 1（强烈反对）至 9（强烈同意）的评分量表对各项修改逐项评定。与前一版指南保持一致，共识的达成标准为：某一项修改在评分 7–9 分的参与者中所占比例至少达到 70%。需要注意的是，本文是一件指南方法学论文，不涉及患者样本、干预组或临床结局数据。"
+        ],
+        "quote": "**关键词**: 病例报告，指南，SCARE，外科 --- ## 引言 SCARE 指南最初于 2016 年发布，旨在为外科病例报告提供标准化框架，提升报告的完整性与一致性。该指南随后在 2018 年与 2020 年分别进行了修订。随着医疗知识和技术的发展，有必要再次更新以反映当前的最佳实践。2023 年版本的修订通过 Delphi 共识方法实施，重点是填补前一版本的不足，并提供更详细的病例报告写作指导。 修订后的指南涵盖五个主要部分：引言、患者信息、诊断评估与判读、干预措施以及随访与结局。每个部分都包含具体建议和示例，以帮助作者准确、有效地报告病例。此外，2023 版增加了对外科手术报告的修正——包括术后指导、操作者资质、干预的物理环境、专科协作以及围绕患者结局开展的多学科讨论。这些变动反映了循证医学对更稳健的外科病例报告数据的需求。 --- ## 方法 指南更新采用 Delphi 共识法。邀请对象包括 SCARE 2020 Delphi 组成员、编委会成员及同行审稿人。通过电子邮件联系潜在参与者，在获得参与意愿后发送一份 Google Forms 在线调查，其中列出了对 SCARE 2023 条目清单的拟议修改。 每位参与者使用 1（强烈反对）至 9（强烈同意）的评分量表对各项修改逐项评定。与前一版指南保持一致，共识的达成标准为：某一项修改在评分 7–9 分的参与者中所占比例至少达到 70%。需要注意的是，本文是一件指南方法学论文，不涉及患者样本、干预组或临床结局数据。"
+      },
+      "explanation": "Analytical definition identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No computational model or algorithm employed.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "54 invited, 44 completed (81.5%), 43 items assessed, 36 (83.7%) met threshold.",
+      "generatedFact": "54 邀请，44 人完成（81.5%），43 项评估，36 项（83.7%）达标。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "However, with advances in technology and changes in the healthcare landscape, it is important to revise and update these guidelines to ensure they remain relevant and valuable for surgeons.Materials and methods:The updated guidelines were produced through a Delphi consensus exercise. Members of the SCARE 2020 guidelines Delphi group, editorial board members, and peer reviewers were invited to participate. Potential contributors were contacted by e-mail. An online survey was completed to indicate their agreement with the proposed changes to the guideline items.Results:A total of 54 participants were invited to participate and 44 (81.5%) completed the survey."
+        ],
+        "quote": "However, with advances in technology and changes in the healthcare landscape, it is important to revise and update these guidelines to ensure they remain relevant and valuable for surgeons.Materials and methods:The updated guidelines were produced through a Delphi consensus exercise. Members of the SCARE 2020 guidelines Delphi group, editorial board members, and peer reviewers were invited to participate. Potential contributors were contacted by e-mail. An online survey was completed to indicate their agreement with the proposed changes to the guideline items.Results:A total of 54 participants were invited to participate and 44 (81.5%) completed the survey."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# SCARE 2023 指南：外科病例报告共识更新 — 结构化科研正文 > **来源**: Sohrabi C, Mathew G, Maria N, Kerwan A, Franchi T, Agha RA, et al. *The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.* Published online 5 April 2023. > **PMCID**: [PMC10389401](https://europepmc.org/articles/PMC10389401) > **DOI**: [10.1097/js9.0000000000000373](https://doi.org/10.1097/js9.0000000000000373) > **PMID**: 37013953 > **注意**: 以下正文基于以上来源的开放获取全文重写，非逐字复制。 --- ## 摘要 2023 年 SCARE（Surgical CAse REport）指南通过一项 Delphi 共识过程完成更新。共邀请 54 名参与者，其中 44 人（81.5%）完成了在线调查。调查评估了 43 项拟议修改，最终 36 项（83.7%）达到预先定义的纳入阈值（即至少 70% 的评分者打出 7–9 分）。修订后的指南对患者信息部分、随访与结局报告以及新增的优势与局限性条目进行了调整。SCARE 2023 旨在为外科医生提供一个全面、标准化且以患者为中心的病例报告工具。"
+        ],
+        "quote": "# SCARE 2023 指南：外科病例报告共识更新 — 结构化科研正文 > **来源**: Sohrabi C, Mathew G, Maria N, Kerwan A, Franchi T, Agha RA, et al. *The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.* Published online 5 April 2023. > **PMCID**: [PMC10389401](https://europepmc.org/articles/PMC10389401) > **DOI**: [10.1097/js9.0000000000000373](https://doi.org/10.1097/js9.0000000000000373) > **PMID**: 37013953 > **注意**: 以下正文基于以上来源的开放获取全文重写，非逐字复制。 --- ## 摘要 2023 年 SCARE（Surgical CAse REport）指南通过一项 Delphi 共识过程完成更新。共邀请 54 名参与者，其中 44 人（81.5%）完成了在线调查。调查评估了 43 项拟议修改，最终 36 项（83.7%）达到预先定义的纳入阈值（即至少 70% 的评分者打出 7–9 分）。修订后的指南对患者信息部分、随访与结局报告以及新增的优势与局限性条目进行了调整。SCARE 2023 旨在为外科医生提供一个全面、标准化且以患者为中心的病例报告工具。"
+      },
+      "explanation": "All key numerical figures reproduced without discrepancy.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No confidence intervals, P values, or other uncertainty measures reported.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "The updated SCARE 2023 provides a comprehensive, standardised, patient-centred reporting tool; adherence will advance surgical knowledge.",
+      "generatedFact": "SCARE 2023 提供全面标准化、以患者为中心的工具；遵循可推动外科知识进步。",
+      "sourceEvidence": {
+        "locator": "R0035",
+        "locators": [
+          "R0035"
+        ],
+        "quotes": [
+          "Overall, the revised SCARE 2023 guidelines provide a more comprehensive and detailed format for reporting surgical cases in the medical and surgical literature. Authors should cite the guidelines and upload a completed checklist of compliance for reviewers and editors to inspect. This checklist will be provided in various formats for easy use via the SCARE website ( https://www.scareguideline.com ). Conclusion The updated SCARE 2023 guidelines provide a comprehensive and standardised approach for reporting surgical cases. This addresses the importance of patient privacy, consent, ethical considerations, and the need for clear and concise reporting of surgical procedures and outcomes."
+        ],
+        "quote": "Overall, the revised SCARE 2023 guidelines provide a more comprehensive and detailed format for reporting surgical cases in the medical and surgical literature. Authors should cite the guidelines and upload a completed checklist of compliance for reviewers and editors to inspect. This checklist will be provided in various formats for easy use via the SCARE website ( https://www.scareguideline.com ). Conclusion The updated SCARE 2023 guidelines provide a comprehensive and standardised approach for reporting surgical cases. This addresses the importance of patient privacy, consent, ethical considerations, and the need for clear and concise reporting of surgical procedures and outcomes."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "指南的 2023 版对原有格式进行了若干调整，包括患者信息部分的扩展（如问诊场所、禁忌以及系统回顾），以及随访部分的细化（如随访人、随访方式、长期适用性评估），此外新增的优势与局限性章节是此前版本所不含的内容。 **局限性**（原文来源：Provenance and peer review、Data statement 及正文讨论部分） - 同行评审类型为\"未委托、内部审阅\"（该期刊内部编辑审核），未经过标准外部同行评审。 - Delphi 调查的原始数据因个体回复保密而未公开，读者无法独立核验各条目的评分分布。 - 文章未报告 Delphi 轮次的数量；既往版本为多轮 Delphi，本次未说明是否仅进行了一轮调查。 - 样本量为 44 名完成调查者，且参与人群的组成（编委会成员、同行审稿人）可能引入选择偏倚，地域和专业代表性未作进一步分析。 - 本文未提供正式的效度证据或条目间信度评估指标（如 Cronbach's alpha）。 - 针对\"实施后报告完整度在统计上显著提升\"的陈述，依据的是 2017 年发表的既往研究（Agha et al., *Int J Surg*, 2017），该结论并非 SCARE 2023 本身的实证发现。 --- ## 结论 SCARE 2023 指南通过 Delphi 共识方法完成了更新，最终版本纳入了 36 项（83.7%）达成共识的修改条目。修订后的指南强调患者隐私、伦理考量、知情同意以及对外科手术与结局的清晰报告。作者提出，持续遵循此指南有望推动外科知识与实践的进步。指南条目清单和投稿用检查表可通过 SCARE 官方网站免费获取。"
+        ],
+        "quote": "指南的 2023 版对原有格式进行了若干调整，包括患者信息部分的扩展（如问诊场所、禁忌以及系统回顾），以及随访部分的细化（如随访人、随访方式、长期适用性评估），此外新增的优势与局限性章节是此前版本所不含的内容。 **局限性**（原文来源：Provenance and peer review、Data statement 及正文讨论部分） - 同行评审类型为\"未委托、内部审阅\"（该期刊内部编辑审核），未经过标准外部同行评审。 - Delphi 调查的原始数据因个体回复保密而未公开，读者无法独立核验各条目的评分分布。 - 文章未报告 Delphi 轮次的数量；既往版本为多轮 Delphi，本次未说明是否仅进行了一轮调查。 - 样本量为 44 名完成调查者，且参与人群的组成（编委会成员、同行审稿人）可能引入选择偏倚，地域和专业代表性未作进一步分析。 - 本文未提供正式的效度证据或条目间信度评估指标（如 Cronbach's alpha）。 - 针对\"实施后报告完整度在统计上显著提升\"的陈述，依据的是 2017 年发表的既往研究（Agha et al., *Int J Surg*, 2017），该结论并非 SCARE 2023 本身的实证发现。 --- ## 结论 SCARE 2023 指南通过 Delphi 共识方法完成了更新，最终版本纳入了 36 项（83.7%）达成共识的修改条目。修订后的指南强调患者隐私、伦理考量、知情同意以及对外科手术与结局的清晰报告。作者提出，持续遵循此指南有望推动外科知识与实践的进步。指南条目清单和投稿用检查表可通过 SCARE 官方网站免费获取。"
+      },
+      "explanation": "Direction and strength of conclusion aligned.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "unsupported",
+      "issueKinds": [
+        "unsupported"
+      ],
+      "referenceFact": "The REFERENCE does not expressly list study limitations; it only notes internal review and confidential data.",
+      "generatedFact": "GENERATED lists multiple explicit limitations (internal review, data confidentiality, unknown Delphi rounds, lack of validity evidence, selection bias, etc.).",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "指南的 2023 版对原有格式进行了若干调整，包括患者信息部分的扩展（如问诊场所、禁忌以及系统回顾），以及随访部分的细化（如随访人、随访方式、长期适用性评估），此外新增的优势与局限性章节是此前版本所不含的内容。 **局限性**（原文来源：Provenance and peer review、Data statement 及正文讨论部分） - 同行评审类型为\"未委托、内部审阅\"（该期刊内部编辑审核），未经过标准外部同行评审。 - Delphi 调查的原始数据因个体回复保密而未公开，读者无法独立核验各条目的评分分布。 - 文章未报告 Delphi 轮次的数量；既往版本为多轮 Delphi，本次未说明是否仅进行了一轮调查。 - 样本量为 44 名完成调查者，且参与人群的组成（编委会成员、同行审稿人）可能引入选择偏倚，地域和专业代表性未作进一步分析。 - 本文未提供正式的效度证据或条目间信度评估指标（如 Cronbach's alpha）。 - 针对\"实施后报告完整度在统计上显著提升\"的陈述，依据的是 2017 年发表的既往研究（Agha et al., *Int J Surg*, 2017），该结论并非 SCARE 2023 本身的实证发现。 --- ## 结论 SCARE 2023 指南通过 Delphi 共识方法完成了更新，最终版本纳入了 36 项（83.7%）达成共识的修改条目。修订后的指南强调患者隐私、伦理考量、知情同意以及对外科手术与结局的清晰报告。作者提出，持续遵循此指南有望推动外科知识与实践的进步。指南条目清单和投稿用检查表可通过 SCARE 官方网站免费获取。"
+        ],
+        "quote": "指南的 2023 版对原有格式进行了若干调整，包括患者信息部分的扩展（如问诊场所、禁忌以及系统回顾），以及随访部分的细化（如随访人、随访方式、长期适用性评估），此外新增的优势与局限性章节是此前版本所不含的内容。 **局限性**（原文来源：Provenance and peer review、Data statement 及正文讨论部分） - 同行评审类型为\"未委托、内部审阅\"（该期刊内部编辑审核），未经过标准外部同行评审。 - Delphi 调查的原始数据因个体回复保密而未公开，读者无法独立核验各条目的评分分布。 - 文章未报告 Delphi 轮次的数量；既往版本为多轮 Delphi，本次未说明是否仅进行了一轮调查。 - 样本量为 44 名完成调查者，且参与人群的组成（编委会成员、同行审稿人）可能引入选择偏倚，地域和专业代表性未作进一步分析。 - 本文未提供正式的效度证据或条目间信度评估指标（如 Cronbach's alpha）。 - 针对\"实施后报告完整度在统计上显著提升\"的陈述，依据的是 2017 年发表的既往研究（Agha et al., *Int J Surg*, 2017），该结论并非 SCARE 2023 本身的实证发现。 --- ## 结论 SCARE 2023 指南通过 Delphi 共识方法完成了更新，最终版本纳入了 36 项（83.7%）达成共识的修改条目。修订后的指南强调患者隐私、伦理考量、知情同意以及对外科手术与结局的清晰报告。作者提出，持续遵循此指南有望推动外科知识与实践的进步。指南条目清单和投稿用检查表可通过 SCARE 官方网站免费获取。"
+      },
+      "explanation": "REFERENCE never framed these facts as limitations, making the deliberate limitation statements unsupported by the source text.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No patient harms or adverse events in a guideline methodology article.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "patient_and_timeline",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No individual patient or clinical timeline; this is a reporting guideline.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "diagnostic_workup",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No diagnostic workup described.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "treatment_and_outcome",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No treatment or individual outcome; it is a guideline development.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "causal_calibration",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No causal claim made; not a single-case study, so criterion not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    }
+  ],
+  "metrics": {
+    "applicableItems": 11,
+    "weightedFidelity": 0.95,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 10,
+      "not_applicable": 10,
+      "unsupported": 1
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [
+      "limitations_and_bias"
+    ],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 66.7,
+      "type_specific_methods": null
+    },
+    "gateFailures": [
+      "unsupported_claim"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail"
+  },
+  "adversarialAudit": null,
+  "overallAssessment": "GENERATED accurately reproduces the Delphi methodology, participation numbers, consensus threshold, and key results of the SCARE 2023 guideline. The only departure is the section on limitations, where GENERATED explicitly lists multiple limitations while REFERENCE does not formally present them as such; therefore that item is unsupported. All other scientific facts are exact or not applicable.",
+  "gradedAt": "2026-07-18T15:29:03Z"
+}

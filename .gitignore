@@ -1,0 +1,35 @@
+.DS_Store
+.evimed-local/
+.playwright-mcp/
+outputs/
+logs/
+evidence-chao/
+sentum-evimed-evidence-comprehensive/
+open-science-master/
+grok-build-main/
+项目代码/scientific-agent-skills-main/
+
+# Local secrets and runtime data
+.env
+.env.*
+!.env.example
+deploy.env
+*.key
+*.pem
+*.p12
+*.pfx
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Build and dependency artifacts
+node_modules/
+target/
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+dist/
+build/
+coverage/

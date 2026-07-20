@@ -1,0 +1,761 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-013",
+  "category": "observational-cohort",
+  "title": "Associations of healthy lifestyle and socioeconomic status with mortality and incident cardiovascular disease: two prospective cohort studies.",
+  "pmcid": "PMC8044922",
+  "doi": "10.1136/bmj.n604",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "f077e8bb2c6b4adf28711a4e2b89741d0a8ff1a5f85091956419504655534656",
+  "generatedSha256": "236d23ba44354121752e2dff2bbf46a98eb6a4f10cd815733c3d47323ff3aaed",
+  "promptSha256": "148d5af2de1370a0fd869aaebe6fb33bff7a45b340bd98ed18b1b21d3d997421",
+  "cacheFingerprint": "1fd774d2a1fdd8b7e6da3dd3e65b45cb2e1e876b2a3a2dab508ca976cbdf6ef3",
+  "referenceCharacters": 54176,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 10020,
+  "paperType": "observational-cohort",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "To examine whether overall lifestyles mediate associations of SES with mortality and incident CVD and the extent of interaction or joint relations.",
+      "generatedFact": "考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Gov't\", \"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-04-14\"} [ABSTRACT] AbstractObjectiveTo examine whether overall lifestyles mediate associations of socioeconomic status (SES) with mortality and incident cardiovascular disease (CVD) and the extent of interaction or joint relations of lifestyles and SES with health outcomes.DesignPopulation based cohort study.SettingUS National Health and Nutrition Examination Survey (US NHANES, 1988-94 and 1999-2014) and UK Biobank.Participants44 462 US adults aged 20 years or older and 399 537 UK adults aged 37-73 years.ExposuresSES was derived by latent class analysis using family income, occupation or employment status, education"
+        ],
+        "quote": "Gov't\", \"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-04-14\"} [ABSTRACT] AbstractObjectiveTo examine whether overall lifestyles mediate associations of socioeconomic status (SES) with mortality and incident cardiovascular disease (CVD) and the extent of interaction or joint relations of lifestyles and SES with health outcomes.DesignPopulation based cohort study.SettingUS National Health and Nutrition Examination Survey (US NHANES, 1988-94 and 1999-2014) and UK Biobank.Participants44 462 US adults aged 20 years or older and 399 537 UK adults aged 37-73 years.ExposuresSES was derived by latent class analysis using family income, occupation or employment status, education"
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。"
+        ],
+        "quote": "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。"
+      },
+      "explanation": "The generated text exactly mirrors the research objective stated in the reference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Population based cohort study (two prospective cohorts).",
+      "generatedFact": "设计：基于人群的前瞻性队列研究。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Gov't\", \"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-04-14\"} [ABSTRACT] AbstractObjectiveTo examine whether overall lifestyles mediate associations of socioeconomic status (SES) with mortality and incident cardiovascular disease (CVD) and the extent of interaction or joint relations of lifestyles and SES with health outcomes.DesignPopulation based cohort study.SettingUS National Health and Nutrition Examination Survey (US NHANES, 1988-94 and 1999-2014) and UK Biobank.Participants44 462 US adults aged 20 years or older and 399 537 UK adults aged 37-73 years.ExposuresSES was derived by latent class analysis using family income, occupation or employment status, education"
+        ],
+        "quote": "Gov't\", \"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-04-14\"} [ABSTRACT] AbstractObjectiveTo examine whether overall lifestyles mediate associations of socioeconomic status (SES) with mortality and incident cardiovascular disease (CVD) and the extent of interaction or joint relations of lifestyles and SES with health outcomes.DesignPopulation based cohort study.SettingUS National Health and Nutrition Examination Survey (US NHANES, 1988-94 and 1999-2014) and UK Biobank.Participants44 462 US adults aged 20 years or older and 399 537 UK adults aged 37-73 years.ExposuresSES was derived by latent class analysis using family income, occupation or employment status, education"
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。"
+        ],
+        "quote": "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。"
+      },
+      "explanation": "Design type matches exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "US NHANES (1988-94 and 1999-2014) and UK Biobank.",
+      "generatedFact": "美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Gov't\", \"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-04-14\"} [ABSTRACT] AbstractObjectiveTo examine whether overall lifestyles mediate associations of socioeconomic status (SES) with mortality and incident cardiovascular disease (CVD) and the extent of interaction or joint relations of lifestyles and SES with health outcomes.DesignPopulation based cohort study.SettingUS National Health and Nutrition Examination Survey (US NHANES, 1988-94 and 1999-2014) and UK Biobank.Participants44 462 US adults aged 20 years or older and 399 537 UK adults aged 37-73 years.ExposuresSES was derived by latent class analysis using family income, occupation or employment status, education"
+        ],
+        "quote": "Gov't\", \"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-04-14\"} [ABSTRACT] AbstractObjectiveTo examine whether overall lifestyles mediate associations of socioeconomic status (SES) with mortality and incident cardiovascular disease (CVD) and the extent of interaction or joint relations of lifestyles and SES with health outcomes.DesignPopulation based cohort study.SettingUS National Health and Nutrition Examination Survey (US NHANES, 1988-94 and 1999-2014) and UK Biobank.Participants44 462 US adults aged 20 years or older and 399 537 UK adults aged 37-73 years.ExposuresSES was derived by latent class analysis using family income, occupation or employment status, education"
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。"
+        ],
+        "quote": "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。"
+      },
+      "explanation": "Data sources are accurately reported.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "44 462 US adults aged ≥20 years and 399 537 UK adults aged 37-73 years.",
+      "generatedFact": "US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Gov't\", \"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-04-14\"} [ABSTRACT] AbstractObjectiveTo examine whether overall lifestyles mediate associations of socioeconomic status (SES) with mortality and incident cardiovascular disease (CVD) and the extent of interaction or joint relations of lifestyles and SES with health outcomes.DesignPopulation based cohort study.SettingUS National Health and Nutrition Examination Survey (US NHANES, 1988-94 and 1999-2014) and UK Biobank.Participants44 462 US adults aged 20 years or older and 399 537 UK adults aged 37-73 years.ExposuresSES was derived by latent class analysis using family income, occupation or employment status, education"
+        ],
+        "quote": "Gov't\", \"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-04-14\"} [ABSTRACT] AbstractObjectiveTo examine whether overall lifestyles mediate associations of socioeconomic status (SES) with mortality and incident cardiovascular disease (CVD) and the extent of interaction or joint relations of lifestyles and SES with health outcomes.DesignPopulation based cohort study.SettingUS National Health and Nutrition Examination Survey (US NHANES, 1988-94 and 1999-2014) and UK Biobank.Participants44 462 US adults aged 20 years or older and 399 537 UK adults aged 37-73 years.ExposuresSES was derived by latent class analysis using family income, occupation or employment status, education"
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。"
+        ],
+        "quote": "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。"
+      },
+      "explanation": "Sample sizes and age ranges match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "From US NHANES III and 1999-2014, age ≥20, not pregnant; excluded if missing socioeconomic, lifestyle, or covariate data, leaving 44 462. UK Biobank age 37-73; excluded missing data, leaving 399 537; for incident CVD, excluded baseline CVD (n=324 517).",
+      "generatedFact": "US NHANES: age ≥20, not pregnant, excluded missing data, final 44 462. UK Biobank: age 37-73, excluded missing data, final 399 537, incident CVD analysis: baseline CVD-free n=324 517.",
+      "sourceEvidence": {
+        "locator": "R0013",
+        "locators": [
+          "R0013",
+          "R0014"
+        ],
+        "quotes": [
+          "9 Although US NHANES has released cross sectional questionnaire, examination, and laboratory data up to 2018, mortality data were updated to 31 December 2015. Accordingly, the current analysis included 61 202 participants who were aged 20 years and older and not pregnant at baseline in US NHANES III (1988-94) and continuous NHANES (1999-2014) surveys. Those with missing information on socioeconomic factors (n=6939), lifestyle factors (n=8156), other covariates (n=1619), and deaths (n=26) were excluded from the analysis. Overall, 44 462 participants from US NHANES were included (supplementary fig 1).",
+          "UK Biobank recruited more than 500 000 participants aged 37 to 73 years from 22 assessment centers across England, Scotland, and Wales between 2007 and 2010. Details of the study design and data collection have been described previously. 10 Among the 502 492 participants, we excluded those with missing information on socioeconomic factors (n=77 962), lifestyle factors (n=20 029), and other covariates (n=4964). Overall, 399 537 participants were included (supplementary fig 1). For the analysis of incident CVD, we only included those without prevalent CVD (n=324 517) at baseline."
+        ],
+        "quote": "9 Although US NHANES has released cross sectional questionnaire, examination, and laboratory data up to 2018, mortality data were updated to 31 December 2015. Accordingly, the current analysis included 61 202 participants who were aged 20 years and older and not pregnant at baseline in US NHANES III (1988-94) and continuous NHANES (1999-2014) surveys. Those with missing information on socioeconomic factors (n=6939), lifestyle factors (n=8156), other covariates (n=1619), and deaths (n=26) were excluded from the analysis. Overall, 44 462 participants from US NHANES were included (supplementary fig 1).\n\nUK Biobank recruited more than 500 000 participants aged 37 to 73 years from 22 assessment centers across England, Scotland, and Wales between 2007 and 2010. Details of the study design and data collection have been described previously. 10 Among the 502 492 participants, we excluded those with missing information on socioeconomic factors (n=77 962), lifestyle factors (n=20 029), and other covariates (n=4964). Overall, 399 537 participants were included (supplementary fig 1). For the analysis of incident CVD, we only included those without prevalent CVD (n=324 517) at baseline."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "本研究利用 US NHANES 和 UK Biobank 两项大型全国性队列的数据，系统评估了生活方式与 SES 对死亡和新发 CVD 的复杂关系。 --- ## 方法 ### 研究人群 **US NHANES** 采用复杂多阶段概率抽样设计，招募具有全国代表性的美国平民社区人群。研究在 1999 年前为周期性开展，此后持续进行[9]。考虑到死亡率数据更新至 2015 年 12 月 31 日，本研究纳入 NHANES III（1988—1994 年）和连续 NHANES（1999—2014 年）中年龄 ≥20 岁且基线未怀孕的 61 202 名参与者。排除社会经济因素缺失（n=6 939）、生活方式因素缺失（n=8 156）、其他协变量缺失（n=1 619）及死亡信息缺失（n=26）者，最终纳入 44 462 人。 **UK Biobank** 于 2007—2010 年间从英格兰、苏格兰和威尔士的 22 个评估中心招募了超过 50 万名 37—73 岁的参与者[10]。从 502 492 人中排除社会经济因素缺失（n=77 962）、生活方式因素缺失（n=20 029）及其他协变量缺失（n=4 964）者，最终纳入 399 537 人。新发 CVD 分析仅纳入基线无 CVD 者（n=324 517）。"
+        ],
+        "quote": "本研究利用 US NHANES 和 UK Biobank 两项大型全国性队列的数据，系统评估了生活方式与 SES 对死亡和新发 CVD 的复杂关系。 --- ## 方法 ### 研究人群 **US NHANES** 采用复杂多阶段概率抽样设计，招募具有全国代表性的美国平民社区人群。研究在 1999 年前为周期性开展，此后持续进行[9]。考虑到死亡率数据更新至 2015 年 12 月 31 日，本研究纳入 NHANES III（1988—1994 年）和连续 NHANES（1999—2014 年）中年龄 ≥20 岁且基线未怀孕的 61 202 名参与者。排除社会经济因素缺失（n=6 939）、生活方式因素缺失（n=8 156）、其他协变量缺失（n=1 619）及死亡信息缺失（n=26）者，最终纳入 44 462 人。 **UK Biobank** 于 2007—2010 年间从英格兰、苏格兰和威尔士的 22 个评估中心招募了超过 50 万名 37—73 岁的参与者[10]。从 502 492 人中排除社会经济因素缺失（n=77 962）、生活方式因素缺失（n=20 029）及其他协变量缺失（n=4 964）者，最终纳入 399 537 人。新发 CVD 分析仅纳入基线无 CVD 者（n=324 517）。"
+      },
+      "explanation": "Inclusion and exclusion criteria are faithfully reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "SES derived by latent class analysis from income, occupation/employment, education, and health insurance (US only); three levels (low, medium, high). Healthy lifestyle score from never smoking, no heavy alcohol, top third physical activity, higher dietary quality (0-4 points).",
+      "generatedFact": "SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒、体力活动前三分之一水平、较高膳食质量，总分 0-4 分。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003",
+          "R0004"
+        ],
+        "quotes": [
+          "level, and health insurance (US NHANES only), and three levels (low, medium, and high) were defined according to item response probabilities.",
+          "A healthy lifestyle score was constructed using information on never smoking, no heavy alcohol consumption (women ≤1 drink/day; men ≤2 drinks/day; one drink contains 14 g of ethanol in the US and 8 g in the UK), top third of physical activity, and higher dietary quality.Main outcome measuresAll cause mortality was the primary outcome in both studies, and CVD mortality and morbidity in UK Biobank, which were obtained through linkage to registries.ResultsUS NHANES documented 8906 deaths over a mean follow-up of 11.2 years, and UK Biobank documented 22 309 deaths and 6903 incident CVD cases over a mean follow-up of 8.8-11.0 years."
+        ],
+        "quote": "level, and health insurance (US NHANES only), and three levels (low, medium, and high) were defined according to item response probabilities.\n\nA healthy lifestyle score was constructed using information on never smoking, no heavy alcohol consumption (women ≤1 drink/day; men ≤2 drinks/day; one drink contains 14 g of ethanol in the US and 8 g in the UK), top third of physical activity, and higher dietary quality.Main outcome measuresAll cause mortality was the primary outcome in both studies, and CVD mortality and morbidity in UK Biobank, which were obtained through linkage to registries.ResultsUS NHANES documented 8906 deaths over a mean follow-up of 11.2 years, and UK Biobank documented 22 309 deaths and 6903 incident CVD cases over a mean follow-up of 8.8-11.0 years."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002",
+          "G0003"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。",
+          "**结果**：US NHANES 平均随访 11.2 年，记录 8 906 例死亡；UK Biobank 平均随访 8.8—11.0 年，记录 22 309 例死亡和 6 903 例新发 CVD。以高 SES 为参照，低 SES 组成年人在校正生活方式评分及其他协变量后，全因死亡风险比（HR）在 US NHANES 为 2.13（95% CI 1.90—2.38），在 UK Biobank 为 1.96（1.87—2.06）；CVD 死亡 HR 为 2.25（2.00—2.53）；新发 CVD HR 为 1.65（1.52—1.79）。生活方式对上述关联的中介比例分别为：US NHANES 全因死亡 12.3%（10.7%—13.9%），UK Biobank 全因死亡 4.0%（3.5%—4.4%），CVD 死亡 3.0%（2.5%—3.6%），新发 CVD 3.7%（3.1%—4.5%）。US NHANES 中未发现生活方式与 SES 的显著交互作用；UK Biobank 中低 SES 组健康生活方式的保护性关联更强。以高 SES 且具有 3—4 项健康生活方式者为参照，低 SES 且仅 0—1 项健康生活方式者的全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。"
+        ],
+        "quote": "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。\n\n**结果**：US NHANES 平均随访 11.2 年，记录 8 906 例死亡；UK Biobank 平均随访 8.8—11.0 年，记录 22 309 例死亡和 6 903 例新发 CVD。以高 SES 为参照，低 SES 组成年人在校正生活方式评分及其他协变量后，全因死亡风险比（HR）在 US NHANES 为 2.13（95% CI 1.90—2.38），在 UK Biobank 为 1.96（1.87—2.06）；CVD 死亡 HR 为 2.25（2.00—2.53）；新发 CVD HR 为 1.65（1.52—1.79）。生活方式对上述关联的中介比例分别为：US NHANES 全因死亡 12.3%（10.7%—13.9%），UK Biobank 全因死亡 4.0%（3.5%—4.4%），CVD 死亡 3.0%（2.5%—3.6%），新发 CVD 3.7%（3.1%—4.5%）。US NHANES 中未发现生活方式与 SES 的显著交互作用；UK Biobank 中低 SES 组健康生活方式的保护性关联更强。以高 SES 且具有 3—4 项健康生活方式者为参照，低 SES 且仅 0—1 项健康生活方式者的全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。"
+      },
+      "explanation": "Exposure definitions and construction are exactly replicated.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "High SES served as the reference category for hazard ratio comparisons.",
+      "generatedFact": "以高 SES 为参照（例如，全因死亡风险比）。",
+      "sourceEvidence": {
+        "locator": "R0006",
+        "locators": [
+          "R0006"
+        ],
+        "quotes": [
+          "Compared with adults of high SES, those of low SES had higher risks of all cause mortality (hazard ratio 2.13, 95% confidence interval 1.90 to 2.38 in US NHANES; 1.96, 1.87 to 2.06 in UK Biobank), CVD mortality (2.25, 2.00 to 2.53), and incident CVD (1.65, 1.52 to 1.79) in UK Biobank, and the proportions mediated by lifestyle were 12.3% (10.7% to 13.9%), 4.0% (3.5% to 4.4%), 3.0% (2.5% to 3.6%), and 3.7% (3.1% to 4.5%), respectively. No significant interaction was observed between lifestyle and SES in US NHANES, whereas associations between lifestyle and outcomes were stronger among those of low SES in UK Biobank."
+        ],
+        "quote": "Compared with adults of high SES, those of low SES had higher risks of all cause mortality (hazard ratio 2.13, 95% confidence interval 1.90 to 2.38 in US NHANES; 1.96, 1.87 to 2.06 in UK Biobank), CVD mortality (2.25, 2.00 to 2.53), and incident CVD (1.65, 1.52 to 1.79) in UK Biobank, and the proportions mediated by lifestyle were 12.3% (10.7% to 13.9%), 4.0% (3.5% to 4.4%), 3.0% (2.5% to 3.6%), and 3.7% (3.1% to 4.5%), respectively. No significant interaction was observed between lifestyle and SES in US NHANES, whereas associations between lifestyle and outcomes were stronger among those of low SES in UK Biobank."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结果**：US NHANES 平均随访 11.2 年，记录 8 906 例死亡；UK Biobank 平均随访 8.8—11.0 年，记录 22 309 例死亡和 6 903 例新发 CVD。以高 SES 为参照，低 SES 组成年人在校正生活方式评分及其他协变量后，全因死亡风险比（HR）在 US NHANES 为 2.13（95% CI 1.90—2.38），在 UK Biobank 为 1.96（1.87—2.06）；CVD 死亡 HR 为 2.25（2.00—2.53）；新发 CVD HR 为 1.65（1.52—1.79）。生活方式对上述关联的中介比例分别为：US NHANES 全因死亡 12.3%（10.7%—13.9%），UK Biobank 全因死亡 4.0%（3.5%—4.4%），CVD 死亡 3.0%（2.5%—3.6%），新发 CVD 3.7%（3.1%—4.5%）。US NHANES 中未发现生活方式与 SES 的显著交互作用；UK Biobank 中低 SES 组健康生活方式的保护性关联更强。以高 SES 且具有 3—4 项健康生活方式者为参照，低 SES 且仅 0—1 项健康生活方式者的全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。"
+        ],
+        "quote": "**结果**：US NHANES 平均随访 11.2 年，记录 8 906 例死亡；UK Biobank 平均随访 8.8—11.0 年，记录 22 309 例死亡和 6 903 例新发 CVD。以高 SES 为参照，低 SES 组成年人在校正生活方式评分及其他协变量后，全因死亡风险比（HR）在 US NHANES 为 2.13（95% CI 1.90—2.38），在 UK Biobank 为 1.96（1.87—2.06）；CVD 死亡 HR 为 2.25（2.00—2.53）；新发 CVD HR 为 1.65（1.52—1.79）。生活方式对上述关联的中介比例分别为：US NHANES 全因死亡 12.3%（10.7%—13.9%），UK Biobank 全因死亡 4.0%（3.5%—4.4%），CVD 死亡 3.0%（2.5%—3.6%），新发 CVD 3.7%（3.1%—4.5%）。US NHANES 中未发现生活方式与 SES 的显著交互作用；UK Biobank 中低 SES 组健康生活方式的保护性关联更强。以高 SES 且具有 3—4 项健康生活方式者为参照，低 SES 且仅 0—1 项健康生活方式者的全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。"
+      },
+      "explanation": "Reference group (high SES) is correctly identified.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary outcomes: all cause mortality in both cohorts, CVD mortality and incident CVD in UK Biobank.",
+      "generatedFact": "主要结局：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD。",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "A healthy lifestyle score was constructed using information on never smoking, no heavy alcohol consumption (women ≤1 drink/day; men ≤2 drinks/day; one drink contains 14 g of ethanol in the US and 8 g in the UK), top third of physical activity, and higher dietary quality.Main outcome measuresAll cause mortality was the primary outcome in both studies, and CVD mortality and morbidity in UK Biobank, which were obtained through linkage to registries.ResultsUS NHANES documented 8906 deaths over a mean follow-up of 11.2 years, and UK Biobank documented 22 309 deaths and 6903 incident CVD cases over a mean follow-up of 8.8-11.0 years."
+        ],
+        "quote": "A healthy lifestyle score was constructed using information on never smoking, no heavy alcohol consumption (women ≤1 drink/day; men ≤2 drinks/day; one drink contains 14 g of ethanol in the US and 8 g in the UK), top third of physical activity, and higher dietary quality.Main outcome measuresAll cause mortality was the primary outcome in both studies, and CVD mortality and morbidity in UK Biobank, which were obtained through linkage to registries.ResultsUS NHANES documented 8906 deaths over a mean follow-up of 11.2 years, and UK Biobank documented 22 309 deaths and 6903 incident CVD cases over a mean follow-up of 8.8-11.0 years."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。"
+        ],
+        "quote": "--- ## 摘要 **目的**：考察整体生活方式是否在社会经济地位（SES）与死亡及新发心血管疾病（CVD）的关联中发挥中介作用，并评估生活方式与 SES 之间的交互效应及联合关联。 **设计**：基于人群的前瞻性队列研究。 **数据来源**：美国国家健康与营养调查（US NHANES，1988—1994 年和 1999—2014 年）及英国生物银行（UK Biobank）。 **参与者**：US NHANES 纳入 44 462 名 ≥20 岁的美国成年人；UK Biobank 纳入 399 537 名 37—73 岁的英国成年人。 **暴露评估**：SES 通过潜在类别分析构建，纳入家庭收入、职业/就业状况、教育水平及健康保险（仅美国），划分为低、中、高三个等级。健康生活方式评分基于从不吸烟、无重度饮酒（女性 ≤1 杯/天，男性 ≤2 杯/天；美国每杯含 14 g 乙醇，英国含 8 g）、体力活动处于前三分之一水平及较高的膳食质量四项指标，每项满足计 1 分，总分 0—4 分。 **主要结局**：两项研究的主要结局均为全因死亡；UK Biobank 同时评估 CVD 死亡和新发 CVD，通过与登记系统链接获取。"
+      },
+      "explanation": "Primary outcomes match the reference exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Mean follow-up 11.2 years in US NHANES, 8.8–11.0 years in UK Biobank (mortality 11.0 y; incident CVD 8.8 y).",
+      "generatedFact": "US NHANES 平均随访 11.2 年；UK Biobank 平均随访 8.8—11.0 年。",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "A healthy lifestyle score was constructed using information on never smoking, no heavy alcohol consumption (women ≤1 drink/day; men ≤2 drinks/day; one drink contains 14 g of ethanol in the US and 8 g in the UK), top third of physical activity, and higher dietary quality.Main outcome measuresAll cause mortality was the primary outcome in both studies, and CVD mortality and morbidity in UK Biobank, which were obtained through linkage to registries.ResultsUS NHANES documented 8906 deaths over a mean follow-up of 11.2 years, and UK Biobank documented 22 309 deaths and 6903 incident CVD cases over a mean follow-up of 8.8-11.0 years."
+        ],
+        "quote": "A healthy lifestyle score was constructed using information on never smoking, no heavy alcohol consumption (women ≤1 drink/day; men ≤2 drinks/day; one drink contains 14 g of ethanol in the US and 8 g in the UK), top third of physical activity, and higher dietary quality.Main outcome measuresAll cause mortality was the primary outcome in both studies, and CVD mortality and morbidity in UK Biobank, which were obtained through linkage to registries.ResultsUS NHANES documented 8906 deaths over a mean follow-up of 11.2 years, and UK Biobank documented 22 309 deaths and 6903 incident CVD cases over a mean follow-up of 8.8-11.0 years."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结果**：US NHANES 平均随访 11.2 年，记录 8 906 例死亡；UK Biobank 平均随访 8.8—11.0 年，记录 22 309 例死亡和 6 903 例新发 CVD。以高 SES 为参照，低 SES 组成年人在校正生活方式评分及其他协变量后，全因死亡风险比（HR）在 US NHANES 为 2.13（95% CI 1.90—2.38），在 UK Biobank 为 1.96（1.87—2.06）；CVD 死亡 HR 为 2.25（2.00—2.53）；新发 CVD HR 为 1.65（1.52—1.79）。生活方式对上述关联的中介比例分别为：US NHANES 全因死亡 12.3%（10.7%—13.9%），UK Biobank 全因死亡 4.0%（3.5%—4.4%），CVD 死亡 3.0%（2.5%—3.6%），新发 CVD 3.7%（3.1%—4.5%）。US NHANES 中未发现生活方式与 SES 的显著交互作用；UK Biobank 中低 SES 组健康生活方式的保护性关联更强。以高 SES 且具有 3—4 项健康生活方式者为参照，低 SES 且仅 0—1 项健康生活方式者的全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。"
+        ],
+        "quote": "**结果**：US NHANES 平均随访 11.2 年，记录 8 906 例死亡；UK Biobank 平均随访 8.8—11.0 年，记录 22 309 例死亡和 6 903 例新发 CVD。以高 SES 为参照，低 SES 组成年人在校正生活方式评分及其他协变量后，全因死亡风险比（HR）在 US NHANES 为 2.13（95% CI 1.90—2.38），在 UK Biobank 为 1.96（1.87—2.06）；CVD 死亡 HR 为 2.25（2.00—2.53）；新发 CVD HR 为 1.65（1.52—1.79）。生活方式对上述关联的中介比例分别为：US NHANES 全因死亡 12.3%（10.7%—13.9%），UK Biobank 全因死亡 4.0%（3.5%—4.4%），CVD 死亡 3.0%（2.5%—3.6%），新发 CVD 3.7%（3.1%—4.5%）。US NHANES 中未发现生活方式与 SES 的显著交互作用；UK Biobank 中低 SES 组健康生活方式的保护性关联更强。以高 SES 且具有 3—4 项健康生活方式者为参照，低 SES 且仅 0—1 项健康生活方式者的全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。"
+      },
+      "explanation": "Follow-up durations are reported accurately.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "SES constructed via latent class analysis; lifestyle score built from harmonized smoking, alcohol, physical activity (thirds), diet (HEI-1995/2015 or UK diet score); missing covariates excluded; multiple imputation used in sensitivity analysis.",
+      "generatedFact": "SES 通过潜在类别分析构建；体力活动通过三分位统一；膳食质量采用 HEI-1995/HEI-2015 或 UK 膳食评分；缺失协变量排除；敏感性分析包括多重插补。",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018",
+          "R0025",
+          "R0027",
+          "R0042"
+        ],
+        "quotes": [
+          "17 An overall SES variable was created using latent class analysis based on family income level, occupation, education level, and health insurance (each factor had three levels). 7 The latent class analysis, which uses multiple observed categorical variables to generate an unmeasured variable (ie, latent variable) with a set of mutually exclusive latent classes, was conducted using PROC LCA, a new SAS procedure. 18 Three latent classes were identified, which respectively represented a high, medium, and low SES according to the item-response probabilities. 19 The supplementary file describes the data collection and latent class analysis in US NHANES.",
+          "Nevertheless, weekly metabolic equivalent hours of leisure time physical activity were calculated in US NHANES 1999-2014 and UK Biobank, whereas monthly frequency of leisure time physical activity was calculated in US NHANES 1988-94. To harmonize the data, we further classified the participants into thirds and defined the top third as a healthy level of physical activity. In US NHANES, dietary quality was obtained from 24 hour dietary recalls and was assessed by healthy eating index (HEI) scores. The HEI-2015 was calculated for the 1999-2014 survey cycles, which aligns with the 2015-20 Dietary Guidelines for Americans.",
+          "28 In UK Biobank, dietary information was obtained through questionnaires and did not contain energy or salt intakes, thus we could not calculate the HEI scores. Instead, according to a previous UK Biobank study, 29 we evaluated dietary quality using a more recent dietary recommendation for cardiovascular health, which considered adequate consumption of fruit, vegetables, whole grains, fish, shellfish, dairy products, and vegetable oils and reduced consumption of refined grains, processed meats, unprocessed meats, and sugar sweetened beverages. We defined a healthy diet as meeting at least five items of the recommendations (see supplementary table 2).",
+          "Fifth, we excluded events that occurred within the first three years of follow-up to reduce potential reverse causation. Sixth, we restricted the analysis to those aged 40 years or older in US NHANES to coincide with the age distribution in UK Biobank, and to reduce the concern that SES is prone to change and the risk of mortality due to lifestyles is relatively lower in younger adults. As only five participants in UK Biobank were aged less than 40 years, this sensitivity analysis was not performed in UK Biobank. Seventh, we used multiple imputation to impute all missing independent variables to test the influence of missing variables."
+        ],
+        "quote": "17 An overall SES variable was created using latent class analysis based on family income level, occupation, education level, and health insurance (each factor had three levels). 7 The latent class analysis, which uses multiple observed categorical variables to generate an unmeasured variable (ie, latent variable) with a set of mutually exclusive latent classes, was conducted using PROC LCA, a new SAS procedure. 18 Three latent classes were identified, which respectively represented a high, medium, and low SES according to the item-response probabilities. 19 The supplementary file describes the data collection and latent class analysis in US NHANES.\n\nNevertheless, weekly metabolic equivalent hours of leisure time physical activity were calculated in US NHANES 1999-2014 and UK Biobank, whereas monthly frequency of leisure time physical activity was calculated in US NHANES 1988-94. To harmonize the data, we further classified the participants into thirds and defined the top third as a healthy level of physical activity. In US NHANES, dietary quality was obtained from 24 hour dietary recalls and was assessed by healthy eating index (HEI) scores. The HEI-2015 was calculated for the 1999-2014 survey cycles, which aligns with the 2015-20 Dietary Guidelines for Americans.\n\n28 In UK Biobank, dietary information was obtained through questionnaires and did not contain energy or salt intakes, thus we could not calculate the HEI scores. Instead, according to a previous UK Biobank study, 29 we evaluated dietary quality using a more recent dietary recommendation for cardiovascular health, which considered adequate consumption of fruit, vegetables, whole grains, fish, shellfish, dairy products, and vegetable oils and reduced consumption of refined grains, processed meats, unprocessed meats, and sugar sweetened beverages. We defined a healthy diet as meeting at least five items of the recommendations (see supplementary table 2).\n\nFifth, we excluded events that occurred within the first three years of follow-up to reduce potential reverse causation. Sixth, we restricted the analysis to those aged 40 years or older in US NHANES to coincide with the age distribution in UK Biobank, and to reduce the concern that SES is prone to change and the risk of mortality due to lifestyles is relatively lower in younger adults. As only five participants in UK Biobank were aged less than 40 years, this sensitivity analysis was not performed in UK Biobank. Seventh, we used multiple imputation to impute all missing independent variables to test the influence of missing variables."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006",
+          "G0007",
+          "G0009"
+        ],
+        "quotes": [
+          "### 社会经济地位评估 **US NHANES** 中，SES 通过自我报告的家庭收入水平、职业、教育水平和健康保险四方面衡量，每个方面分为低、中、高三个等级[7, 11]。家庭收入水平使用家庭贫困收入比（family poverty-to-income ratio）进行操作化：低（≤1）、中（1—4）、高（≥4）[12]。教育分为高中以下、高中毕业或同等学力、大学及以上[13]。职业基于美国广泛使用的社会经济指数进行分类：上层（指数 ≥50）、下层（指数 <50，含退休人员和学生）和无业[14—16]。健康保险分为私人保险、仅公共保险和无保险[17]。通过潜在类别分析（PROC LCA 程序）基于上述四个因素生成整体 SES 变量，三种潜在类别分别对应高、中、低 SES[18, 19]。 **UK Biobank** 中，SES 通过家庭税前总收入、教育资质和就业状态三项指标构建[20]。家庭收入分为 <£18 000、£18 000—£30 999、£31 000—£51 999、£52 000—£100 000、>£100 000 五档；教育资质细分为大学学位、A levels 等、O levels/GCSEs 等、CSEs 等、职业资格、其他专业资格及无资质；就业状态分为就业（含自雇、退休、志愿工作及全日制/非全日制学生）和无业。英国因有全民免费 NHS，未纳入健康保险维度[21]。通过潜在类别分析生成整体 SES 变量。UK Biobank 同时提供了反映区域水平 SES 的 Townsend 剥夺指数[22]，用于补充分析。",
+          "### 生活方式因素与协变量 健康生活方式评分涵盖四项指标[23, 24]： 1. **从不吸烟**：一生中吸烟少于 100 支。 2. **无重度饮酒**：女性 ≤1 杯/天，男性 ≤2 杯/天[25, 26]。 3. **体力活动**：休闲时间体力活动水平处于研究人群的前三分之一（为统一不同调查周期的问卷差异，计算每周代谢当量小时或每月体力活动频率后分三等份）。 4. **膳食质量**：US NHANES 中，NHANES III 使用 HEI-1995 评分，连续 NHANES 使用 HEI-2015 评分[27]，健康膳食定义为评分处于前五分之二[28]。UK Biobank 中，基于心血管健康膳食推荐（足量摄入水果、蔬菜、全谷物、鱼类、贝类、乳制品和植物油，减少精制谷物、加工肉类、未加工肉类和含糖饮料摄入），满足至少 5 项即为健康膳食[29]。 每项健康行为计 1 分，总分范围 0—4 分。BMI 未被纳入主评分（因其可能是行为因素与健康结局间的中间因素）[33]，但在敏感性分析中纳入（健康体重定义为 BMI 18.5—24.9[28]）。 协变量包括：年龄、性别、婚姻状况（仅 US NHANES）、评估中心（仅 UK Biobank）、自报种族、文化适应评分、高血压/糖尿病/CVD/癌症史，以及慢性支气管炎/肺气肿/COPD 史（仅 UK Biobank）。基线体重和身高由测量获得。",
+          "敏感性分析包括：(1) 用单项社会经济因素及单项生活方式因素替代综合变量；(2) 构建加权生活方式评分[44]；(3) 将 BMI 纳入评分；(4) 排除基线患有主要慢性病者；(5) 排除前三年内的事件；(6) US NHANES 中限制至 ≥40 岁人群；(7) 多重插补缺失变量[45]；(8) 使用社会经济分数替代潜在类别变量；(9) UK Biobank 中纳入 Townsend 剥夺指数并以其作 SES 变量；(10) 纳入年龄的二次项。所有分析使用 SAS 9.4，以双侧 P <0.05 为统计学显著。 --- ## 结果 ### 人群特征 US NHANES 共 44 462 人（平均年龄 46.5 岁，男性 48.7%），其中高 SES 10 469 人（33.6%）、中 SES 20 729 人（46.4%）、低 SES 13 264 人（20.0%）。UK Biobank 共 399 537 人（平均年龄 56.1 岁，男性 47.5%），其中高 SES 79 697 人（19.9%）、中 SES 210 935 人（52.8%）、低 SES 108 905 人（27.3%）。低 SES 组成年人更可能为女性、非白种人、未婚、无业、受教育程度低、低收入、仅公共保险或无保险，且合并症患病率更高。低 SES 组中不健康水平的吸烟、体力活动和 BMI 更为普遍。"
+        ],
+        "quote": "### 社会经济地位评估 **US NHANES** 中，SES 通过自我报告的家庭收入水平、职业、教育水平和健康保险四方面衡量，每个方面分为低、中、高三个等级[7, 11]。家庭收入水平使用家庭贫困收入比（family poverty-to-income ratio）进行操作化：低（≤1）、中（1—4）、高（≥4）[12]。教育分为高中以下、高中毕业或同等学力、大学及以上[13]。职业基于美国广泛使用的社会经济指数进行分类：上层（指数 ≥50）、下层（指数 <50，含退休人员和学生）和无业[14—16]。健康保险分为私人保险、仅公共保险和无保险[17]。通过潜在类别分析（PROC LCA 程序）基于上述四个因素生成整体 SES 变量，三种潜在类别分别对应高、中、低 SES[18, 19]。 **UK Biobank** 中，SES 通过家庭税前总收入、教育资质和就业状态三项指标构建[20]。家庭收入分为 <£18 000、£18 000—£30 999、£31 000—£51 999、£52 000—£100 000、>£100 000 五档；教育资质细分为大学学位、A levels 等、O levels/GCSEs 等、CSEs 等、职业资格、其他专业资格及无资质；就业状态分为就业（含自雇、退休、志愿工作及全日制/非全日制学生）和无业。英国因有全民免费 NHS，未纳入健康保险维度[21]。通过潜在类别分析生成整体 SES 变量。UK Biobank 同时提供了反映区域水平 SES 的 Townsend 剥夺指数[22]，用于补充分析。\n\n### 生活方式因素与协变量 健康生活方式评分涵盖四项指标[23, 24]： 1. **从不吸烟**：一生中吸烟少于 100 支。 2. **无重度饮酒**：女性 ≤1 杯/天，男性 ≤2 杯/天[25, 26]。 3. **体力活动**：休闲时间体力活动水平处于研究人群的前三分之一（为统一不同调查周期的问卷差异，计算每周代谢当量小时或每月体力活动频率后分三等份）。 4. **膳食质量**：US NHANES 中，NHANES III 使用 HEI-1995 评分，连续 NHANES 使用 HEI-2015 评分[27]，健康膳食定义为评分处于前五分之二[28]。UK Biobank 中，基于心血管健康膳食推荐（足量摄入水果、蔬菜、全谷物、鱼类、贝类、乳制品和植物油，减少精制谷物、加工肉类、未加工肉类和含糖饮料摄入），满足至少 5 项即为健康膳食[29]。 每项健康行为计 1 分，总分范围 0—4 分。BMI 未被纳入主评分（因其可能是行为因素与健康结局间的中间因素）[33]，但在敏感性分析中纳入（健康体重定义为 BMI 18.5—24.9[28]）。 协变量包括：年龄、性别、婚姻状况（仅 US NHANES）、评估中心（仅 UK Biobank）、自报种族、文化适应评分、高血压/糖尿病/CVD/癌症史，以及慢性支气管炎/肺气肿/COPD 史（仅 UK Biobank）。基线体重和身高由测量获得。\n\n敏感性分析包括：(1) 用单项社会经济因素及单项生活方式因素替代综合变量；(2) 构建加权生活方式评分[44]；(3) 将 BMI 纳入评分；(4) 排除基线患有主要慢性病者；(5) 排除前三年内的事件；(6) US NHANES 中限制至 ≥40 岁人群；(7) 多重插补缺失变量[45]；(8) 使用社会经济分数替代潜在类别变量；(9) UK Biobank 中纳入 Townsend 剥夺指数并以其作 SES 变量；(10) 纳入年龄的二次项。所有分析使用 SAS 9.4，以双侧 P <0.05 为统计学显著。 --- ## 结果 ### 人群特征 US NHANES 共 44 462 人（平均年龄 46.5 岁，男性 48.7%），其中高 SES 10 469 人（33.6%）、中 SES 20 729 人（46.4%）、低 SES 13 264 人（20.0%）。UK Biobank 共 399 537 人（平均年龄 56.1 岁，男性 47.5%），其中高 SES 79 697 人（19.9%）、中 SES 210 935 人（52.8%）、低 SES 108 905 人（27.3%）。低 SES 组成年人更可能为女性、非白种人、未婚、无业、受教育程度低、低收入、仅公共保险或无保险，且合并症患病率更高。低 SES 组中不健康水平的吸烟、体力活动和 BMI 更为普遍。"
+      },
+      "explanation": "Data preprocessing steps, including harmonization and missing data handling, are consistent.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Cox proportional hazards regression, difference method for mediation, product term and RERI for interaction, joint classification, stratification by sex/race/age, extensive sensitivity analyses.",
+      "generatedFact": "Cox 比例风险模型，差值法计算中介比例，乘积项和 RERI 评估交互，联合分组，按性别/种族/年龄分层，多项敏感性分析。",
+      "sourceEvidence": {
+        "locator": "R0035",
+        "locators": [
+          "R0035",
+          "R0044"
+        ],
+        "quotes": [
+          "We used Cox proportional hazard regression models to estimate the hazard ratios and 95% confidence intervals of outcomes associated with SES and lifestyle score. The proportional hazards assumption was examined by creating a product term of follow-up time and SES, and we found no significant deviation from the assumption. 40 Person years were calculated from baseline until the date of death or diagnosis (for the incident CVD analysis), or end of follow-up, whichever occurred first.",
+          "Ninth, in the final model in UK Biobank we further included the Townsend deprivation index, a variable reflecting the area level SES, for two purposes: to evaluate whether the association between individual level SES and health outcomes remained robust when controlling for area level SES, and to repeat all the main analysis using Townsend deprivation index as the SES variable, instead of the individual level SES variable. Tenth, we additionally included quadratic terms of age in the models to consider the possible non-linear associations of age with health outcomes. All analyses were performed using SAS version 9.4 (SAS Institute, Cary, NC)."
+        ],
+        "quote": "We used Cox proportional hazard regression models to estimate the hazard ratios and 95% confidence intervals of outcomes associated with SES and lifestyle score. The proportional hazards assumption was examined by creating a product term of follow-up time and SES, and we found no significant deviation from the assumption. 40 Person years were calculated from baseline until the date of death or diagnosis (for the incident CVD analysis), or end of follow-up, whichever occurred first.\n\nNinth, in the final model in UK Biobank we further included the Townsend deprivation index, a variable reflecting the area level SES, for two purposes: to evaluate whether the association between individual level SES and health outcomes remained robust when controlling for area level SES, and to repeat all the main analysis using Townsend deprivation index as the SES variable, instead of the individual level SES variable. Tenth, we additionally included quadratic terms of age in the models to consider the possible non-linear associations of age with health outcomes. All analyses were performed using SAS version 9.4 (SAS Institute, Cary, NC)."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008",
+          "G0009"
+        ],
+        "quotes": [
+          "### 结局判定 主要结局为全因死亡（两项研究）、CVD 死亡和新发 CVD（仅 UK Biobank）。US NHANES 中死亡信息通过国家死亡索引获取至 2015 年 12 月 31 日[35]。UK Biobank 中死亡信息通过 NHS 信息中心（英格兰和威尔士）及 NHS 中央登记处（苏格兰）获取至 2020 年 4 月 30 日[36]；CVD 诊断（心肌梗死和卒中）通过链接的住院数据及死亡登记数据获取至 2018 年 1 月 31 日[37, 38]。 ### 统计分析 US NHANES 分析考虑了复杂调查设计的过采样、分层和聚类[39]。使用 Cox 比例风险回归模型估计风险比（HR）及 95% 置信区间。采用差值法计算生活方式的中介比例[41]：模型 1 纳入 SES 及协变量，模型 2 额外纳入健康生活方式评分，比较两模型估计值的变化。通过引入 SES 与健康生活方式评分的乘积项评估相乘交互作用，通过超额相对风险（RERI）评估相加交互作用[42]。联合分析将参与者按 SES（高/中/低）× 生活方式评分（0—1/2/3—4 分）分为 9 组。按性别、自报种族（白种人/非白种人）和年龄（<60 岁/≥60 岁[43]）分层进行亚组分析。",
+          "敏感性分析包括：(1) 用单项社会经济因素及单项生活方式因素替代综合变量；(2) 构建加权生活方式评分[44]；(3) 将 BMI 纳入评分；(4) 排除基线患有主要慢性病者；(5) 排除前三年内的事件；(6) US NHANES 中限制至 ≥40 岁人群；(7) 多重插补缺失变量[45]；(8) 使用社会经济分数替代潜在类别变量；(9) UK Biobank 中纳入 Townsend 剥夺指数并以其作 SES 变量；(10) 纳入年龄的二次项。所有分析使用 SAS 9.4，以双侧 P <0.05 为统计学显著。 --- ## 结果 ### 人群特征 US NHANES 共 44 462 人（平均年龄 46.5 岁，男性 48.7%），其中高 SES 10 469 人（33.6%）、中 SES 20 729 人（46.4%）、低 SES 13 264 人（20.0%）。UK Biobank 共 399 537 人（平均年龄 56.1 岁，男性 47.5%），其中高 SES 79 697 人（19.9%）、中 SES 210 935 人（52.8%）、低 SES 108 905 人（27.3%）。低 SES 组成年人更可能为女性、非白种人、未婚、无业、受教育程度低、低收入、仅公共保险或无保险，且合并症患病率更高。低 SES 组中不健康水平的吸烟、体力活动和 BMI 更为普遍。"
+        ],
+        "quote": "### 结局判定 主要结局为全因死亡（两项研究）、CVD 死亡和新发 CVD（仅 UK Biobank）。US NHANES 中死亡信息通过国家死亡索引获取至 2015 年 12 月 31 日[35]。UK Biobank 中死亡信息通过 NHS 信息中心（英格兰和威尔士）及 NHS 中央登记处（苏格兰）获取至 2020 年 4 月 30 日[36]；CVD 诊断（心肌梗死和卒中）通过链接的住院数据及死亡登记数据获取至 2018 年 1 月 31 日[37, 38]。 ### 统计分析 US NHANES 分析考虑了复杂调查设计的过采样、分层和聚类[39]。使用 Cox 比例风险回归模型估计风险比（HR）及 95% 置信区间。采用差值法计算生活方式的中介比例[41]：模型 1 纳入 SES 及协变量，模型 2 额外纳入健康生活方式评分，比较两模型估计值的变化。通过引入 SES 与健康生活方式评分的乘积项评估相乘交互作用，通过超额相对风险（RERI）评估相加交互作用[42]。联合分析将参与者按 SES（高/中/低）× 生活方式评分（0—1/2/3—4 分）分为 9 组。按性别、自报种族（白种人/非白种人）和年龄（<60 岁/≥60 岁[43]）分层进行亚组分析。\n\n敏感性分析包括：(1) 用单项社会经济因素及单项生活方式因素替代综合变量；(2) 构建加权生活方式评分[44]；(3) 将 BMI 纳入评分；(4) 排除基线患有主要慢性病者；(5) 排除前三年内的事件；(6) US NHANES 中限制至 ≥40 岁人群；(7) 多重插补缺失变量[45]；(8) 使用社会经济分数替代潜在类别变量；(9) UK Biobank 中纳入 Townsend 剥夺指数并以其作 SES 变量；(10) 纳入年龄的二次项。所有分析使用 SAS 9.4，以双侧 P <0.05 为统计学显著。 --- ## 结果 ### 人群特征 US NHANES 共 44 462 人（平均年龄 46.5 岁，男性 48.7%），其中高 SES 10 469 人（33.6%）、中 SES 20 729 人（46.4%）、低 SES 13 264 人（20.0%）。UK Biobank 共 399 537 人（平均年龄 56.1 岁，男性 47.5%），其中高 SES 79 697 人（19.9%）、中 SES 210 935 人（52.8%）、低 SES 108 905 人（27.3%）。低 SES 组成年人更可能为女性、非白种人、未婚、无业、受教育程度低、低收入、仅公共保险或无保险，且合并症患病率更高。低 SES 组中不健康水平的吸烟、体力活动和 BMI 更为普遍。"
+      },
+      "explanation": "The full set of statistical methods is accurately described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Latent class analysis (PROC LCA in SAS) for SES, Cox proportional hazards model for associations.",
+      "generatedFact": "潜在类别分析（PROC LCA 程序）和 Cox 比例风险回归模型。",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018",
+          "R0035"
+        ],
+        "quotes": [
+          "17 An overall SES variable was created using latent class analysis based on family income level, occupation, education level, and health insurance (each factor had three levels). 7 The latent class analysis, which uses multiple observed categorical variables to generate an unmeasured variable (ie, latent variable) with a set of mutually exclusive latent classes, was conducted using PROC LCA, a new SAS procedure. 18 Three latent classes were identified, which respectively represented a high, medium, and low SES according to the item-response probabilities. 19 The supplementary file describes the data collection and latent class analysis in US NHANES.",
+          "We used Cox proportional hazard regression models to estimate the hazard ratios and 95% confidence intervals of outcomes associated with SES and lifestyle score. The proportional hazards assumption was examined by creating a product term of follow-up time and SES, and we found no significant deviation from the assumption. 40 Person years were calculated from baseline until the date of death or diagnosis (for the incident CVD analysis), or end of follow-up, whichever occurred first."
+        ],
+        "quote": "17 An overall SES variable was created using latent class analysis based on family income level, occupation, education level, and health insurance (each factor had three levels). 7 The latent class analysis, which uses multiple observed categorical variables to generate an unmeasured variable (ie, latent variable) with a set of mutually exclusive latent classes, was conducted using PROC LCA, a new SAS procedure. 18 Three latent classes were identified, which respectively represented a high, medium, and low SES according to the item-response probabilities. 19 The supplementary file describes the data collection and latent class analysis in US NHANES.\n\nWe used Cox proportional hazard regression models to estimate the hazard ratios and 95% confidence intervals of outcomes associated with SES and lifestyle score. The proportional hazards assumption was examined by creating a product term of follow-up time and SES, and we found no significant deviation from the assumption. 40 Person years were calculated from baseline until the date of death or diagnosis (for the incident CVD analysis), or end of follow-up, whichever occurred first."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006",
+          "G0008"
+        ],
+        "quotes": [
+          "### 社会经济地位评估 **US NHANES** 中，SES 通过自我报告的家庭收入水平、职业、教育水平和健康保险四方面衡量，每个方面分为低、中、高三个等级[7, 11]。家庭收入水平使用家庭贫困收入比（family poverty-to-income ratio）进行操作化：低（≤1）、中（1—4）、高（≥4）[12]。教育分为高中以下、高中毕业或同等学力、大学及以上[13]。职业基于美国广泛使用的社会经济指数进行分类：上层（指数 ≥50）、下层（指数 <50，含退休人员和学生）和无业[14—16]。健康保险分为私人保险、仅公共保险和无保险[17]。通过潜在类别分析（PROC LCA 程序）基于上述四个因素生成整体 SES 变量，三种潜在类别分别对应高、中、低 SES[18, 19]。 **UK Biobank** 中，SES 通过家庭税前总收入、教育资质和就业状态三项指标构建[20]。家庭收入分为 <£18 000、£18 000—£30 999、£31 000—£51 999、£52 000—£100 000、>£100 000 五档；教育资质细分为大学学位、A levels 等、O levels/GCSEs 等、CSEs 等、职业资格、其他专业资格及无资质；就业状态分为就业（含自雇、退休、志愿工作及全日制/非全日制学生）和无业。英国因有全民免费 NHS，未纳入健康保险维度[21]。通过潜在类别分析生成整体 SES 变量。UK Biobank 同时提供了反映区域水平 SES 的 Townsend 剥夺指数[22]，用于补充分析。",
+          "### 结局判定 主要结局为全因死亡（两项研究）、CVD 死亡和新发 CVD（仅 UK Biobank）。US NHANES 中死亡信息通过国家死亡索引获取至 2015 年 12 月 31 日[35]。UK Biobank 中死亡信息通过 NHS 信息中心（英格兰和威尔士）及 NHS 中央登记处（苏格兰）获取至 2020 年 4 月 30 日[36]；CVD 诊断（心肌梗死和卒中）通过链接的住院数据及死亡登记数据获取至 2018 年 1 月 31 日[37, 38]。 ### 统计分析 US NHANES 分析考虑了复杂调查设计的过采样、分层和聚类[39]。使用 Cox 比例风险回归模型估计风险比（HR）及 95% 置信区间。采用差值法计算生活方式的中介比例[41]：模型 1 纳入 SES 及协变量，模型 2 额外纳入健康生活方式评分，比较两模型估计值的变化。通过引入 SES 与健康生活方式评分的乘积项评估相乘交互作用，通过超额相对风险（RERI）评估相加交互作用[42]。联合分析将参与者按 SES（高/中/低）× 生活方式评分（0—1/2/3—4 分）分为 9 组。按性别、自报种族（白种人/非白种人）和年龄（<60 岁/≥60 岁[43]）分层进行亚组分析。"
+        ],
+        "quote": "### 社会经济地位评估 **US NHANES** 中，SES 通过自我报告的家庭收入水平、职业、教育水平和健康保险四方面衡量，每个方面分为低、中、高三个等级[7, 11]。家庭收入水平使用家庭贫困收入比（family poverty-to-income ratio）进行操作化：低（≤1）、中（1—4）、高（≥4）[12]。教育分为高中以下、高中毕业或同等学力、大学及以上[13]。职业基于美国广泛使用的社会经济指数进行分类：上层（指数 ≥50）、下层（指数 <50，含退休人员和学生）和无业[14—16]。健康保险分为私人保险、仅公共保险和无保险[17]。通过潜在类别分析（PROC LCA 程序）基于上述四个因素生成整体 SES 变量，三种潜在类别分别对应高、中、低 SES[18, 19]。 **UK Biobank** 中，SES 通过家庭税前总收入、教育资质和就业状态三项指标构建[20]。家庭收入分为 <£18 000、£18 000—£30 999、£31 000—£51 999、£52 000—£100 000、>£100 000 五档；教育资质细分为大学学位、A levels 等、O levels/GCSEs 等、CSEs 等、职业资格、其他专业资格及无资质；就业状态分为就业（含自雇、退休、志愿工作及全日制/非全日制学生）和无业。英国因有全民免费 NHS，未纳入健康保险维度[21]。通过潜在类别分析生成整体 SES 变量。UK Biobank 同时提供了反映区域水平 SES 的 Townsend 剥夺指数[22]，用于补充分析。\n\n### 结局判定 主要结局为全因死亡（两项研究）、CVD 死亡和新发 CVD（仅 UK Biobank）。US NHANES 中死亡信息通过国家死亡索引获取至 2015 年 12 月 31 日[35]。UK Biobank 中死亡信息通过 NHS 信息中心（英格兰和威尔士）及 NHS 中央登记处（苏格兰）获取至 2020 年 4 月 30 日[36]；CVD 诊断（心肌梗死和卒中）通过链接的住院数据及死亡登记数据获取至 2018 年 1 月 31 日[37, 38]。 ### 统计分析 US NHANES 分析考虑了复杂调查设计的过采样、分层和聚类[39]。使用 Cox 比例风险回归模型估计风险比（HR）及 95% 置信区间。采用差值法计算生活方式的中介比例[41]：模型 1 纳入 SES 及协变量，模型 2 额外纳入健康生活方式评分，比较两模型估计值的变化。通过引入 SES 与健康生活方式评分的乘积项评估相乘交互作用，通过超额相对风险（RERI）评估相加交互作用[42]。联合分析将参与者按 SES（高/中/低）× 生活方式评分（0—1/2/3—4 分）分为 9 组。按性别、自报种族（白种人/非白种人）和年龄（<60 岁/≥60 岁[43]）分层进行亚组分析。"
+      },
+      "explanation": "Both the latent class analysis procedure and Cox model are correctly named.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Low vs high SES HRs: all-cause mortality US 2.13 (1.90-2.38), UK 1.96 (1.87-2.06); CVD mortality 2.25 (2.00-2.53); incident CVD 1.65 (1.52-1.79). Mediation proportions: 12.3% (10.7-13.9%), 4.0% (3.5-4.4%), 3.0% (2.5-3.6%), 3.7% (3.1-4.5%). Joint HR low SES+unhealthy vs high SES+healthy: US 3.53 (3.01-4.14), UK 2.65 (2.39-2.94); CVD mortality 2.65 (2.09-3.38); incident CVD 2.09 (1.78-2.46). Lifestyle HR in low SES UK 0.56 (0.52-0.59).",
+      "generatedFact": "低 vs 高 SES HR：全因死亡 US 2.13 (1.90-2.38), UK 1.96 (1.87-2.06)；CVD 死亡 2.25 (2.00-2.53)；新发 CVD 1.65 (1.52-1.79)。中介比例 12.3% … 3.7%。联合 HR 低 SES 不健康生活方式 vs 高 SES 健康：全因 US 3.53 (3.01-4.14), UK 2.65 (2.39-2.94)；CVD 死亡 2.65 (2.09-3.38)；新发 CVD 2.09 (1.78-2.46)。UK 低 SES 中健康生活方式 HR 0.56 (0.52-0.59)。",
+      "sourceEvidence": {
+        "locator": "R0006",
+        "locators": [
+          "R0006",
+          "R0007",
+          "R0057",
+          "R0058",
+          "R0066"
+        ],
+        "quotes": [
+          "Compared with adults of high SES, those of low SES had higher risks of all cause mortality (hazard ratio 2.13, 95% confidence interval 1.90 to 2.38 in US NHANES; 1.96, 1.87 to 2.06 in UK Biobank), CVD mortality (2.25, 2.00 to 2.53), and incident CVD (1.65, 1.52 to 1.79) in UK Biobank, and the proportions mediated by lifestyle were 12.3% (10.7% to 13.9%), 4.0% (3.5% to 4.4%), 3.0% (2.5% to 3.6%), and 3.7% (3.1% to 4.5%), respectively. No significant interaction was observed between lifestyle and SES in US NHANES, whereas associations between lifestyle and outcomes were stronger among those of low SES in UK Biobank.",
+          "Compared with adults of high SES and three or four healthy lifestyle factors, those with low SES and no or one healthy lifestyle factor had higher risks of all cause mortality (3.53, 3.01 to 4.14 in US NHANES; 2.65, 2.39 to 2.94 in UK Biobank), CVD mortality (2.65, 2.09 to 3.38), and incident CVD (2.09, 1.78 to 2.46) in UK Biobank.ConclusionsUnhealthy lifestyles mediated a small proportion of the socioeconomic inequity in health in both US and UK adults; therefore, healthy lifestyle promotion alone might not substantially reduce the socioeconomic inequity in health, and other measures tackling social determinants of health are warranted.",
+          "After adjusting for lifestyle score and other covariates, including age, sex, self-reported race, marital status, assessment centers, acculturation, BMI, and history of comorbidities, the hazards ratios when adults of low SES were compared with adults of high SES were 2.13 (95% confidence interval 1.90 to 2.38) for all cause mortality in US NHANES, and 1.96 (1.87 to 2.06) for all cause mortality, 2.25 (2.00 to 2.53) for CVD mortality, and 1.65 (1.52 to 1.79) for incident CVD in UK Biobank ( table 2 ). The hazard ratios without adjustment for lifestyle score were larger.",
+          "Each additional healthy lifestyle factor was associated with 11% to 17% lower risks of mortality and incident CVD (supplementary table 4). When low SES was compared with high SES, the proportion mediated by the lifestyle score was 12.3% (10.7% to 13.9%) for all cause mortality in US NHANES, and 4.0% (3.5% to 4.4%) for all cause mortality, 3.0% (2.5% to 3.6%) for CVD mortality, and 3.7% (3.1% to 4.5%) for incident CVD in UK Biobank ( table 2 ).",
+          "For example, in UK Biobank, the hazard ratios for those with three or four healthy lifestyle factors compared with no or one healthy lifestyle factor for all cause mortality were 0.86 (0.76 to 0.96) among individuals of high SES, 0.70 (0.66 to 0.74) among those of medium SES, and 0.56 (0.52 to 0.59) among those of low SES. Similar patterns were found for total CVD mortality and incident CVD ( fig 1 ), and when CVD subtypes were used as the outcomes (supplementary fig 3), as well as when the area level Townsend deprivation index was used as the SES variable (supplementary fig 2). The results remained similar in all sensitivity analyses (supplementary table 9)."
+        ],
+        "quote": "Compared with adults of high SES, those of low SES had higher risks of all cause mortality (hazard ratio 2.13, 95% confidence interval 1.90 to 2.38 in US NHANES; 1.96, 1.87 to 2.06 in UK Biobank), CVD mortality (2.25, 2.00 to 2.53), and incident CVD (1.65, 1.52 to 1.79) in UK Biobank, and the proportions mediated by lifestyle were 12.3% (10.7% to 13.9%), 4.0% (3.5% to 4.4%), 3.0% (2.5% to 3.6%), and 3.7% (3.1% to 4.5%), respectively. No significant interaction was observed between lifestyle and SES in US NHANES, whereas associations between lifestyle and outcomes were stronger among those of low SES in UK Biobank.\n\nCompared with adults of high SES and three or four healthy lifestyle factors, those with low SES and no or one healthy lifestyle factor had higher risks of all cause mortality (3.53, 3.01 to 4.14 in US NHANES; 2.65, 2.39 to 2.94 in UK Biobank), CVD mortality (2.65, 2.09 to 3.38), and incident CVD (2.09, 1.78 to 2.46) in UK Biobank.ConclusionsUnhealthy lifestyles mediated a small proportion of the socioeconomic inequity in health in both US and UK adults; therefore, healthy lifestyle promotion alone might not substantially reduce the socioeconomic inequity in health, and other measures tackling social determinants of health are warranted.\n\nAfter adjusting for lifestyle score and other covariates, including age, sex, self-reported race, marital status, assessment centers, acculturation, BMI, and history of comorbidities, the hazards ratios when adults of low SES were compared with adults of high SES were 2.13 (95% confidence interval 1.90 to 2.38) for all cause mortality in US NHANES, and 1.96 (1.87 to 2.06) for all cause mortality, 2.25 (2.00 to 2.53) for CVD mortality, and 1.65 (1.52 to 1.79) for incident CVD in UK Biobank ( table 2 ). The hazard ratios without adjustment for lifestyle score were larger.\n\nEach additional healthy lifestyle factor was associated with 11% to 17% lower risks of mortality and incident CVD (supplementary table 4). When low SES was compared with high SES, the proportion mediated by the lifestyle score was 12.3% (10.7% to 13.9%) for all cause mortality in US NHANES, and 4.0% (3.5% to 4.4%) for all cause mortality, 3.0% (2.5% to 3.6%) for CVD mortality, and 3.7% (3.1% to 4.5%) for incident CVD in UK Biobank ( table 2 ).\n\nFor example, in UK Biobank, the hazard ratios for those with three or four healthy lifestyle factors compared with no or one healthy lifestyle factor for all cause mortality were 0.86 (0.76 to 0.96) among individuals of high SES, 0.70 (0.66 to 0.74) among those of medium SES, and 0.56 (0.52 to 0.59) among those of low SES. Similar patterns were found for total CVD mortality and incident CVD ( fig 1 ), and when CVD subtypes were used as the outcomes (supplementary fig 3), as well as when the area level Townsend deprivation index was used as the SES variable (supplementary fig 2). The results remained similar in all sensitivity analyses (supplementary table 9)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003",
+          "G0010",
+          "G0011"
+        ],
+        "quotes": [
+          "**结果**：US NHANES 平均随访 11.2 年，记录 8 906 例死亡；UK Biobank 平均随访 8.8—11.0 年，记录 22 309 例死亡和 6 903 例新发 CVD。以高 SES 为参照，低 SES 组成年人在校正生活方式评分及其他协变量后，全因死亡风险比（HR）在 US NHANES 为 2.13（95% CI 1.90—2.38），在 UK Biobank 为 1.96（1.87—2.06）；CVD 死亡 HR 为 2.25（2.00—2.53）；新发 CVD HR 为 1.65（1.52—1.79）。生活方式对上述关联的中介比例分别为：US NHANES 全因死亡 12.3%（10.7%—13.9%），UK Biobank 全因死亡 4.0%（3.5%—4.4%），CVD 死亡 3.0%（2.5%—3.6%），新发 CVD 3.7%（3.1%—4.5%）。US NHANES 中未发现生活方式与 SES 的显著交互作用；UK Biobank 中低 SES 组健康生活方式的保护性关联更强。以高 SES 且具有 3—4 项健康生活方式者为参照，低 SES 且仅 0—1 项健康生活方式者的全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。",
+          "### 生活方式的中介作用 校正生活方式评分及其他协变量后，以高 SES 为参照，低 SES 组全因死亡风险显著升高（US NHANES: HR 2.13, 95% CI 1.90—2.38；UK Biobank: HR 1.96, 95% CI 1.87—2.06），CVD 死亡 HR 为 2.25（2.00—2.53），新发 CVD HR 为 1.65（1.52—1.79）。每增加一项健康生活方式因素，死亡和 CVD 风险降低 11%—17%。 生活方式对 SES-健康结局关联的中介比例：US NHANES 全因死亡 12.3%（10.7%—13.9%）；UK Biobank 全因死亡 4.0%（3.5%—4.4%）、CVD 死亡 3.0%（2.5%—3.6%）、新发 CVD 3.7%（3.1%—4.5%）。当使用社会经济分数考察更极端的社会经济差距时，中介比例相似。纳入健康生活方式评分并未改善所有结局的预测能力（C 统计量未显著增加）。 当使用单项社会经济因素时，HR 范围为 1.13—2.09；生活方式对教育与死亡关联的中介比例最高可达 22.2%，而对英国家庭收入的中介比例不足 1%。在 UK Biobank 中同时纳入 Townsend 剥夺指数后，个体水平 SES 与结局的关联未发生实质性变化。所有敏感性分析结果基本一致。",
+          "### 交互作用与联合关联 US NHANES 中未发现生活方式与 SES 对全因死亡的显著交互作用；UK Biobank 中两者在相乘和相加尺度上均存在显著交互作用（均 P <0.02）。在 UK Biobank 的低 SES 组中，健康生活方式的保护性关联更强——以 0—1 分者为参照，3—4 分者的全因死亡 HR 在高 SES 组为 0.86（0.76—0.96），中 SES 组为 0.70（0.66—0.74），低 SES 组为 0.56（0.52—0.59）。 以高 SES 且具备 3—4 项健康生活方式因素者为参照，低 SES 且仅 0—1 项者：全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。 ### 亚组分析 按性别分层，社会经济不平等及生活方式-SES 联合关联在男性中强于女性（交互 P <0.03）；按年龄分层，在较年轻成人中强于老年人（交互 P <0.03）；种族间未见显著差异。生活方式的中介比例在所有亚组中均较小（均 <20%），与主分析相似。 --- ## 讨论 本研究发现，低 SES 与死亡和 CVD 风险显著升高相关，生活方式因素仅介导了该关联的 3.0%—12.3%。UK Biobank 中观察到生活方式与 SES 对健康结局的显著交互作用，低 SES 组健康生活方式的保护关联更强。低 SES 联合不健康生活方式者的死亡和 CVD 风险最高。"
+        ],
+        "quote": "**结果**：US NHANES 平均随访 11.2 年，记录 8 906 例死亡；UK Biobank 平均随访 8.8—11.0 年，记录 22 309 例死亡和 6 903 例新发 CVD。以高 SES 为参照，低 SES 组成年人在校正生活方式评分及其他协变量后，全因死亡风险比（HR）在 US NHANES 为 2.13（95% CI 1.90—2.38），在 UK Biobank 为 1.96（1.87—2.06）；CVD 死亡 HR 为 2.25（2.00—2.53）；新发 CVD HR 为 1.65（1.52—1.79）。生活方式对上述关联的中介比例分别为：US NHANES 全因死亡 12.3%（10.7%—13.9%），UK Biobank 全因死亡 4.0%（3.5%—4.4%），CVD 死亡 3.0%（2.5%—3.6%），新发 CVD 3.7%（3.1%—4.5%）。US NHANES 中未发现生活方式与 SES 的显著交互作用；UK Biobank 中低 SES 组健康生活方式的保护性关联更强。以高 SES 且具有 3—4 项健康生活方式者为参照，低 SES 且仅 0—1 项健康生活方式者的全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。\n\n### 生活方式的中介作用 校正生活方式评分及其他协变量后，以高 SES 为参照，低 SES 组全因死亡风险显著升高（US NHANES: HR 2.13, 95% CI 1.90—2.38；UK Biobank: HR 1.96, 95% CI 1.87—2.06），CVD 死亡 HR 为 2.25（2.00—2.53），新发 CVD HR 为 1.65（1.52—1.79）。每增加一项健康生活方式因素，死亡和 CVD 风险降低 11%—17%。 生活方式对 SES-健康结局关联的中介比例：US NHANES 全因死亡 12.3%（10.7%—13.9%）；UK Biobank 全因死亡 4.0%（3.5%—4.4%）、CVD 死亡 3.0%（2.5%—3.6%）、新发 CVD 3.7%（3.1%—4.5%）。当使用社会经济分数考察更极端的社会经济差距时，中介比例相似。纳入健康生活方式评分并未改善所有结局的预测能力（C 统计量未显著增加）。 当使用单项社会经济因素时，HR 范围为 1.13—2.09；生活方式对教育与死亡关联的中介比例最高可达 22.2%，而对英国家庭收入的中介比例不足 1%。在 UK Biobank 中同时纳入 Townsend 剥夺指数后，个体水平 SES 与结局的关联未发生实质性变化。所有敏感性分析结果基本一致。\n\n### 交互作用与联合关联 US NHANES 中未发现生活方式与 SES 对全因死亡的显著交互作用；UK Biobank 中两者在相乘和相加尺度上均存在显著交互作用（均 P <0.02）。在 UK Biobank 的低 SES 组中，健康生活方式的保护性关联更强——以 0—1 分者为参照，3—4 分者的全因死亡 HR 在高 SES 组为 0.86（0.76—0.96），中 SES 组为 0.70（0.66—0.74），低 SES 组为 0.56（0.52—0.59）。 以高 SES 且具备 3—4 项健康生活方式因素者为参照，低 SES 且仅 0—1 项者：全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。 ### 亚组分析 按性别分层，社会经济不平等及生活方式-SES 联合关联在男性中强于女性（交互 P <0.03）；按年龄分层，在较年轻成人中强于老年人（交互 P <0.03）；种族间未见显著差异。生活方式的中介比例在所有亚组中均较小（均 <20%），与主分析相似。 --- ## 讨论 本研究发现，低 SES 与死亡和 CVD 风险显著升高相关，生活方式因素仅介导了该关联的 3.0%—12.3%。UK Biobank 中观察到生活方式与 SES 对健康结局的显著交互作用，低 SES 组健康生活方式的保护关联更强。低 SES 联合不健康生活方式者的死亡和 CVD 风险最高。"
+      },
+      "explanation": "All point estimates, confidence intervals, and mediation proportions are exactly reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "95% confidence intervals reported for all HRs; interaction P values <0.02 in UK Biobank; non-significant interaction in US NHANES.",
+      "generatedFact": "报告 95% CI；UK Biobank 中交互 P <0.02；US NHANES 交互不显著。",
+      "sourceEvidence": {
+        "locator": "R0065",
+        "locators": [
+          "R0065"
+        ],
+        "quotes": [
+          "Interaction and joint analysis of lifestyle and SES with mortality and incident CVD No significant interaction was found between lifestyle and SES on all cause mortality in US NHANES, whereas both multiplicative and additive interactions were observed between lifestyle and SES on all primary outcomes in UK Biobank (all P for interaction <0.02; fig 1 ). A healthier lifestyle score was associated with lower risks of all primary outcomes among individuals of various SES subgroups in both cohorts, whereas the associations were stronger among those from a low SES subgroup in UK Biobank ( fig 1 )."
+        ],
+        "quote": "Interaction and joint analysis of lifestyle and SES with mortality and incident CVD No significant interaction was found between lifestyle and SES on all cause mortality in US NHANES, whereas both multiplicative and additive interactions were observed between lifestyle and SES on all primary outcomes in UK Biobank (all P for interaction <0.02; fig 1 ). A healthier lifestyle score was associated with lower risks of all primary outcomes among individuals of various SES subgroups in both cohorts, whereas the associations were stronger among those from a low SES subgroup in UK Biobank ( fig 1 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0011",
+        "locators": [
+          "G0011"
+        ],
+        "quotes": [
+          "### 交互作用与联合关联 US NHANES 中未发现生活方式与 SES 对全因死亡的显著交互作用；UK Biobank 中两者在相乘和相加尺度上均存在显著交互作用（均 P <0.02）。在 UK Biobank 的低 SES 组中，健康生活方式的保护性关联更强——以 0—1 分者为参照，3—4 分者的全因死亡 HR 在高 SES 组为 0.86（0.76—0.96），中 SES 组为 0.70（0.66—0.74），低 SES 组为 0.56（0.52—0.59）。 以高 SES 且具备 3—4 项健康生活方式因素者为参照，低 SES 且仅 0—1 项者：全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。 ### 亚组分析 按性别分层，社会经济不平等及生活方式-SES 联合关联在男性中强于女性（交互 P <0.03）；按年龄分层，在较年轻成人中强于老年人（交互 P <0.03）；种族间未见显著差异。生活方式的中介比例在所有亚组中均较小（均 <20%），与主分析相似。 --- ## 讨论 本研究发现，低 SES 与死亡和 CVD 风险显著升高相关，生活方式因素仅介导了该关联的 3.0%—12.3%。UK Biobank 中观察到生活方式与 SES 对健康结局的显著交互作用，低 SES 组健康生活方式的保护关联更强。低 SES 联合不健康生活方式者的死亡和 CVD 风险最高。"
+        ],
+        "quote": "### 交互作用与联合关联 US NHANES 中未发现生活方式与 SES 对全因死亡的显著交互作用；UK Biobank 中两者在相乘和相加尺度上均存在显著交互作用（均 P <0.02）。在 UK Biobank 的低 SES 组中，健康生活方式的保护性关联更强——以 0—1 分者为参照，3—4 分者的全因死亡 HR 在高 SES 组为 0.86（0.76—0.96），中 SES 组为 0.70（0.66—0.74），低 SES 组为 0.56（0.52—0.59）。 以高 SES 且具备 3—4 项健康生活方式因素者为参照，低 SES 且仅 0—1 项者：全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。 ### 亚组分析 按性别分层，社会经济不平等及生活方式-SES 联合关联在男性中强于女性（交互 P <0.03）；按年龄分层，在较年轻成人中强于老年人（交互 P <0.03）；种族间未见显著差异。生活方式的中介比例在所有亚组中均较小（均 <20%），与主分析相似。 --- ## 讨论 本研究发现，低 SES 与死亡和 CVD 风险显著升高相关，生活方式因素仅介导了该关联的 3.0%—12.3%。UK Biobank 中观察到生活方式与 SES 对健康结局的显著交互作用，低 SES 组健康生活方式的保护关联更强。低 SES 联合不健康生活方式者的死亡和 CVD 风险最高。"
+      },
+      "explanation": "Confidence intervals and significance levels are accurately transferred.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Lifestyle mediated only a small proportion (3-12%) of the SES-health association; healthy lifestyle promotion alone cannot substantially reduce inequality; healthy lifestyles were beneficial across SES strata, especially in low SES groups.",
+      "generatedFact": "不健康生活方式仅介导了小部分社会经济健康不平等；仅靠促进健康生活方式不足以大幅缩小差距；健康生活方式在不同 SES 亚组中均与较低风险相关，尤其对低 SES 群体更重要。",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007",
+          "R0008"
+        ],
+        "quotes": [
+          "Compared with adults of high SES and three or four healthy lifestyle factors, those with low SES and no or one healthy lifestyle factor had higher risks of all cause mortality (3.53, 3.01 to 4.14 in US NHANES; 2.65, 2.39 to 2.94 in UK Biobank), CVD mortality (2.65, 2.09 to 3.38), and incident CVD (2.09, 1.78 to 2.46) in UK Biobank.ConclusionsUnhealthy lifestyles mediated a small proportion of the socioeconomic inequity in health in both US and UK adults; therefore, healthy lifestyle promotion alone might not substantially reduce the socioeconomic inequity in health, and other measures tackling social determinants of health are warranted.",
+          "Nevertheless, healthy lifestyles were associated with lower mortality and CVD risk in different SES subgroups, supporting an important role of healthy lifestyles in reducing disease burden. [ARTICLE BODY EVIDENCE COMPLETE=true] Introduction Socioeconomic status (SES) has been associated with differences in morbidity and mortality. 1 Although most countries and regions have witnessed socioeconomic progress and rising standards of living in recent decades, the US and UK are the top two countries showing an increasing rate of wealth inequity among Organization for Economic Cooperation and Development countries."
+        ],
+        "quote": "Compared with adults of high SES and three or four healthy lifestyle factors, those with low SES and no or one healthy lifestyle factor had higher risks of all cause mortality (3.53, 3.01 to 4.14 in US NHANES; 2.65, 2.39 to 2.94 in UK Biobank), CVD mortality (2.65, 2.09 to 3.38), and incident CVD (2.09, 1.78 to 2.46) in UK Biobank.ConclusionsUnhealthy lifestyles mediated a small proportion of the socioeconomic inequity in health in both US and UK adults; therefore, healthy lifestyle promotion alone might not substantially reduce the socioeconomic inequity in health, and other measures tackling social determinants of health are warranted.\n\nNevertheless, healthy lifestyles were associated with lower mortality and CVD risk in different SES subgroups, supporting an important role of healthy lifestyles in reducing disease burden. [ARTICLE BODY EVIDENCE COMPLETE=true] Introduction Socioeconomic status (SES) has been associated with differences in morbidity and mortality. 1 Although most countries and regions have witnessed socioeconomic progress and rising standards of living in recent decades, the US and UK are the top two countries showing an increasing rate of wealth inequity among Organization for Economic Cooperation and Development countries."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004",
+          "G0014"
+        ],
+        "quotes": [
+          "**结论**：不健康生活方式仅介导了小部分社会经济健康不平等；仅靠促进健康生活方式可能不足以大幅缩小健康领域的社会经济差距，需要同时针对健康的社会决定因素采取措施。但健康生活方式在不同 SES 亚组中均与较低的死亡和 CVD 风险相关，支持其在减轻疾病负担中的重要作用。 --- ## 引言 社会经济地位（SES）与发病率和死亡率的差异已被广泛证实[1]。尽管近几十年来多数国家和地区的社会经济水平和生活标准有所提升，但美国和英国却是经济合作与发展组织（OECD）国家中财富不平等增速最高的两个国家[2]。在美国，中高收入群体的预期寿命持续延长，而贫困群体的预期寿命停滞甚至在某些人口群体中出现下降[3]，英国也呈现相似趋势[2]。COVID-19 大流行进一步暴露了这一不平等——社会弱势群体受冲击最为严重[4]。 生活方式因素通常被视为 SES 与健康之间的中介变量，即健康生活方式可能缓解社会经济健康不平等[5]。已有大量研究探讨了单个或多个生活方式因素在 SES 与死亡或疾病关联中的贡献[6]，但仍存在重要研究空白。首先，整体生活方式在多大程度上中介 SES 与健康结局之间的关联尚无定论。既往研究多使用单一变量（如收入、职业、教育）代表个体水平的 SES[6]，仅能部分反映整体社会经济地位[7]。其次，关于生活方式与 SES 在健康结局上的交互作用及联合关联的研究十分有限。第三，这些发现在不同年龄、性别和种族/族裔亚群中是否一致尚不明确。",
+          "--- ## 结论 基于两项大型美国和英国全国性队列研究，低社会经济地位与死亡和新发 CVD 风险显著升高相关，而生活方式因素仅介导了该关联的小部分。因此，仅推广健康生活方式不足以大幅缩小健康领域的社会经济不平等，必须同时着手改善健康的社会决定因素。尽管如此，健康生活方式在不同 SES 亚组中均与较低的死亡和 CVD 风险显著相关，且对于社会经济弱势群体尤其重要（英国），这支持了生活方式改善在减轻全民疾病负担中不可或缺的作用。 --- ## 参考文献 > *以下为原文引用的代表性文献，依原文顺序列出。完整参考文献列表见 [PMC 全文](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8044922/)。* 1. Stringhini S, et al. Socioeconomic status and the 25×25 risk factors as determinants of premature mortality: a multicohort study and meta-analysis of 1.7 million men and women. *Lancet*. 2017;389:1229–37. 2. Marmot M, et al. Health equity in England: the Marmot review ten years on. 2020. 3. Bor J, Cohen GH, Galea S."
+        ],
+        "quote": "**结论**：不健康生活方式仅介导了小部分社会经济健康不平等；仅靠促进健康生活方式可能不足以大幅缩小健康领域的社会经济差距，需要同时针对健康的社会决定因素采取措施。但健康生活方式在不同 SES 亚组中均与较低的死亡和 CVD 风险相关，支持其在减轻疾病负担中的重要作用。 --- ## 引言 社会经济地位（SES）与发病率和死亡率的差异已被广泛证实[1]。尽管近几十年来多数国家和地区的社会经济水平和生活标准有所提升，但美国和英国却是经济合作与发展组织（OECD）国家中财富不平等增速最高的两个国家[2]。在美国，中高收入群体的预期寿命持续延长，而贫困群体的预期寿命停滞甚至在某些人口群体中出现下降[3]，英国也呈现相似趋势[2]。COVID-19 大流行进一步暴露了这一不平等——社会弱势群体受冲击最为严重[4]。 生活方式因素通常被视为 SES 与健康之间的中介变量，即健康生活方式可能缓解社会经济健康不平等[5]。已有大量研究探讨了单个或多个生活方式因素在 SES 与死亡或疾病关联中的贡献[6]，但仍存在重要研究空白。首先，整体生活方式在多大程度上中介 SES 与健康结局之间的关联尚无定论。既往研究多使用单一变量（如收入、职业、教育）代表个体水平的 SES[6]，仅能部分反映整体社会经济地位[7]。其次，关于生活方式与 SES 在健康结局上的交互作用及联合关联的研究十分有限。第三，这些发现在不同年龄、性别和种族/族裔亚群中是否一致尚不明确。\n\n--- ## 结论 基于两项大型美国和英国全国性队列研究，低社会经济地位与死亡和新发 CVD 风险显著升高相关，而生活方式因素仅介导了该关联的小部分。因此，仅推广健康生活方式不足以大幅缩小健康领域的社会经济不平等，必须同时着手改善健康的社会决定因素。尽管如此，健康生活方式在不同 SES 亚组中均与较低的死亡和 CVD 风险显著相关，且对于社会经济弱势群体尤其重要（英国），这支持了生活方式改善在减轻全民疾病负担中不可或缺的作用。 --- ## 参考文献 > *以下为原文引用的代表性文献，依原文顺序列出。完整参考文献列表见 [PMC 全文](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8044922/)。* 1. Stringhini S, et al. Socioeconomic status and the 25×25 risk factors as determinants of premature mortality: a multicohort study and meta-analysis of 1.7 million men and women. *Lancet*. 2017;389:1229–37. 2. Marmot M, et al. Health equity in England: the Marmot review ten years on. 2020. 3. Bor J, Cohen GH, Galea S."
+      },
+      "explanation": "The direction, magnitude, and nuance of the conclusion match the original.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "partial",
+      "issueKinds": [
+        "unsupported"
+      ],
+      "referenceFact": "Limitations: self-reported measures, single measurement, SES variable differences, lifestyle score assumptions, short follow-up, reverse causation, residual confounding, missing data exclusion, post hoc analysis.",
+      "generatedFact": "列举了测量偏倚、SES 构建可比性、生活方式评分简化、反向因果/残余混杂、选择偏倚、事后亚组分析，并额外增加“健康志愿者偏倚（UK Biobank 参与率约 5.5%）”。",
+      "sourceEvidence": {
+        "locator": "R0086",
+        "locators": [
+          "R0086",
+          "R0089"
+        ],
+        "quotes": [
+          "We also conducted a series of sensitivity analyses to show the robustness of the findings, and evaluated individual socioeconomic and lifestyle factors. Nevertheless, we also acknowledge several limitations. First, information on socioeconomic level and lifestyle was mainly self-reported and was only measured once, thus measurement errors were inevitable. Besides, we could not capture the long term SES trajectories as well as lifestyle changes during adulthood. Future studies with repeated measurements are preferred. Second, the SES variable was constructed differently in the two cohorts.",
+          "Fifth, those excluded from the analysis because of missing covariates were more likely to be of lower SES; therefore, the socioeconomic inequity in health outcomes might be underestimated in our study. Nevertheless, the results remained similar after imputing missing covariates. Sixth, owing to the nature of post hoc subgroup analyses, sample size in each subgroup was not calculated before data collection. Especially, the number of participants and events might be insufficient among the non-white subgroup in the UK Biobank, and the results should be cautiously interpreted."
+        ],
+        "quote": "We also conducted a series of sensitivity analyses to show the robustness of the findings, and evaluated individual socioeconomic and lifestyle factors. Nevertheless, we also acknowledge several limitations. First, information on socioeconomic level and lifestyle was mainly self-reported and was only measured once, thus measurement errors were inevitable. Besides, we could not capture the long term SES trajectories as well as lifestyle changes during adulthood. Future studies with repeated measurements are preferred. Second, the SES variable was constructed differently in the two cohorts.\n\nFifth, those excluded from the analysis because of missing covariates were more likely to be of lower SES; therefore, the socioeconomic inequity in health outcomes might be underestimated in our study. Nevertheless, the results remained similar after imputing missing covariates. Sixth, owing to the nature of post hoc subgroup analyses, sample size in each subgroup was not calculated before data collection. Especially, the number of participants and events might be insufficient among the non-white subgroup in the UK Biobank, and the results should be cautiously interpreted."
+      },
+      "generatedEvidence": {
+        "locator": "G0013",
+        "locators": [
+          "G0013"
+        ],
+        "quotes": [
+          "### 优势与局限性 **优势**：(1) 样本量大，来自两个成熟的全国性队列；(2) 整体 SES 变量和健康生活方式评分的构建能更全面地反映社会经济地位和生活方式；(3) 一系列敏感性分析验证了结果的稳健性。 **局限性**（源自原文明确陈述，逐条改写）： 1. **测量偏倚**：社会经济和生活方式信息主要来自自我报告且仅测量一次，无法捕捉长期 SES 轨迹及生活方式变化。 2. **SES 构建的可比性问题**：两个队列中 SES 变量的构建方式不同——美国纳入了健康保险，英国未纳入；英国基线未收集具体职业信息，仅使用就业状态。 3. **生活方式评分的简化假设**：同等权重计分法假设各生活方式因素对健康结局的影响相同，这一假设可能不成立。加权评分虽在一定程度上缓解了该问题，但仍无法完全解释生活方式因素间的复杂交互，且权重具有研究特异性。 4. **反向因果与残余混杂**：随访时间相对较短（平均 8.8—11.2 年），部分死亡者可能在基线时已患有严重疾病。疾病状态可能同时影响生活方式行为和 SES。尽管主分析调整了基线合并症且敏感性分析排除了基线患主要慢性病者，仍无法完全排除反向因果和残余混杂。 5. **选择偏倚**：因协变量缺失被排除的参与者更可能属于低 SES 群体，健康结局的社会经济不平等可能被低估。多重插补后结果保持稳定。 6. **事后亚组分析**：分层分析为事后检验，样本量限制可能影响交互作用检验的统计效力。 7. **健康志愿者偏倚**：UK Biobank 的参与率约 5.5%，参与者总体上比一般人群更健康，可能影响绝对风险估计。"
+        ],
+        "quote": "### 优势与局限性 **优势**：(1) 样本量大，来自两个成熟的全国性队列；(2) 整体 SES 变量和健康生活方式评分的构建能更全面地反映社会经济地位和生活方式；(3) 一系列敏感性分析验证了结果的稳健性。 **局限性**（源自原文明确陈述，逐条改写）： 1. **测量偏倚**：社会经济和生活方式信息主要来自自我报告且仅测量一次，无法捕捉长期 SES 轨迹及生活方式变化。 2. **SES 构建的可比性问题**：两个队列中 SES 变量的构建方式不同——美国纳入了健康保险，英国未纳入；英国基线未收集具体职业信息，仅使用就业状态。 3. **生活方式评分的简化假设**：同等权重计分法假设各生活方式因素对健康结局的影响相同，这一假设可能不成立。加权评分虽在一定程度上缓解了该问题，但仍无法完全解释生活方式因素间的复杂交互，且权重具有研究特异性。 4. **反向因果与残余混杂**：随访时间相对较短（平均 8.8—11.2 年），部分死亡者可能在基线时已患有严重疾病。疾病状态可能同时影响生活方式行为和 SES。尽管主分析调整了基线合并症且敏感性分析排除了基线患主要慢性病者，仍无法完全排除反向因果和残余混杂。 5. **选择偏倚**：因协变量缺失被排除的参与者更可能属于低 SES 群体，健康结局的社会经济不平等可能被低估。多重插补后结果保持稳定。 6. **事后亚组分析**：分层分析为事后检验，样本量限制可能影响交互作用检验的统计效力。 7. **健康志愿者偏倚**：UK Biobank 的参与率约 5.5%，参与者总体上比一般人群更健康，可能影响绝对风险估计。"
+      },
+      "explanation": "The generated text adds an unsupported limitation about UK Biobank volunteer participation bias not mentioned in the reference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The observational study does not report harms or safety endpoints; not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "cohort_construction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "NHANES: aged ≥20, non-pregnant, from III and 1999-2014; excluded missing data, 44 462 final. UK Biobank: age 37-73; excluded missing data, 399 537; for incident CVD, excluded baseline CVD (n=324 517).",
+      "generatedFact": "US NHANES: ≥20 岁，未怀孕，排除缺失数据得 44 462；UK Biobank: 37-73 岁，排除缺失数据得 399 537，新发 CVD 分析仅纳入基线无 CVD 者 (n=324 517)。",
+      "sourceEvidence": {
+        "locator": "R0013",
+        "locators": [
+          "R0013",
+          "R0014"
+        ],
+        "quotes": [
+          "9 Although US NHANES has released cross sectional questionnaire, examination, and laboratory data up to 2018, mortality data were updated to 31 December 2015. Accordingly, the current analysis included 61 202 participants who were aged 20 years and older and not pregnant at baseline in US NHANES III (1988-94) and continuous NHANES (1999-2014) surveys. Those with missing information on socioeconomic factors (n=6939), lifestyle factors (n=8156), other covariates (n=1619), and deaths (n=26) were excluded from the analysis. Overall, 44 462 participants from US NHANES were included (supplementary fig 1).",
+          "UK Biobank recruited more than 500 000 participants aged 37 to 73 years from 22 assessment centers across England, Scotland, and Wales between 2007 and 2010. Details of the study design and data collection have been described previously. 10 Among the 502 492 participants, we excluded those with missing information on socioeconomic factors (n=77 962), lifestyle factors (n=20 029), and other covariates (n=4964). Overall, 399 537 participants were included (supplementary fig 1). For the analysis of incident CVD, we only included those without prevalent CVD (n=324 517) at baseline."
+        ],
+        "quote": "9 Although US NHANES has released cross sectional questionnaire, examination, and laboratory data up to 2018, mortality data were updated to 31 December 2015. Accordingly, the current analysis included 61 202 participants who were aged 20 years and older and not pregnant at baseline in US NHANES III (1988-94) and continuous NHANES (1999-2014) surveys. Those with missing information on socioeconomic factors (n=6939), lifestyle factors (n=8156), other covariates (n=1619), and deaths (n=26) were excluded from the analysis. Overall, 44 462 participants from US NHANES were included (supplementary fig 1).\n\nUK Biobank recruited more than 500 000 participants aged 37 to 73 years from 22 assessment centers across England, Scotland, and Wales between 2007 and 2010. Details of the study design and data collection have been described previously. 10 Among the 502 492 participants, we excluded those with missing information on socioeconomic factors (n=77 962), lifestyle factors (n=20 029), and other covariates (n=4964). Overall, 399 537 participants were included (supplementary fig 1). For the analysis of incident CVD, we only included those without prevalent CVD (n=324 517) at baseline."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "本研究利用 US NHANES 和 UK Biobank 两项大型全国性队列的数据，系统评估了生活方式与 SES 对死亡和新发 CVD 的复杂关系。 --- ## 方法 ### 研究人群 **US NHANES** 采用复杂多阶段概率抽样设计，招募具有全国代表性的美国平民社区人群。研究在 1999 年前为周期性开展，此后持续进行[9]。考虑到死亡率数据更新至 2015 年 12 月 31 日，本研究纳入 NHANES III（1988—1994 年）和连续 NHANES（1999—2014 年）中年龄 ≥20 岁且基线未怀孕的 61 202 名参与者。排除社会经济因素缺失（n=6 939）、生活方式因素缺失（n=8 156）、其他协变量缺失（n=1 619）及死亡信息缺失（n=26）者，最终纳入 44 462 人。 **UK Biobank** 于 2007—2010 年间从英格兰、苏格兰和威尔士的 22 个评估中心招募了超过 50 万名 37—73 岁的参与者[10]。从 502 492 人中排除社会经济因素缺失（n=77 962）、生活方式因素缺失（n=20 029）及其他协变量缺失（n=4 964）者，最终纳入 399 537 人。新发 CVD 分析仅纳入基线无 CVD 者（n=324 517）。"
+        ],
+        "quote": "本研究利用 US NHANES 和 UK Biobank 两项大型全国性队列的数据，系统评估了生活方式与 SES 对死亡和新发 CVD 的复杂关系。 --- ## 方法 ### 研究人群 **US NHANES** 采用复杂多阶段概率抽样设计，招募具有全国代表性的美国平民社区人群。研究在 1999 年前为周期性开展，此后持续进行[9]。考虑到死亡率数据更新至 2015 年 12 月 31 日，本研究纳入 NHANES III（1988—1994 年）和连续 NHANES（1999—2014 年）中年龄 ≥20 岁且基线未怀孕的 61 202 名参与者。排除社会经济因素缺失（n=6 939）、生活方式因素缺失（n=8 156）、其他协变量缺失（n=1 619）及死亡信息缺失（n=26）者，最终纳入 44 462 人。 **UK Biobank** 于 2007—2010 年间从英格兰、苏格兰和威尔士的 22 个评估中心招募了超过 50 万名 37—73 岁的参与者[10]。从 502 492 人中排除社会经济因素缺失（n=77 962）、生活方式因素缺失（n=20 029）及其他协变量缺失（n=4 964）者，最终纳入 399 537 人。新发 CVD 分析仅纳入基线无 CVD 者（n=324 517）。"
+      },
+      "explanation": "Cohort construction and exclusions are faithfully reported.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "confounding_adjustment",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Adjusted for age, sex, marital status (US), assessment centre (UK), race, acculturation, BMI, and history of hypertension, diabetes, CVD, cancer, chronic bronchitis/emphysema/COPD.",
+      "generatedFact": "协变量包括年龄、性别、婚姻状况（US）、评估中心（UK）、自报种族、文化适应评分、BMI、高血压/糖尿病/CVD/癌症史及慢性支气管炎/肺气肿/COPD 史。",
+      "sourceEvidence": {
+        "locator": "R0036",
+        "locators": [
+          "R0036"
+        ],
+        "quotes": [
+          "Based on previous researches, 20 23 model 1 included SES; age; sex; self-reported race; marital status (US NHANES only); assessment centers (UK Biobank only); acculturation; BMI; and history of hypertension, diabetes, CVD, cancer, chronic bronchitis, emphysema, or chronic obstructive pulmonary disease. Model 2 additionally included the healthy lifestyle score. We used the difference method to calculate the mediation proportion by the mediator (overall lifestyle) for the association between SES and each outcome—that is, comparing estimates from models with and without the hypothesized mediator."
+        ],
+        "quote": "Based on previous researches, 20 23 model 1 included SES; age; sex; self-reported race; marital status (US NHANES only); assessment centers (UK Biobank only); acculturation; BMI; and history of hypertension, diabetes, CVD, cancer, chronic bronchitis, emphysema, or chronic obstructive pulmonary disease. Model 2 additionally included the healthy lifestyle score. We used the difference method to calculate the mediation proportion by the mediator (overall lifestyle) for the association between SES and each outcome—that is, comparing estimates from models with and without the hypothesized mediator."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007",
+          "G0008"
+        ],
+        "quotes": [
+          "### 生活方式因素与协变量 健康生活方式评分涵盖四项指标[23, 24]： 1. **从不吸烟**：一生中吸烟少于 100 支。 2. **无重度饮酒**：女性 ≤1 杯/天，男性 ≤2 杯/天[25, 26]。 3. **体力活动**：休闲时间体力活动水平处于研究人群的前三分之一（为统一不同调查周期的问卷差异，计算每周代谢当量小时或每月体力活动频率后分三等份）。 4. **膳食质量**：US NHANES 中，NHANES III 使用 HEI-1995 评分，连续 NHANES 使用 HEI-2015 评分[27]，健康膳食定义为评分处于前五分之二[28]。UK Biobank 中，基于心血管健康膳食推荐（足量摄入水果、蔬菜、全谷物、鱼类、贝类、乳制品和植物油，减少精制谷物、加工肉类、未加工肉类和含糖饮料摄入），满足至少 5 项即为健康膳食[29]。 每项健康行为计 1 分，总分范围 0—4 分。BMI 未被纳入主评分（因其可能是行为因素与健康结局间的中间因素）[33]，但在敏感性分析中纳入（健康体重定义为 BMI 18.5—24.9[28]）。 协变量包括：年龄、性别、婚姻状况（仅 US NHANES）、评估中心（仅 UK Biobank）、自报种族、文化适应评分、高血压/糖尿病/CVD/癌症史，以及慢性支气管炎/肺气肿/COPD 史（仅 UK Biobank）。基线体重和身高由测量获得。",
+          "### 结局判定 主要结局为全因死亡（两项研究）、CVD 死亡和新发 CVD（仅 UK Biobank）。US NHANES 中死亡信息通过国家死亡索引获取至 2015 年 12 月 31 日[35]。UK Biobank 中死亡信息通过 NHS 信息中心（英格兰和威尔士）及 NHS 中央登记处（苏格兰）获取至 2020 年 4 月 30 日[36]；CVD 诊断（心肌梗死和卒中）通过链接的住院数据及死亡登记数据获取至 2018 年 1 月 31 日[37, 38]。 ### 统计分析 US NHANES 分析考虑了复杂调查设计的过采样、分层和聚类[39]。使用 Cox 比例风险回归模型估计风险比（HR）及 95% 置信区间。采用差值法计算生活方式的中介比例[41]：模型 1 纳入 SES 及协变量，模型 2 额外纳入健康生活方式评分，比较两模型估计值的变化。通过引入 SES 与健康生活方式评分的乘积项评估相乘交互作用，通过超额相对风险（RERI）评估相加交互作用[42]。联合分析将参与者按 SES（高/中/低）× 生活方式评分（0—1/2/3—4 分）分为 9 组。按性别、自报种族（白种人/非白种人）和年龄（<60 岁/≥60 岁[43]）分层进行亚组分析。"
+        ],
+        "quote": "### 生活方式因素与协变量 健康生活方式评分涵盖四项指标[23, 24]： 1. **从不吸烟**：一生中吸烟少于 100 支。 2. **无重度饮酒**：女性 ≤1 杯/天，男性 ≤2 杯/天[25, 26]。 3. **体力活动**：休闲时间体力活动水平处于研究人群的前三分之一（为统一不同调查周期的问卷差异，计算每周代谢当量小时或每月体力活动频率后分三等份）。 4. **膳食质量**：US NHANES 中，NHANES III 使用 HEI-1995 评分，连续 NHANES 使用 HEI-2015 评分[27]，健康膳食定义为评分处于前五分之二[28]。UK Biobank 中，基于心血管健康膳食推荐（足量摄入水果、蔬菜、全谷物、鱼类、贝类、乳制品和植物油，减少精制谷物、加工肉类、未加工肉类和含糖饮料摄入），满足至少 5 项即为健康膳食[29]。 每项健康行为计 1 分，总分范围 0—4 分。BMI 未被纳入主评分（因其可能是行为因素与健康结局间的中间因素）[33]，但在敏感性分析中纳入（健康体重定义为 BMI 18.5—24.9[28]）。 协变量包括：年龄、性别、婚姻状况（仅 US NHANES）、评估中心（仅 UK Biobank）、自报种族、文化适应评分、高血压/糖尿病/CVD/癌症史，以及慢性支气管炎/肺气肿/COPD 史（仅 UK Biobank）。基线体重和身高由测量获得。\n\n### 结局判定 主要结局为全因死亡（两项研究）、CVD 死亡和新发 CVD（仅 UK Biobank）。US NHANES 中死亡信息通过国家死亡索引获取至 2015 年 12 月 31 日[35]。UK Biobank 中死亡信息通过 NHS 信息中心（英格兰和威尔士）及 NHS 中央登记处（苏格兰）获取至 2020 年 4 月 30 日[36]；CVD 诊断（心肌梗死和卒中）通过链接的住院数据及死亡登记数据获取至 2018 年 1 月 31 日[37, 38]。 ### 统计分析 US NHANES 分析考虑了复杂调查设计的过采样、分层和聚类[39]。使用 Cox 比例风险回归模型估计风险比（HR）及 95% 置信区间。采用差值法计算生活方式的中介比例[41]：模型 1 纳入 SES 及协变量，模型 2 额外纳入健康生活方式评分，比较两模型估计值的变化。通过引入 SES 与健康生活方式评分的乘积项评估相乘交互作用，通过超额相对风险（RERI）评估相加交互作用[42]。联合分析将参与者按 SES（高/中/低）× 生活方式评分（0—1/2/3—4 分）分为 9 组。按性别、自报种族（白种人/非白种人）和年龄（<60 岁/≥60 岁[43]）分层进行亚组分析。"
+      },
+      "explanation": "The set of adjustment variables is complete and matches the reference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "missing_data_and_censoring",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Participants with missing covariates excluded; multiple imputation used in sensitivity analysis; censoring at death, diagnosis, or end of follow-up.",
+      "generatedFact": "排除缺失协变量者；敏感性分析采用多重插补；随访至死亡、诊断或期末。",
+      "sourceEvidence": {
+        "locator": "R0042",
+        "locators": [
+          "R0042",
+          "R0035"
+        ],
+        "quotes": [
+          "Fifth, we excluded events that occurred within the first three years of follow-up to reduce potential reverse causation. Sixth, we restricted the analysis to those aged 40 years or older in US NHANES to coincide with the age distribution in UK Biobank, and to reduce the concern that SES is prone to change and the risk of mortality due to lifestyles is relatively lower in younger adults. As only five participants in UK Biobank were aged less than 40 years, this sensitivity analysis was not performed in UK Biobank. Seventh, we used multiple imputation to impute all missing independent variables to test the influence of missing variables.",
+          "We used Cox proportional hazard regression models to estimate the hazard ratios and 95% confidence intervals of outcomes associated with SES and lifestyle score. The proportional hazards assumption was examined by creating a product term of follow-up time and SES, and we found no significant deviation from the assumption. 40 Person years were calculated from baseline until the date of death or diagnosis (for the incident CVD analysis), or end of follow-up, whichever occurred first."
+        ],
+        "quote": "Fifth, we excluded events that occurred within the first three years of follow-up to reduce potential reverse causation. Sixth, we restricted the analysis to those aged 40 years or older in US NHANES to coincide with the age distribution in UK Biobank, and to reduce the concern that SES is prone to change and the risk of mortality due to lifestyles is relatively lower in younger adults. As only five participants in UK Biobank were aged less than 40 years, this sensitivity analysis was not performed in UK Biobank. Seventh, we used multiple imputation to impute all missing independent variables to test the influence of missing variables.\n\nWe used Cox proportional hazard regression models to estimate the hazard ratios and 95% confidence intervals of outcomes associated with SES and lifestyle score. The proportional hazards assumption was examined by creating a product term of follow-up time and SES, and we found no significant deviation from the assumption. 40 Person years were calculated from baseline until the date of death or diagnosis (for the incident CVD analysis), or end of follow-up, whichever occurred first."
+      },
+      "generatedEvidence": {
+        "locator": "G0009",
+        "locators": [
+          "G0009",
+          "G0005"
+        ],
+        "quotes": [
+          "敏感性分析包括：(1) 用单项社会经济因素及单项生活方式因素替代综合变量；(2) 构建加权生活方式评分[44]；(3) 将 BMI 纳入评分；(4) 排除基线患有主要慢性病者；(5) 排除前三年内的事件；(6) US NHANES 中限制至 ≥40 岁人群；(7) 多重插补缺失变量[45]；(8) 使用社会经济分数替代潜在类别变量；(9) UK Biobank 中纳入 Townsend 剥夺指数并以其作 SES 变量；(10) 纳入年龄的二次项。所有分析使用 SAS 9.4，以双侧 P <0.05 为统计学显著。 --- ## 结果 ### 人群特征 US NHANES 共 44 462 人（平均年龄 46.5 岁，男性 48.7%），其中高 SES 10 469 人（33.6%）、中 SES 20 729 人（46.4%）、低 SES 13 264 人（20.0%）。UK Biobank 共 399 537 人（平均年龄 56.1 岁，男性 47.5%），其中高 SES 79 697 人（19.9%）、中 SES 210 935 人（52.8%）、低 SES 108 905 人（27.3%）。低 SES 组成年人更可能为女性、非白种人、未婚、无业、受教育程度低、低收入、仅公共保险或无保险，且合并症患病率更高。低 SES 组中不健康水平的吸烟、体力活动和 BMI 更为普遍。",
+          "本研究利用 US NHANES 和 UK Biobank 两项大型全国性队列的数据，系统评估了生活方式与 SES 对死亡和新发 CVD 的复杂关系。 --- ## 方法 ### 研究人群 **US NHANES** 采用复杂多阶段概率抽样设计，招募具有全国代表性的美国平民社区人群。研究在 1999 年前为周期性开展，此后持续进行[9]。考虑到死亡率数据更新至 2015 年 12 月 31 日，本研究纳入 NHANES III（1988—1994 年）和连续 NHANES（1999—2014 年）中年龄 ≥20 岁且基线未怀孕的 61 202 名参与者。排除社会经济因素缺失（n=6 939）、生活方式因素缺失（n=8 156）、其他协变量缺失（n=1 619）及死亡信息缺失（n=26）者，最终纳入 44 462 人。 **UK Biobank** 于 2007—2010 年间从英格兰、苏格兰和威尔士的 22 个评估中心招募了超过 50 万名 37—73 岁的参与者[10]。从 502 492 人中排除社会经济因素缺失（n=77 962）、生活方式因素缺失（n=20 029）及其他协变量缺失（n=4 964）者，最终纳入 399 537 人。新发 CVD 分析仅纳入基线无 CVD 者（n=324 517）。"
+        ],
+        "quote": "敏感性分析包括：(1) 用单项社会经济因素及单项生活方式因素替代综合变量；(2) 构建加权生活方式评分[44]；(3) 将 BMI 纳入评分；(4) 排除基线患有主要慢性病者；(5) 排除前三年内的事件；(6) US NHANES 中限制至 ≥40 岁人群；(7) 多重插补缺失变量[45]；(8) 使用社会经济分数替代潜在类别变量；(9) UK Biobank 中纳入 Townsend 剥夺指数并以其作 SES 变量；(10) 纳入年龄的二次项。所有分析使用 SAS 9.4，以双侧 P <0.05 为统计学显著。 --- ## 结果 ### 人群特征 US NHANES 共 44 462 人（平均年龄 46.5 岁，男性 48.7%），其中高 SES 10 469 人（33.6%）、中 SES 20 729 人（46.4%）、低 SES 13 264 人（20.0%）。UK Biobank 共 399 537 人（平均年龄 56.1 岁，男性 47.5%），其中高 SES 79 697 人（19.9%）、中 SES 210 935 人（52.8%）、低 SES 108 905 人（27.3%）。低 SES 组成年人更可能为女性、非白种人、未婚、无业、受教育程度低、低收入、仅公共保险或无保险，且合并症患病率更高。低 SES 组中不健康水平的吸烟、体力活动和 BMI 更为普遍。\n\n本研究利用 US NHANES 和 UK Biobank 两项大型全国性队列的数据，系统评估了生活方式与 SES 对死亡和新发 CVD 的复杂关系。 --- ## 方法 ### 研究人群 **US NHANES** 采用复杂多阶段概率抽样设计，招募具有全国代表性的美国平民社区人群。研究在 1999 年前为周期性开展，此后持续进行[9]。考虑到死亡率数据更新至 2015 年 12 月 31 日，本研究纳入 NHANES III（1988—1994 年）和连续 NHANES（1999—2014 年）中年龄 ≥20 岁且基线未怀孕的 61 202 名参与者。排除社会经济因素缺失（n=6 939）、生活方式因素缺失（n=8 156）、其他协变量缺失（n=1 619）及死亡信息缺失（n=26）者，最终纳入 44 462 人。 **UK Biobank** 于 2007—2010 年间从英格兰、苏格兰和威尔士的 22 个评估中心招募了超过 50 万名 37—73 岁的参与者[10]。从 502 492 人中排除社会经济因素缺失（n=77 962）、生活方式因素缺失（n=20 029）及其他协变量缺失（n=4 964）者，最终纳入 399 537 人。新发 CVD 分析仅纳入基线无 CVD 者（n=324 517）。"
+      },
+      "explanation": "Missing data handling and censoring approach are correctly described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "association_measure_context",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Hazard ratios (Cox model) with 95% CI, reference group high SES, over follow-up periods of 11.2 (US) and 8.8–11.0 (UK) years.",
+      "generatedFact": "风险比（HR）和 95% CI，以高 SES 为参照，随访时间 US 11.2 年、UK 8.8–11.0 年。",
+      "sourceEvidence": {
+        "locator": "R0006",
+        "locators": [
+          "R0006",
+          "R0035",
+          "R0004"
+        ],
+        "quotes": [
+          "Compared with adults of high SES, those of low SES had higher risks of all cause mortality (hazard ratio 2.13, 95% confidence interval 1.90 to 2.38 in US NHANES; 1.96, 1.87 to 2.06 in UK Biobank), CVD mortality (2.25, 2.00 to 2.53), and incident CVD (1.65, 1.52 to 1.79) in UK Biobank, and the proportions mediated by lifestyle were 12.3% (10.7% to 13.9%), 4.0% (3.5% to 4.4%), 3.0% (2.5% to 3.6%), and 3.7% (3.1% to 4.5%), respectively. No significant interaction was observed between lifestyle and SES in US NHANES, whereas associations between lifestyle and outcomes were stronger among those of low SES in UK Biobank.",
+          "We used Cox proportional hazard regression models to estimate the hazard ratios and 95% confidence intervals of outcomes associated with SES and lifestyle score. The proportional hazards assumption was examined by creating a product term of follow-up time and SES, and we found no significant deviation from the assumption. 40 Person years were calculated from baseline until the date of death or diagnosis (for the incident CVD analysis), or end of follow-up, whichever occurred first.",
+          "A healthy lifestyle score was constructed using information on never smoking, no heavy alcohol consumption (women ≤1 drink/day; men ≤2 drinks/day; one drink contains 14 g of ethanol in the US and 8 g in the UK), top third of physical activity, and higher dietary quality.Main outcome measuresAll cause mortality was the primary outcome in both studies, and CVD mortality and morbidity in UK Biobank, which were obtained through linkage to registries.ResultsUS NHANES documented 8906 deaths over a mean follow-up of 11.2 years, and UK Biobank documented 22 309 deaths and 6903 incident CVD cases over a mean follow-up of 8.8-11.0 years."
+        ],
+        "quote": "Compared with adults of high SES, those of low SES had higher risks of all cause mortality (hazard ratio 2.13, 95% confidence interval 1.90 to 2.38 in US NHANES; 1.96, 1.87 to 2.06 in UK Biobank), CVD mortality (2.25, 2.00 to 2.53), and incident CVD (1.65, 1.52 to 1.79) in UK Biobank, and the proportions mediated by lifestyle were 12.3% (10.7% to 13.9%), 4.0% (3.5% to 4.4%), 3.0% (2.5% to 3.6%), and 3.7% (3.1% to 4.5%), respectively. No significant interaction was observed between lifestyle and SES in US NHANES, whereas associations between lifestyle and outcomes were stronger among those of low SES in UK Biobank.\n\nWe used Cox proportional hazard regression models to estimate the hazard ratios and 95% confidence intervals of outcomes associated with SES and lifestyle score. The proportional hazards assumption was examined by creating a product term of follow-up time and SES, and we found no significant deviation from the assumption. 40 Person years were calculated from baseline until the date of death or diagnosis (for the incident CVD analysis), or end of follow-up, whichever occurred first.\n\nA healthy lifestyle score was constructed using information on never smoking, no heavy alcohol consumption (women ≤1 drink/day; men ≤2 drinks/day; one drink contains 14 g of ethanol in the US and 8 g in the UK), top third of physical activity, and higher dietary quality.Main outcome measuresAll cause mortality was the primary outcome in both studies, and CVD mortality and morbidity in UK Biobank, which were obtained through linkage to registries.ResultsUS NHANES documented 8906 deaths over a mean follow-up of 11.2 years, and UK Biobank documented 22 309 deaths and 6903 incident CVD cases over a mean follow-up of 8.8-11.0 years."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003",
+          "G0008",
+          "G0010"
+        ],
+        "quotes": [
+          "**结果**：US NHANES 平均随访 11.2 年，记录 8 906 例死亡；UK Biobank 平均随访 8.8—11.0 年，记录 22 309 例死亡和 6 903 例新发 CVD。以高 SES 为参照，低 SES 组成年人在校正生活方式评分及其他协变量后，全因死亡风险比（HR）在 US NHANES 为 2.13（95% CI 1.90—2.38），在 UK Biobank 为 1.96（1.87—2.06）；CVD 死亡 HR 为 2.25（2.00—2.53）；新发 CVD HR 为 1.65（1.52—1.79）。生活方式对上述关联的中介比例分别为：US NHANES 全因死亡 12.3%（10.7%—13.9%），UK Biobank 全因死亡 4.0%（3.5%—4.4%），CVD 死亡 3.0%（2.5%—3.6%），新发 CVD 3.7%（3.1%—4.5%）。US NHANES 中未发现生活方式与 SES 的显著交互作用；UK Biobank 中低 SES 组健康生活方式的保护性关联更强。以高 SES 且具有 3—4 项健康生活方式者为参照，低 SES 且仅 0—1 项健康生活方式者的全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。",
+          "### 结局判定 主要结局为全因死亡（两项研究）、CVD 死亡和新发 CVD（仅 UK Biobank）。US NHANES 中死亡信息通过国家死亡索引获取至 2015 年 12 月 31 日[35]。UK Biobank 中死亡信息通过 NHS 信息中心（英格兰和威尔士）及 NHS 中央登记处（苏格兰）获取至 2020 年 4 月 30 日[36]；CVD 诊断（心肌梗死和卒中）通过链接的住院数据及死亡登记数据获取至 2018 年 1 月 31 日[37, 38]。 ### 统计分析 US NHANES 分析考虑了复杂调查设计的过采样、分层和聚类[39]。使用 Cox 比例风险回归模型估计风险比（HR）及 95% 置信区间。采用差值法计算生活方式的中介比例[41]：模型 1 纳入 SES 及协变量，模型 2 额外纳入健康生活方式评分，比较两模型估计值的变化。通过引入 SES 与健康生活方式评分的乘积项评估相乘交互作用，通过超额相对风险（RERI）评估相加交互作用[42]。联合分析将参与者按 SES（高/中/低）× 生活方式评分（0—1/2/3—4 分）分为 9 组。按性别、自报种族（白种人/非白种人）和年龄（<60 岁/≥60 岁[43]）分层进行亚组分析。",
+          "### 生活方式的中介作用 校正生活方式评分及其他协变量后，以高 SES 为参照，低 SES 组全因死亡风险显著升高（US NHANES: HR 2.13, 95% CI 1.90—2.38；UK Biobank: HR 1.96, 95% CI 1.87—2.06），CVD 死亡 HR 为 2.25（2.00—2.53），新发 CVD HR 为 1.65（1.52—1.79）。每增加一项健康生活方式因素，死亡和 CVD 风险降低 11%—17%。 生活方式对 SES-健康结局关联的中介比例：US NHANES 全因死亡 12.3%（10.7%—13.9%）；UK Biobank 全因死亡 4.0%（3.5%—4.4%）、CVD 死亡 3.0%（2.5%—3.6%）、新发 CVD 3.7%（3.1%—4.5%）。当使用社会经济分数考察更极端的社会经济差距时，中介比例相似。纳入健康生活方式评分并未改善所有结局的预测能力（C 统计量未显著增加）。 当使用单项社会经济因素时，HR 范围为 1.13—2.09；生活方式对教育与死亡关联的中介比例最高可达 22.2%，而对英国家庭收入的中介比例不足 1%。在 UK Biobank 中同时纳入 Townsend 剥夺指数后，个体水平 SES 与结局的关联未发生实质性变化。所有敏感性分析结果基本一致。"
+        ],
+        "quote": "**结果**：US NHANES 平均随访 11.2 年，记录 8 906 例死亡；UK Biobank 平均随访 8.8—11.0 年，记录 22 309 例死亡和 6 903 例新发 CVD。以高 SES 为参照，低 SES 组成年人在校正生活方式评分及其他协变量后，全因死亡风险比（HR）在 US NHANES 为 2.13（95% CI 1.90—2.38），在 UK Biobank 为 1.96（1.87—2.06）；CVD 死亡 HR 为 2.25（2.00—2.53）；新发 CVD HR 为 1.65（1.52—1.79）。生活方式对上述关联的中介比例分别为：US NHANES 全因死亡 12.3%（10.7%—13.9%），UK Biobank 全因死亡 4.0%（3.5%—4.4%），CVD 死亡 3.0%（2.5%—3.6%），新发 CVD 3.7%（3.1%—4.5%）。US NHANES 中未发现生活方式与 SES 的显著交互作用；UK Biobank 中低 SES 组健康生活方式的保护性关联更强。以高 SES 且具有 3—4 项健康生活方式者为参照，低 SES 且仅 0—1 项健康生活方式者的全因死亡 HR 在 US NHANES 为 3.53（3.01—4.14），在 UK Biobank 为 2.65（2.39—2.94），CVD 死亡 HR 为 2.65（2.09—3.38），新发 CVD HR 为 2.09（1.78—2.46）。\n\n### 结局判定 主要结局为全因死亡（两项研究）、CVD 死亡和新发 CVD（仅 UK Biobank）。US NHANES 中死亡信息通过国家死亡索引获取至 2015 年 12 月 31 日[35]。UK Biobank 中死亡信息通过 NHS 信息中心（英格兰和威尔士）及 NHS 中央登记处（苏格兰）获取至 2020 年 4 月 30 日[36]；CVD 诊断（心肌梗死和卒中）通过链接的住院数据及死亡登记数据获取至 2018 年 1 月 31 日[37, 38]。 ### 统计分析 US NHANES 分析考虑了复杂调查设计的过采样、分层和聚类[39]。使用 Cox 比例风险回归模型估计风险比（HR）及 95% 置信区间。采用差值法计算生活方式的中介比例[41]：模型 1 纳入 SES 及协变量，模型 2 额外纳入健康生活方式评分，比较两模型估计值的变化。通过引入 SES 与健康生活方式评分的乘积项评估相乘交互作用，通过超额相对风险（RERI）评估相加交互作用[42]。联合分析将参与者按 SES（高/中/低）× 生活方式评分（0—1/2/3—4 分）分为 9 组。按性别、自报种族（白种人/非白种人）和年龄（<60 岁/≥60 岁[43]）分层进行亚组分析。\n\n### 生活方式的中介作用 校正生活方式评分及其他协变量后，以高 SES 为参照，低 SES 组全因死亡风险显著升高（US NHANES: HR 2.13, 95% CI 1.90—2.38；UK Biobank: HR 1.96, 95% CI 1.87—2.06），CVD 死亡 HR 为 2.25（2.00—2.53），新发 CVD HR 为 1.65（1.52—1.79）。每增加一项健康生活方式因素，死亡和 CVD 风险降低 11%—17%。 生活方式对 SES-健康结局关联的中介比例：US NHANES 全因死亡 12.3%（10.7%—13.9%）；UK Biobank 全因死亡 4.0%（3.5%—4.4%）、CVD 死亡 3.0%（2.5%—3.6%）、新发 CVD 3.7%（3.1%—4.5%）。当使用社会经济分数考察更极端的社会经济差距时，中介比例相似。纳入健康生活方式评分并未改善所有结局的预测能力（C 统计量未显著增加）。 当使用单项社会经济因素时，HR 范围为 1.13—2.09；生活方式对教育与死亡关联的中介比例最高可达 22.2%，而对英国家庭收入的中介比例不足 1%。在 UK Biobank 中同时纳入 Townsend 剥夺指数后，个体水平 SES 与结局的关联未发生实质性变化。所有敏感性分析结果基本一致。"
+      },
+      "explanation": "Association measure, reference, CI, and time context are correctly maintained.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 20,
+    "weightedFidelity": 0.9853,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 19,
+      "partial": 1,
+      "not_applicable": 1
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [
+      "limitations_and_bias"
+    ],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 83.3,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "unsupported_claim"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail"
+  },
+  "adversarialAudit": null,
+  "overallAssessment": "The generated article is highly faithful to the reference, with all critical observational cohort elements (objective, design, population, sample size, exposures, outcomes, analysis, key results, and conclusions) reproduced exactly. One unsupported limitation about UK Biobank volunteer participation bias was added, making the limitations section partially unsupported. No other factual discrepancies or omissions were found.",
+  "gradedAt": "2026-07-18T15:19:41Z"
+}

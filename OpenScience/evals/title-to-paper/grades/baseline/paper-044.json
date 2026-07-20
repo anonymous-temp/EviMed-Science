@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-044",
+  "category": "biomedical-ai",
+  "title": "DeepEMhancer: a deep learning solution for cryo-EM volume post-processing.",
+  "pmcid": "PMC8282847",
+  "doi": "10.1038/s42003-021-02399-1",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 4309,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 46,
+    "supportedUniqueNumbers": 45,
+    "unsupportedNumberTokens": [
+      "70000"
+    ],
+    "supportedNumericClaimPrecision": 0.9782608695652174,
+    "verbatimEightGramRate": 0.0010065425264217413,
+    "toolCalls": 11,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "All generated claims, including the U-net architecture, dataset sizes (107/21/20 maps, >70k cubes), LocScale targets, preprocessing, redundancy control, quantitative improvements (0.6 Å median FSC, 0.4 Å DeepRes, correlation 0.9), comparisons with RELION and EMDB, and case-study details, exactly match the reference. No fabricated design, sample, endpoint, effect estimate, or conclusion is present. The summary is fully faithful to the published article."
+  },
+  "overallVerdict": "pass"
+}

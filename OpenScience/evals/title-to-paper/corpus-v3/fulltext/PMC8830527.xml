@@ -1,0 +1,795 @@
+
+<!DOCTYPE article
+  PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Archiving and Interchange DTD with MathML3 v1.4 20241031//EN" "JATS-archivearticle1-4-mathml3.dtd">
+<article xml:lang="en" article-type="research-article" dtd-version="1.4"><processing-meta base-tagset="archiving" mathml-version="3.0" table-model="xhtml" tagset-family="jats"><restricted-by>pmc</restricted-by></processing-meta><front><journal-meta><journal-id journal-id-type="nlm-ta">Eur Heart J</journal-id><journal-id journal-id-type="iso-abbrev">Eur Heart J</journal-id><journal-id journal-id-type="pmc-domain-id">729</journal-id><journal-id journal-id-type="pmc-domain">ehj</journal-id><journal-id journal-id-type="publisher-id">eurheartj</journal-id><journal-title-group><journal-title>European Heart Journal</journal-title></journal-title-group><issn pub-type="ppub">0195-668X</issn><issn pub-type="epub">1522-9645</issn><publisher><publisher-name>Oxford University Press</publisher-name></publisher></journal-meta><article-meta><article-id pub-id-type="pmcid">PMC8830527</article-id><article-id pub-id-type="pmcid-ver">PMC8830527.1</article-id><article-id pub-id-type="pmcaid">8830527</article-id><article-id pub-id-type="pmcaiid">8830527</article-id><article-id pub-id-type="pmid">35023547</article-id><article-id pub-id-type="doi">10.1093/eurheartj/ehab777</article-id><article-id pub-id-type="publisher-id">ehab777</article-id><article-version article-version-type="pmc-version">1</article-version><article-categories><subj-group subj-group-type="heading"><subject>Fast Track Clinical Research</subject><subj-group subj-group-type="category-toc-heading"><subject>Diabetes and Metabolic Disorders</subject></subj-group></subj-group><subj-group subj-group-type="category-oup-series"><subject>Editor's Choice</subject></subj-group><subj-group subj-group-type="category-taxonomy-collection"><subject>AcademicSubjects/MED00200</subject></subj-group><subj-group subj-group-type="category-taxonomy-collection"><subject>Eurheartj/29</subject><subject>Eurheartj/27</subject><subject>Eurheartj/45</subject><subject>Eurheartj/47</subject></subj-group></article-categories><title-group><article-title>Cardiovascular and kidney outcomes with finerenone in patients with type 2
+diabetes and chronic kidney disease: the FIDELITY pooled analysis</article-title></title-group><contrib-group><contrib contrib-type="author" corresp="yes"><contrib-id contrib-id-type="orcid" authenticated="false">https://orcid.org/0000-0001-8355-7100</contrib-id><name name-style="western"><surname>Agarwal</surname><given-names initials="R">Rajiv</given-names></name><aff>
+<institution>Indiana University School of Medicine and Richard L. Roudebush VA Medical
+Center, 1481 W. 10<sup>th</sup> St, Indianapolis, IN 46202, USA</institution>
+</aff><xref rid="ehab777-cor1" ref-type="corresp"/><xref rid="ehab777-FM1" ref-type="author-notes"/></contrib><contrib contrib-type="author" corresp="yes"><name name-style="western"><surname>Filippatos</surname><given-names initials="G">Gerasimos</given-names></name><aff>
+<institution>Department of Cardiology, Attikon University Hospital, Rimini 1, Chaidari
+124 62, Athens, Greece</institution>
+</aff><xref rid="ehab777-cor1" ref-type="corresp"/><xref rid="ehab777-FM1" ref-type="author-notes"/></contrib><contrib contrib-type="author"><contrib-id contrib-id-type="orcid" authenticated="false">https://orcid.org/0000-0001-5880-275X</contrib-id><name name-style="western"><surname>Pitt</surname><given-names initials="B">Bertram</given-names></name><aff>
+<institution>Department of Medicine, University of Michigan School of Medicine, 1500 E.
+Medical Centre Dr #6303, Ann Arbor, MI 48109, USA</institution>
+</aff></contrib><contrib contrib-type="author"><name name-style="western"><surname>Anker</surname><given-names initials="SD">Stefan D</given-names></name><aff>
+<institution>Department of Cardiology (CVK) and Berlin Institute of Health Center for
+Regenerative Therapies, German Centre for Cardiovascular Research Partner Site Berlin,
+CharitéUniversitätsmedizin, Charitépl. 1, 10117 Berlin, Germany</institution>
+</aff></contrib><contrib contrib-type="author"><contrib-id contrib-id-type="orcid" authenticated="false">https://orcid.org/0000-0002-1531-4294</contrib-id><name name-style="western"><surname>Rossing</surname><given-names initials="P">Peter</given-names></name><aff>
+<institution>Steno Diabetes Center Copenhagen, Niels SteensensVej 2-4, 2820 Gentofte,
+Denmark</institution>
+</aff><aff>
+<institution>Department of Clinical Medicine, University of Copenhagen, Blegdamsvej 3b
+33.5, DK-2200 Copenhagen, Denmark</institution>
+</aff></contrib><contrib contrib-type="author"><name name-style="western"><surname>Joseph</surname><given-names initials="A">Amer</given-names></name><aff>
+<institution>Cardiology and Nephrology Clinical Development, Bayer AG, Müllerstraße 178,
+13353 Berlin, Germany</institution>
+</aff></contrib><contrib contrib-type="author"><contrib-id contrib-id-type="orcid" authenticated="false">https://orcid.org/0000-0003-3425-7528</contrib-id><name name-style="western"><surname>Kolkhof</surname><given-names initials="P">Peter</given-names></name><aff>
+<institution>Research and Development, Preclinical Research Cardiovascular, Bayer AG,
+Friedrich-Ebert-Straße 217/333, 42117, Wuppertal, Germany</institution>
+</aff></contrib><contrib contrib-type="author"><name name-style="western"><surname>Nowack</surname><given-names initials="C">Christina</given-names></name><aff>
+<institution>Research and Development, Clinical Development Operations, Bayer AG,
+Friedrich-Ebert-Straße 217/333, 42117, Wuppertal, Germany</institution>
+</aff></contrib><contrib contrib-type="author"><contrib-id contrib-id-type="orcid" authenticated="false">https://orcid.org/0000-0003-0812-8490</contrib-id><name name-style="western"><surname>Gebel</surname><given-names initials="M">Martin</given-names></name><aff>
+<institution>Research and Development, Integrated Analysis Statistics, Bayer AG,
+Friedrich-Ebert-Straße 217/333, 42117, Wuppertal, Germany</institution>
+</aff></contrib><contrib contrib-type="author"><contrib-id contrib-id-type="orcid" authenticated="false">https://orcid.org/0000-0001-6278-7951</contrib-id><name name-style="western"><surname>Ruilope</surname><given-names initials="LM">Luis M</given-names></name><aff>
+<institution>Cardiorenal Translational Laboratory and Hypertension Unit, Institute of
+Research imas12, Instituto de Investigación Hospital 12 de OctubreCentro de
+ActividadesAmbulatorias, 6ª Planta Bloque DAvda. de Córdoba, s/n28041 Madrid,
+Spain</institution>
+</aff><aff>
+<institution>CIBER-CV, Hospital Universitario 12 de Octubre, Av. de Córdoba, s/n, 28041,
+Madrid, Spain</institution>
+</aff><aff>
+<institution>Faculty of Sport Sciences, European University of Madrid, C. Tajo, s/n,
+28670 Villaviciosa de Odón, Madrid, Spain</institution>
+</aff></contrib><contrib contrib-type="author"><contrib-id contrib-id-type="orcid" authenticated="false">https://orcid.org/0000-0003-1183-1267</contrib-id><name name-style="western"><surname>Bakris</surname><given-names initials="GL">George L</given-names></name><aff>
+<institution>Department of Medicine, University of Chicago Medicine, 5841 South Maryland
+Avenue, MC 6092, 60637 Chicago, IL, USA</institution>
+</aff></contrib><contrib contrib-type="author"><collab>FIDELIO-DKD and FIGARO-DKD investigators</collab><xref rid="ehab777-FM2" ref-type="author-notes"/></contrib></contrib-group><author-notes><fn id="ehab777-FM1"><p> These authors contributed equally to this article.</p></fn><fn id="ehab777-FM2"><label>‡</label><p>FIDELIO-DKD and FIGARO-DKD Investigators are listed in the <xref rid="sup1" ref-type="supplementary-material">Supplementary material online,
+Appendix</xref>.</p></fn><corresp id="ehab777-cor1">Corresponding authors. Tel: +1 317 988 2241, Email:
+<email>ragarwal@iu.edu</email> (R.A.); Tel: +30 2105832195, Email:
+<email>gfilippatos@gmail.com</email> (G.F.)</corresp></author-notes><pub-date pub-type="collection"><day>07</day><month>2</month><year>2022</year></pub-date><pub-date pub-type="epub" iso-8601-date="2021-11-22"><day>22</day><month>11</month><year>2021</year></pub-date><volume>43</volume><issue>6</issue><issue-id pub-id-type="pmc-issue-id">400746</issue-id><issue-title>Focus Issue on Vascular Biology and Medicine</issue-title><fpage>474</fpage><lpage>484</lpage><history><date date-type="received"><day>27</day><month>8</month><year>2021</year></date><date date-type="rev-recd"><day>23</day><month>9</month><year>2021</year></date><date date-type="accepted"><day>01</day><month>11</month><year>2021</year></date><date date-type="editorial-decision"><day>26</day><month>10</month><year>2021</year></date></history><pub-history><event event-type="pmc-release"><date><day>22</day><month>11</month><year>2021</year></date></event><event event-type="pmc-live"><date><day>11</day><month>02</month><year>2022</year></date></event><event event-type="pmc-last-change"><date iso-8601-date="2024-02-15 00:25:12.480"><day>15</day><month>02</month><year>2024</year></date></event></pub-history><permissions><copyright-statement>© The Author(s) 2021. Published by Oxford University Press on behalf of
+the European Society of Cardiology.</copyright-statement><copyright-year>2021</copyright-year><license><ali:license_ref xmlns:ali="http://www.niso.org/schemas/ali/1.0/" specific-use="textmining" content-type="ccbynclicense">https://creativecommons.org/licenses/by-nc/4.0/</ali:license_ref><license-p>This is an Open Access article distributed under the terms of the Creative
+Commons Attribution-NonCommercial License (<ext-link xmlns:xlink="http://www.w3.org/1999/xlink" ext-link-type="uri" xlink:href="https://creativecommons.org/licenses/by-nc/4.0/">https://creativecommons.org/licenses/by-nc/4.0/</ext-link>), which permits
+non-commercial re-use, distribution, and reproduction in any medium, provided the
+original work is properly cited. For commercial re-use, please contact
+journals.permissions@oup.com</license-p></license></permissions><self-uri xmlns:xlink="http://www.w3.org/1999/xlink" content-type="pmc-pdf" xlink:href="ehab777.pdf"><?pdf-name ehab777.pdf?><?pdf-size 1444459?><?pdf-md5 857300486fcaae8c6e777a51e22edaac?><?pdf-image-server-status NEVER_LOAD?><?pdf-cloudpmc-urn urn:app:6754/8830527/857300486fca/ehab777.pdf?></self-uri><self-uri xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="ehab777.pdf"/><related-article xmlns:xlink="http://www.w3.org/1999/xlink" related-article-type="correction-forward" xml:lang="en" xlink:title="correction" vol="43" journal-id="Eur Heart J" journal-id-type="nlm-ta" ext-link-type="pmc" xlink:href="PMC9123234"><article-title>Corrigendum to: Cardiovascular and kidney outcomes with finerenone in patients with type 2 diabetes and chronic kidney disease: the FIDELITY pooled analysis</article-title><volume>43</volume><issue>20</issue><date><day>12</day><month>1</month><year>2022</year></date><fpage>1989</fpage><lpage>1989</lpage><source>European Heart Journal</source><pub-id pub-id-type="doi">10.1093/eurheartj/ehab886</pub-id><pub-id pub-id-type="pmcid">PMC9123234</pub-id><pub-id pub-id-type="pmid">35023545</pub-id></related-article><related-article xmlns:xlink="http://www.w3.org/1999/xlink" related-article-type="companion" journal-id="Eur Heart J" journal-id-type="nlm-ta" ext-link-type="pubmed" xlink:href="34888636"><article-title>Bringing FIDELITY to the estimate of treatment effects of finerenone in chronic kidney disease due to type 2 diabetes.</article-title><date><day>9</day><month>12</month><year>2021</year></date><source>Eur Heart J</source><pub-id pub-id-type="doi">10.1093/eurheartj/ehab827</pub-id><pub-id pub-id-type="pmid">34888636</pub-id></related-article><abstract><title>Abstract</title><sec id="s1"><title>Aims</title><p>The complementary studies FIDELIO-DKD and FIGARO-DKD in patients with type 2 diabetes
+and chronic kidney disease (CKD) examined cardiovascular and kidney outcomes in
+different, overlapping stages of CKD. The purpose of the FIDELITY analysis was to
+perform an individual patient-level prespecified pooled efficacy and safety analysis
+across a broad spectrum of CKD to provide more robust estimates of safety and efficacy
+of finerenone compared with placebo.</p></sec><sec id="s2"><title>Methods and results</title><p>For this prespecified analysis, two phase III, multicentre, double-blind trials
+involving patients with CKD and type 2 diabetes, randomized 1:1 to finerenone or
+placebo, were combined. Main time-to-event efficacy outcomes were a composite of
+cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or
+hospitalization for heart failure, and a composite of kidney failure, a sustained ≥57%
+decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal
+death. Among 13 026 patients with a median follow-up of 3.0 years (interquartile range
+2.3–3.8 years), the composite cardiovascular outcome occurred in 825 (12.7%) patients
+receiving finerenone and 939 (14.4%) receiving placebo [hazard ratio (HR), 0.86; 95%
+confidence interval (CI), 0.78–0.95; <italic toggle="yes">P </italic>=<italic toggle="yes"> </italic>0.0018]. The
+composite kidney outcome occurred in 360 (5.5%) patients receiving finerenone and 465
+(7.1%) receiving placebo (HR, 0.77; 95% CI, 0.67–0.88;
+<italic toggle="yes">P </italic>=<italic toggle="yes"> </italic>0.0002). Overall safety outcomes were generally
+similar between treatment arms. Hyperkalaemia leading to permanent treatment
+discontinuation occurred more frequently in patients receiving finerenone (1.7%) than
+placebo (0.6%).</p></sec><sec id="s3"><title>Conclusion</title><p>Finerenone reduced the risk of clinically important cardiovascular and kidney outcomes
+vs. placebo across the spectrum of CKD in patients with type 2 diabetes.</p></sec><sec id="s4"><title>Key Question</title><p>Does finerenone, a novel selective, nonsteroidal mineralocorticoid receptor antagonist,
+added to maximum tolerated renin–angiotensin system inhibition reduce cardiovascular
+disease and kidney disease progression over a broad range of chronic kidney disease in
+patients with type 2 diabetes?</p></sec><sec id="s5"><title>Key Finding</title><p>In a prespecified, pooled individual-level analysis from two randomized trials, we
+found reductions both in cardiovascular events and kidney failure outcomes with
+finerenone. Because 40% of the patients had an estimated glomerular filtration rate of
+&gt;60 mL/min/1.73m<sup>2</sup> they were identified solely on the basis of
+albuminuria.</p></sec><sec id="s6"><title>Take Home Message</title><p>Finerenone reduces the risk of clinical cardiovascular outcomes and kidney disease
+progression in a broad range of patients with chronic kidney disease and type 2
+diabetes. Screening for albuminuria to identify at-risk patients among patients with
+type 2 diabetes facilitates reduction of both cardiovascular and kidney disease
+burden.</p></sec></abstract><abstract abstract-type="graphical"><title>Graphical Abstract</title><p>
+<fig position="float" id="ehab777-ga1" orientation="portrait"><label>Structured Graphical Abstract</label><caption><p>Finerenone reduced the risk of clinically important cardiovascular and kidney
+outcomes versus placebo across the spectrum of chronic kidney disease in patients
+with type 2 diabetes.</p></caption><graphic xmlns:xlink="http://www.w3.org/1999/xlink" position="float" orientation="portrait" xlink:href="ehab777f4.jpg"><?image-name ehab777f4.jpg?><?image-size 139797?><?image-md5 f43412c47d3a95f8b771043fa579f8ba?><?image-image-server-status LOAD_COMPLETED?><?image-original-height 1497?><?image-original-width 1950?><?image-scaled-height 599?><?image-scaled-width 780?><?image-cloudpmc-urn urn:cdn:blobs/6754/8830527/f43412c47d3a/ehab777f4.jpg?><?thumb-name ehab777f4.gif?><?thumb-size 6854?><?thumb-md5 d6619ec98f8c3816cc288fe9b3d9ca40?><?thumb-image-server-status NEVER_LOAD?><?thumb-scaled-height 80?><?thumb-scaled-width 104?><?thumb-cloudpmc-urn urn:cdn:blobs/6754/8830527/d6619ec98f8c/ehab777f4.gif?></graphic></fig>
+</p></abstract><kwd-group><kwd>Cardiorenal outcomes</kwd><kwd>Chronic kidney disease</kwd><kwd>Finerenone</kwd><kwd>Hospitalization for heart failure</kwd><kwd>Hyperkalaemia</kwd><kwd>Type 2 diabetes</kwd></kwd-group><funding-group><award-group award-type="grant"><funding-source>
+<institution-wrap><institution>Bayer AG,</institution></institution-wrap>
+</funding-source></award-group></funding-group><counts><page-count count="12"/></counts><custom-meta-group><custom-meta><meta-name>pmc-status-qastatus</meta-name><meta-value>0</meta-value></custom-meta><custom-meta><meta-name>pmc-status-live</meta-name><meta-value>yes</meta-value></custom-meta><custom-meta><meta-name>pmc-status-embargo</meta-name><meta-value>no</meta-value></custom-meta><custom-meta><meta-name>pmc-status-released</meta-name><meta-value>yes</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-open-access</meta-name><meta-value>yes</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-olf</meta-name><meta-value>no</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-manuscript</meta-name><meta-value>no</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-legally-suppressed</meta-name><meta-value>no</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-has-pdf</meta-name><meta-value>yes</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-has-supplement</meta-name><meta-value>yes</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-pdf-only</meta-name><meta-value>no</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-suppress-copyright</meta-name><meta-value>no</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-is-real-version</meta-name><meta-value>no</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-is-scanned-article</meta-name><meta-value>no</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-preprint</meta-name><meta-value>no</meta-value></custom-meta><custom-meta><meta-name>pmc-prop-in-epmc</meta-name><meta-value>yes</meta-value></custom-meta><custom-meta><meta-name>pmc-license-ref</meta-name><meta-value>CC BY-NC</meta-value></custom-meta></custom-meta-group></article-meta></front><body><p>
+<bold>See the editorial comment for this article ‘Bringing FIDELITY to the estimate of
+treatment effects of finerenone in chronic kidney disease due to type 2 diabetes’, by Carly
+Adamson and Pardeep S. Jhund, <ext-link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://doi.org/10.1093/eurheartj/ehab827" ext-link-type="uri">https://doi.org/10.1093/eurheartj/ehab827</ext-link>.</bold>
+</p><sec sec-type="intro"><title>Introduction</title><p>Patients with chronic kidney disease (CKD) and type 2 diabetes have high residual
+cardiorenal morbidity and mortality, despite current therapies,<xref rid="ehab777-B1" ref-type="bibr"><sup>1–5</sup></xref> and the
+risks of progression towards kidney failure and cardiovascular events increase with severity
+and stage of CKD.<xref rid="ehab777-B6" ref-type="bibr"><sup>6</sup></xref> Compared with
+patients with advanced kidney disease, who are more likely to progress to dialysis, patients
+with better preserved estimated glomerular filtration rate (eGFR) have a greater lifetime
+risk of cardiovascular morbidity such as heart failure, myocardial infarction (MI), stroke,
+or dying from cardiovascular causes.<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref></p><p>Evidence suggests that overactivation of the mineralocorticoid receptor (MR) leads to
+inflammation and fibrosis in the heart, kidneys, and vasculature where the MR is extensively
+expressed that can drive CKD and cardiovascular disease progression.<xref rid="ehab777-B8" ref-type="bibr"><sup>8</sup></xref> Finerenone is a novel, selective, nonsteroidal MR
+antagonist (MRA) that blocks MR-mediated sodium reabsorption and MR overactivation and has
+demonstrated anti-inflammatory and anti-fibrotic effects in preclinical kidney and
+cardiovascular disease models.<xref rid="ehab777-B8" ref-type="bibr"><sup>8</sup></xref>
+ <sup>,</sup>  <xref rid="ehab777-B9" ref-type="bibr"><sup>9</sup></xref> The FInerenone
+in reducing kiDnEy faiLure and dIsease prOgression in Diabetic Kidney Disease (FIDELIO-DKD)
+and FInerenone in reducinG cArdiovascular moRtality and mOrbidity in Diabetic Kidney Disease
+(FIGARO-DKD) phase III trials are complementary in nature due to features such as their
+similar designs and endpoints. Together, they form the largest cardiorenal outcomes
+programme in CKD in type 2 diabetes to date. They investigated the efficacy and safety of
+finerenone, on top of maximum tolerated renin–angiotensin system inhibition, on kidney and
+cardiovascular outcomes in patients with mild-to-severe CKD in type 2 diabetes (<xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>,
+<italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Figure
+S1</xref></italic>).<xref rid="ehab777-B3" ref-type="bibr"><sup>3</sup></xref> In
+FIDELIO-DKD, finerenone significantly reduced the risk of the primary kidney composite
+outcome and the key secondary cardiovascular composite outcome in patients with
+predominantly stage 3–4 CKD with severely increased albuminuria and type 2 diabetes.<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref> In FIGARO-DKD, finerenone
+significantly reduced the primary cardiovascular composite outcome risk in a broader patient
+population than studied in FIDELIO-DKD (patients with stage 2–4 CKD and moderately increased
+albuminuria, or stage 1–2 CKD with severely increased albuminuria).<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>  <sup>,</sup>  <xref rid="ehab777-B10" ref-type="bibr"><sup>10</sup></xref></p><p>The FIDELIO-DKD trial was designed to detect a treatment effect of finerenone on kidney
+failure endpoints, whereas the FIGARO-DKD trial aimed to detect an effect on a
+cardiovascular composite primary endpoint.<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>  <sup>,</sup>  <xref rid="ehab777-B10" ref-type="bibr"><sup>10</sup></xref> To improve the ability to detect a treatment effect on the kidney
+failure outcome, patients with a higher urine albumin-to-creatinine ratio (UACR) were
+preferentially selected in the FIDELIO-DKD trial. To provide a greater kidney failure-free
+interval to detect a treatment effect on cardiovascular events, in FIGARO-DKD, a population
+with moderate UACR and a wider eGFR range was selected. Thus, the two trials complemented
+each other with a slight overlap in the populations studied, and their similar designs and
+overlapping research sites allowed for the comparison and pooling of their results.</p><p>The efficacy and safety of finerenone, however, have not been fully evaluated across the
+spectrum of CKD in type 2 diabetes. The FInerenone in chronic kiDney diseasE and type 2
+diabetes: Combined FIDELIO-DKD and FIGARO-DKD Trial programme analYsis (FIDELITY) pools
+these complementary studies with similar designs, assessments, and conduct. The aim of the
+FIDELITY prespecified pooled analysis was to provide more robust estimates of finerenone
+efficacy and safety across the spectrum of patients with CKD and type 2 diabetes, to provide
+reassurance regarding outcomes in a wide range of patients with a degree of precision that
+was not possible to obtain by considering the two trials separately.</p></sec><sec sec-type="methods"><title>Methods</title><sec><title>Study design</title><p>This prespecified pooled efficacy and safety analysis, which was prespecified in a formal
+statistical analysis plan, combines data from FIDELIO-DKD (<ext-link xmlns:xlink="http://www.w3.org/1999/xlink" ext-link-type="pmc:clinical-trial" xlink:href="NCT02540993">NCT02540993</ext-link>) and FIGARO-DKD
+(<ext-link xmlns:xlink="http://www.w3.org/1999/xlink" ext-link-type="pmc:clinical-trial" xlink:href="NCT02545049">NCT02545049</ext-link>), two phase III, randomized, double-blind, placebo-controlled, multicentre
+clinical trials (<italic toggle="yes">Table <xref rid="ehab777-T1" ref-type="table">1</xref></italic>
+and <xref rid="sup1" ref-type="supplementary-material">Supplementary material
+online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Figure
+S2</xref></italic>). Trial design and study protocol details have been published
+previously.<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>  <sup>,</sup>
+ <xref rid="ehab777-B11" ref-type="bibr"><sup>11</sup></xref></p><table-wrap position="float" id="ehab777-T1" orientation="portrait"><label>Table 1</label><caption><p>Pooled analysis study details</p></caption><table frame="hsides" rules="groups"><colgroup span="1"><col valign="top" align="left" span="1"/><col valign="top" align="left" span="1"/><col valign="top" align="left" span="1"/></colgroup><thead><tr><th rowspan="1" colspan="1">Study name</th><th align="left" rowspan="1" colspan="1">FIDELIO-DKD<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref></th><th align="left" rowspan="1" colspan="1">FIGARO-DKD<xref rid="ehab777-B10" ref-type="bibr"><sup>10</sup></xref></th></tr></thead><tbody><tr><td rowspan="1" colspan="1">Publication year</td><td rowspan="1" colspan="1">2020</td><td rowspan="1" colspan="1">2021</td></tr><tr><td rowspan="1" colspan="1">Study design</td><td rowspan="1" colspan="1">Phase III, randomized, double-blind, placebo-controlled, multicentre clinical
+trial</td><td rowspan="1" colspan="1">Phase III, randomized, double-blind, placebo-controlled, multicentre clinical
+trial</td></tr><tr><td rowspan="1" colspan="1">Sample size<xref rid="tblfn3" ref-type="table-fn"><sup>a</sup></xref></td><td rowspan="1" colspan="1">5734</td><td rowspan="1" colspan="1">7437</td></tr><tr><td rowspan="1" colspan="1">Inclusion criteria</td><td rowspan="1" colspan="1">
+<list list-type="bullet"><list-item><p>Age ≥18 years</p></list-item><list-item><p>T2D and CKD defined as UACR 30–&lt;300 mg/g, eGFR 25–&lt;60 mL/min/1.73
+m<sup>2</sup>, and diabetic retinopathy, <italic toggle="yes">or</italic> UACR 300–5000
+mg/g and eGFR 25–&lt;75 mL/min/1.73 m<sup>2</sup></p></list-item><list-item><p>Maximum tolerated dose of an RAS inhibitor</p></list-item><list-item><p>Serum potassium ≤4.8 mmol/L</p></list-item></list>
+</td><td rowspan="1" colspan="1">
+<list list-type="bullet"><list-item><p>Age ≥18 years</p></list-item><list-item><p>T2D and CKD defined as UACR 30–&lt;300 mg/g and eGFR 25–90 mL/min/1.73
+m<sup>2</sup>, <italic toggle="yes">or</italic> UACR 300–5000 mg/g and eGFR
+≥60 mL/min/1.73 m<sup>2</sup></p></list-item><list-item><p>Maximum tolerated dose of an RAS inhibitor</p></list-item><list-item><p>Serum potassium ≤4.8 mmol/L</p></list-item></list>
+</td></tr><tr><td rowspan="1" colspan="1">Exclusion criteria</td><td rowspan="1" colspan="1">
+<list list-type="bullet"><list-item><p>Non-diabetic kidney disease</p></list-item><list-item><p>Uncontrolled hypertension<xref rid="tblfn4" ref-type="table-fn"><sup>b</sup></xref></p></list-item><list-item><p>HbA1c &gt;12%</p></list-item><list-item><p>SBP &lt;90 mmHg</p></list-item><list-item><p>Chronic symptomatic HFrEF<xref rid="tblfn5" ref-type="table-fn"><sup>c</sup></xref></p></list-item><list-item><p>Recent CV event</p></list-item><list-item><p>Dialysis for acute kidney failure</p></list-item><list-item><p>Kidney transplant</p></list-item></list>
+</td><td rowspan="1" colspan="1">
+<list list-type="bullet"><list-item><p>Non-diabetic kidney disease</p></list-item><list-item><p>Uncontrolled hypertension<xref rid="tblfn4" ref-type="table-fn"><sup>b</sup></xref></p></list-item><list-item><p>HbA1c &gt;12%</p></list-item><list-item><p>SBP &lt;90 mmHg</p></list-item><list-item><p>Chronic symptomatic HFrEF<xref rid="tblfn5" ref-type="table-fn"><sup>c</sup></xref></p></list-item><list-item><p>Recent CV event</p></list-item><list-item><p>Dialysis for acute kidney failure</p></list-item><list-item><p>Kidney transplant</p></list-item></list>
+</td></tr><tr><td rowspan="1" colspan="1">Follow-up period, median</td><td rowspan="1" colspan="1">2.6 years</td><td rowspan="1" colspan="1">3.4 years</td></tr><tr><td rowspan="1" colspan="1">Primary outcome</td><td rowspan="1" colspan="1">Time to kidney failure, sustained ≥40% decrease in eGFR from baseline, or renal
+death</td><td rowspan="1" colspan="1">Time to CV death, non-fatal MI, non-fatal stroke, or HHF</td></tr><tr><td rowspan="1" colspan="1">Secondary outcome</td><td rowspan="1" colspan="1">Time to CV death, non-fatal MI, non-fatal stroke, or HHF</td><td rowspan="1" colspan="1">Time to kidney failure, sustained ≥40% decrease in eGFR from baseline, or renal
+death</td></tr><tr><td rowspan="1" colspan="1">Trial registry information</td><td rowspan="1" colspan="1"><ext-link xmlns:xlink="http://www.w3.org/1999/xlink" ext-link-type="pmc:clinical-trial" xlink:href="NCT02540993">NCT02540993</ext-link></td><td rowspan="1" colspan="1"><ext-link xmlns:xlink="http://www.w3.org/1999/xlink" ext-link-type="pmc:clinical-trial" xlink:href="NCT02545049">NCT02545049</ext-link></td></tr></tbody></table><table-wrap-foot><fn id="tblfn1"><p>The key features of the FIDELIO-DKD and FIGARO-DKD studies that comprised the
+FIDELITY prespecified pooled analysis are described above, including publication
+year, study design, sample size, eligibility criteria, median follow-up, primary and
+main secondary endpoints, and links to the trials’ ClinicalTrials.gov webpages.</p></fn><fn id="tblfn2"><p>CKD, chronic kidney disease; CV, cardiovascular; DBP, diastolic blood pressure;
+eGFR, estimated glomerular filtration rate; HbA1c, glycated haemoglobin; HFrEF,
+heart failure with reduced ejection fraction; HHF, hospitalization for heart
+failure; MI, myocardial infarction; RAS, renin–angiotensin system; SBP, systolic
+blood pressure; T2D, type 2 diabetes; UACR, urine albumin-to-creatinine ratio.</p></fn><fn id="tblfn3"><label>a</label><p>A total of 145 randomized patients (60 patients in FIDELIO-DKD and 85 patients in
+FIGARO-DKD) were prospectively excluded prior to database lock from all analyses
+because of critical Good Clinical Practice violations. This affected one site in the
+USA that was subsequently closed during the conduct of the trial, leading to the
+exclusion of 66 patients. In addition, during trial conduct, it was detected that
+several patients were randomized simultaneously at multiple trial sites in the same
+locality in Florida, USA. This led to the prospective exclusion of a total of 79
+patient IDs.</p></fn><fn id="tblfn4"><label>b</label><p>Mean sitting SBP ≥170 mmHg or mean sitting DBP ≥110 mmHg at the run-in visit, or
+mean sitting SBP ≥160 mmHg or mean sitting DBP ≥100 mmHg at the screening visit.</p></fn><fn id="tblfn5"><label>c</label><p>New York Heart Association class II–IV at the run-in visit.</p></fn></table-wrap-foot></table-wrap></sec><sec><title>Patients</title><p>Eligible patients were adults (aged ≥18 years) with type 2 diabetes and CKD treated with
+a maximum tolerated labelled dose of an angiotensin-converting enzyme inhibitor (ACEi) or
+angiotensin receptor blocker (ARB).</p><sec><title>Chronic kidney disease in FIDELIO-DKD</title><p>CKD in FIDELIO-DKD was defined as either: (i) persistent (demonstrated at both the
+run-in and screening visits, which took place between a minimum of 4 to a maximum of
+16 weeks apart), moderately increased albuminuria (UACR ≥30–&lt;300 mg/g) with an eGFR
+of ≥25–&lt;60 mL/min/1.73 m<sup>2</sup>  <underline>and</underline> the presence of
+diabetic retinopathy, or (ii) persistent, severely increased albuminuria (UACR
+≥300–≤5000 mg/g) <underline>and</underline> an eGFR of ≥25–&lt;75 mL/min/1.73
+m<sup>2</sup>.</p></sec><sec><title>Chronic kidney disease in FIGARO-DKD</title><p>CKD in FIGARO-DKD was defined as either: (i) persistent, moderately increased
+albuminuria (UACR ≥30–&lt;300 mg/g) with an eGFR of ≥25–≤90 mL/min/1.73 m<sup>2</sup>,
+or (ii) persistent, severely increased albuminuria (UACR ≥300–≤5000 mg/g)
+<underline>and</underline> an eGFR ≥60 mL/min/1.73 m<sup>2</sup>. Patients in both
+trials had to have serum potassium ≤4.8 mmol/L at both the run-in and screening visits.
+Other key exclusion criteria included clinical diagnosis of symptomatic chronic heart
+failure with reduced ejection fraction (i.e., a Class IA recommendation for MRA
+treatment). Inclusion and exclusion criteria are listed in the <xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>,
+<italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Appendix</xref></italic>.</p></sec></sec><sec sec-type="methods"><title>Procedures</title><p>The procedures for the FIDELIO-DKD and FIGARO-DKD studies have been described previously.
+Briefly, eligible patients were randomized 1:1 to receive oral finerenone (10 or 20 mg) or
+placebo. Both studies consisted of run-in, screening, double-blind treatment, and safety
+follow-up periods (<xref rid="sup1" ref-type="supplementary-material">Supplementary
+material online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Figure S2</xref></italic>).<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>
+ <sup>,</sup>  <xref rid="ehab777-B10" ref-type="bibr"><sup>10</sup></xref> The run-in
+period required ACEi or ARB therapy to be adjusted to a maximum tolerated labelled dose
+that did not lead to unacceptable side effects. Study drug was withheld if potassium
+concentrations exceeded 5.5 mmol/L and restarted when potassium levels fell to
+≤5.0 mmol/L. Further details are found in the <xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Appendix</xref></italic>.</p></sec><sec><title>Outcomes</title><p>The outcome definitions for FIDELIO-DKD and FIGARO-DKD have been described
+previously.<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>  <sup>,</sup>
+ <xref rid="ehab777-B10" ref-type="bibr"><sup>10</sup></xref> The efficacy outcomes
+selected for this analysis were either a primary or a secondary outcome or those
+prespecified in the hierarchical outcomes in the complementary studies. The efficacy
+outcomes of interest for this pooled analysis were a composite cardiovascular outcome of
+time to cardiovascular death, non-fatal MI, non-fatal stroke, or hospitalization for heart
+failure (HHF), and a composite kidney outcome of time to first onset of kidney failure,
+sustained ≥57% decrease in eGFR from baseline over ≥4 weeks, or renal death. In the
+composite kidney outcome, kidney failure was defined as end-stage kidney disease (ESKD) or
+a sustained decrease in eGFR to &lt;15 mL/min/1.73 m<sup>2</sup>, and ESKD was defined as
+initiation of chronic dialysis (for ≥90 days) or kidney transplantation. Other
+prespecified outcomes included: a second composite kidney outcome of time to first
+occurrence of kidney failure, sustained ≥40% decrease in eGFR from baseline over ≥4 weeks,
+or renal death; time to all-cause mortality; time to all-cause hospitalization; and change
+in UACR from baseline to Month 4.</p><p>The eGFR ≥40% composite kidney outcome was the primary or secondary outcome in the
+complementary trials.<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>
+ <sup>,</sup>  <xref rid="ehab777-B10" ref-type="bibr"><sup>10</sup></xref> However, a
+sustained ≥57% decrease in eGFR (equivalent to doubling of serum creatinine) was selected
+in FIDELITY because it is a classic outcome in diabetic nephropathy studies<xref rid="ehab777-B2" ref-type="bibr"><sup>2</sup></xref>  <sup>,</sup>  <xref rid="ehab777-B12" ref-type="bibr"><sup>12–14</sup></xref> and is
+a more robust kidney failure surrogate outcome than a ≥40% decrease in eGFR, particularly
+when initial changes in eGFR occur.<xref rid="ehab777-B14" ref-type="bibr"><sup>14</sup></xref>  <sup>,</sup>  <xref rid="ehab777-B15" ref-type="bibr"><sup>15</sup></xref> This outcome was selected before data pooling and analysis.
+Furthermore, the eGFR ≥57% outcome was a predefined outcome in the complementary
+trials.</p><p>In the safety analyses, adverse events were considered treatment emergent if they started
+or worsened during study drug intake or up to 3 days after any temporary or permanent
+interruption. The hyperkalaemia management procedure has been described previously.<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>  <sup>,</sup>  <xref rid="ehab777-B10" ref-type="bibr"><sup>10</sup></xref></p></sec><sec><title>Statistical analyses</title><p>Statistical analyses were prespecified exploratory evaluations rather than hypothesis
+confirming. Statistical tests where <italic toggle="yes">P</italic>-values are provided were
+exploratory in nature; therefore, no adjustment for multiplicity was performed.</p><p>The full analysis set comprised all randomized patients [except those with critical Good
+Clinical Practice (GCP) violations, who were prospectively excluded from all analyses].
+Safety analyses were performed in the safety analysis set, defined as all randomized
+patients without critical GCP violations who took ≥1 dose of study drug. Study outcomes
+were analysed using stratified Cox proportional hazards models fitted using the
+stratification factors: study, region (North America, Latin America, Europe, Asia, and
+others), eGFR category at screening (25–&lt;45, 45–&lt;60, and ≥60 mL/min/1.73
+m<sup>2</sup>), albuminuria category (moderately increased and severely increased) at
+screening, and a history of cardiovascular disease (present or absent; see <xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>,
+<italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Appendix</xref></italic>,
+for further details). <italic toggle="yes">P</italic>-values for the comparison of treatment groups are
+presented based on a stratified log-rank test. Treatment effects are expressed as hazard
+ratios (HRs) with corresponding 95% confidence intervals (CIs) from the stratified Cox
+proportional hazards models. Events were counted from randomization up to the end-of-study
+visit and patients without an event were censored at the date of their last contact with
+complete information on all components of the respective outcome. The time-to-event
+analyses reporting included first events only. Events based on a sustained decrease in
+eGFR were considered in the analysis from randomization up until 5 months after the last
+eGFR was recorded at a clinic visit. For subgroup analyses, HRs were derived from
+stratified Cox proportional hazards models, including treatment subgroup and a subgroup by
+treatment interaction term as fixed effects.</p><p>Cumulative incidences based on Aalen–Johansen accounting for mortality as competing risk
+and corresponding numbers needed to treat were calculated in 6-month intervals for the
+composite cardiovascular outcome and the key composite kidney outcome. Cumulative
+incidences based on Kaplan–Meier were calculated for all-cause mortality. An on-treatment
+sensitivity analysis was performed for outcomes considering only events occurring up until
+30 days after study drug cessation in the full analysis set.</p><p>The sponsor, Bayer, conducted the statistical analyses, and all authors had access to the
+data and participated in its interpretation. All analyses were performed using SAS
+software, version 9.4 (SAS Institute, Cary, NC, USA). Additional statistical methods are
+found in the <xref rid="sup1" ref-type="supplementary-material">Supplementary material
+online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Appendix</xref></italic>.</p></sec></sec><sec sec-type="results"><title>Results</title><p>From September 2015 through October 2018, 33 292 patients from 48 countries were screened
+and 13 171 patients were randomized (<xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Figure S3</xref></italic>). Critical GCP violations related to site or
+patient misconduct resulted in the prospective exclusion of 145 patients (see <xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>,
+<italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Appendix</xref></italic>),
+leaving a population of 13 026 patients on whom statistical analyses were performed.</p><p>Patient characteristics, medications, and demographics at baseline were balanced between
+patients randomized to finerenone and placebo (<italic toggle="yes">Table <xref rid="ehab777-T2" ref-type="table">2</xref></italic> and <xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Table S1</xref></italic>; published
+previously<xref rid="ehab777-B3" ref-type="bibr"><sup>3</sup></xref>). The mean eGFR was
+57.6 mL/min/1.73 m<sup>2</sup> and median UACR 515 mg/g. Overall, 10.2%, 41.0%, and 48.3% of
+patients had moderate, high, and very high Kidney Disease Improving Global Outcomes risk
+scores, respectively (<xref rid="sup1" ref-type="supplementary-material">Supplementary
+material online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Figure
+S4</xref></italic>). History of cardiovascular disease was reported in 45.6% of
+patients. Blood glucose (mean glycated haemoglobin 7.7%) and blood pressure (mean systolic
+blood pressure 136.7 ± 14.2) were moderately well controlled. Baseline cardiovascular
+medications included statins, anti-platelets, and diuretics in 72.2%, 56.0%, and 51.5% of
+patients, respectively, and renin–angiotensin system inhibition in 99.8% of patients.
+Glucagon-like peptide-1 receptor agonists (GLP-1RAs) and sodium-glucose co-transporter-2
+(SGLT-2) inhibitors were used by 7.2% and 6.7% of patients, respectively. Medications
+started after study drug initiation are summarized in <xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>,
+<italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Table S2</xref></italic>. The
+median follow-up period was 3.0 years [interquartile range (IQR) 2.3–3.8 years].</p><table-wrap position="float" id="ehab777-T2" orientation="portrait"><label>Table 2</label><caption><p>Baseline patient demographics, clinical characteristics, and medications<xref rid="tblfn8" ref-type="table-fn"><sup>a</sup></xref></p></caption><table frame="hsides" rules="groups"><colgroup span="1"><col valign="top" align="left" span="1"/><col valign="top" align="char" char="" span="1"/><col valign="top" align="char" char="" span="1"/><col valign="top" align="char" char="" span="1"/></colgroup><thead><tr><th rowspan="1" colspan="1"/><th rowspan="1" colspan="1">Finerenone (10 mg od or 20 mg od) (<italic toggle="yes">n</italic> = 6519)</th><th rowspan="1" colspan="1">Placebo (<italic toggle="yes">n</italic> = 6507)</th><th rowspan="1" colspan="1">All patients (<italic toggle="yes">n</italic> = 13 026)</th></tr></thead><tbody><tr><td rowspan="1" colspan="1">Age, years</td><td rowspan="1" colspan="1">64.7 ± 9.4</td><td rowspan="1" colspan="1">64.8 ± 9.7</td><td rowspan="1" colspan="1">64.8 ± 9.5</td></tr><tr><td rowspan="1" colspan="1">Sex, <italic toggle="yes">n</italic> (%)</td><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/></tr><tr><td rowspan="1" colspan="1"> Male</td><td rowspan="1" colspan="1">4481 (68.7)</td><td rowspan="1" colspan="1">4607 (70.8)</td><td rowspan="1" colspan="1">9088 (69.8)</td></tr><tr><td rowspan="1" colspan="1"> Female</td><td rowspan="1" colspan="1">2038 (31.3)</td><td rowspan="1" colspan="1">1900 (29.2)</td><td rowspan="1" colspan="1">3938 (30.2)</td></tr><tr><td rowspan="1" colspan="1">Race or ethnic group, <italic toggle="yes">n</italic> (%)</td><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/></tr><tr><td rowspan="1" colspan="1"> White</td><td rowspan="1" colspan="1">4449 (68.2)</td><td rowspan="1" colspan="1">4420 (67.9)</td><td rowspan="1" colspan="1">8869 (68.1)</td></tr><tr><td rowspan="1" colspan="1"> Black/African American</td><td rowspan="1" colspan="1">253 (3.9)</td><td rowspan="1" colspan="1">269 (4.1)</td><td rowspan="1" colspan="1">522 (4.0)</td></tr><tr><td rowspan="1" colspan="1"> Asian</td><td rowspan="1" colspan="1">1432 (22.0)</td><td rowspan="1" colspan="1">1462 (22.5)</td><td rowspan="1" colspan="1">2894 (22.2)</td></tr><tr><td rowspan="1" colspan="1"> Others</td><td rowspan="1" colspan="1">385 (5.9)</td><td rowspan="1" colspan="1">356 (5.4)</td><td rowspan="1" colspan="1">741 (5.8)</td></tr><tr><td rowspan="1" colspan="1">Duration of diabetes, years</td><td rowspan="1" colspan="1">15.4 ± 8.7</td><td rowspan="1" colspan="1">15.4 ± 8.7</td><td rowspan="1" colspan="1">15.4 ± 8.7</td></tr><tr><td rowspan="1" colspan="1">HbA1c, %</td><td rowspan="1" colspan="1">7.7 ± 1.4</td><td rowspan="1" colspan="1">7.7 ± 1.4</td><td rowspan="1" colspan="1">7.7 ± 1.4</td></tr><tr><td rowspan="1" colspan="1">Systolic blood pressure, mmHg</td><td rowspan="1" colspan="1">136.8 ± 14.2</td><td rowspan="1" colspan="1">136.7 ± 14.3</td><td rowspan="1" colspan="1">136.7 ± 14.2</td></tr><tr><td rowspan="1" colspan="1">History of cardiovascular disease, <italic toggle="yes">n</italic> (%)</td><td rowspan="1" colspan="1">2979 (45.7)</td><td rowspan="1" colspan="1">2956 (45.4)</td><td rowspan="1" colspan="1">5935 (45.6)</td></tr><tr><td rowspan="1" colspan="1">Heart failure, <italic toggle="yes">n</italic> (%)</td><td rowspan="1" colspan="1">485 (7.4)</td><td rowspan="1" colspan="1">522 (8.0)</td><td rowspan="1" colspan="1">1007 (7.7)</td></tr><tr><td rowspan="1" colspan="1">eGFR, mL/min/1.73 m<sup>2</sup></td><td rowspan="1" colspan="1">57.5 ± 21.6</td><td rowspan="1" colspan="1">57.7 ± 21.8</td><td rowspan="1" colspan="1">57.6 ± 21.7</td></tr><tr><td rowspan="1" colspan="1">eGFR, mL/min/1.73 m<sup>2</sup>, <italic toggle="yes">n</italic> (%)</td><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/></tr><tr><td rowspan="1" colspan="1"> ≥60</td><td rowspan="1" colspan="1">2603 (39.9)</td><td rowspan="1" colspan="1">2592 (39.8)</td><td rowspan="1" colspan="1">5195 (39.9)</td></tr><tr><td rowspan="1" colspan="1"> 45–&lt;60</td><td rowspan="1" colspan="1">1717 (26.3)</td><td rowspan="1" colspan="1">1717 (26.4)</td><td rowspan="1" colspan="1">3434 (26.4)</td></tr><tr><td rowspan="1" colspan="1"> 25–&lt;45</td><td rowspan="1" colspan="1">2117 (32.5)</td><td rowspan="1" colspan="1">2115 (32.5)</td><td rowspan="1" colspan="1">4232 (32.5)</td></tr><tr><td rowspan="1" colspan="1"> &lt;25</td><td rowspan="1" colspan="1">81 (1.2)</td><td rowspan="1" colspan="1">81 (1.2)</td><td rowspan="1" colspan="1">162 (1.2)</td></tr><tr><td rowspan="1" colspan="1">UACR, mg/g, median (IQR)</td><td rowspan="1" colspan="1">514 (198–1129)</td><td rowspan="1" colspan="1">515 (198–1163)</td><td rowspan="1" colspan="1">515 (198–1147)</td></tr><tr><td rowspan="1" colspan="1">UACR, mg/g, <italic toggle="yes">n</italic> (%)</td><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/></tr><tr><td rowspan="1" colspan="1"> &lt;30</td><td rowspan="1" colspan="1">120 (1.8)</td><td rowspan="1" colspan="1">110 (1.7)</td><td rowspan="1" colspan="1">230 (1.8)</td></tr><tr><td rowspan="1" colspan="1"> 30–&lt;300</td><td rowspan="1" colspan="1">2076 (31.8)</td><td rowspan="1" colspan="1">2023 (31.1)</td><td rowspan="1" colspan="1">4099 (31.5)</td></tr><tr><td rowspan="1" colspan="1"> ≥300</td><td rowspan="1" colspan="1">4321 (66.3)</td><td rowspan="1" colspan="1">4371 (67.2)</td><td rowspan="1" colspan="1">8692 (66.7)</td></tr><tr><td rowspan="1" colspan="1">Serum potassium, mmol/L</td><td rowspan="1" colspan="1">4.35 ± 0.44</td><td rowspan="1" colspan="1">4.35 ± 0.44</td><td rowspan="1" colspan="1">4.35 ± 0.44</td></tr><tr><td rowspan="1" colspan="1">Baseline medications, <italic toggle="yes">n</italic> (%)</td><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/></tr><tr><td rowspan="1" colspan="1"> Renin–angiotensin system inhibitors</td><td rowspan="1" colspan="1">6408 (99.8)</td><td rowspan="1" colspan="1">6495 (99.8)</td><td rowspan="1" colspan="1">13 003 (99.8)</td></tr><tr><td rowspan="1" colspan="1">  Angiotensin-converting enzyme inhibitors</td><td rowspan="1" colspan="1">2526 (38.7)</td><td rowspan="1" colspan="1">2553 (39.2)</td><td rowspan="1" colspan="1">5079 (39.0)</td></tr><tr><td rowspan="1" colspan="1">  Angiotensin receptor blockers</td><td rowspan="1" colspan="1">3987 (61.2)</td><td rowspan="1" colspan="1">3950 (60.7)</td><td rowspan="1" colspan="1">7937 (60.9)</td></tr><tr><td rowspan="1" colspan="1"> Diuretics</td><td rowspan="1" colspan="1">3325 (51.0)</td><td rowspan="1" colspan="1">3385 (52.0)</td><td rowspan="1" colspan="1">6710 (51.5)</td></tr><tr><td rowspan="1" colspan="1"> Statins</td><td rowspan="1" colspan="1">4657 (71.4)</td><td rowspan="1" colspan="1">4742 (72.9)</td><td rowspan="1" colspan="1">9399 (72.2)</td></tr><tr><td rowspan="1" colspan="1"> Potassium binders<xref rid="tblfn9" ref-type="table-fn"><sup>b</sup></xref></td><td rowspan="1" colspan="1">94 (1.4)</td><td rowspan="1" colspan="1">88 (1.4)</td><td rowspan="1" colspan="1">182 (1.4)</td></tr><tr><td rowspan="1" colspan="1"> Glucose-lowering therapies</td><td rowspan="1" colspan="1">6354 (97.5)</td><td rowspan="1" colspan="1">6366 (97.8)</td><td rowspan="1" colspan="1">12 720 (97.7)</td></tr><tr><td rowspan="1" colspan="1">  Insulin</td><td rowspan="1" colspan="1">3866 (59.3)</td><td rowspan="1" colspan="1">3764 (57.8)</td><td rowspan="1" colspan="1">7630 (58.6)</td></tr><tr><td rowspan="1" colspan="1">  GLP-1RAs</td><td rowspan="1" colspan="1">497 (7.6)</td><td rowspan="1" colspan="1">447 (6.9)</td><td rowspan="1" colspan="1">944 (7.2)</td></tr><tr><td rowspan="1" colspan="1">  SGLT-2 inhibitors</td><td rowspan="1" colspan="1">438 (6.7)</td><td rowspan="1" colspan="1">439 (6.7)</td><td rowspan="1" colspan="1">877 (6.7)</td></tr></tbody></table><table-wrap-foot><fn id="tblfn6"><p>Details of key patient baseline demographic and clinical characteristics, and
+medication use for both treatment groups and the overall FIDELITY population.</p></fn><fn id="tblfn7"><p>eGFR, estimated glomerular filtration rate; GLP-1RA, glucagon-like peptide-1 receptor
+agonist; HbA1c, glycated haemoglobin; IQR, interquartile range; od, once daily;
+SGLT-2, sodium-glucose co-transporter-2; UACR, urine albumin-to-creatinine ratio.</p></fn><fn id="tblfn8"><label>a</label><p>Plus or minus values indicate mean ± standard deviation.</p></fn><fn id="tblfn9"><label>b</label><p>Sodium polystyrene sulphonate, calcium polystyrene sulphonate, and potassium-binding
+agents.</p></fn></table-wrap-foot></table-wrap><p>The composite cardiovascular outcome (time to cardiovascular death, non-fatal MI, non-fatal
+stroke, or HHF) occurred in 825 (12.7%) patients receiving finerenone and 939 (14.4%)
+patients receiving placebo (HR, 0.86; 95% CI, 0.78–0.95;
+<italic toggle="yes">P </italic>=<italic toggle="yes"> </italic>0.0018; <italic toggle="yes">Figures <xref rid="ehab777-F1" ref-type="fig">1</xref> and <xref rid="ehab777-F2" ref-type="fig">2</xref></italic>).
+Significantly lower incidences of HHF occurred with finerenone vs. placebo (HR, 0.78; 95%
+CI, 0.66–0.92 [<italic toggle="yes">P </italic>=<italic toggle="yes"> </italic>0.0030], <italic toggle="yes">Figures <xref rid="ehab777-F2" ref-type="fig">2</xref> and <xref rid="ehab777-F3" ref-type="fig">3</xref></italic>). Cardiovascular death and non-fatal MI incidences were directionally
+consistent with the cardiovascular composite outcome; non-fatal stroke was similar with
+finerenone and placebo (<italic toggle="yes">Figures <xref rid="ehab777-F2" ref-type="fig">2</xref> and
+<xref rid="ehab777-F3" ref-type="fig">3</xref></italic>). Based on a between-group risk
+difference of 2.2% after 3 years, 46 (95% CI, 29–109) patients would need to be treated with
+finerenone to prevent one composite cardiovascular outcome event. Consistent results were
+observed in prespecified subgroups (including those with SGLT-2 inhibitor or GLP-1RA
+baseline use; <xref rid="sup1" ref-type="supplementary-material">Supplementary material
+online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Figure
+S5</xref></italic>), and a prespecified ‘on-treatment’ sensitivity analysis (including all
+events from randomization up to 30 days after last intake of study drug) confirmed the
+results of the main analysis (<xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Table S3</xref></italic>). Results for each of the cardiovascular and renal
+endpoints by individual trial in FIDELITY, including <italic toggle="yes">P</italic>
+ <sub>interaction</sub> values, are presented in <xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Figure S6</xref></italic>.</p><fig position="float" id="ehab777-F1" orientation="portrait"><label>Figure 1</label><caption><p>Time to efficacy outcomes. (<italic toggle="yes">A</italic>) The composite cardiovascular outcome
+defined as cardiovascular death, non-fatal myocardial infarction, non-fatal stroke, or
+hospitalization for heart failure (Aalen–Johansen curve). (<italic toggle="yes">B</italic>) The
+composite kidney outcome defined as kidney failure, sustained ≥57% decrease in estimated
+glomerular filtration rate from baseline over ≥4 weeks, or renal death (Aalen–Johansen
+curve). (<italic toggle="yes">C</italic>) The composite kidney outcome defined as kidney failure,
+sustained ≥40% decrease in estimated glomerular filtration rate from baseline over ≥4
+weeks, or renal death (Aalen–Johansen curve). (<italic toggle="yes">D</italic>) All-cause mortality
+(Kaplan–Meier curve). Outcomes were assessed in time-to-event analyses.</p></caption><graphic xmlns:xlink="http://www.w3.org/1999/xlink" position="float" orientation="portrait" xlink:href="ehab777f1.jpg"><?image-name ehab777f1.jpg?><?image-size 121018?><?image-md5 83936022916a8f06db4c90d2d301420d?><?image-image-server-status LOAD_COMPLETED?><?image-original-height 1888?><?image-original-width 1951?><?image-scaled-height 755?><?image-scaled-width 780?><?image-cloudpmc-urn urn:cdn:blobs/6754/8830527/83936022916a/ehab777f1.jpg?><?thumb-name ehab777f1.gif?><?thumb-size 3241?><?thumb-md5 10b0c5eb8f8ccc30b89379492185ec99?><?thumb-image-server-status NEVER_LOAD?><?thumb-scaled-height 97?><?thumb-scaled-width 100?><?thumb-cloudpmc-urn urn:cdn:blobs/6754/8830527/10b0c5eb8f8c/ehab777f1.gif?></graphic></fig><fig position="float" id="ehab777-F2" orientation="portrait"><label>Figure 2</label><caption><p>Efficacy outcomes. <sup>a</sup>Statistical tests where <italic toggle="yes">P</italic>-values are
+provided were exploratory in nature; therefore, no adjustment for multiplicity was
+performed. <sup>b</sup>The composite of time to first onset of cardiovascular death,
+non-fatal myocardial infarction, non-fatal stroke, or hospitalization for heart failure.
+<sup>c</sup>The composite of time to first onset of kidney failure, sustained ≥57%
+decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal
+death. <sup>d</sup>Initiation of chronic dialysis for ≥90 days or kidney
+transplantation. <sup>e</sup>Analyses for <italic toggle="yes">P</italic>-values not prespecified.
+<sup>f</sup>The composite of time to first onset of kidney failure, sustained ≥40%
+decrease in estimated glomerular filtration rate from baseline over ≥4 weeks, or renal
+death. <sup>g</sup>  <italic toggle="yes">P</italic> = 1.001 to 3 decimal places.</p></caption><graphic xmlns:xlink="http://www.w3.org/1999/xlink" position="float" orientation="portrait" xlink:href="ehab777f2.jpg"><?image-name ehab777f2.jpg?><?image-size 74608?><?image-md5 ce47970396d686f3838528f55c3af9a2?><?image-image-server-status LOAD_COMPLETED?><?image-original-height 1957?><?image-original-width 3900?><?image-scaled-height 391?><?image-scaled-width 780?><?image-cloudpmc-urn urn:cdn:blobs/6754/8830527/ce47970396d6/ehab777f2.jpg?><?thumb-name ehab777f2.gif?><?thumb-size 5605?><?thumb-md5 b1a1f542395d5bdfaadf6c7eb37bc44b?><?thumb-image-server-status NEVER_LOAD?><?thumb-scaled-height 80?><?thumb-scaled-width 159?><?thumb-cloudpmc-urn urn:cdn:blobs/6754/8830527/b1a1f542395d/ehab777f2.gif?></graphic></fig><fig position="float" id="ehab777-F3" orientation="portrait"><label>Figure 3</label><caption><p>Components of the composite cardiovascular outcome. Outcomes were assessed in
+time-to-event analyses (Aalen–Johansen curves). (<italic toggle="yes">A</italic>) Cardiovascular
+death. (<italic toggle="yes">B</italic>) Non-fatal myocardial infarction. (<italic toggle="yes">C</italic>)
+Non-fatal stroke. (<italic toggle="yes">D</italic>) Hospitalization for heart failure.</p></caption><graphic xmlns:xlink="http://www.w3.org/1999/xlink" position="float" orientation="portrait" xlink:href="ehab777f3.jpg"><?image-name ehab777f3.jpg?><?image-size 117714?><?image-md5 69541b1a394977a60549f461775e74be?><?image-image-server-status LOAD_COMPLETED?><?image-original-height 1895?><?image-original-width 1951?><?image-scaled-height 758?><?image-scaled-width 780?><?image-cloudpmc-urn urn:cdn:blobs/6754/8830527/69541b1a3949/ehab777f3.jpg?><?thumb-name ehab777f3.gif?><?thumb-size 3106?><?thumb-md5 73076d37ae3f3baeb94e32f2458cb5c2?><?thumb-image-server-status NEVER_LOAD?><?thumb-scaled-height 97?><?thumb-scaled-width 100?><?thumb-cloudpmc-urn urn:cdn:blobs/6754/8830527/73076d37ae3f/ehab777f3.gif?></graphic></fig><p>The incidence of the composite kidney outcome (time to first onset of kidney failure,
+sustained ≥57% decrease in eGFR from baseline over ≥4 weeks, or renal death) was
+significantly lower with finerenone vs. placebo (<italic toggle="yes">Figures <xref rid="ehab777-F1" ref-type="fig">1</xref> and <xref rid="ehab777-F2" ref-type="fig">2</xref></italic>),
+occurring in 360 (5.5%) patients receiving finerenone and 465 (7.1%) patients receiving
+placebo (HR, 0.77; 95% CI, 0.67–0.88; <italic toggle="yes">P </italic>=<italic toggle="yes"> </italic>0.0002); the
+number needed to treat based on a between-group risk difference of 1.7% at 3 years was 60
+(95% CI, 38–142). Analysis of the sustained ≥57% decrease in eGFR component showed a 30%
+risk reduction (HR, 0.70; 95% CI, 0.60–0.83;
+<italic toggle="yes">P </italic>&lt;<italic toggle="yes"> </italic>0.0001) and the ESKD component a 20% risk reduction
+with finerenone vs. placebo (HR, 0.80; 95% CI, 0.64–0.99;
+<italic toggle="yes">P </italic>=<italic toggle="yes"> </italic>0.040). The prespecified ‘on-treatment’ sensitivity
+analysis confirmed the results of the primary analysis (<xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>,
+<italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Table
+S3</xref></italic>).</p><p>The composite kidney outcome of kidney failure, sustained ≥40% eGFR decrease, or renal
+death occurred in 854 (13.1%) and 995 (15.3%) patients receiving finerenone and placebo,
+respectively (HR, 0.85; 95% CI, 0.77–0.93; <italic toggle="yes">P </italic>=<italic toggle="yes"> </italic>0.0004;
+<italic toggle="yes">Figures <xref rid="ehab777-F1" ref-type="fig">1</xref> and <xref rid="ehab777-F2" ref-type="fig">2</xref></italic>). Incidences of all-cause mortality (<italic toggle="yes">Figures
+<xref rid="ehab777-F1" ref-type="fig">1</xref> and <xref rid="ehab777-F2" ref-type="fig">2</xref></italic>) and hospitalization for any cause (<italic toggle="yes">Figure <xref rid="ehab777-F2" ref-type="fig">2</xref></italic>) with finerenone were not
+significantly different from placebo (<italic toggle="yes">P </italic>=<italic toggle="yes"> </italic>0.051 and
+<italic toggle="yes">P </italic>=<italic toggle="yes"> </italic>0.087, respectively). The mean change in UACR from
+baseline to 4 months was 32% lower with finerenone vs. placebo (ratio of least-squares mean
+change from baseline, 0.68; 95% CI, 0.66–0.70), an effect maintained throughout the trial
+(<xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>,
+<italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Figure
+S7A</xref></italic>).</p><p>Similar incidences of investigator-reported treatment-emergent adverse events were observed
+between treatment groups (<italic toggle="yes">Table <xref rid="ehab777-T3" ref-type="table">3</xref></italic> and <xref rid="sup1" ref-type="supplementary-material">Supplementary
+material online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Table
+S4</xref></italic>). Serious adverse events occurred in 31.6% of patients in the
+finerenone group and 33.7% of patients in the placebo group. Renal-related adverse events,
+including acute kidney injury, occurred in similar proportions of patients between groups.
+Hyperkalaemia-related adverse events occurred more frequently with finerenone (14.0%) vs.
+placebo (6.9%), but no hyperkalaemia-related adverse events were fatal and only a small
+proportion led to permanent treatment discontinuation [1.7% (incidence rate 0.66 per 100
+patient-years) and 0.6% (incidence rate 0.22 per 100 patient-years), respectively] or
+hospitalization (0.9% and 0.2%, respectively). After the fourth month of treatment, the
+change in serum potassium from baseline was +0.21 mmol/L [standard deviation (SD)
+0.47 mmol/L] with finerenone and +0.02 mmol/L (SD 0.43 mmol/L) with placebo; the mean serum
+potassium was stable over time thereafter (<xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>, <italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Figure S7B</xref></italic>). Hypokalaemia
+occurred less frequently with finerenone (1.1%) vs. placebo (2.3%), while gynaecomastia was
+similar in the finerenone group (0.1%) and the placebo group (0.2%). Patients receiving
+finerenone had a modest reduction in mean systolic blood pressure compared with patients
+receiving placebo [change in mean systolic blood pressure at 4 months was –3.2 mmHg (SD
+15.0 mmHg) with finerenone and +0.5 mmHg (SD 14.6 mmHg) with placebo; <xref rid="sup1" ref-type="supplementary-material">Supplementary material online</xref>,
+<italic toggle="yes"><xref rid="sup1" ref-type="supplementary-material">Figure
+S8</xref></italic>].</p><table-wrap position="float" id="ehab777-T3" orientation="portrait"><label>Table 3</label><caption><p>Safety outcomes</p></caption><table frame="hsides" rules="groups"><colgroup span="1"><col valign="top" align="left" span="1"/><col valign="top" align="char" char="" span="1"/><col valign="top" align="char" char="" span="1"/></colgroup><thead><tr><th rowspan="2" colspan="1">Treatment-emergent AEs<sup>a</sup></th><th colspan="2" rowspan="1">Number of patients with event (%)<hr/></th></tr><tr><th rowspan="1" colspan="1">Finerenone (<italic toggle="yes">n</italic> = 6510)</th><th rowspan="1" colspan="1">Placebo (<italic toggle="yes">n</italic> = 6489)</th></tr></thead><tbody><tr><td rowspan="1" colspan="1">Any AE</td><td rowspan="1" colspan="1">5602 (86.1)</td><td rowspan="1" colspan="1">5607 (86.4)</td></tr><tr><td rowspan="1" colspan="1">AE related to study drug</td><td rowspan="1" colspan="1">1206 (18.5)</td><td rowspan="1" colspan="1">862 (13.3)</td></tr><tr><td rowspan="1" colspan="1">AE leading to treatment discontinuation</td><td rowspan="1" colspan="1">414 (6.4)</td><td rowspan="1" colspan="1">351 (5.4)</td></tr><tr><td rowspan="1" colspan="1">Any serious AE<xref rid="tblfn13" ref-type="table-fn"><sup>b</sup></xref></td><td rowspan="1" colspan="1">2060 (31.6)</td><td rowspan="1" colspan="1">2186 (33.7)</td></tr><tr><td rowspan="1" colspan="1"> Serious AE<xref rid="tblfn13" ref-type="table-fn"><sup>b</sup></xref> related to
+study drug</td><td rowspan="1" colspan="1">83 (1.3)</td><td rowspan="1" colspan="1">61 (0.9)</td></tr><tr><td rowspan="1" colspan="1"> Serious AE<xref rid="tblfn13" ref-type="table-fn"><sup>b</sup></xref> leading to
+treatment discontinuation</td><td rowspan="1" colspan="1">145 (2.2)</td><td rowspan="1" colspan="1">154 (2.4)</td></tr><tr><td rowspan="1" colspan="1">Investigator-reported hyperkalaemia<xref rid="tblfn14" ref-type="table-fn"><sup>c</sup></xref></td><td rowspan="1" colspan="1">912 (14.0)</td><td rowspan="1" colspan="1">448 (6.9)</td></tr><tr><td rowspan="1" colspan="1">Hyperkalaemia related to study drug</td><td rowspan="1" colspan="1">573 (8.8)</td><td rowspan="1" colspan="1">249 (3.8)</td></tr><tr><td rowspan="1" colspan="1">Permanent discontinuation due to hyperkalaemia</td><td rowspan="1" colspan="1">110 (1.7)</td><td rowspan="1" colspan="1">38 (0.6)</td></tr><tr><td rowspan="1" colspan="1">Serious hyperkalaemia<xref rid="tblfn13" ref-type="table-fn"><sup>b</sup></xref></td><td rowspan="1" colspan="1">69 (1.1)</td><td rowspan="1" colspan="1">16 (0.2)</td></tr><tr><td rowspan="1" colspan="1"> Hospitalization due to serious hyperkalaemia</td><td rowspan="1" colspan="1">61 (0.9)</td><td rowspan="1" colspan="1">10 (0.2)</td></tr><tr><td rowspan="1" colspan="1"> Fatal hyperkalaemia</td><td rowspan="1" colspan="1">0 (0.0)</td><td rowspan="1" colspan="1">0 (0.0)</td></tr><tr><td rowspan="1" colspan="1">Investigator-reported hypokalaemia</td><td rowspan="1" colspan="1">70 (1.1)</td><td rowspan="1" colspan="1">149 (2.3)</td></tr><tr><td rowspan="1" colspan="1">Investigator-reported renal-related AEs</td><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/></tr><tr><td rowspan="1" colspan="1"> Acute kidney injury<xref rid="tblfn15" ref-type="table-fn"><sup>d</sup></xref></td><td rowspan="1" colspan="1">220 (3.4)</td><td rowspan="1" colspan="1">234 (3.6)</td></tr><tr><td rowspan="1" colspan="1"> Hospitalization due to acute kidney injury<xref rid="tblfn15" ref-type="table-fn"><sup>d</sup></xref></td><td rowspan="1" colspan="1">85 (1.3)</td><td rowspan="1" colspan="1">86 (1.3)</td></tr><tr><td rowspan="1" colspan="1"> Treatment discontinuation due to acute kidney injury<xref rid="tblfn15" ref-type="table-fn"><sup>d</sup></xref></td><td rowspan="1" colspan="1">14 (0.2)</td><td rowspan="1" colspan="1">10 (0.2)</td></tr><tr><td rowspan="1" colspan="1">Adverse events affecting ≥5% of patients in either group<xref rid="tblfn15" ref-type="table-fn"><sup>d</sup></xref></td><td rowspan="1" colspan="1"/><td rowspan="1" colspan="1"/></tr><tr><td rowspan="1" colspan="1"> Hyperkalaemia</td><td rowspan="1" colspan="1">781 (12.0)</td><td rowspan="1" colspan="1">382 (5.9)</td></tr><tr><td rowspan="1" colspan="1"> Nasopharyngitis</td><td rowspan="1" colspan="1">559 (8.6)</td><td rowspan="1" colspan="1">577 (8.9)</td></tr><tr><td rowspan="1" colspan="1"> Arthralgia</td><td rowspan="1" colspan="1">496 (7.6)</td><td rowspan="1" colspan="1">459 (7.1)</td></tr><tr><td rowspan="1" colspan="1"> Back pain</td><td rowspan="1" colspan="1">436 (6.7)</td><td rowspan="1" colspan="1">428 (6.6)</td></tr><tr><td rowspan="1" colspan="1"> Urinary tract infection</td><td rowspan="1" colspan="1">431 (6.6)</td><td rowspan="1" colspan="1">432 (6.7)</td></tr><tr><td rowspan="1" colspan="1"> Diarrhoea</td><td rowspan="1" colspan="1">423 (6.5)</td><td rowspan="1" colspan="1">411 (6.3)</td></tr><tr><td rowspan="1" colspan="1"> Anaemia</td><td rowspan="1" colspan="1">425 (6.5)</td><td rowspan="1" colspan="1">397 (6.1)</td></tr><tr><td rowspan="1" colspan="1"> Hypertension</td><td rowspan="1" colspan="1">419 (6.4)</td><td rowspan="1" colspan="1">581 (9.0)</td></tr><tr><td rowspan="1" colspan="1"> Upper respiratory tract infection</td><td rowspan="1" colspan="1">407 (6.3)</td><td rowspan="1" colspan="1">394 (6.1)</td></tr><tr><td rowspan="1" colspan="1"> Oedema peripheral</td><td rowspan="1" colspan="1">384 (5.9)</td><td rowspan="1" colspan="1">584 (9.0)</td></tr><tr><td rowspan="1" colspan="1"> Glomerular filtration rate decreased</td><td rowspan="1" colspan="1">348 (5.3)</td><td rowspan="1" colspan="1">274 (4.2)</td></tr><tr><td rowspan="1" colspan="1"> Hypoglycaemia</td><td rowspan="1" colspan="1">340 (5.2)</td><td rowspan="1" colspan="1">375 (5.8)</td></tr><tr><td rowspan="1" colspan="1"> Dizziness</td><td rowspan="1" colspan="1">341 (5.2)</td><td rowspan="1" colspan="1">322 (5.0)</td></tr><tr><td rowspan="1" colspan="1"> Bronchitis</td><td rowspan="1" colspan="1">328 (5.0)</td><td rowspan="1" colspan="1">332 (5.1)</td></tr><tr><td rowspan="1" colspan="1"> Constipation</td><td rowspan="1" colspan="1">317 (4.9)</td><td rowspan="1" colspan="1">334 (5.1)</td></tr><tr><td rowspan="1" colspan="1"> Pneumonia</td><td rowspan="1" colspan="1">271 (4.2)</td><td rowspan="1" colspan="1">387 (6.0)</td></tr></tbody></table><table-wrap-foot><fn id="tblfn10"><p>Summary of safety outcomes by treatment group (including events leading to treatment
+discontinuation or hospitalization) which included AEs, serious AEs,
+hyperkalaemia-related events, renal AEs, hypokalaemia events, and a list of the most
+commonly occurring AEs that had an incidence ≥5% in either treatment group.</p></fn><fn id="tblfn11"><p>AEs, adverse events; MedDRA, Medical Dictionary for Regulatory Activities.</p></fn><fn id="tblfn12"><label>a</label><p>Reported as treatment-emergent AEs relating to seriousness criteria.</p></fn><fn id="tblfn13"><label>b</label><p>A treatment-emergent event was considered to be a serious AE if it: (i) resulted in
+death; (ii) was life-threatening; (iii) required inpatient hospitalization (or
+prolongation of existing hospitalization); (iv) caused persistent or significant
+disability/incapacity; (v) was a congenital abnormality or birth defect; or (vi) was
+judged by the investigator to be a serious or important medical event.</p></fn><fn id="tblfn14"><label>c</label><p>Investigator-reported AEs using the MedDRA preferred terms ‘hyperkalaemia’ and ‘blood
+potassium increased’.</p></fn><fn id="tblfn15"><label>d</label><p>MedDRA preferred term.</p></fn></table-wrap-foot></table-wrap></sec><sec sec-type="discussion"><title>Discussion</title><p>The pooled analysis of two complementary trials comprising 13 026 patients with a broad
+spectrum of CKD and type 2 diabetes, all treated with an optimized dose of an ACEi or
+ARB,<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>  <sup>,</sup>  <xref rid="ehab777-B10" ref-type="bibr"><sup>10</sup></xref> provides robust evidence of both
+cardiovascular and kidney protection with finerenone vs. placebo. Based on the FIDELIO-DKD
+trial results, finerenone is currently indicated to reduce the risk of sustained eGFR
+decline, ESKD, cardiovascular death, non-fatal MI, and HHF in adult patients with CKD
+associated with type 2 diabetes.<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>
+ <sup>,</sup>  <xref rid="ehab777-B16" ref-type="bibr"><sup>16</sup></xref> Across the
+FIDELITY population, the relative risk reduction was 14% for the composite cardiovascular
+outcome and 23% for the composite kidney outcome; cardiovascular outcomes across subgroups
+by baseline demographics and clinical characteristics were generally consistent. The results
+of this analysis provide reassurance regarding the safety and efficacy of finerenone across
+a wide spectrum of patients with CKD and type 2 diabetes with a degree of precision that was
+previously not possible to obtain by considering the two trials separately.</p><p>MRAs are indicated for the treatment of patients with chronic symptomatic heart failure
+with reduced ejection fraction<xref rid="ehab777-B17" ref-type="bibr"><sup>17</sup></xref>
+ <sup>,</sup>  <xref rid="ehab777-B18" ref-type="bibr"><sup>18</sup></xref>—such patients
+were excluded from the FIDELIO-DKD and FIGARO-DKD studies<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>  <sup>,</sup>  <xref rid="ehab777-B10" ref-type="bibr"><sup>10</sup></xref>—but data supporting use of MRAs to reduce the risk
+of heart failure developing in patients with CKD and type 2 diabetes are limited. The
+FIDELITY analysis provides evidence that finerenone use in patients with CKD and type 2
+diabetes, a population at high risk of developing heart failure, prevents HHF. In the
+FIDELITY analysis, HHF was the main driver of the cardiovascular benefit with finerenone,
+with a relative risk reduction of 22% vs. placebo
+(<italic toggle="yes">P </italic>=<italic toggle="yes"> </italic>0.0030), in a population that excluded patients with
+chronic symptomatic heart failure with reduced ejection fraction at the run-in visit.<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>  <sup>,</sup>  <xref rid="ehab777-B10" ref-type="bibr"><sup>10</sup></xref> This finding is important because heart failure is
+a major source of morbidity and healthcare costs among patients with CKD and type 2
+diabetes<xref rid="ehab777-B19" ref-type="bibr"><sup>19–21</sup></xref>; therefore, prevention of such events can improve patient
+outcomes and potentially reduce healthcare costs. Furthermore, the fact that finerenone
+lowers HHF risk across the CKD spectrum emphasizes the need to screen all patients with type
+2 diabetes for this risk factor.</p><p>The FIDELITY analysis shows not only a 30% reduction in the risk of a sustained ≥57%
+decrease in eGFR on top of optimized ACEi or ARB therapy but also a relative risk reduction
+of 20% in ESKD with finerenone vs. placebo (<italic toggle="yes">P </italic>=<italic toggle="yes"> </italic>0.0403).
+The relative risks of all components of the kidney composite outcome were reduced with
+finerenone vs. placebo, except time to renal death (this finding was likely due to low event
+numbers, although the HR of 0.53 still favoured finerenone over placebo). The relative risk
+of a sustained ≥57% decrease in eGFR was reduced by 30%, ESKD by 20%, sustained decrease in
+eGFR to &lt;15 mL/min/1.73 m<sup>2</sup> by 19%, and kidney failure by 16%. The requirement
+for dialysis is one of the most dreaded complications of CKD progression<xref rid="ehab777-B22" ref-type="bibr"><sup>22</sup></xref>; it is associated with substantial
+morbidity and costs.<xref rid="ehab777-B23" ref-type="bibr"><sup>23</sup></xref> Reduction
+of this outcome, which is of great relevance to both patients and payers, is therefore
+notable.</p><p>Prior trials of dual renin–angiotensin system blockade have failed to show cardiovascular
+or kidney protection among patients with CKD and type 2 diabetes, suggesting that the way in
+which the renin–angiotensin–aldosterone system is blocked is important.<xref rid="ehab777-B24" ref-type="bibr"><sup>24–26</sup></xref> The FIDELITY analysis
+suggests a strong effect of MR overactivation in the pathogenesis of both cardiovascular
+disease and CKD progression in patients with CKD and type 2 diabetes.</p><p>Previous studies assessing SGLT-2 inhibitors in patients with CKD and type 2 diabetes, such
+as CREDENCE or DAPA-CKD, included patient populations representing a substantially smaller
+part of the CKD spectrum than the FIDELITY analysis.<xref rid="ehab777-B2" ref-type="bibr"><sup>2</sup></xref>  <sup>,</sup>  <xref rid="ehab777-B27" ref-type="bibr"><sup>27</sup></xref> Because the trials differed in population, design, and other
+aspects described previously, their results cannot be directly compared with the FIDELITY
+analysis.<xref rid="ehab777-B7" ref-type="bibr"><sup>7</sup></xref>  <sup>,</sup>  <xref rid="ehab777-B10" ref-type="bibr"><sup>10</sup></xref> In FIDELITY, 877 patients (6.7%)
+received SGLT-2 inhibitors and 944 patients (7.2%) received GLP-1RAs at baseline, and the
+cardiovascular and kidney benefits of finerenone are at least as large in patients on SGLT-2
+inhibitors or GLP-1RAs as in those without. Preclinical data on the initial combination of
+finerenone and empagliflozin in a rat model of hypertension-induced end-organ damage also
+showed that the combination approach conferred a protective effect across various
+cardiorenal outcomes.<xref rid="ehab777-B28" ref-type="bibr"><sup>28</sup></xref> It is
+possible that there is an additive effect of the combination of finerenone on top of SGLT-2
+inhibitors or GLP-1RAs, which may relate to their distinct mechanisms of action. However,
+this was not a randomized trial of finerenone and SGLT-2 inhibitor or GLP-1RA combination
+therapy, and the efficacy and safety of these agents in combination will be determined in
+future clinical trials and analyses.</p><p>Owing to its mechanism of action, finerenone treatment is expected to increase serum
+potassium concentration through MR antagonism.<xref rid="ehab777-B8" ref-type="bibr"><sup>8</sup></xref> In FIDELITY, hyperkalaemia was more frequent with finerenone vs.
+placebo. However, the incidence of hyperkalaemia-related adverse events with clinical impact
+was low, with hyperkalaemia-related permanent treatment discontinuation in only 1.7% of
+patients receiving finerenone vs. 0.6% with placebo over a median follow-up of 3.0 years
+(IQR 2.3–3.8 years). Hypokalaemia occurred less frequently in finerenone-treated patients
+than in placebo-treated patients. Potassium intake was not restricted during the trials, but
+finerenone or placebo was withheld in cases where potassium concentrations &gt;5.5 mmol/L
+were detected, until potassium concentrations fell to ≤5.0 mmol/L. Therefore, finerenone
+improves cardiorenal outcomes in patients with CKD and type 2 diabetes with a manageable
+hyperkalaemia risk and a reduction in hypokalaemia. The hypokalaemia reduction is notable
+because it is causatively associated with adverse outcomes in heart failure.<xref rid="ehab777-B29" ref-type="bibr"><sup>29</sup></xref></p><p>Although this prespecified pooled analysis of two studies with similar protocols included a
+large patient population with CKD and type 2 diabetes, limitations are that it did not
+include patients with non-albuminuric CKD and only a small proportion of Black patients were
+included. Since the design of the FIGARO-DKD and FIDELIO-DKD studies, SGLT-2 inhibitors have
+emerged as therapeutic options for patients with CKD and type 2 diabetes.<xref rid="ehab777-B30" ref-type="bibr"><sup>30</sup></xref> Some patients in the finerenone
+phase III trials also received these novel agents at study commencement, and consistent
+cardiovascular benefits were observed in these groups.</p><p>In conclusion, finerenone reduced the risk of clinically important cardiovascular and
+kidney outcomes vs. placebo across the spectrum of CKD in patients with type 2 diabetes. The
+results highlight the importance of early treatment before CKD has progressed to improve
+outcomes in this patient population.</p></sec><sec sec-type="supplementary-material"><title>Supplementary material</title><p>
+<xref rid="sup1" ref-type="supplementary-material">Supplementary material</xref> is
+available at <italic toggle="yes">European Heart Journal</italic> online.</p></sec><sec sec-type="supplementary-material"><title>Supplementary Material</title><supplementary-material id="sup1" position="float" content-type="local-data" orientation="portrait"><label>ehab777_Supplementary_Data</label><media xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="ehab777_supplementary_data.docx" position="float" orientation="portrait"><?suppdata-name ehab777_supplementary_data.docx?><?suppdata-size 4232061?><?suppdata-md5 098a5bb87912bf7bc04eb990e3379286?><?suppdata-image-server-status NEVER_LOAD?><?suppdata-mime-type application?><?suppdata-mime-sub-type vnd.openxmlformats-officedocument.wordprocessingml.document?><?suppdata-cloudpmc-urn urn:app:6754/8830527/098a5bb87912/ehab777_supplementary_data.docx?><caption><p>Click here for additional data file.</p></caption></media></supplementary-material></sec></body><back><ack id="ack1"><title>Acknowledgements</title><p>The authors and study sponsor are indebted to the patients and their families, as well as
+the investigators and sites participating in the studies. Medical writing assistance was
+provided by Lizahn Zwart, PhD, of Chameleon Communications International and was funded by
+Bayer AG.</p><sec><title>Funding</title><p>This work was supported by Bayer AG, who funded by the FIDELIO-DKD and FIGARO-DKD studies
+and pooled analysis.</p></sec><sec><title>Role of the funder/sponsor</title><p>The Executive Committee, in collaboration with the study sponsor, designed the trials and
+protocols and supervised the trial conduct. In both trials, patient safety was overseen by
+an independent data monitoring committee. Analyses were conducted by the sponsor; all
+authors had access to and participated in the interpretation of the data. The study
+sponsor collected and analysed the data, and sponsor authors contributed to interpretation
+of the data; preparation, review, and approval of the manuscript; and the decision to
+submit the manuscript for publication.</p><p>
+<bold>Conflict of interest:</bold> R.A. reported personal fees and non-financial support
+from Bayer Healthcare Pharmaceuticals Inc. during the conduct of the study; he also
+reported personal fees and non-financial support from Akebia Therapeutics, AstraZeneca,
+Boehringer Ingelheim, Eli Lilly, Fresenius, Janssen, Relypsa, Sanofi, and Vifor Pharma; he
+has received personal fees from Ironwood Pharmaceuticals, Lexicon, Merck &amp; Co, and
+Reata, and non-financial support from E. R. Squibb &amp; Sons, Opko Pharmaceuticals, and
+Otsuka America Pharmaceutical; he is a member of data safety monitoring committees for
+Amgen, AstraZeneca, and Celgene; a member of steering committees of randomized trials for
+Akebia Therapeutics, Bayer, Janssen, and Relypsa; and a member of adjudication committees
+for AbbVie, Bayer, Boehringer Ingelheim, and Janssen; he has served as associate editor of
+the <italic toggle="yes">American Journal of Nephrology</italic> and <italic toggle="yes">Nephrology Dialysis and
+Transplantation</italic> and has been an author for UpToDate; and he has received
+research grants from the U.S. Veterans Administration and the National Institutes of
+Health. G.F. reported that he is a committee member of trials and registries sponsored by
+Amgen, Bayer, Boehringer Ingelheim, Medtronic, Novartis, Servier, and Vifor Pharma; he is
+a senior consulting editor for <italic toggle="yes">JACC Heart Failure</italic> and has received
+research support from the European Union. B.P. reported consultant fees for AstraZeneca,
+Bayer, Boehringer Ingelheim, Brainstorm Medical, Cereno Scientific, G3 Pharmaceuticals,
+KBP Biosciences, PhaseBio, Proton Intel, Sanofi/Lexicon, Sarfez, scPharmaceuticals, SQ
+Innovation, Tricida, and Vifor/Relypsa; he has stock options for KBP Biosciences,
+Brainstorm Medical, Cereno Scientific, G3 Pharmaceuticals, Proton Intel, Sarfez,
+scPharmaceuticals, SQ Innovation, Tricida, and Vifor/Relypsa; he also holds a patent for
+site-specific delivery of eplerenone to the myocardium (US patent # 9931412) and a
+provisional patent for histone-acetylation-modulating agents for the treatment and
+prevention of organ injury (provisional patent US 63/045784). S.D.A. has received research
+support from Abbott Vascular and Vifor International and personal fees from Abbott
+Vascular, Bayer, Boehringer Ingelheim, BRAHMS, Cardiac Dimensions, Impulse Dynamics,
+Novartis, Servier, and Vifor Pharma. P.R. reported personal fees from Bayer during the
+conduct of the study; he has received research support and personal fees from AstraZeneca
+and Novo Nordisk and personal fees from Astellas, Boehringer Ingelheim, Eli Lilly, Gilead,
+Mundipharma, Sanofi, and Vifor; all fees are given to Steno Diabetes Center Copenhagen.
+A.J., C.N., and M.G. are full-time employees of Bayer AG, Division Pharmaceuticals,
+Germany. P.K. is a full-time employee of Bayer AG, Division Pharmaceuticals, Germany. He
+is a co-inventor of finerenone and holds US and European patents relating to finerenone
+(US8436180B2 and EP2132206B1). L.M.R. reported receipt of consultancy fees from Bayer.
+G.L.B. reported research funding, paid to the University of Chicago Medicine, from Bayer
+during the conduct of the study; he also reported research funding, paid to the University
+of Chicago Medicine, from Novo Nordisk and Vascular Dynamics; he acted as a consultant and
+received personal fees from for Alnylam, Merck, and Relypsa; he is an editor of the
+<italic toggle="yes">American Journal of Nephrology, Nephrology</italic>, and
+<italic toggle="yes">Hypertension</italic> and a section editor of UpToDate and is an associate
+editor of <italic toggle="yes">Diabetes Care</italic> and <italic toggle="yes">Hypertension Research</italic>.</p></sec><sec sec-type="data-availability"><title>Data availability</title><p>Data are not currently available.</p><p>Will data be available: Yes</p><p>Where: Electronic repository</p><p>When will data availability begin: Date to be confirmed by Bayer.</p></sec></ack><ref-list id="ref1"><title>References</title><ref id="ehab777-B1"><label>1</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Alicic</surname>  <given-names>RZ</given-names></string-name>,
+<string-name name-style="western"><surname>Rooney</surname>  <given-names>MT</given-names></string-name>,
+<string-name name-style="western"><surname>Tuttle</surname>
+ <given-names>KR.</given-names></string-name></person-group>  <article-title>Diabetic
+kidney disease: challenges, progress, and possibilities</article-title>. <source>Clin J
+Am Soc Nephrol</source>
+ <year>2017</year>;<volume>12</volume>:<fpage>2032</fpage>–<lpage>2045</lpage>.<pub-id pub-id-type="pmid">28522654</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.2215/CJN.11491116</pub-id><pub-id pub-id-type="pmcid">PMC5718284</pub-id></mixed-citation></ref><ref id="ehab777-B2"><label>2</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Perkovic</surname>  <given-names>V</given-names></string-name>,
+<string-name name-style="western"><surname>Jardine</surname>
+ <given-names>MJ</given-names></string-name>, <string-name name-style="western"><surname>Neal</surname>
+ <given-names>B</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>CREDENCE Trial Investigators</collab>. <article-title>Canagliflozin and renal
+outcomes in type 2 diabetes and nephropathy</article-title>. <source>N Engl J
+Med</source>
+ <year>2019</year>;<volume>380</volume>:<fpage>2295</fpage>–<lpage>2306</lpage>.<pub-id pub-id-type="pmid">30990260</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1056/NEJMoa1811744</pub-id></mixed-citation></ref><ref id="ehab777-B3"><label>3</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Agarwal</surname>  <given-names>R</given-names></string-name>,
+<string-name name-style="western"><surname>Anker</surname>  <given-names>SD</given-names></string-name>,
+<string-name name-style="western"><surname>Bakris</surname>
+ <given-names>G</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>FIDELIO-DKD and FIGARO-DKD Investigators</collab>. <article-title>Investigating
+new treatment opportunities for patients with chronic kidney disease in type 2 diabetes:
+the role of finerenone</article-title>. <source>Nephrol Dial Transplant</source>
+ <year>2020</year>. doi:10.1093/ndt/gfaa294.<pub-id pub-id-type="doi" assigning-authority="pmc">10.1093/ndt/gfaa294</pub-id><pub-id pub-id-type="pmcid">PMC9130026</pub-id><pub-id pub-id-type="pmid">33280027</pub-id></mixed-citation></ref><ref id="ehab777-B4"><label>4</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Neuen</surname>  <given-names>BL</given-names></string-name>,
+<string-name name-style="western"><surname>Young</surname>  <given-names>T</given-names></string-name>,
+<string-name name-style="western"><surname>Heerspink</surname>
+ <given-names>HJL</given-names></string-name></person-group>  <etal>et al</etal>
+ <article-title>SGLT2 inhibitors for the prevention of kidney failure in patients with
+type 2 diabetes: a systematic review and meta-analysis</article-title>. <source>Lancet
+Diabetes Endocrinol</source>
+ <year>2019</year>;<volume>7</volume>:<fpage>845</fpage>–<lpage>854</lpage>.<pub-id pub-id-type="pmid">31495651</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1016/S2213-8587(19)30256-6</pub-id></mixed-citation></ref><ref id="ehab777-B5"><label>5</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Zelniker</surname>  <given-names>TA</given-names></string-name>,
+<string-name name-style="western"><surname>Wiviott</surname>
+ <given-names>SD</given-names></string-name>, <string-name name-style="western"><surname>Raz</surname>
+ <given-names>I</given-names></string-name></person-group>  <etal>et al</etal>
+ <article-title>Comparison of the effects of glucagon-like peptide receptor agonists and
+sodium-glucose cotransporter 2 inhibitors for prevention of major adverse cardiovascular
+and renal outcomes in type 2 diabetes mellitus</article-title>.
+<source>Circulation</source>
+ <year>2019</year>;<volume>139</volume>:<fpage>2022</fpage>–<lpage>2031</lpage>.<pub-id pub-id-type="pmid">30786725</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1161/CIRCULATIONAHA.118.038868</pub-id></mixed-citation></ref><ref id="ehab777-B6"><label>6</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Fox</surname>  <given-names>CS</given-names></string-name>,
+<string-name name-style="western"><surname>Matsushita</surname>
+ <given-names>K</given-names></string-name>, <string-name name-style="western"><surname>Woodward</surname>
+ <given-names>M</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>Chronic Kidney Disease Prognosis Consortium</collab>.
+<article-title>Associations of kidney disease measures with mortality and end-stage
+renal disease in individuals with and without diabetes: a meta-analysis</article-title>.
+<source>Lancet</source>
+ <year>2012</year>;<volume>380</volume>:<fpage>1662</fpage>–<lpage>1673</lpage>.<pub-id pub-id-type="pmid">23013602</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1016/S0140-6736(12)61350-6</pub-id><pub-id pub-id-type="pmcid">PMC3771350</pub-id></mixed-citation></ref><ref id="ehab777-B7"><label>7</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Bakris</surname>  <given-names>GL</given-names></string-name>,
+<string-name name-style="western"><surname>Agarwal</surname>  <given-names>R</given-names></string-name>,
+<string-name name-style="western"><surname>Anker</surname>
+ <given-names>SD</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>FIDELIO-DKD Investigators</collab>. <article-title>Effect of finerenone on
+chronic kidney disease outcomes in type 2 diabetes</article-title>. <source>N Engl J
+Med</source>
+ <year>2020</year>;<volume>383</volume>:<fpage>2219</fpage>–<lpage>2229</lpage>.<pub-id pub-id-type="pmid">33264825</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1056/NEJMoa2025845</pub-id></mixed-citation></ref><ref id="ehab777-B8"><label>8</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Agarwal</surname>  <given-names>R</given-names></string-name>,
+<string-name name-style="western"><surname>Kolkhof</surname>  <given-names>P</given-names></string-name>,
+<string-name name-style="western"><surname>Bakris</surname>
+ <given-names>G</given-names></string-name></person-group>  <etal>et al</etal>
+ <article-title>Steroidal and non-steroidal mineralocorticoid receptor antagonists in
+cardiorenal medicine</article-title>. <source>Eur Heart J</source>
+ <year>2021</year>;<volume>42</volume>:<fpage>152</fpage>–<lpage>161</lpage>.<pub-id pub-id-type="pmid">33099609</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1093/eurheartj/ehaa736</pub-id><pub-id pub-id-type="pmcid">PMC7813624</pub-id></mixed-citation></ref><ref id="ehab777-B9"><label>9</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Kolkhof</surname>  <given-names>P</given-names></string-name>,
+<string-name name-style="western"><surname>Jaisser</surname>  <given-names>F</given-names></string-name>,
+<string-name name-style="western"><surname>Kim</surname>  <given-names>SY</given-names></string-name>,
+<string-name name-style="western"><surname>Filippatos</surname>
+ <given-names>G</given-names></string-name>, <string-name name-style="western"><surname>Nowack</surname>
+ <given-names>C</given-names></string-name>, <string-name name-style="western"><surname>Pitt</surname>
+ <given-names>B.</given-names></string-name></person-group>
+ <article-title>Steroidal and novel non-steroidal mineralocorticoid receptor antagonists
+in heart failure and cardiorenal diseases: comparison at bench and
+bedside</article-title>. <source>Handb Exp Pharmacol</source>
+ <year>2017</year>;<volume>243</volume>:<fpage>271</fpage>–<lpage>305</lpage>.<pub-id pub-id-type="pmid">27830348</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1007/164_2016_76</pub-id></mixed-citation></ref><ref id="ehab777-B10"><label>10</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Pitt</surname>  <given-names>B</given-names></string-name>,
+<string-name name-style="western"><surname>Filippatos</surname>
+ <given-names>G</given-names></string-name>, <string-name name-style="western"><surname>Agarwal</surname>
+ <given-names>R</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>FIGARO-DKD Investigators</collab>. <article-title>Cardiovascular events with
+finerenone in kidney disease and type 2 diabetes</article-title>. <source>N Engl J
+Med</source>  <year>2021</year>. doi:10.1056/NEJMoa2110956.<pub-id pub-id-type="doi" assigning-authority="pmc">10.1056/NEJMoa2110956</pub-id><pub-id pub-id-type="pmid">34449181</pub-id></mixed-citation></ref><ref id="ehab777-B11"><label>11</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Ruilope</surname>  <given-names>LM</given-names></string-name>,
+<string-name name-style="western"><surname>Agarwal</surname>  <given-names>R</given-names></string-name>,
+<string-name name-style="western"><surname>Anker</surname>
+ <given-names>SD</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>FIGARO-DKD Study Investigators</collab>. <article-title>Design and baseline
+characteristics of the Finerenone in Reducing Cardiovascular Mortality and Morbidity in
+Diabetic Kidney Disease trial</article-title>. <source>Am J Nephrol</source>
+ <year>2019</year>;<volume>50</volume>:<fpage>345</fpage>–<lpage>356</lpage>.<pub-id pub-id-type="pmid">31665733</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1159/000503712</pub-id><pub-id pub-id-type="pmcid">PMC6889917</pub-id></mixed-citation></ref><ref id="ehab777-B12"><label>12</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Lewis</surname>  <given-names>EJ</given-names></string-name>,
+<string-name name-style="western"><surname>Hunsicker</surname>
+ <given-names>LG</given-names></string-name>, <string-name name-style="western"><surname>Clarke</surname>
+ <given-names>WR</given-names></string-name></person-group>  <etal>et al</etal>
+ <article-title>Renoprotective effect of the angiotensin-receptor antagonist irbesartan
+in patients with nephropathy due to type 2 diabetes</article-title>. <source>N Engl J
+Med</source>
+ <year>2001</year>;<volume>345</volume>:<fpage>851</fpage>–<lpage>860</lpage>.<pub-id pub-id-type="pmid">11565517</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1056/NEJMoa011303</pub-id></mixed-citation></ref><ref id="ehab777-B13"><label>13</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Brenner</surname>  <given-names>BM</given-names></string-name>,
+<string-name name-style="western"><surname>Cooper</surname>  <given-names>ME</given-names></string-name>,
+<string-name name-style="western"><surname>de Zeeuw</surname>
+ <given-names>D</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>RENAAL Study Investigators</collab>. <article-title>Effects of losartan on renal
+and cardiovascular outcomes in patients with type 2 diabetes and
+nephropathy</article-title>. <source>N Engl J Med</source>
+ <year>2001</year>;<volume>345</volume>:<fpage>861</fpage>–<lpage>869</lpage>.<pub-id pub-id-type="pmid">11565518</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1056/NEJMoa011161</pub-id></mixed-citation></ref><ref id="ehab777-B14"><label>14</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Coresh</surname>  <given-names>J</given-names></string-name>,
+<string-name name-style="western"><surname>Turin</surname>  <given-names>TC</given-names></string-name>,
+<string-name name-style="western"><surname>Matsushita</surname>
+ <given-names>K</given-names></string-name></person-group>  <etal>et al</etal>
+ <article-title>Decline in estimated glomerular filtration rate and subsequent risk of
+end-stage renal disease and mortality</article-title>. <source>JAMA</source>
+ <year>2014</year>;<volume>311</volume>:<fpage>2518</fpage>–<lpage>2531</lpage>.<pub-id pub-id-type="pmid">24892770</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1001/jama.2014.6634</pub-id><pub-id pub-id-type="pmcid">PMC4172342</pub-id></mixed-citation></ref><ref id="ehab777-B15"><label>15</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Levey</surname>  <given-names>AS</given-names></string-name>,
+<string-name name-style="western"><surname>Inker</surname>  <given-names>LA</given-names></string-name>,
+<string-name name-style="western"><surname>Matsushita</surname>
+ <given-names>K</given-names></string-name></person-group>  <etal>et al</etal>
+ <article-title>GFR decline as an end point for clinical trials in CKD: a scientific
+workshop sponsored by the National Kidney Foundation and the US Food and Drug
+Administration</article-title>. <source>Am J Kidney Dis</source>
+ <year>2014</year>;<volume>64</volume>:<fpage>821</fpage>–<lpage>835</lpage>.<pub-id pub-id-type="pmid">25441437</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1053/j.ajkd.2014.07.030</pub-id></mixed-citation></ref><ref id="ehab777-B16"><label>16</label><mixed-citation publication-type="other">
+<collab>Bayer Healthcare Pharmaceuticals Inc</collab>. <italic toggle="yes">KERENDIA (Finerenone)
+Prescribing Information</italic>; <year>2021</year>. <ext-link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://labeling.bayerhealthcare.com/html/products/pi/Kerendia_PI.pdf" ext-link-type="uri">https://labeling.bayerhealthcare.com/html/products/pi/Kerendia_PI.pdf</ext-link> (17
+August 2021).</mixed-citation></ref><ref id="ehab777-B17"><label>17</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Yancy</surname>  <given-names>CW</given-names></string-name>,
+<string-name name-style="western"><surname>Jessup</surname>  <given-names>M</given-names></string-name>,
+<string-name name-style="western"><surname>Bozkurt</surname>
+ <given-names>B</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>American College of Cardiology Foundation/American Heart Association Task Force
+on Practice Guidelines</collab>. <article-title>2013 ACCF/AHA guideline for the
+management of heart failure: a report of the American College of Cardiology
+Foundation/American Heart Association Task Force on practice guidelines</article-title>.
+<source>Circulation</source>
+ <year>2013</year>;<volume>128</volume>:<fpage>e240–327</fpage>–<lpage>e327</lpage>.<pub-id pub-id-type="pmid">23741058</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1161/CIR.0b013e31829e8776</pub-id></mixed-citation></ref><ref id="ehab777-B18"><label>18</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Ponikowski</surname>  <given-names>P</given-names></string-name>,
+<string-name name-style="western"><surname>Voors</surname>  <given-names>AA</given-names></string-name>,
+<string-name name-style="western"><surname>Anker</surname>  <given-names>SD</given-names></string-name>,
+<string-name name-style="western"><surname>Bueno</surname>
+ <given-names>H</given-names></string-name></person-group>  <etal>et al</etal>
+ <article-title>2016 ESC Guidelines for the diagnosis and treatment of acute and chronic
+heart failure: the Task Force for the diagnosis and treatment of acute and chronic heart
+failure of the European Society of Cardiology (ESC). Developed with the special
+contribution of the Heart Failure Association (HFA) of the ESC</article-title>.
+<source>Eur Heart J</source>
+ <year>2016</year>;<volume>37</volume>:<fpage>2129</fpage>–<lpage>2200</lpage>.<pub-id pub-id-type="pmid">27206819</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1093/eurheartj/ehw128</pub-id></mixed-citation></ref><ref id="ehab777-B19"><label>19</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Zareini</surname>  <given-names>B</given-names></string-name>,
+<string-name name-style="western"><surname>Blanche</surname>  <given-names>P</given-names></string-name>,
+<string-name name-style="western"><surname>D'Souza</surname>
+ <given-names>M</given-names></string-name></person-group>  <etal>et al</etal>
+ <article-title>Type 2 diabetes mellitus and impact of heart failure on prognosis
+compared to other cardiovascular diseases: a nationwide study</article-title>.
+<source>Circ Cardiovasc Qual Outcomes</source>
+ <year>2020</year>;<volume>13</volume>:<fpage>e006260</fpage>.<pub-id pub-id-type="pmid">32571092</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1161/CIRCOUTCOMES.119.006260</pub-id></mixed-citation></ref><ref id="ehab777-B20"><label>20</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Lawson</surname>  <given-names>CA</given-names></string-name>,
+<string-name name-style="western"><surname>Seidu</surname>  <given-names>S</given-names></string-name>,
+<string-name name-style="western"><surname>Zaccardi</surname>
+ <given-names>F</given-names></string-name></person-group>  <etal>et al</etal>
+ <article-title>Outcome trends in people with heart failure, type 2 diabetes mellitus
+and chronic kidney disease in the UK over twenty years</article-title>.
+<source>EClinicalMedicine</source>
+ <year>2021</year>;<volume>32</volume>:<fpage>100739</fpage>.<pub-id pub-id-type="pmid">33688855</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1016/j.eclinm.2021.100739</pub-id><pub-id pub-id-type="pmcid">PMC7910705</pub-id></mixed-citation></ref><ref id="ehab777-B21"><label>21</label><mixed-citation publication-type="other">
+<collab>United States Renal Data System</collab>. Cardiovascular disease in patients with
+CKD. In: <italic toggle="yes">USRDS Annual Data Report. Volume 1: Chronic Kidney Disease</italic>.
+Bethesda, MD: National Institutes of Health, National Institute of Diabetes and Digestive
+and Kidney Diseases; <year>2020</year>, Chapter 4. <ext-link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://adr.usrds.org/2020/chronic-kidney-disease/4-cardiovascular-disease-in-patients-with-ckd" ext-link-type="uri">https://adr.usrds.org/2020/chronic-kidney-disease/4-cardiovascular-disease-in-patients-with-ckd</ext-link>
+(1 June 2021).</mixed-citation></ref><ref id="ehab777-B22"><label>22</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Frontini</surname>  <given-names>R</given-names></string-name>,
+<string-name name-style="western"><surname>Sousa</surname>  <given-names>H</given-names></string-name>,
+<string-name name-style="western"><surname>Ribeiro</surname>  <given-names>O</given-names></string-name>,
+<string-name name-style="western"><surname>Figueiredo</surname>
+ <given-names>D.</given-names></string-name></person-group>  <article-title>“What do
+we fear the most?”: Exploring fears and concerns of patients, family members and dyads
+in end-stage renal disease</article-title>. <source>Scand J Caring Sci</source>
+ <year>2020</year>. doi:10.1111/scs.12940.<pub-id pub-id-type="doi" assigning-authority="pmc">10.1111/scs.12940</pub-id><pub-id pub-id-type="pmid">33615525</pub-id></mixed-citation></ref><ref id="ehab777-B23"><label>23</label><mixed-citation publication-type="other">
+<collab>United States Renal Data System</collab>. Healthcare expenditures for persons with
+CKD. In: <collab>USRDS Annual Data</collab>  <italic toggle="yes">Report. Volume 1: Chronic Kidney
+Disease</italic>. Bethesda, MD: National Institutes of Health, National Institute of
+Diabetes and Digestive and Kidney Diseases; <year>2020</year> (Chapter 6). <ext-link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://adr.usrds.org/2020/chronic-kidney-disease/6-healthcare-expenditures-for-persons-with-ckd" ext-link-type="uri">https://adr.usrds.org/2020/chronic-kidney-disease/6-healthcare-expenditures-for-persons-with-ckd</ext-link>.
+(1 July 2021).</mixed-citation></ref><ref id="ehab777-B24"><label>24</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Fried</surname>  <given-names>LF</given-names></string-name>,
+<string-name name-style="western"><surname>Emanuele</surname>
+ <given-names>N</given-names></string-name>, <string-name name-style="western"><surname>Zhang</surname>
+ <given-names>JH</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>VA NEPHRON-D Investigators</collab>. <article-title>Combined angiotensin
+inhibition for the treatment of diabetic nephropathy</article-title>. <source>N Engl J
+Med</source>
+ <year>2013</year>;<volume>369</volume>:<fpage>1892</fpage>–<lpage>1903</lpage>.<pub-id pub-id-type="pmid">24206457</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1056/NEJMoa1303154</pub-id></mixed-citation></ref><ref id="ehab777-B25"><label>25</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Parving</surname>  <given-names>HH</given-names></string-name>,
+<string-name name-style="western"><surname>Brenner</surname>
+ <given-names>BM</given-names></string-name>, <string-name name-style="western"><surname>McMurray</surname>
+ <given-names>JJ</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>ALTITUDE Investigators</collab>. <article-title>Cardiorenal end points in a
+trial of aliskiren for type 2 diabetes</article-title>. <source>N Engl J Med</source>
+ <year>2012</year>;<volume>367</volume>:<fpage>2204</fpage>–<lpage>2213</lpage>.<pub-id pub-id-type="pmid">23121378</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1056/NEJMoa1208799</pub-id></mixed-citation></ref><ref id="ehab777-B26"><label>26</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Imai</surname>  <given-names>E</given-names></string-name>,
+<string-name name-style="western"><surname>Chan</surname>  <given-names>JC</given-names></string-name>,
+<string-name name-style="western"><surname>Ito</surname>
+ <given-names>S</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>ORIENT Study Investigators</collab>. <article-title>Effects of olmesartan on
+renal and cardiovascular outcomes in type 2 diabetes with overt nephropathy: a
+multicentre, randomised, placebo-controlled study</article-title>.
+<source>Diabetologia</source>
+ <year>2011</year>;<volume>54</volume>:<fpage>2978</fpage>–<lpage>2986</lpage>.<pub-id pub-id-type="pmid">21993710</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1007/s00125-011-2325-z</pub-id><pub-id pub-id-type="pmcid">PMC3210358</pub-id></mixed-citation></ref><ref id="ehab777-B27"><label>27</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Heerspink</surname>  <given-names>HJL</given-names></string-name>,
+<string-name name-style="western"><surname>Stefansson</surname>
+ <given-names>BV</given-names></string-name>,
+<string-name name-style="western"><surname>Correa-Rotter</surname>
+ <given-names>R</given-names></string-name></person-group>  <etal>et al</etal>;
+<collab>DAPA-CKD Trial Committees and Investigators</collab>.
+<article-title>Dapagliflozin in patients with chronic kidney disease</article-title>.
+<source>N Engl J Med</source>
+ <year>2020</year>;<volume>383</volume>:<fpage>1436</fpage>–<lpage>1446</lpage>.<pub-id pub-id-type="pmid">32970396</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1056/NEJMoa2024816</pub-id></mixed-citation></ref><ref id="ehab777-B28"><label>28</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Kolkhof</surname>  <given-names>P</given-names></string-name>,
+<string-name name-style="western"><surname>Hartmann</surname>
+ <given-names>E</given-names></string-name>, <string-name name-style="western"><surname>Freyberger</surname>
+ <given-names>A</given-names></string-name></person-group>  <etal>et al</etal>
+ <article-title>Effects of finerenone combined with empagliflozin in a model of
+hypertension-induced end-organ damage</article-title>. <source>Am J Nephrol</source>
+ <year>2021</year>;<volume>52</volume>:<fpage>642</fpage>–<lpage>652</lpage>.<pub-id pub-id-type="pmid">34111864</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1159/000516213</pub-id><pub-id pub-id-type="pmcid">PMC8619789</pub-id></mixed-citation></ref><ref id="ehab777-B29"><label>29</label><mixed-citation publication-type="journal">
+<person-group person-group-type="author">
+<string-name name-style="western">
+<surname>Sfairopoulos</surname>  <given-names>D</given-names></string-name>,
+<string-name name-style="western"><surname>Arseniou</surname>
+ <given-names>A</given-names></string-name>,
+<string-name name-style="western"><surname>Korantzopoulos</surname>
+ <given-names>P.</given-names></string-name></person-group>  <article-title>Serum
+potassium and heart failure: association, causation, and clinical
+implications</article-title>. <source>Heart Fail Rev</source>
+ <year>2021</year>;<volume>26</volume>:<fpage>479</fpage>–<lpage>486</lpage>.<pub-id pub-id-type="pmid">33098029</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.1007/s10741-020-10039-9</pub-id></mixed-citation></ref><ref id="ehab777-B30"><label>30</label><mixed-citation publication-type="journal">
+<collab>American Diabetes Association</collab>. <article-title>11. Microvascular
+complications and foot care: standards of medical care in diabetes-2021</article-title>.
+<source>Diabetes Care</source>
+ <year>2021</year>;<volume>44</volume>:<fpage>S151</fpage>–<lpage>S167</lpage>.<pub-id pub-id-type="pmid">33298422</pub-id><pub-id pub-id-type="doi" assigning-authority="pmc">10.2337/dc21-S011</pub-id></mixed-citation></ref></ref-list></back></article>

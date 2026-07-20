@@ -1,0 +1,77 @@
+#!/usr/bin/env node
+import fsp from "node:fs/promises";
+import path from "node:path";
+
+const ARCHIVE_RE = /^open-science-data-\d{8}T\d{6}Z\.tar\.gz(?:\.enc)?$/;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function usage() {
+  console.error("Usage: backup-retention.mjs prune BACKUP_DIR RETENTION_DAYS");
+  process.exit(2);
+}
+
+function parseRetentionDays(value) {
+  if (!/^\d+$/.test(String(value ?? ""))) {
+    throw new Error("RETENTION_DAYS must be a positive integer.");
+  }
+  const days = Number(value);
+  if (!Number.isSafeInteger(days) || days < 1) {
+    throw new Error("RETENTION_DAYS must be a positive integer.");
+  }
+  return days;
+}
+
+async function assertBackupDir(dir) {
+  const stat = await fsp.lstat(dir);
+  if (stat.isSymbolicLink()) throw new Error(`Backup directory must not be a symbolic link: ${dir}`);
+  if (!stat.isDirectory()) throw new Error(`Backup path is not a directory: ${dir}`);
+}
+
+async function removeRegularFile(file, { optional = false } = {}) {
+  let stat;
+  try {
+    stat = await fsp.lstat(file);
+  } catch (err) {
+    if (optional && err?.code === "ENOENT") return false;
+    throw err;
+  }
+  if (stat.isSymbolicLink()) throw new Error(`Refusing to delete symbolic link: ${file}`);
+  if (!stat.isFile()) throw new Error(`Refusing to delete non-file backup artifact: ${file}`);
+  await fsp.rm(file);
+  return true;
+}
+
+async function prune(backupDir, retentionDays) {
+  await assertBackupDir(backupDir);
+  const cutoff = Date.now() - retentionDays * DAY_MS;
+  const entries = await fsp.readdir(backupDir, { withFileTypes: true });
+  const deleted = [];
+
+  for (const entry of entries) {
+    if (!ARCHIVE_RE.test(entry.name)) continue;
+    const archive = path.join(backupDir, entry.name);
+    const stat = await fsp.lstat(archive);
+    if (stat.isSymbolicLink()) throw new Error(`Refusing to prune symbolic-link backup archive: ${archive}`);
+    if (!stat.isFile()) continue;
+    if (stat.mtimeMs >= cutoff) continue;
+
+    await removeRegularFile(archive);
+    deleted.push(entry.name);
+    if (await removeRegularFile(`${archive}.sha256`, { optional: true })) {
+      deleted.push(`${entry.name}.sha256`);
+    }
+  }
+
+  return { backupDir, retentionDays, deleted };
+}
+
+const [, , mode, backupDir, daysArg] = process.argv;
+if (mode !== "prune" || !backupDir || !daysArg) usage();
+
+try {
+  const result = await prune(path.resolve(backupDir), parseRetentionDays(daysArg));
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}

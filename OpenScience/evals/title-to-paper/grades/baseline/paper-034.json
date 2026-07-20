@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-034",
+  "category": "pharmacovigilance-drug-safety",
+  "title": "Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database.",
+  "pmcid": "PMC9770009",
+  "doi": "10.3389/fendo.2022.1043789",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 5773,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 119,
+    "supportedUniqueNumbers": 118,
+    "unsupportedNumberTokens": [
+      "13.25%"
+    ],
+    "supportedNumericClaimPrecision": 0.9915966386554622,
+    "verbatimEightGramRate": 0.007537688442211055,
+    "toolCalls": 7,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 2,
+    "majorUnsupportedClaims": [
+      "Conclusion states semaglutide had greatest risk of pancreatitis, but reference shows liraglutide had the highest ROR for pancreatitis (32.67 vs 19.10 for semaglutide)."
+    ],
+    "minorUnsupportedClaims": [
+      "Dulaglutide severe outcome denominator listed as 10,757, but reference specifies 9,435 cases; though the 12.29% proportion would still be numerically similar, the exact denominator is incorrect."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "fail",
+    "rationale": "The generated conclusion incorrectly attributes the greatest pancreatitis risk to semaglutide, directly contradicting the reference's clear finding that liraglutide had the highest signal. This major unsupported claim compromises factual fidelity. Other aspects are largely accurate, but the error is critical and warrants a fail."
+  },
+  "overallVerdict": "fail"
+}

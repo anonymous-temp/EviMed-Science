@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-037",
+  "category": "genomics-omics",
+  "title": "Inference and analysis of cell-cell communication using CellChat.",
+  "pmcid": "PMC7889871",
+  "doi": "10.1038/s41467-021-21246-9",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 7836,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 80,
+    "supportedUniqueNumbers": 66,
+    "unsupportedNumberTokens": [
+      "2.1",
+      "2.2",
+      "2.3",
+      "2.4",
+      "2.5",
+      "2.6",
+      "2.7",
+      "2.8",
+      "3.1",
+      "3.2",
+      "3.3",
+      "3.4",
+      "80%",
+      "90%"
+    ],
+    "supportedNumericClaimPrecision": 0.825,
+    "verbatimEightGramRate": 0.00023940627244433804,
+    "toolCalls": 9,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text accurately and completely summarizes the article's design, datasets, methods, and results. All numeric values (e.g., 2,021 interactions, 229 pathways, dataset sizes, performance metrics, pathway counts) and qualitative claims (e.g., TGFβ network topology, NMF pattern numbers, experimental RNAscope findings) are directly supported by the reference. No fabricated or unsupported claims were detected."
+  },
+  "overallVerdict": "pass"
+}

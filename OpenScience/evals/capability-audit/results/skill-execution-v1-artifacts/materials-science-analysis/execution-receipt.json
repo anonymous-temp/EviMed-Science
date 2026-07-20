@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 217,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/materials-science-analysis/results.json",
+      "sha256": "b9953ed9f2404543d2d512ad5962e44574d9ac9363d8fbf68bb7d52a01aeb6cb"
+    },
+    {
+      "bytes": 777,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/materials-science-analysis/materials-science-analysis-report.md",
+      "sha256": "db257d1981ff31a2738f5389fa62916e7c9513f41e0a6a53d5a86f2074be4815"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:36.991320Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "materials-science-analysis",
+  "startedAt": "2026-07-19T19:31:36.990837Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for materials-science-analysis and wrote 2 verified artifacts.",
+  "warnings": [
+    "Composition and unit-cell geometry alone do not establish phase identity, stability, or properties."
+  ]
+}

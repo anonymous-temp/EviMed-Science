@@ -1,0 +1,12 @@
+{
+  "findings": [
+    {
+      "level": "error",
+      "check": "domain",
+      "tag": "physics · units",
+      "title": "Dimensional mismatch: add/subtract of time and length",
+      "evidence": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T170650Z-92455a50/domain-check/analysis.py:3  value = time_seconds + distance_meters\n  left is a time quantity, right is a length quantity — the result has no consistent unit."
+    }
+  ],
+  "note": "Domain-correctness gate — flags known dangerous patterns per discipline (units, CRS, coordinates). It checks for specific error classes only; absence of findings is not a guarantee the science is correct."
+}

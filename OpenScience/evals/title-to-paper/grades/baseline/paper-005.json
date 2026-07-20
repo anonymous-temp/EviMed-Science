@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-005",
+  "category": "randomized-trial",
+  "title": "Cardiovascular and kidney outcomes with finerenone in patients with type 2 diabetes and chronic kidney disease: the FIDELITY pooled analysis.",
+  "pmcid": "PMC8830527",
+  "doi": "10.1093/eurheartj/ehab777",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 16692,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 131,
+    "supportedUniqueNumbers": 124,
+    "unsupportedNumberTokens": [
+      "22.2%",
+      "4%",
+      "66.7%",
+      "68.1%",
+      "69.8%",
+      "86.1%",
+      "86.4%"
+    ],
+    "supportedNumericClaimPrecision": 0.9465648854961832,
+    "verbatimEightGramRate": 0.01884057971014493,
+    "toolCalls": 9,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "All factual claims in the generated text are directly corroborated by the REFERENCE article. Study design, eligibility criteria, endpoint definitions, statistical methods, baseline characteristics, efficacy and safety outcomes, and discussion points are faithfully reproduced without fabrication or unsupported statements."
+  },
+  "overallVerdict": "pass"
+}

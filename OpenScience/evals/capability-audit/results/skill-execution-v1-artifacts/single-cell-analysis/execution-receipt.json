@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1425,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/single-cell-analysis/results.json",
+      "sha256": "3ff3dd8c0c9ce252d255610567d0fb1b7df97478454214d90f0e0ee5f270fd3d"
+    },
+    {
+      "bytes": 2006,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/single-cell-analysis/single-cell-analysis-report.md",
+      "sha256": "9fbde420349cbde1374b59df26a475a55659ecccdc7bc7e3a7d12a00b818260d"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:46.640330Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "single-cell-analysis",
+  "startedAt": "2026-07-19T19:31:46.634067Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for single-cell-analysis and wrote 2 verified artifacts.",
+  "warnings": [
+    "Cell-level QC is descriptive; sample-aware biological inference requires donor metadata and pseudobulk or hierarchical models."
+  ]
+}

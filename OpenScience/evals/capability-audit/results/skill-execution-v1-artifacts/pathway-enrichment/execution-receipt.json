@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 397,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/pathway-enrichment/results.json",
+      "sha256": "c837f1360237ab53726a3aae6e6c5d22969657beb220c0e286601c81d45502a5"
+    },
+    {
+      "bytes": 954,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/pathway-enrichment/pathway-enrichment-report.md",
+      "sha256": "8005df28a770054784526b00195614fd7ec53a9a6e5cfce4bd61a15671b04201"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:40.088913Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "pathway-enrichment",
+  "startedAt": "2026-07-19T19:31:40.085505Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for pathway-enrichment and wrote 2 verified artifacts.",
+  "warnings": [
+    "Use a prespecified, measured-gene background and versioned gene sets; enrichment is not causal evidence."
+  ]
+}

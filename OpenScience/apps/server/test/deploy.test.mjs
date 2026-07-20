@@ -1,0 +1,731 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import test from "node:test";
+import { createCommandRegistry } from "../src/commands.mjs";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+test("bundled examples resolve independently of the server working directory", () => {
+  const configModule = pathToFileURL(path.join(repoRoot, "apps/server/src/config.mjs")).href;
+  const source = `import { loadConfig } from ${JSON.stringify(configModule)}; process.stdout.write(loadConfig().examplesDir);`;
+  const env = { ...process.env };
+  delete env.OPEN_SCIENCE_EXAMPLES_DIR;
+  const examplesDir = execFileSync(process.execPath, ["--input-type=module", "--eval", source], {
+    cwd: path.join(repoRoot, "apps/server"),
+    encoding: "utf8",
+    env,
+  });
+
+  assert.equal(examplesDir, path.join(repoRoot, "examples"));
+});
+
+function splitDockerWords(line) {
+  return line
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+test("web Dockerfile only copies sources that exist in the build context", async () => {
+  const dockerfilePath = path.join(repoRoot, "deploy/web/Dockerfile");
+  const dockerfile = await readFile(dockerfilePath, "utf8");
+  const missing = [];
+
+  for (const rawLine of dockerfile.split("\n")) {
+    const line = rawLine.trim();
+    if (!line.startsWith("COPY ") || line.includes("--from=")) continue;
+    const words = splitDockerWords(line);
+    let parts = words.slice(1);
+    while (parts[0]?.startsWith("--")) parts = parts.slice(1);
+    const sources = parts.slice(0, -1);
+    for (const source of sources) {
+      if (!existsSync(path.join(repoRoot, source))) missing.push(source);
+    }
+  }
+
+  assert.deepEqual(missing, []);
+});
+
+test("web Dockerfile embeds immutable OCI release metadata", async () => {
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
+  assert.match(dockerfile, /ARG APP_VERSION=0\.1\.3/);
+  assert.match(dockerfile, /ARG RELEASE_ID=untracked/);
+  assert.match(dockerfile, /LABEL org\.opencontainers\.image\.version="\$\{RELEASE_ID\}"/);
+  assert.match(dockerfile, /LABEL org\.opencontainers\.image\.revision="\$\{SOURCE_REVISION\}"/);
+  assert.match(dockerfile, /LABEL org\.opencontainers\.image\.created="\$\{BUILD_CREATED\}"/);
+  assert.match(dockerfile, /LABEL io\.open-science\.app\.version="\$\{APP_VERSION\}"/);
+  assert.match(dockerfile, /ENV OPEN_SCIENCE_RELEASE_ID=\$\{RELEASE_ID\}/);
+  assert.match(dockerfile, /pnpm --filter @ai4s\/server deploy --prod \/server/);
+  assert.match(dockerfile, /COPY --from=build \/server \.\/apps\/server/);
+});
+
+test("web image packages the isolated backup scheduler runtime", async () => {
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
+  assert.match(dockerfile, /apk add --no-cache aws-cli bash coreutils docker-cli tar/);
+  assert.match(dockerfile, /COPY --from=build \/app\/scripts\/ops \.\/scripts\/ops/);
+  assert.match(dockerfile, /COPY --from=build \/app\/examples\/climate-trends \.\/examples\/climate-trends/);
+  assert.match(dockerfile, /ENV OPEN_SCIENCE_EXAMPLES_DIR=\/app\/examples/);
+});
+
+test("hosted command registry explicitly covers every registered Tauri command", async () => {
+  const tauriEntry = await readFile(path.join(repoRoot, "apps/desktop/src-tauri/src/lib.rs"), "utf8");
+  const handlerBlock = tauriEntry.match(/\.invoke_handler\(tauri::generate_handler!\[([\s\S]*?)\]\)/)?.[1];
+  assert.ok(handlerBlock, "Tauri command registration block must be discoverable");
+
+  const desktopCommands = [...handlerBlock.matchAll(/\b[a-z_]+::([a-z_][a-z0-9_]*)\s*,?/g)]
+    .map((match) => match[1])
+    .sort();
+  const hostedCommands = createCommandRegistry({ config: {}, runtimeManager: {} }).list();
+  const missing = desktopCommands.filter((command) => !hostedCommands.includes(command));
+
+  assert.deepEqual(missing, [], `Hosted command registry is missing: ${missing.join(", ")}`);
+});
+
+test("Docker build context excludes deployment secrets and generated manifests", async () => {
+  const dockerignore = await readFile(path.join(repoRoot, ".dockerignore"), "utf8");
+  assert.match(dockerignore, /^\.env\.\*$/m);
+  assert.match(dockerignore, /^\*\*\/\.env\.\*$/m);
+  assert.match(dockerignore, /^\*\*\/secrets$/m);
+  assert.match(dockerignore, /^deploy\/web\/release-manifest\.json$/m);
+});
+
+test("production compose isolates runtimes behind the internal model gateway network", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE:.*open-science-runtime-internal/);
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME:.*open-science-runtime-internal/);
+  assert.match(compose, /OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:.*http:\/\/open-science-web:8787\/internal\/model\/v1/);
+  assert.match(compose, /OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_INTERNAL_URL:.*http:\/\/open-science-web:8787\/internal\/sources\/v1\/fetch/);
+  assert.match(compose, /OPEN_SCIENCE_DEEPSEEK_PROVIDER_ENABLED:.*true/);
+  assert.match(compose, /OPEN_SCIENCE_REQUIRE_ALL_SPECIALIST_ADAPTERS:.*true/);
+  assert.match(compose, /networks:\n\s+runtime-internal:\n\s+name:.*\n\s+internal: true/);
+  assert.match(compose, /open-science-web:[\s\S]*?networks:\n\s+- default\n\s+- runtime-internal/);
+});
+
+test("production compose requires PostgreSQL control-plane state and a healthy provisioned Memos service", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const envExample = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  assert.match(compose, /evimed-postgres:\n\s+image: postgres:16\.14-bookworm/);
+  assert.match(compose, /POSTGRES_PASSWORD_FILE: \/run\/secrets\/postgres-password/);
+  assert.match(compose, /evimed-memos:\n\s+image: neosmemo\/memos:0\.29\.1/);
+  assert.match(compose, /MEMOS_DRIVER: postgres/);
+  assert.match(compose, /MEMOS_DSN_FILE: \/run\/secrets\/memos-dsn/);
+  assert.match(compose, /evimed-memos-bootstrap:[\s\S]*scripts\/ops\/provision-memos\.mjs/);
+  assert.match(compose, /OPEN_SCIENCE_STATE_STORE: postgres/);
+  assert.match(compose, /OPEN_SCIENCE_REQUIRE_SHARED_STATE_STORE: "true"/);
+  assert.match(compose, /OPEN_SCIENCE_DATABASE_URL_FILE: \/run\/secrets\/database-url/);
+  assert.match(compose, /OPEN_SCIENCE_MEMOS_URL: http:\/\/evimed-memos:5230/);
+  assert.match(compose, /OPEN_SCIENCE_MEMOS_ACCESS_TOKEN_FILE: \/run\/memos-integration\/access-token/);
+  assert.match(compose, /OPEN_SCIENCE_REQUIRE_MEMOS: "true"/);
+  assert.match(compose, /evimed-memos-bootstrap:\n\s+condition: service_completed_successfully/);
+  for (const name of [
+    "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE",
+    "OPEN_SCIENCE_DATABASE_URL_HOST_FILE",
+    "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE",
+    "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE",
+  ]) {
+    assert.match(envExample, new RegExp(`^${name}=`, "m"));
+  }
+});
+
+test("production compose exposes every specialist adapter configured by the server", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const envExample = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const config = await readFile(path.join(repoRoot, "apps/server/src/config.mjs"), "utf8");
+  const adapterEnvs = [...config.matchAll(/\["[^"]+", "(EVIMED_[A-Z0-9_]+_URL)"\]/g)]
+    .map((match) => match[1]);
+
+  assert.ok(adapterEnvs.length >= 15, "the specialist adapter registry should remain complete");
+  for (const envName of adapterEnvs) {
+    assert.match(compose, new RegExp(`\\b${envName}:`), `${envName} is missing from Docker Compose`);
+    assert.match(envExample, new RegExp(`^${envName}=`, "m"), `${envName} is missing from .env.example`);
+  }
+});
+
+test("web compose defaults to the hosted docker runtime boundary", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const metaStart = compose.indexOf("\n  evimed-meta-agent:\n    image:");
+  const controllerStart = compose.indexOf("\n  open-science-runtime-controller:\n    image:");
+  const runtimeImageStart = compose.indexOf("\n  opencode-runtime-image:");
+  const webService = compose.slice(
+    compose.indexOf("  open-science-web:"),
+    metaStart,
+  );
+  const metaService = compose.slice(metaStart, controllerStart);
+  const controllerService = compose.slice(
+    controllerStart,
+    runtimeImageStart,
+  );
+  assert.match(compose, /NODE_ENV:\s+\$\{NODE_ENV:-production\}/);
+  assert.match(compose, /OPEN_SCIENCE_DEPLOYMENT_PROFILE:\s+\$\{OPEN_SCIENCE_DEPLOYMENT_PROFILE:-controlled-pilot\}/);
+  assert.match(compose, /image:\s+\$\{OPEN_SCIENCE_WEB_CONTAINER_IMAGE:-open-science-web:0\.1\.3\}/);
+  assert.match(compose, /RELEASE_ID:\s+\$\{OPEN_SCIENCE_RELEASE_ID:\?set OPEN_SCIENCE_RELEASE_ID\}/);
+  assert.match(compose, /SOURCE_REVISION:\s+\$\{OPEN_SCIENCE_SOURCE_REVISION:\?set OPEN_SCIENCE_SOURCE_REVISION\}/);
+  assert.match(compose, /BUILD_CREATED:\s+\$\{OPEN_SCIENCE_BUILD_CREATED:\?set OPEN_SCIENCE_BUILD_CREATED\}/);
+  assert.match(compose, /OPEN_SCIENCE_RELEASE_MANIFEST_FILE:\s+\/run\/open-science\/release-manifest\.json/);
+  assert.match(compose, /OPEN_SCIENCE_AUTH_MODE:\s+\$\{OPEN_SCIENCE_AUTH_MODE:-local\}/);
+  assert.match(webService, /127\.0\.0\.1:\$\{OPEN_SCIENCE_API_PORT:-8787\}:8787/);
+  assert.doesNotMatch(webService, /- "8787:8787"/);
+  assert.match(webService, /OPEN_SCIENCE_TRUST_PROXY:\s+\$\{OPEN_SCIENCE_TRUST_PROXY:-true\}/);
+  assert.match(compose, /OPEN_SCIENCE_DEV_AUTH:\s+\$\{OPEN_SCIENCE_DEV_AUTH:-false\}/);
+  assert.match(compose, /OPEN_SCIENCE_BOOTSTRAP_PASSWORD:\s+\$\{OPEN_SCIENCE_BOOTSTRAP_PASSWORD:-\}/);
+  assert.match(compose, /OPEN_SCIENCE_OIDC_CLIENT_SECRET_FILE:\s+\$\{OPEN_SCIENCE_OIDC_CLIENT_SECRET_FILE:-\}/);
+  assert.match(compose, /OPEN_SCIENCE_OIDC_CLIENT_AUTH_METHOD:\s+\$\{OPEN_SCIENCE_OIDC_CLIENT_AUTH_METHOD:-client_secret_basic\}/);
+  assert.match(compose, /OPEN_SCIENCE_OIDC_FLOW_SECRET_FILE:\s+\$\{OPEN_SCIENCE_OIDC_FLOW_SECRET_FILE:-\}/);
+  assert.match(compose, /OPEN_SCIENCE_SESSION_TTL_MS:\s+\$\{OPEN_SCIENCE_SESSION_TTL_MS:-604800000\}/);
+  assert.match(compose, /OPEN_SCIENCE_OPERATOR_METRICS_TOKEN:\s+\$\{OPEN_SCIENCE_OPERATOR_METRICS_TOKEN:-\}/);
+  assert.match(compose, /OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE:\s+\$\{OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE:-\}/);
+  assert.match(compose, /OPEN_SCIENCE_BACKUP_MODE:\s+\$\{OPEN_SCIENCE_BACKUP_MODE:-disabled\}/);
+  assert.match(compose, /OPEN_SCIENCE_BACKUP_DIR:\s+\$\{OPEN_SCIENCE_BACKUP_DIR:-\/backups\}/);
+  assert.match(compose, /OPEN_SCIENCE_BACKUP_RETENTION_DAYS:\s+\$\{OPEN_SCIENCE_BACKUP_RETENTION_DAYS:-0\}/);
+  assert.match(compose, /OPEN_SCIENCE_RESTORE_DRILL_ACK:\s+\$\{OPEN_SCIENCE_RESTORE_DRILL_ACK:-false\}/);
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_MODE:\s+\$\{OPEN_SCIENCE_RUNTIME_MODE:-opencode\}/);
+  assert.match(compose, /OPEN_SCIENCE_ALLOW_MOCK_RUNTIME:\s+\$\{OPEN_SCIENCE_ALLOW_MOCK_RUNTIME:-false\}/);
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:\s+\$\{OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker\}/);
+  assert.match(webService, /OPEN_SCIENCE_RUNTIME_CONTROLLER_MODE:\s+socket/);
+  assert.match(webService, /OPEN_SCIENCE_ALLOW_DIRECT_DOCKER_CONTROL:\s+"false"/);
+  assert.doesNotMatch(webService, /OPEN_SCIENCE_BACKUP_PASSPHRASE(?:_FILE)?:/);
+  assert.match(webService, /OPEN_SCIENCE_BACKUP_STATE_FILE:\s+\$\{OPEN_SCIENCE_BACKUP_STATE_FILE:-\/backups\/\.open-science-backup-state\.json\}/);
+  assert.match(webService, /OPEN_SCIENCE_BACKUP_HEALTH_GRACE_SECONDS:\s+\$\{OPEN_SCIENCE_BACKUP_HEALTH_GRACE_SECONDS:-1800\}/);
+  assert.match(webService, /open-science-runtime-control:\/run\/open-science-controller:ro/);
+  assert.match(webService, /open-science-backups:\/backups:ro/);
+  assert.doesNotMatch(webService, /\/var\/run\/docker\.sock/);
+  assert.match(webService, /EVIMED_META_ANALYSIS_URL:.*http:\/\/evimed-meta-agent:8024\/api\/v1\/evimed\/meta-analysis/);
+  assert.match(webService, /target:\s+\/run\/secrets\/evimed-workload-signing-key/);
+  assert.match(webService, /security_opt:\s*\n\s+- no-new-privileges:true/);
+  assert.match(webService, /cap_drop:\s*\n\s+- ALL/);
+  assert.match(webService, /read_only:\s+true/);
+  assert.match(webService, /\/tmp:rw,nosuid,nodev,noexec,size=\$\{OPEN_SCIENCE_WEB_TMPFS_SIZE:-128m\}/);
+  assert.match(metaService, /context:\s+\.\.\/\.\.\/\.\.\/项目代码\/meta/);
+  assert.match(metaService, /dockerfile:\s+Dockerfile\.evimed/);
+  assert.match(metaService, /EVIMED_WORKLOAD_SIGNING_SECRET_FILE:\s+\/run\/secrets\/evimed-workload-signing-key/);
+  assert.match(metaService, /LLM_API_KEY_FILE:\s+\/run\/secrets\/deepseek-api-key/);
+  assert.match(metaService, /LLM_MODEL:\s+deepseek-v4-pro/);
+  assert.match(metaService, /open-science-data:\/data/);
+  assert.match(metaService, /security_opt:\s*\n\s+- no-new-privileges:true/);
+  assert.match(metaService, /cap_drop:\s*\n\s+- ALL/);
+  assert.match(metaService, /read_only:\s+true/);
+  assert.doesNotMatch(metaService, /^\s+ports:/m);
+  assert.match(controllerService, /command:\s+\["node", "apps\/server\/src\/runtimeControllerIndex\.mjs"\]/);
+  assert.match(controllerService, /open-science-data:\/data:ro/);
+  assert.match(controllerService, /open-science-runtime-control:\/run\/open-science-controller/);
+  assert.match(controllerService, /\/var\/run\/docker\.sock:\/var\/run\/docker\.sock/);
+  assert.match(
+    controllerService,
+    /group_add:\s*\n\s+- "\$\{OPEN_SCIENCE_DOCKER_SOCKET_GID:\?set OPEN_SCIENCE_DOCKER_SOCKET_GID\}"/,
+  );
+  assert.match(controllerService, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2\}/);
+  assert.match(
+    controllerService,
+    /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1\}/,
+  );
+  assert.match(controllerService, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8\}/);
+  assert.match(
+    controllerService,
+    /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4\}/,
+  );
+  assert.doesNotMatch(controllerService, /^\s+ports:/m);
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_DATA_VOLUME:\s+\$\{OPEN_SCIENCE_DATA_VOLUME:-open-science-data\}/);
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_TRANSPORT:\s+\$\{OPEN_SCIENCE_RUNTIME_TRANSPORT:-unix\}/);
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE:\s+\$\{OPEN_SCIENCE_RUNTIME_NETWORK_MODE:-open-science-runtime-internal\}/);
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME:\s+\$\{OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME:-open-science-runtime-internal\}/);
+  assert.match(compose, /image:\s+caddy:\$\{OPEN_SCIENCE_CADDY_VERSION:-\d+\.\d+\.\d+-alpine\}/);
+  assert.match(compose, /OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS:\s+\$\{OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS:-false\}/);
+  assert.match(
+    compose,
+    /OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK:\s+\$\{OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK:-false\}/,
+  );
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_READ_ONLY_ROOT:\s+\$\{OPEN_SCIENCE_RUNTIME_READ_ONLY_ROOT:-true\}/);
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_TMPFS:\s+\$\{OPEN_SCIENCE_RUNTIME_TMPFS:-\/tmp:rw,nosuid,nodev,size=64m\}/);
+  assert.match(
+    compose,
+    /OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS:\s+\$\{OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS:-30000\}/,
+  );
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_SKILL_DIRS:\s+\$\{OPEN_SCIENCE_RUNTIME_SKILL_DIRS-runtime\/skills\/core,runtime\/skills\/external\/ai4s-skills,runtime\/skills\/curated-scientific,runtime\/skills\/office\}/);
+  assert.match(compose, /OPEN_SCIENCE_ALLOW_UNSANDBOXED_RUNTIME:\s+\$\{OPEN_SCIENCE_ALLOW_UNSANDBOXED_RUNTIME:-false\}/);
+  assert.match(compose, /OPEN_SCIENCE_ALLOW_DIRECT_SHELL:\s+\$\{OPEN_SCIENCE_ALLOW_DIRECT_SHELL:-false\}/);
+  assert.match(compose, /OPEN_SCIENCE_ENABLE_KERNEL:\s+\$\{OPEN_SCIENCE_ENABLE_KERNEL:-false\}/);
+  assert.match(compose, /OPEN_SCIENCE_KERNEL_SANDBOX_MODE:\s+\$\{OPEN_SCIENCE_KERNEL_SANDBOX_MODE:-docker\}/);
+  assert.match(compose, /OPEN_SCIENCE_ALLOW_UNSANDBOXED_KERNEL:\s+\$\{OPEN_SCIENCE_ALLOW_UNSANDBOXED_KERNEL:-false\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_JSON_BYTES:\s+\$\{OPEN_SCIENCE_MAX_JSON_BYTES:-12582912\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_FILE_BYTES:\s+\$\{OPEN_SCIENCE_MAX_FILE_BYTES:-52428800\}/);
+  assert.match(compose, /OPEN_SCIENCE_PROXY_MAX_BODY_SIZE:\s+\$\{OPEN_SCIENCE_PROXY_MAX_BODY_SIZE:-73408512\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES:-10000\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES:-10000\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_ARCHIVE_BYTES:\s+\$\{OPEN_SCIENCE_MAX_ARCHIVE_BYTES:-1073741824\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:-10000\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_LOG_READ_BYTES:\s+\$\{OPEN_SCIENCE_MAX_LOG_READ_BYTES:-1048576\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_LOG_FILE_BYTES:\s+\$\{OPEN_SCIENCE_MAX_LOG_FILE_BYTES:-10485760\}/);
+  assert.match(compose, /OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES:\s+\$\{OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES:-1048576\}/);
+  assert.match(compose, /OPEN_SCIENCE_KERNEL_TIMEOUT_MS:\s+\$\{OPEN_SCIENCE_KERNEL_TIMEOUT_MS:-10000\}/);
+  assert.match(compose, /OPEN_SCIENCE_EXAMPLES_DIR:\s+\/app\/examples/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_QUEUED_TASKS:\s+\$\{OPEN_SCIENCE_MAX_QUEUED_TASKS:-100\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_QUEUED_TASKS_PER_PROJECT:\s+\$\{OPEN_SCIENCE_MAX_QUEUED_TASKS_PER_PROJECT:-25\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS:\s+\$\{OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS:-64\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT:\s+\$\{OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT:-8\}/);
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS:\s+\$\{OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS:-120000\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2\}/);
+  assert.match(compose, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1\}/);
+  assert.match(compose, /open-science-backups:\/backups/);
+  assert.match(compose, /open-science-data:[\s\S]*name:\s+\$\{OPEN_SCIENCE_DATA_VOLUME:-open-science-data\}/);
+  assert.match(compose, /source:\s+\$\{OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE:-\.\/release-manifest\.json\}/);
+  assert.match(compose, /target:\s+\/run\/open-science\/release-manifest\.json/);
+  assert.match(compose, /\/api\/ready/);
+});
+
+test("backup compose overlay runs an unexposed least-privilege encrypted scheduler", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.backup.yml"), "utf8");
+  const backupStart = compose.indexOf("  open-science-backup:");
+  const backupService = compose.slice(backupStart, compose.indexOf("\nsecrets:"));
+  assert.match(compose, /OPEN_SCIENCE_BACKUP_MODE:\s+local/);
+  assert.match(compose, /OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK:\s+"true"/);
+  assert.match(compose, /OPEN_SCIENCE_RESTORE_DRILL_ACK:\s+"true"/);
+  assert.match(backupService, /command:\s+\["node", "scripts\/ops\/backup-scheduler\.mjs", "run"\]/);
+  assert.match(backupService, /profiles:\s+\["backup"\]/);
+  assert.match(backupService, /open-science-data:\/data:ro/);
+  assert.match(backupService, /open-science-backups:\/backups/);
+  assert.match(backupService, /OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE:\s+\/run\/secrets\/backup-passphrase/);
+  assert.match(backupService, /target:\s+backup-passphrase/);
+  assert.match(backupService, /mode:\s+0400/);
+  assert.match(backupService, /backup-scheduler\.mjs", "health"/);
+  assert.match(backupService, /no-new-privileges:true/);
+  assert.match(backupService, /cap_drop:\s*\n\s+- ALL/);
+  assert.match(backupService, /read_only:\s+true/);
+  assert.doesNotMatch(backupService, /^\s+ports:/m);
+  assert.match(compose, /OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE:-\.\/secrets\/backup-passphrase\.txt/);
+});
+
+test("OIDC compose overlay mounts separate file-backed client and flow secrets", async () => {
+  const overlay = await readFile(path.join(repoRoot, "deploy/web/docker-compose.oidc.yml"), "utf8");
+  assert.match(overlay, /OPEN_SCIENCE_AUTH_MODE:\s+oidc/);
+  assert.match(overlay, /OPEN_SCIENCE_BOOTSTRAP_PASSWORD:\s+""/);
+  assert.match(overlay, /OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE:\s+""/);
+  assert.match(overlay, /OPEN_SCIENCE_OIDC_CLIENT_SECRET_FILE:\s+\/run\/secrets\/oidc_client_secret/);
+  assert.match(overlay, /OPEN_SCIENCE_OIDC_FLOW_SECRET_FILE:\s+\/run\/secrets\/oidc_flow_secret/);
+  assert.match(overlay, /oidc-client-secret\.txt/);
+  assert.match(overlay, /oidc-flow-secret\.txt/);
+});
+
+test("individual SaaS overlay opts in explicitly and requires external recovery evidence", async () => {
+  const overlay = await readFile(path.join(repoRoot, "deploy/web/docker-compose.saas.yml"), "utf8");
+  assert.match(overlay, /OPEN_SCIENCE_DEPLOYMENT_PROFILE:\s+individual-saas/);
+  assert.match(overlay, /OPEN_SCIENCE_BACKUP_MODE:\s+external/);
+  assert.match(overlay, /OPEN_SCIENCE_BACKUP_EXTERNAL_ACK:\s+\$\{OPEN_SCIENCE_BACKUP_EXTERNAL_ACK:\?/);
+  assert.match(overlay, /OPEN_SCIENCE_RESTORE_DRILL_ACK:\s+\$\{OPEN_SCIENCE_RESTORE_DRILL_ACK:\?/);
+});
+
+test("local-auth compose overlay mounts the bootstrap password as a read-only Docker secret", async () => {
+  const overlay = await readFile(path.join(repoRoot, "deploy/web/docker-compose.local-auth.yml"), "utf8");
+  assert.match(overlay, /OPEN_SCIENCE_AUTH_MODE:\s+local/);
+  assert.match(overlay, /OPEN_SCIENCE_BOOTSTRAP_PASSWORD:\s+""/);
+  assert.match(overlay, /OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE:\s+\/run\/secrets\/bootstrap-password/);
+  assert.match(overlay, /target:\s+bootstrap-password/);
+  assert.match(overlay, /mode:\s+0400/);
+  assert.match(overlay, /OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE:-\.\/secrets\/bootstrap-password\.txt/);
+});
+
+test("web Caddy proxy caps browser upload body size", async () => {
+  const caddyfile = await readFile(path.join(repoRoot, "deploy/web/Caddyfile"), "utf8");
+  assert.match(
+    caddyfile,
+    /request_body\s*\{[\s\S]*max_size\s+\{\$OPEN_SCIENCE_PROXY_MAX_BODY_SIZE:73408512\}/,
+  );
+  assert.match(caddyfile, /header_up X-Forwarded-For \{remote_host\}/);
+  assert.match(caddyfile, /@internal path \/internal\/\*/);
+  assert.match(caddyfile, /respond @internal 404/);
+});
+
+test("web compose includes a buildable OpenCode runtime image profile", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  assert.match(compose, /opencode-runtime-image:/);
+  assert.match(
+    compose,
+    /image:\s+\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-opencode:opencode-1\.17\.13-uv-0\.11\.26\}/,
+  );
+  assert.match(compose, /dockerfile:\s+deploy\/runtime-opencode\/Dockerfile/);
+  assert.match(compose, /profiles:\s+\["runtime-image"\]/);
+  assert.match(compose, /OPENCODE_VERSION:\s+\$\{OPEN_SCIENCE_OPENCODE_VERSION:-1\.17\.13\}/);
+  assert.match(compose, /UV_VERSION:\s+\$\{OPEN_SCIENCE_UV_VERSION:-0\.11\.26\}/);
+  for (const name of [
+    "OPENCODE_SHA256_AMD64",
+    "OPENCODE_SHA256_ARM64",
+    "UV_SHA256_AMD64",
+    "UV_SHA256_ARM64",
+    "OPENCODE_LICENSE_SHA256",
+    "UV_LICENSE_MIT_SHA256",
+  ]) {
+    assert.match(compose, new RegExp(`${name}:\\s+\\$\\{OPEN_SCIENCE_${name}:-[a-f0-9]{64}\\}`));
+  }
+});
+
+test("OpenCode runtime Dockerfile pins and verifies tools, architectures, and licenses", async () => {
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-opencode/Dockerfile"), "utf8");
+  assert.match(dockerfile, /^ARG TARGETARCH$/m);
+  assert.doesNotMatch(dockerfile, /^ARG TARGETARCH=/m);
+  assert.match(dockerfile, /ARG OPENCODE_VERSION=1\.17\.13/);
+  assert.match(dockerfile, /ARG UV_VERSION=0\.11\.26/);
+  for (const name of [
+    "OPENCODE_SHA256_AMD64",
+    "OPENCODE_SHA256_ARM64",
+    "UV_SHA256_AMD64",
+    "UV_SHA256_ARM64",
+    "OPENCODE_LICENSE_SHA256",
+    "UV_LICENSE_MIT_SHA256",
+  ]) {
+    assert.match(dockerfile, new RegExp(`^ARG ${name}=[a-f0-9]{64}$`, "m"));
+  }
+  assert.match(dockerfile, /LABEL io\.open-science\.opencode\.version="\$\{OPENCODE_VERSION\}"/);
+  assert.match(dockerfile, /LABEL io\.open-science\.uv\.version="\$\{UV_VERSION\}"/);
+  assert.match(dockerfile, /LABEL org\.opencontainers\.image\.revision="\$\{SOURCE_REVISION\}"/);
+  assert.match(dockerfile, /amd64\).*OPENCODE_ARCH="x64";.*UV_TRIPLE="x86_64-unknown-linux-gnu"/s);
+  assert.match(dockerfile, /arm64\).*OPENCODE_ARCH="arm64";.*UV_TRIPLE="aarch64-unknown-linux-gnu"/s);
+  assert.match(dockerfile, /opencode-linux-\$\{OPENCODE_ARCH\}\.tar\.gz/);
+  assert.match(dockerfile, /uv-\$\{UV_TRIPLE\}\.tar\.gz/);
+  assert.match(dockerfile, /--http1\.1 --fail --show-error --location --retry 5 --retry-all-errors/);
+  assert.match(dockerfile, /--connect-timeout 20 --max-time 600/);
+  assert.match(dockerfile, /--speed-limit 1024 --speed-time 60 --continue-at -/);
+  assert.equal((dockerfile.match(/curl "\$\{curl_args\[@\]\}"/g) ?? []).length, 4);
+  assert.equal((dockerfile.match(/sha256sum -c -/g) ?? []).length, 4);
+  assert.match(dockerfile, /opencode\/v\$\{OPENCODE_VERSION\}\/LICENSE/);
+  assert.match(dockerfile, /uv\/\$\{UV_VERSION\}\/LICENSE-MIT/);
+  assert.match(dockerfile, /\/usr\/share\/licenses\/opencode\/LICENSE/);
+  assert.match(dockerfile, /\/usr\/share\/licenses\/uv\/LICENSE-MIT/);
+  assert.match(dockerfile, /python-is-python3/);
+  assert.match(dockerfile, /r-base-core/);
+  assert.match(dockerfile, /r-recommended/);
+  assert.match(dockerfile, /ENV VIRTUAL_ENV=\/opt\/evimed\/venv/);
+  assert.match(dockerfile, /uv venv "\$\{VIRTUAL_ENV\}" --python \/usr\/bin\/python3/);
+  assert.match(dockerfile, /uv pip install --python "\$\{VIRTUAL_ENV\}\/bin\/python"/);
+  assert.doesNotMatch(dockerfile, /uv pip install --system/);
+  for (const packageName of [
+    "ipykernel",
+    "jupyterlab",
+    "matplotlib",
+    "numpy",
+    "openpyxl",
+    "pandas",
+    "pypdf",
+    "scikit-learn",
+    "scipy",
+    "statsmodels",
+  ]) {
+    assert.match(dockerfile, new RegExp(`${packageName.replace("-", "\\-")}==\\d+\\.`));
+  }
+  assert.match(dockerfile, /importlib\.import_module\(package\)/);
+  assert.match(dockerfile, /RUN Rscript -e 'stopifnot\(getRversion\(\) >= "4\.0\.0"/);
+  assert.match(dockerfile, /\bsocat\b/);
+  assert.match(dockerfile, /COPY deploy\/runtime-opencode\/open-science-opencode-serve\.sh/);
+  assert.match(dockerfile, /CMD \["opencode", "--version"\]/);
+
+  const launcher = await readFile(
+    path.join(repoRoot, "deploy/runtime-opencode/open-science-opencode-serve.sh"),
+    "utf8",
+  );
+  assert.match(launcher, /opencode serve --hostname 127\.0\.0\.1/);
+  assert.match(launcher, /UNIX-LISTEN:\$\{socket\}/);
+});
+
+test("web deployment env example documents required hosted settings", async () => {
+  const env = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  assert.match(env, /NODE_ENV=production/);
+  assert.match(env, /OPEN_SCIENCE_DEPLOYMENT_PROFILE=controlled-pilot/);
+  assert.match(env, /OPEN_SCIENCE_API_PORT=8787/);
+  assert.match(env, /OPEN_SCIENCE_TRUST_PROXY=true/);
+  assert.match(env, /OPEN_SCIENCE_APP_VERSION=0\.1\.3/);
+  assert.match(env, /OPEN_SCIENCE_RELEASE_ID=replace-with-release-id/);
+  assert.match(env, /OPEN_SCIENCE_SOURCE_REVISION=replace-with-the-40-character-source-revision/);
+  assert.match(env, /OPEN_SCIENCE_BUILD_CREATED=replace-with-rfc3339-build-time/);
+  assert.match(env, /OPEN_SCIENCE_WEB_CONTAINER_IMAGE=open-science-web:0\.1\.3/);
+  assert.match(env, /OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE=\.\/release-manifest\.json/);
+  assert.match(env, /OPEN_SCIENCE_DATA_VOLUME=open-science-data/);
+  assert.match(env, /OPEN_SCIENCE_DOCKER_SOCKET_GID=replace-with-docker-socket-gid/);
+  assert.match(env, /stat -c '%g' \/var\/run\/docker\.sock/);
+  assert.match(env, /OPEN_SCIENCE_AUTH_MODE=local/);
+  assert.match(env, /^OPEN_SCIENCE_BOOTSTRAP_PASSWORD=$/m);
+  assert.match(env, /OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE=\.\/secrets\/bootstrap-password\.txt/);
+  assert.match(env, /pnpm configure:local-auth/);
+  assert.match(env, /OPEN_SCIENCE_SESSION_TTL_MS=604800000/);
+  assert.match(env, /OPEN_SCIENCE_OIDC_ISSUER=/);
+  assert.match(env, /OPEN_SCIENCE_OIDC_CLIENT_ID=/);
+  assert.match(env, /OPEN_SCIENCE_OIDC_CLIENT_AUTH_METHOD=client_secret_basic/);
+  assert.match(env, /OPEN_SCIENCE_OIDC_ALLOWED_GROUPS=/);
+  assert.match(env, /OPEN_SCIENCE_OIDC_ALLOWED_EMAIL_DOMAINS=/);
+  assert.match(env, /OPEN_SCIENCE_OIDC_SECRETS_DIR=\.\/secrets/);
+  assert.match(env, /OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=replace-with-a-long-random-scrape-token/);
+  assert.match(env, /OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE=/);
+  assert.match(env, /OPEN_SCIENCE_MONITORING_SECRETS_DIR=\.\/secrets/);
+  assert.match(env, /OPEN_SCIENCE_PROMETHEUS_VERSION=v3\.13\.0/);
+  assert.match(env, /OPEN_SCIENCE_ALERTMANAGER_VERSION=v0\.33\.1/);
+  assert.match(env, /OPEN_SCIENCE_BLACKBOX_EXPORTER_VERSION=v0\.28\.0/);
+  assert.match(env, /OPEN_SCIENCE_GRAFANA_VERSION=13\.1\.0/);
+  assert.match(env, /OPEN_SCIENCE_BACKUP_MODE=local/);
+  assert.match(env, /OPEN_SCIENCE_BACKUP_DIR=\/backups/);
+  assert.match(env, /OPEN_SCIENCE_BACKUP_RETENTION_DAYS=30/);
+  assert.match(env, /OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK=false/);
+  assert.match(env, /OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE=\.\/secrets\/backup-passphrase\.txt/);
+  assert.match(env, /OPEN_SCIENCE_BACKUP_INTERVAL_SECONDS=86400/);
+  assert.match(env, /OPEN_SCIENCE_BACKUP_HEALTH_GRACE_SECONDS=1800/);
+  assert.match(env, /OPEN_SCIENCE_BACKUP_RETRY_SECONDS=300/);
+  assert.match(env, /OPEN_SCIENCE_BACKUP_MAX_FAILURES=3/);
+  assert.match(env, /OPEN_SCIENCE_BACKUP_RESTORE_DRILL_EVERY=1/);
+  assert.match(env, /OPEN_SCIENCE_BACKUP_TMPFS_SIZE=2g/);
+  assert.match(env, /OPEN_SCIENCE_RESTORE_DRILL_ACK=false/);
+  assert.match(env, /OPEN_SCIENCE_OBJECT_BACKUP_URI=/);
+  assert.match(env, /OPEN_SCIENCE_OBJECT_BACKUP_SSE=AES256/);
+  assert.match(env, /OPEN_SCIENCE_OPENCODE_VERSION=1\.17\.13/);
+  assert.match(env, /OPEN_SCIENCE_UV_VERSION=0\.11\.26/);
+  assert.match(env, /OPEN_SCIENCE_OPENCODE_SHA256_AMD64=[a-f0-9]{64}/);
+  assert.match(env, /OPEN_SCIENCE_OPENCODE_SHA256_ARM64=[a-f0-9]{64}/);
+  assert.match(env, /OPEN_SCIENCE_UV_SHA256_AMD64=[a-f0-9]{64}/);
+  assert.match(env, /OPEN_SCIENCE_UV_SHA256_ARM64=[a-f0-9]{64}/);
+  assert.match(env, /OPEN_SCIENCE_OPENCODE_LICENSE_SHA256=[a-f0-9]{64}/);
+  assert.match(env, /OPEN_SCIENCE_UV_LICENSE_MIT_SHA256=[a-f0-9]{64}/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_MODE=opencode/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_CONTROLLER_TIMEOUT_MS=10000/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS=500/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-opencode:opencode-1\.17\.13-uv-0\.11\.26/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_TRANSPORT=unix/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME=open-science-runtime-internal/);
+  assert.match(env, /OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE=\.\/secrets\/deepseek-api-key\.txt/);
+  assert.match(env, /OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE=\.\/secrets\/model-gateway-signing-key\.txt/);
+  assert.match(env, /OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE=\.\/secrets\/evimed-workload-signing-key\.txt/);
+  assert.match(env, /EVIMED_META_ANALYSIS_URL=http:\/\/evimed-meta-agent:8024\/api\/v1\/evimed\/meta-analysis/);
+  assert.match(env, /EVIMED_META_AGENT_IMAGE=evimed-meta-agent:0\.9\.0/);
+  assert.match(env, /OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS=false/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK=false/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_READ_ONLY_ROOT=true/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_TMPFS=\/tmp:rw,nosuid,nodev,size=64m/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS=30000/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_SKILL_DIRS=runtime\/skills\/core,runtime\/skills\/external\/ai4s-skills,runtime\/skills\/curated-scientific/);
+  assert.match(env, /OPEN_SCIENCE_ALLOW_DIRECT_SHELL=false/);
+  assert.match(env, /OPEN_SCIENCE_ENABLE_KERNEL=false/);
+  assert.match(env, /OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker/);
+  assert.match(env, /OPEN_SCIENCE_ALLOW_UNSANDBOXED_KERNEL=false/);
+  assert.match(env, /OPEN_SCIENCE_PROXY_MAX_BODY_SIZE=73408512/);
+  assert.match(env, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES=10000/);
+  assert.match(env, /OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES=10000/);
+  assert.match(env, /OPEN_SCIENCE_MAX_ARCHIVE_BYTES=1073741824/);
+  assert.match(env, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES=10000/);
+  assert.match(env, /OPEN_SCIENCE_MAX_LOG_FILE_BYTES=10485760/);
+  assert.match(env, /OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES=1048576/);
+  assert.match(env, /OPEN_SCIENCE_KERNEL_TIMEOUT_MS=10000/);
+  assert.match(env, /OPEN_SCIENCE_MAX_CONCURRENT_TASKS_PER_PROJECT=1/);
+  assert.match(env, /OPEN_SCIENCE_MAX_QUEUED_TASKS=100/);
+  assert.match(env, /OPEN_SCIENCE_MAX_QUEUED_TASKS_PER_PROJECT=25/);
+  assert.match(env, /OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS=64/);
+  assert.match(env, /OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT=8/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS=120000/);
+  assert.match(env, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES=8/);
+  assert.match(env, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER=4/);
+  assert.match(env, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS=2/);
+  assert.match(env, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER=1/);
+  assert.match(env, /# NODE_ENV=development/);
+  assert.match(env, /OPEN_SCIENCE_RUNTIME_MODE=mock/);
+  assert.match(env, /OPEN_SCIENCE_ALLOW_MOCK_RUNTIME=true/);
+});
+
+test("monitoring compose pins components, keeps consoles local, and shares file-backed secrets", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.monitoring.yml"), "utf8");
+  assert.match(compose, /prom\/prometheus:\$\{OPEN_SCIENCE_PROMETHEUS_VERSION:-v3\.13\.0\}/);
+  assert.match(compose, /prom\/blackbox-exporter:\$\{OPEN_SCIENCE_BLACKBOX_EXPORTER_VERSION:-v0\.28\.0\}/);
+  assert.match(compose, /prom\/alertmanager:\$\{OPEN_SCIENCE_ALERTMANAGER_VERSION:-v0\.33\.1\}/);
+  assert.match(compose, /grafana\/grafana:\$\{OPEN_SCIENCE_GRAFANA_VERSION:-13\.1\.0\}/);
+  assert.match(compose, /OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE:\s+\/run\/secrets\/operator_metrics_token/);
+  assert.match(compose, /GF_SECURITY_ADMIN_PASSWORD__FILE:\s+\/run\/secrets\/grafana_admin_password/);
+  assert.match(compose, /--config\.file=\/run\/secrets\/alertmanager_config/);
+  assert.match(compose, /127\.0\.0\.1:\$\{OPEN_SCIENCE_PROMETHEUS_PORT:-9090\}:9090/);
+  assert.match(compose, /127\.0\.0\.1:\$\{OPEN_SCIENCE_ALERTMANAGER_PORT:-9093\}:9093/);
+  assert.match(compose, /127\.0\.0\.1:\$\{OPEN_SCIENCE_GRAFANA_PORT:-3000\}:3000/);
+  assert.match(compose, /--storage\.tsdb\.retention\.time=\$\{OPEN_SCIENCE_PROMETHEUS_RETENTION_TIME:-30d\}/);
+  assert.match(compose, /--storage\.tsdb\.retention\.size=\$\{OPEN_SCIENCE_PROMETHEUS_RETENTION_SIZE:-10GB\}/);
+});
+
+test("monitoring configs scrape protected metrics, probe health/readiness, alert, and provision a dashboard", async () => {
+  const monitoringDir = path.join(repoRoot, "deploy/web/monitoring");
+  const prometheus = JSON.parse(await readFile(path.join(monitoringDir, "prometheus.json"), "utf8"));
+  const blackbox = JSON.parse(await readFile(path.join(monitoringDir, "blackbox.json"), "utf8"));
+  const rules = JSON.parse(await readFile(path.join(monitoringDir, "open-science.rules.json"), "utf8"));
+  const datasource = JSON.parse(
+    await readFile(path.join(monitoringDir, "grafana/provisioning/datasources/prometheus.json"), "utf8"),
+  );
+  const provider = JSON.parse(
+    await readFile(path.join(monitoringDir, "grafana/provisioning/dashboards/open-science.json"), "utf8"),
+  );
+  const dashboard = JSON.parse(
+    await readFile(path.join(monitoringDir, "grafana/dashboards/open-science-operations.json"), "utf8"),
+  );
+
+  const jobs = new Map(prometheus.scrape_configs.map((job) => [job.job_name, job]));
+  assert.equal(jobs.get("open-science-web").metrics_path, "/api/ops/metrics");
+  assert.equal(jobs.get("open-science-web").authorization.credentials_file, "/run/secrets/operator_metrics_token");
+  assert.deepEqual(jobs.get("open-science-web").static_configs[0].targets, ["open-science-web:8787"]);
+  assert.deepEqual(jobs.get("open-science-health").static_configs[0].targets, [
+    "http://open-science-web:8787/api/health",
+  ]);
+  assert.deepEqual(jobs.get("open-science-readiness").static_configs[0].targets, [
+    "http://open-science-web:8787/api/ready",
+  ]);
+  assert.equal(blackbox.modules.http_2xx.http.follow_redirects, false);
+
+  const alerts = rules.groups.flatMap((group) => group.rules);
+  const names = alerts.map((rule) => rule.alert);
+  assert.equal(new Set(names).size, names.length);
+  for (const required of [
+    "OpenScienceApiMetricsUnavailable",
+    "OpenScienceHealthProbeFailed",
+    "OpenScienceReadinessProbeFailed",
+    "OpenScienceApiServerErrors",
+    "OpenScienceTaskQueueNearCapacity",
+    "OpenScienceRuntimeQuotaMonitorGap",
+  ]) {
+    assert.equal(names.includes(required), true, `missing alert ${required}`);
+  }
+  assert.equal(alerts.every((rule) => rule.for && rule.labels?.severity && rule.annotations?.summary), true);
+
+  assert.equal(datasource.datasources[0].uid, "prometheus");
+  assert.equal(datasource.datasources[0].editable, false);
+  assert.equal(provider.providers[0].options.path, "/var/lib/grafana/dashboards");
+  assert.equal(dashboard.uid, "open-science-operations");
+  assert.equal(dashboard.refresh, "15s");
+  const expressions = dashboard.panels.flatMap((panel) => panel.targets ?? []).map((target) => target.expr);
+  assert.equal(expressions.some((expr) => expr.includes("open_science_http_requests_total")), true);
+  assert.equal(expressions.some((expr) => expr.includes("open_science_http_request_duration_seconds_bucket")), true);
+  assert.equal(expressions.some((expr) => expr.includes("open_science_readiness_check")), true);
+});
+
+test("root package exposes the deployment smoke test script", async () => {
+  const pkg = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
+  assert.match(pkg.scripts["smoke:deployment"], /scripts\/ops\/deployment-smoke\.mjs/);
+  assert.match(pkg.scripts["preflight:host"], /scripts\/ops\/host-preflight\.mjs/);
+  assert.match(pkg.scripts["migrate:data"], /scripts\/ops\/migrate-data-dir\.sh/);
+  assert.match(pkg.scripts["configure:monitoring"], /scripts\/ops\/configure-monitoring\.mjs/);
+  assert.match(pkg.scripts["check:monitoring"], /configure-monitoring\.mjs --check/);
+  assert.match(pkg.scripts["probe:monitoring"], /configure-monitoring\.mjs --probe/);
+  assert.match(pkg.scripts["configure:oidc"], /scripts\/ops\/configure-oidc\.mjs/);
+  assert.match(pkg.scripts["check:oidc"], /configure-oidc\.mjs --check/);
+  assert.match(pkg.scripts["configure:local-auth"], /scripts\/ops\/configure-local-auth\.mjs/);
+  assert.match(pkg.scripts["check:local-auth"], /configure-local-auth\.mjs --check/);
+  assert.match(pkg.scripts["configure:production-state"], /scripts\/ops\/configure-production-state\.mjs/);
+  assert.match(pkg.scripts["check:production-state"], /configure-production-state\.mjs --check/);
+  assert.match(pkg.scripts["release:manifest"], /scripts\/ops\/generate-release-manifest\.mjs/);
+  assert.match(pkg.scripts["check:release-manifest"], /generate-release-manifest\.mjs --check/);
+  assert.match(pkg.scripts["verify:release-manifest"], /generate-release-manifest\.mjs --check --verify-images/);
+  assert.match(pkg.scripts["backup:object"], /object-backup\.mjs upload/);
+  assert.match(pkg.scripts["restore:object"], /object-backup\.mjs download/);
+  assert.match(pkg.scripts["probe:object"], /object-backup\.mjs probe/);
+  assert.match(pkg.scripts["audit:dependencies"], /pnpm audit --prod --audit-level moderate/);
+  assert.match(pkg.scripts["audit:saas-alignment"], /scripts\/ops\/audit-saas-alignment\.mjs/);
+  assert.match(pkg.scripts["ci:web"], /pnpm audit:saas-alignment/);
+  assert.match(pkg.scripts["ci:web"], /pnpm audit:dependencies/);
+});
+
+test("release workflows enforce source credential and quality gates before packaging", async () => {
+  const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
+  const buildWorkflow = await readFile(path.join(repoRoot, ".github/workflows/build.yml"), "utf8");
+
+  assert.equal(packageJson.scripts["audit:source-secrets"], "node scripts/ops/audit-source-secrets.mjs");
+  assert.match(packageJson.scripts["ci:web"], /audit:source-secrets/);
+  assert.match(buildWorkflow, /quality:/);
+  assert.match(buildWorkflow, /build:\n\s+needs: quality/);
+  assert.match(buildWorkflow, /pnpm ci:web/);
+  assert.match(buildWorkflow, /pnpm check:tauri/);
+});
+
+test("Hosted E2E targets a real deployed release while the mock flow is labeled as a contract test", async () => {
+  const rootPackage = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
+  const serverPackage = JSON.parse(await readFile(path.join(repoRoot, "apps/server/package.json"), "utf8"));
+  const workflow = await readFile(path.join(repoRoot, ".github/workflows/web.yml"), "utf8");
+  const script = await readFile(path.join(repoRoot, "scripts/ops/hosted-production-e2e.mjs"), "utf8");
+  assert.match(serverPackage.scripts["test:contract"], /hosted-web\.e2e\.test\.mjs/);
+  assert.match(serverPackage.scripts["test:e2e"], /hosted-production-e2e\.mjs/);
+  assert.match(rootPackage.scripts["test:web:e2e"], /@ai4s\/server test:e2e/);
+  assert.doesNotMatch(rootPackage.scripts["ci:web"], /test:web:e2e/);
+  assert.match(workflow, /Test mock hosted API contract[\s\S]*test:contract/);
+  assert.match(workflow, /hosted-production-e2e:/);
+  assert.match(workflow, /environment: production/);
+  assert.match(workflow, /OPEN_SCIENCE_E2E_BASE_URL: \$\{\{ secrets\.OPEN_SCIENCE_E2E_BASE_URL \}\}/);
+  assert.match(workflow, /run: pnpm test:web:e2e/);
+  assert.doesNotMatch(workflow, /Test Hosted Web E2E/);
+  for (const proof of [
+    'checks.runtime?.mode !== "opencode"',
+    'checks.stateStore?.mode !== "postgres"',
+    'checks.memory?.connected !== true',
+    'checks.modelGateway?.model !== "deepseek-v4-pro"',
+    'run.runtimeAgent !== "evimed-peer-review"',
+    'run.model !== "deepseek/deepseek-v4-pro"',
+    'language: "python"',
+    'language: "r"',
+  ]) assert.equal(script.includes(proof), true, `Hosted E2E is missing proof: ${proof}`);
+  assert.equal(script.includes("mock-agent-artifact.md"), false);
+});
+
+test("Web CI includes a Linux Docker Compose release and real runtime smoke job", async () => {
+  const workflow = await readFile(path.join(repoRoot, ".github/workflows/web.yml"), "utf8");
+  assert.match(workflow, /docker-hosted:/);
+  assert.match(workflow, /runs-on:\s+ubuntu-22\.04/);
+  assert.match(workflow, /run:\s+pnpm audit:dependencies/);
+  assert.match(workflow, /--profile runtime-image build/);
+  assert.match(workflow, /pnpm release:manifest/);
+  assert.match(workflow, /pnpm verify:release-manifest/);
+  assert.match(workflow, /pnpm configure:monitoring/);
+  assert.match(workflow, /pnpm configure:backup/);
+  assert.match(workflow, /pnpm check:backup/);
+  assert.match(workflow, /pnpm configure:local-auth/);
+  assert.match(workflow, /docker-compose\.local-auth\.yml/);
+  assert.equal(/OPEN_SCIENCE_BOOTSTRAP_PASSWORD=ci-/.test(workflow), false);
+  assert.match(workflow, /docker pull "caddy:\$\{OPEN_SCIENCE_CADDY_VERSION\}"/);
+  assert.match(workflow, /pnpm preflight:host --env-file deploy\/web\/\.env\.ci/);
+  assert.match(workflow, /test\/deepseekCompatibility\.test\.mjs/);
+  assert.match(workflow, /OPEN_SCIENCE_PREFLIGHT_ALERT_DELIVERY=false/);
+  assert.match(workflow, /OPEN_SCIENCE_PREFLIGHT_OBJECT_STORAGE=false/);
+  assert.match(workflow, /OPEN_SCIENCE_TRUST_PROXY=true/);
+  assert.match(workflow, /OPEN_SCIENCE_DOCKER_SOCKET_GID=\$\(stat -c '%g' \/var\/run\/docker\.sock\)/);
+  assert.match(workflow, /OPEN_SCIENCE_DOCKER_SOCKET_GID=\$\{OPEN_SCIENCE_DOCKER_SOCKET_GID\}/);
+  assert.match(workflow, /chmod 600 deploy\/web\/\.env\.ci/);
+  assert.match(workflow, /docker-compose\.backup\.yml/);
+  assert.match(workflow, /--profile backup/);
+  assert.match(workflow, /Verify runtime binaries and preserved licenses/);
+  assert.match(workflow, /docker run --rm --network none/);
+  assert.match(workflow, /\/usr\/share\/licenses\/opencode\/LICENSE/);
+  assert.match(workflow, /\/usr\/share\/licenses\/uv\/LICENSE-MIT/);
+  assert.match(workflow, /--profile backup --profile monitoring --profile tls up -d/);
+  assert.match(workflow, /OPEN_SCIENCE_PUBLIC_URL=https:\/\/localhost/);
+  assert.match(workflow, /OPEN_SCIENCE_DOMAIN=localhost/);
+  assert.match(workflow, /curl -kfsS https:\/\/localhost\/api\/ready/);
+  assert.match(workflow, /caddy:\/data\/caddy\/pki\/authorities\/local\/root\.crt/);
+  assert.match(workflow, /NODE_EXTRA_CA_CERTS=\/tmp\/open-science-caddy-root\.crt pnpm preflight:host --env-file deploy\/web\/\.env\.ci --online/);
+  assert.match(workflow, /OPEN_SCIENCE_RUNTIME_TRANSPORT=unix/);
+  assert.match(workflow, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal/);
+  assert.match(workflow, /OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME=open-science-runtime-internal/);
+  assert.match(workflow, /OPEN_SCIENCE_ENABLE_KERNEL=true/);
+  assert.match(workflow, /OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker/);
+  assert.match(workflow, /Verify Docker socket privilege boundary/);
+  assert.match(workflow, /Web API container must not mount \/var\/run\/docker\.sock/);
+  assert.match(workflow, /Web API controller mount must be read-only/);
+  assert.match(workflow, /\.HostConfig\.GroupAdd/);
+  assert.match(workflow, /grep -Fx "\$OPEN_SCIENCE_DOCKER_SOCKET_GID"/);
+  assert.match(workflow, /Backup container must not mount \/var\/run\/docker\.sock/);
+  assert.match(workflow, /\.Destination \"\/backups\".*\.RW/);
+  assert.match(workflow, /\.Destination \"\/data\".*\.RW/);
+  assert.match(workflow, /endsWith\('\.tar\.gz\.enc'\)/);
+  assert.match(workflow, /\.Destination \"\/run\/open-science-controller\".*\.RW/);
+  assert.match(workflow, /ps -q open-science-runtime-controller/);
+  assert.equal(workflow.includes("OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK=true"), false);
+  assert.match(workflow, /OPEN_SCIENCE_SMOKE_BASE_URL:\s+https:\/\/localhost/);
+  assert.equal(workflow.includes("OPEN_SCIENCE_SMOKE_ALLOW_HTTP"), false);
+  assert.match(workflow, /OPEN_SCIENCE_SMOKE_RUNTIME:\s+"true"/);
+  assert.match(workflow, /OPEN_SCIENCE_SMOKE_RUNTIME_PROMPT:\s+"false"/);
+  assert.match(workflow, /OPEN_SCIENCE_SMOKE_KERNEL:\s+"true"/);
+  assert.match(workflow, /OPEN_SCIENCE_SMOKE_REQUIRE_DOCKER_KERNEL:\s+"true"/);
+  assert.match(workflow, /docker ps -aq --filter label=open-science\.web\.runtime=true/);
+  assert.match(workflow, /docker ps -aq --filter label=open-science\.web\.kernel=true/);
+  assert.match(workflow, /--profile backup --profile monitoring --profile tls down -v --remove-orphans/);
+  assert.equal(workflow.includes("open-science-opencode:latest"), false);
+});

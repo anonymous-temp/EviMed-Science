@@ -1,0 +1,3462 @@
+{
+  "summary": {
+    "schemaVersion": 4,
+    "incomingSkillsReviewed": 149,
+    "freshWebOpenCodeSkillPackages": 66,
+    "freshWebGlobalSkillPackages": 57,
+    "freshWebSpecialistSkillPackages": 9,
+    "freshWebInstalledPackageIds": [
+      "core/domain-check",
+      "core/hpc-slurm",
+      "core/large-file",
+      "core/modal-run",
+      "core/publication-figures",
+      "core/remote-compute",
+      "core/stats-integrity",
+      "core/traceability-review",
+      "curated-scientific/astronomy-data-analysis",
+      "curated-scientific/bayesian-modeling",
+      "curated-scientific/biomedical-database-search",
+      "curated-scientific/biomedical-knowledge-graph",
+      "curated-scientific/biomedical-signal-analysis",
+      "curated-scientific/biosequence-analysis",
+      "curated-scientific/bulk-rna-seq",
+      "curated-scientific/cancer-functional-genomics",
+      "curated-scientific/cheminformatics",
+      "curated-scientific/citation-integrity",
+      "curated-scientific/clinical-machine-learning",
+      "curated-scientific/digital-pathology-analysis",
+      "curated-scientific/drug-discovery-data",
+      "curated-scientific/experimental-design",
+      "curated-scientific/exploratory-data-analysis",
+      "curated-scientific/flow-cytometry-analysis",
+      "curated-scientific/genome-variant-analysis",
+      "curated-scientific/geospatial-analysis",
+      "curated-scientific/hypothesis-development",
+      "curated-scientific/markdown-mermaid-writing",
+      "curated-scientific/mass-spectrometry-analysis",
+      "curated-scientific/materials-science-analysis",
+      "curated-scientific/matplotlib",
+      "curated-scientific/medical-imaging-data",
+      "curated-scientific/metabolic-network-modeling",
+      "curated-scientific/pathway-enrichment",
+      "curated-scientific/phylogenetic-analysis",
+      "curated-scientific/quantum-computing-analysis",
+      "curated-scientific/reproducible-workflows",
+      "curated-scientific/research-grant-development",
+      "curated-scientific/scientific-data-engineering",
+      "curated-scientific/scientific-deep-learning",
+      "curated-scientific/simulation-optimization",
+      "curated-scientific/single-cell-analysis",
+      "curated-scientific/statistical-analysis",
+      "curated-scientific/statistical-power",
+      "curated-scientific/survival-analysis",
+      "curated-scientific/time-series-forecasting",
+      "evimed/adr-analysis",
+      "evimed/bibliometric-analysis",
+      "evimed/comprehensive-drug-evaluation",
+      "evimed/drug-selection",
+      "evimed/mendelian-randomization",
+      "evimed/meta-analysis",
+      "evimed/off-label-analysis",
+      "evimed/peer-review",
+      "evimed/research-topic-selection",
+      "external/ai4s-skills/ai4s-agent",
+      "external/ai4s-skills/experiment-suite",
+      "external/ai4s-skills/integrity-auditor",
+      "external/ai4s-skills/literature-survey",
+      "external/ai4s-skills/mindmap-render",
+      "external/ai4s-skills/paper-writer",
+      "external/ai4s-skills/research-explorer",
+      "office/docx",
+      "office/pdf",
+      "office/pptx",
+      "office/xlsx"
+    ],
+    "observedLocalRuntimeSkillPackageCounts": [
+      {
+        "runtime": ".openscience-web-data/users/dev/projects/default/runtime/xdg-config/opencode/skills",
+        "skillPackages": 11
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/audit-adr-8feb050f27/runtime/xdg-config/opencode/skills",
+        "skillPackages": 66
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/audit-adr-analysis-9278f78af5/runtime/xdg-config/opencode/skills",
+        "skillPackages": 66
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/audit-adr-current-9e7681978b/runtime/xdg-config/opencode/skills",
+        "skillPackages": 66
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/audit-comprehensive-drug-evaluation-b9384c0610/runtime/xdg-config/opencode/skills",
+        "skillPackages": 66
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/audit-comprehensive-v13-035850/runtime/xdg-config/opencode/skills",
+        "skillPackages": 66
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/audit-drug-selection-b9384c0610/runtime/xdg-config/opencode/skills",
+        "skillPackages": 66
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/audit-fresh100-open-domain/runtime/xdg-config/opencode/skills",
+        "skillPackages": 62
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/audit-meta-analysis-9278f78af5/runtime/xdg-config/opencode/skills",
+        "skillPackages": 66
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/audit-offlabel-64db58fdb6/runtime/xdg-config/opencode/skills",
+        "skillPackages": 66
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/audit-offlabel-current-f02050b54e/runtime/xdg-config/opencode/skills",
+        "skillPackages": 66
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/default/runtime/xdg-config/opencode/skills",
+        "skillPackages": 66
+      },
+      {
+        "runtime": ".openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/runtime/xdg-config/opencode/skills",
+        "skillPackages": 62
+      }
+    ],
+    "desktopRepositorySkillPackages": 70,
+    "webExecutionCertifiedSkillPackages": 61,
+    "webExecutionCertifiedPackageIds": [
+      "core/domain-check",
+      "core/hpc-slurm",
+      "core/large-file",
+      "core/modal-run",
+      "core/publication-figures",
+      "core/remote-compute",
+      "core/stats-integrity",
+      "core/traceability-review",
+      "curated-scientific/astronomy-data-analysis",
+      "curated-scientific/bayesian-modeling",
+      "curated-scientific/biomedical-database-search",
+      "curated-scientific/biomedical-knowledge-graph",
+      "curated-scientific/biomedical-signal-analysis",
+      "curated-scientific/biosequence-analysis",
+      "curated-scientific/bulk-rna-seq",
+      "curated-scientific/cancer-functional-genomics",
+      "curated-scientific/cheminformatics",
+      "curated-scientific/citation-integrity",
+      "curated-scientific/clinical-machine-learning",
+      "curated-scientific/digital-pathology-analysis",
+      "curated-scientific/drug-discovery-data",
+      "curated-scientific/experimental-design",
+      "curated-scientific/exploratory-data-analysis",
+      "curated-scientific/flow-cytometry-analysis",
+      "curated-scientific/genome-variant-analysis",
+      "curated-scientific/geospatial-analysis",
+      "curated-scientific/hypothesis-development",
+      "curated-scientific/markdown-mermaid-writing",
+      "curated-scientific/mass-spectrometry-analysis",
+      "curated-scientific/materials-science-analysis",
+      "curated-scientific/matplotlib",
+      "curated-scientific/medical-imaging-data",
+      "curated-scientific/metabolic-network-modeling",
+      "curated-scientific/pathway-enrichment",
+      "curated-scientific/phylogenetic-analysis",
+      "curated-scientific/quantum-computing-analysis",
+      "curated-scientific/reproducible-workflows",
+      "curated-scientific/research-grant-development",
+      "curated-scientific/scientific-data-engineering",
+      "curated-scientific/scientific-deep-learning",
+      "curated-scientific/simulation-optimization",
+      "curated-scientific/single-cell-analysis",
+      "curated-scientific/statistical-analysis",
+      "curated-scientific/statistical-power",
+      "curated-scientific/survival-analysis",
+      "curated-scientific/time-series-forecasting",
+      "evimed/adr-analysis",
+      "evimed/bibliometric-analysis",
+      "evimed/comprehensive-drug-evaluation",
+      "evimed/drug-selection",
+      "evimed/mendelian-randomization",
+      "evimed/meta-analysis",
+      "evimed/off-label-analysis",
+      "evimed/peer-review",
+      "evimed/research-topic-selection",
+      "external/ai4s-skills/integrity-auditor",
+      "external/ai4s-skills/mindmap-render",
+      "office/docx",
+      "office/pdf",
+      "office/pptx",
+      "office/xlsx"
+    ],
+    "releaseStatus": {
+      "not_default": 13,
+      "capability_mapped": 127,
+      "excluded": 9
+    },
+    "dispositions": {
+      "credentialed_or_licensed_optional": 11,
+      "covered_by_rehabilitated_runtime": 113,
+      "excluded_no_unique_research_gap": 7,
+      "excluded_clinical_decision_support": 2,
+      "covered_by_bundled_platform": 14,
+      "physical_hardware_not_default": 2
+    },
+    "incomingSourceInstructionsLoaded": 4,
+    "sourceCapabilitiesMapped": 127,
+    "sourceCapabilitiesMappedToFreshRuntime": 122,
+    "sourceCapabilitiesBackedByExecutedRuntime": 119,
+    "sourcePackagesPublished": 0,
+    "note": "A clean Web runtime currently receives 57 global executable-tier Skills plus 9 EviMed specialist packages. Existing local runtimes may still show 62 packages created before the executable-tier delivery inventory was added; that observation is not the clean-deployment contract. Mapping one of 149 reviewed source capabilities does not install or publish that source package. Execution certification applies only to packages with retained task artifacts and matching dependency evidence."
+  },
+  "items": [
+    {
+      "sourceName": "adaptyv",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "credentialed_or_licensed_optional",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Useful external service, but global publication would fail without an operator account, contract, or proprietary runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "aeon",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/time-series-forecasting"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/time-series-forecasting"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/time-series-forecasting"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "anndata",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "arbor",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "external/ai4s-skills/experiment-suite",
+        "core/traceability-review"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "external/ai4s-skills/experiment-suite",
+        "core/traceability-review"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "core/traceability-review"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "arboreto",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "astropy",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/astronomy-data-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/astronomy-data-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/astronomy-data-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "autoskill",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 15,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "excluded",
+      "disposition": "excluded_no_unique_research_gap",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "No unique safe EviMed research gap remains after the unified runtime packages; the incoming package is omitted from the action space.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "benchling-integration",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "credentialed_or_licensed_optional",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Useful external service, but global publication would fail without an operator account, contract, or proprietary runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "bgpt-paper-search",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 4,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity",
+        "builtin/websearch"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity"
+      ],
+      "platformCapabilities": [
+        "builtin/websearch"
+      ],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "bids",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 6,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/medical-imaging-data"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/medical-imaging-data"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/medical-imaging-data"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "biopython",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 10,
+      "sourceScannerSafe": false,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "bioservices",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-database-search"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-database-search"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-database-search"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "bulk-rnaseq",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "cellxgene-census",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 5,
+      "sourceScannerSafe": false,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "cirq",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "citation-management",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 15,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/citation-integrity"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/citation-integrity"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/citation-integrity"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "clinical-decision-support",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 12,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "excluded",
+      "disposition": "excluded_clinical_decision_support",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Clinical treatment or decision support is outside the current research-agent scope and is not published as an autonomous research skill.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "clinical-reports",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 12,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "external/ai4s-skills/paper-writer",
+        "core/domain-check"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "external/ai4s-skills/paper-writer",
+        "core/domain-check"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "core/domain-check"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "cobrapy",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/metabolic-network-modeling"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/metabolic-network-modeling"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/metabolic-network-modeling"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "consciousness-council",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 4,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "excluded",
+      "disposition": "excluded_no_unique_research_gap",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "No unique safe EviMed research gap remains after the unified runtime packages; the incoming package is omitted from the action space.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "dask",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 1,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "database-lookup",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-database-search"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-database-search"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-database-search"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "datamol",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/cheminformatics"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/cheminformatics"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/cheminformatics"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "deepchem",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/drug-discovery-data"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/drug-discovery-data"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/drug-discovery-data"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "deeptools",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 1,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "depmap",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/cancer-functional-genomics"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/cancer-functional-genomics"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/cancer-functional-genomics"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "dhdna-profiler",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 5,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "excluded",
+      "disposition": "excluded_no_unique_research_gap",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "No unique safe EviMed research gap remains after the unified runtime packages; the incoming package is omitted from the action space.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "diffdock",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/drug-discovery-data"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/drug-discovery-data"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/drug-discovery-data"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "dnanexus-integration",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "credentialed_or_licensed_optional",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Useful external service, but global publication would fail without an operator account, contract, or proprietary runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "docx",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "office/docx"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "office/docx"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "office/docx"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "esm",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "etetoolkit",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/phylogenetic-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/phylogenetic-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/phylogenetic-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "exa-search",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 6,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "builtin/websearch"
+      ],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [
+        "builtin/websearch"
+      ],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "experimental-design",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/experimental-design"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/experimental-design"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/experimental-design"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "exploratory-data-analysis",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 6,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/exploratory-data-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/exploratory-data-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/exploratory-data-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "flowio",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 5,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/flow-cytometry-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/flow-cytometry-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/flow-cytometry-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "fluidsim",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "generate-image",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "core/publication-figures",
+        "external/ai4s-skills/mindmap-render"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "core/publication-figures",
+        "external/ai4s-skills/mindmap-render"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "core/publication-figures",
+        "external/ai4s-skills/mindmap-render"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "geniml",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 5,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "geomaster",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 8,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/geospatial-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/geospatial-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/geospatial-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "geopandas",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/geospatial-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/geospatial-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/geospatial-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "get-available-resources",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "platform/runtime-capabilities"
+      ],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [
+        "platform/runtime-capabilities"
+      ],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "gget",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "ginkgo-cloud-lab",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "credentialed_or_licensed_optional",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Useful external service, but global publication would fail without an operator account, contract, or proprietary runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "glycoengineering",
+      "sourceSeverity": "INFO",
+      "sourceFindings": 1,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/drug-discovery-data"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/drug-discovery-data"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/drug-discovery-data"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "gtars",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "histolab",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 3,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/digital-pathology-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/digital-pathology-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/digital-pathology-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "hugging-science",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biosequence-analysis",
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "hypogenic",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/hypothesis-development",
+        "curated-scientific/statistical-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/hypothesis-development",
+        "curated-scientific/statistical-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/hypothesis-development",
+        "curated-scientific/statistical-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "hypothesis-generation",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 10,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/hypothesis-development"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/hypothesis-development"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/hypothesis-development"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "imaging-data-commons",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/medical-imaging-data"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/medical-imaging-data"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/medical-imaging-data"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "infographics",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 11,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "core/publication-figures",
+        "office/pptx"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "core/publication-figures",
+        "office/pptx"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "core/publication-figures",
+        "office/pptx"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "iso-13485-certification",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "excluded",
+      "disposition": "excluded_no_unique_research_gap",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "No unique safe EviMed research gap remains after the unified runtime packages; the incoming package is omitted from the action space.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "labarchive-integration",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 8,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "credentialed_or_licensed_optional",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Useful external service, but global publication would fail without an operator account, contract, or proprietary runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "lamindb",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "latchbio-integration",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "credentialed_or_licensed_optional",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Useful external service, but global publication would fail without an operator account, contract, or proprietary runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "latex-posters",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 11,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "core/publication-figures"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "core/publication-figures"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "core/publication-figures"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "liteparse",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "platform/document-viewers"
+      ],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [
+        "platform/document-viewers"
+      ],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "literature-review",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 11,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "external/ai4s-skills/literature-survey"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "external/ai4s-skills/literature-survey"
+      ],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "markdown-mermaid-writing",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_audited",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/markdown-mermaid-writing"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/markdown-mermaid-writing"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/markdown-mermaid-writing"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": true,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "market-research-reports",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "excluded",
+      "disposition": "excluded_no_unique_research_gap",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "No unique safe EviMed research gap remains after the unified runtime packages; the incoming package is omitted from the action space.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "markitdown",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 12,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "platform/document-viewers"
+      ],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [
+        "platform/document-viewers"
+      ],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "matchms",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 1,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/mass-spectrometry-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/mass-spectrometry-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/mass-spectrometry-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "matlab",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "credentialed_or_licensed_optional",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Useful external service, but global publication would fail without an operator account, contract, or proprietary runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "matplotlib",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_audited",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/matplotlib"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/matplotlib"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/matplotlib"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": true,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "medchem",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/cheminformatics"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/cheminformatics"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/cheminformatics"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "modal",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 8,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "core/modal-run"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "core/modal-run"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "core/modal-run"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "molecular-dynamics",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/materials-science-analysis",
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/materials-science-analysis",
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/materials-science-analysis",
+        "curated-scientific/simulation-optimization"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "molfeat",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/cheminformatics"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/cheminformatics"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/cheminformatics"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "networkx",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "neurokit2",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-signal-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-signal-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-signal-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "neuropixels-analysis",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-signal-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-signal-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-signal-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "nextflow",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/reproducible-workflows"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/reproducible-workflows"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/reproducible-workflows"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "omero-integration",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "credentialed_or_licensed_optional",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Useful external service, but global publication would fail without an operator account, contract, or proprietary runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "onekgpd",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "open-notebook",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 18,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "platform/notebooks"
+      ],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [
+        "platform/notebooks"
+      ],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "opentrons-integration",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "physical_hardware_not_default",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Physical laboratory actuation requires device-specific validation and is intentionally outside the default autonomous SaaS runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "optimize-for-gpu",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/scientific-deep-learning",
+        "core/remote-compute"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/scientific-deep-learning",
+        "core/remote-compute"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/scientific-deep-learning",
+        "core/remote-compute"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pacsomatic",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 6,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/reproducible-workflows"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/reproducible-workflows"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/reproducible-workflows"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "paper-lookup",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 6,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity",
+        "builtin/websearch"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity"
+      ],
+      "platformCapabilities": [
+        "builtin/websearch"
+      ],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "paperzilla",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity",
+        "builtin/websearch"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity"
+      ],
+      "platformCapabilities": [
+        "builtin/websearch"
+      ],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "parallel-web",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 7,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity",
+        "builtin/websearch"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-database-search",
+        "curated-scientific/citation-integrity"
+      ],
+      "platformCapabilities": [
+        "builtin/websearch"
+      ],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pathml",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 8,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/digital-pathology-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/digital-pathology-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/digital-pathology-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pathway-enrichment",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_audited",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/pathway-enrichment"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/pathway-enrichment"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/pathway-enrichment"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": true,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pdf",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 6,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "office/pdf"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "office/pdf"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "office/pdf"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "peer-review",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 10,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "external/ai4s-skills/integrity-auditor",
+        "core/traceability-review"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "external/ai4s-skills/integrity-auditor",
+        "core/traceability-review"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "external/ai4s-skills/integrity-auditor",
+        "core/traceability-review"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pennylane",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "phylogenetics",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 9,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/phylogenetic-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/phylogenetic-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/phylogenetic-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pi-agent",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "excluded",
+      "disposition": "excluded_no_unique_research_gap",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "No unique safe EviMed research gap remains after the unified runtime packages; the incoming package is omitted from the action space.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "polars",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "polars-bio",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pptx",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "office/pptx"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "office/pptx"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "office/pptx"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pptx-posters",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 9,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "core/publication-figures",
+        "office/pptx"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "core/publication-figures",
+        "office/pptx"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "core/publication-figures",
+        "office/pptx"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "primekg",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "protocolsio-integration",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 7,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "credentialed_or_licensed_optional",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Useful external service, but global publication would fail without an operator account, contract, or proprietary runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pufferlib",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/scientific-deep-learning",
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/scientific-deep-learning",
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/scientific-deep-learning",
+        "curated-scientific/simulation-optimization"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pydeseq2",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/bulk-rna-seq"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pydicom",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/medical-imaging-data"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/medical-imaging-data"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/medical-imaging-data"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pyhealth",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/clinical-machine-learning"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/clinical-machine-learning"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/clinical-machine-learning"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pylabrobot",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "physical_hardware_not_default",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Physical laboratory actuation requires device-specific validation and is intentionally outside the default autonomous SaaS runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pymatgen",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/materials-science-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/materials-science-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/materials-science-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pymc",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 1,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/bayesian-modeling"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/bayesian-modeling"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/bayesian-modeling"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pymoo",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pyopenms",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 1,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/mass-spectrometry-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/mass-spectrometry-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/mass-spectrometry-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pysam",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 1,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/biosequence-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pytdc",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/drug-discovery-data"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/drug-discovery-data"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/drug-discovery-data"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pytorch-lightning",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "pyzotero",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/citation-integrity"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/citation-integrity"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/citation-integrity"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "qiskit",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "qutip",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 4,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/quantum-computing-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "rdkit",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/cheminformatics"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/cheminformatics"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/cheminformatics"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "research-grants",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/research-grant-development"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/research-grant-development"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/research-grant-development"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "research-lookup",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 6,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/biomedical-database-search"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/biomedical-database-search"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/biomedical-database-search"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "rowan",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "credentialed_or_licensed_optional",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Useful external service, but global publication would fail without an operator account, contract, or proprietary runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scanpy",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scholar-evaluation",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 10,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/citation-integrity"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/citation-integrity"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/citation-integrity"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scientific-brainstorming",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/hypothesis-development"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/hypothesis-development"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/hypothesis-development"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scientific-critical-thinking",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/hypothesis-development"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/hypothesis-development"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/hypothesis-development"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scientific-schematics",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 10,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "core/publication-figures",
+        "curated-scientific/markdown-mermaid-writing"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "core/publication-figures",
+        "curated-scientific/markdown-mermaid-writing"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "core/publication-figures",
+        "curated-scientific/markdown-mermaid-writing"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scientific-slides",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 15,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "office/pptx"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "office/pptx"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "office/pptx"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scientific-visualization",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/matplotlib",
+        "core/publication-figures"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/matplotlib",
+        "core/publication-figures"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/matplotlib",
+        "core/publication-figures"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scientific-writing",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 11,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "external/ai4s-skills/paper-writer"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "external/ai4s-skills/paper-writer"
+      ],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scikit-bio",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 4,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/phylogenetic-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/phylogenetic-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/phylogenetic-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scikit-learn",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/clinical-machine-learning"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/clinical-machine-learning"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/clinical-machine-learning"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scikit-survival",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 1,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/survival-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/survival-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/survival-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scvelo",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "scvi-tools",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/single-cell-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "seaborn",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 4,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/matplotlib",
+        "core/publication-figures"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/matplotlib",
+        "core/publication-figures"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/matplotlib",
+        "core/publication-figures"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "shap",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/clinical-machine-learning"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/clinical-machine-learning"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/clinical-machine-learning"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "simpy",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 1,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "stable-baselines3",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 1,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/scientific-deep-learning",
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/scientific-deep-learning",
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/scientific-deep-learning",
+        "curated-scientific/simulation-optimization"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "statistical-analysis",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_rehabilitated",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/statistical-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/statistical-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/statistical-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "statistical-power",
+      "sourceSeverity": "SAFE",
+      "sourceFindings": 0,
+      "sourceScannerSafe": true,
+      "previousStatus": "integrated_audited",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/statistical-power"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/statistical-power"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/statistical-power"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": true,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "statsmodels",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/statistical-analysis",
+        "curated-scientific/time-series-forecasting"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/statistical-analysis",
+        "curated-scientific/time-series-forecasting"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/statistical-analysis",
+        "curated-scientific/time-series-forecasting"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "sympy",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "tamarind",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 13,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "not_default",
+      "disposition": "credentialed_or_licensed_optional",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Useful external service, but global publication would fail without an operator account, contract, or proprietary runtime.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "tiledbvcf",
+      "sourceSeverity": "HIGH",
+      "sourceFindings": 3,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/genome-variant-analysis",
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "timesfm-forecasting",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 4,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/time-series-forecasting"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/time-series-forecasting"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/time-series-forecasting"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "torch-geometric",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/scientific-deep-learning",
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/scientific-deep-learning",
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/scientific-deep-learning",
+        "curated-scientific/biomedical-knowledge-graph"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "torchdrug",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/drug-discovery-data",
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/drug-discovery-data",
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/drug-discovery-data",
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "transformers",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/scientific-deep-learning"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "treatment-plans",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 10,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "excluded",
+      "disposition": "excluded_clinical_decision_support",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Clinical treatment or decision support is outside the current research-agent scope and is not published as an autonomous research skill.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "umap-learn",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/exploratory-data-analysis",
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/exploratory-data-analysis",
+        "curated-scientific/single-cell-analysis"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/exploratory-data-analysis",
+        "curated-scientific/single-cell-analysis"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "usfiscaldata",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 1,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "excluded",
+      "disposition": "excluded_no_unique_research_gap",
+      "runtimePackages": [],
+      "runtimePackagesInstalledInWeb": [],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "No unique safe EviMed research gap remains after the unified runtime packages; the incoming package is omitted from the action space.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "vaex",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "venue-templates",
+      "sourceSeverity": "CRITICAL",
+      "sourceFindings": 10,
+      "sourceScannerSafe": false,
+      "previousStatus": "blocked_security",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "external/ai4s-skills/paper-writer"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "external/ai4s-skills/paper-writer"
+      ],
+      "runtimePackagesExecutionCertified": [],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "what-if-oracle",
+      "sourceSeverity": "LOW",
+      "sourceFindings": 2,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/simulation-optimization"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "xlsx",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 5,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_bundled_platform",
+      "runtimePackages": [
+        "office/xlsx"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "office/xlsx"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "office/xlsx"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability exists in the platform; duplicate incoming instructions are not installed and are not counted as a published package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    },
+    {
+      "sourceName": "zarr-python",
+      "sourceSeverity": "MEDIUM",
+      "sourceFindings": 3,
+      "sourceScannerSafe": true,
+      "previousStatus": "not_selected",
+      "releaseStatus": "capability_mapped",
+      "disposition": "covered_by_rehabilitated_runtime",
+      "runtimePackages": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesInstalledInWeb": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "runtimePackagesExecutionCertified": [
+        "curated-scientific/scientific-data-engineering"
+      ],
+      "platformCapabilities": [],
+      "incomingSourceLoaded": false,
+      "decision": "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package.",
+      "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime."
+    }
+  ]
+}

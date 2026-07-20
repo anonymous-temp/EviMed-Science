@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-041",
+  "category": "biomedical-ai",
+  "title": "Text Data Augmentation for Deep Learning.",
+  "pmcid": "PMC8287113",
+  "doi": "10.1186/s40537-021-00492-0",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 18413,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 63,
+    "supportedUniqueNumbers": 61,
+    "unsupportedNumberTokens": [
+      "-18",
+      "-7"
+    ],
+    "supportedNumericClaimPrecision": 0.9682539682539683,
+    "verbatimEightGramRate": 0.017738359201773836,
+    "toolCalls": 9,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text is a faithful restatement of the survey article. All substantive claims—motifs, augmentation categories, cited numerical results, implementation considerations, and conclusions—are directly supported by the reference. No factual fabrications or distortions were found."
+  },
+  "modelEvidenceCharacters": 122988,
+  "modelEvidenceComplete": true,
+  "overallVerdict": "pass"
+}

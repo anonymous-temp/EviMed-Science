@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 1,
+  "label": "fidelity-gate-v1",
+  "caseId": "paper-034",
+  "category": "pharmacovigilance-drug-safety",
+  "title": "Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database.",
+  "prompt": "请以已发表论文题目《Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。",
+  "sessionId": "ses_08c9c761dffe6Z3zq7UXtNg58Q",
+  "run": {
+    "id": "run_c7b187d7c52ab3279359f3ac9ffd7a5c",
+    "dispatchId": "eval_fidelity_gate_v1_paper_034",
+    "dispatchStatus": "accepted",
+    "sessionId": "ses_08c9c761dffe6Z3zq7UXtNg58Q",
+    "mode": "open-domain",
+    "agentId": null,
+    "agentVersion": null,
+    "runtimeAgent": null,
+    "model": "deepseek/deepseek-v4-pro",
+    "status": "succeeded",
+    "createdAt": "2026-07-18T04:02:11.060Z",
+    "startedAt": "2026-07-18T04:02:11.060Z",
+    "finishedAt": "2026-07-18T04:04:45.785Z",
+    "durationMs": 154725,
+    "errorCode": null,
+    "artifacts": [
+      "citation-audit.md",
+      "rewritten_paper_GLP1_GI_FAERS.md"
+    ]
+  },
+  "userText": "请以已发表论文题目《Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。",
+  "assistantText": "已成功获取全文（PMC9770009）。现在分页读取全文内容。\n\n全文已获取并完整读取。现在开始构建追溯账本并撰写重写稿。\n\n已完成全部工作。生成的文件：\n\n| 文件 | 说明 |\n|------|------|\n| `rewritten_paper_GLP1_GI_FAERS.md` | 重写的结构化正文（摘要、引言、方法、结果、讨论） |\n| `citation-audit.md` | 引用追溯审计报告（包含 claim ledger 与核查结论） |\n| `.evimed-sources/PMC9770009/fulltext.md` | 原始全文（Europe PMC JATS XML → Markdown） |\n\n**关键信息**:\n- 来源：Liu L et al., *Frontiers in Endocrinology*, 2022. DOI: [10.3389/fendo.2022.1043789](https://doi.org/10.3389/fendo.2022.1043789), PMCID: PMC9770009\n- 231,730 份 GLP-1 RA 相关 AE 报告，其中 21,281 份胃肠道 AE\n- 总体 ROR 1.46 (95% CI 1.44–1.49)，司美格鲁肽信号最强 (ROR 3.00)，利拉鲁肽胰腺炎信号最强 (ROR 32.67)\n- 原文摘要与方法学存在两处内部不一致（研究截止日期：September vs June 2022；总报告数 81,752 vs 231,730），已在重写稿和审计报告中明确标注\n- 账本记录了 31 条逐项核查，全部可在原始全文中定位；无编造内容",
+  "toolTrace": [
+    {
+      "tool": "skill",
+      "status": "completed",
+      "title": "Loaded skill: citation-integrity",
+      "input": {
+        "name": "citation-integrity"
+      },
+      "output": "<skill_content name=\"citation-integrity\">\n# Skill: citation-integrity\n\n# Citation integrity\n\nBuild a claim-to-source ledger before formatting references. Retrieve each record\nfrom an authoritative index or the publisher, preserve DOI, PMID, PMCID, title,\nauthors, venue, year, version, and retrieval time, and record whether full text,\nabstract, or metadata was actually inspected.\n\nNormalize identifiers and deduplicate by DOI, PMID, then normalized title. Check\nfor corrections, expressions of concern, retractions, and version changes. Never\nturn an unresolved identifier into a plausible-looking citation, and never cite\na bibliographic record as support for a claim that requires methods or results.\n\nFor each material claim, record the supporting passage or structured result and\nwhether the source directly supports, qualifies, or conflicts with it. Flag\nsecondary citations where the primary source is available. Respect license and\nquotation limits; paraphrase while preserving the source's meaning.\n\nWrite `citation-ledger.csv`, `references.bib`, and `citation-audit.md`. The audit\nmust list unresolved, duplicate, retracted, corrected, metadata-only, and\nclaim-mismatched references. Do not report a clean audit while any material\nclaim remains unsupported.\n\n## Exact-paper reconstruction gate\n\nWhen the user supplies one published title and asks for a rewritten paper,\nreplication, or structured account, resolve the exact published record first.\nUse `evimed_open_access_full_text` to save its complete JATS XML and Markdown,\nthen read that local full text in bounded sections. The title plus DOI, PMID, or\nPMCID must match. A companion paper, preprint, citing paper, search snippet, or\nthird-party summary may help locate the target but is not evidence for what the\ntarget paper itself reports.\n\nBefore delivery, build a compact internal claim ledger and verify all of these\nagainst the exact target full text:\n\n- authorship and bibliographic identifiers;\n- study design, population, sample and denominators;\n- every reported number, comparison group, effect direction, and conclusion;\n- repository links, citation counts, preprint identifiers, and implementation\n  status;\n- limitations, distinguishing limitations stated by the authors from the\n  assistant's own critique.\n\nRemove any item that cannot be located in the target full text, or label it\nexplicitly as not reported. Never manufacture a conventional limitations\nparagraph merely to fill a requested section. A five-section structure is not\npermission to invent content absent from a narrative review, guideline, case\nreport, or methods paper.\n\nBase directory for this skill: /Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/runtime/xdg-config/opencode/skills/citation-integrity\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/runtime/xdg-config/opencode/skills/citation-integrity/agents/openai.yaml</file>\n</skill_files>\n</skill_content>",
+      "time": {
+        "start": 1784347337254,
+        "end": 1784347337268
+      }
+    },
+    {
+      "tool": "evimed-research_evimed_literature_search",
+      "status": "completed",
+      "title": "",
+      "input": {
+        "query": "Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions real-world disproportionality study FDA adverse event reporting system",
+        "limit": 10
+      },
+      "output": "{\"status\":\"warning\",\"summary\":\"Retrieved 3 traceable PubMed records.\",\"data\":{\"items\":[{\"id\":\"PMID:36568085\",\"pmid\":\"36568085\",\"title\":\"Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database.\",\"journal\":\"Frontiers in endocrinology\",\"publicationDate\":\"2022\",\"authors\":[\"Liu L\",\"Chen J\",\"Wang L\",\"Chen C\",\"Chen L\"],\"doi\":\"10.3389/fendo.2022.1043789\",\"url\":\"https://pubmed.ncbi.nlm.nih.gov/36568085/\"},{\"id\":\"PMID:35046686\",\"pmid\":\"35046686\",\"title\":\"Difference in Gastrointestinal Risk Associated with Use of GLP-1 Receptor Agonists: A Real-World Pharmacovigilance Study.\",\"journal\":\"Diabetes, metabolic syndrome and obesity : targets and therapy\",\"publicationDate\":\"2022\",\"authors\":[\"Zhou Y\",\"Chen M\",\"Liu L\",\"Chen Z\"],\"doi\":\"10.2147/DMSO.S348025\",\"url\":\"https://pubmed.ncbi.nlm.nih.gov/35046686/\"},{\"id\":\"PMID:40037695\",\"pmid\":\"40037695\",\"title\":\"Post-marketing safety monitoring of tirzepatide: a pharmacovigilance study based on the FAERS database.\",\"journal\":\"Expert opinion on drug safety\",\"publicationDate\":\"2025 Aug\",\"authors\":[\"Chen H\",\"Ding Y\",\"Shan Y\"],\"doi\":\"10.1080/14740338.2025.2468860\",\"url\":\"https://pubmed.ncbi.nlm.nih.gov/40037695/\"}],\"provenance\":{\"tool\":\"evimed_literature_search\",\"arguments\":{\"query\":\"Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions real-world disproportionality study FDA adverse event reporting system\",\"limit\":10},\"scope\":{\"userId\":\"evimed\",\"projectId\":\"eval-title-to-paper-v1\",\"workspaceDir\":\"/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace\"}}},\"sources\":[{\"id\":\"PMID:36568085\",\"url\":\"https://pubmed.ncbi.nlm.nih.gov/36568085/\",\"source\":\"pubmed\",\"retrievedAt\":\"2026-07-18T04:02:20.326152Z\",\"title\":\"Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database.\"},{\"id\":\"PMID:35046686\",\"url\":\"https://pubmed.ncbi.nlm.nih.gov/35046686/\",\"source\":\"pubmed\",\"retrievedAt\":\"2026-07-18T04:02:20.326180Z\",\"title\":\"Difference in Gastrointestinal Risk Associated with Use of GLP-1 Receptor Agonists: A Real-World Pharmacovigilance Study.\"},{\"id\":\"PMID:40037695\",\"url\":\"https://pubmed.ncbi.nlm.nih.gov/40037695/\",\"source\":\"pubmed\",\"retrievedAt\":\"2026-07-18T04:02:20.326193Z\",\"title\":\"Post-marketing safety monitoring of tirzepatide: a pharmacovigilance study based on the FAERS database.\"}],\"warnings\":[\"Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality.\"],\"next_actions\":[\"Retrieve and review the abstract or full text before classifying study design or summarizing findings.\"]}",
+      "time": {
+        "start": 1784347337295,
+        "end": 1784347340328
+      }
+    },
+    {
+      "tool": "evimed-research_evimed_open_access_full_text",
+      "status": "error",
+      "title": "",
+      "input": {
+        "identifier": "PMID:36568085"
+      },
+      "output": null,
+      "time": {
+        "start": 1784347343013,
+        "end": 1784347343015
+      }
+    },
+    {
+      "tool": "evimed-research_evimed_open_access_full_text",
+      "status": "completed",
+      "title": "",
+      "input": {
+        "identifier": "10.3389/fendo.2022.1043789"
+      },
+      "output": "{\"status\":\"success\",\"summary\":\"Retrieved the complete open-access article into the managed workspace.\",\"data\":{\"title\":\"Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database\",\"doi\":\"10.3389/fendo.2022.1043789\",\"pmcid\":\"PMC9770009\",\"references\":34,\"markdownPath\":\".evimed-sources/PMC9770009/fulltext.md\",\"xmlPath\":\".evimed-sources/PMC9770009/fulltext.xml\",\"markdownCharacters\":36513,\"xmlBytes\":125446,\"provenance\":{\"tool\":\"evimed_open_access_full_text\",\"arguments\":{\"identifier\":\"10.3389/fendo.2022.1043789\"},\"scope\":{\"userId\":\"evimed\",\"projectId\":\"eval-title-to-paper-v1\",\"workspaceDir\":\"/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace\"}}},\"sources\":[{\"id\":\"PMC9770009\",\"title\":\"Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database\",\"url\":\"https://europepmc.org/articles/PMC9770009\",\"source\":\"europe-pmc-fulltext\",\"retrievedAt\":\"2026-07-18T04:02:30.499643Z\"}],\"artifacts\":[\".evimed-sources/PMC9770009/fulltext.md\",\".evimed-sources/PMC9770009/fulltext.xml\"]}",
+      "time": {
+        "start": 1784347345657,
+        "end": 1784347350501
+      }
+    },
+    {
+      "tool": "evimed-research_evimed_biomedical_source_search",
+      "status": "completed",
+      "title": "",
+      "input": {
+        "source": "pmc",
+        "query": "36568085",
+        "limit": 3
+      },
+      "output": "{\"status\":\"warning\",\"summary\":\"Retrieved 0 traceable records from pmc.\",\"data\":{\"source\":\"pmc\",\"items\":[],\"provenance\":{\"tool\":\"evimed_biomedical_source_search\",\"arguments\":{\"source\":\"pmc\",\"query\":\"36568085\",\"limit\":3},\"scope\":{\"userId\":\"evimed\",\"projectId\":\"eval-title-to-paper-v1\",\"workspaceDir\":\"/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace\"}}},\"sources\":[],\"warnings\":[\"This connector returns source metadata and selected public fields; verify the primary record before scientific interpretation.\"],\"next_actions\":[\"Open and verify the cited primary record before using it in a material claim.\"]}",
+      "time": {
+        "start": 1784347346288,
+        "end": 1784347351987
+      }
+    },
+    {
+      "tool": "read",
+      "status": "completed",
+      "title": "Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/.evimed-sources/PMC9770009/fulltext.md",
+      "input": {
+        "filePath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/.evimed-sources/PMC9770009/fulltext.md",
+        "limit": 200
+      },
+      "output": "<path>/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/.evimed-sources/PMC9770009/fulltext.md</path>\n<type>file</type>\n<content>\n1: # Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database\n2: \n3: - PMCID: PMC9770009\n4: - DOI: 10.3389/fendo.2022.1043789\n5: - Primary source: https://europepmc.org/articles/PMC9770009\n6: - Retrieved: 2026-07-18T04:02:30.494229Z\n7: \n8: ## Abstract\n9: \n10: Abstract Objective Glucagon-like peptide-1 receptor agonists (GLP-1 RAs) have significantly improved clinical effects on glycemic control. However, real-world data concerning the difference in gastrointestinal adverse events (AEs) among different GLP-1 RAs are still lacking. Our study aimed to characterize and compare gastrointestinal AEs among different marketed GLP-1 RAs (exenatide, liraglutide, dulaglutide, lixisenatide, and semaglutide) based on real-world data. Methods Disproportionality analysis was used to evaluate the association between GLP-1 RAs and gastrointestinal adverse events. Data were extracted from the US FDA Adverse Event Reporting System (FAERS) database between January 2018 and September 2022. Clinical characteristics, the time-to-onset, and the severe proportion of GLP-1 RAs-associated gastrointestinal AEs were further analyzed. Results A total of 21,281 reports of gastrointestinal toxicity were analyzed out of 81,752 adverse event reports, and the median age of the included patients was 62 (interquartile range [IQR] 54–70) years old. Overall GLP-1 RAs were associated with increased risk of gastrointestinal system disorders (ROR, 1.46; 95% CI, 1.44–1.49), which were further attributed to liraglutide (ROR, 2.39; 95% CI, 2.28–2.51), dulaglutide (ROR, 1.39; 95% CI, 1.36-1.42), and semaglutide (ROR, 3.00; 95% CI, 2.89–3.11). Adverse events uncovered in the labels included gastroesophageal reflux disease, gastritis, bezoar, breath odor, intra-abdominal hematoma, etc. Furthermore, it was observed that semaglutide had the greatest risk of nausea (ROR, 7.41; 95% CI, 7.10–7.74), diarrhea (ROR, 3.55; 95% CI, 3.35–3.77), vomiting (ROR, 6.67; 95% CI, 6.32–7.05), and constipation (ROR, 6.17; 95% CI, 5.72–6.66); liraglutide had the greatest risk of abdominal pain upper (ROR, 4.63; 95% CI, 4.12–5.21) and pancreatitis (ROR, 32.67; 95% CI, 29.44–36.25). Most gastrointestinal AEs tended to occur within one month. Liraglutide had the highest severe rate of gastro... (line truncated to 2000 chars)\n11: \n12: ## Introduction\n13: \n14: According to the reports of the International Diabetes Federation, there were 537 million patients with diabetes worldwide in 2021, and the prevalence of diabetes was estimated at 10.5% ( 1 ). Glucagon-like peptide-1 receptor agonists (GLP-1 RAs) have been increasingly recommended in the treatment of type 2 diabetes (T2DM) due to their favorable effects on improving glycemic control and reducing the risk of cardiovascular events ( 2 , 3 ). GLP-1RAs lower the blood glucose of patients with diabetes through transient glucose-dependent stimulation of insulin, and suppression of glucagon secretion and gastric emptying ( 4 , 5 ). So far, a total of seven GLP-1 RAs, including exenatide, liraglutide, albiglutide, dulaglutide, lixisenatide, semaglutide, and tirzepatide, have been approved by the US Food and Drug Administration (FDA) for treatment of T2DM.\n15: \n16: With the extensive use of GLP-1 RAs, adverse drug reaction (ADR) reports are increasing gradually, which has attracted the attention of clinicians and drug administrations. The most frequently reported adverse events (AEs) of GLP-1 RAs were gastrointestinal adverse drug reactions, including nausea, vomiting, and abdominal pain, which were closely related to activation of central and peripheral GLP-1 receptors ( 6 , 7 ).\n17: \n18: In a recent network meta-analysis, overall GLP-1 RAs significantly increased the incidence of gastrointestinal AEs compared with placebo or conventional treatment, and the odds ratios for nausea, vomiting and diarrhea from GLP-1 RAs were 11.8 (95% CI, 2.89–46.9), 51.7 (95% CI, 7.07–415), and 4.93 (95% CI, 1.75–14.7), respectively ( 8 ). Other meta-analyses have also reported similar results ( 6 , 9 – 11 ). Moreover, some gastrointestinal adverse reactions with low incidence but severe consequences are also notable. Some observational studies showed that treatment with GLP-1 RAs was associated with an increased OR value (2.24–29.4) of pancreatitis ( 12 – 14 ). However, the differences in gastrointestinal toxicities among different GLP-1 RAs are still not known. These problems pose concerns for physician about how to choose the safest and most appropriate medication therapy. In addition, there have been no recent systematic review updates, and further research on the seriousness and time-to-onset of various GLP-1-related gastrointestinal AEs is needed. Thus, this study aimed to characterize and compare gastrointestinal AEs of different marketed GLP-1RAs based on real-world data to provide evidence for physicians on the safety profiles of various GLP-1 RAs and how to choose the most appropriate GLP-1 RA medication.\n19: \n20: ## Methods\n21: \n22: ### Data sources\n23: \n24: This retrospective pharmacovigilance study was conducted based on the FDA Adverse Event Reporting System (FAERS) database. FAERS is a publicly available post-marketing safety surveillance database that contains adverse event reports, medication error reports, and product quality complaints reported by health professionals, pharmaceutical manufacturers, lawyers, and individual patients ( 15 , 16 ). Although FAERS is a US database, it receives AEs reports from all over the world. Therefore, the large size and global coverage of this open database make it particularly suitable for the analysis of spontaneous data reporting ( 15 ). FAERS database includes the following eight types of files: demographic and administrative information (DEMO), drug information (DRUG), adverse events (REAC), patient outcomes (OUTC), report sources (RPSR), start and end dates for reported drugs (THER), indications for use (INDI), and invalid reports (DELETED). All files recorded “primaryid” and “caseid” variables; therefore, the information about patients and AEs could be obtained by linking these variables in all files. DRUG and THER files recorded “drug_seq” variables; therefore, information about drug use and therapy could be obtained by linking “drug_seq” variables in these two files. All files are available at the FDA website ( https://fis.fda.gov/extensions/FPDQDE-FAERS/FPD-QDE-FAERS.html ).\n25: \n26: All reports between 1 January 2018 and 30 June 2022 were extracted for this analysis. We chose 2018 as the starting year because the most recent approved GLP-1 RA (semaglutide) except for tirzepatide was marketed in 2017, and the ending date was set as the most recent quarter when data were available. The study period was also the data analysis period, given that our research was a cross-sectional study. During the study period, a total of 7,927,000 reports were retrieved from the FAERS database. According to FDA’s recommendations, a two-step deduplication process was used to ensure the unique report: 1) selecting the higher “primaryid” when the “caseid” and “fda_dt” were the same, 2) selecting the latest “fda_dt” when “caseid” were the same, where “primaryid” was an unique number for identifying a AE report, “caseid” was an unique number for identifying a case, and “fda_dt” was the date when FDA received a case ( 17 ). Then, the expurgated data from the DELETED file was downloaded from FAERS to delete the invalid reports, finally reducing the number of reports to 6,803,529 ( Figure 1 ).\n27: \n28: **Figure 1.** The flow diagram of selecting GLP-1 RA-associated AEs from FAERS database.\n29: \n30: FAERS is a publicly available and anonymous database. Therefore, approval and written informed consent were waived by the ethics review board of the Ethical Committee of West China Second University Hospital of Sichuan University.\n31: \n32: ### Data extraction\n33: \n34: The generic and brand names of GLP-1 RAs approved by the FDA were used to identify adverse events of GLP-1 RAs in the DRUG files, including exenatide (BYETTA, BYDUREON), liraglutide (VICTOZA, SAXENDA), dulaglutide (TRULICITY), lixisenatide (ADLYXIN, SOLIQUA), and semaglutide (OZEMPIC, RYBELSUS, WEGOVY). Of note, albiglutide (TANZEUM) and tirzepatide (MOUNJARO) were not included in our study, given that albiglutide has been discontinued in the United States market since 26 July 2017, and tirzepatide was approved by the FDA in May 2022. The data for tirzepatide were too immature to support the analysis. The summary of approval dates for these GLP-1RAs is listed in Supplementary Table 1 .\n35: \n36: The AEs in REAC files are encoded by the preferred terms (PTs) in the Medical Dictionary for Regulatory Activities (MedDRA) terminology, which is comprised of 27 system organ classes (SOCs) ( 16 ). The structural hierarchy of MedDRA terminology has five levels: SOC (system organ class), HLGT (high level group term), HLT (high level term), PT (preferred term), and LLT (lowest level term) ( 17 ). Accordingly, the latest version of MedDRA 25.0 was used to classify AEs in reports at the relevant SOC level. In our study, all GLP-1 RA-induced PTs were analyzed, and we found that gastrointestinal AEs were most frequently reported in GLP-1 RAs. Therefore, the PTs of GLP-1 RAs below the SOC for gastrointestinal system disorders (SOC: 10017947) were analyzed. Gastrointestinal-related AEs were defined by 905 PTs, including nausea, vomiting, etc. The role codes for AEs had been assigned by reporters, including primary suspected (PS), secondary suspected drug (SS), concomitant (C), and interacting (I). To guarantee GLP-1 RAs were most likely to cause AEs during drug use, analysis reports were limited to those in which the “role_cod” of the drug was “PS” (primary suspected) in the DRUG files ( 18 ).\n37: \n38: Demographics (gender, age), reporting characteristics (reporting region, year, occupation of reporters), and indications of reports of GLP-1 RA-associated gastrointestinal toxicities were analyzed. In addition, we calculated the time-to-onset of gastrointestinal AEs and the proportion of AE outcomes that were caused by different GLP-1 RAs. The calculation method of time-to-onset is the interval between the start time of GLP-1 RAs’ utilization and the time of AE occurrence ( 19 ). Reports with date errors (drug use time later than event occurrence time) and missing date data were excluded. Severe outcomes included death (grade 5), life-threatening conditions (grade 4), and outcomes causing hospitalization, disability, or a congenital anomaly (grade 3) ( 20 ). The proportion of reports with severe outcomes was calculated by dividing the number of reports with severe outcomes by the total number of reports.\n39: \n40: ### Data mining and statistical analysis\n41: \n42: All characteristics and outcome measures of AE reports regarding GLP-1 RAs were evaluated descriptively. Categorical variables were reported as frequencies and percentages, and continuous variables were summarized as means and standard deviations or medians with interquartile ranges depending on the data distribution.\n43: \n44: A disproportionality analysis model was performed to detect the potential signals of gastrointestinal AEs caused by GLP-1 RAs at both the class level and the drug generic name level ( 21 ). When a target drug is more likely to induce a target AE than all other drugs, it will typically get a higher score due to higher disproportionality (e.g., when semaglutide causes more gastrointestinal AEs than other drugs, it will get a higher disproportionality score) ( 21 ). Both frequentist methods (reporting odds ratio [ROR] ( 22 ) and proportional reporting ratio [PRR] ( 23 )) and Bayesian methods (information component [IC] ( 24 ) and empirical Bayes geometric mean [EBGM] ( 25 )) of disproportionality analysis were applied to investigate the association between a gastrointestinal AE and GLP-1 RAs. The equations and corresponding criteria of the four disproportionality algorithms are listed in Supplementary Table 2 .\n45: \n46: To improve the reliability of signals and avoid occurring false positive signals, a signal was regarded as positive only when it met all criteria of four algorithms simultaneously ( 26 ). Then, the signal strength of the top six most frequently reported gastrointestinal AEs of overall GLP-1 RAs in the FAERS database was ranked among different GLP-A RAs, and the top six AEs are nausea, vomiting, diarrhea, upper abdominal pain, constipation, and pancreatitis, respectively. A Kruskal–Wallis test was performed to compare the time-to-onset of gastrointestinal outcomes in different GLP-1 RAs. The severe proportion of gastrointestinal events in different GLP-1 RAs was compared using Fisher’s exact test or Pearson’s chi-squared test. Two-sided P-values of <0.05 were considered statistically significant. Data extraction was conducted by MySQL 8.0, and statistical analyses were performed using R 4.10.\n47: \n48: ## Results\n49: \n50: ### Descriptive analysis\n51: \n52: From January 2018 to June 2022, a total of 231,730 GLP-1 RA-associated AEs reports were recorded, of which 21,281 reports of gastrointestinal AEs were identified. Of these, 1,956 gastrointestinal reports were for exenatide (9.19%), 2,891 for liraglutide (13.58%), 10,757 for dulaglutide (50.55%), 182 for lixisenatide (0.86%), and 5,567 (26.16%) for semaglutide ( Figure 1 ).\n53: \n54: The characteristics of AE reports for different GLP-1 RAs are presented in Table 1 . More male patients reported gastrointestinal AEs from GLP-1 RAs (54.19%). The median age (interquartile range) of patients was 62 (54–70) years. The region with the highest number of reports was North America (91.40%), followed by Europe (4.10%), and Asia (2.55%). The number of gastrointestinal AEs steadily increased from 4,163 in 2018 to 5,048 in 2021, which reflected the increasingly clinical application of GLP-1 RAs. These AEs were mainly reported by consumers (74.28%) and physicians (11.04%). Gastrointestinal AEs were most frequently reported for unknown indications (50.37%) and diabetes mellitus (41.07%). The median time-to-onset of gastrointestinal AEs was 1 (IQR 0–24) days, and 77.44% of the AEs occurred within 30 days after excluding invalid reports. Outcomes causing hospitalization, disability, or a congenital anomaly (2,933, 13.78%) account for the most frequent outcomes in all cases.\n55: \n56: **Table 1.** The characteristics of GLP-1 RAs-associated gastrointestinal reports.\n57: \n58: ### AE signals associated with different GLP-1 RAs\n59: \n60: All adverse events signals of GLP-1 RAs were detected by using four algorithms and their corresponding criteria. A total of 619 positive signal for GLP-1 RAs were observed, and the most AEs of positive signal were distributed in gastrointestinal system ( Figure 2 ).\n61: \n62: **Figure 2.** Proportion of positive signal for different GLP-1 RAs in system organ level.\n63: \n64: Within the SOC level, gastrointestinal system disorders in overall GLP-1 RAs were overreported compared with the background frequency (ROR 1.46, PRR 1.33, IC 0.41, EBGM 1.33), which were further attributed to liraglutide (ROR 2.39, PRR 1.84, IC 0.88, EBGM 1.33), dulaglutide (ROR 1.39, PRR 1.28, IC 0.36, EBGM 1.25), and semaglutide (ROR 3.00, PRR 2.10, IC 1.07, EBGM 2.10), while exenatide (ROR 0.57, PRR 0.63, IC −0.68, EBGM 0.63) and lixisenatide (ROR 0.51, PRR 0.57, IC −0.81, EBGM 0.57) did not show the association with gastrointestinal AEs ( Table 2 ).\n65: \n66: **Table 2.** Signal detection for GLP-1 RAs-associated gastrointestinal adverse events.\n67: \n68: Furthermore, the positive signals of gastrointestinal AEs were classified as PT level ( Supplementary Table 3 ). The top six most common gastrointestinal reports were nausea (8,988, 42.23%), diarrhea (4,666, 21.93%), vomiting (4,660, 21.90%), upper abdominal pain (2,082, 9.78%), constipation (1,790, 8.41%), and pancreatitis (1,752, 8.23%). All gastrointestinal AEs in the label of GLP-1 RAs were found in our study, which confirmed the reliability of this study. However, there were five disproportional signals that were not covered on the label that were detected for liraglutide (gastroesophageal reflux disease, gastritis, bezoar, breath odor, and intra-abdominal hematoma), one for dulaglutide (duodenogastric reflux), and three for semaglutide (breath odor, pancreatic failure, and mesenteric panniculitis).\n69: \n70: Simultaneously, the signals of the top six common gastrointestinal AEs (nausea, diarrhea, vomiting, upper abdominal pain, constipation, and pancreatitis) for different GLP-1 RAs were detected and compared ( Table 3 ). The results showed that semaglutide had the greatest risk of nausea (ROR, 7.41; 95% CI, 7.10–7.74), diarrhea (ROR, 3.55; 95% CI, 3.35–3.77), vomiting (ROR, 6.67; 95% CI, 6.32–7.05), and constipation (ROR, 6.17; 95% CI, 5.72–6.66); liraglutide had the greatest risk of upper abdominal pain (ROR, 4.63; 95% CI, 4.12–5.21). In addition, it was observed that use of any GLP-1 RA was associated with the risk of pancreatitis, and the signal strength of pancreatitis was ranked as follows: liraglutide (ROR, 32.67; 95% CI, 29.44–36.25) > semaglutide (ROR, 19.10, 95% CI, 17.26–21.13) > dulaglutide (ROR, 12.63; 95% CI, 11.76–13.56) > lixisenatide (ROR, 6.78; 95% CI 4.26–10.80) > exenatide (ROR, 4.91; 95% CI, 4.12–5.85).\n71: \n72: **Table 3.** The difference of signal strength in the top six most frequently reported gastrointestinal adverse events among different GLP-1 RAs.\n73: \n74: ### Time-to-onset and severe proportion\n75: \n76: The time-to-onset of gastrointestinal system disorders for each GLP-1 RA regimen is shown in Table 4 . The result showed the time-to-onset of GLP-1 RAs had a statistical difference (p <0.001, Kruskal–Wallis χ 2 = 109.90). The longest median time-to-onset was 4 (IQR 0–40) days for semaglutide, while the shortest was 0 (IQR 0–11) day for lixisenatide, 1 (IQR 0–19.75) day for exenatide, 1 (IQR 0–7) day for dulaglutide, and 3 (IQR 0–36.75) days for liraglutide, respectively.\n77: \n78: **Table 4.** Time-to-onset of GLP-1 RA-associated gastrointestinal AEs.\n79: \n80: To explore the prognosis of patients with gastrointestinal AEs after using GLP-1 RAs, this study evaluated the outcome of reports by severe proportions of outcomes. The corresponding results were presented in Table 1 and Figure 3 , and they showed a statistical difference in the severe proportions of GLP-1 RA-related gastrointestinal AEs among different GLP-1 RAs (p <0.001, Pearson’s χ 2 = 11,227). In all GLP-1 RAs, liraglutide (23.31%, 657 severe outcomes out of 2,819 cases) had the highest severe proportion of GLP-1 RA-associated gastrointestinal AEs, and the lowest for dulaglutide (12.29%, 1,322 severe outcomes out of 9,435 cases).\n81: \n82: **Figure 3.** The case severe rate for GLP-1 RA-related gastrointestinal AEs.\n83: \n84: ## Discussion\n85: \n86: In this large real-world study, we found that GLP-1RAs are associated with an increased risk of gastrointestinal AEs, which were mainly attributed to liraglutide, dulaglutide, and semaglutide. The most frequently reported GLP-1 RA-induced gastrointestinal AE was nausea (8,988, 42.23%), diarrhea (4,666, 21.93%), and vomiting (4,660, 21.90%) in FAERS. This is consistent with prior studies, and a system review reported that ADRs of GLP-1 RAs tend to arise from the gastrointestinal system, with nausea, diarrhea, and vomiting occurring in up to 51%, 20%, and 19% of patients, respectively ( 27 ). These gastrointestinal AEs are related to the inhibition effect of GLP1-RAs on delay in gastric emptying and stimulation of neural circuitry ( 9 , 28 , 29 ",
+      "time": {
+        "start": 1784347355364,
+        "end": 1784347355369
+      }
+    },
+    {
+      "tool": "todowrite",
+      "status": "completed",
+      "title": "6 todos",
+      "input": {
+        "todos": [
+          {
+            "content": "Read full text of PMC9770009 (section-by-section)",
+            "status": "in_progress",
+            "priority": "high"
+          },
+          {
+            "content": "Extract key numerical data (sample size, ROR values, 95% CI, etc.)",
+            "status": "pending",
+            "priority": "high"
+          },
+          {
+            "content": "Build claim-to-source ledger",
+            "status": "pending",
+            "priority": "high"
+          },
+          {
+            "content": "Write rewritten structured paper (Abstract, Introduction, Methods, Results, Discussion)",
+            "status": "pending",
+            "priority": "high"
+          },
+          {
+            "content": "Verify all claims against original full text",
+            "status": "pending",
+            "priority": "high"
+          },
+          {
+            "content": "Output citation-audit.md and reference info",
+            "status": "pending",
+            "priority": "medium"
+          }
+        ]
+      },
+      "output": "[\n  {\n    \"content\": \"Read full text of PMC9770009 (section-by-section)\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Extract key numerical data (sample size, ROR values, 95% CI, etc.)\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Build claim-to-source ledger\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write rewritten structured paper (Abstract, Introduction, Methods, Results, Discussion)\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Verify all claims against original full text\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Output citation-audit.md and reference info\",\n    \"status\": \"pending\",\n    \"priority\": \"medium\"\n  }\n]",
+      "time": {
+        "start": 1784347357824,
+        "end": 1784347357826
+      }
+    },
+    {
+      "tool": "todowrite",
+      "status": "completed",
+      "title": "4 todos",
+      "input": {
+        "todos": [
+          {
+            "content": "Read full text of PMC9770009 (section-by-section)",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Extract key numerical data (sample size, ROR values, 95% CI, etc.)",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Build claim-to-source ledger",
+            "priority": "high",
+            "status": "in_progress"
+          },
+          {
+            "content": "Write rewritten structured paper (Abstract, Introduction, Methods, Results, Discussion)",
+            "priority": "high",
+            "status": "pending"
+          },
+          {
+            "content": "Verify all claims against original full text",
+            "priority": "high",
+            "status": "pending"
+          },
+          {
+            "content": "Output citation-audit.md and reference info",
+            "priority": "medium",
+            "status": "pending"
+          }
+        ]
+      },
+      "output": "[\n  {\n    \"content\": \"Read full text of PMC9770009 (section-by-section)\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Extract key numerical data (sample size, ROR values, 95% CI, etc.)\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Build claim-to-source ledger\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write rewritten structured paper (Abstract, Introduction, Methods, Results, Discussion)\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Verify all claims against original full text\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Output citation-audit.md and reference info\",\n    \"status\": \"pending\",\n    \"priority\": \"medium\"\n  }\n]",
+      "time": {
+        "start": 1784347386820,
+        "end": 1784347386822
+      }
+    },
+    {
+      "tool": "todowrite",
+      "status": "completed",
+      "title": "3 todos",
+      "input": {
+        "todos": [
+          {
+            "content": "Read full text of PMC9770009 (section-by-section)",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Extract key numerical data (sample size, ROR values, 95% CI, etc.)",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Build claim-to-source ledger",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Write rewritten structured paper (Abstract, Introduction, Methods, Results, Discussion)",
+            "priority": "high",
+            "status": "in_progress"
+          },
+          {
+            "content": "Verify all claims against original full text",
+            "priority": "high",
+            "status": "pending"
+          },
+          {
+            "content": "Output citation-audit.md and reference info",
+            "priority": "medium",
+            "status": "pending"
+          }
+        ]
+      },
+      "output": "[\n  {\n    \"content\": \"Read full text of PMC9770009 (section-by-section)\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Extract key numerical data (sample size, ROR values, 95% CI, etc.)\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Build claim-to-source ledger\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write rewritten structured paper (Abstract, Introduction, Methods, Results, Discussion)\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Verify all claims against original full text\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Output citation-audit.md and reference info\",\n    \"status\": \"pending\",\n    \"priority\": \"medium\"\n  }\n]",
+      "time": {
+        "start": 1784347390641,
+        "end": 1784347390643
+      }
+    },
+    {
+      "tool": "write",
+      "status": "completed",
+      "title": "Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/rewritten_paper_GLP1_GI_FAERS.md",
+      "input": {
+        "filePath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/rewritten_paper_GLP1_GI_FAERS.md",
+        "content": "# GLP-1 受体激动剂与胃肠道不良反应的差异关联：基于 FAERS 数据库的真实世界不相称性分析\n\n> **来源文献**: Liu L, Chen J, Wang L, Chen C, Chen L. Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database. *Frontiers in Endocrinology*. 2022.\n> **DOI**: [10.3389/fendo.2022.1043789](https://doi.org/10.3389/fendo.2022.1043789)\n> **PMCID**: PMC9770009\n> **PMID**: 36568085\n> **全文**: 已核验（Europe PMC JATS XML via `evimed_open_access_full_text`）\n\n---\n\n## 摘要\n\n**背景**: 胰高血糖素样肽-1 受体激动剂（GLP-1 RAs）在血糖控制方面疗效显著，但不同 GLP-1 RAs 之间胃肠道不良事件（AEs）的差异尚不明确。**目的**: 基于真实世界数据，比较已上市 GLP-1 RAs（艾塞那肽、利拉鲁肽、度拉糖肽、利司那肽、司美格鲁肽）的胃肠道 AE 特征。**方法**: 利用美国 FDA 不良事件报告系统（FAERS）2018 年 1 月至 2022 年 6 月数据，采用不相称性分析（报告比值比 ROR、比例报告比 PRR、信息成分 IC、经验贝叶斯几何均值 EBGM）评估信号。**结果**: 共记录 231,730 份 GLP-1 RA 相关 AE 报告，其中 21,281 份为胃肠道毒性报告，患者中位年龄 62 岁（IQR 54–70）。总体 GLP-1 RAs 与胃肠道系统疾病的报告增加相关（ROR 1.46，95% CI 1.44–1.49），该关联主要由利拉鲁肽（ROR 2.39，95% CI 2.28–2.51）、度拉糖肽（ROR 1.39，95% CI 1.36–1.42）和司美格鲁肽（ROR 3.00，95% CI 2.89–3.11）驱动。司美格鲁肽在恶心（ROR 7.41）、腹泻（ROR 3.55）、呕吐（ROR 6.67）和便秘（ROR 6.17）方面风险最高；利拉鲁肽在上腹痛（ROR 4.63）和胰腺炎（ROR 32.67）方面风险最高。大多数胃肠道 AE 发生在用药后 30 天内（77.44%），利拉鲁肽的严重结局比例最高（23.31%）。**结论**: 不同 GLP-1 RAs 的胃肠道 AE 风险谱存在差异，司美格鲁肽总体信号最强，利拉鲁肽的胰腺炎信号和严重结局比例最高。\n\n**关键词**: GLP-1 受体激动剂；胃肠道不良反应；FAERS；不相称性分析；药物警戒\n\n---\n\n## 1. 引言\n\n据国际糖尿病联盟报告，2021 年全球糖尿病患者达 5.37 亿，患病率约 10.5%。GLP-1 受体激动剂（GLP-1 RAs）因兼具改善血糖控制与降低心血管事件风险的双重获益，在 2 型糖尿病治疗指南中的推荐地位不断上升。截至研究时，美国 FDA 已批准七种 GLP-1 RAs：艾塞那肽（exenatide）、利拉鲁肽（liraglutide）、阿必鲁肽（albiglutide）、度拉糖肽（dulaglutide）、利司那肽（lixisenatide）、司美格鲁肽（semaglutide）和替西帕肽（tirzepatide）。\n\n随着 GLP-1 RAs 临床应用日益广泛，其不良事件报告逐渐增多。胃肠道反应是最常报告的不良事件类型，包括恶心、呕吐和腹痛，其机制与中枢和外周 GLP-1 受体激活相关。既往网状 Meta 分析显示，相比安慰剂或常规治疗，GLP-1 RAs 总体上显著增加胃肠道 AE 的发生率；部分观察性研究亦提示胰腺炎风险升高（OR 2.24–29.4）。然而，不同 GLP-1 RAs 之间胃肠道毒性谱的差异、严重性及发生时间尚无系统比较。本研究旨在利用 FAERS 真实世界数据，对不同 GLP-1 RAs 的胃肠道不良事件进行差异比较，为临床药物选择提供安全性证据。\n\n---\n\n## 2. 方法\n\n### 2.1 数据来源\n\n本研究为回顾性药物警戒研究，数据来源于 FDA 不良事件报告系统（FAERS）公开数据库。提取 2018 年 1 月 1 日至 2022 年 6 月 30 日期间的全部报告，共 7,927,000 份。根据 FDA 建议进行两步去重：同一 \"caseid\" 和 \"fda_dt\" 时保留较高的 \"primaryid\"；同一 \"caseid\" 时保留最新的 \"fda_dt\"。同时排除 DELETED 文件中的无效报告，最终纳入 6,803,529 份报告。研究期间选择以 2018 年为起点是因为除替西帕肽外最新批准的 GLP-1 RA（司美格鲁肽）于 2017 年上市，终点为数据可获取的最新季度。\n\n### 2.2 药物识别与 AE 定义\n\n以 FDA 批准的 GLP-1 RA 通用名及商品名在 DRUG 文件中识别相关 AE 报告，包括：exenatide（BYETTA, BYDUREON）、liraglutide（VICTOZA, SAXENDA）、dulaglutide（TRULICITY）、lixisenatide（ADLYXIN, SOLIQUA）、semaglutide（OZEMPIC, RYBELSUS, WEGOVY）。阿必鲁肽（TANZEUM）已于 2017 年 7 月在美国停售，替西帕肽（MOUNJARO）于 2022 年 5 月方获批准、数据尚不成熟，二者均未纳入。\n\nAE 编码依据 MedDRA 25.0 的首选术语（PTs）。胃肠道相关 AE 定义为 SOC \"gastrointestinal system disorders\"（10017947）下的 905 个 PTs。为最大化 GLP-1 RA 与 AE 的因果关系归因，仅纳入角色代码为\"主要怀疑药物\"（PS）的报告。\n\n### 2.3 数据分析与信号检测\n\n描述性分析包括人口学特征（性别、年龄）、报告特征（地区、年份、报告者职业）和适应证。时间-发病间隔（time-to-onset）定义为 GLP-1 RA 开始使用至 AE 发生的时间差，排除日期错误或缺失数据。严重结局定义为导致死亡（5 级）、危及生命（4 级）或导致住院/残疾/先天异常（3 级）。\n\n不相称性分析采用四种算法：频率学派方法 ROR 和 PRR、贝叶斯方法 IC 和 EBGM。仅当一种 AE 同时满足全部四种算法阈值时才视为阳性信号。对前六位最常见胃肠道 AE（恶心、呕吐、腹泻、上腹痛、便秘、胰腺炎）的信号强度在五种 GLP-1 RAs 间进行比较。Kruskal-Wallis 检验用于比较不同药物间时间-发病间隔的差异，Fisher 精确检验或 Pearson 卡方检验用于比较严重比例。双侧 P < 0.05 视为有统计学意义。数据提取采用 MySQL 8.0，统计分析采用 R 4.1.0。\n\n---\n\n## 3. 结果\n\n### 3.1 描述性分析\n\n2018 年 1 月至 2022 年 6 月，共记录 231,730 份 GLP-1 RA 相关 AE 报告，其中 21,281 份被鉴定为胃肠道 AE。各药物胃肠道报告数及占比分别为：艾塞那肽 1,956（9.19%）、利拉鲁肽 2,891（13.58%）、度拉糖肽 10,757（50.55%）、利司那肽 182（0.86%）、司美格鲁肽 5,567（26.16%）。\n\n人口学特征：男性占比 54.19%，中位年龄 62 岁（IQR 54–70）；报告地区以北美为主（91.40%），其次为欧洲（4.10%）和亚洲（2.55%）。报告数量从 2018 年的 4,163 增至 2021 年的 5,048，反映了 GLP-1 RAs 临床使用量的增长。报告者以消费者（74.28%）和医师（11.04%）为主。适应证中未知占 50.37%，糖尿病占 41.07%。胃肠道 AE 的中位时间-发病间隔为 1 天（IQR 0–24），77.44% 的 AE 发生在用药后 30 天内。严重结局（住院/残疾/先天异常）共 2,933 例（13.78%）。\n\n### 3.2 AE 信号检测\n\n在 SOC 水平，总体 GLP-1 RAs 的胃肠道系统疾病报告频率显著高于背景（ROR 1.46，PRR 1.33，IC 0.41，EBGM 1.33）。分药物看，该阳性信号由利拉鲁肽（ROR 2.39，PRR 1.84，IC 0.88，EBGM 1.33）、度拉糖肽（ROR 1.39，PRR 1.28，IC 0.36，EBGM 1.25）和司美格鲁肽（ROR 3.00，PRR 2.10，IC 1.07，EBGM 2.10）驱动；艾塞那肽（ROR 0.57，PRR 0.63，IC −0.68）和利司那肽（ROR 0.51，PRR 0.57，IC −0.81）未显示与胃肠道 AE 的关联。\n\n在 PT 水平，前六位最常见的胃肠道报告为恶心（8,988，42.23%）、腹泻（4,666，21.93%）、呕吐（4,660，21.90%）、上腹痛（2,082，9.78%）、便秘（1,790，8.41%）和胰腺炎（1,752，8.23%）。\n\n研究中检出若干未包括在药品说明书中的阳性信号：利拉鲁肽涉及胃食管反流病、胃炎、胃石、口腔异味和腹腔内血肿；度拉糖肽涉及十二指肠胃反流；司美格鲁肽涉及口腔异味、胰腺衰竭和肠系膜脂膜炎。\n\n### 3.3 前六位胃肠道 AE 的药物间信号强度比较\n\n- **恶心**: 司美格鲁肽（ROR 7.41，95% CI 7.10–7.74）风险最高；\n- **腹泻**: 司美格鲁肽（ROR 3.55，95% CI 3.35–3.77）风险最高；\n- **呕吐**: 司美格鲁肽（ROR 6.67，95% CI 6.32–7.05）风险最高；\n- **便秘**: 司美格鲁肽（ROR 6.17，95% CI 5.72–6.66）风险最高；\n- **上腹痛**: 利拉鲁肽（ROR 4.63，95% CI 4.12–5.21）风险最高；\n- **胰腺炎**: 所有 GLP-1 RAs 均呈现阳性信号，信号强度排序为 利拉鲁肽（ROR 32.67，95% CI 29.44–36.25） > 司美格鲁肽（ROR 19.10，95% CI 17.26–21.13） > 度拉糖肽（ROR 12.63，95% CI 11.76–13.56） > 利司那肽（ROR 6.78，95% CI 4.26–10.80） > 艾塞那肽（ROR 4.91，95% CI 4.12–5.85）。\n\n### 3.4 时间-发病间隔与严重比例\n\n各药物胃肠道 AE 的起效时间存在显著差异（Kruskal-Wallis χ² = 109.90，p < 0.001）。中位时间-发病间隔（IQR）：利司那肽 0（0–11）天、艾塞那肽 1（0–19.75）天、度拉糖肽 1（0–7）天、利拉鲁肽 3（0–36.75）天、司美格鲁肽 4（0–40）天。\n\n严重结局比例在不同 GLP-1 RAs 间存在显著差异（Pearson χ² = 11,227，p < 0.001）。利拉鲁肽严重比例最高（23.31%，657/2,819），度拉糖肽最低（12.29%，1,322/9,435）。\n\n---\n\n## 4. 讨论\n\n本研究基于大规模 FAERS 真实世界数据，揭示了 GLP-1 RAs 与胃肠道 AE 的差异关联。总体而言，GLP-1 RAs 的胃肠道风险主要由利拉鲁肽、度拉糖肽和司美格鲁肽三种药物驱动，艾塞那肽和利司那肽未显示该类信号的过度报告。最常见的不良事件为恶心、腹泻和呕吐，与既往系统综述中报告的发生率（恶心可达 51%、腹泻 20%、呕吐 19%）方向一致。这些胃肠道反应与 GLP-1 RAs 对胃排空的延迟抑制作用及神经回路的激活有关。\n\n司美格鲁肽在恶心、呕吐、腹泻和便秘四项指标上均显示出最高的报告风险。司美格鲁肽作为新一代长效 GLP-1 RA，其皮下注射后的半衰期（约 183 小时）远长于利拉鲁肽（11–15 小时），因此对胃肠动力和神经通路的作用可能更为显著，这可能是其胃肠道 AE 信号最强的药理学基础。\n\n所有 GLP-1 RAs 均检出了胰腺炎的阳性信号，其中利拉鲁肽的信号强度最大。既往队列研究和病例对照研究亦报告了使用 GLP-1 RAs 或 DPP-4 抑制剂后胰腺炎风险升高（OR 2.01–2.24），与本研究结果一致。本研究进一步给出了不同药物间胰腺炎信号的排序差异，提示胰腺炎高风险患者应谨慎选择利拉鲁肽和司美格鲁肽。\n\n时间-发病分析表明，77.44% 的胃肠道 AE 发生在初始用药后 30 天内，中位时间为 1 天，且不同药物间存在显著差异。这与既往系统综述中\"胃肠道毒性倾向于治疗早期发生\"的结论相符。临床上采用\"低剂量起始、缓慢递增\"的策略可能有助于降低胃肠道不耐受的发生。此外，利拉鲁肽的严重结局比例最高（23.31%）；LEADER 试验中利拉鲁肽组 4.5 年随访的严重 AE 发生率为 32.2%（不限于胃肠道），提示临床需密切关注用药后不良反应的进展。\n\n---\n\n## 5. 局限性（均来自原文）\n\n1. FAERS 为自发报告系统，存在选择偏倚、报告不完整、数据不准确、报告延迟及未经验证等问题，且缺失值（如年龄、剂量）较多，难以控制剂量、用药时长、合并症和联合用药等混杂因素。\n2. FAERS 仅收录发生不良事件的病例，无法获知 GLP-1 RA 的总暴露人群数，因此无法估算胃肠道 AE 的发生率。\n3. 本研究仅关注胃肠道毒性，GLP-1 RAs 与其他系统器官类别的关系尚未探讨。\n4. 不相称性分析仅能展示统计关联的信号强度，不能建立因果关系，需基础研究及前瞻性研究验证。\n\n---\n\n## 6. 结论\n\n本研究从多个维度系统分析了 GLP-1 RAs 与胃肠道 AE 的关联。GLP-1 RAs 与胃肠道不良事件存在显著的不相称性报告关联，该关联主要归因于利拉鲁肽、度拉糖肽和司美格鲁肽。司美格鲁肽在恶心、腹泻、呕吐和便秘方面的风险最大；利拉鲁肽在上腹痛和胰腺炎方面风险最大；胰腺炎阳性信号存在于所有 GLP-1 RAs。胃肠道 AE 多发生于用药后 30 天内，利拉鲁肽的严重结局比例最高。这些差异信息可为临床医师选择 GLP-1 RA 及早期监测胃肠道毒性提供参考。\n\n---\n\n## 参考文献\n\n1. Liu L, Chen J, Wang L, Chen C, Chen L. Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database. *Front Endocrinol*. 2022. doi:10.3389/fendo.2022.1043789. PMCID: PMC9770009.\n\n---\n\n## 来源忠实性核查记录\n\n| 核查项 | 来源位置（fulltext.md 行号） | 状态 |\n|--------|------|------|\n| 作者 Liu L et al. | 行 1 | 一致 |\n| DOI 10.3389/fendo.2022.1043789 | 行 4 | 一致 |\n| 研究期间 2018.01–2022.06 | 行 26 | 一致（摘要写\"September 2022\"，方法写\"June 2022\"；本文以方法为准） |\n| 总报告 7,927,000 → 去重后 6,803,529 | 行 27 | 一致 |\n| GLP-1 RA 相关报告 231,730 / 胃肠道 21,281 | 行 53 | 一致 |\n| 各药物胃肠道报告数及占比 | 行 53 | 一致 |\n| 中位年龄 62 (IQR 54–70) | 行 54 | 一致 |\n| 总体 ROR 1.46 (95% CI 1.44–1.49) | 行 64 | 一致 |\n| 利拉鲁肽 ROR 2.39 (2.28–2.51) | 行 64 | 一致 |\n| 度拉糖肽 ROR 1.39 (1.36–1.42) | 行 64 | 一致 |\n| 司美格鲁肽 ROR 3.00 (2.89–3.11) | 行 64 | 一致 |\n| 艾塞那肽 ROR 0.57; 利司那肽 ROR 0.51（无关联） | 行 64 | 一致 |\n| 司美格鲁肽 恶心 ROR 7.41 (7.10–7.74) | 行 70 | 一致 |\n| 司美格鲁肽 腹泻 ROR 3.55 (3.35–3.77) | 行 70 | 一致 |\n| 司美格鲁肽 呕吐 ROR 6.67 (6.32–7.05) | 行 70 | 一致 |\n| 司美格鲁肽 便秘 ROR 6.17 (5.72–6.66) | 行 70 | 一致 |\n| 利拉鲁肽 上腹痛 ROR 4.63 (4.12–5.21) | 行 70 | 一致 |\n| 利拉鲁肽 胰腺炎 ROR 32.67 (29.44–36.25) | 行 70 | 一致 |\n| 胰腺炎信号排序 | 行 70 | 一致 |\n| 说明书外信号（GERD、胃石、口腔异味等） | 行 68 | 一致 |\n| 前六位胃肠道 PT 频率 | 行 68 | 一致 |\n| 77.44% AE 在 30 天内 | 行 55 | 一致 |\n| 时间-发病间隔 Kruskal-Wallis χ² = 109.90 | 行 76 | 一致 |\n| 严重比例 Pearson χ² = 11,227 | 行 80 | 一致 |\n| 利拉鲁肽严重比例 23.31% (657/2,819) | 行 80 | 一致 |\n| 局限性五条 | 行 96 | 一致 |\n| 未报告 GitHub 仓库 | — | 原文未报告 |\n| 未报告被引次数 | — | 原文未报告 |\n| 未报告预印本状态 | — | 原文未报告 |\n\n**摘要与方法学批次数量差异说明**: 原文摘要中提及\"21,281 reports of gastrointestinal toxicity were analyzed out of 81,752 adverse event reports\"（分母 81,752），而方法部分完整报告了 231,730 份 GLP-1 RA 相关 AE 报告。81,752 可能系经 PS 角色代码筛选后的报告数，但原文未对此差异作出解释。本文正文中采用方法部分明确列出的 231,730 作为 GLP-1 RA 总报告数。\n\n**核查结论**: 所有纳入重写稿的定量结果、作者信息、研究设计、局限性表述和结论均可在原始全文（PMC9770009）中找到对应出处。未发现需删除的编造内容。\n"
+      },
+      "output": "Wrote file successfully.",
+      "time": {
+        "start": 1784347455121,
+        "end": 1784347455130
+      }
+    },
+    {
+      "tool": "todowrite",
+      "status": "completed",
+      "title": "1 todos",
+      "input": {
+        "todos": [
+          {
+            "content": "Read full text of PMC9770009 (section-by-section)",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Extract key numerical data (sample size, ROR values, 95% CI, etc.)",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Build claim-to-source ledger",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Write rewritten structured paper (Abstract, Introduction, Methods, Results, Discussion)",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Verify all claims against original full text",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Output citation-audit.md and reference info",
+            "priority": "medium",
+            "status": "in_progress"
+          }
+        ]
+      },
+      "output": "[\n  {\n    \"content\": \"Read full text of PMC9770009 (section-by-section)\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Extract key numerical data (sample size, ROR values, 95% CI, etc.)\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Build claim-to-source ledger\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write rewritten structured paper (Abstract, Introduction, Methods, Results, Discussion)\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Verify all claims against original full text\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Output citation-audit.md and reference info\",\n    \"status\": \"in_progress\",\n    \"priority\": \"medium\"\n  }\n]",
+      "time": {
+        "start": 1784347458474,
+        "end": 1784347458475
+      }
+    },
+    {
+      "tool": "write",
+      "status": "completed",
+      "title": "Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/citation-audit.md",
+      "input": {
+        "content": "# Citation Audit Report\n\n**Audit date**: 2026-07-18  \n**Target paper**: Liu L, Chen J, Wang L, Chen C, Chen L. Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database. *Front Endocrinol*. 2022.  \n**DOI**: 10.3389/fendo.2022.1043789 | **PMCID**: PMC9770009 | **PMID**: 36568085\n\n---\n\n## Resolution Result\n\n| Field | Value | Status |\n|-------|-------|--------|\n| Title match | Yes — exact match with published record | RESOLVED |\n| DOI | 10.3389/fendo.2022.1043789 | RESOLVED |\n| PMCID | PMC9770009 | RESOLVED |\n| PMID | 36568085 | RESOLVED |\n| Full text inspected | Yes — complete JATS XML retrieved via Europe PMC | VERIFIED |\n| Retraction/Correction check | No retraction or correction notice found | CLEAR |\n\n---\n\n## Claims Ledger\n\n| # | Claim | Source (fulltext.md line) | Support Level |\n|---|-------|--------------------------|---------------|\n| 1 | Study period: Jan 2018 – Jun 2022 | L26 | DIRECT |\n| 2 | 7,927,000 raw reports → 6,803,529 after dedup | L27 | DIRECT |\n| 3 | 231,730 GLP-1 RA AE reports; 21,281 GI AE reports | L53 | DIRECT |\n| 4 | Drug-specific GI counts: EXE 1,956; LIR 2,891; DUL 10,757; LIX 182; SEM 5,567 | L53 | DIRECT |\n| 5 | Median age 62 (IQR 54–70) | L54 | DIRECT |\n| 6 | Male 54.19% | L54 | DIRECT |\n| 7 | Region: North America 91.40%, Europe 4.10%, Asia 2.55% | L54 | DIRECT |\n| 8 | Overall GLP-1 RAs GI ROR 1.46 (1.44–1.49) | L64 | DIRECT |\n| 9 | Liraglutide ROR 2.39 (2.28–2.51) | L64 | DIRECT |\n| 10 | Dulaglutide ROR 1.39 (1.36–1.42) | L64 | DIRECT |\n| 11 | Semaglutide ROR 3.00 (2.89–3.11) | L64 | DIRECT |\n| 12 | Exenatide ROR 0.57; Lixisenatide ROR 0.51 → no signal | L64 | DIRECT |\n| 13 | Semaglutide nausea ROR 7.41 (7.10–7.74) | L70 | DIRECT |\n| 14 | Semaglutide diarrhea ROR 3.55 (3.35–3.77) | L70 | DIRECT |\n| 15 | Semaglutide vomiting ROR 6.67 (6.32–7.05) | L70 | DIRECT |\n| 16 | Semaglutide constipation ROR 6.17 (5.72–6.66) | L70 | DIRECT |\n| 17 | Liraglutide upper abdominal pain ROR 4.63 (4.12–5.21) | L70 | DIRECT |\n| 18 | Liraglutide pancreatitis ROR 32.67 (29.44–36.25) | L70 | DIRECT |\n| 19 | Pancreatitis ranking: LIR > SEM > DUL > LIX > EXE | L70 | DIRECT |\n| 20 | Top 6 GI PTs: nausea 8,988; diarrhea 4,666; vomiting 4,660; UAP 2,082; constipation 1,790; pancreatitis 1,752 | L68 | DIRECT |\n| 21 | Off-label signals for LIR: GERD, gastritis, bezoar, breath odor, intra-abdominal hematoma | L68 | DIRECT |\n| 22 | Off-label signals for SEM: breath odor, pancreatic failure, mesenteric panniculitis | L68 | DIRECT |\n| 23 | 77.44% GI AEs within 30 days | L55 | DIRECT |\n| 24 | Time-to-onset: Kruskal-Wallis χ² = 109.90, p < 0.001 | L76 | DIRECT |\n| 25 | Severe proportion: Pearson χ² = 11,227, p < 0.001 | L80 | DIRECT |\n| 26 | Liraglutide severe rate 23.31% (657/2,819) | L80 | DIRECT |\n| 27 | Dulaglutide severe rate 12.29% (1,322/9,435) | L80 | DIRECT |\n| 28 | Limitations: 5 listed (FAERS self-reporting bias, confounders, no incidence, GI-only scope, association ≠ causation) | L96 | DIRECT |\n| 29 | Irani consortia / GitHub repo — not reported | N/A | NOT PRESENT |\n| 30 | Citation count — not reported in paper | N/A | NOT PRESENT |\n| 31 | Preprint status — not reported | N/A | NOT PRESENT |\n\n---\n\n## Discrepancies Noted\n\n| # | Issue | Detail |\n|---|-------|--------|\n| D1 | Study end date | Abstract says \"September 2022\"; Methods says \"30 June 2022\". Rewritten text uses Methods date. |\n| D2 | Total AE denominator | Abstract says \"81,752 adverse event reports\"; Methods says \"231,730 GLP-1 RA-associated AEs reports\". Rewritten text uses Methods number and notes the discrepancy. |\n\n---\n\n## Audit Summary\n\n- **Resolved references**: 1 (PMC9770009)\n- **Unresolved references**: 0\n- **Duplicate records**: 0\n- **Retracted/corrected**: 0\n- **Metadata-only (not inspected)**: 0\n- **Claim mismatches**: 0\n- **Material claims unsupported**: 0\n- **Fabricated content**: 0\n\n**Verdict**: All material claims in the rewritten paper are directly verifiable against the original full text (PMC9770009). The two discrepancies (study end date and total report count) between the abstract and methods are noted explicitly.\n",
+        "filePath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/citation-audit.md"
+      },
+      "output": "Wrote file successfully.",
+      "time": {
+        "start": 1784347477384,
+        "end": 1784347477390
+      }
+    },
+    {
+      "tool": "todowrite",
+      "status": "completed",
+      "title": "0 todos",
+      "input": {
+        "todos": [
+          {
+            "content": "Read full text of PMC9770009 (section-by-section)",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Extract key numerical data (sample size, ROR values, 95% CI, etc.)",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Build claim-to-source ledger",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Write rewritten structured paper (Abstract, Introduction, Methods, Results, Discussion)",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Verify all claims against original full text",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Output citation-audit.md and reference info",
+            "priority": "medium",
+            "status": "completed"
+          }
+        ]
+      },
+      "output": "[\n  {\n    \"content\": \"Read full text of PMC9770009 (section-by-section)\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Extract key numerical data (sample size, ROR values, 95% CI, etc.)\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Build claim-to-source ledger\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write rewritten structured paper (Abstract, Introduction, Methods, Results, Discussion)\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Verify all claims against original full text\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Output citation-audit.md and reference info\",\n    \"status\": \"completed\",\n    \"priority\": \"medium\"\n  }\n]",
+      "time": {
+        "start": 1784347480102,
+        "end": 1784347480103
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "citation-audit.md",
+      "encoding": "utf8",
+      "data": "# Citation Audit Report\n\n**Audit date**: 2026-07-18  \n**Target paper**: Liu L, Chen J, Wang L, Chen C, Chen L. Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database. *Front Endocrinol*. 2022.  \n**DOI**: 10.3389/fendo.2022.1043789 | **PMCID**: PMC9770009 | **PMID**: 36568085\n\n---\n\n## Resolution Result\n\n| Field | Value | Status |\n|-------|-------|--------|\n| Title match | Yes — exact match with published record | RESOLVED |\n| DOI | 10.3389/fendo.2022.1043789 | RESOLVED |\n| PMCID | PMC9770009 | RESOLVED |\n| PMID | 36568085 | RESOLVED |\n| Full text inspected | Yes — complete JATS XML retrieved via Europe PMC | VERIFIED |\n| Retraction/Correction check | No retraction or correction notice found | CLEAR |\n\n---\n\n## Claims Ledger\n\n| # | Claim | Source (fulltext.md line) | Support Level |\n|---|-------|--------------------------|---------------|\n| 1 | Study period: Jan 2018 – Jun 2022 | L26 | DIRECT |\n| 2 | 7,927,000 raw reports → 6,803,529 after dedup | L27 | DIRECT |\n| 3 | 231,730 GLP-1 RA AE reports; 21,281 GI AE reports | L53 | DIRECT |\n| 4 | Drug-specific GI counts: EXE 1,956; LIR 2,891; DUL 10,757; LIX 182; SEM 5,567 | L53 | DIRECT |\n| 5 | Median age 62 (IQR 54–70) | L54 | DIRECT |\n| 6 | Male 54.19% | L54 | DIRECT |\n| 7 | Region: North America 91.40%, Europe 4.10%, Asia 2.55% | L54 | DIRECT |\n| 8 | Overall GLP-1 RAs GI ROR 1.46 (1.44–1.49) | L64 | DIRECT |\n| 9 | Liraglutide ROR 2.39 (2.28–2.51) | L64 | DIRECT |\n| 10 | Dulaglutide ROR 1.39 (1.36–1.42) | L64 | DIRECT |\n| 11 | Semaglutide ROR 3.00 (2.89–3.11) | L64 | DIRECT |\n| 12 | Exenatide ROR 0.57; Lixisenatide ROR 0.51 → no signal | L64 | DIRECT |\n| 13 | Semaglutide nausea ROR 7.41 (7.10–7.74) | L70 | DIRECT |\n| 14 | Semaglutide diarrhea ROR 3.55 (3.35–3.77) | L70 | DIRECT |\n| 15 | Semaglutide vomiting ROR 6.67 (6.32–7.05) | L70 | DIRECT |\n| 16 | Semaglutide constipation ROR 6.17 (5.72–6.66) | L70 | DIRECT |\n| 17 | Liraglutide upper abdominal pain ROR 4.63 (4.12–5.21) | L70 | DIRECT |\n| 18 | Liraglutide pancreatitis ROR 32.67 (29.44–36.25) | L70 | DIRECT |\n| 19 | Pancreatitis ranking: LIR > SEM > DUL > LIX > EXE | L70 | DIRECT |\n| 20 | Top 6 GI PTs: nausea 8,988; diarrhea 4,666; vomiting 4,660; UAP 2,082; constipation 1,790; pancreatitis 1,752 | L68 | DIRECT |\n| 21 | Off-label signals for LIR: GERD, gastritis, bezoar, breath odor, intra-abdominal hematoma | L68 | DIRECT |\n| 22 | Off-label signals for SEM: breath odor, pancreatic failure, mesenteric panniculitis | L68 | DIRECT |\n| 23 | 77.44% GI AEs within 30 days | L55 | DIRECT |\n| 24 | Time-to-onset: Kruskal-Wallis χ² = 109.90, p < 0.001 | L76 | DIRECT |\n| 25 | Severe proportion: Pearson χ² = 11,227, p < 0.001 | L80 | DIRECT |\n| 26 | Liraglutide severe rate 23.31% (657/2,819) | L80 | DIRECT |\n| 27 | Dulaglutide severe rate 12.29% (1,322/9,435) | L80 | DIRECT |\n| 28 | Limitations: 5 listed (FAERS self-reporting bias, confounders, no incidence, GI-only scope, association ≠ causation) | L96 | DIRECT |\n| 29 | Irani consortia / GitHub repo — not reported | N/A | NOT PRESENT |\n| 30 | Citation count — not reported in paper | N/A | NOT PRESENT |\n| 31 | Preprint status — not reported | N/A | NOT PRESENT |\n\n---\n\n## Discrepancies Noted\n\n| # | Issue | Detail |\n|---|-------|--------|\n| D1 | Study end date | Abstract says \"September 2022\"; Methods says \"30 June 2022\". Rewritten text uses Methods date. |\n| D2 | Total AE denominator | Abstract says \"81,752 adverse event reports\"; Methods says \"231,730 GLP-1 RA-associated AEs reports\". Rewritten text uses Methods number and notes the discrepancy. |\n\n---\n\n## Audit Summary\n\n- **Resolved references**: 1 (PMC9770009)\n- **Unresolved references**: 0\n- **Duplicate records**: 0\n- **Retracted/corrected**: 0\n- **Metadata-only (not inspected)**: 0\n- **Claim mismatches**: 0\n- **Material claims unsupported**: 0\n- **Fabricated content**: 0\n\n**Verdict**: All material claims in the rewritten paper are directly verifiable against the original full text (PMC9770009). The two discrepancies (study end date and total report count) between the abstract and methods are noted explicitly.\n"
+    },
+    {
+      "path": "rewritten_paper_GLP1_GI_FAERS.md",
+      "encoding": "utf8",
+      "data": "# GLP-1 受体激动剂与胃肠道不良反应的差异关联：基于 FAERS 数据库的真实世界不相称性分析\n\n> **来源文献**: Liu L, Chen J, Wang L, Chen C, Chen L. Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database. *Frontiers in Endocrinology*. 2022.\n> **DOI**: [10.3389/fendo.2022.1043789](https://doi.org/10.3389/fendo.2022.1043789)\n> **PMCID**: PMC9770009\n> **PMID**: 36568085\n> **全文**: 已核验（Europe PMC JATS XML via `evimed_open_access_full_text`）\n\n---\n\n## 摘要\n\n**背景**: 胰高血糖素样肽-1 受体激动剂（GLP-1 RAs）在血糖控制方面疗效显著，但不同 GLP-1 RAs 之间胃肠道不良事件（AEs）的差异尚不明确。**目的**: 基于真实世界数据，比较已上市 GLP-1 RAs（艾塞那肽、利拉鲁肽、度拉糖肽、利司那肽、司美格鲁肽）的胃肠道 AE 特征。**方法**: 利用美国 FDA 不良事件报告系统（FAERS）2018 年 1 月至 2022 年 6 月数据，采用不相称性分析（报告比值比 ROR、比例报告比 PRR、信息成分 IC、经验贝叶斯几何均值 EBGM）评估信号。**结果**: 共记录 231,730 份 GLP-1 RA 相关 AE 报告，其中 21,281 份为胃肠道毒性报告，患者中位年龄 62 岁（IQR 54–70）。总体 GLP-1 RAs 与胃肠道系统疾病的报告增加相关（ROR 1.46，95% CI 1.44–1.49），该关联主要由利拉鲁肽（ROR 2.39，95% CI 2.28–2.51）、度拉糖肽（ROR 1.39，95% CI 1.36–1.42）和司美格鲁肽（ROR 3.00，95% CI 2.89–3.11）驱动。司美格鲁肽在恶心（ROR 7.41）、腹泻（ROR 3.55）、呕吐（ROR 6.67）和便秘（ROR 6.17）方面风险最高；利拉鲁肽在上腹痛（ROR 4.63）和胰腺炎（ROR 32.67）方面风险最高。大多数胃肠道 AE 发生在用药后 30 天内（77.44%），利拉鲁肽的严重结局比例最高（23.31%）。**结论**: 不同 GLP-1 RAs 的胃肠道 AE 风险谱存在差异，司美格鲁肽总体信号最强，利拉鲁肽的胰腺炎信号和严重结局比例最高。\n\n**关键词**: GLP-1 受体激动剂；胃肠道不良反应；FAERS；不相称性分析；药物警戒\n\n---\n\n## 1. 引言\n\n据国际糖尿病联盟报告，2021 年全球糖尿病患者达 5.37 亿，患病率约 10.5%。GLP-1 受体激动剂（GLP-1 RAs）因兼具改善血糖控制与降低心血管事件风险的双重获益，在 2 型糖尿病治疗指南中的推荐地位不断上升。截至研究时，美国 FDA 已批准七种 GLP-1 RAs：艾塞那肽（exenatide）、利拉鲁肽（liraglutide）、阿必鲁肽（albiglutide）、度拉糖肽（dulaglutide）、利司那肽（lixisenatide）、司美格鲁肽（semaglutide）和替西帕肽（tirzepatide）。\n\n随着 GLP-1 RAs 临床应用日益广泛，其不良事件报告逐渐增多。胃肠道反应是最常报告的不良事件类型，包括恶心、呕吐和腹痛，其机制与中枢和外周 GLP-1 受体激活相关。既往网状 Meta 分析显示，相比安慰剂或常规治疗，GLP-1 RAs 总体上显著增加胃肠道 AE 的发生率；部分观察性研究亦提示胰腺炎风险升高（OR 2.24–29.4）。然而，不同 GLP-1 RAs 之间胃肠道毒性谱的差异、严重性及发生时间尚无系统比较。本研究旨在利用 FAERS 真实世界数据，对不同 GLP-1 RAs 的胃肠道不良事件进行差异比较，为临床药物选择提供安全性证据。\n\n---\n\n## 2. 方法\n\n### 2.1 数据来源\n\n本研究为回顾性药物警戒研究，数据来源于 FDA 不良事件报告系统（FAERS）公开数据库。提取 2018 年 1 月 1 日至 2022 年 6 月 30 日期间的全部报告，共 7,927,000 份。根据 FDA 建议进行两步去重：同一 \"caseid\" 和 \"fda_dt\" 时保留较高的 \"primaryid\"；同一 \"caseid\" 时保留最新的 \"fda_dt\"。同时排除 DELETED 文件中的无效报告，最终纳入 6,803,529 份报告。研究期间选择以 2018 年为起点是因为除替西帕肽外最新批准的 GLP-1 RA（司美格鲁肽）于 2017 年上市，终点为数据可获取的最新季度。\n\n### 2.2 药物识别与 AE 定义\n\n以 FDA 批准的 GLP-1 RA 通用名及商品名在 DRUG 文件中识别相关 AE 报告，包括：exenatide（BYETTA, BYDUREON）、liraglutide（VICTOZA, SAXENDA）、dulaglutide（TRULICITY）、lixisenatide（ADLYXIN, SOLIQUA）、semaglutide（OZEMPIC, RYBELSUS, WEGOVY）。阿必鲁肽（TANZEUM）已于 2017 年 7 月在美国停售，替西帕肽（MOUNJARO）于 2022 年 5 月方获批准、数据尚不成熟，二者均未纳入。\n\nAE 编码依据 MedDRA 25.0 的首选术语（PTs）。胃肠道相关 AE 定义为 SOC \"gastrointestinal system disorders\"（10017947）下的 905 个 PTs。为最大化 GLP-1 RA 与 AE 的因果关系归因，仅纳入角色代码为\"主要怀疑药物\"（PS）的报告。\n\n### 2.3 数据分析与信号检测\n\n描述性分析包括人口学特征（性别、年龄）、报告特征（地区、年份、报告者职业）和适应证。时间-发病间隔（time-to-onset）定义为 GLP-1 RA 开始使用至 AE 发生的时间差，排除日期错误或缺失数据。严重结局定义为导致死亡（5 级）、危及生命（4 级）或导致住院/残疾/先天异常（3 级）。\n\n不相称性分析采用四种算法：频率学派方法 ROR 和 PRR、贝叶斯方法 IC 和 EBGM。仅当一种 AE 同时满足全部四种算法阈值时才视为阳性信号。对前六位最常见胃肠道 AE（恶心、呕吐、腹泻、上腹痛、便秘、胰腺炎）的信号强度在五种 GLP-1 RAs 间进行比较。Kruskal-Wallis 检验用于比较不同药物间时间-发病间隔的差异，Fisher 精确检验或 Pearson 卡方检验用于比较严重比例。双侧 P < 0.05 视为有统计学意义。数据提取采用 MySQL 8.0，统计分析采用 R 4.1.0。\n\n---\n\n## 3. 结果\n\n### 3.1 描述性分析\n\n2018 年 1 月至 2022 年 6 月，共记录 231,730 份 GLP-1 RA 相关 AE 报告，其中 21,281 份被鉴定为胃肠道 AE。各药物胃肠道报告数及占比分别为：艾塞那肽 1,956（9.19%）、利拉鲁肽 2,891（13.58%）、度拉糖肽 10,757（50.55%）、利司那肽 182（0.86%）、司美格鲁肽 5,567（26.16%）。\n\n人口学特征：男性占比 54.19%，中位年龄 62 岁（IQR 54–70）；报告地区以北美为主（91.40%），其次为欧洲（4.10%）和亚洲（2.55%）。报告数量从 2018 年的 4,163 增至 2021 年的 5,048，反映了 GLP-1 RAs 临床使用量的增长。报告者以消费者（74.28%）和医师（11.04%）为主。适应证中未知占 50.37%，糖尿病占 41.07%。胃肠道 AE 的中位时间-发病间隔为 1 天（IQR 0–24），77.44% 的 AE 发生在用药后 30 天内。严重结局（住院/残疾/先天异常）共 2,933 例（13.78%）。\n\n### 3.2 AE 信号检测\n\n在 SOC 水平，总体 GLP-1 RAs 的胃肠道系统疾病报告频率显著高于背景（ROR 1.46，PRR 1.33，IC 0.41，EBGM 1.33）。分药物看，该阳性信号由利拉鲁肽（ROR 2.39，PRR 1.84，IC 0.88，EBGM 1.33）、度拉糖肽（ROR 1.39，PRR 1.28，IC 0.36，EBGM 1.25）和司美格鲁肽（ROR 3.00，PRR 2.10，IC 1.07，EBGM 2.10）驱动；艾塞那肽（ROR 0.57，PRR 0.63，IC −0.68）和利司那肽（ROR 0.51，PRR 0.57，IC −0.81）未显示与胃肠道 AE 的关联。\n\n在 PT 水平，前六位最常见的胃肠道报告为恶心（8,988，42.23%）、腹泻（4,666，21.93%）、呕吐（4,660，21.90%）、上腹痛（2,082，9.78%）、便秘（1,790，8.41%）和胰腺炎（1,752，8.23%）。\n\n研究中检出若干未包括在药品说明书中的阳性信号：利拉鲁肽涉及胃食管反流病、胃炎、胃石、口腔异味和腹腔内血肿；度拉糖肽涉及十二指肠胃反流；司美格鲁肽涉及口腔异味、胰腺衰竭和肠系膜脂膜炎。\n\n### 3.3 前六位胃肠道 AE 的药物间信号强度比较\n\n- **恶心**: 司美格鲁肽（ROR 7.41，95% CI 7.10–7.74）风险最高；\n- **腹泻**: 司美格鲁肽（ROR 3.55，95% CI 3.35–3.77）风险最高；\n- **呕吐**: 司美格鲁肽（ROR 6.67，95% CI 6.32–7.05）风险最高；\n- **便秘**: 司美格鲁肽（ROR 6.17，95% CI 5.72–6.66）风险最高；\n- **上腹痛**: 利拉鲁肽（ROR 4.63，95% CI 4.12–5.21）风险最高；\n- **胰腺炎**: 所有 GLP-1 RAs 均呈现阳性信号，信号强度排序为 利拉鲁肽（ROR 32.67，95% CI 29.44–36.25） > 司美格鲁肽（ROR 19.10，95% CI 17.26–21.13） > 度拉糖肽（ROR 12.63，95% CI 11.76–13.56） > 利司那肽（ROR 6.78，95% CI 4.26–10.80） > 艾塞那肽（ROR 4.91，95% CI 4.12–5.85）。\n\n### 3.4 时间-发病间隔与严重比例\n\n各药物胃肠道 AE 的起效时间存在显著差异（Kruskal-Wallis χ² = 109.90，p < 0.001）。中位时间-发病间隔（IQR）：利司那肽 0（0–11）天、艾塞那肽 1（0–19.75）天、度拉糖肽 1（0–7）天、利拉鲁肽 3（0–36.75）天、司美格鲁肽 4（0–40）天。\n\n严重结局比例在不同 GLP-1 RAs 间存在显著差异（Pearson χ² = 11,227，p < 0.001）。利拉鲁肽严重比例最高（23.31%，657/2,819），度拉糖肽最低（12.29%，1,322/9,435）。\n\n---\n\n## 4. 讨论\n\n本研究基于大规模 FAERS 真实世界数据，揭示了 GLP-1 RAs 与胃肠道 AE 的差异关联。总体而言，GLP-1 RAs 的胃肠道风险主要由利拉鲁肽、度拉糖肽和司美格鲁肽三种药物驱动，艾塞那肽和利司那肽未显示该类信号的过度报告。最常见的不良事件为恶心、腹泻和呕吐，与既往系统综述中报告的发生率（恶心可达 51%、腹泻 20%、呕吐 19%）方向一致。这些胃肠道反应与 GLP-1 RAs 对胃排空的延迟抑制作用及神经回路的激活有关。\n\n司美格鲁肽在恶心、呕吐、腹泻和便秘四项指标上均显示出最高的报告风险。司美格鲁肽作为新一代长效 GLP-1 RA，其皮下注射后的半衰期（约 183 小时）远长于利拉鲁肽（11–15 小时），因此对胃肠动力和神经通路的作用可能更为显著，这可能是其胃肠道 AE 信号最强的药理学基础。\n\n所有 GLP-1 RAs 均检出了胰腺炎的阳性信号，其中利拉鲁肽的信号强度最大。既往队列研究和病例对照研究亦报告了使用 GLP-1 RAs 或 DPP-4 抑制剂后胰腺炎风险升高（OR 2.01–2.24），与本研究结果一致。本研究进一步给出了不同药物间胰腺炎信号的排序差异，提示胰腺炎高风险患者应谨慎选择利拉鲁肽和司美格鲁肽。\n\n时间-发病分析表明，77.44% 的胃肠道 AE 发生在初始用药后 30 天内，中位时间为 1 天，且不同药物间存在显著差异。这与既往系统综述中\"胃肠道毒性倾向于治疗早期发生\"的结论相符。临床上采用\"低剂量起始、缓慢递增\"的策略可能有助于降低胃肠道不耐受的发生。此外，利拉鲁肽的严重结局比例最高（23.31%）；LEADER 试验中利拉鲁肽组 4.5 年随访的严重 AE 发生率为 32.2%（不限于胃肠道），提示临床需密切关注用药后不良反应的进展。\n\n---\n\n## 5. 局限性（均来自原文）\n\n1. FAERS 为自发报告系统，存在选择偏倚、报告不完整、数据不准确、报告延迟及未经验证等问题，且缺失值（如年龄、剂量）较多，难以控制剂量、用药时长、合并症和联合用药等混杂因素。\n2. FAERS 仅收录发生不良事件的病例，无法获知 GLP-1 RA 的总暴露人群数，因此无法估算胃肠道 AE 的发生率。\n3. 本研究仅关注胃肠道毒性，GLP-1 RAs 与其他系统器官类别的关系尚未探讨。\n4. 不相称性分析仅能展示统计关联的信号强度，不能建立因果关系，需基础研究及前瞻性研究验证。\n\n---\n\n## 6. 结论\n\n本研究从多个维度系统分析了 GLP-1 RAs 与胃肠道 AE 的关联。GLP-1 RAs 与胃肠道不良事件存在显著的不相称性报告关联，该关联主要归因于利拉鲁肽、度拉糖肽和司美格鲁肽。司美格鲁肽在恶心、腹泻、呕吐和便秘方面的风险最大；利拉鲁肽在上腹痛和胰腺炎方面风险最大；胰腺炎阳性信号存在于所有 GLP-1 RAs。胃肠道 AE 多发生于用药后 30 天内，利拉鲁肽的严重结局比例最高。这些差异信息可为临床医师选择 GLP-1 RA 及早期监测胃肠道毒性提供参考。\n\n---\n\n## 参考文献\n\n1. Liu L, Chen J, Wang L, Chen C, Chen L. Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database. *Front Endocrinol*. 2022. doi:10.3389/fendo.2022.1043789. PMCID: PMC9770009.\n\n---\n\n## 来源忠实性核查记录\n\n| 核查项 | 来源位置（fulltext.md 行号） | 状态 |\n|--------|------|------|\n| 作者 Liu L et al. | 行 1 | 一致 |\n| DOI 10.3389/fendo.2022.1043789 | 行 4 | 一致 |\n| 研究期间 2018.01–2022.06 | 行 26 | 一致（摘要写\"September 2022\"，方法写\"June 2022\"；本文以方法为准） |\n| 总报告 7,927,000 → 去重后 6,803,529 | 行 27 | 一致 |\n| GLP-1 RA 相关报告 231,730 / 胃肠道 21,281 | 行 53 | 一致 |\n| 各药物胃肠道报告数及占比 | 行 53 | 一致 |\n| 中位年龄 62 (IQR 54–70) | 行 54 | 一致 |\n| 总体 ROR 1.46 (95% CI 1.44–1.49) | 行 64 | 一致 |\n| 利拉鲁肽 ROR 2.39 (2.28–2.51) | 行 64 | 一致 |\n| 度拉糖肽 ROR 1.39 (1.36–1.42) | 行 64 | 一致 |\n| 司美格鲁肽 ROR 3.00 (2.89–3.11) | 行 64 | 一致 |\n| 艾塞那肽 ROR 0.57; 利司那肽 ROR 0.51（无关联） | 行 64 | 一致 |\n| 司美格鲁肽 恶心 ROR 7.41 (7.10–7.74) | 行 70 | 一致 |\n| 司美格鲁肽 腹泻 ROR 3.55 (3.35–3.77) | 行 70 | 一致 |\n| 司美格鲁肽 呕吐 ROR 6.67 (6.32–7.05) | 行 70 | 一致 |\n| 司美格鲁肽 便秘 ROR 6.17 (5.72–6.66) | 行 70 | 一致 |\n| 利拉鲁肽 上腹痛 ROR 4.63 (4.12–5.21) | 行 70 | 一致 |\n| 利拉鲁肽 胰腺炎 ROR 32.67 (29.44–36.25) | 行 70 | 一致 |\n| 胰腺炎信号排序 | 行 70 | 一致 |\n| 说明书外信号（GERD、胃石、口腔异味等） | 行 68 | 一致 |\n| 前六位胃肠道 PT 频率 | 行 68 | 一致 |\n| 77.44% AE 在 30 天内 | 行 55 | 一致 |\n| 时间-发病间隔 Kruskal-Wallis χ² = 109.90 | 行 76 | 一致 |\n| 严重比例 Pearson χ² = 11,227 | 行 80 | 一致 |\n| 利拉鲁肽严重比例 23.31% (657/2,819) | 行 80 | 一致 |\n| 局限性五条 | 行 96 | 一致 |\n| 未报告 GitHub 仓库 | — | 原文未报告 |\n| 未报告被引次数 | — | 原文未报告 |\n| 未报告预印本状态 | — | 原文未报告 |\n\n**摘要与方法学批次数量差异说明**: 原文摘要中提及\"21,281 reports of gastrointestinal toxicity were analyzed out of 81,752 adverse event reports\"（分母 81,752），而方法部分完整报告了 231,730 份 GLP-1 RA 相关 AE 报告。81,752 可能系经 PS 角色代码筛选后的报告数，但原文未对此差异作出解释。本文正文中采用方法部分明确列出的 231,730 作为 GLP-1 RA 总报告数。\n\n**核查结论**: 所有纳入重写稿的定量结果、作者信息、研究设计、局限性表述和结论均可在原始全文（PMC9770009）中找到对应出处。未发现需删除的编造内容。\n"
+    }
+  ],
+  "capturedAt": "2026-07-18T04:04:47.455Z"
+}

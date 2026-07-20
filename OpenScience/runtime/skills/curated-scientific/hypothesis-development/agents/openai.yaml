@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hypothesis Development"
+  short_description: "Develop falsifiable scientific hypotheses from evidence"
+  default_prompt: "Use $hypothesis-development to turn this evidence gap into falsifiable hypotheses."

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-017",
+  "category": "diagnostic-prognostic",
+  "title": "Receiver operating characteristic curve analysis in diagnostic accuracy studies: A guide to interpreting the area under the curve value.",
+  "pmcid": "PMC10664195",
+  "doi": "10.4103/tjem.tjem_182_23",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 15619,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 116,
+    "supportedUniqueNumbers": 96,
+    "unsupportedNumberTokens": [
+      "0.59",
+      "0.69",
+      "0.79",
+      "0.89",
+      "1314",
+      "2.1",
+      "2.2",
+      "2.3",
+      "2.4",
+      "3.1",
+      "3.2",
+      "3.3",
+      "3.4",
+      "3.5",
+      "4.1",
+      "4.2",
+      "4.3",
+      "4.4",
+      "510",
+      "67"
+    ],
+    "supportedNumericClaimPrecision": 0.8275862068965517,
+    "verbatimEightGramRate": 0.13109756097560976,
+    "toolCalls": 13,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text faithfully summarizes the reference article without fabricating any study design, sample, endpoints, effect estimates, or conclusions. All factual claims (AUC classification schema, Youden index, De‑Long test, STARD requirements, BNP example) are directly supported by the full‐text evidence. The description of the review as narrative and non‑systematic is accurate. No unsupported or misleading statements were identified."
+  },
+  "overallVerdict": "pass"
+}

@@ -1,0 +1,809 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-023",
+  "category": "case-report",
+  "title": "Fecal Microbiota Transplantation (FMT) as an Adjunctive Therapy for Depression-Case Report.",
+  "pmcid": "PMC8891755",
+  "doi": "10.3389/fpsyt.2022.815422",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "c0afb2148ca82892165a09ed098718b19db0567f0a38d989acb6be06aa482fba",
+  "generatedSha256": "363194c3b984b6f2c1cf2269b88eb55c1c526fda96f6effb401d230b72d701a1",
+  "promptSha256": "ce7b94802c75797524119327f9bef453ae46c6e2f35a1f4f6e36003ae58ac967",
+  "cacheFingerprint": "cbdd459f129631e96652cd3d27fc802cb0de470266a0486528e079bc0cad469f",
+  "referenceCharacters": 38933,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 18186,
+  "paperType": "case-report",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "To present the first two patients with major depressive disorder treated with fecal microbiota transplantation as add-on therapy, reporting clinical and safety results.",
+      "generatedFact": "To describe clinical outcomes, gastrointestinal changes, and gut microbiome alterations in two MDD patients who received oral frozen FMT capsules as add-on therapy within a prematurely terminated RCT.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Fecal Microbiota Transplantation (FMT) as an Adjunctive Therapy for Depression-Case Report.\", \"pmcid\": \"PMC8891755\", \"pmid\": \"35250668\", \"doi\": \"10.3389/fpsyt.2022.815422\", \"publicationTypes\": [\"Journal Article\", \"Case Reports\", \"case-report\"], \"publicationDate\": \"2022-02-17\"} [ABSTRACT] AbstractDepression is a debilitating disorder, and at least one third of patients do not respond to therapy. Associations between gut microbiota and depression have been observed in recent years, opening novel treatment avenues. Here, we present the first two patients with major depressive disorder ever treated with fecal microbiota transplantation as add-on therapy."
+        ],
+        "quote": "[METADATA] {\"title\": \"Fecal Microbiota Transplantation (FMT) as an Adjunctive Therapy for Depression-Case Report.\", \"pmcid\": \"PMC8891755\", \"pmid\": \"35250668\", \"doi\": \"10.3389/fpsyt.2022.815422\", \"publicationTypes\": [\"Journal Article\", \"Case Reports\", \"case-report\"], \"publicationDate\": \"2022-02-17\"} [ABSTRACT] AbstractDepression is a debilitating disorder, and at least one third of patients do not respond to therapy. Associations between gut microbiota and depression have been observed in recent years, opening novel treatment avenues. Here, we present the first two patients with major depressive disorder ever treated with fecal microbiota transplantation as add-on therapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "Fecal microbiota transplantation (FMT) from healthy donors has been proposed as a microbial modulation strategy, but clinical data in depression are extremely limited. **Objective:** To describe clinical outcomes, gastrointestinal changes, and gut microbiome alterations in two patients with MDD who received oral frozen FMT capsules as add-on therapy within a prematurely terminated randomized controlled trial. **Methods:** Two female inpatients (aged 53 and 58 years) with moderate-to-severe MDD and comorbid gastrointestinal symptoms received 30 oral frozen FMT capsules (8.25 g donor stool per dose, single donor per patient) in addition to treatment as usual."
+        ],
+        "quote": "Fecal microbiota transplantation (FMT) from healthy donors has been proposed as a microbial modulation strategy, but clinical data in depression are extremely limited. **Objective:** To describe clinical outcomes, gastrointestinal changes, and gut microbiome alterations in two patients with MDD who received oral frozen FMT capsules as add-on therapy within a prematurely terminated randomized controlled trial. **Methods:** Two female inpatients (aged 53 and 58 years) with moderate-to-severe MDD and comorbid gastrointestinal symptoms received 30 oral frozen FMT capsules (8.25 g donor stool per dose, single donor per patient) in addition to treatment as usual."
+      },
+      "explanation": "Both describe the objective as reporting on two MDD patients who received FMT as add-on therapy. The generated adds the trial termination context, which is consistent.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Case report of two patients from a prematurely terminated randomized controlled trial.",
+      "generatedFact": "Structured case report rewrite drawn from a prematurely terminated randomized controlled trial.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Fecal Microbiota Transplantation (FMT) as an Adjunctive Therapy for Depression-Case Report.\", \"pmcid\": \"PMC8891755\", \"pmid\": \"35250668\", \"doi\": \"10.3389/fpsyt.2022.815422\", \"publicationTypes\": [\"Journal Article\", \"Case Reports\", \"case-report\"], \"publicationDate\": \"2022-02-17\"} [ABSTRACT] AbstractDepression is a debilitating disorder, and at least one third of patients do not respond to therapy. Associations between gut microbiota and depression have been observed in recent years, opening novel treatment avenues. Here, we present the first two patients with major depressive disorder ever treated with fecal microbiota transplantation as add-on therapy."
+        ],
+        "quote": "[METADATA] {\"title\": \"Fecal Microbiota Transplantation (FMT) as an Adjunctive Therapy for Depression-Case Report.\", \"pmcid\": \"PMC8891755\", \"pmid\": \"35250668\", \"doi\": \"10.3389/fpsyt.2022.815422\", \"publicationTypes\": [\"Journal Article\", \"Case Reports\", \"case-report\"], \"publicationDate\": \"2022-02-17\"} [ABSTRACT] AbstractDepression is a debilitating disorder, and at least one third of patients do not respond to therapy. Associations between gut microbiota and depression have been observed in recent years, opening novel treatment avenues. Here, we present the first two patients with major depressive disorder ever treated with fecal microbiota transplantation as add-on therapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "# Fecal Microbiota Transplantation as Adjunctive Therapy for Major Depressive Disorder: A Structured Case Report Rewrite **Source:** Doll JPK, Vázquez-Castellanos JF, Schaub AC, et al. Fecal Microbiota Transplantation (FMT) as an Adjunctive Therapy for Depression—Case Report. *Frontiers in Psychiatry*. 2022;13:815422."
+        ],
+        "quote": "# Fecal Microbiota Transplantation as Adjunctive Therapy for Major Depressive Disorder: A Structured Case Report Rewrite **Source:** Doll JPK, Vázquez-Castellanos JF, Schaub AC, et al. Fecal Microbiota Transplantation (FMT) as an Adjunctive Therapy for Depression—Case Report. *Frontiers in Psychiatry*. 2022;13:815422."
+      },
+      "explanation": "The study design is a case report in both texts.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Two female patients aged 53 and 58 with major depressive disorder and chronic constipation, recruited as inpatients at University Psychiatric Clinics Basel.",
+      "generatedFact": "Two female inpatients aged 53 and 58 years with moderate-to-severe MDD and comorbid gastrointestinal symptoms.",
+      "sourceEvidence": {
+        "locator": "R0009",
+        "locators": [
+          "R0009"
+        ],
+        "quotes": [
+          "Patient 1 Patient 2 Age (years) 53 58 Body-mass index (kg/m 2 ) 29.3 37.1 Sex Female Female Ethnicity Caucasian Caucasian Years with diagnosed depression 12 39 Number of hospitalizations 2 2 Marital status Unmarried Married Gastrointestinal problems Constipation, stomach pain, bloating, burping, sickness Constipation, flatulence Hamilton depression scale (HAMD), sum score 21 31 Gastrointestinal symptom-rating scale (GSRS), sum score 79 30 Figure 1 Timeline with relevant timepoints from the episode of study and care. Patient 1 had a diagnosis of MDD and chronic constipation. According to the patient, her first depressive episode started in adolescence, with a suicide attempt later in life."
+        ],
+        "quote": "Patient 1 Patient 2 Age (years) 53 58 Body-mass index (kg/m 2 ) 29.3 37.1 Sex Female Female Ethnicity Caucasian Caucasian Years with diagnosed depression 12 39 Number of hospitalizations 2 2 Marital status Unmarried Married Gastrointestinal problems Constipation, stomach pain, bloating, burping, sickness Constipation, flatulence Hamilton depression scale (HAMD), sum score 21 31 Gastrointestinal symptom-rating scale (GSRS), sum score 79 30 Figure 1 Timeline with relevant timepoints from the episode of study and care. Patient 1 had a diagnosis of MDD and chronic constipation. According to the patient, her first depressive episode started in adolescence, with a suicide attempt later in life."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "Fecal microbiota transplantation (FMT) from healthy donors has been proposed as a microbial modulation strategy, but clinical data in depression are extremely limited. **Objective:** To describe clinical outcomes, gastrointestinal changes, and gut microbiome alterations in two patients with MDD who received oral frozen FMT capsules as add-on therapy within a prematurely terminated randomized controlled trial. **Methods:** Two female inpatients (aged 53 and 58 years) with moderate-to-severe MDD and comorbid gastrointestinal symptoms received 30 oral frozen FMT capsules (8.25 g donor stool per dose, single donor per patient) in addition to treatment as usual."
+        ],
+        "quote": "Fecal microbiota transplantation (FMT) from healthy donors has been proposed as a microbial modulation strategy, but clinical data in depression are extremely limited. **Objective:** To describe clinical outcomes, gastrointestinal changes, and gut microbiome alterations in two patients with MDD who received oral frozen FMT capsules as add-on therapy within a prematurely terminated randomized controlled trial. **Methods:** Two female inpatients (aged 53 and 58 years) with moderate-to-severe MDD and comorbid gastrointestinal symptoms received 30 oral frozen FMT capsules (8.25 g donor stool per dose, single donor per patient) in addition to treatment as usual."
+      },
+      "explanation": "Both identify the same two patients with matching demographics and psychiatric condition.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Two active FMT cases reported.",
+      "generatedFact": "Two female inpatients who received the active FMT intervention.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Fecal Microbiota Transplantation (FMT) as an Adjunctive Therapy for Depression-Case Report.\", \"pmcid\": \"PMC8891755\", \"pmid\": \"35250668\", \"doi\": \"10.3389/fpsyt.2022.815422\", \"publicationTypes\": [\"Journal Article\", \"Case Reports\", \"case-report\"], \"publicationDate\": \"2022-02-17\"} [ABSTRACT] AbstractDepression is a debilitating disorder, and at least one third of patients do not respond to therapy. Associations between gut microbiota and depression have been observed in recent years, opening novel treatment avenues. Here, we present the first two patients with major depressive disorder ever treated with fecal microbiota transplantation as add-on therapy."
+        ],
+        "quote": "[METADATA] {\"title\": \"Fecal Microbiota Transplantation (FMT) as an Adjunctive Therapy for Depression-Case Report.\", \"pmcid\": \"PMC8891755\", \"pmid\": \"35250668\", \"doi\": \"10.3389/fpsyt.2022.815422\", \"publicationTypes\": [\"Journal Article\", \"Case Reports\", \"case-report\"], \"publicationDate\": \"2022-02-17\"} [ABSTRACT] AbstractDepression is a debilitating disorder, and at least one third of patients do not respond to therapy. Associations between gut microbiota and depression have been observed in recent years, opening novel treatment avenues. Here, we present the first two patients with major depressive disorder ever treated with fecal microbiota transplantation as add-on therapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "Fecal microbiota transplantation (FMT) from healthy donors has been proposed as a microbial modulation strategy, but clinical data in depression are extremely limited. **Objective:** To describe clinical outcomes, gastrointestinal changes, and gut microbiome alterations in two patients with MDD who received oral frozen FMT capsules as add-on therapy within a prematurely terminated randomized controlled trial. **Methods:** Two female inpatients (aged 53 and 58 years) with moderate-to-severe MDD and comorbid gastrointestinal symptoms received 30 oral frozen FMT capsules (8.25 g donor stool per dose, single donor per patient) in addition to treatment as usual."
+        ],
+        "quote": "Fecal microbiota transplantation (FMT) from healthy donors has been proposed as a microbial modulation strategy, but clinical data in depression are extremely limited. **Objective:** To describe clinical outcomes, gastrointestinal changes, and gut microbiome alterations in two patients with MDD who received oral frozen FMT capsules as add-on therapy within a prematurely terminated randomized controlled trial. **Methods:** Two female inpatients (aged 53 and 58 years) with moderate-to-severe MDD and comorbid gastrointestinal symptoms received 30 oral frozen FMT capsules (8.25 g donor stool per dose, single donor per patient) in addition to treatment as usual."
+      },
+      "explanation": "Sample size is exactly two in both documents.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Patients with moderate/severe MDD recruited from UPK inpatient services; full eligibility criteria not detailed.",
+      "generatedFact": "Adults diagnosed with moderate-to-severe MDD recruited from inpatient services at UPK, Basel, Switzerland.",
+      "sourceEvidence": {
+        "locator": "R0012",
+        "locators": [
+          "R0012"
+        ],
+        "quotes": [
+          "Eligible patients were informed about the study and provided written informed consent. The study was registered at ClinicalTrials.gov prior to study start (NCT03281004). MDD-patients were recruited from the UPK (Switzerland). At baseline, we assessed depressive symptoms [Hamilton Depression Rating Scale; HAMD ( 27 ) and Beck Depression Inventory-II; BDI II ( 28 )], GI-symptoms [Gastrointestinal Rating Scale; GSRS ( 29 )] and collected anthropometric and demographic data. Then the intake of oral frozen FMT-capsules followed. After the treatment, participants were observed and assessed on a weekly basis over a period of 4 weeks. After 4 weeks, post-intervention measurements were conducted."
+        ],
+        "quote": "Eligible patients were informed about the study and provided written informed consent. The study was registered at ClinicalTrials.gov prior to study start (NCT03281004). MDD-patients were recruited from the UPK (Switzerland). At baseline, we assessed depressive symptoms [Hamilton Depression Rating Scale; HAMD ( 27 ) and Beck Depression Inventory-II; BDI II ( 28 )], GI-symptoms [Gastrointestinal Rating Scale; GSRS ( 29 )] and collected anthropometric and demographic data. Then the intake of oral frozen FMT-capsules followed. After the treatment, participants were observed and assessed on a weekly basis over a period of 4 weeks. After 4 weeks, post-intervention measurements were conducted."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "--- ## Methods ### Study Design and Ethical Oversight The parent study was designed as a randomized, placebo-controlled trial. It received approval from the Ethikkommission Nordwest- und Zentralschweiz and was conducted in accordance with the Declaration of Helsinki and Good Clinical Practice guidelines. All participants provided written informed consent. ### Participants Eligible patients were adults diagnosed with moderate-to-severe MDD recruited from inpatient services at UPK, Basel, Switzerland. Both patients described in this report were women (53 and 58 years old, Caucasian) with diagnosed depression durations of 12 and 39 years, respectively."
+        ],
+        "quote": "--- ## Methods ### Study Design and Ethical Oversight The parent study was designed as a randomized, placebo-controlled trial. It received approval from the Ethikkommission Nordwest- und Zentralschweiz and was conducted in accordance with the Declaration of Helsinki and Good Clinical Practice guidelines. All participants provided written informed consent. ### Participants Eligible patients were adults diagnosed with moderate-to-severe MDD recruited from inpatient services at UPK, Basel, Switzerland. Both patients described in this report were women (53 and 58 years old, Caucasian) with diagnosed depression durations of 12 and 39 years, respectively."
+      },
+      "explanation": "Both state recruitment of MDD patients from UPK; generated adds 'adults' and 'inpatient' which aligns with the described cases but formal criteria are not listed in the reference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "30 oral frozen FMT capsules (8.25 g donor stool per dose, single donor per patient, different donor for each) under physician observation within 90 min.",
+      "generatedFact": "30 oral frozen FMT capsules (8.25 g donor stool per 30-capsule set, different single donor per patient) ingested within 90 minutes under physician observation.",
+      "sourceEvidence": {
+        "locator": "R0013",
+        "locators": [
+          "R0013"
+        ],
+        "quotes": [
+          "Additionally, an 8-week follow-up was performed. Stool samples were collected at baseline and 4 weeks after the intervention. For one of the patients, stool samples were available 8 weeks after the intervention ( Supplementary Material ). Intervention Patients were administered 30 oral frozen FMT-capsules within 90 min under the observation of a physician. Each active 30-capsule-dose consisted of 8.25 g donor stool, originating from a single donor, which was a different donor for each patient. For a detailed description of the methods (see Supplementary Methods ). Outcomes Both patients adhered to the intervention."
+        ],
+        "quote": "Additionally, an 8-week follow-up was performed. Stool samples were collected at baseline and 4 weeks after the intervention. For one of the patients, stool samples were available 8 weeks after the intervention ( Supplementary Material ). Intervention Patients were administered 30 oral frozen FMT-capsules within 90 min under the observation of a physician. Each active 30-capsule-dose consisted of 8.25 g donor stool, originating from a single donor, which was a different donor for each patient. For a detailed description of the methods (see Supplementary Methods ). Outcomes Both patients adhered to the intervention."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "The active dose comprised 8.25 g of donor stool per 30-capsule set, with each patient receiving material from a different single donor. Placebo capsules were administered to two additional patients not the primary focus of this report. ### Assessments Depressive symptom severity was assessed at baseline, weekly for 4 weeks post-intervention, and at an 8-week follow-up using the clinician-rated HAMD and the self-reported BDI-II. Gastrointestinal symptoms were evaluated with the GSRS. Stool samples were collected at baseline, at 4 weeks post-intervention, and for one patient additionally at 8 weeks. ### Microbiome Analysis Fecal samples underwent amplicon sequencing."
+        ],
+        "quote": "The active dose comprised 8.25 g of donor stool per 30-capsule set, with each patient receiving material from a different single donor. Placebo capsules were administered to two additional patients not the primary focus of this report. ### Assessments Depressive symptom severity was assessed at baseline, weekly for 4 weeks post-intervention, and at an 8-week follow-up using the clinician-rated HAMD and the self-reported BDI-II. Gastrointestinal symptoms were evaluated with the GSRS. Stool samples were collected at baseline, at 4 weeks post-intervention, and for one patient additionally at 8 weeks. ### Microbiome Analysis Fecal samples underwent amplicon sequencing."
+      },
+      "explanation": "The intervention details match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Change from baseline (pre-FMT) assessed at 4 and 8 weeks.",
+      "generatedFact": "Change from baseline for HAMD and BDI-II scores, compared descriptively with two placebo-receiving patients.",
+      "sourceEvidence": {
+        "locator": "R0014",
+        "locators": [
+          "R0014"
+        ],
+        "quotes": [
+          "They tolerated the oral frozen FMT-capsules well and did not report any serious adverse events (SAEs). Depressive Symptoms For patient 1, symptoms of depression improved, indicated by a decreased HAMD-score from 21 points at baseline to nine points 4 weeks post-intervention. At 8-week follow-up, the HAMD-score increased to 19 points ( Figure 2A ). For patient 2, the HAMD-score decreased from 31 to 10 points after 4 weeks and increased by two points after 8 weeks ( Figure 2A ). Thus, the FMT intervention resulted in a 4-week change score of 12 and 21 HAMD-points for patient 1 and 2, respectively, and an 8-week change score of 2 and 19 points, respectively ( Figure 2B )."
+        ],
+        "quote": "They tolerated the oral frozen FMT-capsules well and did not report any serious adverse events (SAEs). Depressive Symptoms For patient 1, symptoms of depression improved, indicated by a decreased HAMD-score from 21 points at baseline to nine points 4 weeks post-intervention. At 8-week follow-up, the HAMD-score increased to 19 points ( Figure 2A ). For patient 2, the HAMD-score decreased from 31 to 10 points after 4 weeks and increased by two points after 8 weeks ( Figure 2A ). Thus, the FMT intervention resulted in a 4-week change score of 12 and 21 HAMD-points for patient 1 and 2, respectively, and an 8-week change score of 2 and 19 points, respectively ( Figure 2B )."
+      },
+      "generatedEvidence": {
+        "locator": "G0014",
+        "locators": [
+          "G0014"
+        ],
+        "quotes": [
+          "Patient 1 decreased from 21 to 9 points (change score: 12; moderate-to-mild depression). Patient 2 decreased from 31 to 10 points (change score: 21; severe-to-mild depression). On the BDI-II, Patient 1 changed from 50 to 31 (change: 19), and Patient 2 from 24 to 12 (change: 12). Durability differed between patients. At the 8-week follow-up, Patient 1's HAMD rose to 19 (change from baseline: 2), indicating a return to moderate depression. Patient 2's HAMD reached 12 (change from baseline: 19), consistent with sustained mild depression. BDI-II scores at 8 weeks were 34 for Patient 1 and 9 for Patient 2."
+        ],
+        "quote": "Patient 1 decreased from 21 to 9 points (change score: 12; moderate-to-mild depression). Patient 2 decreased from 31 to 10 points (change score: 21; severe-to-mild depression). On the BDI-II, Patient 1 changed from 50 to 31 (change: 19), and Patient 2 from 24 to 12 (change: 12). Durability differed between patients. At the 8-week follow-up, Patient 1's HAMD rose to 19 (change from baseline: 2), indicating a return to moderate depression. Patient 2's HAMD reached 12 (change from baseline: 19), consistent with sustained mild depression. BDI-II scores at 8 weeks were 34 for Patient 1 and 9 for Patient 2."
+      },
+      "explanation": "Both use baseline as reference for change scores; placebo cases are mentioned for context but not as a formal comparator group.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Depressive symptoms (HAMD, BDI-II), GI symptoms (GSRS), stool microbiome (diversity, composition), and safety (adverse events).",
+      "generatedFact": "HAMD and BDI-II for depressive symptoms, GSRS for GI symptoms, stool microbiome composition and diversity, and adverse events.",
+      "sourceEvidence": {
+        "locator": "R0012",
+        "locators": [
+          "R0012"
+        ],
+        "quotes": [
+          "Eligible patients were informed about the study and provided written informed consent. The study was registered at ClinicalTrials.gov prior to study start (NCT03281004). MDD-patients were recruited from the UPK (Switzerland). At baseline, we assessed depressive symptoms [Hamilton Depression Rating Scale; HAMD ( 27 ) and Beck Depression Inventory-II; BDI II ( 28 )], GI-symptoms [Gastrointestinal Rating Scale; GSRS ( 29 )] and collected anthropometric and demographic data. Then the intake of oral frozen FMT-capsules followed. After the treatment, participants were observed and assessed on a weekly basis over a period of 4 weeks. After 4 weeks, post-intervention measurements were conducted."
+        ],
+        "quote": "Eligible patients were informed about the study and provided written informed consent. The study was registered at ClinicalTrials.gov prior to study start (NCT03281004). MDD-patients were recruited from the UPK (Switzerland). At baseline, we assessed depressive symptoms [Hamilton Depression Rating Scale; HAMD ( 27 ) and Beck Depression Inventory-II; BDI II ( 28 )], GI-symptoms [Gastrointestinal Rating Scale; GSRS ( 29 )] and collected anthropometric and demographic data. Then the intake of oral frozen FMT-capsules followed. After the treatment, participants were observed and assessed on a weekly basis over a period of 4 weeks. After 4 weeks, post-intervention measurements were conducted."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Depressive symptoms were measured by the Hamilton Depression Rating Scale (HAMD) and Beck Depression Inventory-II (BDI-II); gastrointestinal symptoms by the Gastrointestinal Symptom Rating Scale (GSRS). Assessments occurred at baseline, weekly for 4 weeks post-intervention, and at 8-week follow-up. Stool samples were analyzed for microbiome composition and diversity. **Results:** Both patients showed HAMD score reductions at 4 weeks (Patient 1: 21→9; Patient 2: 31→10), corresponding to change scores of 12 and 21 points, respectively. BDI-II scores also decreased (Patient 1: 50→31; Patient 2: 24→12). At 8 weeks, HAMD scores rebounded to 19 for Patient 1 and 12 for Patient 2."
+        ],
+        "quote": "Depressive symptoms were measured by the Hamilton Depression Rating Scale (HAMD) and Beck Depression Inventory-II (BDI-II); gastrointestinal symptoms by the Gastrointestinal Symptom Rating Scale (GSRS). Assessments occurred at baseline, weekly for 4 weeks post-intervention, and at 8-week follow-up. Stool samples were analyzed for microbiome composition and diversity. **Results:** Both patients showed HAMD score reductions at 4 weeks (Patient 1: 21→9; Patient 2: 31→10), corresponding to change scores of 12 and 21 points, respectively. BDI-II scores also decreased (Patient 1: 50→31; Patient 2: 24→12). At 8 weeks, HAMD scores rebounded to 19 for Patient 1 and 12 for Patient 2."
+      },
+      "explanation": "Outcome measures match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Weekly assessments for 4 weeks post-intervention, additional 8-week follow-up.",
+      "generatedFact": "Assessments at baseline, weekly for 4 weeks, and at 8-week follow-up.",
+      "sourceEvidence": {
+        "locator": "R0013",
+        "locators": [
+          "R0013"
+        ],
+        "quotes": [
+          "Additionally, an 8-week follow-up was performed. Stool samples were collected at baseline and 4 weeks after the intervention. For one of the patients, stool samples were available 8 weeks after the intervention ( Supplementary Material ). Intervention Patients were administered 30 oral frozen FMT-capsules within 90 min under the observation of a physician. Each active 30-capsule-dose consisted of 8.25 g donor stool, originating from a single donor, which was a different donor for each patient. For a detailed description of the methods (see Supplementary Methods ). Outcomes Both patients adhered to the intervention."
+        ],
+        "quote": "Additionally, an 8-week follow-up was performed. Stool samples were collected at baseline and 4 weeks after the intervention. For one of the patients, stool samples were available 8 weeks after the intervention ( Supplementary Material ). Intervention Patients were administered 30 oral frozen FMT-capsules within 90 min under the observation of a physician. Each active 30-capsule-dose consisted of 8.25 g donor stool, originating from a single donor, which was a different donor for each patient. For a detailed description of the methods (see Supplementary Methods ). Outcomes Both patients adhered to the intervention."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Depressive symptoms were measured by the Hamilton Depression Rating Scale (HAMD) and Beck Depression Inventory-II (BDI-II); gastrointestinal symptoms by the Gastrointestinal Symptom Rating Scale (GSRS). Assessments occurred at baseline, weekly for 4 weeks post-intervention, and at 8-week follow-up. Stool samples were analyzed for microbiome composition and diversity. **Results:** Both patients showed HAMD score reductions at 4 weeks (Patient 1: 21→9; Patient 2: 31→10), corresponding to change scores of 12 and 21 points, respectively. BDI-II scores also decreased (Patient 1: 50→31; Patient 2: 24→12). At 8 weeks, HAMD scores rebounded to 19 for Patient 1 and 12 for Patient 2."
+        ],
+        "quote": "Depressive symptoms were measured by the Hamilton Depression Rating Scale (HAMD) and Beck Depression Inventory-II (BDI-II); gastrointestinal symptoms by the Gastrointestinal Symptom Rating Scale (GSRS). Assessments occurred at baseline, weekly for 4 weeks post-intervention, and at 8-week follow-up. Stool samples were analyzed for microbiome composition and diversity. **Results:** Both patients showed HAMD score reductions at 4 weeks (Patient 1: 21→9; Patient 2: 31→10), corresponding to change scores of 12 and 21 points, respectively. BDI-II scores also decreased (Patient 1: 50→31; Patient 2: 24→12). At 8 weeks, HAMD scores rebounded to 19 for Patient 1 and 12 for Patient 2."
+      },
+      "explanation": "Follow-up duration and assessment schedule are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No explicit data preprocessing or cleaning steps are described in the reference; the generated also omits such details.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Descriptive presentation of clinical outcomes; mapping to meta-analysis; microbiome analyzed with mixed-effects models (MEM) ANOVA (p<0.05), Wilcoxon test for moisture vs healthy.",
+      "generatedFact": "Descriptive clinical outcomes; microbiome analysis with mixed-effects models and ANOVA testing, p<0.05 significance, and Wilcoxon test for moisture.",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "As the present results come from two cases and do not allow for statistical comparison, we mapped our HAMD change scores together with meta-analysis results from Kirsch et al. ( 30 ) ( Supplementary Figures 1 , 2 ); methods and results can be found in the Supplementary Material . Additionally, we explored the depressive symptoms from two patients, who had received placebo. Both placebo-patients tolerated the placebo-capsules well."
+        ],
+        "quote": "As the present results come from two cases and do not allow for statistical comparison, we mapped our HAMD change scores together with meta-analysis results from Kirsch et al. ( 30 ) ( Supplementary Figures 1 , 2 ); methods and results can be found in the Supplementary Material . Additionally, we explored the depressive symptoms from two patients, who had received placebo. Both placebo-patients tolerated the placebo-capsules well."
+      },
+      "generatedEvidence": {
+        "locator": "G0013",
+        "locators": [
+          "G0013"
+        ],
+        "quotes": [
+          "Alpha diversity was quantified using the Pielou evenness index, observed species richness, and the inverse Simpson and Shannon indices. Enterotype classification was performed. Differential abundance analysis of amplicon sequence variants (ASVs) across time points employed mixed-effects models with ANOVA testing; an ASV was considered a putative biomarker when both continuous and discrete model coefficients were significant (p < 0.05). Fecal calprotectin and bacterial cell counts were measured for quantitative microbiome profiling. --- ## Results ### Depressive Symptoms At 4 weeks post-FMT, both patients exhibited clinically substantial reductions in HAMD scores."
+        ],
+        "quote": "Alpha diversity was quantified using the Pielou evenness index, observed species richness, and the inverse Simpson and Shannon indices. Enterotype classification was performed. Differential abundance analysis of amplicon sequence variants (ASVs) across time points employed mixed-effects models with ANOVA testing; an ASV was considered a putative biomarker when both continuous and discrete model coefficients were significant (p < 0.05). Fecal calprotectin and bacterial cell counts were measured for quantitative microbiome profiling. --- ## Results ### Depressive Symptoms At 4 weeks post-FMT, both patients exhibited clinically substantial reductions in HAMD scores."
+      },
+      "explanation": "The analysis methods for both clinical (descriptive) and microbiome (mixed-effects models) are accurately described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Mixed-effects models (MEM) for microbiome diversity and ASV analysis; ANOVA for significance.",
+      "generatedFact": "Mixed-effects models with ANOVA testing for differential abundance; enterotype classification.",
+      "sourceEvidence": {
+        "locator": "R0021",
+        "locators": [
+          "R0021"
+        ],
+        "quotes": [
+          "We found that patient 1 showed increased inversed Simpson and Shannon diversity ( Figures 3C,D ), whereas patient 2 showed decreased diversity ( Figures 3C,D ). Figure 3 Patients' microbiome diversity. Mixed-effects models (MEM) of the genus level (A) Pielou evenness, (B) observed species, (C) inverse simpson, and (D) Shannon index, the alpha diversity estimators were modeled into a discrete manner and represent its results as boxplot and into a continuous way, representing the MEM slope into line-plots. The gray area into the continuous MEM represents the 95% confidence level. Patient 1 is displayed in purple, patient 2 in orange."
+        ],
+        "quote": "We found that patient 1 showed increased inversed Simpson and Shannon diversity ( Figures 3C,D ), whereas patient 2 showed decreased diversity ( Figures 3C,D ). Figure 3 Patients' microbiome diversity. Mixed-effects models (MEM) of the genus level (A) Pielou evenness, (B) observed species, (C) inverse simpson, and (D) Shannon index, the alpha diversity estimators were modeled into a discrete manner and represent its results as boxplot and into a continuous way, representing the MEM slope into line-plots. The gray area into the continuous MEM represents the 95% confidence level. Patient 1 is displayed in purple, patient 2 in orange."
+      },
+      "generatedEvidence": {
+        "locator": "G0013",
+        "locators": [
+          "G0013"
+        ],
+        "quotes": [
+          "Alpha diversity was quantified using the Pielou evenness index, observed species richness, and the inverse Simpson and Shannon indices. Enterotype classification was performed. Differential abundance analysis of amplicon sequence variants (ASVs) across time points employed mixed-effects models with ANOVA testing; an ASV was considered a putative biomarker when both continuous and discrete model coefficients were significant (p < 0.05). Fecal calprotectin and bacterial cell counts were measured for quantitative microbiome profiling. --- ## Results ### Depressive Symptoms At 4 weeks post-FMT, both patients exhibited clinically substantial reductions in HAMD scores."
+        ],
+        "quote": "Alpha diversity was quantified using the Pielou evenness index, observed species richness, and the inverse Simpson and Shannon indices. Enterotype classification was performed. Differential abundance analysis of amplicon sequence variants (ASVs) across time points employed mixed-effects models with ANOVA testing; an ASV was considered a putative biomarker when both continuous and discrete model coefficients were significant (p < 0.05). Fecal calprotectin and bacterial cell counts were measured for quantitative microbiome profiling. --- ## Results ### Depressive Symptoms At 4 weeks post-FMT, both patients exhibited clinically substantial reductions in HAMD scores."
+      },
+      "explanation": "The statistical models used are correctly reported as mixed-effects models.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Patient 1: HAMD 21→9→19, change 12 & 2; BDI-II 50→31→34; GSRS 79→23 (56-point improvement) then 26. Patient 2: HAMD 31→10→12, change 21 & 19; BDI-II 24→12→9; GSRS 30→27 then 24. Both showed reduced fecal moisture, divergent diversity, enterotype shift in Patient 2.",
+      "generatedFact": "Patient 1: HAMD 21→9→19, change 12 & 2; BDI-II 50→31→34; GSRS 79→23 at 4 weeks, 3-point worsening at 8 weeks. Patient 2: HAMD 31→10→12, change 21 & 19; BDI-II 24→12→9; GSRS modest 3-point improvements. Microbiome moisture, diversity, enterotype changes as described.",
+      "sourceEvidence": {
+        "locator": "R0014",
+        "locators": [
+          "R0014"
+        ],
+        "quotes": [
+          "They tolerated the oral frozen FMT-capsules well and did not report any serious adverse events (SAEs). Depressive Symptoms For patient 1, symptoms of depression improved, indicated by a decreased HAMD-score from 21 points at baseline to nine points 4 weeks post-intervention. At 8-week follow-up, the HAMD-score increased to 19 points ( Figure 2A ). For patient 2, the HAMD-score decreased from 31 to 10 points after 4 weeks and increased by two points after 8 weeks ( Figure 2A ). Thus, the FMT intervention resulted in a 4-week change score of 12 and 21 HAMD-points for patient 1 and 2, respectively, and an 8-week change score of 2 and 19 points, respectively ( Figure 2B )."
+        ],
+        "quote": "They tolerated the oral frozen FMT-capsules well and did not report any serious adverse events (SAEs). Depressive Symptoms For patient 1, symptoms of depression improved, indicated by a decreased HAMD-score from 21 points at baseline to nine points 4 weeks post-intervention. At 8-week follow-up, the HAMD-score increased to 19 points ( Figure 2A ). For patient 2, the HAMD-score decreased from 31 to 10 points after 4 weeks and increased by two points after 8 weeks ( Figure 2A ). Thus, the FMT intervention resulted in a 4-week change score of 12 and 21 HAMD-points for patient 1 and 2, respectively, and an 8-week change score of 2 and 19 points, respectively ( Figure 2B )."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Depressive symptoms were measured by the Hamilton Depression Rating Scale (HAMD) and Beck Depression Inventory-II (BDI-II); gastrointestinal symptoms by the Gastrointestinal Symptom Rating Scale (GSRS). Assessments occurred at baseline, weekly for 4 weeks post-intervention, and at 8-week follow-up. Stool samples were analyzed for microbiome composition and diversity. **Results:** Both patients showed HAMD score reductions at 4 weeks (Patient 1: 21→9; Patient 2: 31→10), corresponding to change scores of 12 and 21 points, respectively. BDI-II scores also decreased (Patient 1: 50→31; Patient 2: 24→12). At 8 weeks, HAMD scores rebounded to 19 for Patient 1 and 12 for Patient 2."
+        ],
+        "quote": "Depressive symptoms were measured by the Hamilton Depression Rating Scale (HAMD) and Beck Depression Inventory-II (BDI-II); gastrointestinal symptoms by the Gastrointestinal Symptom Rating Scale (GSRS). Assessments occurred at baseline, weekly for 4 weeks post-intervention, and at 8-week follow-up. Stool samples were analyzed for microbiome composition and diversity. **Results:** Both patients showed HAMD score reductions at 4 weeks (Patient 1: 21→9; Patient 2: 31→10), corresponding to change scores of 12 and 21 points, respectively. BDI-II scores also decreased (Patient 1: 50→31; Patient 2: 24→12). At 8 weeks, HAMD scores rebounded to 19 for Patient 1 and 12 for Patient 2."
+      },
+      "explanation": "All key numerical results for depressive, GI, and microbiome outcomes are accurately reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Clinical outcomes lack statistical inference due to n=2. Microbiome: adjusted p<0.05 for moisture (MEM), p=0.025 for moisture vs healthy (Wilcoxon), ASV significance based on p<0.05.",
+      "generatedFact": "No statistical tests for clinical outcomes; microbiome p<0.05 for moisture (MEM), p=0.025 (Wilcoxon), and ASV significance at p<0.05.",
+      "sourceEvidence": {
+        "locator": "R0019",
+        "locators": [
+          "R0019"
+        ],
+        "quotes": [
+          "At baseline, she suffered from stomach pains, sickness, bloating, burping, and constipation. All symptoms improved over time. Patient 2 reported only a slight improvement of three points 4-week post-FMT and continued reporting constipation and bloating. The patient slightly improved by three more points at 8-week follow-up ( Figures 2C,D ). Microbiome Composition and Diversity In both patients, moisture decreased over time [ Supplementary Figure 6A ; Mixed-effects model (MEM) ANOVA p adjusted < 0.05]. Our patients showed lower moisture levels than the ones reported in a healthy population ( 31 ) (Wilcoxon test: W = 50, p = 0.025, Supplementary Figure 7 )."
+        ],
+        "quote": "At baseline, she suffered from stomach pains, sickness, bloating, burping, and constipation. All symptoms improved over time. Patient 2 reported only a slight improvement of three points 4-week post-FMT and continued reporting constipation and bloating. The patient slightly improved by three more points at 8-week follow-up ( Figures 2C,D ). Microbiome Composition and Diversity In both patients, moisture decreased over time [ Supplementary Figure 6A ; Mixed-effects model (MEM) ANOVA p adjusted < 0.05]. Our patients showed lower moisture levels than the ones reported in a healthy population ( 31 ) (Wilcoxon test: W = 50, p = 0.025, Supplementary Figure 7 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0016",
+        "locators": [
+          "G0016"
+        ],
+        "quotes": [
+          "Patient 2 showed modest GSRS changes: a 3-point improvement at 4 weeks and a further 3-point improvement at 8 weeks, with persistent constipation and bloating. ### Microbiome Composition and Diversity Fecal moisture decreased over time in both patients (mixed-effects model ANOVA, adjusted p < 0.05). Both patients exhibited lower moisture levels than a healthy reference population (Wilcoxon test: W = 50, p = 0.025). Bacterial cell counts remained stable across time points (adjusted p = 1). Pielou evenness increased in both patients after FMT, suggesting evolution toward a more even species distribution."
+        ],
+        "quote": "Patient 2 showed modest GSRS changes: a 3-point improvement at 4 weeks and a further 3-point improvement at 8 weeks, with persistent constipation and bloating. ### Microbiome Composition and Diversity Fecal moisture decreased over time in both patients (mixed-effects model ANOVA, adjusted p < 0.05). Both patients exhibited lower moisture levels than a healthy reference population (Wilcoxon test: W = 50, p = 0.025). Bacterial cell counts remained stable across time points (adjusted p = 1). Pielou evenness increased in both patients after FMT, suggesting evolution toward a more even species distribution."
+      },
+      "explanation": "Uncertainty and significance reporting matches reference perfectly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "FMT add-on improved depressive symptoms at 4 weeks, durability limited; further studies warranted, hypothesis-generating.",
+      "generatedFact": "Oral frozen FMT associated with clinically meaningful short-term improvement, durability varied; findings do not establish efficacy, support further controlled investigation.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "This report suggests further FMT studies in depression could be worth pursuing and adds to awareness as well as safety assurance, both crucial in determining the potential of FMT in depression treatment.Keywords: FMT, depression, gastrointestinal, microbiome-gut-brain axis (MGBA), case report [ARTICLE BODY EVIDENCE COMPLETE=true] Introduction Major depressive disorder (MDD) is an illness affecting more than 264 million people worldwide ( 1 ) and influencing functioning and quality of life (QoL) ( 2 )."
+        ],
+        "quote": "This report suggests further FMT studies in depression could be worth pursuing and adds to awareness as well as safety assurance, both crucial in determining the potential of FMT in depression treatment.Keywords: FMT, depression, gastrointestinal, microbiome-gut-brain axis (MGBA), case report [ARTICLE BODY EVIDENCE COMPLETE=true] Introduction Major depressive disorder (MDD) is an illness affecting more than 264 million people worldwide ( 1 ) and influencing functioning and quality of life (QoL) ( 2 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "GSRS scores improved markedly in Patient 1 (79→23 at 4 weeks) but only modestly in Patient 2 (30→27). Patient 1 maintained the Ruminococcus enterotype with increased alpha diversity, while Patient 2 shifted to the Bacteroides-2 enterotype with decreased diversity and elevated fecal calprotectin. No serious adverse events were reported. Two placebo-receiving patients showed only transient improvement within the first 2 weeks. **Conclusions:** Oral frozen FMT capsules as adjunctive treatment were associated with clinically meaningful short-term improvement in depressive and gastrointestinal symptoms in two MDD patients, though durability varied and effects partially waned by 8 weeks."
+        ],
+        "quote": "GSRS scores improved markedly in Patient 1 (79→23 at 4 weeks) but only modestly in Patient 2 (30→27). Patient 1 maintained the Ruminococcus enterotype with increased alpha diversity, while Patient 2 shifted to the Bacteroides-2 enterotype with decreased diversity and elevated fecal calprotectin. No serious adverse events were reported. Two placebo-receiving patients showed only transient improvement within the first 2 weeks. **Conclusions:** Oral frozen FMT capsules as adjunctive treatment were associated with clinically meaningful short-term improvement in depressive and gastrointestinal symptoms in two MDD patients, though durability varied and effects partially waned by 8 weeks."
+      },
+      "explanation": "Both conclude that FMT may improve symptoms but durability is limited and further studies are needed; no causal overstatement.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Limited sample size, comorbidities (obesity, constipation), concurrent TAU confounding, no dietary data, low donor stool dose, no donor microbiome data, unestablished delivery route.",
+      "generatedFact": "Small sample size, concurrent TAU, confounding comorbidities, no dietary data, low dose, missing donor microbiome, delivery route not studied for depression.",
+      "sourceEvidence": {
+        "locator": "R0037",
+        "locators": [
+          "R0037"
+        ],
+        "quotes": [
+          "Limitations The current study reports some limitations, starting with the limited sample size. Second, both patients also had comorbidities, such as obesity and constipation, which both might be confounding factors as overweight and constipation seem to be associated with altered gut microbiota composition ( 51 , 52 ). They received FMT additionally to TAU which makes attribution of effects solely to FMT impossible; the outcome could be influenced by other pathologies or be the result of FMT and antidepressants working in synergy as antidepressants may influence the gut microbiota ( 53 )."
+        ],
+        "quote": "Limitations The current study reports some limitations, starting with the limited sample size. Second, both patients also had comorbidities, such as obesity and constipation, which both might be confounding factors as overweight and constipation seem to be associated with altered gut microbiota composition ( 51 , 52 ). They received FMT additionally to TAU which makes attribution of effects solely to FMT impossible; the outcome could be influenced by other pathologies or be the result of FMT and antidepressants working in synergy as antidepressants may influence the gut microbiota ( 53 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0025",
+        "locators": [
+          "G0025"
+        ],
+        "quotes": [
+          "The limitations of this study are substantial and were explicitly acknowledged by the authors: sample size restricted to two active-treatment cases precluding statistical inference; concurrent TAU rendering attribution of effects to FMT alone impossible; comorbid obesity and constipation as potential confounders of both microbial composition and clinical trajectory; absence of dietary data despite diet being a major modulator of gut microbiota; low donor stool dose relative to typical FMT protocols; unavailability of donor microbiome data preventing donor-recipient matching analyses; and lack of evidence regarding the optimal FMT delivery route in depression, as the non-inferiority of oral"
+        ],
+        "quote": "The limitations of this study are substantial and were explicitly acknowledged by the authors: sample size restricted to two active-treatment cases precluding statistical inference; concurrent TAU rendering attribution of effects to FMT alone impossible; comorbid obesity and constipation as potential confounders of both microbial composition and clinical trajectory; absence of dietary data despite diet being a major modulator of gut microbiota; low donor stool dose relative to typical FMT protocols; unavailability of donor microbiome data preventing donor-recipient matching analyses; and lack of evidence regarding the optimal FMT delivery route in depression, as the non-inferiority of oral"
+      },
+      "explanation": "All limitations listed in the reference are faithfully reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "No serious adverse events; capsules well tolerated.",
+      "generatedFact": "No serious adverse events; both tolerated capsules without acute intolerance.",
+      "sourceEvidence": {
+        "locator": "R0014",
+        "locators": [
+          "R0014"
+        ],
+        "quotes": [
+          "They tolerated the oral frozen FMT-capsules well and did not report any serious adverse events (SAEs). Depressive Symptoms For patient 1, symptoms of depression improved, indicated by a decreased HAMD-score from 21 points at baseline to nine points 4 weeks post-intervention. At 8-week follow-up, the HAMD-score increased to 19 points ( Figure 2A ). For patient 2, the HAMD-score decreased from 31 to 10 points after 4 weeks and increased by two points after 8 weeks ( Figure 2A ). Thus, the FMT intervention resulted in a 4-week change score of 12 and 21 HAMD-points for patient 1 and 2, respectively, and an 8-week change score of 2 and 19 points, respectively ( Figure 2B )."
+        ],
+        "quote": "They tolerated the oral frozen FMT-capsules well and did not report any serious adverse events (SAEs). Depressive Symptoms For patient 1, symptoms of depression improved, indicated by a decreased HAMD-score from 21 points at baseline to nine points 4 weeks post-intervention. At 8-week follow-up, the HAMD-score increased to 19 points ( Figure 2A ). For patient 2, the HAMD-score decreased from 31 to 10 points after 4 weeks and increased by two points after 8 weeks ( Figure 2A ). Thus, the FMT intervention resulted in a 4-week change score of 12 and 21 HAMD-points for patient 1 and 2, respectively, and an 8-week change score of 2 and 19 points, respectively ( Figure 2B )."
+      },
+      "generatedEvidence": {
+        "locator": "G0018",
+        "locators": [
+          "G0018"
+        ],
+        "quotes": [
+          "Patient 2 also exhibited increased bacterial cell counts, reaching between the 75th and 95th quantile of the healthy population distribution. ### Taxa-Level Changes Patient 1 demonstrated an increase in 13 ASVs spanning the genera *Alistipes*, *Oscillibacter*, *Coprococcus*, and *Clostridium IV*, as well as the families Ruminococcaceae and Lachnospiraceae, the order Clostridiales, and the phylum Firmicutes. Nine ASVs from *Victivallis*, *Alistipes*, *Roseburia*, *Prevotella*, *Ruminococcus*, *Blautia*, *Faecalibacterium*, and Lachnospiraceae decreased."
+        ],
+        "quote": "Patient 2 also exhibited increased bacterial cell counts, reaching between the 75th and 95th quantile of the healthy population distribution. ### Taxa-Level Changes Patient 1 demonstrated an increase in 13 ASVs spanning the genera *Alistipes*, *Oscillibacter*, *Coprococcus*, and *Clostridium IV*, as well as the families Ruminococcaceae and Lachnospiraceae, the order Clostridiales, and the phylum Firmicutes. Nine ASVs from *Victivallis*, *Alistipes*, *Roseburia*, *Prevotella*, *Ruminococcus*, *Blautia*, *Faecalibacterium*, and Lachnospiraceae decreased."
+      },
+      "explanation": "Safety profile is accurately conveyed.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "patient_and_timeline",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Patient 1: 53y, female, BMI 29.3, MDD 12y, chronic constipation, inpatient 3 months, baseline HAMD 21, GSRS 79. Patient 2: 58y, female, BMI 37.1, MDD 39y, constipation/flatulence, inpatient 2+ months, baseline HAMD 31, GSRS 30. Timeline: baseline, 4-week, 8-week, 2021 phone follow-up.",
+      "generatedFact": "Patient 1: 53, female, depression 12 y, constipation/stomach pain, baseline HAMD 21, GSRS 79; Patient 2: 58, female, depression 39 y, constipation/flatulence, baseline HAMD 31, GSRS 30. Assessments baseline, 4-week, 8-week, long-term phone contact in 2021.",
+      "sourceEvidence": {
+        "locator": "R0009",
+        "locators": [
+          "R0009"
+        ],
+        "quotes": [
+          "Patient 1 Patient 2 Age (years) 53 58 Body-mass index (kg/m 2 ) 29.3 37.1 Sex Female Female Ethnicity Caucasian Caucasian Years with diagnosed depression 12 39 Number of hospitalizations 2 2 Marital status Unmarried Married Gastrointestinal problems Constipation, stomach pain, bloating, burping, sickness Constipation, flatulence Hamilton depression scale (HAMD), sum score 21 31 Gastrointestinal symptom-rating scale (GSRS), sum score 79 30 Figure 1 Timeline with relevant timepoints from the episode of study and care. Patient 1 had a diagnosis of MDD and chronic constipation. According to the patient, her first depressive episode started in adolescence, with a suicide attempt later in life."
+        ],
+        "quote": "Patient 1 Patient 2 Age (years) 53 58 Body-mass index (kg/m 2 ) 29.3 37.1 Sex Female Female Ethnicity Caucasian Caucasian Years with diagnosed depression 12 39 Number of hospitalizations 2 2 Marital status Unmarried Married Gastrointestinal problems Constipation, stomach pain, bloating, burping, sickness Constipation, flatulence Hamilton depression scale (HAMD), sum score 21 31 Gastrointestinal symptom-rating scale (GSRS), sum score 79 30 Figure 1 Timeline with relevant timepoints from the episode of study and care. Patient 1 had a diagnosis of MDD and chronic constipation. According to the patient, her first depressive episode started in adolescence, with a suicide attempt later in life."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "--- ## Methods ### Study Design and Ethical Oversight The parent study was designed as a randomized, placebo-controlled trial. It received approval from the Ethikkommission Nordwest- und Zentralschweiz and was conducted in accordance with the Declaration of Helsinki and Good Clinical Practice guidelines. All participants provided written informed consent. ### Participants Eligible patients were adults diagnosed with moderate-to-severe MDD recruited from inpatient services at UPK, Basel, Switzerland. Both patients described in this report were women (53 and 58 years old, Caucasian) with diagnosed depression durations of 12 and 39 years, respectively."
+        ],
+        "quote": "--- ## Methods ### Study Design and Ethical Oversight The parent study was designed as a randomized, placebo-controlled trial. It received approval from the Ethikkommission Nordwest- und Zentralschweiz and was conducted in accordance with the Declaration of Helsinki and Good Clinical Practice guidelines. All participants provided written informed consent. ### Participants Eligible patients were adults diagnosed with moderate-to-severe MDD recruited from inpatient services at UPK, Basel, Switzerland. Both patients described in this report were women (53 and 58 years old, Caucasian) with diagnosed depression durations of 12 and 39 years, respectively."
+      },
+      "explanation": "Patient characteristics and timeline are identical and comprehensive.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "diagnostic_workup",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No detailed diagnostic workup or differential diagnosis is presented in either text.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "treatment_and_outcome",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "30 oral frozen FMT capsules (8.25 g stool, different donor per patient) plus TAU. Outcome: both improved depressive and GI symptoms at 4 weeks, variable durability at 8 weeks.",
+      "generatedFact": "30 oral frozen FMT capsules (8.25 g stool, different donor) as add-on. Both showed HAMD and BDI-II improvement at 4 weeks, partial relapse at 8 weeks; GI improved markedly in Patient 1, modestly in Patient 2.",
+      "sourceEvidence": {
+        "locator": "R0013",
+        "locators": [
+          "R0013"
+        ],
+        "quotes": [
+          "Additionally, an 8-week follow-up was performed. Stool samples were collected at baseline and 4 weeks after the intervention. For one of the patients, stool samples were available 8 weeks after the intervention ( Supplementary Material ). Intervention Patients were administered 30 oral frozen FMT-capsules within 90 min under the observation of a physician. Each active 30-capsule-dose consisted of 8.25 g donor stool, originating from a single donor, which was a different donor for each patient. For a detailed description of the methods (see Supplementary Methods ). Outcomes Both patients adhered to the intervention."
+        ],
+        "quote": "Additionally, an 8-week follow-up was performed. Stool samples were collected at baseline and 4 weeks after the intervention. For one of the patients, stool samples were available 8 weeks after the intervention ( Supplementary Material ). Intervention Patients were administered 30 oral frozen FMT-capsules within 90 min under the observation of a physician. Each active 30-capsule-dose consisted of 8.25 g donor stool, originating from a single donor, which was a different donor for each patient. For a detailed description of the methods (see Supplementary Methods ). Outcomes Both patients adhered to the intervention."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "The active dose comprised 8.25 g of donor stool per 30-capsule set, with each patient receiving material from a different single donor. Placebo capsules were administered to two additional patients not the primary focus of this report. ### Assessments Depressive symptom severity was assessed at baseline, weekly for 4 weeks post-intervention, and at an 8-week follow-up using the clinician-rated HAMD and the self-reported BDI-II. Gastrointestinal symptoms were evaluated with the GSRS. Stool samples were collected at baseline, at 4 weeks post-intervention, and for one patient additionally at 8 weeks. ### Microbiome Analysis Fecal samples underwent amplicon sequencing."
+        ],
+        "quote": "The active dose comprised 8.25 g of donor stool per 30-capsule set, with each patient receiving material from a different single donor. Placebo capsules were administered to two additional patients not the primary focus of this report. ### Assessments Depressive symptom severity was assessed at baseline, weekly for 4 weeks post-intervention, and at an 8-week follow-up using the clinician-rated HAMD and the self-reported BDI-II. Gastrointestinal symptoms were evaluated with the GSRS. Stool samples were collected at baseline, at 4 weeks post-intervention, and for one patient additionally at 8 weeks. ### Microbiome Analysis Fecal samples underwent amplicon sequencing."
+      },
+      "explanation": "Treatment dose and outcomes are accurately and completely reported.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "causal_calibration",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "No causal claim; emphasizes small sample, preliminary nature, need for RCTs.",
+      "generatedFact": "Preclude causal inference; findings are hypothesis-generating, do not establish efficacy, require controlled trials.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "This report suggests further FMT studies in depression could be worth pursuing and adds to awareness as well as safety assurance, both crucial in determining the potential of FMT in depression treatment.Keywords: FMT, depression, gastrointestinal, microbiome-gut-brain axis (MGBA), case report [ARTICLE BODY EVIDENCE COMPLETE=true] Introduction Major depressive disorder (MDD) is an illness affecting more than 264 million people worldwide ( 1 ) and influencing functioning and quality of life (QoL) ( 2 )."
+        ],
+        "quote": "This report suggests further FMT studies in depression could be worth pursuing and adds to awareness as well as safety assurance, both crucial in determining the potential of FMT in depression treatment.Keywords: FMT, depression, gastrointestinal, microbiome-gut-brain axis (MGBA), case report [ARTICLE BODY EVIDENCE COMPLETE=true] Introduction Major depressive disorder (MDD) is an illness affecting more than 264 million people worldwide ( 1 ) and influencing functioning and quality of life (QoL) ( 2 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "The trial's premature termination and the case-report design preclude causal inference. Rigorous controlled trials are needed to establish the efficacy and safety profile of FMT in depression. --- ## Introduction Major depressive disorder remains a leading cause of disability worldwide. Despite the availability of multiple pharmacological and psychotherapeutic interventions, a substantial subset of patients continues to experience persistent symptoms after two or more adequate antidepressant trials, underscoring the need for novel therapeutic strategies targeting alternative pathophysiological pathways."
+        ],
+        "quote": "The trial's premature termination and the case-report design preclude causal inference. Rigorous controlled trials are needed to establish the efficacy and safety profile of FMT in depression. --- ## Introduction Major depressive disorder remains a leading cause of disability worldwide. Despite the availability of multiple pharmacological and psychotherapeutic interventions, a substantial subset of patients continues to experience persistent symptoms after two or more adequate antidepressant trials, underscoring the need for novel therapeutic strategies targeting alternative pathophysiological pathways."
+      },
+      "explanation": "Both texts explicitly avoid causal claims and stress the preliminary, uncontrolled nature.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 19,
+    "weightedFidelity": 0.997,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 18,
+      "compatible": 1,
+      "not_applicable": 2
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 98.3,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "adversarial_unsupported_claim",
+      "adversarial_contradiction"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail",
+    "adversarialIssueCount": 3,
+    "adversarialUnsupportedClaimCount": 1,
+    "adversarialContradictionCount": 2,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "issues_found",
+    "issues": [
+      {
+        "id": "patient_and_timeline",
+        "importance": "minor",
+        "status": "contradicted",
+        "issueKinds": [
+          "contradicted"
+        ],
+        "referenceFact": "",
+        "generatedFact": "Placebo Patient 2 declined post-intervention assessment.",
+        "sourceEvidence": {
+          "locator": "R0016",
+          "locators": [
+            "R0016"
+          ],
+          "quotes": [
+            "HAMD-scores from both placebo-patients only improved within the first 2 weeks after placebo-intake and increased back to baseline scores, which is visible in Supplementary Figures 3A,B (placebo 1: baseline 16, post-intervention 16, follow-up 9; placebo 2: baseline 22, post-intervention 22, follow-up not available). Figure 2 (A) HAMD-scores for patient 1 and 2 over time, including cut-offs for depressive symptom severity. (B) Change scores of HAMD rating for both patients at 4-weeks compared to baseline and 8-weeks compared to baseline."
+          ],
+          "quote": "HAMD-scores from both placebo-patients only improved within the first 2 weeks after placebo-intake and increased back to baseline scores, which is visible in Supplementary Figures 3A,B (placebo 1: baseline 16, post-intervention 16, follow-up 9; placebo 2: baseline 22, post-intervention 22, follow-up not available). Figure 2 (A) HAMD-scores for patient 1 and 2 over time, including cut-offs for depressive symptom severity. (B) Change scores of HAMD rating for both patients at 4-weeks compared to baseline and 8-weeks compared to baseline."
+        },
+        "generatedEvidence": {
+          "locator": "G0015",
+          "locators": [
+            "G0015"
+          ],
+          "quotes": [
+            "Two patients who received placebo capsules showed only transient HAMD improvement during the first 2 weeks, followed by return to baseline scores. Placebo Patient 1 had baseline, post-intervention, and follow-up scores of 16, 16, and 9; Placebo Patient 2 had corresponding scores of 22, 22, and no follow-up (patient declined post-intervention assessment). ### Gastrointestinal Symptoms Patient 1 experienced a pronounced GSRS improvement of 56 points at 4 weeks, with only a 3-point worsening at 8 weeks. Her baseline symptoms (stomach pain, sickness, bloating, burping, constipation) all improved."
+          ],
+          "quote": "Two patients who received placebo capsules showed only transient HAMD improvement during the first 2 weeks, followed by return to baseline scores. Placebo Patient 1 had baseline, post-intervention, and follow-up scores of 16, 16, and 9; Placebo Patient 2 had corresponding scores of 22, 22, and no follow-up (patient declined post-intervention assessment). ### Gastrointestinal Symptoms Patient 1 experienced a pronounced GSRS improvement of 56 points at 4 weeks, with only a 3-point worsening at 8 weeks. Her baseline symptoms (stomach pain, sickness, bloating, burping, constipation) all improved."
+        },
+        "explanation": "Reference gives a post-intervention HAMD score of 22 for placebo patient 2, implying attendance; generated says she declined that assessment.",
+        "sourceEvidenceValid": true,
+        "generatedEvidenceValid": true,
+        "criterionId": "patient_and_timeline",
+        "kind": "contradicted",
+        "severity": "minor",
+        "claim": "Placebo Patient 2 declined post-intervention assessment."
+      },
+      {
+        "id": "key_numerical_results",
+        "importance": "major",
+        "status": "contradicted",
+        "issueKinds": [
+          "contradicted"
+        ],
+        "referenceFact": "",
+        "generatedFact": "Nine ASVs from Victivallis, Alistipes, Roseburia, Prevotella, Ruminococcus, Blautia, Faecalibacterium, and Lachnospiraceae decreased.",
+        "sourceEvidence": {
+          "locator": "R0025",
+          "locators": [
+            "R0025"
+          ],
+          "quotes": [
+            "Contrary, nine ASV from the genera Victivallis, Alistipes, Roseburia, Prevotella, Ruminococcus, Blautia , and Faecalibacterium and two ASV of the family Lachnospiraceae decreased after FMT ( Figure 3E ). Patient 2 showed an increase of ASV of the Ruminococcaceae family, including Ruminococcus E , and one ASV of the species Flavonifractor plautii ( Figure 3E ), which has been reported to be increased in MDD-patients ( 16 ). Patient 2 showed a decrease of five ASV of the genera Ruminococcus, Alistipes, Bifidobacterium, Oscillibacter , and the family Lachnospiraceae ( Figure 3E ). Further results are documented in the Supplementary Results ."
+          ],
+          "quote": "Contrary, nine ASV from the genera Victivallis, Alistipes, Roseburia, Prevotella, Ruminococcus, Blautia , and Faecalibacterium and two ASV of the family Lachnospiraceae decreased after FMT ( Figure 3E ). Patient 2 showed an increase of ASV of the Ruminococcaceae family, including Ruminococcus E , and one ASV of the species Flavonifractor plautii ( Figure 3E ), which has been reported to be increased in MDD-patients ( 16 ). Patient 2 showed a decrease of five ASV of the genera Ruminococcus, Alistipes, Bifidobacterium, Oscillibacter , and the family Lachnospiraceae ( Figure 3E ). Further results are documented in the Supplementary Results ."
+        },
+        "generatedEvidence": {
+          "locator": "G0018",
+          "locators": [
+            "G0018"
+          ],
+          "quotes": [
+            "Patient 2 also exhibited increased bacterial cell counts, reaching between the 75th and 95th quantile of the healthy population distribution. ### Taxa-Level Changes Patient 1 demonstrated an increase in 13 ASVs spanning the genera *Alistipes*, *Oscillibacter*, *Coprococcus*, and *Clostridium IV*, as well as the families Ruminococcaceae and Lachnospiraceae, the order Clostridiales, and the phylum Firmicutes. Nine ASVs from *Victivallis*, *Alistipes*, *Roseburia*, *Prevotella*, *Ruminococcus*, *Blautia*, *Faecalibacterium*, and Lachnospiraceae decreased."
+          ],
+          "quote": "Patient 2 also exhibited increased bacterial cell counts, reaching between the 75th and 95th quantile of the healthy population distribution. ### Taxa-Level Changes Patient 1 demonstrated an increase in 13 ASVs spanning the genera *Alistipes*, *Oscillibacter*, *Coprococcus*, and *Clostridium IV*, as well as the families Ruminococcaceae and Lachnospiraceae, the order Clostridiales, and the phylum Firmicutes. Nine ASVs from *Victivallis*, *Alistipes*, *Roseburia*, *Prevotella*, *Ruminococcus*, *Blautia*, *Faecalibacterium*, and Lachnospiraceae decreased."
+        },
+        "explanation": "Reference reports 9 ASV from the listed genera plus 2 ASV of Lachnospiraceae, total 11 decreased; generated miscounts and conflates them as 9 ASVs across all taxa.",
+        "sourceEvidenceValid": true,
+        "generatedEvidenceValid": true,
+        "criterionId": "key_numerical_results",
+        "kind": "contradicted",
+        "severity": "major",
+        "claim": "Nine ASVs from Victivallis, Alistipes, Roseburia, Prevotella, Ruminococcus, Blautia, Faecalibacterium, and Lachnospiraceae decreased."
+      },
+      {
+        "id": "safety_or_harms",
+        "importance": "minor",
+        "status": "unsupported",
+        "issueKinds": [
+          "unsupported"
+        ],
+        "referenceFact": "",
+        "generatedFact": "FMT literature has documented severe adverse events, including transmission of multidrug-resistant organisms.",
+        "sourceEvidence": {
+          "locator": "",
+          "locators": [],
+          "quotes": [],
+          "quote": ""
+        },
+        "generatedEvidence": {
+          "locator": "G0025",
+          "locators": [
+            "G0025"
+          ],
+          "quotes": [
+            "The limitations of this study are substantial and were explicitly acknowledged by the authors: sample size restricted to two active-treatment cases precluding statistical inference; concurrent TAU rendering attribution of effects to FMT alone impossible; comorbid obesity and constipation as potential confounders of both microbial composition and clinical trajectory; absence of dietary data despite diet being a major modulator of gut microbiota; low donor stool dose relative to typical FMT protocols; unavailability of donor microbiome data preventing donor-recipient matching analyses; and lack of evidence regarding the optimal FMT delivery route in depression, as the non-inferiority of oral"
+          ],
+          "quote": "The limitations of this study are substantial and were explicitly acknowledged by the authors: sample size restricted to two active-treatment cases precluding statistical inference; concurrent TAU rendering attribution of effects to FMT alone impossible; comorbid obesity and constipation as potential confounders of both microbial composition and clinical trajectory; absence of dietary data despite diet being a major modulator of gut microbiota; low donor stool dose relative to typical FMT protocols; unavailability of donor microbiome data preventing donor-recipient matching analyses; and lack of evidence regarding the optimal FMT delivery route in depression, as the non-inferiority of oral"
+        },
+        "explanation": "Reference only mentions SAEs and FDA safety alerts; it does not mention transmission of multidrug-resistant organisms.",
+        "sourceEvidenceValid": false,
+        "generatedEvidenceValid": true,
+        "criterionId": "safety_or_harms",
+        "kind": "unsupported",
+        "severity": "minor",
+        "claim": "FMT literature has documented severe adverse events, including transmission of multidrug-resistant organisms."
+      }
+    ],
+    "rationale": "Generated contains one major numerical contradiction (Patient 1 decreased ASV count: 9 vs. 11), one minor contradiction about placebo assessment attendance, and one unsupported safety claim (multidrug-resistant organism transmission). All other factual statements, numbers, and design details align with the reference."
+  },
+  "overallAssessment": "The generated text is highly faithful to the reference case report. All critical and major items are either exact or compatible, with no contradictions, unsupported claims, or omissions of material facts. Numerical data, patient details, methods, limitations, and conclusions align precisely with the source. The generated rewrite accurately captures the study's objectives, design, intervention, outcomes, and cautious interpretation.",
+  "gradedAt": "2026-07-18T15:35:14Z"
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "license": "MIT",
+  "provenance": "EviMed first-party clean-room implementation",
+  "policy": {
+    "delivery": {
+      "contractVersion": 1,
+      "defaultEnabledTier": "executable",
+      "executable": {
+        "docx": {
+          "entrypoints": ["scripts/create_docx.py"],
+          "dependencies": ["python>=3.11"],
+          "artifacts": ["document.docx"],
+          "smoke": "minimal-docx"
+        },
+        "pdf": {
+          "entrypoints": ["scripts/create_pdf.py"],
+          "dependencies": ["python>=3.11"],
+          "artifacts": ["document.pdf"],
+          "smoke": "minimal-pdf"
+        },
+        "pptx": {
+          "entrypoints": ["scripts/create_pptx.py"],
+          "dependencies": ["python>=3.11"],
+          "artifacts": ["presentation.pptx"],
+          "smoke": "minimal-pptx"
+        },
+        "xlsx": {
+          "entrypoints": ["scripts/create_xlsx.py"],
+          "dependencies": ["python>=3.11"],
+          "artifacts": ["workbook.xlsx"],
+          "smoke": "minimal-xlsx"
+        }
+      },
+      "conditional": {},
+      "instructionOnly": []
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "molecule": {
+    "elementCounts": {
+      "C": 9,
+      "H": 8,
+      "O": 4
+    },
+    "formula": "C9H8O4",
+    "heavyAtoms": 13,
+    "name": "acetylsalicylic acid"
+  }
+}

@@ -1,0 +1,51 @@
+id: off-label-analysis
+version: 2.2.0
+title: Off-label Use Analysis
+category: Evidence Synthesis
+description: Assist item-level label comparison and evidence-support scoring for a proposed use.
+skill: off-label-analysis
+estimatedMinutes: [15, 35]
+starterPrompts:
+  - Assess the evidence for an off-label indication in a defined population.
+  - Compare a proposed dose and regimen with approved labels across jurisdictions.
+requiredInputs:
+  - drug
+  - proposedUse
+optionalInputs:
+  - product
+  - population
+  - dose
+  - route
+  - frequency
+  - duration
+  - formulation
+  - jurisdiction
+  - decisionDate
+  - uploadedFiles
+requiredTools:
+  - evimed_drug_term_normalize
+  - evimed_drug_label_search
+  - evimed_offlabel_evidence_packet
+optionalTools:
+  - evimed_data_source_catalog
+  - evimed_biomedical_source_search
+  - evimed_guideline_search
+  - evimed_clinical_trial_search
+  - evimed_literature_search
+dataSources:
+  - drug-labels
+  - guidelines
+  - clinical-trials
+  - literature
+outputs:
+  - path: off-label-report.md
+    required: true
+  - path: evidence-table.csv
+    required: true
+  - path: assessment-result.json
+    required: true
+  - path: evidence-snapshot.json
+    required: true
+completionChecks:
+  - requiredOutputsExist
+  - citationsResolvable

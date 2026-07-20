@@ -1,0 +1,39 @@
+id: adr-analysis
+version: 1.2.0
+title: Drug Safety Analysis
+category: Pharmacovigilance
+description: Mine adverse-event signals, compare labels, and synthesize drug-safety evidence.
+skill: adr-analysis
+estimatedMinutes: [20, 40]
+starterPrompts:
+  - Analyze cardiac safety signals associated with osimertinib.
+  - Summarize the leading adverse events reported for a drug in FAERS.
+requiredInputs:
+  - drug
+optionalInputs:
+  - adverseEvent
+  - dateRange
+  - uploadedFiles
+requiredTools:
+  - evimed_drug_safety_analysis
+optionalTools:
+  - evimed_data_source_catalog
+  - evimed_biomedical_source_search
+  - evimed_drug_term_normalize
+  - evimed_adr_case_query
+  - evimed_adr_signal_analysis
+  - evimed_drug_label_search
+  - evimed_literature_search
+dataSources:
+  - faers
+  - meddra
+  - drug-labels
+  - literature
+outputs:
+  - path: safety-report.md
+    required: true
+  - path: signals.csv
+    required: true
+completionChecks:
+  - requiredOutputsExist
+  - citationsResolvable

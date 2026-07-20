@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-025",
+  "category": "case-report",
+  "title": "Case Report: VEXAS Syndrome: From Mild Symptoms to Life-Threatening Macrophage Activation Syndrome.",
+  "pmcid": "PMC8147557",
+  "doi": "10.3389/fimmu.2021.678927",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 6721,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 60,
+    "supportedUniqueNumbers": 54,
+    "unsupportedNumberTokens": [
+      "2021.7488",
+      "2638",
+      "273",
+      "31%",
+      "400",
+      "46%"
+    ],
+    "supportedNumericClaimPrecision": 0.9,
+    "verbatimEightGramRate": 0.013447031813709412,
+    "toolCalls": 5,
+    "usedEviMedResearchTool": false
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [
+      "Claims that serum IL-6 was measured both before and after siltuximab treatment; the reference only reports a pre-treatment measurement.",
+      "Describes anemia as 'normocytic normochromic' but only normocytic is explicitly stated; normochromic is an inference."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text is highly faithful to the reference. All major clinical findings, treatments, and conclusions are accurate and well-supported. The only minor inaccuracies are an unsupported statement about post-treatment IL‑6 measurement (later corrected in the limitations) and an inferential description of anemia as 'normochromic'. No fabricated endpoints or conclusions."
+  },
+  "overallVerdict": "pass"
+}

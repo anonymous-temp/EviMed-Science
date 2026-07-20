@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-021",
+  "category": "case-report",
+  "title": "The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.",
+  "pmcid": "PMC10389401",
+  "doi": "10.1097/js9.0000000000000373",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 13088,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 46,
+    "supportedUniqueNumbers": 46,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.07200496585971446,
+    "toolCalls": 8,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 2,
+    "majorUnsupportedClaims": [
+      "Invents an entire limitations paragraph (Delphi panel selection bias, arbitrary consensus threshold, lack of inter-rater reliability, confidentiality preventing verification, limited external validity) that is absent from the original article."
+    ],
+    "minorUnsupportedClaims": [
+      "States that seven non‑consensus items were 'excluded or modified accordingly,' but the source does not describe their disposition."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "fail",
+    "rationale": "The generated text faithfully reproduces most study details, but it adds a fabricated limitations section discussing selection bias, consensus‑threshold arbitrariness, and missing reliability metrics – none of which appear in the original publication. This misrepresentation constitutes a major unsupported claim, and with an additional minor extrapolation (the fate of non‑consensus items), the overall fidelity is compromised."
+  },
+  "overallVerdict": "fail"
+}

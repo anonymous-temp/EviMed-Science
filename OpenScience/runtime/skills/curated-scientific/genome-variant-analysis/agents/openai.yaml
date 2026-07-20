@@ -1,0 +1,4 @@
+interface:
+  display_name: "Genome Variant Analysis"
+  short_description: "Analyze genomic variants with traceable references"
+  default_prompt: "Use $genome-variant-analysis to build a reproducible variant-analysis workflow."

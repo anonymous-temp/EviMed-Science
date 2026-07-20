@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-013",
+  "category": "observational-cohort",
+  "title": "Associations of healthy lifestyle and socioeconomic status with mortality and incident cardiovascular disease: two prospective cohort studies.",
+  "pmcid": "PMC8044922",
+  "doi": "10.1136/bmj.n604",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 10020,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 175,
+    "supportedUniqueNumbers": 168,
+    "unsupportedNumberTokens": [
+      "156",
+      "5.5%",
+      "500000",
+      "903",
+      "906",
+      "939",
+      "964"
+    ],
+    "supportedNumericClaimPrecision": 0.96,
+    "verbatimEightGramRate": 0.026109106346847804,
+    "toolCalls": 13,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [
+      "UK Biobank 的参与率约 5.5% 及由此衍生的健康志愿者偏倚未在原文中提及，为额外添加内容。"
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "摘要严格遵循原文的主要发现：SES 与死亡/CVD 的关联、生活方式的中介比例（3.0%–12.3%）、交互作用及联合关联的 HR 值均准确。唯一不支持的细节是 UK Biobank 5.5% 的参与率及健康志愿者偏倚的表述，原文未提及。所有核心方法、结果和结论均忠实反映，无重要事实缺失。"
+  },
+  "overallVerdict": "pass"
+}

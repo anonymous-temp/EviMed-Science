@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 130,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/genome-variant-analysis/results.json",
+      "sha256": "6b34bb32da1b7d073abe456b0333b2f4936e3aaee0aa69de7403457227692bb1"
+    },
+    {
+      "bytes": 713,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/genome-variant-analysis/genome-variant-analysis-report.md",
+      "sha256": "6575464cafcb857d99a208f970b54aa8dd130dc11e738d21a8c8f12c784d401a"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:33.253729Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "genome-variant-analysis",
+  "startedAt": "2026-07-19T19:31:33.253222Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for genome-variant-analysis and wrote 2 verified artifacts.",
+  "warnings": [
+    "Variant interpretation requires genome build, normalization, allele frequency, consequence annotation, and sample provenance."
+  ]
+}

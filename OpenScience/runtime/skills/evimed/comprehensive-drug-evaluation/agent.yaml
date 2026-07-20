@@ -1,0 +1,57 @@
+id: comprehensive-drug-evaluation
+version: 2.2.0
+title: Comprehensive Drug Evaluation
+category: Evidence Evaluation
+description: Synthesize labels, guidelines, trials, literature, HTA, effectiveness, safety, and economic evidence for a medicine and indication.
+skill: comprehensive-drug-evaluation
+estimatedMinutes: [25, 60]
+starterPrompts:
+  - Evaluate the overall clinical value of dapagliflozin for chronic kidney disease.
+  - Compare the evidence, safety, and economic implications of two medicines for one indication.
+requiredInputs:
+  - drug
+  - indication
+optionalInputs:
+  - comparator
+  - population
+  - jurisdiction
+  - outcomes
+  - careSetting
+  - timeHorizon
+  - decisionDate
+  - economicContext
+  - quantitativeScoringRequested
+  - evaluationDomains
+  - scoringRubric
+  - scoringPolicyVersion
+  - uploadedFiles
+requiredTools:
+  - evimed_drug_term_normalize
+  - evimed_comprehensive_drug_evaluation
+optionalTools:
+  - evimed_data_source_catalog
+  - evimed_biomedical_source_search
+  - evimed_drug_label_search
+  - evimed_guideline_search
+  - evimed_clinical_trial_search
+  - evimed_literature_search
+  - evimed_evidence_deduplicate
+dataSources:
+  - drug-labels
+  - guidelines
+  - clinical-trials
+  - literature
+  - internal-evidence
+  - uploaded-files
+outputs:
+  - path: comprehensive-evaluation-report.md
+    required: true
+  - path: evidence-table.csv
+    required: true
+  - path: evaluation-summary.json
+    required: true
+  - path: evidence-snapshot.json
+    required: true
+completionChecks:
+  - requiredOutputsExist
+  - citationsResolvable
