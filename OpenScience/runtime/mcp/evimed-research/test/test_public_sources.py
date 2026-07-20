@@ -169,6 +169,11 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 "list": [
                     {"id": "irrelevant", "title": "Metformin and preeclampsia prevention"},
                     {
+                        "id": "background-only",
+                        "title": "Glucose screening in polycystic ovary syndrome",
+                        "abstract": "Participants had previously received metformin.",
+                    },
+                    {
                         "id": "relevant",
                         "title": "Metformin for polycystic ovary syndrome",
                         "abstract": "A randomized study in participants with PCOS.",
@@ -180,11 +185,13 @@ class PublicSourceConnectorTests(unittest.TestCase):
             result = sources._evimed_literature_records({
                 "query": "metformin polycystic ovary syndrome",
                 "requiredConcepts": ["metformin", "polycystic ovary syndrome"],
+                "requiredTitleConcepts": ["metformin"],
                 "limit": 3,
             })
         self.assertEqual([item["id"] for item in result["data"]["items"]], ["EVIMED-LITERATURE:relevant"])
         self.assertEqual(request.call_args.kwargs["json_body"]["count"], 15)
         self.assertTrue(any("Excluded 1" in warning for warning in result["warnings"]))
+        self.assertTrue(any("titles" in warning for warning in result["warnings"]))
 
     def test_relevance_filter_does_not_match_ascii_concepts_inside_other_words(self):
         records, filtered = sources._filter_evimed_records(
@@ -206,6 +213,70 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertEqual(result["data"]["items"][0]["id"], "set-1")
         self.assertEqual(result["sources"][0]["source"], "openfda-label")
         self.assertTrue(any("no records" in warning for warning in result["warnings"]))
+        self.assertTrue(any("No exact product" in warning for warning in result["warnings"]))
+
+    def test_pubmed_fallback_keeps_only_titles_that_identify_the_medicine(self):
+        empty = {"status": "warning", "data": {"items": []}, "sources": [], "warnings": []}
+        fallback = {
+            "summary": "Retrieved records.",
+            "data": {"items": [
+                {"id": "PMID:1", "title": "Weight management outcomes"},
+                {"id": "PMID:2", "title": "Semaglutide for chronic weight management"},
+            ]},
+            "sources": [{"id": "PMID:1"}, {"id": "PMID:2"}],
+        }
+        with mock.patch.object(sources, "_evimed_literature_records", return_value=empty):
+            with mock.patch.object(sources, "_pubmed", return_value=fallback):
+                result = sources.literature({
+                    "query": "semaglutide obesity",
+                    "databases": ["internal", "pubmed"],
+                    "requiredConcepts": ["semaglutide", "obesity"],
+                    "requiredTitleConcepts": ["semaglutide"],
+                    "limit": 2,
+                })
+        self.assertEqual([item["id"] for item in result["data"]["items"]], ["PMID:2"])
+        self.assertEqual([item["id"] for item in result["sources"]], ["PMID:2"])
+        self.assertTrue(any("bibliographic candidates" in warning for warning in result["warnings"]))
+
+    def test_evimed_guideline_never_inherits_the_requested_jurisdiction(self):
+        payload = {
+            "code": 200,
+            "data": {"total": 1, "list": [{
+                "id": "guide-1",
+                "title": "European obesity guideline",
+                "publisher": "European Society",
+                "region": "European Union",
+            }]},
+        }
+        with mock.patch.object(sources, "_get_json", return_value=payload):
+            result = sources._evimed_guidelines({
+                "query": "obesity",
+                "jurisdiction": "United States",
+                "limit": 1,
+            })
+        self.assertEqual(result["data"]["requestedJurisdiction"], "United States")
+        self.assertEqual(result["data"]["items"][0]["jurisdiction"], "European Union")
+
+    def test_trial_relevance_requires_drug_intervention_and_condition(self):
+        records = [
+            {
+                "title": "Exercise for polycystic ovary syndrome",
+                "conditions": ["polycystic ovary syndrome"],
+                "interventions": ["exercise"],
+                "description": "Past metformin use was permitted.",
+            },
+            {
+                "title": "Metformin for polycystic ovary syndrome",
+                "conditions": ["polycystic ovary syndrome"],
+                "interventions": ["metformin"],
+            },
+        ]
+        filtered, count = sources._filter_trial_records(
+            records,
+            ["metformin", "polycystic ovary syndrome"],
+        )
+        self.assertEqual([item["title"] for item in filtered], ["Metformin for polycystic ovary syndrome"])
+        self.assertEqual(count, 1)
 
     def test_composite_drug_workflows_keep_evimed_evidence_enabled_by_default(self):
         empty = {"status": "warning", "data": {"items": []}, "sources": [], "warnings": []}
@@ -224,6 +295,7 @@ class PublicSourceConnectorTests(unittest.TestCase):
             literature.call_args.args[0]["requiredConcepts"],
             ["观察药", "观察适应证"],
         )
+        self.assertEqual(literature.call_args.args[0]["requiredTitleConcepts"], ["观察药"])
 
     def test_managed_gateway_reuses_the_active_runtime_token_without_direct_egress(self):
         class Headers:

@@ -544,8 +544,70 @@ def _filter_evimed_records(records, required_concepts):
     return kept, len(records) - len(kept)
 
 
+def _filter_evimed_title_records(records, required_concepts):
+    concepts = [
+        value.strip() for value in required_concepts or []
+        if isinstance(value, str) and value.strip()
+    ]
+    if not concepts:
+        return records, 0
+    kept = [
+        record for record in records
+        if all(
+            _concept_is_present(_normalized_relevance_text(_dict(record).get("title", "")), concept)
+            for concept in concepts
+        )
+    ]
+    return kept, len(records) - len(kept)
+
+
+def _filter_trial_records(records, required_concepts):
+    concepts = [
+        value.strip() for value in required_concepts or []
+        if isinstance(value, str) and value.strip()
+    ]
+    if not concepts:
+        return records, 0
+    drug, indications = concepts[0], concepts[1:]
+    kept = []
+    for value in records:
+        record = _dict(value)
+        drug_text = _normalized_relevance_text({
+            "title": record.get("title"),
+            "interventions": record.get("interventions"),
+        })
+        indication_text = _normalized_relevance_text({
+            "title": record.get("title"),
+            "conditions": record.get("conditions"),
+        })
+        if _concept_is_present(drug_text, drug) and all(
+            _concept_is_present(indication_text, concept) for concept in indications
+        ):
+            kept.append(value)
+    return kept, len(records) - len(kept)
+
+
 def _evimed_candidate_limit(arguments, limit):
-    return min(max(limit * 5, limit), 100) if arguments.get("requiredConcepts") else limit
+    constrained = arguments.get("requiredConcepts") or arguments.get("requiredTitleConcepts")
+    return min(max(limit * 5, limit), 100) if constrained else limit
+
+
+def _filter_bibliographic_title_result(result, required_concepts):
+    items = result.get("data", {}).get("items", [])
+    filtered, filtered_count = _filter_evimed_title_records(items, required_concepts)
+    if not filtered_count:
+        return result
+    identifiers = {str(item.get("id")) for item in filtered if isinstance(item, dict)}
+    result["data"]["items"] = filtered
+    result["sources"] = [
+        source for source in result.get("sources", [])
+        if str(source.get("id")) in identifiers
+    ]
+    result.setdefault("warnings", []).append(
+        "Excluded %d bibliographic candidates whose titles did not identify the required medicine."
+        % filtered_count
+    )
+    return result
 
 
 def _evimed_evidence_records(query, limit):
@@ -606,6 +668,9 @@ def _evimed_literature_records(arguments):
     records, filtered_count = _filter_evimed_records(
         _list(data.get("list")), arguments.get("requiredConcepts")
     )
+    records, title_filtered_count = _filter_evimed_title_records(
+        records, arguments.get("requiredTitleConcepts")
+    )
     items, sources = [], []
     for index, value in enumerate(records[:limit]):
         record = _dict(value)
@@ -636,6 +701,7 @@ def _evimed_literature_records(arguments):
         "warnings": [
             "AI summaries and indexed metadata are discovery aids; verify material claims against the primary record.",
             *(["Excluded %d EviMed literature candidates that did not match every required concept." % filtered_count] if filtered_count else []),
+            *(["Excluded %d additional literature candidates whose titles did not identify the required medicine." % title_filtered_count] if title_filtered_count else []),
         ],
         "next_actions": ["Open the primary record and verify the study design, population, outcomes, and effect estimates."],
     }
@@ -675,7 +741,7 @@ def _evimed_guidelines(arguments):
             "year": record.get("year"),
             "publisher": record.get("publisher") or record.get("formulator"),
             "summary": str(record.get("summary") or record.get("introduction") or "")[:4000],
-            "jurisdiction": arguments.get("jurisdiction"),
+            "jurisdiction": record.get("jurisdiction") or record.get("region") or record.get("country"),
             "language": record.get("language"),
             "publicationDate": record.get("publicationDate"),
             "blocks": _bounded_text_list(record.get("blocks"), limit=10, max_chars=4000),
@@ -692,6 +758,7 @@ def _evimed_guidelines(arguments):
             "total": data.get("total"),
             "keywords": data.get("keywords") if mode == "blocks" else None,
             "enrichedQuery": data.get("enrichedQuery") if mode == "blocks" else None,
+            "requestedJurisdiction": arguments.get("jurisdiction"),
         },
         "sources": sources,
         "warnings": [
@@ -716,7 +783,7 @@ def _evimed_trial_records(arguments):
     if arguments.get("recruitmentStatus") and "status" not in body:
         body["status"] = [arguments["recruitmentStatus"]]
     data, endpoint = _evimed_post("review/api/clinical-trial", body)
-    records, filtered_count = _filter_evimed_records(
+    records, filtered_count = _filter_trial_records(
         _list(data.get("list")), arguments.get("requiredConcepts")
     )
     items, sources = [], []
@@ -917,7 +984,7 @@ def literature(arguments):
         fallback = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
         fallback = _bibliographic_metadata_only(fallback)
         fallback["warnings"].insert(0, evimed_warning)
-        return fallback
+        return _filter_bibliographic_title_result(fallback, arguments.get("requiredTitleConcepts"))
     if "pubmed" in databases:
         result = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
     else:
@@ -953,7 +1020,9 @@ def trials(arguments):
     except PublicSourceError as error:
         evimed_warning = "EviMed clinical-trial search was unavailable: %s" % error
     base = _base("EVIMED_CLINICAL_TRIALS_BASE_URL", "https://clinicaltrials.gov/api/v2")
-    params = {"query.term": arguments["query"], "pageSize": arguments.get("limit", 10), "format": "json"}
+    limit = min(arguments.get("limit", 10), 100)
+    candidate_limit = _evimed_candidate_limit(arguments, limit)
+    params = {"query.term": arguments["query"], "pageSize": candidate_limit, "format": "json"}
     if arguments.get("recruitmentStatus"):
         params["filter.overallStatus"] = arguments["recruitmentStatus"]
     url = _url(base, "studies", params)
@@ -961,8 +1030,7 @@ def trials(arguments):
     if not isinstance(records, list):
         records = []
     items = []
-    sources = []
-    for record in records[:arguments.get("limit", 10)]:
+    for record in records[:candidate_limit]:
         protocol = record.get("protocolSection", {}) if isinstance(record, dict) else {}
         identification = protocol.get("identificationModule", {})
         status = protocol.get("statusModule", {})
@@ -981,13 +1049,21 @@ def trials(arguments):
             "interventions": [item.get("name") for item in arms.get("interventions", []) if isinstance(item, dict) and item.get("name")],
             "url": record_url,
         })
-        sources.append(_source(nct_id, title, record_url, "clinicaltrials.gov"))
+    items, filtered_count = _filter_trial_records(items, arguments.get("requiredConcepts"))
+    items = items[:limit]
+    sources = [
+        _source(item["id"], item.get("title"), item.get("url"), "clinicaltrials.gov")
+        for item in items
+    ]
     return {
         "status": "warning",
         "summary": "Retrieved %d registered clinical trials." % len(items),
         "data": {"items": items},
         "sources": sources,
-        "warnings": [evimed_warning],
+        "warnings": [
+            evimed_warning,
+            *(["Excluded %d public trial candidates that did not identify the required medicine as an intervention and the required condition." % filtered_count] if filtered_count else []),
+        ],
         "next_actions": ["Verify the current trial record and protocol before using registry fields in an assessment."],
     }
 
@@ -1089,7 +1165,10 @@ def labels(arguments):
     return {
         "status": "warning",
         **result,
-        "warnings": [evimed_warning],
+        "warnings": [
+            evimed_warning,
+            *(["No exact product was supplied; generic-name results may include different brands, formulations, strengths, or approved uses and cannot establish label status for the proposed use."] if not arguments.get("product") else []),
+        ],
         "next_actions": ["Verify the exact product and current official label before making a label-status determination."],
     }
 
@@ -1298,6 +1377,7 @@ def _composite(arguments, mode):
         "limit": 8,
         "databases": ["internal", "pubmed"],
         "requiredConcepts": required_concepts,
+        "requiredTitleConcepts": [drug],
     }, warnings)
     data = {
         "mode": mode,
