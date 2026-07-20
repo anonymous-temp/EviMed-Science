@@ -16,6 +16,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY requirements.txt pyproject.toml README.md ./
 COPY new_meta ./new_meta
+COPY validation ./validation
+COPY docs/benchmarks ./docs/benchmarks
 RUN pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir .
 
 LABEL org.opencontainers.image.title="EviMed MetaAgent Adapter" \
