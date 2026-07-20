@@ -197,19 +197,19 @@ services:
       EVIMED_GUIDELINE_SEARCH_URL: ${EVIMED_GUIDELINE_SEARCH_URL:-}
       EVIMED_CLINICAL_TRIAL_SEARCH_URL: ${EVIMED_CLINICAL_TRIAL_SEARCH_URL:-}
       EVIMED_PATENT_SEARCH_URL: ${EVIMED_PATENT_SEARCH_URL:-}
-      EVIMED_PHARMACY_REFERENCE_SEARCH_URL: ${EVIMED_PHARMACY_REFERENCE_SEARCH_URL:-}
+      EVIMED_PHARMACY_REFERENCE_SEARCH_URL: ${EVIMED_PHARMACY_REFERENCE_SEARCH_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/pharmacy-reference-search}
       EVIMED_DRUG_LABEL_SEARCH_URL: ${EVIMED_DRUG_LABEL_SEARCH_URL:-}
-      EVIMED_ADR_CASE_QUERY_URL: ${EVIMED_ADR_CASE_QUERY_URL:-}
-      EVIMED_ADR_SIGNAL_ANALYSIS_URL: ${EVIMED_ADR_SIGNAL_ANALYSIS_URL:-}
-      EVIMED_OFFLABEL_EVIDENCE_PACKET_URL: ${EVIMED_OFFLABEL_EVIDENCE_PACKET_URL:-}
-      EVIMED_COMPREHENSIVE_DRUG_EVALUATION_URL: ${EVIMED_COMPREHENSIVE_DRUG_EVALUATION_URL:-}
-      EVIMED_DRUG_SELECTION_EVALUATION_URL: ${EVIMED_DRUG_SELECTION_EVALUATION_URL:-}
+      EVIMED_ADR_CASE_QUERY_URL: ${EVIMED_ADR_CASE_QUERY_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/adr-cases}
+      EVIMED_ADR_SIGNAL_ANALYSIS_URL: ${EVIMED_ADR_SIGNAL_ANALYSIS_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/adr-signal}
+      EVIMED_OFFLABEL_EVIDENCE_PACKET_URL: ${EVIMED_OFFLABEL_EVIDENCE_PACKET_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/offlabel-evidence-packet}
+      EVIMED_COMPREHENSIVE_DRUG_EVALUATION_URL: ${EVIMED_COMPREHENSIVE_DRUG_EVALUATION_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/comprehensive-drug-evaluation}
+      EVIMED_DRUG_SELECTION_EVALUATION_URL: ${EVIMED_DRUG_SELECTION_EVALUATION_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/drug-selection-evaluation}
       EVIMED_META_ANALYSIS_URL: ${EVIMED_META_ANALYSIS_URL:-http://evimed-meta-agent:8024/api/v1/evimed/meta-analysis}
-      EVIMED_MR_ANALYSIS_URL: ${EVIMED_MR_ANALYSIS_URL:-}
-      EVIMED_BIBLIOMETRIC_ANALYSIS_URL: ${EVIMED_BIBLIOMETRIC_ANALYSIS_URL:-}
-      EVIMED_RESEARCH_TOPIC_SELECTION_URL: ${EVIMED_RESEARCH_TOPIC_SELECTION_URL:-}
-      EVIMED_PEER_REVIEW_URL: ${EVIMED_PEER_REVIEW_URL:-}
-      EVIMED_DRUG_SAFETY_ANALYSIS_URL: ${EVIMED_DRUG_SAFETY_ANALYSIS_URL:-}
+      EVIMED_MR_ANALYSIS_URL: ${EVIMED_MR_ANALYSIS_URL:-http://evimed-mr-agent:8025/api/v1/evimed/mendelian-randomization}
+      EVIMED_BIBLIOMETRIC_ANALYSIS_URL: ${EVIMED_BIBLIOMETRIC_ANALYSIS_URL:-http://evimed-bibliometric-agent:8025/api/v1/evimed/bibliometric-analysis}
+      EVIMED_RESEARCH_TOPIC_SELECTION_URL: ${EVIMED_RESEARCH_TOPIC_SELECTION_URL:-http://evimed-research-topic-agent:8025/api/v1/evimed/research-topic-selection}
+      EVIMED_PEER_REVIEW_URL: ${EVIMED_PEER_REVIEW_URL:-http://evimed-peer-review-agent:8025/api/v1/evimed/peer-review}
+      EVIMED_DRUG_SAFETY_ANALYSIS_URL: ${EVIMED_DRUG_SAFETY_ANALYSIS_URL:-http://evimed-drug-safety-agent:8025/api/v1/evimed/drug-safety-analysis}
       OPEN_SCIENCE_ALLOW_RUNTIME_HOST_NETWORK: ${OPEN_SCIENCE_ALLOW_RUNTIME_HOST_NETWORK:-false}
       OPEN_SCIENCE_ALLOW_UNSANDBOXED_RUNTIME: ${OPEN_SCIENCE_ALLOW_UNSANDBOXED_RUNTIME:-false}
       OPEN_SCIENCE_ALLOW_HOST_SHELL: ${OPEN_SCIENCE_ALLOW_HOST_SHELL:-false}
@@ -303,6 +303,18 @@ services:
         condition: service_healthy
       evimed-meta-agent:
         condition: service_healthy
+      evimed-mr-agent:
+        condition: service_healthy
+      evimed-bibliometric-agent:
+        condition: service_healthy
+      evimed-research-topic-agent:
+        condition: service_healthy
+      evimed-peer-review-agent:
+        condition: service_healthy
+      evimed-drug-safety-agent:
+        condition: service_healthy
+      evimed-drug-evidence-adapter:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${OPEN_SCIENCE_API_PORT:-8787}:8787"
     networks:
@@ -375,6 +387,254 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,nosuid,nodev,size=256m
+    networks:
+      - default
+      - runtime-internal
+    restart: unless-stopped
+
+  evimed-mr-agent:
+    image: ${EVIMED_MR_AGENT_IMAGE:-evimed-mr-agent:1.0.0}
+    build:
+      context: ../../..
+      dockerfile: OpenScience/deploy/specialist-adapter/Dockerfile
+      args:
+        AGENT_DIR: 项目代码/孟德尔随机化
+        AGENT_KIND: mendelian-randomization
+        APP_VERSION: ${EVIMED_MR_AGENT_VERSION:-1.0.0}
+    environment:
+      EVIMED_SPECIALIST_KIND: mendelian-randomization
+      EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
+      LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      LLM_MODEL: deepseek-v4-pro
+      OPENGWAS_JWT: ${OPENGWAS_JWT:-}
+    volumes:
+      - open-science-data:/data
+      - type: bind
+        source: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}
+        target: /run/secrets/deepseek-api-key
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
+        target: /run/secrets/evimed-workload-signing-key
+        read_only: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=512m"]
+    cpus: 1.5
+    mem_limit: 2g
+    pids_limit: 256
+    networks: [default, runtime-internal]
+    restart: unless-stopped
+
+  evimed-bibliometric-agent:
+    image: ${EVIMED_BIBLIOMETRIC_AGENT_IMAGE:-evimed-bibliometric-agent:1.0.0}
+    build:
+      context: ../../..
+      dockerfile: OpenScience/deploy/specialist-adapter/Dockerfile
+      args:
+        AGENT_DIR: 项目代码/文献剂量分析
+        AGENT_KIND: bibliometric-analysis
+        APP_VERSION: ${EVIMED_BIBLIOMETRIC_AGENT_VERSION:-1.0.0}
+    environment:
+      EVIMED_SPECIALIST_KIND: bibliometric-analysis
+      EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
+      LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      LLM_MODEL: deepseek-v4-pro
+    volumes:
+      - open-science-data:/data
+      - type: bind
+        source: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}
+        target: /run/secrets/deepseek-api-key
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
+        target: /run/secrets/evimed-workload-signing-key
+        read_only: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=512m"]
+    cpus: 1.5
+    mem_limit: 2g
+    pids_limit: 256
+    networks: [default, runtime-internal]
+    restart: unless-stopped
+
+  evimed-research-topic-agent:
+    image: ${EVIMED_RESEARCH_TOPIC_AGENT_IMAGE:-evimed-research-topic-agent:1.0.0}
+    build:
+      context: ../../..
+      dockerfile: OpenScience/deploy/specialist-adapter/Dockerfile
+      args:
+        AGENT_DIR: 项目代码/科研选题
+        AGENT_KIND: research-topic-selection
+        APP_VERSION: ${EVIMED_RESEARCH_TOPIC_AGENT_VERSION:-1.0.0}
+    environment:
+      EVIMED_SPECIALIST_KIND: research-topic-selection
+      EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
+      LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      LLM_MODEL: deepseek-v4-pro
+    volumes:
+      - open-science-data:/data
+      - type: bind
+        source: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}
+        target: /run/secrets/deepseek-api-key
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
+        target: /run/secrets/evimed-workload-signing-key
+        read_only: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=512m"]
+    cpus: 1.5
+    mem_limit: 2g
+    pids_limit: 256
+    networks: [default, runtime-internal]
+    restart: unless-stopped
+
+  evimed-peer-review-agent:
+    image: ${EVIMED_PEER_REVIEW_AGENT_IMAGE:-evimed-peer-review-agent:1.0.0}
+    build:
+      context: ../../..
+      dockerfile: OpenScience/deploy/specialist-adapter/Dockerfile
+      args:
+        AGENT_DIR: 项目代码/论文审稿
+        AGENT_KIND: peer-review
+        APP_VERSION: ${EVIMED_PEER_REVIEW_AGENT_VERSION:-1.0.0}
+    environment:
+      EVIMED_SPECIALIST_KIND: peer-review
+      EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
+      LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      LLM_MODEL: deepseek-v4-pro
+    volumes:
+      - open-science-data:/data
+      - type: bind
+        source: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}
+        target: /run/secrets/deepseek-api-key
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
+        target: /run/secrets/evimed-workload-signing-key
+        read_only: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=512m"]
+    cpus: 1.5
+    mem_limit: 2g
+    pids_limit: 256
+    networks: [default, runtime-internal]
+    restart: unless-stopped
+
+  evimed-drug-safety-agent:
+    image: ${EVIMED_DRUG_SAFETY_AGENT_IMAGE:-evimed-drug-safety-agent:1.0.0}
+    build:
+      context: ../../..
+      dockerfile: OpenScience/deploy/specialist-adapter/Dockerfile
+      args:
+        AGENT_DIR: 项目代码/药物安全分析agent
+        AGENT_KIND: drug-safety-analysis
+        APP_VERSION: ${EVIMED_DRUG_SAFETY_AGENT_VERSION:-1.0.0}
+    environment:
+      EVIMED_SPECIALIST_KIND: drug-safety-analysis
+      EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
+      LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      LLM_MODEL: deepseek-v4-pro
+      EVIMED_EVIDENCE_SEARCH_URL: ${EVIMED_EVIDENCE_SEARCH_URL:-https://www.evimed.com/api-evimed/medicine-api/ai-api}
+      EVIMED_EVIDENCE_SEARCH_KEY_FILE: /run/secrets/evimed-api-key
+    volumes:
+      - open-science-data:/data
+      - type: bind
+        source: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}
+        target: /run/secrets/deepseek-api-key
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
+        target: /run/secrets/evimed-workload-signing-key
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
+        target: /run/secrets/evimed-api-key
+        read_only: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=1g"]
+    cpus: 1.5
+    mem_limit: 2g
+    pids_limit: 256
+    networks: [default, runtime-internal]
+    restart: unless-stopped
+
+  evimed-drug-evidence-adapter:
+    image: ${EVIMED_DRUG_EVIDENCE_ADAPTER_IMAGE:-evimed-drug-evidence-adapter:1.0.0}
+    build:
+      context: ../../..
+      dockerfile: OpenScience/deploy/specialist-adapter/Dockerfile.evidence
+      args:
+        APP_VERSION: ${EVIMED_DRUG_EVIDENCE_ADAPTER_VERSION:-1.0.0}
+    environment:
+      EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_PUBLIC_CONNECTORS_ENABLED: "true"
+      EVIMED_PHARMACY_REFERENCE_DB: /data/pharmacy-reference.sqlite
+    volumes:
+      - open-science-data:/data:ro
+      - type: bind
+        source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
+        target: /run/secrets/evimed-workload-signing-key
+        read_only: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8026/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,noexec,size=64m"]
+    cpus: 0.5
+    mem_limit: 512m
+    pids_limit: 64
+    networks: [default, runtime-internal]
     restart: unless-stopped
 
   open-science-runtime-controller:

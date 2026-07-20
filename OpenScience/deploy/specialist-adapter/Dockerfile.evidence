@@ -1,0 +1,27 @@
+ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim-bookworm
+FROM ${PYTHON_BASE_IMAGE}
+
+ARG APP_VERSION=1.0.0
+LABEL org.opencontainers.image.title="EviMed Drug Evidence Adapters" \
+      org.opencontainers.image.version="${APP_VERSION}"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp \
+    EVIMED_PUBLIC_CONNECTORS_ENABLED=true \
+    EVIMED_PHARMACY_REFERENCE_DB=/data/pharmacy-reference.sqlite
+
+WORKDIR /adapter
+COPY OpenScience/deploy/specialist-adapter/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm -f /tmp/requirements.txt
+
+COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter ./evimed_specialist_adapter
+COPY OpenScience/runtime/mcp/evimed-research /mcp
+RUN python -m compileall -q /adapter/evimed_specialist_adapter /mcp
+
+VOLUME ["/data"]
+EXPOSE 8026
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8026/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"
+
+CMD ["uvicorn", "evimed_specialist_adapter.evidence_service:app", "--host", "0.0.0.0", "--port", "8026", "--no-access-log"]

@@ -116,6 +116,7 @@ test("release manifest generator records exact images, tools, skills, and source
         "scripts/dev/patch-ai4s-integrity-auditor.py",
         "examples/climate-trends",
         "deploy/web/Dockerfile",
+        "deploy/specialist-adapter",
         "deploy/runtime-opencode/Dockerfile",
         "deploy/runtime-opencode/open-science-opencode-serve.sh",
         "scripts/ops/archive-crypto.mjs",

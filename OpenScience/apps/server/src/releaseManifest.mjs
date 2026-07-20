@@ -128,7 +128,7 @@ export function validateReleaseManifest(input) {
     assertDigest(record.digest);
   }
 
-  if (!Array.isArray(manifest.inputs) || manifest.inputs.length === 0 || manifest.inputs.length > 64) {
+  if (!Array.isArray(manifest.inputs) || manifest.inputs.length === 0 || manifest.inputs.length > 96) {
     throw failure("release_manifest_inputs_invalid");
   }
   const inputPaths = new Set();

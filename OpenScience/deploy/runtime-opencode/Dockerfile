@@ -1,4 +1,5 @@
-FROM debian:bookworm-slim
+ARG RUNTIME_BASE_IMAGE=docker.m.daocloud.io/library/debian:bookworm-slim
+FROM ${RUNTIME_BASE_IMAGE}
 
 ARG TARGETARCH
 ARG OPENCODE_VERSION=1.17.13

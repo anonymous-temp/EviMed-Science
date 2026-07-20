@@ -1,4 +1,5 @@
-FROM node:20-alpine AS build
+ARG NODE_BASE_IMAGE=docker.m.daocloud.io/library/node:20-alpine
+FROM ${NODE_BASE_IMAGE} AS build
 
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.4.0 --activate
@@ -17,7 +18,7 @@ ENV VITE_OPEN_SCIENCE_API_URL=${VITE_OPEN_SCIENCE_API_URL}
 RUN pnpm --filter @ai4s/desktop build
 RUN pnpm --filter @ai4s/server deploy --prod /server
 
-FROM node:20-alpine AS runtime
+FROM ${NODE_BASE_IMAGE} AS runtime
 
 ARG APP_VERSION=0.1.3
 ARG RELEASE_ID=untracked

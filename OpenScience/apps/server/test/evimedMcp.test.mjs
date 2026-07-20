@@ -872,15 +872,23 @@ test("hosted deployment exposes only MCP source and non-secret adapter URL setti
     "EVIMED_GUIDELINE_SEARCH_URL",
     "EVIMED_CLINICAL_TRIAL_SEARCH_URL",
     "EVIMED_PATENT_SEARCH_URL",
-    "EVIMED_PHARMACY_REFERENCE_SEARCH_URL",
     "EVIMED_DRUG_LABEL_SEARCH_URL",
-    "EVIMED_ADR_CASE_QUERY_URL",
-    "EVIMED_ADR_SIGNAL_ANALYSIS_URL",
-    "EVIMED_OFFLABEL_EVIDENCE_PACKET_URL",
-    "EVIMED_COMPREHENSIVE_DRUG_EVALUATION_URL",
-    "EVIMED_DRUG_SELECTION_EVALUATION_URL",
   ]) {
     assert.match(compose, new RegExp(name + ": \\$\\{" + name + ":-\\}"));
+    assert.match(example, new RegExp(`^${name}=$`, "m"));
+  }
+  for (const [name, servicePath] of Object.entries({
+    EVIMED_PHARMACY_REFERENCE_SEARCH_URL: "pharmacy-reference-search",
+    EVIMED_ADR_CASE_QUERY_URL: "adr-cases",
+    EVIMED_ADR_SIGNAL_ANALYSIS_URL: "adr-signal",
+    EVIMED_OFFLABEL_EVIDENCE_PACKET_URL: "offlabel-evidence-packet",
+    EVIMED_COMPREHENSIVE_DRUG_EVALUATION_URL: "comprehensive-drug-evaluation",
+    EVIMED_DRUG_SELECTION_EVALUATION_URL: "drug-selection-evaluation",
+  })) {
+    assert.match(
+      compose,
+      new RegExp(`${name}: \\$\\{${name}:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/${servicePath}\\}`),
+    );
     assert.match(example, new RegExp(`^${name}=$`, "m"));
   }
   assert.match(
@@ -888,6 +896,15 @@ test("hosted deployment exposes only MCP source and non-secret adapter URL setti
     /EVIMED_META_ANALYSIS_URL:\s+\$\{EVIMED_META_ANALYSIS_URL:-http:\/\/evimed-meta-agent:8024\/api\/v1\/evimed\/meta-analysis\}/,
   );
   assert.match(example, /^EVIMED_META_ANALYSIS_URL=http:\/\/evimed-meta-agent:8024\/api\/v1\/evimed\/meta-analysis$/m);
+  for (const [name, target] of Object.entries({
+    EVIMED_MR_ANALYSIS_URL: "evimed-mr-agent:8025/api/v1/evimed/mendelian-randomization",
+    EVIMED_BIBLIOMETRIC_ANALYSIS_URL: "evimed-bibliometric-agent:8025/api/v1/evimed/bibliometric-analysis",
+    EVIMED_RESEARCH_TOPIC_SELECTION_URL: "evimed-research-topic-agent:8025/api/v1/evimed/research-topic-selection",
+    EVIMED_PEER_REVIEW_URL: "evimed-peer-review-agent:8025/api/v1/evimed/peer-review",
+    EVIMED_DRUG_SAFETY_ANALYSIS_URL: "evimed-drug-safety-agent:8025/api/v1/evimed/drug-safety-analysis",
+  })) {
+    assert.match(compose, new RegExp(`${name}: \\$\\{${name}:-http://${target}\\}`));
+  }
   assert.doesNotMatch(example, /EVIMED_(?:API_KEY|TOKEN|PASSWORD)=/);
   assert.match(compose, /OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET:\s+\$\{OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET:-\}/);
   assert.match(compose, /OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_FILE:\s+\/run\/secrets\/evimed-workload-signing-key/);
