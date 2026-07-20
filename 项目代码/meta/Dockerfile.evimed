@@ -1,4 +1,5 @@
-FROM python:3.11-slim
+ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim-bookworm
+FROM ${PYTHON_BASE_IMAGE}
 
 ARG APP_VERSION=0.9.0
 WORKDIR /app

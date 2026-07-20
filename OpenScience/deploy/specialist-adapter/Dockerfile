@@ -1,0 +1,71 @@
+ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.10-slim-bookworm
+FROM ${PYTHON_BASE_IMAGE}
+
+ARG APP_VERSION=1.0.0
+
+LABEL org.opencontainers.image.title="EviMed Specialist Adapter" \
+      org.opencontainers.image.version="${APP_VERSION}"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp \
+    MPLCONFIGDIR=/tmp/matplotlib \
+    EVIMED_AGENT_ROOT=/agent \
+    EVIMED_DATA_ROOT=/data \
+    LLM_MODEL=deepseek-v4-pro \
+    LLM_ENABLE_THINKING=true \
+    LLM_REASONING_EFFORT=high
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl fonts-noto-cjk; \
+    rm -rf /var/lib/apt/lists/*
+
+ARG AGENT_KIND
+RUN set -eux; \
+    if [ "${AGENT_KIND}" = "mendelian-randomization" ] \
+      || [ "${AGENT_KIND}" = "peer-review" ] \
+      || [ "${AGENT_KIND}" = "drug-safety-analysis" ]; then \
+      apt-get update; \
+    fi; \
+    if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \
+      apt-get install -y --no-install-recommends \
+        build-essential git libcurl4-openssl-dev libfontconfig1-dev libssl-dev libxml2-dev \
+        r-base-core r-recommended r-cran-cowplot r-cran-data.table r-cran-dplyr \
+        r-cran-ggplot2 r-cran-glmnet r-cran-httr r-cran-jsonlite r-cran-magrittr \
+        r-cran-remotes r-cran-reshape2; \
+    fi; \
+    if [ "${AGENT_KIND}" = "peer-review" ]; then \
+      apt-get install -y --no-install-recommends poppler-utils; \
+    fi; \
+    if [ "${AGENT_KIND}" = "drug-safety-analysis" ]; then \
+      apt-get install -y --no-install-recommends libreoffice-writer; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /adapter
+ARG AGENT_DIR
+COPY OpenScience/deploy/specialist-adapter/requirements.txt /tmp/adapter-requirements.txt
+COPY ${AGENT_DIR}/requirements.txt /tmp/agent-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/agent-requirements.txt \
+    && pip install --no-cache-dir -r /tmp/adapter-requirements.txt \
+    && rm -f /tmp/adapter-requirements.txt /tmp/agent-requirements.txt
+
+RUN if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \
+      Rscript -e 'options(repos=c(CRAN="https://cloud.r-project.org")); remotes::install_github("MRCIEU/ieugwasr@cc35329751ebb3d69226d3a6a238dd0cb7709a25", upgrade="never", dependencies=TRUE); remotes::install_github("MRCIEU/TwoSampleMR@3d119f20d6fc164b0c7f710f5590fee9580f2c7b", upgrade="never", dependencies=TRUE); remotes::install_github("rondolab/MR-PRESSO@3e3c92d7eda6dce0d1d66077373ec0f7ff4f7e87", upgrade="never", dependencies=TRUE)' \
+      && Rscript -e 'stopifnot(all(vapply(c("TwoSampleMR","ieugwasr","jsonlite","MRPRESSO"), requireNamespace, quietly=TRUE, FUN.VALUE=logical(1))))'; \
+    fi
+
+COPY ${AGENT_DIR} /agent
+COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter ./evimed_specialist_adapter
+
+RUN python -m compileall -q /adapter/evimed_specialist_adapter /agent \
+    && test -f /agent/evimed_runner.py
+
+VOLUME ["/data"]
+EXPOSE 8025
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"
+
+CMD ["uvicorn", "evimed_specialist_adapter.service:app", "--host", "0.0.0.0", "--port", "8025", "--no-access-log"]
