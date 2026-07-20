@@ -29,7 +29,8 @@ _BASE_LIMITATIONS = [
     "本报告为自发报告数据库(FAERS)的失比例信号**筛查**结果;信号不等于因果关系,不能据此判定该药导致某不良反应。",
     "FAERS 报告数**不能用于推算不良反应发生率**;数据库存在漏报、重复报告、适应证偏倚(protopathic bias)与媒体驱动报告(Weber 效应)等已知偏倚。",
     "FAERS 由美国 FDA 管理但包含全球来源的自发报告;本分析不含 WHO VigiBase 与中国国家药品不良反应监测数据库。",
-    "年龄分布按 patientonsetage 原始数值分桶,未区分年龄单位,仅为近似。",
+    "live 年龄分布按 patientonsetageunit(800–805)统一换算为年;"
+    "其中十年代编码只能近似归类。冻结快照使用已规范化的 age_years。",
     "LLM 仅用于文字解读与说明书对照,不参与任何数值计算。",
 ]
 
@@ -105,10 +106,20 @@ def _section_overview(add, result: AnalysisResult) -> None:
     add(f"- **FAERS 报告总数(该药)**:{_int(result.overview.total_reports)} 份")
     add(f"- **药品角色口径**:{'、'.join(result.suspect_roles) or '未限定'}")
     add(f"- **药名/角色绑定**:{result.suspect_binding}")
+    if result.administration_routes:
+        add(f"- **给药途径**:{'、'.join(result.administration_routes)}")
     if result.study_date_from or result.study_date_to:
         add(
             f"- **研究时间窗**:{result.study_date_from or 'open'} 至 "
             f"{result.study_date_to or 'open'}"
+        )
+    if (result.background_date_from or result.background_date_to) and (
+        result.background_date_from != result.study_date_from
+        or result.background_date_to != result.study_date_to
+    ):
+        add(
+            f"- **背景时间窗**:{result.background_date_from or 'open'} 至 "
+            f"{result.background_date_to or 'open'}"
         )
     prior_label = "fitted" if result.gps_prior_fitted else "unfitted-starting-prior"
     prior_id = f" ({result.gps_prior_id})" if result.gps_prior_id else ""
@@ -156,7 +167,10 @@ def _section_case_profile(add, result: AnalysisResult) -> None:
     add("**性别**:")
     add("")
     _bucket_table(add, overview.sex, "性别", "报告数")
-    add("**年龄段**(按 patientonsetage 原始数值,未区分单位,为近似分布):")
+    add(
+        "**年龄段**(live 按 patientonsetageunit 800–805 换算为年;"
+        "十年代编码近似归类;冻结快照使用 age_years):"
+    )
     add("")
     _bucket_table(add, overview.age_buckets, "年龄段", "报告数")
     if itp and itp.demographics:

@@ -17,6 +17,13 @@ Require medicine and indication. First call `evimed_comprehensive_drug_evaluatio
 
 Call `evimed_comprehensive_drug_evaluation` with `action: retrieve`. Use label, guideline, trial, literature, and active biomedical-source tools only to fill a declared gap or verify a material claim. Deduplicate records with `evimed_evidence_deduplicate`.
 
+The optional `evimed_pharmacy_reference_search` tool may supply private
+terminology, dose-risk, interaction, route, monitoring, or special-population
+context. Treat every returned row as a hypothesis or institution-specific
+decision-support reference, never as current label, guideline, pharmacopoeia,
+HTA, efficacy, or safety evidence. Verify any material rule against a current
+authoritative source and keep private rows labeled `user_provided_other`.
+
 Preserve the exact query, source identifier, URL, jurisdiction, version/date, retrieval time, and observed fields. Bibliographic metadata alone cannot establish study design, outcomes, effect size, certainty, or comparative benefit. Read the abstract or full text required for every material conclusion. A source outage or empty retrieval is missing evidence, not evidence of no effect. Mark uploaded files as user-provided evidence.
 
 For every `sourceInventory` item passed to the compiler, declare `evidenceAccess`

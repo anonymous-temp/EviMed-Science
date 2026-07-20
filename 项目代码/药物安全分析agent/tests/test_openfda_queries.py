@@ -8,6 +8,7 @@ from safety_agent.core.exceptions import SafetyAgentError
 from safety_agent.openfda.queries import (
     EventQuery,
     age_range_clause,
+    age_years_range_clause,
     country_clause,
     date_range_clause,
     drug_clause,
@@ -58,6 +59,18 @@ def test_age_range_clause():
     assert age_range_clause(None, 12) == "patient.patientonsetage:[0 TO 12]"
     with pytest.raises(SafetyAgentError):
         age_range_clause(65, 18)
+
+
+def test_age_years_range_clause_binds_each_value_to_its_unit():
+    clause = age_years_range_clause(18, 44)
+    assert "patient.patientonsetageunit:800" in clause
+    assert "patient.patientonsetage:[2 TO 4]" in clause
+    assert "patient.patientonsetageunit:801" in clause
+    assert "patient.patientonsetage:[18 TO 44]" in clause
+    assert "patient.patientonsetageunit:802" in clause
+    assert "patient.patientonsetage:[216 TO 539]" in clause
+    with pytest.raises(SafetyAgentError):
+        age_years_range_clause(65, 18)
 
 
 def test_outcome_and_serious_clauses():

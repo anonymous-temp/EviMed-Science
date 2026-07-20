@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { constants as fsConstants, existsSync } from "node:fs";
+import { constants as fsConstants, existsSync, lstatSync } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
@@ -1353,6 +1353,8 @@ const evimedAdapterEnvironment = Object.freeze({
   literatureSearch: "EVIMED_LITERATURE_SEARCH_URL",
   guidelineSearch: "EVIMED_GUIDELINE_SEARCH_URL",
   clinicalTrialSearch: "EVIMED_CLINICAL_TRIAL_SEARCH_URL",
+  patentSearch: "EVIMED_PATENT_SEARCH_URL",
+  pharmacyReferenceSearch: "EVIMED_PHARMACY_REFERENCE_SEARCH_URL",
   drugLabelSearch: "EVIMED_DRUG_LABEL_SEARCH_URL",
   adrCaseQuery: "EVIMED_ADR_CASE_QUERY_URL",
   adrSignalAnalysis: "EVIMED_ADR_SIGNAL_ANALYSIS_URL",
@@ -1750,6 +1752,40 @@ function evimedMcpEnvironment(config, project, plan) {
     environment.EVIMED_MODEL_CONFIG_FILE = modelConfigRuntimePath(plan);
   }
   const configured = config.evimedAdapterUrls ?? {};
+  const pharmacyReferenceDb = String(config.pharmacyReferenceDb ?? "").trim();
+  if (pharmacyReferenceDb) {
+    if (!path.isAbsolute(pharmacyReferenceDb) || /[\r\n\0]/.test(pharmacyReferenceDb)) {
+      throw runtimeMcpError(
+        "runtime_pharmacy_reference_invalid",
+        "The pharmacy reference database must be an absolute path.",
+      );
+    }
+    if (plan.sandboxMode === "docker") {
+      if (!String(configured.pharmacyReferenceSearch ?? "").trim()) {
+        throw runtimeMcpError(
+          "runtime_pharmacy_reference_adapter_required",
+          "Docker runtimes require EVIMED_PHARMACY_REFERENCE_SEARCH_URL; a host database is not container-visible.",
+        );
+      }
+    } else {
+      let metadata;
+      try {
+        metadata = lstatSync(pharmacyReferenceDb);
+      } catch {
+        throw runtimeMcpError(
+          "runtime_pharmacy_reference_invalid",
+          "The pharmacy reference database is unavailable.",
+        );
+      }
+      if (metadata.isSymbolicLink() || !metadata.isFile() || metadata.size <= 0 || metadata.size > 256 * 1024 * 1024) {
+        throw runtimeMcpError(
+          "runtime_pharmacy_reference_invalid",
+          "The pharmacy reference database must be a bounded regular file.",
+        );
+      }
+      environment.EVIMED_PHARMACY_REFERENCE_DB = pharmacyReferenceDb;
+    }
+  }
   const metaAgentRoot = String(config.metaAgentRoot ?? "").trim();
   if (metaAgentRoot) {
     if (!path.isAbsolute(metaAgentRoot) || /[\r\n\0]/.test(metaAgentRoot)) {
@@ -2175,6 +2211,7 @@ function assertReservedMcpOwnership(existing, targetExists, config, project, pla
     "EVIMED_META_AGENT_ROOT",
     "EVIMED_META_AGENT_PYTHON",
     "EVIMED_MODEL_CONFIG_FILE",
+    "EVIMED_PHARMACY_REFERENCE_DB",
     ...Object.values(evimedSpecialistEnvironment).flatMap((entry) => [entry.root, entry.python]),
     ...Object.values(evimedAdapterEnvironment),
   ]);
@@ -2206,6 +2243,16 @@ function assertReservedMcpOwnership(existing, targetExists, config, project, pla
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
       throw runtimeMcpError("runtime_mcp_config_collision", "Reserved EviMed MCP adapter URL is invalid.", 409);
     }
+  }
+  if (
+    environment.EVIMED_PHARMACY_REFERENCE_DB != null &&
+    !managedPathMatches(
+      environment.EVIMED_PHARMACY_REFERENCE_DB,
+      String(config.pharmacyReferenceDb ?? ""),
+      relocation,
+    )
+  ) {
+    throw runtimeMcpError("runtime_mcp_config_collision", "Reserved pharmacy reference database is invalid.", 409);
   }
   if (
     environment.EVIMED_META_AGENT_ROOT != null &&

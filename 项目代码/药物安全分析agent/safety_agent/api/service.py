@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from urllib.parse import quote
 
@@ -24,6 +25,7 @@ from safety_agent.core.exceptions import (
 )
 from safety_agent.core.logging import get_logger
 from safety_agent.evidence.evimed import EviMedEvidenceClient
+from safety_agent.drug_classes import ClassAnalysisEngine, ClassAnalysisResult
 from safety_agent.faers import DrugScope, FrozenFAERSSnapshot, load_faers_snapshot
 from safety_agent.llm.client import DeepSeekClient
 from safety_agent.llm.fallbacks import DeepSeekNameTranslator
@@ -34,7 +36,9 @@ from safety_agent.openfda.queries import (
     DRUG_FIELD_MEDICINALPRODUCT,
     DRUG_FIELD_OPENFDA_GENERIC,
     drug_clause,
+    date_range_clause,
     reaction_clause,
+    route_clause,
     suspect_only_clause,
 )
 from safety_agent.signals import (
@@ -69,16 +73,35 @@ class SignalComputationResult:
     snapshot_deduplication: str | None = None
     study_date_from: str | None = None
     study_date_to: str | None = None
+    administration_routes: list[str] | None = None
+    background_date_from: str | None = None
+    background_date_to: str | None = None
     statistics_version: str = "gps-v2"
     gps_prior_fitted: bool = False
     gps_prior_id: str | None = None
 
 
-def _scoped_drug_search(drug_name: str, drug_field: str, ps_only: bool) -> str:
+def _scoped_drug_search(
+    drug_name: str,
+    drug_field: str,
+    ps_only: bool,
+    *,
+    aliases: tuple[str, ...] = (),
+    routes: tuple[str, ...] = (),
+    date_from: date | str | None = None,
+    date_to: date | str | None = None,
+) -> str:
     """Drug clause + suspect filter (same construction as the pipeline)."""
-    base = drug_clause(drug_name, field=drug_field)
+    names = (drug_name, *aliases) if drug_field == DRUG_FIELD_MEDICINALPRODUCT else (drug_name,)
+    clauses = [drug_clause(name, field=drug_field) for name in dict.fromkeys(names)]
+    base = clauses[0] if len(clauses) == 1 else "(" + " OR ".join(clauses) + ")"
     if ps_only:
-        return f"({base}) AND ({suspect_only_clause()})"
+        base = f"({base}) AND ({suspect_only_clause()})"
+    if routes:
+        route_search = " OR ".join(route_clause(route) for route in routes)
+        base = f"({base}) AND ({route_search})"
+    if date_from is not None or date_to is not None:
+        base = f"({base}) AND ({date_range_clause(date_from, date_to)})"
     return base
 
 
@@ -95,6 +118,13 @@ class ServiceContext:
         faers_snapshot: FrozenFAERSSnapshot | None = None,
         jobs_dir: Path | None = None,
         max_concurrent_jobs: int | None = None,
+        drug_aliases: tuple[str, ...] | None = None,
+        suspect_roles: frozenset[str] | None = None,
+        drug_routes: tuple[str, ...] | None = None,
+        study_date_from: date | str | None = None,
+        study_date_to: date | str | None = None,
+        background_date_from: date | str | None = None,
+        background_date_to: date | str | None = None,
     ) -> None:
         self.settings = settings
         self.openfda = openfda if openfda is not None else OpenFDAClient.from_settings(settings)
@@ -120,18 +150,35 @@ class ServiceContext:
             if snapshot_path is not None
             else None
         )
-        self.study_date_from = settings.faers_study_date_from
-        self.study_date_to = settings.faers_study_date_to
-        if self.faers_snapshot is None and (
-            self.study_date_from is not None or self.study_date_to is not None
-        ):
-            raise ValueError("FAERS study dates require a configured frozen snapshot")
-        if self.faers_snapshot is not None:
-            DrugScope(
-                names=("scope-validation",),
-                date_from=self.study_date_from,
-                date_to=self.study_date_to,
-            )
+        aliases = settings.parsed_faers_drug_aliases if drug_aliases is None else drug_aliases
+        roles = settings.parsed_faers_suspect_roles if suspect_roles is None else suspect_roles
+        routes = settings.parsed_faers_administration_routes if drug_routes is None else drug_routes
+        validated_scope = DrugScope(
+            names=("scope-validation", *aliases),
+            role_codes=roles,
+            routes=routes,
+            date_from=settings.faers_study_date_from if study_date_from is None else study_date_from,
+            date_to=settings.faers_study_date_to if study_date_to is None else study_date_to,
+            background_date_from=(
+                settings.faers_background_date_from
+                if background_date_from is None
+                else background_date_from
+            ),
+            background_date_to=(
+                settings.faers_background_date_to
+                if background_date_to is None
+                else background_date_to
+            ),
+        )
+        self.drug_aliases = tuple(
+            name for name in validated_scope.names if name != "scope-validation"
+        )
+        self.suspect_roles = validated_scope.role_codes
+        self.drug_routes = validated_scope.routes
+        self.study_date_from = validated_scope.date_from
+        self.study_date_to = validated_scope.date_to
+        self.background_date_from = validated_scope.background_date_from
+        self.background_date_to = validated_scope.background_date_to
         self.gps_scope_fingerprint = (
             gps_scope_fingerprint(
                 date_from=(
@@ -144,8 +191,21 @@ class ServiceContext:
                     if self.study_date_to is not None
                     else None
                 ),
-                role_codes=("PS",),
+                role_codes=tuple(self.suspect_roles),
                 deduplication=self.faers_snapshot.provenance.deduplication,
+                routes=self.drug_routes,
+                background_date_from=(
+                    self.background_date_from.isoformat()
+                    if self.background_date_from is not None
+                    and self.background_date_from != self.study_date_from
+                    else None
+                ),
+                background_date_to=(
+                    self.background_date_to.isoformat()
+                    if self.background_date_to is not None
+                    and self.background_date_to != self.study_date_to
+                    else None
+                ),
             )
             if self.faers_snapshot is not None
             else None
@@ -174,18 +234,26 @@ class ServiceContext:
 
     # -- full analysis jobs -------------------------------------------------
 
-    def make_pipeline(self, on_stage=None) -> AnalysisPipeline:
+    def make_pipeline(
+        self, on_stage=None, *, timeout_seconds: float = 300.0
+    ) -> AnalysisPipeline:
         return AnalysisPipeline(
             openfda=self.openfda,
             llm=self.llm,
             evidence=self.evidence,
             on_stage=on_stage,
+            timeout_seconds=timeout_seconds,
             openfda_base_url=self.settings.openfda_base_url,
             name_fallback=self.name_translator,
             adr_fallback=self.name_translator,
             faers_snapshot=self.faers_snapshot,
+            drug_aliases=self.drug_aliases,
+            suspect_roles=self.suspect_roles,
+            drug_routes=self.drug_routes,
             study_date_from=self.study_date_from,
             study_date_to=self.study_date_to,
+            background_date_from=self.background_date_from,
+            background_date_to=self.background_date_to,
             gps_prior=self.gps_prior,
         )
 
@@ -235,6 +303,31 @@ class ServiceContext:
             raise SafetyAgentError(job.error or "analysis failed")
         return job.result, job.artifacts
 
+    async def compute_class_analysis(
+        self,
+        class_id: str,
+        reactions: list[str],
+        role_codes: list[str],
+    ) -> ClassAnalysisResult:
+        """Run exact report-level class methods against the configured snapshot."""
+        if self.faers_snapshot is None:
+            raise SafetyAgentError(
+                "drug-class analysis requires a configured frozen report-level FAERS snapshot"
+            )
+        engine = ClassAnalysisEngine(self.faers_snapshot, prior=self.gps_prior)
+        async with self._sem:
+            return await asyncio.wait_for(
+                asyncio.to_thread(
+                    engine.run,
+                    class_id,
+                    reactions,
+                    role_codes=frozenset(role_codes),
+                    date_from=self.study_date_from,
+                    date_to=self.study_date_to,
+                ),
+                timeout=300,
+            )
+
     # -- lightweight signal endpoint ------------------------------------------
 
     async def compute_signals(
@@ -269,10 +362,13 @@ class ServiceContext:
 
         if self.faers_snapshot is not None:
             scope = DrugScope(
-                names=(drug_norm.normalized,),
-                role_codes=frozenset({"PS"}),
+                names=(drug_norm.normalized, *self.drug_aliases),
+                role_codes=self.suspect_roles,
+                routes=self.drug_routes,
                 date_from=self.study_date_from,
                 date_to=self.study_date_to,
+                background_date_from=self.background_date_from,
+                background_date_to=self.background_date_to,
             )
 
             async def exact_row(reaction: str) -> dict:
@@ -291,7 +387,7 @@ class ServiceContext:
 
             rows = await asyncio.gather(*(exact_row(reaction) for reaction in normalized))
             if not rows or all(row["a"] + row["b"] == 0 for row in rows):
-                raise NoDataError(f"冻结 FAERS 快照中未检索到 {drug_norm.normalized} 的 PS 报告")
+                raise NoDataError(f"冻结 FAERS 快照中未检索到 {drug_norm.normalized} 的目标报告")
             return SignalComputationResult(
                 drug_normalized=drug_norm.normalized,
                 rows=rows,
@@ -299,7 +395,8 @@ class ServiceContext:
                 drug_field_used="frozen_normalized",
                 data_source="frozen_faers",
                 suspect_binding="same_drug_object",
-                suspect_roles=["PS"],
+                suspect_roles=sorted(scope.role_codes),
+                administration_routes=list(scope.routes),
                 snapshot_id=self.faers_snapshot.provenance.snapshot_id,
                 gps_prior_fitted=self.gps_prior.fitted,
                 gps_prior_id=self.gps_prior.fit_id,
@@ -313,17 +410,40 @@ class ServiceContext:
                 study_date_to=(
                     scope.date_to.isoformat() if scope.date_to is not None else None
                 ),
+                background_date_from=(
+                    scope.background_date_from.isoformat()
+                    if scope.background_date_from is not None
+                    else None
+                ),
+                background_date_to=(
+                    scope.background_date_to.isoformat()
+                    if scope.background_date_to is not None
+                    else None
+                ),
             )
 
-        drug_search = _scoped_drug_search(drug_norm.normalized, drug_field, ps_only)
+        drug_search = _scoped_drug_search(
+            drug_norm.normalized,
+            drug_field,
+            ps_only,
+            aliases=self.drug_aliases,
+            routes=self.drug_routes,
+            date_from=self.study_date_from,
+            date_to=self.study_date_to,
+        )
+        background_search = (
+            date_range_clause(self.background_date_from, self.background_date_to)
+            if self.background_date_from is not None or self.background_date_to is not None
+            else None
+        )
         try:
             drug_total, grand_total = await asyncio.gather(
                 self.openfda.count_total(drug_search),
-                self.openfda.count_total(None),
+                self.openfda.count_total(background_search),
             )
         except NoResults:
             drug_total = 0
-            grand_total = await self.openfda.count_total(None)
+            grand_total = await self.openfda.count_total(background_search)
         if drug_total == 0 and drug_field == DRUG_FIELD_OPENFDA_GENERIC:
             # same documented fallback as the full pipeline
             logger.warning(
@@ -331,7 +451,15 @@ class ServiceContext:
                 drug_norm.normalized,
             )
             drug_field = DRUG_FIELD_MEDICINALPRODUCT
-            drug_search = _scoped_drug_search(drug_norm.normalized, drug_field, ps_only)
+            drug_search = _scoped_drug_search(
+                drug_norm.normalized,
+                drug_field,
+                ps_only,
+                aliases=self.drug_aliases,
+                routes=self.drug_routes,
+                date_from=self.study_date_from,
+                date_to=self.study_date_to,
+            )
             try:
                 drug_total = await self.openfda.count_total(drug_search)
             except NoResults:
@@ -346,7 +474,12 @@ class ServiceContext:
                     _count_or_zero(
                         self.openfda, f"({drug_search}) AND ({clause})"
                     ),
-                    _count_or_zero(self.openfda, clause),
+                    _count_or_zero(
+                        self.openfda,
+                        f"({clause}) AND ({background_search})"
+                        if background_search is not None
+                        else clause,
+                    ),
                 )
             table = build_table_from_counts(joint, drug_total, event_total, grand_total)
             metrics = analyze(table, prior=self.gps_prior)
@@ -374,7 +507,28 @@ class ServiceContext:
                 "report_contains_suspect_approximation" if ps_only else "target_name_only"
             ),
             suspect_roles=["PS", "SS"] if ps_only else ["PS", "SS", "C", "I"],
+            administration_routes=list(self.drug_routes),
             snapshot_id=None,
+            study_date_from=(
+                self.study_date_from.isoformat() if self.study_date_from is not None else None
+            ),
+            study_date_to=(
+                self.study_date_to.isoformat() if self.study_date_to is not None else None
+            ),
+            background_date_from=(
+                self.background_date_from.isoformat()
+                if self.background_date_from is not None
+                else self.study_date_from.isoformat()
+                if self.study_date_from is not None
+                else None
+            ),
+            background_date_to=(
+                self.background_date_to.isoformat()
+                if self.background_date_to is not None
+                else self.study_date_to.isoformat()
+                if self.study_date_to is not None
+                else None
+            ),
             gps_prior_fitted=False,
             gps_prior_id=None,
         )

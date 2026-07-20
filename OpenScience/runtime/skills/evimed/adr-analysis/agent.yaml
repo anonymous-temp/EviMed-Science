@@ -1,5 +1,5 @@
 id: adr-analysis
-version: 1.2.1
+version: 1.2.2
 title: Drug Safety Analysis
 category: Pharmacovigilance
 description: Mine adverse-event signals, compare labels, and synthesize drug-safety evidence.
@@ -13,6 +13,13 @@ requiredInputs:
 optionalInputs:
   - adverseEvent
   - dateRange
+  - drugAliases
+  - suspectRoles
+  - administrationRoutes
+  - studyDateFrom
+  - studyDateTo
+  - backgroundDateFrom
+  - backgroundDateTo
   - uploadedFiles
 requiredTools:
   - evimed_drug_safety_analysis
@@ -24,6 +31,7 @@ optionalTools:
   - evimed_adr_signal_analysis
   - evimed_drug_label_search
   - evimed_literature_search
+  - evimed_pharmacy_reference_search
 dataSources:
   - faers
   - meddra

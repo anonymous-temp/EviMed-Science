@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "source": "Curated paper-regression subset; production deployments should load licensed MedDRA and the current EMA IME list",
+  "terms": {
+    "diabetic ketoacidosis": {"soc": "Metabolism and nutrition disorders", "smqs": ["Hyperglycaemia/new onset diabetes mellitus"], "ime": true},
+    "ketoacidosis": {"soc": "Metabolism and nutrition disorders", "smqs": ["Hyperglycaemia/new onset diabetes mellitus"], "ime": true},
+    "euglycaemic diabetic ketoacidosis": {"soc": "Metabolism and nutrition disorders", "smqs": ["Hyperglycaemia/new onset diabetes mellitus"], "ime": true},
+    "fournier's gangrene": {"soc": "Infections and infestations", "smqs": ["Fournier's gangrene"], "ime": true},
+    "gangrene": {"soc": "Infections and infestations", "smqs": ["Fournier's gangrene"], "ime": true},
+    "diabetes mellitus inadequate control": {"soc": "Metabolism and nutrition disorders", "smqs": [], "ime": false},
+    "myelodysplastic syndrome": {"soc": "Neoplasms benign, malignant and unspecified", "smqs": ["Haematopoietic cytopenias"], "ime": true},
+    "acute myeloid leukaemia": {"soc": "Neoplasms benign, malignant and unspecified", "smqs": ["Malignant haematological tumours"], "ime": true},
+    "pulmonary embolism": {"soc": "Respiratory, thoracic and mediastinal disorders", "smqs": ["Embolic and thrombotic events, venous"], "ime": true},
+    "deep vein thrombosis": {"soc": "Vascular disorders", "smqs": ["Embolic and thrombotic events, venous"], "ime": true},
+    "death": {"soc": "General disorders and administration site conditions", "smqs": [], "ime": true},
+    "pancreatitis": {"soc": "Gastrointestinal disorders", "smqs": ["Acute pancreatitis"], "ime": true}
+  }
+}

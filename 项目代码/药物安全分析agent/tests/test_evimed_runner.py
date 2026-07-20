@@ -94,3 +94,33 @@ def test_runner_reactions_not_array_fails(tmp_path, monkeypatch):
     request = tmp_path / "request.json"
     request.write_text(json.dumps({"drug": "x", "reactions": "myalgia"}), encoding="utf-8")
     assert evimed_runner.run(request, tmp_path / "out") == 1
+
+
+def test_runner_passes_reproducible_faers_scope_controls(tmp_path, monkeypatch):
+    observed = {}
+
+    async def capture(drug, reactions, **kwargs):
+        observed.update(kwargs)
+        return _fake_artifacts(kwargs["outdir"])
+
+    _patch(monkeypatch, capture)
+    request = tmp_path / "request.json"
+    request.write_text(json.dumps({
+        "drug": "cefiderocol",
+        "drugAliases": ["Fetroja"],
+        "suspectRoles": ["PS", "SS"],
+        "administrationRoutes": ["048"],
+        "studyDateFrom": "2019-11-14",
+        "studyDateTo": "2024-09-30",
+        "backgroundDateFrom": "2004-01-01",
+        "backgroundDateTo": "2024-09-30",
+    }), encoding="utf-8")
+    out = tmp_path / "out"
+
+    assert evimed_runner.run(request, out) == 0
+    assert observed["drug_aliases"] == ("Fetroja",)
+    assert observed["suspect_roles"] == frozenset({"PS", "SS"})
+    assert observed["administration_routes"] == ("048",)
+    assert observed["background_date_from"] == "2004-01-01"
+    result = json.loads((out / "result.json").read_text(encoding="utf-8"))
+    assert result["scope"]["studyDateFrom"] == "2019-11-14"

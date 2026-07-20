@@ -63,6 +63,8 @@ class ToolContractTests(unittest.TestCase):
             "evimed_literature_search",
             "evimed_guideline_search",
             "evimed_clinical_trial_search",
+            "evimed_patent_search",
+            "evimed_pharmacy_reference_search",
             "evimed_drug_label_search",
             "evimed_adr_case_query",
             "evimed_adr_signal_analysis",
@@ -406,6 +408,37 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(result["data"]["provenance"]["scope"]["userId"], "user-public")
         self.assertEqual(len(requests), 2)
         self.assertTrue(all(item["authorization"] is None for item in requests))
+
+    def test_documented_evimed_endpoints_are_exposed_through_managed_public_tools(self):
+        os.environ["EVIMED_PUBLIC_CONNECTORS_ENABLED"] = "true"
+        for env_name in (
+            "EVIMED_LITERATURE_SEARCH_URL", "EVIMED_GUIDELINE_SEARCH_URL",
+            "EVIMED_CLINICAL_TRIAL_SEARCH_URL", "EVIMED_PATENT_SEARCH_URL",
+        ):
+            os.environ.pop(env_name, None)
+        responses = {
+            "review/api/literature": {"code": 200, "data": {"total": 1, "list": [{"id": "p1", "title": "Observed paper", "url": {"Pubmed": "https://pubmed.ncbi.nlm.nih.gov/1/"}}]}},
+            "review/api/guide-block": {"code": 200, "data": {"total": 1, "guides": [{"guideId": "g1", "title": "Observed guideline", "blocks": ["Verified recommendation block"], "url": "https://www.evimed.com/guide/g1"}]}},
+            "review/api/clinical-trial": {"code": 200, "data": {"total": 1, "list": [{"registrationNo": "NCT1", "title": "Observed trial", "url": "https://clinicaltrials.gov/study/NCT1"}]}},
+            "review/api/patent": {"code": 200, "data": {"total": 1, "list": [{"id": "pt1", "title": "Observed patent", "patentNumber": "WO-1", "url": "https://example.invalid/patent/1"}]}},
+        }
+        calls = []
+
+        def fake_get_json(url, **kwargs):
+            calls.append((url, kwargs))
+            return next(value for suffix, value in responses.items() if url.endswith(suffix))
+
+        with mock.patch.object(self.server.public_sources, "_get_json", side_effect=fake_get_json):
+            literature = self.server.call_tool("evimed_literature_search", {"query": "observed", "limit": 2})
+            guideline = self.server.call_tool("evimed_guideline_search", {"query": "observed", "mode": "blocks", "publisher": "NCCN"})
+            trial = self.server.call_tool("evimed_clinical_trial_search", {"query": "observed", "registry": 1})
+            patent = self.server.call_tool("evimed_patent_search", {"query": "observed"})
+
+        self.assertEqual(literature["data"]["items"][0]["id"], "EVIMED-LITERATURE:p1")
+        self.assertEqual(guideline["data"]["items"][0]["blocks"], ["Verified recommendation block"])
+        self.assertEqual(trial["data"]["items"][0]["id"], "NCT1")
+        self.assertEqual(patent["data"]["items"][0]["patentNumber"], "WO-1")
+        self.assertTrue(all(kwargs["credential_profile"] == "evimed-evidence" for _, kwargs in calls))
 
     def test_public_connector_retryable_failure_participates_in_the_circuit_breaker(self):
         os.environ.pop("EVIMED_LITERATURE_SEARCH_URL", None)

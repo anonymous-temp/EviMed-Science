@@ -42,6 +42,43 @@ class AnalyzeAccepted(BaseModel):
     jobId: str
 
 
+class ClassAnalyzeRequest(BaseModel):
+    class_id: str = Field(min_length=1, max_length=100)
+    reactions: list[str] = Field(default_factory=list, max_length=20)
+    role_codes: list[Literal["PS", "SS", "C", "I"]] = Field(
+        default_factory=lambda: ["PS"]
+    )
+
+    @field_validator("class_id")
+    @classmethod
+    def class_id_not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("class_id must not be blank")
+        return cleaned
+
+    @field_validator("reactions")
+    @classmethod
+    def class_reactions_clean(cls, value: list[str]) -> list[str]:
+        cleaned = list(
+            dict.fromkeys(
+                item.strip()
+                for item in value
+                if isinstance(item, str) and item.strip()
+            )
+        )
+        if any(len(item) > 200 for item in cleaned):
+            raise ValueError("each reaction must be at most 200 characters")
+        return cleaned[:20]
+
+    @field_validator("role_codes")
+    @classmethod
+    def role_codes_not_empty(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("role_codes must not be empty")
+        return list(dict.fromkeys(value))
+
+
 class ErrorBody(BaseModel):
     code: int
     msg: str
@@ -89,6 +126,7 @@ class SignalsResponse(BaseModel):
         "report_contains_suspect_approximation", "same_drug_object", "target_name_only"
     ]
     suspect_roles: list[str]
+    administration_routes: list[str] = Field(default_factory=list)
     snapshot_id: str | None = None
     snapshot_source: str | None = None
     snapshot_sha256: str | None = None
@@ -96,6 +134,8 @@ class SignalsResponse(BaseModel):
     snapshot_deduplication: str | None = None
     study_date_from: str | None = None
     study_date_to: str | None = None
+    background_date_from: str | None = None
+    background_date_to: str | None = None
     statistics_version: str = "gps-v2"
     gps_prior_fitted: bool = False
     gps_prior_id: str | None = None

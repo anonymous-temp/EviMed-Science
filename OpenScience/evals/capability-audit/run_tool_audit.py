@@ -44,6 +44,8 @@ TASK_FIXTURES = {
     },
     "evimed_guideline_search": {"query": "hypertension clinical practice guideline", "limit": 2},
     "evimed_clinical_trial_search": {"query": "type 2 diabetes metformin", "limit": 2},
+    "evimed_patent_search": {"query": "pembrolizumab biomarker", "limit": 2},
+    "evimed_pharmacy_reference_search": {"query": "阿司匹林", "limit": 2},
     "evimed_drug_label_search": {"drug": "metformin", "jurisdiction": "US", "limit": 1},
     "evimed_adr_case_query": {"drug": "aspirin", "adverseEvent": "haemorrhage", "limit": 2},
     "evimed_adr_signal_analysis": {
@@ -178,7 +180,30 @@ def artifact_receipts(workspace: Path, artifacts) -> list[dict]:
 def workspace_roots(explicit) -> list[Path]:
     if explicit:
         return [Path(value).resolve() for value in explicit]
-    return sorted((REPO / ".openscience-web-data" / "users").glob("*/projects/*/workspace"))
+    roots = []
+    for workspace_candidate in sorted((REPO / ".openscience-web-data" / "users").glob("*/projects/*/workspace")):
+        if workspace_candidate.is_symlink() or not workspace_candidate.is_dir():
+            continue
+        workspace = workspace_candidate.resolve()
+        roots.append(workspace)
+        project_path = workspace.parent / "project.json"
+        try:
+            if project_path.is_symlink() or project_path.stat().st_size > 64 * 1024:
+                continue
+            project = json.loads(project_path.read_text(encoding="utf-8"))
+            active_name = project.get("activeWorkspace")
+            if not isinstance(active_name, str) or not active_name.strip():
+                continue
+            active_candidate = workspace / active_name
+            if active_candidate.is_symlink():
+                continue
+            active = active_candidate.resolve()
+            active.relative_to(workspace)
+            if active.is_dir():
+                roots.append(active)
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+    return sorted(set(roots))
 
 
 def latest_specialist_receipt(tool, roots, max_age_days):
@@ -292,7 +317,6 @@ def main():
     workspace = args.probe_workspace.resolve()
     workspace.mkdir(parents=True, exist_ok=True)
     os.environ["OPEN_SCIENCE_WORKSPACE_DIR"] = str(workspace)
-    os.environ.pop("EVIMED_PUBLIC_SOURCE_GATEWAY_URL", None)
     server = load_server()
     declared = [item["name"] for item in server.list_tools()]
     if set(declared) != set(TASK_FIXTURES) | set(SPECIALISTS):

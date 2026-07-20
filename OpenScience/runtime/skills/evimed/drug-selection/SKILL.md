@@ -19,6 +19,13 @@ Record the institution's criteria, domain definitions, weights, thresholds, and 
 
 For every candidate, call `evimed_drug_selection_evaluation` with `action: retrieve`. Use `evimed_drug_label_search`, `evimed_guideline_search`, `evimed_clinical_trial_search`, and `evimed_literature_search` only to fill a declared gap or cross-check a material claim. Use `evimed_data_source_catalog` and `evimed_biomedical_source_search` for an identified active-source gap; a catalog-only or blocked source is not evidence.
 
+Use `evimed_pharmacy_reference_search` only for configured private formulary
+context such as name mapping, high-alert classification, route/frequency
+normalization, interaction screening, or monitoring hypotheses. Do not convert
+an institution-specific row into a universal criterion or score. Verify it
+against current official sources and the approved local policy before it enters
+an assessment or committee-facing output.
+
 Deduplicate records and preserve the exact query, jurisdiction, source identifier, URL, retrieval time, version/date, and retrieved fields. Bibliographic metadata does not establish study design, outcomes, effect size, certainty, or comparative value. Read the abstract or full text needed for each material conclusion. A failed or empty search is an evidence gap, not a zero score and not evidence against a candidate.
 
 Freeze the retrieval and provenance package in `evidence-snapshot.json` before assessment; the compiler input SHA-256 binds the structured assessment to the supplied inventory. Uploaded files must be marked as user-provided evidence.

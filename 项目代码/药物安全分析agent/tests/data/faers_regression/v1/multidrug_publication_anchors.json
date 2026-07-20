@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "anchors": [
+    {
+      "id": "tafamidis-li-2024",
+      "study": "Li et al. Safety assessment of Tafamidis",
+      "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11438280/",
+      "period": {"target_from": "2019-Q2", "background_from": "2019-Q2", "to": "2023-Q4"},
+      "drug_names": ["tafamidis", "tafamidis meglumine", "Vyndaqel", "Vyndamax"],
+      "role_codes": ["PS"],
+      "meddra_version": "26.1",
+      "deduplication": "latest FDA_DT for duplicate CASEID",
+      "comparison_mode": "directional_with_declared_drift",
+      "minimum_ror_rank_spearman": 1.0,
+      "case_drift_threshold": 0.35,
+      "ror_drift_threshold": 0.35,
+      "expected_case_drift": ["tafamidis-cardiac-failure-2019q2-2023"],
+      "expected_ror_drift": [],
+      "expected_signal_mismatches": [],
+      "method_compatibility": {
+        "cohort": "raw-quarterly-only; live latest-report panel is drift monitor",
+        "ror_prr_chi2": "formula-compatible",
+        "ic_ic025": "directional-only because published interval implementation differs",
+        "ebgm_eb05": "not exact; paper table uses a non-fitted O/E-style implementation, project uses GPS-v2"
+      },
+      "overview": {
+        "total_reports": 8532,
+        "yearly": {"2019": 446, "2023": 3442},
+        "sex": {"female": 1519, "male": 6224, "unknown": 789},
+        "age": {"<18": 2, "18-64": 291, "65-84": 5031, "85+": 1725, "unknown": 1483},
+        "outcomes": {"death": 2922, "other": 2758, "hospitalization": 1806, "life_threatening": 101, "disability": 61},
+        "countries": {"US": 6155, "JP": 595, "FR": 530, "CA": 381, "DE": 171}
+      },
+      "events": {
+        "tafamidis-cardiac-failure-2019q2-2023": {"cases": 532, "ror": 20.62, "ror_lower": 18.90, "ror_upper": 22.49, "prr": 20.14, "chi2": 9499.32, "ic": 4.30, "ic025": 2.64, "ebgm": 19.77, "eb05": 18.38, "signal": true},
+        "tafamidis-hypoacusis-2019q2-2023": {"cases": 319, "ror": 15.90, "ror_lower": 14.22, "ror_upper": 17.77, "prr": 15.68, "chi2": 4322.21, "ic": 3.95, "ic025": 2.28, "ebgm": 15.46, "eb05": 14.08, "signal": true},
+        "tafamidis-body-height-decreased-2019q2-2023": {"cases": 89, "ror": 28.89, "ror_lower": 23.39, "ror_upper": 35.68, "prr": 28.78, "chi2": 2320.28, "ic": 4.81, "ic025": 3.14, "ebgm": 28.01, "eb05": 23.47, "signal": true},
+        "tafamidis-essential-hypertension-2019q2-2023": {"cases": 31, "ror": 41.95, "ror_lower": 29.28, "ror_upper": 60.10, "prr": 41.90, "chi2": 1187.90, "ic": 5.33, "ic025": 3.66, "ebgm": 40.26, "eb05": 29.80, "signal": true}
+      }
+    },
+    {
+      "id": "olaparib-tian-2022",
+      "study": "Tian et al. Hematological toxicities in PARP inhibitors",
+      "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9939145/",
+      "period": {"target_from": "2015-01", "background_from": "2015-01", "to": "2021-09"},
+      "drug_names": ["olaparib", "Lynparza"],
+      "role_codes": ["PS"],
+      "meddra_version": "24.0",
+      "deduplication": "latest FDA_DT for duplicate PRIMARYID/CASEID",
+      "comparison_mode": "directional_with_declared_drift",
+      "minimum_ror_rank_spearman": 1.0,
+      "case_drift_threshold": 0.35,
+      "ror_drift_threshold": 0.35,
+      "expected_case_drift": ["olaparib-acute-myeloid-leukaemia-2015-2021q3"],
+      "expected_ror_drift": ["olaparib-acute-myeloid-leukaemia-2015-2021q3"],
+      "expected_signal_mismatches": [],
+      "method_compatibility": {
+        "cohort": "PT signal panel is comparable; published overview is the hematological PARPi subset and is not an all-olaparib overview oracle",
+        "ror_prr_chi2": "formula-compatible",
+        "ic_ic025": "directional-only because interval implementation differs",
+        "ebgm_eb05": "not exact; published values track O/E while project uses GPS-v2"
+      },
+      "overview": {
+        "scope": "all PARPi reports with hematological PTs, not all olaparib reports",
+        "total_reports": 4088,
+        "olaparib_reports": 1350,
+        "sex": {"female": 3367, "male": 155, "unknown": 566},
+        "outcomes": {"hospitalization": 1178, "death": 358, "life_threatening": 414, "disability": 35},
+        "countries": {"US": 2647, "JP": 402, "FR": 216}
+      },
+      "events": {
+        "olaparib-anaemia-2015-2021q3": {"cases": 606, "ror": 12.23, "ror_lower": 11.25, "ror_upper": 13.31, "prr": 11.17, "chi2": 5616.08, "ic": 3.47, "ic025": 3.32, "ebgm": 11.09, "eb05": 10.20, "signal": true},
+        "olaparib-myelodysplastic-syndrome-2015-2021q3": {"cases": 184, "ror": 49.51, "ror_lower": 42.66, "ror_upper": 57.46, "prr": 48.11, "chi2": 8220.87, "ic": 5.54, "ic025": 5.00, "ebgm": 46.60, "eb05": 40.15, "signal": true},
+        "olaparib-thrombocytopenia-2015-2021q3": {"cases": 128, "ror": 4.26, "ror_lower": 3.58, "ror_upper": 5.08, "prr": 4.20, "chi2": 312.19, "ic": 2.07, "ic025": 1.76, "ebgm": 4.19, "eb05": 3.51, "signal": true},
+        "olaparib-acute-myeloid-leukaemia-2015-2021q3": {"cases": 113, "ror": 27.57, "ror_lower": 22.85, "ror_upper": 33.26, "prr": 27.10, "chi2": 2789.80, "ic": 4.73, "ic025": 4.15, "ebgm": 26.62, "eb05": 22.06, "signal": true},
+        "olaparib-pancytopenia-2015-2021q3": {"cases": 111, "ror": 7.69, "ror_lower": 6.38, "ror_upper": 9.29, "prr": 7.58, "chi2": 632.02, "ic": 2.92, "ic025": 2.54, "ebgm": 7.54, "eb05": 6.25, "signal": true}
+      }
+    },
+    {
+      "id": "cefiderocol-fang-2025",
+      "study": "Fang et al. Cefiderocol adverse-event profile",
+      "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11899456/",
+      "period": {"target_from": "2019-Q4", "background_from": "2004-Q1", "to": "2024-Q3"},
+      "drug_names": ["cefiderocol", "Fetroja"],
+      "role_codes": ["PS"],
+      "meddra_version": "27.1",
+      "deduplication": "FDA-recommended CASEID/FDA_DT plus deletion list",
+      "comparison_mode": "directional_with_declared_drift",
+      "minimum_ror_rank_spearman": 0.8,
+      "case_drift_threshold": 0.35,
+      "ror_drift_threshold": 0.35,
+      "expected_case_drift": ["cefiderocol-pathogen-resistance-2019q4-2024q3", "cefiderocol-hepatic-cytolysis-2019q4-2024q3", "cefiderocol-acute-kidney-injury-2019q4-2024q3"],
+      "expected_ror_drift": ["cefiderocol-tubulointerstitial-nephritis-2019q4-2024q3", "cefiderocol-acute-kidney-injury-2019q4-2024q3"],
+      "expected_signal_mismatches": [],
+      "method_compatibility": {
+        "cohort": "requires target/background asymmetric windows; now expressible by DrugScope",
+        "ror_prr_chi2": "formula-compatible",
+        "ic_ic025": "directional-only because interval implementation differs",
+        "ebgm_eb05": "not exact; published values track O/E while project uses GPS-v2"
+      },
+      "overview": {
+        "total_reports": 271,
+        "background_reports": 18278243,
+        "yearly": {"2020": 17, "2021": 26, "2022": 70, "2023": 77, "2024-Q1-Q3": 81},
+        "sex": {"female": 67, "male": 96, "unknown": 108},
+        "outcomes": {"death": 148, "hospitalization": 44, "life_threatening": 22, "disability": 4, "other": 79},
+        "countries": {"US": 73, "IT": 48, "FR": 41, "JP": 26, "DE": 24}
+      },
+      "events": {
+        "cefiderocol-pathogen-resistance-2019q4-2024q3": {"cases": 16, "ror": 189.35, "ror_lower": 115.16, "ror_upper": 311.33, "prr": 184.26, "prr_lower": 113.58, "prr_upper": 298.92, "chi2": 2910.82, "ic": 7.52, "ic025": 3.26, "ebgm": 183.89, "eb05": 111.84, "signal": true},
+        "cefiderocol-hepatic-cytolysis-2019q4-2024q3": {"cases": 7, "ror": 60.22, "ror_lower": 28.58, "ror_upper": 126.92, "prr": 59.52, "prr_lower": 28.49, "prr_upper": 124.34, "chi2": 402.60, "ic": 5.89, "ic025": 1.81, "ebgm": 59.48, "eb05": 28.23, "signal": true},
+        "cefiderocol-tubulointerstitial-nephritis-2019q4-2024q3": {"cases": 4, "ror": 21.09, "ror_lower": 7.89, "ror_upper": 56.39, "prr": 20.95, "prr_lower": 7.89, "prr_upper": 55.65, "chi2": 76.01, "ic": 4.39, "ic025": 0.77, "ebgm": 20.95, "eb05": 7.84, "signal": true},
+        "cefiderocol-acute-kidney-injury-2019q4-2024q3": {"cases": 14, "ror": 7.55, "ror_lower": 4.45, "ror_upper": 12.83, "prr": 7.40, "prr_lower": 4.41, "prr_upper": 12.41, "chi2": 77.71, "ic": 2.89, "ic025": 1.62, "ebgm": 7.40, "eb05": 4.35, "signal": true}
+      }
+    },
+    {
+      "id": "famciclovir-fang-2024",
+      "study": "Fang et al. Pharmacovigilance study of famciclovir",
+      "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11576868/",
+      "period": {"target_from": "2004-Q1", "background_from": "2004-Q1", "to": "2023-Q2"},
+      "drug_names": ["famciclovir"],
+      "role_codes": ["PS"],
+      "routes": ["oral", "ICH E2B 048"],
+      "meddra_version": "26.1",
+      "deduplication": "not fully specified beyond FAERS preprocessing",
+      "comparison_mode": "method_incompatible_expected_mismatch",
+      "minimum_ror_rank_spearman": null,
+      "case_drift_threshold": 0.35,
+      "ror_drift_threshold": 0.35,
+      "expected_case_drift": ["famciclovir-altered-state-consciousness-2004-2023q2", "famciclovir-rhabdomyolysis-2004-2023q2", "famciclovir-acute-kidney-injury-2004-2023q2"],
+      "expected_ror_drift": ["famciclovir-altered-state-consciousness-2004-2023q2", "famciclovir-toxic-encephalopathy-2004-2023q2", "famciclovir-rhabdomyolysis-2004-2023q2"],
+      "expected_signal_mismatches": ["famciclovir-altered-state-consciousness-2004-2023q2", "famciclovir-rhabdomyolysis-2004-2023q2"],
+      "method_compatibility": {
+        "cohort": "publication requires oral route bound to the same PS famciclovir object; live panel did not have exact object binding",
+        "route": "now expressible by frozen DrugScope.routes, but no matching raw quarterly snapshot is committed",
+        "ror_prr_chi2": "formula-compatible only after exact cohort reconstruction",
+        "ic_ic025": "directional-only because interval implementation differs",
+        "ebgm_eb05": "not exact; published EBGM is O/E-style and project uses GPS-v2"
+      },
+      "overview": {
+        "total_reports": 432,
+        "sex": {"female": 258, "male": 149, "unknown": 25},
+        "age": {"<18": 6, "18-65": 133, "65+": 200, "unknown": 93},
+        "outcomes": {"hospitalization": 180, "life_threatening": 18, "disability": 15, "death": 11, "other": 227},
+        "countries": {"JP": 125, "US": 32},
+        "indications": {"herpes zoster": 265, "herpes simplex": 34, "oral herpes": 14}
+      },
+      "events": {
+        "famciclovir-altered-state-consciousness-2004-2023q2": {"cases": 28, "ror": 61.64, "ror_lower": 42.37, "ror_upper": 89.67, "prr": 60.32, "prr_lower": 41.57, "prr_upper": 87.54, "chi2": 1630.74, "ic": 5.91, "ic025": 5.38, "ebgm": 60.20, "eb05": 43.99, "signal": true},
+        "famciclovir-toxic-encephalopathy-2004-2023q2": {"cases": 5, "ror": 49.89, "ror_lower": 20.71, "ror_upper": 120.14, "prr": 49.70, "prr_lower": 20.57, "prr_upper": 120.06, "chi2": 238.21, "ic": 5.63, "ic025": 4.47, "ebgm": 49.62, "eb05": 23.78, "signal": true},
+        "famciclovir-rhabdomyolysis-2004-2023q2": {"cases": 12, "ror": 11.93, "ror_lower": 6.75, "ror_upper": 21.06, "prr": 11.82, "prr_lower": 6.70, "prr_upper": 20.87, "chi2": 118.96, "ic": 3.56, "ic025": 2.77, "ebgm": 11.82, "eb05": 7.35, "signal": true},
+        "famciclovir-acute-kidney-injury-2004-2023q2": {"cases": 10, "ror": 3.25, "ror_lower": 1.74, "ror_upper": 6.06, "prr": 3.23, "prr_lower": 1.73, "prr_upper": 6.05, "chi2": 15.45, "ic": 1.69, "ic025": 0.84, "ebgm": 3.23, "eb05": 1.92, "signal": true}
+      }
+    }
+  ]
+}

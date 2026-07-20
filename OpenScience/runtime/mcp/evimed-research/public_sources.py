@@ -52,6 +52,8 @@ def supports(name):
         "evimed_literature_search",
         "evimed_guideline_search",
         "evimed_clinical_trial_search",
+        "evimed_patent_search",
+        "evimed_pharmacy_reference_search",
         "evimed_drug_label_search",
         "evimed_adr_case_query",
         "evimed_adr_signal_analysis",
@@ -60,6 +62,18 @@ def supports(name):
         "evimed_drug_selection_evaluation",
         "evimed_biomedical_source_search",
     }
+
+
+def configured(name):
+    if not supports(name):
+        return False
+    if name != "evimed_pharmacy_reference_search":
+        return True
+    try:
+        _pharmacy_reference_file()
+        return True
+    except PublicSourceError:
+        return False
 
 
 def _now():
@@ -473,12 +487,80 @@ def _evimed_evidence_records(query, limit):
     }
 
 
-def _evimed_guidelines(arguments):
-    body = {"query": arguments["query"][:512], "count": min(arguments.get("limit", 10), 100)}
-    data, endpoint = _evimed_post("review/api/guide", body)
-    records = _list(data.get("list"))
+def _evimed_literature_records(arguments):
+    limit = min(arguments.get("limit", 10), 100)
+    body = {"query": arguments["query"][:512], "count": limit}
+    field_map = {
+        "articleTypes": "articleTypes",
+        "hasPdf": "hasPdf",
+        "language": "language",
+        "minImpactFactor": "minImpactFactor",
+        "maxImpactFactor": "maxImpactFactor",
+        "journalTiers": "journalTiers",
+    }
+    for source_name, target_name in field_map.items():
+        value = arguments.get(source_name)
+        if value not in (None, "", []):
+            body[target_name] = value
+    for source_name, target_name in (("dateFrom", "startYear"), ("dateTo", "endYear")):
+        value = arguments.get(source_name)
+        if isinstance(value, str) and len(value) >= 4:
+            body[target_name] = int(value[:4])
+    data, endpoint = _evimed_post("review/api/literature", body)
     items, sources = [], []
-    for index, value in enumerate(records[:body["count"]]):
+    for index, value in enumerate(_list(data.get("list"))[:limit]):
+        record = _dict(value)
+        title = _first_text(record.get("title"))
+        identifier = str(record.get("id") or index).strip()
+        record_url = _evimed_record_url(record.get("url"), endpoint)
+        item = {
+            "id": "EVIMED-LITERATURE:%s" % identifier,
+            "title": title,
+            "url": record_url,
+            "authors": record.get("authors"),
+            "abstract": str(record.get("abstract") or "")[:12000],
+            "journal": record.get("journal"),
+            "year": record.get("year"),
+            "impactFactor": record.get("impactFactor"),
+            "studyType": record.get("studyType"),
+            "language": record.get("language"),
+            "aiSummary": str(record.get("aiSummary") or "")[:4000],
+            "coreJournals": record.get("coreJournals"),
+        }
+        items.append({key: value for key, value in item.items() if value not in (None, "", [])})
+        sources.append(_source(item["id"], title, record_url, "evimed-literature"))
+    return {
+        "status": "warning",
+        "summary": "Retrieved %d traceable EviMed literature records." % len(items),
+        "data": {"items": items, "total": data.get("total")},
+        "sources": sources,
+        "warnings": ["AI summaries and indexed metadata are discovery aids; verify material claims against the primary record."],
+        "next_actions": ["Open the primary record and verify the study design, population, outcomes, and effect estimates."],
+    }
+
+
+def _evimed_guidelines(arguments):
+    mode = arguments.get("mode", "records")
+    body = {"query": arguments["query"][:512]}
+    if arguments.get("language"):
+        body["language"] = arguments["language"]
+    for name in ("startYear", "endYear"):
+        if arguments.get(name) is not None:
+            body[name] = arguments[name]
+    publisher = arguments.get("publisher") or arguments.get("jurisdiction")
+    if publisher:
+        body["publisher" if mode == "blocks" else "publishers"] = publisher if mode == "blocks" else [publisher]
+    if mode == "blocks":
+        data, endpoint = _evimed_post("review/api/guide-block", body)
+        records = _list(data.get("guides"))
+        limit = min(arguments.get("limit", 10), 100)
+    else:
+        limit = min(arguments.get("limit", 10), 100)
+        body["count"] = limit
+        data, endpoint = _evimed_post("review/api/guide", body)
+        records = _list(data.get("list"))
+    items, sources = [], []
+    for index, value in enumerate(records[:limit]):
         record = _dict(value)
         title = _first_text(record.get("title"))
         identifier = str(record.get("guideId") or record.get("id") or index).strip()
@@ -491,16 +573,106 @@ def _evimed_guidelines(arguments):
             "publisher": record.get("publisher") or record.get("formulator"),
             "summary": str(record.get("summary") or record.get("introduction") or "")[:4000],
             "jurisdiction": arguments.get("jurisdiction"),
+            "language": record.get("language"),
+            "publicationDate": record.get("publicationDate"),
+            "blocks": _bounded_text_list(record.get("blocks"), limit=10, max_chars=4000),
+            "rerankScore": record.get("rerankScore"),
+            "rerankRank": record.get("rerankRank"),
         }
         items.append({key: value for key, value in item.items() if value not in (None, "", [])})
         sources.append(_source(item["id"], title, record_url, "evimed-guideline"))
     return {
         "status": "warning",
         "summary": "Retrieved %d traceable EviMed guideline candidates." % len(items),
-        "data": {"items": items},
+        "data": {
+            "items": items,
+            "total": data.get("total"),
+            "keywords": data.get("keywords") if mode == "blocks" else None,
+            "enrichedQuery": data.get("enrichedQuery") if mode == "blocks" else None,
+        },
         "sources": sources,
         "warnings": ["Verify the guideline version, issuing body, jurisdiction, and original recommendation context before use."],
         "next_actions": ["Open the original guideline and verify the relevant recommendation text and version."],
+    }
+
+
+def _evimed_trial_records(arguments):
+    limit = min(arguments.get("limit", 10), 100)
+    body = {
+        "query": arguments["query"][:512],
+        "count": limit,
+        "registry": arguments.get("registry", 1),
+    }
+    for name in ("startYear", "endYear", "status", "phase", "studyType", "hasArticles", "source", "minSampleSize", "maxSampleSize"):
+        value = arguments.get(name)
+        if value not in (None, "", []):
+            body[name] = value
+    if arguments.get("recruitmentStatus") and "status" not in body:
+        body["status"] = [arguments["recruitmentStatus"]]
+    data, endpoint = _evimed_post("review/api/clinical-trial", body)
+    items, sources = [], []
+    for index, value in enumerate(_list(data.get("list"))[:limit]):
+        record = _dict(value)
+        title = _first_text(record.get("title"))
+        identifier = str(record.get("registrationNo") or record.get("cochraneId") or index).strip()
+        record_url = _first_text(record.get("url"), endpoint)
+        item = {
+            "id": identifier,
+            "title": title,
+            "url": record_url,
+            "status": record.get("status"),
+            "registrationDate": record.get("registrationDate"),
+            "phase": record.get("phase"),
+            "sampleSize": record.get("sampleSize"),
+            "studyType": record.get("studyType") or record.get("publicationType"),
+            "conditions": record.get("conditions"),
+            "primarySponsor": record.get("primarySponsor"),
+            "interventions": record.get("interventions"),
+            "year": record.get("year"),
+            "journal": record.get("journal"),
+            "registry": body["registry"],
+        }
+        items.append({key: value for key, value in item.items() if value not in (None, "", [])})
+        sources.append(_source(identifier, title, record_url, "evimed-clinical-trial"))
+    return {
+        "summary": "Retrieved %d traceable EviMed trial records." % len(items),
+        "data": {"items": items, "total": data.get("total"), "registry": body["registry"]},
+        "sources": sources,
+    }
+
+
+def patent(arguments):
+    limit = min(arguments.get("limit", 10), 100)
+    data, endpoint = _evimed_post("review/api/patent", {"query": arguments["query"][:512], "count": limit})
+    items, sources = [], []
+    for index, value in enumerate(_list(data.get("list"))[:limit]):
+        record = _dict(value)
+        title = _first_text(record.get("title"), record.get("patentNumber"))
+        identifier = str(record.get("id") or record.get("patentNumber") or index).strip()
+        record_url = _first_text(record.get("url"), endpoint)
+        item = {
+            "id": "EVIMED-PATENT:%s" % identifier,
+            "title": title,
+            "url": record_url,
+            "patentNumber": record.get("patentNumber"),
+            "patentType": record.get("patentType"),
+            "abstract": str(record.get("patentAbstract") or "")[:12000],
+            "patentee": record.get("patentee"),
+            "designers": record.get("designer"),
+            "applicationDate": record.get("applicationDate"),
+            "announcementDate": record.get("announcementDate"),
+            "source": record.get("source"),
+            "claims": record.get("claims"),
+        }
+        items.append({key: value for key, value in item.items() if value not in (None, "", [])})
+        sources.append(_source(item["id"], title, record_url, "evimed-patent"))
+    return {
+        "status": "warning",
+        "summary": "Retrieved %d traceable EviMed patent records." % len(items),
+        "data": {"items": items, "total": data.get("total")},
+        "sources": sources,
+        "warnings": ["Patent records describe claims and filings, not clinical efficacy, safety, approval, or freedom to operate."],
+        "next_actions": ["Review the complete patent family and obtain qualified legal analysis before making an IP decision."],
     }
 
 
@@ -611,12 +783,17 @@ def literature(arguments):
     databases = arguments.get("databases") or ["internal", "pubmed"]
     if "internal" in databases:
         try:
-            return _evimed_evidence_records(query, limit)
+            return _evimed_literature_records(arguments)
         except PublicSourceError as error:
-            fallback = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
-            fallback = _bibliographic_metadata_only(fallback)
-            fallback["warnings"].insert(0, "EviMed evidence search was unavailable: %s" % error)
-            return fallback
+            try:
+                legacy = _evimed_evidence_records(query, limit)
+                legacy["warnings"].insert(0, "The documented EviMed literature endpoint was unavailable: %s" % error)
+                return legacy
+            except PublicSourceError:
+                fallback = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
+                fallback = _bibliographic_metadata_only(fallback)
+                fallback["warnings"].insert(0, "EviMed evidence search was unavailable: %s" % error)
+                return fallback
     if "pubmed" in databases:
         result = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
     else:
@@ -641,6 +818,10 @@ def guideline(arguments):
 
 
 def trials(arguments):
+    try:
+        return _evimed_trial_records(arguments)
+    except PublicSourceError as error:
+        evimed_warning = "EviMed clinical-trial search was unavailable: %s" % error
     base = _base("EVIMED_CLINICAL_TRIALS_BASE_URL", "https://clinicaltrials.gov/api/v2")
     params = {"query.term": arguments["query"], "pageSize": arguments.get("limit", 10), "format": "json"}
     if arguments.get("recruitmentStatus"):
@@ -671,7 +852,14 @@ def trials(arguments):
             "url": record_url,
         })
         sources.append(_source(nct_id, title, record_url, "clinicaltrials.gov"))
-    return {"summary": "Retrieved %d registered clinical trials." % len(items), "data": {"items": items}, "sources": sources}
+    return {
+        "status": "warning",
+        "summary": "Retrieved %d registered clinical trials." % len(items),
+        "data": {"items": items},
+        "sources": sources,
+        "warnings": [evimed_warning],
+        "next_actions": ["Verify the current trial record and protocol before using registry fields in an assessment."],
+    }
 
 
 def _openfda_search(field, term):
@@ -1860,6 +2048,100 @@ def _sider(query, limit):
     )
 
 
+def _pharmacy_reference_file():
+    configured = os.environ.get("EVIMED_PHARMACY_REFERENCE_DB", "").strip()
+    if not configured or not os.path.isabs(configured) or "\0" in configured:
+        raise PublicSourceError(
+            "pharmacy_reference_unconfigured",
+            "The private pharmacy reference database is not configured for this runtime.",
+        )
+    try:
+        metadata = os.lstat(configured)
+    except OSError as error:
+        raise PublicSourceError(
+            "pharmacy_reference_unconfigured",
+            "The private pharmacy reference database is unavailable.",
+        ) from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or metadata.st_size <= 0 or metadata.st_size > 256 * 1024 * 1024:
+        raise PublicSourceError("pharmacy_reference_invalid", "The private pharmacy reference database is invalid.")
+    return configured
+
+
+def _pharmacy_fts_query(query):
+    normalized = query.strip().casefold()
+    if not normalized or len(normalized) > 512 or any(value in normalized for value in "\r\n\0"):
+        raise PublicSourceError("public_source_query_invalid", "Pharmacy reference query is invalid.")
+    tokens = re.findall(r"[a-z0-9][a-z0-9._-]{1,}|[\u3400-\u9fff]{2,}", normalized)
+    expanded = []
+    for token in tokens[:32]:
+        if re.fullmatch(r"[\u3400-\u9fff]{3,}", token):
+            expanded.extend(token[index:index + 2] for index in range(len(token) - 1))
+        else:
+            expanded.append(token)
+    if not expanded:
+        raise PublicSourceError("public_source_query_invalid", "Pharmacy reference query has no searchable term.")
+    return " AND ".join('"%s"' % token.replace('"', '""') for token in dict.fromkeys(expanded))
+
+
+def pharmacy_reference(arguments):
+    path = _pharmacy_reference_file()
+    limit = min(arguments.get("limit", 10), 50)
+    uri = "file:%s?mode=ro&immutable=1" % urllib.parse.quote(path)
+    try:
+        connection = sqlite3.connect(uri, uri=True)
+        release = connection.execute("SELECT value FROM metadata WHERE key = 'release'").fetchone()
+        if release != ("evimed-pharmacy-reference-v1",):
+            raise PublicSourceError("pharmacy_reference_invalid", "The private pharmacy reference release is unsupported.")
+        rows = connection.execute(
+            """
+            SELECT r.dataset_id, r.row_number, r.content_json
+            FROM records_fts JOIN records r ON r.id = records_fts.rowid
+            WHERE records_fts MATCH ?
+            ORDER BY bm25(records_fts), r.dataset_id, r.row_number
+            LIMIT ?
+            """,
+            (_pharmacy_fts_query(arguments["query"]), limit),
+        ).fetchall()
+    except PublicSourceError:
+        raise
+    except (sqlite3.Error, OSError) as error:
+        raise PublicSourceError("pharmacy_reference_invalid", "The private pharmacy reference database cannot be queried.") from error
+    finally:
+        if "connection" in locals():
+            connection.close()
+    items, sources = [], []
+    for dataset_id, row_number, content_json in rows:
+        try:
+            content = json.loads(content_json)
+        except (TypeError, json.JSONDecodeError) as error:
+            raise PublicSourceError(
+                "pharmacy_reference_invalid",
+                "The private pharmacy reference database contains an invalid record.",
+            ) from error
+        identifier = "PHARMACY:%s:%s" % (dataset_id, row_number)
+        title = "%s row %s" % (dataset_id, row_number)
+        items.append({"id": identifier, "dataset": dataset_id, "rowNumber": row_number, "fields": content})
+        sources.append({
+            "id": identifier,
+            "title": title,
+            "source": "evimed-private-pharmacy-reference",
+            "retrievedAt": _now(),
+            "evidenceAccess": "user_provided_other",
+        })
+    return {
+        "status": "warning",
+        "summary": "Retrieved %d private pharmacy reference rows." % len(items),
+        "data": {"items": items, "release": "evimed-pharmacy-reference-v1"},
+        "sources": sources,
+        "warnings": [
+            "These curated rows are private decision-support references, may include institution-specific mappings, and are not proof of a current label, guideline, or patient-specific recommendation."
+        ],
+        "next_actions": [
+            "Verify material rules against the current official label, pharmacopeia, guideline, and local governance policy before clinical use."
+        ],
+    }
+
+
 OPEN_TARGETS_QUERY = "query EviMedOpenTargets($q:String!){ search(queryString:$q){ hits { id name entity } } }"
 DGIDB_QUERY = "query EviMedDgidb($names:[String!]!){ genes(names:$names){ nodes { name conceptId interactions { drug { name conceptId } interactionScore } } } }"
 GNOMAD_QUERY = "query EviMedGnomad($symbol:String!){ gene(gene_symbol:$symbol, reference_genome:GRCh38){ gene_id symbol } }"
@@ -2301,6 +2583,10 @@ def call(name, arguments):
         return guideline(arguments)
     if name == "evimed_clinical_trial_search":
         return trials(arguments)
+    if name == "evimed_patent_search":
+        return patent(arguments)
+    if name == "evimed_pharmacy_reference_search":
+        return pharmacy_reference(arguments)
     if name == "evimed_drug_label_search":
         return labels(arguments)
     if name == "evimed_adr_case_query":

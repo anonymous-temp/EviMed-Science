@@ -130,7 +130,7 @@ test("starts immutable open-domain and specialist run identities from research-s
     assert.equal((await bind(base, "ses_adr", {
       mode: "specialist",
       agentId: "adr-analysis",
-      agentVersion: "1.2.1",
+      agentVersion: "1.2.2",
     })).status, 200);
 
     const open = await startRun(base, "ses_open");
@@ -167,7 +167,7 @@ test("starts immutable open-domain and specialist run identities from research-s
       {
         sessionId: "ses_adr",
         agentId: "adr-analysis",
-        agentVersion: "1.2.1",
+        agentVersion: "1.2.2",
         runtimeAgent: "evimed-adr-analysis",
       },
     );
@@ -212,10 +212,14 @@ test("canceling a runtime session records the active AgentRun as canceled", asyn
       agentVersion: null,
       runtimeAgent: null,
     };
+    const finished = [];
     const store = new AgentRunStore({ get: async () => binding }, {
       model: "deepseek/deepseek-v4-pro",
       readSessionHistory: async () => [],
       monitorIntervalMs: 60_000,
+      onRunFinished: async (finishedProject, run) => {
+        finished.push({ projectId: finishedProject.id, runId: run.id, status: run.status });
+      },
     });
     const started = await store.start(project, { sessionId: binding.sessionId });
     const canceled = await store.cancelSession(project, binding.sessionId);
@@ -223,6 +227,7 @@ test("canceling a runtime session records the active AgentRun as canceled", asyn
     assert.equal(canceled.status, "canceled");
     assert.equal(canceled.errorCode, "runtime_canceled");
     assert.equal(await store.cancelSession(project, binding.sessionId), null);
+    assert.deepEqual(finished, [{ projectId: "project-1", runId: started.id, status: "canceled" }]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -418,7 +423,7 @@ test("server monitor owns terminal state and records only existing structured ar
       sessionId: "ses_monitored",
       mode: "specialist",
       agentId: "adr-analysis",
-      agentVersion: "1.2.1",
+      agentVersion: "1.2.2",
       runtimeAgent: "evimed-adr-analysis",
     };
     let reads = 0;
@@ -426,7 +431,7 @@ test("server monitor owns terminal state and records only existing structured ar
       agentRegistry: {
         get: () => ({
           id: "adr-analysis",
-          version: "1.2.1",
+          version: "1.2.2",
           outputs: [{ path: "reports/real.md", required: true }],
           completionChecks: ["requiredOutputsExist"],
         }),

@@ -195,6 +195,13 @@ export function loadConfig(overrides = {}) {
       : "");
   const configuredMetaAgentPython =
     overrides.metaAgentPython ?? process.env.OPEN_SCIENCE_META_AGENT_PYTHON ?? "";
+  const localPharmacyReferenceDb = localAutoConfig
+    ? path.resolve(rootDir, "..", ".evimed-local", "data", "pharmacy-reference.sqlite")
+    : "";
+  const configuredPharmacyReferenceDb =
+    overrides.pharmacyReferenceDb ??
+    process.env.OPEN_SCIENCE_PHARMACY_REFERENCE_DB ??
+    (localPharmacyReferenceDb && fs.existsSync(localPharmacyReferenceDb) ? localPharmacyReferenceDb : "");
   const specialistAgentDefinitions = {
     mendelianRandomization: {
       rootEnv: "OPEN_SCIENCE_MR_AGENT_ROOT",
@@ -242,6 +249,8 @@ export function loadConfig(overrides = {}) {
       ["literatureSearch", "EVIMED_LITERATURE_SEARCH_URL"],
       ["guidelineSearch", "EVIMED_GUIDELINE_SEARCH_URL"],
       ["clinicalTrialSearch", "EVIMED_CLINICAL_TRIAL_SEARCH_URL"],
+      ["patentSearch", "EVIMED_PATENT_SEARCH_URL"],
+      ["pharmacyReferenceSearch", "EVIMED_PHARMACY_REFERENCE_SEARCH_URL"],
       ["drugLabelSearch", "EVIMED_DRUG_LABEL_SEARCH_URL"],
       ["adrCaseQuery", "EVIMED_ADR_CASE_QUERY_URL"],
       ["adrSignalAnalysis", "EVIMED_ADR_SIGNAL_ANALYSIS_URL"],
@@ -620,6 +629,11 @@ export function loadConfig(overrides = {}) {
       }]),
     ),
     evimedAdapterUrls,
+    pharmacyReferenceDb: configuredPharmacyReferenceDb
+      ? (path.isAbsolute(configuredPharmacyReferenceDb)
+        ? configuredPharmacyReferenceDb
+        : path.join(rootDir, configuredPharmacyReferenceDb))
+      : "",
     requireAllSpecialistAdapters:
       overrides.requireAllSpecialistAdapters ??
       boolEnv("OPEN_SCIENCE_REQUIRE_ALL_SPECIALIST_ADAPTERS", false),

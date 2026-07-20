@@ -1,5 +1,5 @@
 id: research-topic-selection
-version: 1.0.1
+version: 1.0.2
 title: 科研选题
 category: 科研规划
 description: 梳理研究版图、矛盾、证据空白与可行性，把宽泛的生物医学方向转化为有证据依据且可检验的研究问题和优先议程。
@@ -19,6 +19,8 @@ optionalTools:
   - evimed_biomedical_source_search
   - evimed_literature_search
   - evimed_clinical_trial_search
+  - evimed_patent_search
+  - evimed_pharmacy_reference_search
 dataSources:
   - literature
   - clinical-trials

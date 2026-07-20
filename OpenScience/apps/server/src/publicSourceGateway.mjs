@@ -103,10 +103,38 @@ const graphQlOperations = new Map([
 const allowedPostEndpoints = new Set([...graphQlOperations.values()].map((item) => item.endpoint));
 
 const evimedPostEndpoints = new Map([
-  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide", new Set(["query", "count", "startYear", "endYear", "publishers", "language"])],
-  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide-block", new Set(["query", "language"])],
-  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/instruction", new Set(["query", "count"])],
-  ["www.evimed.com/api-evimed/medicine-api/ai-api/search/api/evidence", new Set(["query"])],
+  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide", {
+    fields: new Set(["query", "count", "startYear", "endYear", "publishers", "language"]),
+    maxCount: 100,
+  }],
+  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide-block", {
+    fields: new Set(["query", "language", "publisher", "startYear", "endYear"]),
+  }],
+  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/instruction", {
+    fields: new Set(["query", "count", "source"]),
+    maxCount: 200,
+  }],
+  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/literature", {
+    fields: new Set([
+      "query", "count", "articleTypes", "startYear", "endYear", "hasPdf", "language",
+      "minImpactFactor", "maxImpactFactor", "journalTiers",
+    ]),
+    maxCount: 100,
+  }],
+  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/clinical-trial", {
+    fields: new Set([
+      "query", "count", "registry", "startYear", "endYear", "status", "phase", "studyType",
+      "hasArticles", "source", "minSampleSize", "maxSampleSize",
+    ]),
+    maxCount: 100,
+  }],
+  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/patent", {
+    fields: new Set(["query", "count"]),
+    maxCount: 100,
+  }],
+  ["www.evimed.com/api-evimed/medicine-api/ai-api/search/api/evidence", {
+    fields: new Set(["query"]),
+  }],
 ]);
 for (const endpoint of evimedPostEndpoints.keys()) allowedPostEndpoints.add(endpoint);
 
@@ -174,6 +202,20 @@ async function readJsonBody(req, limit) {
   }
 }
 
+function validEvimedText(value, maxLength = 512) {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= maxLength && !/[\r\n\0]/.test(value);
+}
+
+function validEvimedTextArray(value, { maxItems = 20, maxLength = 128 } = {}) {
+  return Array.isArray(value) && value.length > 0 && value.length <= maxItems && value.every(
+    (item) => validEvimedText(item, maxLength),
+  );
+}
+
+function validEvimedEnumArray(value, allowed) {
+  return Array.isArray(value) && value.length > 0 && value.length <= 20 && value.every((item) => allowed.has(item));
+}
+
 function validatedRequest(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     throw gatewayError(400, "public_source_gateway_body_invalid", "The public-source request must be an object.");
@@ -235,14 +277,14 @@ function validatedRequest(value) {
     throw gatewayError(403, "public_source_gateway_url_forbidden", "POST is not approved for this official read-only endpoint.");
   }
   const body = value.body;
-  const evimedFields = evimedPostEndpoints.get(endpoint);
-  if (evimedFields) {
+  const evimedSpec = evimedPostEndpoints.get(endpoint);
+  if (evimedSpec) {
     if (
       credentialProfile !== "evimed-evidence" ||
       body == null ||
       typeof body !== "object" ||
       Array.isArray(body) ||
-      Object.keys(body).some((key) => !evimedFields.has(key)) ||
+      Object.keys(body).some((key) => !evimedSpec.fields.has(key)) ||
       typeof body.query !== "string" ||
       body.query.trim().length < 1 ||
       body.query.length > 512 ||
@@ -250,7 +292,10 @@ function validatedRequest(value) {
     ) {
       throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed evidence request is invalid.");
     }
-    if (body.count !== undefined && (!Number.isSafeInteger(body.count) || body.count < 1 || body.count > 100)) {
+    if (
+      body.count !== undefined &&
+      (!Number.isSafeInteger(body.count) || body.count < 1 || body.count > (evimedSpec.maxCount ?? 100))
+    ) {
       throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed result count is invalid.");
     }
     for (const name of ["startYear", "endYear"]) {
@@ -264,13 +309,73 @@ function validatedRequest(value) {
     if (body.language !== undefined && !new Set(["zh", "en"]).has(body.language)) {
       throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed language is invalid.");
     }
+    if (body.publisher !== undefined && !validEvimedText(body.publisher, 128)) {
+      throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed publisher filter is invalid.");
+    }
     if (
       body.publishers !== undefined &&
-      (!Array.isArray(body.publishers) || body.publishers.length > 20 || body.publishers.some(
-        (item) => typeof item !== "string" || item.trim().length < 1 || item.length > 128 || /[\r\n\0]/.test(item),
-      ))
+      !validEvimedTextArray(body.publishers, { maxItems: 20, maxLength: 128 })
     ) {
       throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed publisher filter is invalid.");
+    }
+    const enumeratedArrays = {
+      articleTypes: new Set([
+        "系统综述/Meta分析", "指南/共识", "传统综述", "随机对照试验", "临床试验", "队列研究",
+        "病例对照研究", "横断面研究", "病例系列", "病例报告", "经济学评价", "专家意见和评价",
+        "动物实验", "体外实验", "其他",
+      ]),
+      journalTiers: new Set(["北大核心", "科技核心", "南大核心"]),
+    };
+    for (const [name, allowed] of Object.entries(enumeratedArrays)) {
+      if (body[name] !== undefined && !validEvimedEnumArray(body[name], allowed)) {
+        throw gatewayError(400, "public_source_gateway_evimed_request_invalid", `The EviMed ${name} filter is invalid.`);
+      }
+    }
+    for (const name of ["status", "phase", "studyType"]) {
+      if (body[name] !== undefined && !validEvimedTextArray(body[name], { maxItems: 20, maxLength: 128 })) {
+        throw gatewayError(400, "public_source_gateway_evimed_request_invalid", `The EviMed ${name} filter is invalid.`);
+      }
+    }
+    if (body.hasArticles !== undefined && (
+      !Array.isArray(body.hasArticles) || body.hasArticles.length !== 1 || ![0, 1].includes(body.hasArticles[0])
+    )) {
+      throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed article-link filter is invalid.");
+    }
+    if (body.registry !== undefined && (!Number.isSafeInteger(body.registry) || ![0, 1, 2].includes(body.registry))) {
+      throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed trial registry is invalid.");
+    }
+    if (body.source !== undefined) {
+      const instructionEndpoint = endpoint.endsWith("/review/api/instruction");
+      const trialEndpoint = endpoint.endsWith("/review/api/clinical-trial");
+      const validInstructionSource = instructionEndpoint && validEvimedEnumArray(
+        body.source,
+        new Set(["nmpa", "fda", "ema", "pmda"]),
+      );
+      const validTrialSource = trialEndpoint && typeof body.source === "string" && new Set(
+        ["PubMed", "Embase", "ICTRP", "CT.gov", "CINAHL"],
+      ).has(body.source);
+      if (!validInstructionSource && !validTrialSource) {
+        throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed source filter is invalid for this endpoint.");
+      }
+    }
+    for (const name of ["minSampleSize", "maxSampleSize"]) {
+      if (body[name] !== undefined && (!Number.isSafeInteger(body[name]) || body[name] < 0 || body[name] > 10_000_000)) {
+        throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed sample-size filter is invalid.");
+      }
+    }
+    if (body.minSampleSize !== undefined && body.maxSampleSize !== undefined && body.minSampleSize > body.maxSampleSize) {
+      throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed sample-size range is invalid.");
+    }
+    for (const name of ["minImpactFactor", "maxImpactFactor"]) {
+      if (body[name] !== undefined && (typeof body[name] !== "number" || !Number.isFinite(body[name]) || body[name] < 0 || body[name] > 10_000)) {
+        throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed impact-factor filter is invalid.");
+      }
+    }
+    if (body.minImpactFactor !== undefined && body.maxImpactFactor !== undefined && body.minImpactFactor > body.maxImpactFactor) {
+      throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed impact-factor range is invalid.");
+    }
+    if (body.hasPdf !== undefined && typeof body.hasPdf !== "boolean") {
+      throw gatewayError(400, "public_source_gateway_evimed_request_invalid", "The EviMed full-text filter is invalid.");
     }
     return { url, accept: [...new Set(value.accept)], method, body, credentialProfile };
   }

@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "classes": [
+    {
+      "id": "sglt2i",
+      "display_name": "SGLT2 inhibitors",
+      "version": "2026-07-20",
+      "atc_codes": ["A10BK"],
+      "excluded_products": [],
+      "therapeutic_comparator_names": ["metformin", "sitagliptin", "linagliptin", "saxagliptin", "alogliptin", "vildagliptin", "glimepiride", "glipizide", "glyburide", "gliclazide", "repaglinide", "pioglitazone", "rosiglitazone", "acarbose", "liraglutide", "exenatide", "dulaglutide", "semaglutide", "insulin", "insulin glargine", "insulin lispro", "insulin aspart", "insulin degludec", "insulin detemir"],
+      "sources": [
+        "药学基础数据/药学相关资料/ATC_DDD_Index_merged.xlsx",
+        "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2021.766125/full"
+      ],
+      "members": [
+        {"id": "dapagliflozin", "display_name": "Dapagliflozin", "canonical_name": "dapagliflozin", "match_names": ["dapagliflozin", "farxiga", "forxiga", "xigduo", "xigduo xr", "qtern"], "atc_codes": ["A10BK01"], "approval_date": "2014-01-08"},
+        {"id": "canagliflozin", "display_name": "Canagliflozin", "canonical_name": "canagliflozin", "match_names": ["canagliflozin", "invokana", "invokamet", "invokamet xr"], "atc_codes": ["A10BK02"], "approval_date": "2013-03-29"},
+        {"id": "empagliflozin", "display_name": "Empagliflozin", "canonical_name": "empagliflozin", "match_names": ["empagliflozin", "jardiance", "synjardy", "synjardy xr", "glyxambi", "trijardy xr"], "atc_codes": ["A10BK03"], "approval_date": "2014-08-01"},
+        {"id": "ertugliflozin", "display_name": "Ertugliflozin", "canonical_name": "ertugliflozin", "match_names": ["ertugliflozin", "steglatro", "segluromet", "steGLujan"], "atc_codes": ["A10BK04"], "approval_date": "2017-12-19"},
+        {"id": "ipragliflozin", "display_name": "Ipragliflozin", "canonical_name": "ipragliflozin", "match_names": ["ipragliflozin", "suglat"], "atc_codes": ["A10BK05"]},
+        {"id": "sotagliflozin", "display_name": "Sotagliflozin", "canonical_name": "sotagliflozin", "match_names": ["sotagliflozin", "inpefa"], "atc_codes": ["A10BK06"], "approval_date": "2023-05-26"},
+        {"id": "luseogliflozin", "display_name": "Luseogliflozin", "canonical_name": "luseogliflozin", "match_names": ["luseogliflozin", "lusefi"], "atc_codes": ["A10BK07"]},
+        {"id": "bexagliflozin", "display_name": "Bexagliflozin", "canonical_name": "bexagliflozin", "match_names": ["bexagliflozin", "brenzavvy"], "atc_codes": ["A10BK08"], "approval_date": "2023-01-20"},
+        {"id": "enavogliflozin", "display_name": "Enavogliflozin", "canonical_name": "enavogliflozin", "match_names": ["enavogliflozin", "envlo"], "atc_codes": ["A10BK09"]},
+        {"id": "tofogliflozin", "display_name": "Tofogliflozin", "canonical_name": "tofogliflozin", "match_names": ["tofogliflozin", "apleway", "deberza"]},
+        {"id": "remogliflozin", "display_name": "Remogliflozin", "canonical_name": "remogliflozin", "match_names": ["remogliflozin", "remogliflozin etabonate", "remo"]}
+      ]
+    },
+    {
+      "id": "glp1ra-products",
+      "display_name": "GLP-1 receptor agonist products",
+      "version": "2026-07-20",
+      "atc_codes": ["A10BJ"],
+      "excluded_products": ["Xultophy", "Soliqua", "Adlyxin"],
+      "therapeutic_comparator_names": ["metformin", "sitagliptin", "empagliflozin", "dapagliflozin", "insulin"],
+      "sources": [
+        "药学基础数据/药学相关资料/ATC_DDD_Index_merged.xlsx",
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC11366408/"
+      ],
+      "members": [
+        {"id": "byetta", "display_name": "Byetta", "canonical_name": "exenatide", "match_names": ["byetta"]},
+        {"id": "victoza", "display_name": "Victoza", "canonical_name": "liraglutide", "match_names": ["victoza"]},
+        {"id": "trulicity", "display_name": "Trulicity", "canonical_name": "dulaglutide", "match_names": ["trulicity"]},
+        {"id": "saxenda", "display_name": "Saxenda", "canonical_name": "liraglutide", "match_names": ["saxenda"]},
+        {"id": "bydureon", "display_name": "Bydureon", "canonical_name": "exenatide", "match_names": ["bydureon", "bydureon bcise"]},
+        {"id": "ozempic", "display_name": "Ozempic", "canonical_name": "semaglutide", "match_names": ["ozempic"]},
+        {"id": "rybelsus", "display_name": "Rybelsus", "canonical_name": "semaglutide", "match_names": ["rybelsus"]},
+        {"id": "wegovy", "display_name": "Wegovy", "canonical_name": "semaglutide", "match_names": ["wegovy"]},
+        {"id": "mounjaro", "display_name": "Mounjaro", "canonical_name": "tirzepatide", "match_names": ["mounjaro"]},
+        {"id": "zepbound", "display_name": "Zepbound", "canonical_name": "tirzepatide", "match_names": ["zepbound"]}
+      ]
+    },
+    {
+      "id": "parpi",
+      "display_name": "PARP inhibitors",
+      "version": "2026-07-20",
+      "atc_codes": ["L01XK"],
+      "excluded_products": [],
+      "therapeutic_comparator_names": ["carboplatin", "cisplatin", "paclitaxel", "docetaxel", "bevacizumab"],
+      "sources": [
+        "药学基础数据/药学相关资料/ATC_DDD_Index_merged.xlsx",
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC8990839/"
+      ],
+      "members": [
+        {"id": "olaparib", "display_name": "Olaparib", "canonical_name": "olaparib", "match_names": ["olaparib", "lynparza"], "atc_codes": ["L01XK01"], "approval_date": "2014-12-19"},
+        {"id": "niraparib", "display_name": "Niraparib", "canonical_name": "niraparib", "match_names": ["niraparib", "zejula", "akeega"], "atc_codes": ["L01XK02"], "approval_date": "2017-03-27"},
+        {"id": "rucaparib", "display_name": "Rucaparib", "canonical_name": "rucaparib", "match_names": ["rucaparib", "rubraca"], "atc_codes": ["L01XK03"], "approval_date": "2016-12-19"},
+        {"id": "talazoparib", "display_name": "Talazoparib", "canonical_name": "talazoparib", "match_names": ["talazoparib", "talzenna"], "atc_codes": ["L01XK04"], "approval_date": "2018-10-16"}
+      ]
+    },
+    {
+      "id": "jaki",
+      "display_name": "Janus kinase inhibitors",
+      "version": "2026-07-20",
+      "atc_codes": ["L01EJ", "L04AF"],
+      "excluded_products": [],
+      "therapeutic_comparator_names": ["adalimumab", "etanercept", "infliximab", "methotrexate", "ustekinumab"],
+      "sources": [
+        "药学基础数据/药学相关资料/ATC_DDD_Index_merged.xlsx",
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC8280037/"
+      ],
+      "members": [
+        {"id": "ruxolitinib", "display_name": "Ruxolitinib", "canonical_name": "ruxolitinib", "match_names": ["ruxolitinib", "jakafi", "jakavi"], "atc_codes": ["L01EJ01"], "approval_date": "2011-11-16"},
+        {"id": "tofacitinib", "display_name": "Tofacitinib", "canonical_name": "tofacitinib", "match_names": ["tofacitinib", "xeljanz"], "atc_codes": ["L04AF01"], "approval_date": "2012-11-06"},
+        {"id": "tofacitinib-xr", "display_name": "Tofacitinib XR", "canonical_name": "tofacitinib", "match_names": ["tofacitinib xr", "xeljanz xr"], "atc_codes": ["L04AF01"], "approval_date": "2016-02-23"},
+        {"id": "baricitinib", "display_name": "Baricitinib", "canonical_name": "baricitinib", "match_names": ["baricitinib", "olumiant"], "atc_codes": ["L04AF02"], "approval_date": "2018-05-31"},
+        {"id": "upadacitinib", "display_name": "Upadacitinib", "canonical_name": "upadacitinib", "match_names": ["upadacitinib", "rinvoq"], "atc_codes": ["L04AF03"], "approval_date": "2019-08-16"},
+        {"id": "fedratinib", "display_name": "Fedratinib", "canonical_name": "fedratinib", "match_names": ["fedratinib", "inrebic"], "atc_codes": ["L01EJ02"], "approval_date": "2019-08-16"}
+      ]
+    }
+  ]
+}

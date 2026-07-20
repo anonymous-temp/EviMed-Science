@@ -315,6 +315,17 @@ async def test_no_results_is_not_cached(tmp_path):
     assert route.call_count == 2  # 404 must not poison the cache
 
 
+def test_memory_cache_uses_a_bounded_lru_when_disk_is_disabled():
+    cache = TwoLevelCache(None, ttl_seconds=3600.0, max_memory_entries=2)
+    keys = [cache.make_key(str(index)) for index in range(3)]
+    for index, key in enumerate(keys):
+        cache.set(key, index)
+
+    assert cache.get(keys[0]) is None
+    assert cache.get(keys[1]) == 1
+    assert cache.get(keys[2]) == 2
+
+
 # -- 2x2 table from live-shaped count queries --------------------------------------
 
 

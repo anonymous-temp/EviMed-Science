@@ -112,7 +112,11 @@ class OpenFDAClient:
     @classmethod
     def from_settings(cls, settings: Settings, **overrides: Any) -> "OpenFDAClient":
         """Build a client wired to the configured two-level cache."""
-        cache = TwoLevelCache(settings.resolved_cache_dir, settings.cache_ttl_seconds)
+        cache = TwoLevelCache(
+            settings.resolved_cache_dir,
+            settings.cache_ttl_seconds,
+            max_memory_entries=settings.cache_max_memory_entries,
+        )
         api_key = settings.openfda_api_key.get_secret_value() or None
         return cls(settings.openfda_base_url, api_key=api_key, cache=cache, **overrides)
 

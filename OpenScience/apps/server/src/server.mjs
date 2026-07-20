@@ -320,12 +320,40 @@ function clientAddress(req, config) {
   return direct;
 }
 
+function agentRunMemoryContent(project, run) {
+  const specialist = run.mode === "specialist"
+    ? `${run.agentId}@${run.agentVersion}`
+    : "open-domain";
+  const artifacts = run.artifacts.length > 0
+    ? run.artifacts.map((artifact) => `  - ${artifact}`).join("\n")
+    : "  - none";
+  return [
+    "# EviMed agent run",
+    `- Run: ${run.id}`,
+    `- Project: ${project.id}`,
+    `- Session: ${run.sessionId}`,
+    `- Mode: ${run.mode}`,
+    `- Agent: ${specialist}`,
+    `- Model: ${run.model}`,
+    `- Status: ${run.status}`,
+    `- Started: ${run.startedAt}`,
+    `- Finished: ${run.finishedAt}`,
+    `- Duration ms: ${run.durationMs}`,
+    `- Error code: ${run.errorCode ?? "none"}`,
+    "- Artifacts:",
+    artifacts,
+    "",
+    "#evimed-agent-run",
+  ].join("\n");
+}
+
 export function createWebApiApp(overrides = {}) {
   const config = loadConfig(overrides);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs });
   const store = createStore(config, { databasePool: overrides.databasePool });
   const researchSessions = new ResearchSessionStore(agentRegistry, { stateStore: store });
   const oidcService = new OidcService(config, store);
+  const memosClient = new MemosClient(config, { fetchImpl: overrides.memosFetch ?? globalThis.fetch });
   let agentRuns;
   const runtimeManager = new RuntimeManager(config, {
     agentRegistry,
@@ -338,12 +366,37 @@ export function createWebApiApp(overrides = {}) {
     readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
+    onRunFinished: async (project, run) => {
+      if (!memosClient.configured) {
+        if (config.requireMemos) {
+          const error = new Error("Required Memos run recording is unavailable.");
+          error.code = "memory_required_unavailable";
+          throw error;
+        }
+        return;
+      }
+      await memosClient.create(project.userId, agentRunMemoryContent(project, run));
+      securityAudit(config, "memory.agent_run.record", "completed", {
+        userId: project.userId,
+        projectId: project.id,
+        runId: run.id,
+        runStatus: run.status,
+      }).catch(() => {});
+    },
+    onRunFinishedError: async (error, project, run) => {
+      await securityAudit(config, "memory.agent_run.record", "failed", {
+        userId: project.userId,
+        projectId: project.id,
+        runId: run.id,
+        runStatus: run.status,
+        code: typeof error?.code === "string" ? error.code : "memory_unavailable",
+      });
+    },
   });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager);
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.publicSourceFetch ?? globalThis.fetch,
   });
-  const memosClient = new MemosClient(config, { fetchImpl: overrides.memosFetch ?? globalThis.fetch });
   const commands = createCommandRegistry({ config, runtimeManager });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx));
   const rateLimiter = new FixedWindowRateLimiter();
@@ -657,6 +710,7 @@ export function createWebApiApp(overrides = {}) {
             query: text,
             memories,
             memoryError,
+            specialists: session.mode === "open-domain" ? (await agentRegistry).list() : [],
           });
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text,

@@ -54,12 +54,12 @@ def verify_tools():
     document = read("tool-probe-v3.json")
     parsed_fresh(document.get("probedAt"), "tool audit")
     require(document.get("schemaVersion") == 3, "tool audit schema is stale")
-    require(document.get("registered") == 22, "tool registry count is not 22")
-    require(document.get("executionCertified") == 22, "all 22 tools are not execution-certified")
-    require(document.get("operational") == 22, "tool operational count is not 22")
+    require(document.get("registered") == 24, "tool registry count is not 24")
+    require(document.get("executionCertified") == 24, "all 24 tools are not execution-certified")
+    require(document.get("operational") == 24, "tool operational count is not 24")
     require(document.get("unverified") == 0 and document.get("errors") == 0, "tool audit contains unverified or errored tools")
     results = document.get("results", [])
-    require(len(results) == 22, "tool audit does not contain 22 results")
+    require(len(results) == 24, "tool audit does not contain 24 results")
     server = load_module("evimed_release_tool_registry", REPO / "runtime" / "mcp" / "evimed-research" / "server.py")
     execution_evidence = load_module(
         "evimed_release_execution_evidence",

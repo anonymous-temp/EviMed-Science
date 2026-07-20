@@ -19,6 +19,13 @@ Jurisdiction is a classification boundary. If it is missing, record the gap and 
 
 Call `evimed_offlabel_evidence_packet` with `action: retrieve`. Verify the exact current official product label with `evimed_drug_label_search`. Use the EviMed NMPA candidate first for a China question, then verify product, approval number, revision date, and currentness. If an exact institutional copy is material but EviMed does not return it, ask once for the current institution label or uploaded file and preserve the gap if it is not supplied. An institutional copy is local evidence and must not be presented as proof of the current NMPA record. If the product originated in another jurisdiction, retrieve that origin-country label separately as evidence support; it must never replace the target-jurisdiction label classification. Use guidelines, trials, literature, and active catalogued biomedical sources only for separate evidence-support questions.
 
+The optional `evimed_pharmacy_reference_search` tool can help normalize private
+names, routes, frequencies, dose-risk rules, interactions, or special-population
+screening terms. Its output cannot establish target-jurisdiction label status,
+approval, legality, or evidence support. Verify material rows against the exact
+current product label, current guideline or pharmacopoeia, and approved local
+policy, and retain their private provenance.
+
 Preserve source identifier, URL, jurisdiction, product scope, version/effective date, retrieval time, exact query, and retrieved label text. A missing label, empty search, connector error, or truncated section is `unclear`, never `match`, `mismatch`, approval, or non-approval. Bibliographic search results are metadata unless evidence content is explicitly present; metadata does not establish design, efficacy, dose support, or certainty. Read the evidence content required for material conclusions.
 
 Deduplicate records and freeze the source and query package in `evidence-snapshot.json` before assessment; the compiler input SHA-256 binds the structured assessment to the supplied inventory. Mark uploaded files as user-provided evidence. If a material licensed source such as Micromedex is unavailable, ask once for a user-provided excerpt or export and record the gap when it is not supplied. Never infer a licensed-database rating from public literature.

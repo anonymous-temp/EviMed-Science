@@ -59,8 +59,10 @@ SHORT_STRING = {"type": "string", "minLength": 1, "maxLength": 128}
 LONG_STRING = {"type": "string", "minLength": 1, "maxLength": 4000}
 NUMBER = {"type": "number"}
 LIMIT = {"type": "integer", "minimum": 1, "maximum": 200}
+EVIMED_SEARCH_LIMIT = {"type": "integer", "minimum": 1, "maximum": 100}
 LABEL_LIMIT = {"type": "integer", "minimum": 1, "maximum": 3}
 DATE = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
+YEAR = {"type": "integer", "minimum": 1900, "maximum": 2100}
 STATUS_WAIT_SECONDS = {"type": "integer", "minimum": 0, "maximum": 60}
 
 ACTION = {"type": "string", "enum": ["requirements", "retrieve", "compile"]}
@@ -314,9 +316,23 @@ TOOL_DEFINITIONS = [
         "inputSchema": object_schema(
             {
                 "query": STRING,
-                "limit": LIMIT,
+                "limit": EVIMED_SEARCH_LIMIT,
                 "dateFrom": DATE,
                 "dateTo": DATE,
+                "articleTypes": {
+                    "type": "array",
+                    "maxItems": 15,
+                    "items": SHORT_STRING,
+                },
+                "hasPdf": {"type": "boolean"},
+                "language": {"type": "string", "enum": ["zh", "en"]},
+                "minImpactFactor": {"type": "number", "minimum": 0, "maximum": 10000},
+                "maxImpactFactor": {"type": "number", "minimum": 0, "maximum": 10000},
+                "journalTiers": {
+                    "type": "array",
+                    "maxItems": 3,
+                    "items": {"type": "string", "enum": ["北大核心", "科技核心", "南大核心"]},
+                },
                 "databases": {
                     "type": "array",
                     "maxItems": 8,
@@ -330,7 +346,16 @@ TOOL_DEFINITIONS = [
         "name": "evimed_guideline_search",
         "description": "Search configured clinical-guideline sources.",
         "inputSchema": object_schema(
-            {"query": STRING, "jurisdiction": SHORT_STRING, "limit": LIMIT},
+            {
+                "query": STRING,
+                "jurisdiction": SHORT_STRING,
+                "limit": EVIMED_SEARCH_LIMIT,
+                "mode": {"type": "string", "enum": ["records", "blocks"]},
+                "language": {"type": "string", "enum": ["zh", "en"]},
+                "publisher": SHORT_STRING,
+                "startYear": YEAR,
+                "endYear": YEAR,
+            },
             ("query",),
         ),
     },
@@ -341,8 +366,34 @@ TOOL_DEFINITIONS = [
             {
                 "query": STRING,
                 "recruitmentStatus": SHORT_STRING,
-                "limit": LIMIT,
+                "limit": EVIMED_SEARCH_LIMIT,
+                "registry": {"type": "integer", "minimum": 0, "maximum": 2},
+                "startYear": YEAR,
+                "endYear": YEAR,
+                "status": {"type": "array", "maxItems": 20, "items": SHORT_STRING},
+                "phase": {"type": "array", "maxItems": 20, "items": SHORT_STRING},
+                "studyType": {"type": "array", "maxItems": 20, "items": SHORT_STRING},
+                "hasArticles": {"type": "array", "maxItems": 1, "items": {"type": "integer", "minimum": 0, "maximum": 1}},
+                "source": {"type": "string", "enum": ["PubMed", "Embase", "ICTRP", "CT.gov", "CINAHL"]},
+                "minSampleSize": {"type": "integer", "minimum": 0, "maximum": 10000000},
+                "maxSampleSize": {"type": "integer", "minimum": 0, "maximum": 10000000},
             },
+            ("query",),
+        ),
+    },
+    {
+        "name": "evimed_patent_search",
+        "description": "Search traceable EviMed patent records for research-landscape discovery; results are not legal opinions, clinical evidence, or freedom-to-operate conclusions.",
+        "inputSchema": object_schema(
+            {"query": STRING, "limit": EVIMED_SEARCH_LIMIT},
+            ("query",),
+        ),
+    },
+    {
+        "name": "evimed_pharmacy_reference_search",
+        "description": "Search the optional private curated pharmacy reference index. Results are decision-support context, not current clinical authority, and require verification against current official sources.",
+        "inputSchema": object_schema(
+            {"query": STRING, "limit": {"type": "integer", "minimum": 1, "maximum": 50}},
             ("query",),
         ),
     },
@@ -573,6 +624,18 @@ TOOL_DEFINITIONS = [
                     "maxItems": 50,
                     "items": SHORT_STRING,
                 },
+                "drugAliases": {"type": "array", "maxItems": 20, "items": SHORT_STRING},
+                "suspectRoles": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 4,
+                    "items": {"type": "string", "enum": ["PS", "SS", "C", "I"]},
+                },
+                "administrationRoutes": {"type": "array", "maxItems": 20, "items": SHORT_STRING},
+                "studyDateFrom": DATE,
+                "studyDateTo": DATE,
+                "backgroundDateFrom": DATE,
+                "backgroundDateTo": DATE,
                 "jobId": {"type": "string", "pattern": r"^safety-[a-z0-9-]{8,80}$"},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
@@ -589,6 +652,8 @@ ADAPTER_ENV = {
     "evimed_literature_search": "EVIMED_LITERATURE_SEARCH_URL",
     "evimed_guideline_search": "EVIMED_GUIDELINE_SEARCH_URL",
     "evimed_clinical_trial_search": "EVIMED_CLINICAL_TRIAL_SEARCH_URL",
+    "evimed_patent_search": "EVIMED_PATENT_SEARCH_URL",
+    "evimed_pharmacy_reference_search": "EVIMED_PHARMACY_REFERENCE_SEARCH_URL",
     "evimed_drug_label_search": "EVIMED_DRUG_LABEL_SEARCH_URL",
     "evimed_adr_case_query": "EVIMED_ADR_CASE_QUERY_URL",
     "evimed_adr_signal_analysis": "EVIMED_ADR_SIGNAL_ANALYSIS_URL",
@@ -969,7 +1034,7 @@ def _adapter_health():
             specialist_spec
             and os.environ.get(specialist_spec["rootEnv"], "").strip()
         )
-        public = not url and public_sources.enabled() and public_sources.supports(name)
+        public = not url and public_sources.enabled() and public_sources.configured(name)
         circuit_url = url or ("public://%s" % name if public else "")
         snapshot = _circuit_snapshot(name, circuit_url) if circuit_url else {
             "state": "unconfigured", "failures": 0, "retryAfterSeconds": 0

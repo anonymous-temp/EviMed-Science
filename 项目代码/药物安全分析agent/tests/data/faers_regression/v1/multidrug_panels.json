@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "frozen_at": "2026-07-20T00:00:00Z",
+  "source": "openFDA drug/event.json live aggregate extraction",
+  "query_binding": "report_contains_target_and_suspect_approximation",
+  "reaction_matching": "quoted tokenized PT",
+  "panels": [
+    {
+      "id": "tafamidis-cardiac-failure-2019q2-2023",
+      "drug": "tafamidis",
+      "drug_aliases": ["tafamidis", "tafamidis meglumine", "Vyndaqel", "Vyndamax"],
+      "reaction": "cardiac failure",
+      "date_from": "2019-04-01",
+      "date_to": "2023-12-31",
+      "counts": {"joint": 1137, "drug_total": 9147, "event_total": 40603, "grand_total": 6986542},
+      "expected_project": {"ror": 24.95368498101338, "prr": 21.976168874813293, "chi2": 22256.51285349061, "ic": 4.418782034448536, "ic025": 4.3297002039254435, "ebgm": 21.342983888610203, "eb05": 20.32166503276999, "signal": true}
+    },
+    {
+      "id": "tafamidis-hypoacusis-2019q2-2023",
+      "drug": "tafamidis",
+      "drug_aliases": ["tafamidis", "tafamidis meglumine", "Vyndaqel", "Vyndamax"],
+      "reaction": "hypoacusis",
+      "date_from": "2019-04-01",
+      "date_to": "2023-12-31",
+      "counts": {"joint": 294, "drug_total": 9147, "event_total": 19004, "grand_total": 6986542},
+      "expected_project": {"ror": 12.351231344817663, "prr": 11.986383633505058, "chi2": 2922.6739656677832, "ic": 3.5627210550852046, "ic025": 3.3986435776671917, "ebgm": 11.757113637885515, "eb05": 10.670942162398482, "signal": true}
+    },
+    {
+      "id": "tafamidis-body-height-decreased-2019q2-2023",
+      "drug": "tafamidis",
+      "drug_aliases": ["tafamidis", "tafamidis meglumine", "Vyndaqel", "Vyndamax"],
+      "reaction": "body height decreased",
+      "date_from": "2019-04-01",
+      "date_to": "2023-12-31",
+      "counts": {"joint": 96, "drug_total": 9147, "event_total": 2683, "grand_total": 6986542},
+      "expected_project": {"ror": 28.59634292417699, "prr": 28.306712562230885, "chi2": 2439.2886971153507, "ic": 4.772395363120319, "ic025": 4.49222279136537, "ebgm": 26.490239657158394, "eb05": 22.325661172398185, "signal": true}
+    },
+    {
+      "id": "tafamidis-essential-hypertension-2019q2-2023",
+      "drug": "tafamidis",
+      "drug_aliases": ["tafamidis", "tafamidis meglumine", "Vyndaqel", "Vyndamax"],
+      "reaction": "essential hypertension",
+      "date_from": "2019-04-01",
+      "date_to": "2023-12-31",
+      "counts": {"joint": 30, "drug_total": 9147, "event_total": 673, "grand_total": 6986542},
+      "expected_project": {"ror": 35.70356746433227, "prr": 35.58974795805371, "chi2": 963.6712061815628, "ic": 5.089492102657886, "ic025": 4.611966993134532, "ebgm": 30.273180824133608, "eb05": 22.1828613451917, "signal": true}
+    },
+    {
+      "id": "olaparib-anaemia-2015-2021q3",
+      "drug": "olaparib",
+      "drug_aliases": ["olaparib", "Lynparza"],
+      "reaction": "anaemia",
+      "date_from": "2015-01-01",
+      "date_to": "2021-09-30",
+      "counts": {"joint": 772, "drug_total": 7520, "event_total": 104317, "grand_total": 9149670},
+      "expected_project": {"ror": 9.986527482202284, "prr": 9.063974394933645, "chi2": 5560.974001483851, "ic": 3.170613610885378, "ic025": 3.0649217767823282, "ebgm": 8.990312407318392, "eb05": 8.470343247097954, "signal": true}
+    },
+    {
+      "id": "olaparib-myelodysplastic-syndrome-2015-2021q3",
+      "drug": "olaparib",
+      "drug_aliases": ["olaparib", "Lynparza"],
+      "reaction": "myelodysplastic syndrome",
+      "date_from": "2015-01-01",
+      "date_to": "2021-09-30",
+      "counts": {"joint": 226, "drug_total": 7520, "event_total": 5748, "grand_total": 9149670},
+      "expected_project": {"ror": 51.2663290552425, "prr": 49.75566544267803, "chi2": 10379.313687429361, "ic": 5.580105949550982, "ic025": 5.391490941585355, "ebgm": 46.78490311330047, "eb05": 41.88103772383678, "signal": true}
+    },
+    {
+      "id": "olaparib-thrombocytopenia-2015-2021q3",
+      "drug": "olaparib",
+      "drug_aliases": ["olaparib", "Lynparza"],
+      "reaction": "thrombocytopenia",
+      "date_from": "2015-01-01",
+      "date_to": "2021-09-30",
+      "counts": {"joint": 162, "drug_total": 7520, "event_total": 46407, "grand_total": 9149670},
+      "expected_project": {"ror": 4.330483249645554, "prr": 4.258736137086701, "chi2": 404.59667118093597, "ic": 2.086566520032464, "ic025": 1.870752838366596, "ebgm": 4.228276641138983, "eb05": 3.708692579416418, "signal": true}
+    },
+    {
+      "id": "olaparib-acute-myeloid-leukaemia-2015-2021q3",
+      "drug": "olaparib",
+      "drug_aliases": ["olaparib", "Lynparza"],
+      "reaction": "acute myeloid leukaemia",
+      "date_from": "2015-01-01",
+      "date_to": "2021-09-30",
+      "counts": {"joint": 216, "drug_total": 7520, "event_total": 7194, "grand_total": 9149670},
+      "expected_project": {"ror": 38.714954243614024, "prr": 37.631652366403834, "chi2": 7476.797433054315, "ic": 5.19108039162122, "ic025": 4.999429199222571, "ebgm": 35.87434244384976, "eb05": 32.031785917102496, "signal": true}
+    },
+    {
+      "id": "olaparib-pancytopenia-2015-2021q3",
+      "drug": "olaparib",
+      "drug_aliases": ["olaparib", "Lynparza"],
+      "reaction": "pancytopenia",
+      "date_from": "2015-01-01",
+      "date_to": "2021-09-30",
+      "counts": {"joint": 125, "drug_total": 7520, "event_total": 21084, "grand_total": 9149670},
+      "expected_project": {"ror": 7.3561881223333065, "prr": 7.2505333995551595, "chi2": 671.1099616050415, "ic": 2.8506946415256857, "ic025": 2.60691920007301, "ebgm": 7.154893609209201, "eb05": 6.161171002377992, "signal": true}
+    },
+    {
+      "id": "cefiderocol-pathogen-resistance-2019q4-2024q3",
+      "drug": "cefiderocol",
+      "drug_aliases": ["cefiderocol", "Fetroja"],
+      "reaction": "pathogen resistance",
+      "date_from": "2019-10-01",
+      "background_date_from": "2004-01-01",
+      "date_to": "2024-09-30",
+      "counts": {"joint": 26, "drug_total": 411, "event_total": 8058, "grand_total": 18375395},
+      "expected_project": {"ror": 154.42798675428156, "prr": 144.72208004963116, "chi2": 3700.6027390109048, "ic": 7.17251097117427, "ic025": 6.657022113845642, "ebgm": 91.71544250708679, "eb05": 65.61063686041328, "signal": true}
+    },
+    {
+      "id": "cefiderocol-hepatic-cytolysis-2019q4-2024q3",
+      "drug": "cefiderocol",
+      "drug_aliases": ["cefiderocol", "Fetroja"],
+      "reaction": "hepatic cytolysis",
+      "date_from": "2019-10-01",
+      "background_date_from": "2004-01-01",
+      "date_to": "2024-09-30",
+      "counts": {"joint": 13, "drug_total": 411, "event_total": 7576, "grand_total": 18375395},
+      "expected_project": {"ror": 79.32578169174579, "prr": 76.8483238766784, "chi2": 971.928138228553, "ic": 6.261496445854483, "ic025": 5.591910284707873, "ebgm": 47.144972199753745, "eb05": 29.110127658576587, "signal": true}
+    },
+    {
+      "id": "cefiderocol-tubulointerstitial-nephritis-2019q4-2024q3",
+      "drug": "cefiderocol",
+      "drug_aliases": ["cefiderocol", "Fetroja"],
+      "reaction": "tubulointerstitial nephritis",
+      "date_from": "2019-10-01",
+      "background_date_from": "2004-01-01",
+      "date_to": "2024-09-30",
+      "counts": {"joint": 4, "drug_total": 411, "event_total": 16550, "grand_total": 18375395},
+      "expected_project": {"ror": 10.904563585815852, "prr": 10.808168806391853, "chi2": 35.626247941149686, "ic": 3.4337337465998337, "ic025": 2.4760853807675156, "ebgm": 7.591118635918913, "eb05": 2.6790401650005267, "signal": true}
+    },
+    {
+      "id": "cefiderocol-acute-kidney-injury-2019q4-2024q3",
+      "drug": "cefiderocol",
+      "drug_aliases": ["cefiderocol", "Fetroja"],
+      "reaction": "acute kidney injury",
+      "date_from": "2019-10-01",
+      "background_date_from": "2004-01-01",
+      "date_to": "2024-09-30",
+      "counts": {"joint": 33, "drug_total": 411, "event_total": 131418, "grand_total": 18375395},
+      "expected_project": {"ror": 12.122351492131147, "prr": 11.229315970865143, "chi2": 309.6434689626896, "ic": 3.488868096520547, "ic025": 3.0203426762180823, "ebgm": 10.759090308640479, "eb05": 8.002872820099018, "signal": true}
+    },
+    {
+      "id": "famciclovir-altered-state-consciousness-2004-2023q2",
+      "drug": "famciclovir",
+      "drug_aliases": ["famciclovir"],
+      "reaction": "altered state of consciousness",
+      "date_from": "2004-01-01",
+      "date_to": "2023-06-30",
+      "paper_route": "oral (ICH E2B 048; not same-object-bound in this live extraction)",
+      "counts": {"joint": 4, "drug_total": 2371, "event_total": 16574, "grand_total": 16715383},
+      "expected_project": {"ror": 1.7027981047999818, "prr": 1.7016124479382357, "chi2": 1.1580302850900615, "ic": 0.766758921735326, "ic025": -0.17880257638189434, "ebgm": 1.0231724839515084, "eb05": 0.43821008815345086, "signal": false}
+    },
+    {
+      "id": "famciclovir-toxic-encephalopathy-2004-2023q2",
+      "drug": "famciclovir",
+      "drug_aliases": ["famciclovir"],
+      "reaction": "toxic encephalopathy",
+      "date_from": "2004-01-01",
+      "date_to": "2023-06-30",
+      "paper_route": "oral (ICH E2B 048; not same-object-bound in this live extraction)",
+      "counts": {"joint": 6, "drug_total": 2371, "event_total": 3661, "grand_total": 16715383},
+      "expected_project": {"ror": 11.598249899497633, "prr": 11.571430203421299, "chi2": 57.864803906784964, "ic": 3.5303335709887, "ic025": 2.679364828555144, "ebgm": 9.18364497435368, "eb05": 4.389277660201869, "signal": true}
+    },
+    {
+      "id": "famciclovir-rhabdomyolysis-2004-2023q2",
+      "drug": "famciclovir",
+      "drug_aliases": ["famciclovir"],
+      "reaction": "rhabdomyolysis",
+      "date_from": "2004-01-01",
+      "date_to": "2023-06-30",
+      "paper_route": "oral (ICH E2B 048; not same-object-bound in this live extraction)",
+      "counts": {"joint": 4, "drug_total": 2371, "event_total": 34215, "grand_total": 16715383},
+      "expected_project": {"ror": 0.8238739885037359, "prr": 0.824171122221992, "chi2": 0.15033569401129462, "ic": -0.27894819834856666, "ic025": -1.224321728402759, "ebgm": 0.638367191097319, "eb05": 0.29562278479239845, "signal": false}
+    },
+    {
+      "id": "famciclovir-acute-kidney-injury-2004-2023q2",
+      "drug": "famciclovir",
+      "drug_aliases": ["famciclovir"],
+      "reaction": "acute kidney injury",
+      "date_from": "2004-01-01",
+      "date_to": "2023-06-30",
+      "paper_route": "oral (ICH E2B 048; not same-object-bound in this live extraction)",
+      "counts": {"joint": 47, "drug_total": 2371, "event_total": 117752, "grand_total": 16715383},
+      "expected_project": {"ror": 2.8513603979902205, "prr": 2.8146611408390014, "chi2": 55.35535823323455, "ic": 1.4925899418085915, "ic025": 1.1093944371075584, "ebgm": 2.7547940319325486, "eb05": 2.131769432954022, "signal": true}
+    }
+  ]
+}

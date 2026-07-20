@@ -16,13 +16,9 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from safety_agent.analysis.pipeline import AnalysisPipeline
 from safety_agent.analysis.models import AnalysisResult
 from safety_agent.core.config import get_settings
 from safety_agent.core.logging import configure_logging, get_logger
-from safety_agent.evidence.evimed import EviMedEvidenceClient
-from safety_agent.llm.client import DeepSeekClient
-from safety_agent.openfda.client import OpenFDAClient
 from safety_agent.report.docx_export import export_docx, export_pdf
 from safety_agent.report.markdown import render_markdown, signal_table_csv
 
@@ -43,31 +39,41 @@ async def run_to_files(
     on_stage=None,
     timeout_seconds: float = 600.0,
     stem: str = "report",
+    drug_aliases: tuple[str, ...] | None = None,
+    suspect_roles: frozenset[str] | None = None,
+    administration_routes: tuple[str, ...] | None = None,
+    study_date_from: str | None = None,
+    study_date_to: str | None = None,
+    background_date_from: str | None = None,
+    background_date_to: str | None = None,
 ) -> dict[str, Path | None]:
     """Run the pipeline and write all report artifacts into ``outdir``."""
     settings = get_settings()
-    openfda = OpenFDAClient.from_settings(settings)
-    llm = None
-    if settings.deepseek_api_key.get_secret_value():
-        llm = DeepSeekClient.from_settings(settings)
-    else:
-        logger.warning("DEEPSEEK_API_KEY empty; LLM steps will degrade")
-    evidence = EviMedEvidenceClient.from_settings(settings)
-    pipeline = AnalysisPipeline(
-        openfda=openfda,
-        llm=llm,
-        evidence=evidence,
+    # Import lazily because the service module reuses write_artifacts from this
+    # module. The shared context is the canonical assembly path for REST, WS,
+    # and managed OpenScience runs, so snapshot/prior/scope settings cannot
+    # silently diverge between entry points.
+    from safety_agent.api.service import ServiceContext
+
+    service = ServiceContext(
+        settings,
+        jobs_dir=outdir / ".jobs",
+        drug_aliases=drug_aliases,
+        suspect_roles=suspect_roles,
+        drug_routes=administration_routes,
+        study_date_from=study_date_from,
+        study_date_to=study_date_to,
+        background_date_from=background_date_from,
+        background_date_to=background_date_to,
+    )
+    pipeline = service.make_pipeline(
         on_stage=on_stage or _stage_printer,
         timeout_seconds=timeout_seconds,
-        openfda_base_url=settings.openfda_base_url,
     )
     try:
         result = await pipeline.run(drug, reactions, language=language)
     finally:
-        await openfda.aclose()
-        if llm is not None:
-            await llm.aclose()
-        await evidence.aclose()
+        await service.aclose()
     return write_artifacts(result, outdir, stem=stem)
 
 

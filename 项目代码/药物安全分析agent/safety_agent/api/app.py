@@ -33,8 +33,16 @@ from safety_agent.core.exceptions import (
 )
 from safety_agent.core.logging import get_logger
 from safety_agent.report.markdown import render_markdown
+from safety_agent.drug_classes import DrugClassRegistry
+from safety_agent.report.class_markdown import render_class_markdown
 
-from .schemas import AnalyzeAccepted, AnalyzeRequest, JobStatusResponse, SignalsResponse
+from .schemas import (
+    AnalyzeAccepted,
+    AnalyzeRequest,
+    ClassAnalyzeRequest,
+    JobStatusResponse,
+    SignalsResponse,
+)
 from .service import ServiceContext
 
 logger = get_logger(__name__)
@@ -50,7 +58,7 @@ def create_app(
     enable_ws: bool = True,
 ) -> FastAPI:
     """Application factory. Tests pass a stubbed ``service`` and no WS."""
-    app = FastAPI(title="EviMed Drug Safety Analysis Agent", version="0.5.0")
+    app = FastAPI(title="EviMed Drug Safety Analysis Agent", version="0.6.0")
     app.state.service = service
     app.state.enable_ws = enable_ws
 
@@ -127,6 +135,7 @@ def create_app(
             data_source=computation.data_source,
             suspect_binding=computation.suspect_binding,
             suspect_roles=computation.suspect_roles,
+            administration_routes=computation.administration_routes or [],
             snapshot_id=computation.snapshot_id,
             snapshot_source=computation.snapshot_source,
             snapshot_sha256=computation.snapshot_sha256,
@@ -134,12 +143,50 @@ def create_app(
             snapshot_deduplication=computation.snapshot_deduplication,
             study_date_from=computation.study_date_from,
             study_date_to=computation.study_date_to,
+            background_date_from=computation.background_date_from,
+            background_date_to=computation.background_date_to,
             statistics_version=computation.statistics_version,
             gps_prior_fitted=computation.gps_prior_fitted,
             gps_prior_id=computation.gps_prior_id,
             rows=computation.rows,
             query_urls=computation.query_urls,
         )
+
+    @app.get("/api/v1/adr/classes", response_model=None)
+    async def drug_classes():
+        registry = DrugClassRegistry.bundled()
+        return {
+            "classes": [
+                {
+                    "id": class_id,
+                    "display_name": registry.get(class_id).display_name,
+                    "version": registry.get(class_id).version,
+                    "atc_codes": list(registry.get(class_id).atc_codes),
+                    "members": [member.id for member in registry.get(class_id).members],
+                }
+                for class_id in registry.ids()
+            ]
+        }
+
+    @app.post("/api/v1/adr/classes/analyze", response_model=None)
+    async def analyze_drug_class(
+        request: Request,
+        body: ClassAnalyzeRequest,
+        report: bool = Query(False),
+    ):
+        svc = _service(request)
+        try:
+            result = await svc.compute_class_analysis(
+                body.class_id, body.reactions, body.role_codes
+            )
+        except KeyError as error:
+            return _error(404, str(error))
+        if report:
+            return PlainTextResponse(
+                render_class_markdown(result),
+                media_type="text/markdown; charset=utf-8",
+            )
+        return result.model_dump(mode="json")
 
     # -- exception handlers (unified {code,msg}) ----------------------------
 

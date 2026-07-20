@@ -24,12 +24,35 @@ import argparse
 import asyncio
 import json
 import traceback
+from datetime import date
 from pathlib import Path
 
 from safety_agent.analysis.runner import run_to_files
 from safety_agent.core.logging import configure_logging, get_logger
 
 logger = get_logger(__name__)
+
+
+def _bounded_string_list(request: dict, name: str, *, maximum: int = 20) -> tuple[str, ...] | None:
+    if name not in request:
+        return None
+    value = request[name]
+    if not isinstance(value, list) or len(value) > maximum:
+        raise ValueError(f"{name} must be an array with at most {maximum} strings")
+    cleaned = tuple(dict.fromkeys(str(item).strip() for item in value if str(item).strip()))
+    if len(cleaned) != len(value) or any(len(item) > 200 for item in cleaned):
+        raise ValueError(f"{name} contains an invalid value")
+    return cleaned
+
+
+def _optional_date(request: dict, name: str) -> str | None:
+    value = request.get(name)
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be an ISO date")
+    date.fromisoformat(value)
+    return value
 
 
 def _write_result(output_dir: Path, value: dict) -> None:
@@ -55,6 +78,17 @@ def run(request_path: Path, output_dir: Path) -> int:
         language = str(request.get("outputLanguage") or "zh")
         if language not in ("zh", "en"):
             raise ValueError("outputLanguage must be 'zh' or 'en'")
+        aliases = _bounded_string_list(request, "drugAliases")
+        roles = _bounded_string_list(request, "suspectRoles", maximum=4)
+        if roles is not None and (not roles or not set(roles) <= {"PS", "SS", "C", "I"}):
+            raise ValueError("suspectRoles must contain one or more of PS, SS, C, I")
+        routes = _bounded_string_list(request, "administrationRoutes")
+        scope_dates = {
+            name: _optional_date(request, name)
+            for name in (
+                "studyDateFrom", "studyDateTo", "backgroundDateFrom", "backgroundDateTo"
+            )
+        }
 
         configure_logging("INFO")
         artifacts = asyncio.run(
@@ -64,6 +98,13 @@ def run(request_path: Path, output_dir: Path) -> int:
                 language=language,
                 outdir=output_dir,
                 stem="safety-report",
+                drug_aliases=aliases,
+                suspect_roles=frozenset(roles) if roles is not None else None,
+                administration_routes=routes,
+                study_date_from=scope_dates["studyDateFrom"],
+                study_date_to=scope_dates["studyDateTo"],
+                background_date_from=scope_dates["backgroundDateFrom"],
+                background_date_to=scope_dates["backgroundDateTo"],
             )
         )
         names = [
@@ -80,6 +121,12 @@ def run(request_path: Path, output_dir: Path) -> int:
                 "report": "safety-report.md",
                 "signals": "signals.csv",
                 "artifacts": names,
+                "scope": {
+                    "drugAliases": list(aliases or ()),
+                    "suspectRoles": list(roles or ()),
+                    "administrationRoutes": list(routes or ()),
+                    **scope_dates,
+                },
             },
         )
         return 0

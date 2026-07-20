@@ -8,6 +8,7 @@ sentum-evimed-evidence-comprehensive/
 open-science-master/
 grok-build-main/
 项目代码/scientific-agent-skills-main/
+/药学基础数据/
 
 # Local secrets and runtime data
 .env

@@ -9,12 +9,25 @@ so the package loads without the dependency in test environments.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import re
 import time
 
 from safety_agent.core.config import Settings
 from safety_agent.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _object_key_component(value: str) -> str:
+    original = str(value).strip()
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", original).strip("._-")
+    if not cleaned:
+        cleaned = "unknown"
+    cleaned = cleaned[:96]
+    if cleaned != original:
+        cleaned = f"{cleaned}-{hashlib.sha256(original.encode('utf-8')).hexdigest()[:12]}"
+    return cleaned
 
 
 async def upload_markdown(
@@ -31,7 +44,14 @@ async def upload_markdown(
     if not key_id or not key_secret or not settings.oss_bucket_name:
         logger.warning("OSS credentials not configured; skipping upload")
         return None
-    remote_path = f"{agent_type}/{user_id}/{message_id}/{int(time.time() * 1000)}.md"
+    remote_path = "/".join(
+        (
+            _object_key_component(agent_type),
+            _object_key_component(user_id),
+            _object_key_component(message_id),
+            f"{int(time.time() * 1000)}.md",
+        )
+    )
     data = content.encode("utf-8")
 
     def _upload_sync() -> None:

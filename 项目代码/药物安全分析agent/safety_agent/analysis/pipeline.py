@@ -47,8 +47,10 @@ from safety_agent.openfda.queries import (
     DRUG_FIELD_MEDICINALPRODUCT,
     DRUG_FIELD_OPENFDA_GENERIC,
     FIELD_REACTION_EXACT,
+    date_range_clause,
     drug_clause,
     reaction_clause,
+    route_clause,
     suspect_only_clause,
 )
 from safety_agent.signals import (
@@ -88,8 +90,11 @@ class AnalysisPipeline:
         faers_snapshot: FrozenFAERSSnapshot | None = None,
         drug_aliases: tuple[str, ...] = (),
         suspect_roles: frozenset[str] = frozenset({"PS"}),
+        drug_routes: tuple[str, ...] = (),
         study_date_from: date | str | None = None,
         study_date_to: date | str | None = None,
+        background_date_from: date | str | None = None,
+        background_date_to: date | str | None = None,
         gps_prior: MGPSPrior = DEFAULT_MGPS_PRIOR,
     ) -> None:
         self._openfda = openfda
@@ -111,9 +116,21 @@ class AnalysisPipeline:
         self._ps_only = ps_only
         self._faers_snapshot = faers_snapshot
         self._drug_aliases = drug_aliases
-        self._suspect_roles = suspect_roles
-        self._study_date_from = study_date_from
-        self._study_date_to = study_date_to
+        validated_scope = DrugScope(
+            names=("scope-validation",),
+            role_codes=suspect_roles,
+            routes=drug_routes,
+            date_from=study_date_from,
+            date_to=study_date_to,
+            background_date_from=background_date_from,
+            background_date_to=background_date_to,
+        )
+        self._suspect_roles = validated_scope.role_codes
+        self._drug_routes = validated_scope.routes
+        self._study_date_from = validated_scope.date_from
+        self._study_date_to = validated_scope.date_to
+        self._background_date_from = validated_scope.background_date_from
+        self._background_date_to = validated_scope.background_date_to
         self._gps_prior = gps_prior
 
     async def run(
@@ -170,8 +187,11 @@ class AnalysisPipeline:
             snapshot_scope = DrugScope(
                 names=(drug_norm.normalized, *self._drug_aliases),
                 role_codes=self._suspect_roles,
+                routes=self._drug_routes,
                 date_from=self._study_date_from,
                 date_to=self._study_date_to,
+                background_date_from=self._background_date_from,
+                background_date_to=self._background_date_to,
             )
             overview = await asyncio.to_thread(
                 self._faers_snapshot.overview, snapshot_scope
@@ -187,7 +207,11 @@ class AnalysisPipeline:
             builder = OverviewBuilder(self._openfda)
             overview = None
             try:
-                overview = await builder.build(drug_search, drug_norm.normalized)
+                overview = await builder.build(
+                    drug_search,
+                    drug_norm.normalized,
+                    drug_aliases=self._drug_aliases,
+                )
             except NoResults:
                 overview = None
             if (overview is None or overview.total_reports == 0) and (
@@ -203,13 +227,22 @@ class AnalysisPipeline:
                 drug_field_used = DRUG_FIELD_MEDICINALPRODUCT
                 drug_search = self._scoped_drug_search(drug_norm.normalized, drug_field_used)
                 try:
-                    overview = await builder.build(drug_search, drug_norm.normalized)
+                    overview = await builder.build(
+                        drug_search,
+                        drug_norm.normalized,
+                        drug_aliases=self._drug_aliases,
+                    )
                 except NoResults:
                     overview = None
             if self._ps_only:
                 notes.append(
                     "openFDA live 聚合仅表示报告同时含目标药和 suspect 药,无法保证二者属于同一 drug 对象;"
                     "该口径为报告级近似,不是 PS-only。"
+                )
+            if self._drug_routes:
+                notes.append(
+                    "openFDA live 聚合仅表示报告同时含目标药、指定角色和给药途径,"
+                    "无法保证三者属于同一 drug 对象。"
                 )
         if overview is None or overview.total_reports == 0:
             raise NoDataError(f"FAERS 中未检索到 {drug_norm.normalized} 的任何报告")
@@ -309,15 +342,26 @@ class AnalysisPipeline:
                 if self._ps_only
                 else ["PS", "SS", "C", "I"]
             ),
+            administration_routes=list(self._drug_routes),
             study_date_from=(
                 snapshot_scope.date_from.isoformat()
                 if snapshot_scope is not None and snapshot_scope.date_from
-                else None
+                else _iso_date(self._study_date_from)
             ),
             study_date_to=(
                 snapshot_scope.date_to.isoformat()
                 if snapshot_scope is not None and snapshot_scope.date_to
-                else None
+                else _iso_date(self._study_date_to)
+            ),
+            background_date_from=(
+                snapshot_scope.background_date_from.isoformat()
+                if snapshot_scope is not None and snapshot_scope.background_date_from
+                else _iso_date(self._background_date_from or self._study_date_from)
+            ),
+            background_date_to=(
+                snapshot_scope.background_date_to.isoformat()
+                if snapshot_scope is not None and snapshot_scope.background_date_to
+                else _iso_date(self._background_date_to or self._study_date_to)
             ),
             snapshot_id=provenance.snapshot_id if provenance else None,
             snapshot_source=provenance.source if provenance else None,
@@ -336,10 +380,31 @@ class AnalysisPipeline:
         derived from them stay marginally consistent; the reaction
         marginal and the grand total deliberately stay unfiltered.
         """
-        base = drug_clause(drug_name, field=field)
+        names = (
+            (drug_name, *self._drug_aliases)
+            if field == DRUG_FIELD_MEDICINALPRODUCT
+            else (drug_name,)
+        )
+        clauses = [drug_clause(name, field=field) for name in dict.fromkeys(names)]
+        base = clauses[0] if len(clauses) == 1 else "(" + " OR ".join(clauses) + ")"
         if self._ps_only:
-            return f"({base}) AND ({suspect_only_clause()})"
+            base = f"({base}) AND ({suspect_only_clause()})"
+        if self._drug_routes:
+            routes = " OR ".join(route_clause(route) for route in self._drug_routes)
+            base = f"({base}) AND ({routes})"
+        if self._study_date_from is not None or self._study_date_to is not None:
+            base = (
+                f"({base}) AND "
+                f"({date_range_clause(self._study_date_from, self._study_date_to)})"
+            )
         return base
+
+    def _background_search(self) -> str | None:
+        date_from = self._background_date_from or self._study_date_from
+        date_to = self._background_date_to or self._study_date_to
+        if date_from is None and date_to is None:
+            return None
+        return date_range_clause(date_from, date_to)
 
     # -- signal computation ---------------------------------------------------
 
@@ -349,7 +414,8 @@ class AnalysisPipeline:
         drug_total: int,
         normalized_reactions: list[NormalizedReaction],
     ) -> list[SignalRow]:
-        grand_total = await self._count(None)
+        background_search = self._background_search()
+        grand_total = await self._count(background_search)
         user_pts = [r.normalized for r in normalized_reactions if r.normalized]
         top_pts = await self._top_pts(drug_search, user_pts)
         targets: list[tuple[str, str]] = [(pt, "user-specified") for pt in user_pts]
@@ -360,7 +426,11 @@ class AnalysisPipeline:
             async with self._sem:
                 joint, event_total = await asyncio.gather(
                     self._count(f"({drug_search}) AND ({clause})"),
-                    self._count(clause),
+                    self._count(
+                        f"({clause}) AND ({background_search})"
+                        if background_search
+                        else clause
+                    ),
                 )
             table = build_table_from_counts(joint, drug_total, event_total, grand_total)
             metrics = analyze(table, prior=self._gps_prior)
@@ -517,7 +587,7 @@ class AnalysisPipeline:
 
         urls: dict[str, str] = {
             "drug_total": event_url(drug_search),
-            "grand_total": event_url(None),
+            "grand_total": event_url(self._background_search()),
             "top_pt_counts": (
                 f"{self._base_url}/drug/event.json?limit=100"
                 f"&count={FIELD_REACTION_EXACT}&search=" + quote(drug_search)
@@ -533,7 +603,11 @@ class AnalysisPipeline:
             urls[f"signal_joint[{pt}]"] = event_url(
                 f"({drug_search}) AND ({reaction_clause(pt)})"
             )
-            urls[f"signal_event[{pt}]"] = event_url(reaction_clause(pt))
+            event_search = reaction_clause(pt)
+            background_search = self._background_search()
+            if background_search:
+                event_search = f"({event_search}) AND ({background_search})"
+            urls[f"signal_event[{pt}]"] = event_url(event_search)
         return urls
 
     def _label_query_url(self, drug_name: str) -> dict[str, str]:
@@ -563,3 +637,14 @@ def _focus_reactions(signals: list[SignalRow], user_pts: list[str]) -> list[str]
     )
     focus.extend(r.reaction for r in ranked[:5])
     return focus
+
+
+def _iso_date(value: date | str | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value.isoformat()
+    compact = value.replace("-", "")
+    if len(compact) == 8 and compact.isdigit():
+        return f"{compact[:4]}-{compact[4:6]}-{compact[6:]}"
+    return value

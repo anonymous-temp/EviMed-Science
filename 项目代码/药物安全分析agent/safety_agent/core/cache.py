@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -22,10 +23,19 @@ logger = get_logger(__name__)
 class TwoLevelCache:
     """Memory + disk cache keyed by a SHA-256 of the request identity."""
 
-    def __init__(self, cache_dir: Path | None, ttl_seconds: float) -> None:
+    def __init__(
+        self,
+        cache_dir: Path | None,
+        ttl_seconds: float,
+        *,
+        max_memory_entries: int = 2048,
+    ) -> None:
+        if max_memory_entries < 1:
+            raise ValueError("max_memory_entries must be positive")
         self._dir = cache_dir
         self._ttl = ttl_seconds
-        self._memory: dict[str, tuple[float, Any]] = {}
+        self._max_memory_entries = max_memory_entries
+        self._memory: OrderedDict[str, tuple[float, Any]] = OrderedDict()
 
     @staticmethod
     def make_key(*parts: str) -> str:
@@ -49,11 +59,12 @@ class TwoLevelCache:
         if entry is not None:
             expires_at, payload = entry
             if expires_at > now:
+                self._memory.move_to_end(key)
                 return payload
             del self._memory[key]
         payload = self._read_disk(key, now)
         if payload is not None:
-            self._memory[key] = (now + self._ttl, payload)
+            self._remember(key, now + self._ttl, payload)
         return payload
 
     def set(self, key: str, payload: Any) -> None:
@@ -61,8 +72,14 @@ class TwoLevelCache:
         if not self.enabled:
             return
         expires_at = time.time() + self._ttl
-        self._memory[key] = (expires_at, payload)
+        self._remember(key, expires_at, payload)
         self._write_disk(key, expires_at, payload)
+
+    def _remember(self, key: str, expires_at: float, payload: Any) -> None:
+        self._memory[key] = (expires_at, payload)
+        self._memory.move_to_end(key)
+        while len(self._memory) > self._max_memory_entries:
+            self._memory.popitem(last=False)
 
     # -- disk level ------------------------------------------------------
 

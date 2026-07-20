@@ -74,6 +74,8 @@ test("loads the final package contract and derives runtime identity", async () =
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_data_source_catalog"));
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_biomedical_source_search"));
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_open_access_full_text"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_patent_search"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_pharmacy_reference_search"));
     assert.ok(EVIMED_AGENT_DATA_SOURCES.has("faers"));
     assert.ok(EVIMED_AGENT_COMPLETION_CHECKS.has("citationsResolvable"));
   });
@@ -108,15 +110,15 @@ test("official skills name every output declared by their manifest", async () =>
 test("official specialist packages preserve domain-specific evidence and release boundaries", async () => {
   const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot] });
   const expectedVersions = new Map([
-    ["adr-analysis", "1.2.1"],
+    ["adr-analysis", "1.2.2"],
     ["bibliometric-analysis", "1.0.1"],
-    ["comprehensive-drug-evaluation", "2.2.0"],
-    ["drug-selection", "2.1.0"],
+    ["comprehensive-drug-evaluation", "2.2.1"],
+    ["drug-selection", "2.1.1"],
     ["mendelian-randomization", "1.0.1"],
     ["meta-analysis", "1.0.0"],
-    ["off-label-analysis", "2.2.0"],
+    ["off-label-analysis", "2.2.1"],
     ["peer-review", "1.0.1"],
-    ["research-topic-selection", "1.0.1"],
+    ["research-topic-selection", "1.0.2"],
   ]);
   for (const agent of registry.list()) {
     assert.equal(agent.version, expectedVersions.get(agent.id));

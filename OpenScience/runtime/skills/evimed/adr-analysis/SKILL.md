@@ -31,10 +31,17 @@ For an open-domain request that asks for a drug-safety analysis or structured
 pharmacovigilance report, call `evimed_drug_safety_analysis` with
 `action=capabilities`, then start the managed job with the drug and optional
 reaction terms. Record its job id and poll with `waitSeconds=60` until terminal.
+When the user or protocol declares aliases, exact FAERS role codes,
+administration routes, a target study window, or a wider background window,
+pass them as `drugAliases`, `suspectRoles`, `administrationRoutes`,
+`studyDateFrom`/`studyDateTo`, and
+`backgroundDateFrom`/`backgroundDateTo`. Do not invent these scope controls;
+the background window must contain the target window.
 The language model may explain the returned findings, but must not replace the
 specialist's case retrieval, statistics, evidence search, or report artifacts.
 Before interpreting a completed run, inspect `data_source`, `suspect_binding`,
-`suspect_roles`, `study_date_from`, `study_date_to`, `snapshot_id`,
+`suspect_roles`, `administration_routes`, `study_date_from`, `study_date_to`,
+`background_date_from`, `background_date_to`, `snapshot_id`,
 `gps_prior_fitted`, and `gps_prior_id`. Preserve these provenance fields in the
 answer whenever they affect reproducibility or the strength of a conclusion.
 An `openfda_live` result with
@@ -49,6 +56,13 @@ When the declared safety, label, or literature adapters leave a material gap,
 use `evimed_data_source_catalog` to select a relevant active source and then
 `evimed_biomedical_source_search`. Do not query unrelated databases merely to
 increase source count.
+
+Use `evimed_pharmacy_reference_search` only when a configured private reference
+can clarify a drug alias, route, dose-risk rule, interaction, monitoring item,
+or special-population screening hypothesis. Its rows may be institution-specific
+and are not current clinical authority. Verify every material rule against the
+current official label, guideline, pharmacopoeia, and local governance policy;
+an unavailable or empty private index is an evidence gap, not a negative finding.
 
 The public literature search returns bibliographic metadata unless it explicitly
 includes abstract or full-text fields. Do not assign study design or evidence
