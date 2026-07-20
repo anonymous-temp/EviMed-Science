@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "corpus_id": "dta_threshold_cases",
+  "description": "Fail-closed threshold contracts for a common-threshold bivariate diagnostic accuracy synthesis.",
+  "cases": [
+    {
+      "case_id": "missing_threshold",
+      "thresholds": ["10 ng/mL", "", "10 ng/mL"],
+      "expected_error": "recorded threshold"
+    },
+    {
+      "case_id": "mixed_thresholds",
+      "thresholds": ["10 ng/mL", "20 ng/mL", "10 ng/mL"],
+      "expected_error": "common threshold"
+    }
+  ]
+}

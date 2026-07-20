@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "corpus_id": "adjusted_effect_policy_cases",
+  "description": "Fail-closed estimand and dependency cases for aggregate adjusted-effect synthesis.",
+  "required_invariants": [
+    "every estimate is explicitly adjusted",
+    "every estimate records its adjustment covariates",
+    "canonical adjustment sets match exactly",
+    "all estimates use one effect measure and analysis scale",
+    "only one independent estimate per study is pooled"
+  ],
+  "cases": [
+    {"case_id": "unadjusted_row", "expected_error": "adjusted estimates only"},
+    {"case_id": "missing_covariates", "expected_error": "reported adjustment set"},
+    {"case_id": "incompatible_adjustment_sets", "expected_error": "adjustment sets are incompatible"},
+    {"case_id": "duplicate_study", "expected_error": "explicit covariance model"},
+    {"case_id": "mixed_measure", "expected_error": "same effect measure"}
+  ]
+}

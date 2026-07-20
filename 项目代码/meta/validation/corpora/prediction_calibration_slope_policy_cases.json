@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "corpus_id": "prediction_calibration_slope_policy_cases",
+  "description": "Fail-closed input and interpretation cases for external-validation calibration-slope synthesis.",
+  "required_invariants": [
+    "one exact model identity and version",
+    "external validation estimates only",
+    "one outcome definition and time horizon",
+    "each calibration slope requires a source-reported standard error or confidence interval",
+    "calibration slopes are pooled on the original scale",
+    "a slope of one is ideal, a slope below one indicates predictions that are too extreme, and a slope above one indicates predictions that are not extreme enough",
+    "calibration slope alone does not establish calibration-in-the-large, discrimination, or clinical utility"
+  ],
+  "cases": [
+    {"case_id": "missing_precision", "expected_error": "SE or CI"},
+    {"case_id": "mixed_metric", "expected_error": "one performance metric"},
+    {"case_id": "mixed_model_version", "expected_error": "one model identity and version"},
+    {"case_id": "mixed_horizon", "expected_error": "one time horizon"},
+    {"case_id": "internal_validation", "expected_error": "external validation"}
+  ]
+}

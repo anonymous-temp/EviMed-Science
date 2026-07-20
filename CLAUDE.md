@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this workspace is
 
-`EviMed Science` (循证医学 / evidence-based medicine) is the **SaaS platform orchestration repository**. Product code remains split across independently versioned submodules with their own stacks and toolchains. There is no root build; `cd` into the relevant subtree before running project commands.
+`EviMed Science` (循证医学 / evidence-based medicine) is the **SaaS platform monorepo**. Product code lives in ordinary directories with separate stacks and toolchains. There is no root build; `cd` into the relevant subtree before running project commands.
 
 | Path | What it is | Stack | Authoritative docs |
 |---|---|---|---|
@@ -14,13 +14,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `记忆模块/` | Memos, vendored as the platform's "memory" store | Go 1.26.2 · React/TS (ConnectRPC) | `记忆模块/AGENTS.md` |
 | `接口文档/` | Markdown API specs for shared capabilities | — | `.md` files in place |
 
-Git model: the root repository tracks `OpenScience/`, shared documentation, and 12 pinned submodules: the five Java services, six Python specialist agents, and `记忆模块/`. Commit inside the specific submodule first, push its branch, then commit the updated gitlink in the root repository. `scientific-agent-skills-main/`, `open-science-master/`, and `grok-build-main/` are ignored reference snapshots, not release submodules.
+Git model: the workspace root is the single authoritative repository and uses the `main` branch. The five Java services, six Python specialist agents, `OpenScience/`, and `记忆模块/` are normal tracked directories, not submodules. Commit and push from the workspace root. `scientific-agent-skills-main/`, `open-science-master/`, and `grok-build-main/` are ignored reference snapshots.
 
 Working language: discussion in Chinese is fine, but **code, files, comments, and commits are English** (per `OpenScience/AGENTS.md`). When a subtree has its own `AGENTS.md`/`CLAUDE.md`, that file wins for that subtree. `AGENTS.md` at the workspace root is the Codex-variant of this file — keep them in sync when editing rules.
 
 ### Supporting directories (do not code here)
 
-- `.evimed-local/` — local infra state: `memos/memos_prod.db` (SQLite for Memos) and `secrets/` (`deepseek.api-key`, signing keys, Memos admin password/PAT, bootstrap password). Treated as runtime state; never commit, never echo.
+- `.evimed-local/` — local infra state: `memos/memos_prod.db` (SQLite for Memos), `secrets/` (`deepseek.api-key`, signing keys, Memos admin password/PAT, bootstrap password), and recoverable migration metadata under `git-backups/`. Treated as runtime state; never commit, never echo.
 - `outputs/` — audit/evaluation artifacts, not chat-style agent runs: UUID dirs hold audit workbooks (`.xlsx` + build scripts); `outputs/audit/` is an evaluation harness (`corpus/`, `runs/`, `reports/`, `scripts/`); `outputs/outputs/audit/` is a stray nested duplicate. Ephemeral.
 - `docs/superpowers/` — `plans/` and `specs/` for the `superpowers` skill framework (incl. the EviMed platform design spec and the `grok-build` fusion design). `docs/ui-ux-audit/` — frontend UI/UX audit reports (Chinese).
 - `open-science-master/` — upstream reference snapshot of OpenScience (`ai4s-workbench` v0.2.0, desktop-only: no `apps/server`, `deploy/`, or `evals/`). **Not** the active tree — use `OpenScience/`. Read-only.
@@ -85,7 +85,7 @@ Platform integration is the same across the five service agents: an **outbound W
 
 | Dir | Purpose | Entry | Default port | Docs |
 |---|---|---|---|---|
-| `meta/` | **MetaAgent** — automated systematic-review / meta-analysis manuscript generator. Five-layer arch in `new_meta/` (`agents/` LLM · `engines/` deterministic numpy/scipy stats · `schemas/` Pydantic v2 · `core/` infra · `tools/` PubMed/PDF). All math is deterministic; LLM never does statistics. The only Python agent that is its own git repo. | `python -m new_meta.main --topic "..."` (CLI; also `metaagent` console script) · `python start.py` (FastAPI prod server) | 8002 | `meta/AGENTS.md`, `meta/CLAUDE.md`, `meta/README.md` |
+| `meta/` | **MetaAgent** — automated systematic-review / meta-analysis manuscript generator. Five-layer arch in `new_meta/` (`agents/` LLM · `engines/` deterministic numpy/scipy stats · `schemas/` Pydantic v2 · `core/` infra · `tools/` PubMed/PDF). All math is deterministic; LLM never does statistics. | `python -m new_meta.main --topic "..."` (CLI; also `metaagent` console script) · `python start.py` (FastAPI prod server) | 8002 | `meta/AGENTS.md`, `meta/CLAUDE.md`, `meta/README.md` |
 | `孟德尔随机化/` | Mendelian Randomization analysis agent (`mr_agent/` package). **Requires R** (`r_scripts/` + local `.r-lib/`). | `python start.py` | 8003 | `孟德尔随机化/README.md` |
 | `论文审稿/` | Plan-Retrieve-Argue peer-review system; advertises 11 international checklists (CONSORT/PRISMA/STROBE/TRIPOD-AI/STARD/CARE/ARRIVE/COREQ/CHEERS/GRADE/Universal); `src/rubrics/` actually ships 15 YAMLs. | `python -m src.main <pdf>` (CLI) · `python start.py` (FastAPI) | 6009 | `论文审稿/README.md` |
 | `文献剂量分析/` | **AI-driven bibliometric analysis** (PubMed → cleaning → network analysis → CiteSpace-style reproduction → insight → report). *Name is historical — this is bibliometrics, not dosing.* | `python start.py` (FastAPI) · `PYTHONPATH=src python3 -m bibliometric analyze "topic" ...` (CLI, `src/bibliometric/cli.py`) | 6066 | `文献剂量分析/CLAUDE.md`, `文献剂量分析/FRONTEND_DEV_GUIDE.md` |
@@ -108,7 +108,7 @@ Per-agent caveats:
 - `科研选题/`: port docs are inconsistent — `start.py` defaults to **6008** while the README / `docker-compose.yml` / `config/settings.py` say 8000. **Celery is vestigial**: `docker-compose.yml` defines a worker for `app.celery_app`, a module that does not exist. The README's structure listing is stale; actual services live in `services/` (`internal_db_service.py`, `llm_service.py`, `pubmed_service.py`, `task_service.py`). Has `Dockerfile` + `docker-compose.yml` (api + redis + mongo).
 - `论文审稿/`: `src/celery_app.py` / `src/tasks.py` exist but are **not** imported by the API entry; `start.py` warns that `workers>1` needs a Redis-backed job store.
 
-⚠️ Secret-handling note: `文献剂量分析/deploy.env` on disk contains real API keys, and several agents have local `.env` files — those dirs are not git repos, so treat them as local-only. Never add new secrets, never echo existing ones, and flag it if asked to handle them (see "Security notes" below).
+⚠️ Secret-handling note: `文献剂量分析/deploy.env` on disk contains real API keys, and several agents have local `.env` files. They are ignored local-only files in the monorepo. Never add new secrets, never echo existing ones, and flag it if asked to handle them (see "Security notes" below).
 
 ## 接口文档/
 

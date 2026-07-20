@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "corpus_id": "metafor_dat_debruin2009_plo_glmm",
+  "description": "Binomial-normal logit-link proportion meta-analysis published in the metafor rma.glmm documentation.",
+  "oracle": {
+    "package": "metafor",
+    "function": "rma.glmm",
+    "measure": "PLO",
+    "method": "ML",
+    "documentation_snapshot": "2026-07-16",
+    "source_url": "https://wviechtb.github.io/metafor/reference/rma.glmm.html",
+    "source_lines": "565-574",
+    "data_source_url": "https://wviechtb.github.io/metadat/reference/dat.debruin2009.html",
+    "data_source_lines": "48-61"
+  },
+  "expected": {
+    "pooled_proportion": 0.4721,
+    "ci_lower": 0.3822,
+    "ci_upper": 0.5638,
+    "prediction_lower": 0.2021,
+    "prediction_upper": 0.7594,
+    "tolerance": 0.001
+  },
+  "studies": [
+    {"study_id": "Andrade 2005", "events": 11, "total": 29},
+    {"study_id": "Fairley 2003", "events": 24, "total": 33},
+    {"study_id": "Goujard 2003", "events": 179, "total": 326},
+    {"study_id": "Holzemer 2006", "events": 82, "total": 240},
+    {"study_id": "Knobel 1999", "events": 60, "total": 110},
+    {"study_id": "Murphy 2002", "events": 11, "total": 29},
+    {"study_id": "Pradier 2003", "events": 99, "total": 244},
+    {"study_id": "Rathbun 2005", "events": 9, "total": 17},
+    {"study_id": "Remien 2005", "events": 88, "total": 215},
+    {"study_id": "Tuldra 2000", "events": 17, "total": 26},
+    {"study_id": "van Servellen 2005", "events": 26, "total": 138},
+    {"study_id": "Wagner 2006", "events": 23, "total": 55},
+    {"study_id": "Wohl 2006", "events": 40, "total": 54}
+  ]
+}

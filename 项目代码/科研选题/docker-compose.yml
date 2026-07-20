@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # API服务
+  api:
+    build: .
+    container_name: research-agent-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=false
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      # DeepSeek V4 双模型配置（必需）
+      - LLM_PROVIDER=deepseek
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_FLASH_MODEL=${DEEPSEEK_FLASH_MODEL:-deepseek-v4-flash}
+      - DEEPSEEK_PRO_MODEL=${DEEPSEEK_PRO_MODEL:-deepseek-v4-pro}
+      # 可选服务配置
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
+      - ES_HOST=${ES_HOST:-elasticsearch}
+      - ES_PORT=${ES_PORT:-9200}
+    depends_on:
+      - redis
+      - mongo
+    volumes:
+      - ./:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Celery Worker（可选，如不需要可注释掉）
+  worker:
+    build: .
+    container_name: research-agent-worker
+    environment:
+      - DEBUG=false
+      - LLM_PROVIDER=deepseek
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_FLASH_MODEL=${DEEPSEEK_FLASH_MODEL:-deepseek-v4-flash}
+      - DEEPSEEK_PRO_MODEL=${DEEPSEEK_PRO_MODEL:-deepseek-v4-pro}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - MONGODB_URL=${MONGODB_URL:-mongodb://mongo:27017}
+      - CELERY_BROKER_URL=${REDIS_URL:-redis://redis:6379/1}
+      - CELERY_RESULT_BACKEND=${REDIS_URL:-redis://redis:6379/2}
+    depends_on:
+      - redis
+      - mongo
+    volumes:
+      - ./:/app
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+
+  # Redis（可选，如不使用可注释掉）
+  redis:
+    image: redis:7-alpine
+    container_name: research-agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # MongoDB（可选，如不使用可注释掉）
+  mongo:
+    image: mongo:7
+    container_name: research-agent-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=research_agent
+
+volumes:
+  redis_data:
+  mongo_data:

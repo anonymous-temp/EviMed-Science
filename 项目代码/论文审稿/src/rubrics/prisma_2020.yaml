@@ -1,0 +1,261 @@
+# PRISMA 2020 Checklist for Systematic Reviews and Meta-Analyses
+# Reference: Page MJ, McKenzie JE, Bossuyt PM, et al. The PRISMA 2020 statement: an updated guideline for reporting systematic reviews. BMJ 2021;372:n71
+# 27 main items (1-27) as per official PRISMA 2020 checklist.
+
+name: PRISMA 2020
+version: "2.0"
+applicable_to:
+  - Systematic Review
+  - Meta-Analysis
+description: "Reporting checklist for systematic reviews and meta-analyses (27 main items)"
+
+items:
+  # ── Section 1: Title ─────────────────────────────────────────────────────
+  - item_id: PRISMA_1
+    item_number: "1"
+    category: 标题
+    question: "Does the title identify the report as a systematic review?"
+    question_zh: "标题是否明确标注为系统评价或荟萃分析？"
+    evaluation_criteria: "Title should contain terms like 'systematic review', 'meta-analysis', or similar identifying terminology."
+    evidence_location_hint: "title"
+    severity_if_missing: MAJOR
+
+  # ── Section 2: Abstract ──────────────────────────────────────────────────
+  - item_id: PRISMA_2
+    item_number: "2"
+    category: 摘要
+    question: "Does the abstract provide a structured summary including background, objectives, data sources, eligibility criteria, results, and conclusions?"
+    question_zh: "摘要是否提供了结构化摘要，包括背景、目的、数据来源、纳入标准、结果与结论？"
+    evaluation_criteria: "Abstract should include: Background, Objectives, Data sources, Eligibility criteria, Participants, Interventions, Results, Limitations, Conclusions, and Registration."
+    evidence_location_hint: "abstract"
+    severity_if_missing: MAJOR
+
+  # ── Section 3: Introduction ──────────────────────────────────────────────
+  - item_id: PRISMA_3
+    item_number: "3"
+    category: 前言-研究背景
+    question: "Is the rationale for the review described in the context of existing knowledge?"
+    question_zh: "是否在现有知识背景下阐述了本综述的研究依据与必要性？"
+    evaluation_criteria: "Should describe why the review is needed and what knowledge gap it addresses."
+    evidence_location_hint: "introduction"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_4
+    item_number: "4"
+    category: 前言-研究目的
+    question: "Are the objectives or questions addressed by the review stated explicitly with PICO/PECO elements?"
+    question_zh: "是否明确陈述了综述的研究目的或研究问题，包含 PICO/PECO 要素？"
+    evaluation_criteria: "Should specify Population, Intervention/Exposure, Comparator, and Outcomes (PICO/PECO)."
+    evidence_location_hint: "introduction"
+    severity_if_missing: CRITICAL
+
+  # ── Section 4: Methods ───────────────────────────────────────────────────
+  - item_id: PRISMA_5
+    item_number: "5"
+    category: 方法-纳入排除标准
+    question: "Are the eligibility criteria for included studies specified and described, with justification where necessary?"
+    question_zh: "是否明确描述了纳入和排除标准，必要时提供了理由？"
+    evaluation_criteria: "Should state inclusion/exclusion criteria for study designs, participants, interventions, comparators, and outcomes."
+    evidence_location_hint: "methods.eligibility"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_6
+    item_number: "6"
+    category: 方法-信息来源
+    question: "Are all information sources (databases, registers, websites, etc.) used in the search specified, including the date of the last search?"
+    question_zh: "是否列举了所有检索的信息来源（数据库、注册库、网站等），并注明最近一次检索日期？"
+    evaluation_criteria: "Should list all databases searched, grey literature sources, and provide the date of the last search for each."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_7
+    item_number: "7"
+    category: 方法-检索策略
+    question: "Is the full search strategy for at least one database presented, including filters and limits used?"
+    question_zh: "是否提供了至少一个数据库的完整检索策略（含检索词、逻辑运算符及限制条件）？"
+    evaluation_criteria: "Should provide complete, reproducible search strategy for at least one major database, including all search terms and Boolean operators."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_8
+    item_number: "8"
+    category: 方法-文献筛选过程
+    question: "Is the process for selecting studies described, including how many reviewers screened records and how conflicts were resolved?"
+    question_zh: "是否描述了文献筛选过程，包括参与筛选的评价者人数及分歧解决方式？"
+    evaluation_criteria: "Should describe the number of reviewers at each stage, how disagreements were resolved, and any automation tools used."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_9
+    item_number: "9"
+    category: 方法-数据提取过程
+    question: "Are the methods for extracting data from reports described, including how many reviewers extracted data?"
+    question_zh: "是否描述了数据提取方法，包括参与提取的评价者人数及分歧解决方式？"
+    evaluation_criteria: "Should describe data extraction procedures, number of reviewers, tools used, and how disagreements were handled."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_10
+    item_number: "10"
+    category: 方法-数据条目
+    question: "Are all data items sought from each study listed and defined, including outcomes and other variables?"
+    question_zh: "是否列出并定义了从每项研究中提取的所有数据条目（包括结局指标及其他变量）？"
+    evaluation_criteria: "Should list all outcome variables and other data that were extracted, with definitions where needed."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_11
+    item_number: "11"
+    category: 方法-偏倚风险评估
+    question: "Are the methods for assessing risk of bias in individual included studies specified, including the tool(s) used?"
+    question_zh: "是否说明了评估各纳入研究偏倚风险的方法及所用工具（如 RoB 2、ROBINS-I）？"
+    evaluation_criteria: "Should name the specific risk-of-bias tool and describe how it was applied."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_12
+    item_number: "12"
+    category: 方法-效应量
+    question: "Are the effect measure(s) used for synthesis clearly specified (e.g., risk ratio, mean difference)?"
+    question_zh: "是否明确说明了用于合并分析的效应量（如风险比、均数差）？"
+    evaluation_criteria: "Should explicitly state the effect measure(s) intended for synthesis for each outcome."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_13
+    item_number: "13"
+    category: 方法-合并分析方法
+    question: "Are the methods for combining or synthesising study results described, including handling of heterogeneity and sensitivity analyses?"
+    question_zh: "是否描述了合并研究结果的统计方法，包括异质性处理方式及敏感性分析？"
+    evaluation_criteria: "Should describe statistical methods, heterogeneity measures (I², τ²), subgroup analyses, and sensitivity analyses planned."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_14
+    item_number: "14"
+    category: 方法-报告偏倚评估
+    question: "Are the methods for assessing risk of reporting bias across studies described?"
+    question_zh: "是否描述了评估研究间报告偏倚（如发表偏倚）的方法？"
+    evaluation_criteria: "Should specify methods used to assess publication bias and other reporting biases (e.g., funnel plot, Egger's test)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_15
+    item_number: "15"
+    category: 方法-证据确定性评估
+    question: "Are the methods for assessing and presenting the certainty (confidence) of the body of evidence described?"
+    question_zh: "是否描述了评估证据体确定性（可信度）的方法（如 GRADE）？"
+    evaluation_criteria: "Should describe the framework used to assess certainty of evidence (e.g., GRADE) and how it was applied."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # ── Section 5: Results ───────────────────────────────────────────────────
+  - item_id: PRISMA_16
+    item_number: "16"
+    category: 结果-文献筛选
+    question: "Is the study selection process presented, including numbers at each stage, preferably with a PRISMA flow diagram?"
+    question_zh: "是否呈现了文献筛选过程（各阶段数量），最好附有 PRISMA 流程图？"
+    evaluation_criteria: "Should provide a PRISMA 2020 flow diagram showing records identified, screened, assessed for eligibility, and included."
+    evidence_location_hint: "results"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_17
+    item_number: "17"
+    category: 结果-纳入研究特征
+    question: "Are the characteristics of included studies presented (e.g., design, participants, interventions, outcomes, follow-up)?"
+    question_zh: "是否呈现了纳入研究的基本特征（如研究设计、受试者、干预措施、结局指标、随访时间）？"
+    evaluation_criteria: "Should present key characteristics of all included studies, typically in a summary table."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_18
+    item_number: "18"
+    category: 结果-各研究偏倚风险
+    question: "Are risk of bias assessments for each included study presented?"
+    question_zh: "是否呈现了每项纳入研究的偏倚风险评估结果？"
+    evaluation_criteria: "Should present the risk-of-bias judgements for each domain and overall for each included study."
+    evidence_location_hint: "results"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_19
+    item_number: "19"
+    category: 结果-各研究效应估计
+    question: "Are the results for all outcomes from all included studies presented, with effect estimates and confidence intervals?"
+    question_zh: "是否呈现了所有纳入研究各结局的效应估计值及其置信区间？"
+    evaluation_criteria: "Should present results for each included study for each outcome, including effect estimates and 95% CI. Forest plots recommended."
+    evidence_location_hint: "results"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_20
+    item_number: "20"
+    category: 结果-合并分析结果
+    question: "Are the results of all statistical syntheses presented, including summary estimates, confidence intervals, and heterogeneity statistics?"
+    question_zh: "是否呈现了所有合并分析的结果，包括汇总效应估计、置信区间及异质性统计量？"
+    evaluation_criteria: "Should present pooled estimates with 95% CI, I² and other heterogeneity statistics, subgroup and sensitivity analysis results."
+    evidence_location_hint: "results"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_21
+    item_number: "21"
+    category: 结果-报告偏倚评估结果
+    question: "Are the results of any assessments of risk of reporting bias across studies presented?"
+    question_zh: "是否呈现了研究间报告偏倚的评估结果（如漏斗图、Egger 检验）？"
+    evaluation_criteria: "If a reporting bias assessment was conducted, results should be presented and discussed."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_22
+    item_number: "22"
+    category: 结果-证据确定性
+    question: "Is the certainty (confidence) in the body of evidence assessed and presented for each outcome?"
+    question_zh: "是否对每个结局指标进行了证据体确定性评级（如 GRADE：高/中/低/极低）？"
+    evaluation_criteria: "Should present certainty of evidence ratings for each synthesised outcome."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  # ── Section 6: Discussion ────────────────────────────────────────────────
+  - item_id: PRISMA_23
+    item_number: "23"
+    category: 讨论
+    question: "Are the results interpreted in context of other evidence, with limitations of the evidence and review process discussed, and implications for practice and research stated?"
+    question_zh: "是否结合其他证据解读了研究结果，并讨论了证据与综述过程的局限性及其对实践与未来研究的启示？"
+    evaluation_criteria: "Discussion should interpret findings in light of existing evidence, discuss limitations at study and review level, and state implications."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  # ── Section 7: Other Information ─────────────────────────────────────────
+  - item_id: PRISMA_24
+    item_number: "24"
+    category: 其他-注册与方案
+    question: "Is registration information provided (registry name and number), and is the review protocol accessible?"
+    question_zh: "是否提供了注册信息（注册库名称及注册号），并说明方案获取途径（如 PROSPERO）？"
+    evaluation_criteria: "Should provide the registry name and registration number and indicate where the protocol can be accessed."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_25
+    item_number: "25"
+    category: 其他-资助来源
+    question: "Are sources of financial or non-financial support for the review described, and the role of funders stated?"
+    question_zh: "是否描述了本综述的资金来源及资助方在研究中的角色？"
+    evaluation_criteria: "Should describe all funding sources and any role of funders in the review design, conduct, or reporting."
+    evidence_location_hint: "end_matter"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_26
+    item_number: "26"
+    category: 其他-利益冲突
+    question: "Are competing interests for all review authors declared?"
+    question_zh: "所有综述作者是否均声明了利益冲突？"
+    evaluation_criteria: "All authors should declare any financial or non-financial competing interests relevant to the review."
+    evidence_location_hint: "end_matter"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_27
+    item_number: "27"
+    category: 其他-数据可用性
+    question: "Is the availability of data, analytic code, and other materials used in the review reported?"
+    question_zh: "是否说明了综述所用数据、分析代码及其他材料的获取方式？"
+    evaluation_criteria: "Should state where supporting data, code, and other materials can be accessed."
+    evidence_location_hint: "end_matter"
+    severity_if_missing: MINOR

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_id": "dosresmeta_rcs_reml_2026_07_17",
+  "description": "Independent dosresmeta 2.2.0 two-stage multivariate REML oracle using an explicit within-study covariance list and a two-column restricted cubic spline basis.",
+  "source_url": "https://cran.r-project.org/package=dosresmeta",
+  "reference_implementation": {
+    "software": "R dosresmeta",
+    "version": "2.2.0",
+    "call": "dosresmeta(logrr ~ dose + spline, covariance='user', Slist=S, method='reml', proc='2stage')"
+  },
+  "inputs": [
+    {"result_id": "D1:1", "study_id": "D1", "contrast_id": "D1:1", "dose": 1, "reference_dose": 0, "dose_unit": "mg/day", "measure": "RR", "estimate": -0.21, "standard_error": 0.2, "scale": "log", "covariance_with": {"D1:2": 0.015}},
+    {"result_id": "D1:2", "study_id": "D1", "contrast_id": "D1:2", "dose": 2, "reference_dose": 0, "dose_unit": "mg/day", "measure": "RR", "estimate": -1.01, "standard_error": 0.22, "scale": "log", "covariance_with": {"D1:1": 0.015}},
+    {"result_id": "D2:1", "study_id": "D2", "contrast_id": "D2:1", "dose": 1, "reference_dose": 0, "dose_unit": "mg/day", "measure": "RR", "estimate": -0.18, "standard_error": 0.2, "scale": "log", "covariance_with": {"D2:2": 0.015}},
+    {"result_id": "D2:2", "study_id": "D2", "contrast_id": "D2:2", "dose": 2, "reference_dose": 0, "dose_unit": "mg/day", "measure": "RR", "estimate": -0.98, "standard_error": 0.22, "scale": "log", "covariance_with": {"D2:1": 0.015}},
+    {"result_id": "D3:1", "study_id": "D3", "contrast_id": "D3:1", "dose": 1, "reference_dose": 0, "dose_unit": "mg/day", "measure": "RR", "estimate": -0.22, "standard_error": 0.2, "scale": "log", "covariance_with": {"D3:2": 0.015}},
+    {"result_id": "D3:2", "study_id": "D3", "contrast_id": "D3:2", "dose": 2, "reference_dose": 0, "dose_unit": "mg/day", "measure": "RR", "estimate": -1.02, "standard_error": 0.22, "scale": "log", "covariance_with": {"D3:1": 0.015}},
+    {"result_id": "D4:1", "study_id": "D4", "contrast_id": "D4:1", "dose": 1, "reference_dose": 0, "dose_unit": "mg/day", "measure": "RR", "estimate": -0.19, "standard_error": 0.2, "scale": "log", "covariance_with": {"D4:2": 0.015}},
+    {"result_id": "D4:2", "study_id": "D4", "contrast_id": "D4:2", "dose": 2, "reference_dose": 0, "dose_unit": "mg/day", "measure": "RR", "estimate": -0.99, "standard_error": 0.22, "scale": "log", "covariance_with": {"D4:1": 0.015}}
+  ],
+  "expected": {
+    "knots": [0, 1, 2],
+    "coefficients": [-0.05, -0.6],
+    "coefficient_covariance": [[0.02044375, -0.025525], [-0.025525, 0.0371]],
+    "nonlinearity_p": 0.00183917,
+    "between_study_covariance_upper_bound": 1e-7
+  },
+  "tolerances": {
+    "coefficient": 1e-7,
+    "covariance": 1e-7,
+    "p_value": 1e-7
+  }
+}

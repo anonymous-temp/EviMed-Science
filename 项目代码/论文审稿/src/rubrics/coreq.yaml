@@ -1,0 +1,267 @@
+# COREQ Checklist for Qualitative Research
+# Reference: Tong A, Sainsbury P, Craig J. Consolidated criteria for reporting qualitative research (COREQ): a 32-item checklist for interviews and focus groups. Int J Qual Health Care 2007;19(6):349-57
+
+name: COREQ
+version: "1.0"
+applicable_to:
+  - Qualitative Research
+  - Interview Study
+  - Focus Group Study
+description: "Reporting checklist for qualitative research using interviews and focus groups"
+
+items:
+  - item_id: COREQ_1
+    item_number: "1"
+    category: Research Team
+    question: "Are characteristics of interviewer/facilitator described?"
+    evaluation_criteria: "Should describe who conducted interviews/focus groups (name, credentials, occupation, gender, experience)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_2
+    item_number: "2"
+    category: Research Team
+    question: "Is the interviewer's relationship with participants described?"
+    evaluation_criteria: "Should describe relationship established before study (e.g., teacher-student, clinician-patient, none)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_3
+    item_number: "3"
+    category: Research Team
+    question: "Are interviewer's assumptions and reasons disclosed?"
+    evaluation_criteria: "Should state interviewer's occupation, gender, qualifications, and reasons for interest in topic."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR
+
+  - item_id: COREQ_4
+    item_number: "4"
+    category: Study Design
+    question: "Is theoretical framework described?"
+    evaluation_criteria: "Should state methodological orientation (e.g., grounded theory, phenomenology, content analysis)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_5
+    item_number: "5"
+    category: Participant Selection
+    question: "Is sampling method described?"
+    evaluation_criteria: "Should describe how participants were selected (purposive, convenience, snowball, etc.)."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: CRITICAL
+
+  - item_id: COREQ_6
+    item_number: "6"
+    category: Participant Selection
+    question: "Is method of approach to participants described?"
+    evaluation_criteria: "Should describe how participants were approached (e.g., letter, telephone, face-to-face)."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_7
+    item_number: "7"
+    category: Participant Selection
+    question: "Is sample size justified?"
+    evaluation_criteria: "Should provide rationale for sample size (e.g., data saturation)."
+    evidence_location_hint: "methods.sample_size"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_8
+    item_number: "8"
+    category: Participant Selection
+    question: "Are non-participants described?"
+    evaluation_criteria: "Should describe number who refused or dropped out with reasons if known."
+    evidence_location_hint: "results.participant_flow"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_9
+    item_number: "9"
+    category: Setting
+    question: "Is setting of data collection described?"
+    evaluation_criteria: "Should describe where data were collected (home, clinic, workplace, etc.)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_10
+    item_number: "10"
+    category: Setting
+    question: "Is presence of non-participants during interviews described?"
+    evaluation_criteria: "Should state whether anyone else was present besides participants and researchers."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR
+
+  - item_id: COREQ_11
+    item_number: "11"
+    category: Setting
+    question: "Is description of sample provided?"
+    evaluation_criteria: "Should provide relevant demographic and other characteristics of participants."
+    evidence_location_hint: "results.baseline"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_12
+    item_number: "12"
+    category: Data Collection
+    question: "Is interview guide provided or described?"
+    evaluation_criteria: "Should provide questions, prompts, or guides or describe them."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_13
+    item_number: "13"
+    category: Data Collection
+    question: "Is repeat interviewing described?"
+    evaluation_criteria: "Should state whether repeat interviews were conducted and if so, how many."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR
+
+  - item_id: COREQ_14
+    item_number: "14"
+    category: Data Collection
+    question: "Is audio/visual recording described?"
+    evaluation_criteria: "Should state whether interviews were audio or video recorded."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_15
+    item_number: "15"
+    category: Data Collection
+    question: "Were field notes made?"
+    evaluation_criteria: "Should state whether field notes were made during and/or after interview."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR
+
+  - item_id: COREQ_16
+    item_number: "16"
+    category: Data Collection
+    question: "Is interview duration reported?"
+    evaluation_criteria: "Should report duration of interviews (range or mean)."
+    evidence_location_hint: "results"
+    severity_if_missing: MINOR
+
+  - item_id: COREQ_17
+    item_number: "17"
+    category: Data Collection
+    question: "Was data saturation discussed?"
+    evaluation_criteria: "Should discuss whether data saturation was reached."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_18
+    item_number: "18"
+    category: Data Collection
+    question: "Were transcripts returned to participants?"
+    evaluation_criteria: "Should state whether transcripts were returned for comment and/or correction."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR
+
+  - item_id: COREQ_19
+    item_number: "19"
+    category: Data Analysis
+    question: "Is number of data coders described?"
+    evaluation_criteria: "Should state how many coders coded the data."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_20
+    item_number: "20"
+    category: Data Analysis
+    question: "Is description of coding tree provided?"
+    evaluation_criteria: "Should provide description of coding tree or codebook (themes, subthemes)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_21
+    item_number: "21"
+    category: Data Analysis
+    question: "Is derivation of themes described?"
+    evaluation_criteria: "Should describe whether themes were identified in advance or derived from data."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_22
+    item_number: "22"
+    category: Data Analysis
+    question: "Is software used described?"
+    evaluation_criteria: "Should state software used for data management and analysis if any."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR
+
+  - item_id: COREQ_23
+    item_number: "23"
+    category: Data Analysis
+    question: "Is participant checking described?"
+    evaluation_criteria: "Should state whether participant feedback on findings was elicited."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR
+
+  - item_id: COREQ_24
+    item_number: "24"
+    category: Reporting
+    question: "Are quotations presented with participant identifiers?"
+    evaluation_criteria: "Should present participant quotations with identifiers (ID numbers, pseudonyms)."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_25
+    item_number: "25"
+    category: Reporting
+    question: "Is data and findings consistency checked?"
+    evaluation_criteria: "Should describe whether there was consistency between data presented and findings."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_26
+    item_number: "26"
+    category: Reporting
+    question: "Are major themes clearly presented?"
+    evaluation_criteria: "Should clearly present major themes with supporting quotations."
+    evidence_location_hint: "results"
+    severity_if_missing: CRITICAL
+
+  - item_id: COREQ_27
+    item_number: "27"
+    category: Reporting
+    question: "Are minority or discrepant cases described?"
+    evaluation_criteria: "Should discuss cases that don't fit the pattern or contradictory evidence."
+    evidence_location_hint: "results"
+    severity_if_missing: MINOR
+
+  - item_id: COREQ_28
+    item_number: "28"
+    category: Reflexivity
+    question: "Is researcher's influence on study discussed?"
+    evaluation_criteria: "Should discuss how researcher characteristics or assumptions may have influenced study."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_29
+    item_number: "29"
+    category: Ethics
+    question: "Is ethical approval reported?"
+    evaluation_criteria: "Should state whether ethical approval was granted and by which committee."
+    evidence_location_hint: "methods.ethics"
+    severity_if_missing: CRITICAL
+
+  - item_id: COREQ_30
+    item_number: "30"
+    category: Ethics
+    question: "Is participant consent described?"
+    evaluation_criteria: "Should describe how informed consent was obtained."
+    evidence_location_hint: "methods.ethics"
+    severity_if_missing: CRITICAL
+
+  - item_id: COREQ_31
+    item_number: "31"
+    category: Credibility
+    question: "Are methods to enhance credibility described?"
+    evaluation_criteria: "Should describe techniques used to enhance trustworthiness (triangulation, member checking, peer debriefing)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COREQ_32
+    item_number: "32"
+    category: Transferability
+    question: "Is thick description provided for transferability?"
+    evaluation_criteria: "Should provide sufficient detail to allow readers to judge transferability to other settings."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR

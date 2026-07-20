@@ -1,0 +1,216 @@
+# PRISMA-ScR Checklist for Scoping Reviews
+# Reference: Tricco AC, et al. PRISMA Extension for Scoping Reviews (PRISMA-ScR): Checklist and Explanation. Ann Intern Med. 2018;169(7):467-473.
+# 22 items (20 required + 2 optional)
+
+name: PRISMA-ScR
+version: "1.0"
+applicable_to:
+  - Scoping Review
+  - Narrative Review
+description: "Reporting checklist for scoping reviews (PRISMA-ScR extension)"
+
+items:
+  # ── Section 1: Title ─────────────────────────────────────────────────────
+  - item_id: PRISMA_SCR_1
+    item_number: "1"
+    category: 标题
+    question: "Does the title identify the report as a scoping review?"
+    question_zh: "标题是否明确包含'scoping review'（范围综述）字样？"
+    evaluation_criteria: "Title must explicitly contain 'scoping review' terminology."
+    evidence_location_hint: "title"
+    severity_if_missing: MAJOR
+
+  # ── Section 2: Abstract ──────────────────────────────────────────────────
+  - item_id: PRISMA_SCR_2
+    item_number: "2"
+    category: 摘要
+    question: "Does the abstract provide a structured summary including background, objectives, eligibility criteria, sources of evidence, charting methods, results, and conclusions?"
+    question_zh: "摘要是否提供结构化摘要，包括背景、目标、纳入标准、信息来源、图表绘制方法、结果和结论？"
+    evaluation_criteria: "Abstract should include: Background, Objectives, Eligibility criteria, Sources of evidence, Charting methods, Results, and Conclusions."
+    evidence_location_hint: "abstract"
+    severity_if_missing: MAJOR
+
+  # ── Section 3: Introduction ──────────────────────────────────────────────
+  - item_id: PRISMA_SCR_3
+    item_number: "3"
+    category: 引言-理论基础
+    question: "Is the rationale for conducting the scoping review explained, including why a scoping review was chosen over a systematic review?"
+    question_zh: "是否解释了开展范围综述的理论依据，以及为何选择范围综述而非系统评价？"
+    evaluation_criteria: "Should explain the rationale and justify why scoping review methodology is appropriate for the research question."
+    evidence_location_hint: "introduction"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_SCR_4
+    item_number: "4"
+    category: 引言-研究目标
+    question: "Are the research questions and objectives clearly stated, ideally linked to a specific framework (e.g., PCC: Population, Concept, Context)?"
+    question_zh: "是否明确陈述研究问题和目标，最好能关联到具体的框架（如PCC框架：Population, Concept, Context）？"
+    evaluation_criteria: "Should provide clear research questions/objectives, preferably using PCC or similar framework."
+    evidence_location_hint: "introduction"
+    severity_if_missing: CRITICAL
+
+  # ── Section 4: Methods ───────────────────────────────────────────────────
+  - item_id: PRISMA_SCR_5
+    item_number: "5"
+    category: 方法-方案与注册
+    question: "Is there indication of a pre-existing protocol, and if registered, is the registration number or link provided?"
+    question_zh: "是否说明存在预先制定的研究方案（Protocol），如已注册需提供注册号或获取链接？"
+    evaluation_criteria: "Should state whether a protocol exists and provide registration details if applicable (e.g., OSF)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR
+
+  - item_id: PRISMA_SCR_6
+    item_number: "6"
+    category: 方法-资格标准
+    question: "Are the inclusion and exclusion criteria clearly specified with rationale?"
+    question_zh: "是否详细说明文献的纳入和排除标准，以及这些标准背后的理由？"
+    evaluation_criteria: "Should provide clear eligibility criteria and explain the reasoning behind them."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_SCR_7
+    item_number: "7"
+    category: 方法-信息来源
+    question: "Are all information sources listed (databases, platforms, grey literature) with the date of last search?"
+    question_zh: "是否列出所有检索的数据库、平台及其他来源（如灰文献），并注明最后一次检索的具体日期？"
+    evaluation_criteria: "Should list all databases searched (e.g., PubMed, Embase) and provide the last search date."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_SCR_8
+    item_number: "8"
+    category: 方法-检索策略
+    question: "Is the full search strategy for at least one database provided, including MeSH terms and Boolean logic?"
+    question_zh: "是否提供至少一个数据库的完整检索策略（包含MeSH词和布尔逻辑）？"
+    evaluation_criteria: "Must provide complete search strategy for at least one database, typically as an appendix or table. Should include MeSH terms and Boolean operators (AND/OR/NOT)."
+    evidence_location_hint: "methods, appendix, or supplementary materials"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_SCR_9
+    item_number: "9"
+    category: 方法-文献筛选
+    question: "Is the study selection process described (e.g., independent dual screening, conflict resolution)?"
+    question_zh: "是否描述文献筛选的过程（如两人独立双盲筛选、冲突解决机制）？"
+    evaluation_criteria: "Should describe how studies were screened and how disagreements were resolved."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_SCR_10
+    item_number: "10"
+    category: 方法-数据提取过程
+    question: "Is the data charting process described, including whether standardized forms were used and cross-checking performed?"
+    question_zh: "是否描述数据提取（Data charting）的流程，是否使用了标准化的表格，提取者是否进行了交叉核对？"
+    evaluation_criteria: "Should describe the data extraction process and quality control measures."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_SCR_11
+    item_number: "11"
+    category: 方法-数据提取项
+    question: "Are the specific data items extracted from included studies clearly listed?"
+    question_zh: "是否明确列出从纳入文献中提取了哪些具体变量或数据项（如作者、年份、研究设计、核心发现等）？"
+    evaluation_criteria: "Should specify which data elements were extracted (e.g., author, year, study design, key findings)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_SCR_12
+    item_number: "12"
+    category: 方法-关键性评估
+    question: "If critical appraisal was conducted, are the methods and tools described?"
+    question_zh: "若进行了质量评估，是否说明使用的方法和工具？（可选）"
+    evaluation_criteria: "Optional for scoping reviews. If conducted, should describe the appraisal method."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR
+
+  - item_id: PRISMA_SCR_13
+    item_number: "13"
+    category: 方法-数据综合
+    question: "Is the method for synthesizing and presenting the extracted data described?"
+    question_zh: "是否描述如何处理、汇总和呈现提取的数据（如定量统计描述、定性主题分析）？"
+    evaluation_criteria: "Should explain how data will be analyzed and presented (e.g., descriptive statistics, thematic analysis)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # ── Section 5: Results ───────────────────────────────────────────────────
+  - item_id: PRISMA_SCR_14
+    item_number: "14"
+    category: 结果-文献筛选结果
+    question: "Are the study selection results reported with numbers at each stage, ideally with a PRISMA flow diagram?"
+    question_zh: "是否报告检索到的总文献数、去重后数量、初筛和复筛排除的数量，以及最终纳入的准确数量？是否提供PRISMA流程图？"
+    evaluation_criteria: "Must report: total records identified, records after deduplication, records screened, records excluded, and final included studies. PRISMA flow diagram strongly recommended."
+    evidence_location_hint: "results, figure"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_SCR_15
+    item_number: "15"
+    category: 结果-纳入研究特征
+    question: "Are the characteristics of included sources of evidence presented, typically in a data charting table?"
+    question_zh: "是否提供纳入研究的特征汇总（通常是一个详尽的Data Charting Table），展示每篇文献的关键提取数据？"
+    evaluation_criteria: "Must provide a comprehensive table showing characteristics of all included studies with extracted data elements."
+    evidence_location_hint: "results, table"
+    severity_if_missing: CRITICAL
+
+  - item_id: PRISMA_SCR_16
+    item_number: "16"
+    category: 结果-关键性评估结果
+    question: "If critical appraisal was conducted, are the results presented?"
+    question_zh: "如果方法部分提到了质量评估，此处是否报告评估结果？（可选）"
+    evaluation_criteria: "Optional. If appraisal was done, results should be reported."
+    evidence_location_hint: "results"
+    severity_if_missing: MINOR
+
+  - item_id: PRISMA_SCR_17
+    item_number: "17"
+    category: 结果-个别研究结果
+    question: "Are the results of individual sources of evidence presented in relation to the research question?"
+    question_zh: "是否针对研究问题，报告每篇纳入文献的具体发现？"
+    evaluation_criteria: "Should present findings from individual studies relevant to the research question."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_SCR_18
+    item_number: "18"
+    category: 结果-结果综合
+    question: "Is a synthesis of results provided, showing the overall landscape, trends, or knowledge gaps?"
+    question_zh: "是否对提取的数据进行汇总分析，展示研究领域的整体图景、趋势或知识空白？"
+    evaluation_criteria: "Should synthesize findings to show overall patterns, trends, or gaps in the literature."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  # ── Section 6: Discussion ────────────────────────────────────────────────
+  - item_id: PRISMA_SCR_19
+    item_number: "19"
+    category: 讨论-结果总结
+    question: "Are the main findings summarized and linked to the research objectives?"
+    question_zh: "是否总结主要发现，并将其与研究目标联系起来？"
+    evaluation_criteria: "Should summarize key findings and relate them back to the stated objectives."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_SCR_20
+    item_number: "20"
+    category: 讨论-研究局限性
+    question: "Are the limitations of the scoping review process discussed?"
+    question_zh: "是否讨论本范围综述过程中的局限性（如仅检索了英文文献、未检索灰文献等）？"
+    evaluation_criteria: "Should acknowledge limitations such as language restrictions, database coverage, or grey literature exclusion."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: PRISMA_SCR_21
+    item_number: "21"
+    category: 讨论-结论
+    question: "Are conclusions drawn based on findings, with implications for future research, practice, or policy?"
+    question_zh: "是否基于研究发现得出总体结论，并指出对未来研究、实践或政策的潜在影响？"
+    evaluation_criteria: "Should provide conclusions and discuss implications for research, practice, or policy."
+    evidence_location_hint: "discussion, conclusion"
+    severity_if_missing: MAJOR
+
+  # ── Section 7: Funding ───────────────────────────────────────────────────
+  - item_id: PRISMA_SCR_22
+    item_number: "22"
+    category: 资金来源
+    question: "Is the funding source reported along with the funder's role in the review?"
+    question_zh: "是否报告本综述的资金来源以及资助者在研究中的角色？"
+    evaluation_criteria: "Should state funding sources and describe the funder's role (if any) in the review."
+    evidence_location_hint: "funding, acknowledgments"
+    severity_if_missing: MINOR

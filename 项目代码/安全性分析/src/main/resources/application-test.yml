@@ -1,0 +1,62 @@
+server:
+  port: 2088
+
+spring:
+  application:
+    name: pharmacovigilance
+  servlet:
+    multipart:
+      max-request-size: 100MB
+      max-file-size: 100MB
+
+
+  cloud:
+    inetutils:
+      ignoredInterfaces:
+        - VMware.* # 忽略虚拟机网卡
+      use-only-site-local-interfaces: true
+      preferred-networks: 192.168.0.*
+
+  # mongodb的连接
+  data:
+    mongodb:
+      database: evimed_test
+      host: 192.168.14.195
+      port: 27017
+      username: RWuser1
+      password: ${EVIMED_SPRING_DATA_MONGODB_PASSWORD:}
+
+  elasticsearch:
+    rest:
+      uris: http://139.9.113.201:9201, http://124.70.56.14:9201, http://117.78.3.21:9201
+      username: elastic
+      password: ${EVIMED_SPRING_ELASTICSEARCH_REST_PASSWORD:}
+      read-timeout: 10s
+      connection-timeout: 10s
+
+  #Rides单体
+  redis:
+    host: 192.168.10.167
+    port: 6379
+    database: 1
+    timeout: 2000
+    password: ${EVIMED_SPRING_REDIS_PASSWORD:}
+
+feign:
+  hystrix:
+    enabled: false
+  client:
+    config:
+      default:
+        #建立连接所用的时间，适用于网络状况正常的情况下，两端连接所需要的时间
+        ConnectTimeOut: 15000000
+        #指建立连接后从服务端读取到可用资源所用的时间
+        ReadTimeOut: 15000000
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://192.168.10.167:7002/eureka/
+  instance:
+    #instance-id: ${spring.application.name}:${server.port}
+    prefer-ip-address: true

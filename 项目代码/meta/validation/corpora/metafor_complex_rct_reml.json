@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "fixture_id": "metafor_complex_rct_reml_2026_07_17",
+  "description": "Independent metafor 5.0-1 REML oracle after explicit GLS consolidation of two correlated contrasts from one multi-arm RCT.",
+  "source_url": "https://wviechtb.github.io/metafor/reference/rma.uni.html",
+  "reference_implementation": {
+    "software": "R metafor",
+    "version": "5.0-1",
+    "call": "rma.uni(yi, vi, method='REML', test='z')"
+  },
+  "inputs": [
+    {
+      "result_id": "cluster-1",
+      "study_id": "C1",
+      "design": "cluster_rct",
+      "measure": "RR",
+      "estimate": 0.8,
+      "ci_lower": 0.66,
+      "ci_upper": 0.97,
+      "scale": "original",
+      "precision_basis": "reported_cluster_adjusted",
+      "estimand_id": "drug-vs-control",
+      "treatment": "Drug",
+      "comparator": "Control",
+      "contrast_id": "C1:drug-control"
+    },
+    {
+      "result_id": "cross-1",
+      "study_id": "X1",
+      "design": "crossover_rct",
+      "measure": "RR",
+      "estimate": 0.74,
+      "ci_lower": 0.58,
+      "ci_upper": 0.95,
+      "scale": "original",
+      "precision_basis": "reported_paired_effect",
+      "paired_analysis": true,
+      "estimand_id": "drug-vs-control",
+      "treatment": "Drug",
+      "comparator": "Control",
+      "contrast_id": "X1:drug-control"
+    },
+    {
+      "result_id": "multi-1a",
+      "study_id": "M1",
+      "design": "multi_arm_rct",
+      "measure": "RR",
+      "estimate": -0.35667494393873245,
+      "standard_error": 0.2,
+      "scale": "log",
+      "precision_basis": "reported_effect",
+      "estimand_id": "drug-vs-control",
+      "treatment": "Drug dose 1",
+      "comparator": "Control",
+      "contrast_id": "M1:dose1-control",
+      "covariance_with": {"M1:dose2-control": 0.02}
+    },
+    {
+      "result_id": "multi-1b",
+      "study_id": "M1",
+      "design": "multi_arm_rct",
+      "measure": "RR",
+      "estimate": -0.2744368457017603,
+      "standard_error": 0.25,
+      "scale": "log",
+      "precision_basis": "reported_effect",
+      "estimand_id": "drug-vs-control",
+      "treatment": "Drug dose 2",
+      "comparator": "Control",
+      "contrast_id": "M1:dose2-control",
+      "covariance_with": {"M1:dose1-control": 0.02}
+    }
+  ],
+  "expected": {
+    "multi_arm_analysis_effect": -0.330358752502901,
+    "multi_arm_variance": 0.0336,
+    "pooled_analysis_scale": -0.264419800860410,
+    "standard_error_analysis_scale": 0.071336322029180,
+    "tau_squared": 0.0,
+    "ci_lower_analysis_scale": -0.404236422827153,
+    "ci_upper_analysis_scale": -0.124603178893667,
+    "i_squared": 0.0,
+    "q": 0.390903756910341
+  },
+  "tolerances": {
+    "effect": 1e-7,
+    "standard_error": 4e-6,
+    "tau_squared": 1e-7
+  }
+}

@@ -1,0 +1,149 @@
+# MIAME / MINSEQE Reporting Checklist for Genomics and Sequencing Studies
+# MIAME: Minimum Information About a Microarray Experiment
+# MINSEQE: Minimum Information about a high-throughput Nucleotide Sequencing Experiment
+# Covers: RNA-seq, ChIP-seq, ATAC-seq, WGS, WES, microarray, proteomics, multi-omics
+
+name: MIAME/MINSEQE Genomics and Sequencing Reporting
+version: "1.0"
+applicable_to:
+  - Genomics Study
+  - Transcriptomics Study
+  - Sequencing Study
+  - Proteomics Study
+description: "Reporting checklist for high-throughput omics studies including microarray, RNA-seq, ChIP-seq, WGS, WES, and proteomics experiments."
+
+items:
+  # Experimental Design
+  - item_id: OMICS_DESIGN_01
+    item_number: "D1"
+    category: Experimental Design
+    question: "Is the experimental design clearly described, including the biological question, number of conditions, replicates, and controls?"
+    evaluation_criteria: "Should state the hypothesis, experimental groups, number of biological replicates (≥3 recommended), and type of controls used."
+    evidence_location_hint: "methods.study_design"
+    severity_if_missing: CRITICAL
+
+  - item_id: OMICS_DESIGN_02
+    item_number: "D2"
+    category: Experimental Design
+    question: "Are biological replicates distinguished from technical replicates, and is the number of each stated?"
+    evaluation_criteria: "Must clearly distinguish biological replicates (independent samples) from technical replicates (repeated measurements of same sample). Minimum 3 biological replicates per condition is standard practice."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  # Sample Information
+  - item_id: OMICS_SAMPLE_01
+    item_number: "S1"
+    category: Sample Information
+    question: "Is sample origin described (species, tissue/cell type, developmental stage, disease state)?"
+    evaluation_criteria: "Should specify organism, tissue source, cell type or line (with authentication if applicable), passage number for cell lines, and relevant biological state."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: CRITICAL
+
+  - item_id: OMICS_SAMPLE_02
+    item_number: "S2"
+    category: Sample Information
+    question: "Are sample preparation and quality control procedures described (RNA/DNA extraction, quality metrics)?"
+    evaluation_criteria: "Should describe extraction method, reagent kits (with vendor and catalog number), quality metrics (RIN for RNA, integrity numbers, A260/A280 ratios), and QC thresholds applied."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: OMICS_SAMPLE_03
+    item_number: "S3"
+    category: Sample Information
+    question: "For cell lines, is authentication (e.g., STR profiling) and mycoplasma testing reported?"
+    evaluation_criteria: "Cell line studies should report authentication method and date, and confirm negative mycoplasma testing."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Library / Array Preparation
+  - item_id: OMICS_LIB_01
+    item_number: "L1"
+    category: Library Preparation
+    question: "Are library preparation or array hybridization protocols described in sufficient detail for replication?"
+    evaluation_criteria: "Should specify kit name/version, fragmentation method, adapter ligation, size selection parameters, amplification cycles, and any custom modifications."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: OMICS_LIB_02
+    item_number: "L2"
+    category: Library Preparation
+    question: "For sequencing studies, are sequencing platform, read length, sequencing depth (target and achieved), and paired-end vs. single-end reported?"
+    evaluation_criteria: "Should report sequencer model, read length (e.g., 150 bp PE), target depth per sample, and achieved mean depth."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Data Processing
+  - item_id: OMICS_PROC_01
+    item_number: "P1"
+    category: Data Processing
+    question: "Is the bioinformatics pipeline described with software names, versions, and key parameters?"
+    evaluation_criteria: "Should list all tools used (e.g., STAR v2.7, DESeq2 v1.36, GATK v4.2), reference genome/transcriptome version, and non-default parameters."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: OMICS_PROC_02
+    item_number: "P2"
+    category: Data Processing
+    question: "Is quality control of raw data described (e.g., FastQC metrics, trimming thresholds, alignment rate)?"
+    evaluation_criteria: "Should report pre- and post-trimming QC metrics, adapter trimming parameters, mapping/alignment rates, and any samples excluded due to QC failure."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: OMICS_PROC_03
+    item_number: "P3"
+    category: Data Processing
+    question: "Is normalization method described and justified for the data type?"
+    evaluation_criteria: "Should specify normalization method (e.g., TMM, DESeq2 size factors, quantile normalization) and justify its appropriateness for the experimental design."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: OMICS_PROC_04
+    item_number: "P4"
+    category: Data Processing
+    question: "Are batch effects assessed and corrected if present?"
+    evaluation_criteria: "Should describe whether batch effects were assessed (e.g., PCA, hierarchical clustering), and if present, the correction method used (e.g., ComBat, limma::removeBatchEffect)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Statistical Analysis
+  - item_id: OMICS_STAT_01
+    item_number: "ST1"
+    category: Statistical Analysis
+    question: "Are differential analysis methods described with significance thresholds and multiple testing correction?"
+    evaluation_criteria: "Should specify statistical test (e.g., DESeq2 Wald test, edgeR likelihood ratio), adjusted p-value threshold, fold change cutoff, and multiple testing correction method (FDR/BH adjustment standard)."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: CRITICAL
+
+  - item_id: OMICS_STAT_02
+    item_number: "ST2"
+    category: Statistical Analysis
+    question: "Are downstream analyses (pathway enrichment, clustering, GSEA) described with tool names, versions, and databases used?"
+    evaluation_criteria: "Should specify enrichment tools (e.g., clusterProfiler, GSEA), gene set databases (e.g., MSigDB v7.5, GO 2023), and statistical thresholds applied."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Data Availability
+  - item_id: OMICS_DATA_01
+    item_number: "DA1"
+    category: Data Availability
+    question: "Are raw data deposited in a public repository with accession numbers provided?"
+    evaluation_criteria: "Raw sequencing data should be deposited in GEO, SRA, ENA, or equivalent. Accession numbers must be provided. Data should be publicly accessible (or accessible upon publication)."
+    evidence_location_hint: "methods or end_matter"
+    severity_if_missing: CRITICAL
+
+  - item_id: OMICS_DATA_02
+    item_number: "DA2"
+    category: Data Availability
+    question: "Is analysis code or pipeline made available (e.g., GitHub, Zenodo)?"
+    evaluation_criteria: "Scripts for data analysis should be shared with sufficient documentation to reproduce results. A repository URL or DOI should be provided."
+    evidence_location_hint: "methods or end_matter"
+    severity_if_missing: MINOR
+
+  # Ethical and Regulatory
+  - item_id: OMICS_ETHICS_01
+    item_number: "E1"
+    category: Ethics
+    question: "For human samples, is ethics approval and informed consent described?"
+    evaluation_criteria: "Studies using human tissue or data must report IRB/ethics committee approval with reference number and informed consent procedures."
+    evidence_location_hint: "methods.ethics"
+    severity_if_missing: CRITICAL

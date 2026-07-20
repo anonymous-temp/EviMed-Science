@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "corpus_id": "metamisc_euroscore_cstat_reml",
+  "description": "EuroSCORE external-validation c-statistic example used by metamisc::valmeta with its default normal/logit REML and Hartung-Knapp model.",
+  "oracle": {
+    "package": "metamisc",
+    "package_version": "0.4.0",
+    "function": "valmeta",
+    "measure": "cstat",
+    "model": "normal/logit",
+    "method": "REML",
+    "test": "knha",
+    "documentation_snapshot": "2026-07-16",
+    "source_url": "https://search.r-project.org/CRAN/refmans/metamisc/html/valmeta.html",
+    "package_source_url": "https://cran.r-project.org/src/contrib/metamisc_0.4.0.tar.gz",
+    "source_data_sha256": "182b7f79570f59a280abdebfb742f12fae74770422a6824204d67cbe1f94e468"
+  },
+  "expected": {
+    "pooled_logit": 1.31807,
+    "pooled_c_statistic": 0.78886,
+    "ci_lower": 0.76488,
+    "ci_upper": 0.81100,
+    "prediction_lower": 0.67926,
+    "prediction_upper": 0.86827,
+    "tau_squared": 0.07007,
+    "tolerance": 0.001
+  },
+  "records": [
+    {"study_id":"Nashef","c_statistic":0.8095,"ci_lower":0.782,"ci_upper":0.836,"sample_size":5553,"events":232},
+    {"study_id":"Biancari","c_statistic":0.867,"ci_lower":0.798,"ci_upper":0.936,"sample_size":1027,"events":28},
+    {"study_id":"Di Dedda","c_statistic":0.81,"ci_lower":0.74,"ci_upper":0.88,"sample_size":1090,"events":41},
+    {"study_id":"Chalmers","c_statistic":0.79,"standard_error":0.01,"sample_size":5576,"events":191},
+    {"study_id":"Grant","c_statistic":0.808,"standard_error":0.008,"sample_size":23740,"events":746},
+    {"study_id":"Carneo","c_statistic":0.85,"standard_error":0.01,"sample_size":3798,"events":215},
+    {"study_id":"Kunt","c_statistic":0.72,"standard_error":0.051,"sample_size":428,"events":34},
+    {"study_id":"Kirmani","c_statistic":0.818,"standard_error":0.007,"sample_size":15497,"events":547},
+    {"study_id":"Howell","c_statistic":0.67,"sample_size":933,"events":90},
+    {"study_id":"Wang-1","c_statistic":0.72,"standard_error":0.015,"sample_size":11170,"events":226},
+    {"study_id":"Borde","c_statistic":0.72,"sample_size":498,"events":8},
+    {"study_id":"Qadir","c_statistic":0.84,"sample_size":2004,"events":76},
+    {"study_id":"Spiliopoulos","c_statistic":0.77,"standard_error":0.067,"sample_size":216,"events":14},
+    {"study_id":"Wendt","c_statistic":0.72,"standard_error":0.034,"sample_size":1066,"events":45},
+    {"study_id":"Laurent","c_statistic":0.77,"standard_error":0.061,"sample_size":314,"events":18},
+    {"study_id":"Wang-2","c_statistic":0.642,"standard_error":0.071,"sample_size":818,"events":13},
+    {"study_id":"Nishida","c_statistic":0.7697,"sample_size":461,"events":33},
+    {"study_id":"Barilli-1","c_statistic":0.8,"standard_error":0.015,"sample_size":12201,"events":210},
+    {"study_id":"Barilli-2","c_statistic":0.82,"standard_error":0.02,"sample_size":1670,"events":125},
+    {"study_id":"Paparella","c_statistic":0.83,"standard_error":0.012,"sample_size":6191,"events":300},
+    {"study_id":"Carosella","c_statistic":0.76,"standard_error":0.056,"sample_size":250,"events":9},
+    {"study_id":"Borracci","c_statistic":0.856,"standard_error":0.033,"sample_size":503,"events":21},
+    {"study_id":"Osnabrugge","c_statistic":0.77,"standard_error":0.01,"sample_size":50588,"events":1071}
+  ]
+}

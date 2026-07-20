@@ -1,0 +1,49 @@
+# Core dependencies
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+
+# Document processing
+python-docx>=1.0.0
+PyPDF2>=3.0.0
+pypdf>=3.0.0
+pdf2image>=1.16.0
+Pillow>=10.0.0
+requests>=2.31.0
+# marker-pdf>=0.2.0  # 禁用：模型体积 3GB+，CPU 推理极慢，改用 pypdf
+
+# OCR - Local HunyuanOCR (optional, heavy dependencies - install separately if needed)
+# vllm>=0.12.0  # High-performance inference for HunyuanOCR
+# torch>=2.7.0  # PyTorch for model inference
+
+# Async task queue
+celery>=5.3.0
+redis>=5.0.0
+kombu>=5.3.0
+
+# Web framework (for API)
+fastapi>=0.110.0
+uvicorn>=0.27.0
+pydantic-settings>=2.0.0
+python-multipart>=0.0.9
+
+# WebSocket & HTTP clients
+websockets>=12.0
+httpx>=0.26.0
+aiohttp>=3.9.0
+
+# Monitoring and logging
+prometheus-client>=0.19.0
+structlog>=24.0.0
+
+# MongoDB async driver（兼容 MongoDB 3.x，需 Python 3.10）
+motor==2.5.1
+pymongo==3.12.3
+
+# Utilities
+pyyaml>=6.0.0
+jsonschema>=4.20.0
+aiofiles>=23.0.0
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

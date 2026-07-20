@@ -1,0 +1,24 @@
+FROM python:3.11-slim
+
+ARG APP_VERSION=0.9.0
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp \
+    MPLCONFIGDIR=/tmp/matplotlib \
+    EVIMED_DATA_ROOT=/data \
+    LLM_MODEL=deepseek-v4-pro \
+    LLM_ENABLE_THINKING=true \
+    LLM_REASONING_EFFORT=high
+
+COPY requirements.txt pyproject.toml README.md ./
+COPY new_meta ./new_meta
+RUN pip install --no-cache-dir .
+
+LABEL org.opencontainers.image.title="EviMed MetaAgent Adapter" \
+      org.opencontainers.image.version="${APP_VERSION}"
+
+VOLUME ["/data"]
+EXPOSE 8024
+CMD ["uvicorn", "new_meta.evimed_service:app", "--host", "0.0.0.0", "--port", "8024", "--no-access-log"]

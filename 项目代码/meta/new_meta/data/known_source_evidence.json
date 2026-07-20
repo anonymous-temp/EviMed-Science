@@ -1,0 +1,22 @@
+[
+  {
+    "source_id": "who_react_figure2_covid_corticosteroids_2020",
+    "source_label": "WHO REACT Working Group. JAMA 2020 Figure 2",
+    "metadata_source": "who_react_figure2",
+    "url": "https://jamanetwork.com/journals/jama/fullarticle/2770279",
+    "doi": "10.1001/jama.2020.17023",
+    "year": 2020,
+    "journal": "JAMA",
+    "preferred_effect_measure": "OR",
+    "preferred_model_preference": "fixed",
+    "preferred_tau_estimator": "DL",
+    "title": "Association Between Administration of Systemic Corticosteroids and Mortality Among Critically Ill Patients With COVID-19: A Meta-analysis",
+    "authors": ["WHO REACT Working Group"],
+    "match_terms": {
+      "population": ["covid", "critically ill", "critical"],
+      "intervention": ["corticosteroid", "steroid", "dexamethasone", "hydrocortisone", "methylprednisolone"],
+      "outcome": ["mortality", "death"]
+    },
+    "text": "Source: WHO REACT Working Group. JAMA 2020;324(13):1330-1341. Figure 2.\nURL: https://jamanetwork.com/journals/jama/fullarticle/2770279\n\nFigure 2: Association Between Corticosteroids and 28-Day All-Cause Mortality in Each Trial, Overall, and According to Corticosteroid Drug.\n\nDEXA-COVID 19 (NCT04325061): deaths/total were 2/7 in the steroid arm and 2/12 in the no-steroid arm.\nCoDEX (NCT04327401): deaths/total were 69/128 in the steroid arm and 76/128 in the no-steroid arm.\nRECOVERY (NCT04381936): deaths/total were 95/324 in the steroid arm and 283/683 in the no-steroid arm.\nCAPE COVID (NCT02517489): deaths/total were 11/75 in the steroid arm and 20/73 in the no-steroid arm.\nCOVID STEROID (NCT04348305): deaths/total were 6/15 in the steroid arm and 2/14 in the no-steroid arm.\nREMAP-CAP (NCT02735707): deaths/total were 26/105 in the steroid arm and 29/92 in the no-steroid arm.\nSteroids-SARI (NCT04244591): deaths/total were 13/24 in the steroid arm and 13/23 in the no-steroid arm.\n\nDexamethasone subgroup fixed effect: 166/459 deaths/total in steroid arms and 361/823 in no-steroid arms.\nHydrocortisone subgroup fixed effect: 43/195 deaths/total in steroid arms and 51/179 in no-steroid arms.\nOverall fixed effect: 222/678 deaths/total in steroid arms and 425/1025 in no-steroid arms; odds ratio 0.66 (95% CI 0.53-0.82)."
+  }
+]

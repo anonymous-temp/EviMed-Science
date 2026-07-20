@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "fixture_id": "ipd_r_oracles_2026_07_17",
+  "description": "Independent R glm, lm, survival::coxph, and metafor REML oracles for deterministic participant-level binary, continuous, and time-to-event datasets.",
+  "source_urls": [
+    "https://stat.ethz.ch/R-manual/R-devel/library/stats/html/glm.html",
+    "https://stat.ethz.ch/R-manual/R-devel/library/stats/html/lm.html",
+    "https://stat.ethz.ch/R-manual/R-devel/library/survival/html/coxph.html",
+    "https://wviechtb.github.io/metafor/reference/rma.uni.html"
+  ],
+  "generators": {
+    "binary": {"numpy_seed": 20260717, "studies": 4, "participants_per_study": 240, "formula": "logit(p)=-1-0.55*treatment+0.20*baseline-0.30*treatment*baseline"},
+    "continuous": {"numpy_seed": 20260718, "studies": 4, "participants_per_study": 160, "formula": "outcome=10+study_index-2*treatment+0.5*baseline+Normal(0,2)"},
+    "survival": {"numpy_seed": 20260719, "studies": 4, "participants_per_study": 180, "formula": "event_time~Exponential(rate=0.15*exp(-0.50*treatment)); censor_time~Exponential(mean=10)"}
+  },
+  "expected": {
+    "binary": {
+      "study_coefficients": [-0.301674134151, -0.283451326040, 0.219835916832, -0.162809009213],
+      "study_standard_errors": [0.319093868845, 0.338845999622, 0.338086413433, 0.342606563664],
+      "pooled_coefficient": -0.136743991472,
+      "pooled_standard_error": 0.167134318561,
+      "tau_squared": 0.0,
+      "one_stage_coefficient": -0.136434690223,
+      "one_stage_standard_error": 0.164633892516
+    },
+    "continuous": {
+      "study_coefficients": [-2.335234046468, -1.660225698708, -1.630379595528, -1.431332736644],
+      "study_standard_errors": [0.336395517450, 0.320416153264, 0.309992948029, 0.310878660875],
+      "pooled_coefficient": -1.749365420748,
+      "pooled_standard_error": 0.188615046416,
+      "tau_squared": 0.040479503525,
+      "one_stage_coefficient": -1.753058207668,
+      "one_stage_standard_error": 0.159437483731
+    },
+    "survival": {
+      "study_coefficients": [-0.117590721036, -0.294090591951, -0.495969369126, -0.383050864869],
+      "study_standard_errors": [0.218299387515, 0.206358647173, 0.211073882832, 0.204547870900],
+      "pooled_coefficient": -0.326616188270,
+      "pooled_standard_error": 0.104935988558,
+      "tau_squared": 0.0,
+      "one_stage_coefficient": -0.327173436164,
+      "one_stage_standard_error": 0.105184634522
+    }
+  },
+  "tolerances": {"coefficient": 1e-5, "standard_error": 1e-5, "tau_squared": 1e-5}
+}

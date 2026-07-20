@@ -1,0 +1,480 @@
+{
+  "schema_version": 1,
+  "manifest_version": "2026.07.17.4",
+  "capabilities": [
+    {
+      "capability_id": "intervention_rct.parallel.standard",
+      "family": "intervention_rct",
+      "supported_designs": ["parallel_rct"],
+      "supported_outcome_types": ["dichotomous", "continuous", "time_to_event", "count"],
+      "supported_effect_measures": ["OR", "RR", "RD", "MD", "SMD", "HR", "IRR"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "analytic_reference", "edge_case"],
+      "evidence": [
+        {
+          "evidence_id": "metafor_bcg_rr_reml_2026_07_16",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/metafor_bcg_rr_reml.json",
+          "sha256": "4b1dd942711ebeb97f44eed2f27b8275c941e89292cb97b1bdb169a67a758713",
+          "source_url": "https://wviechtb.github.io/metafor/reference/rma.uni.html"
+        },
+        {
+          "evidence_id": "analytic_inverse_variance_fixed_1",
+          "evidence_class": "analytic_reference",
+          "artifact": "validation/corpora/analytic_inverse_variance_fixed.json",
+          "sha256": "b8fa256dd7837325f95804a61bd7513787ae07ce4bcc3c083150bd9264693323"
+        },
+        {
+          "evidence_id": "binary_zero_cell_edge_cases_1",
+          "evidence_class": "edge_case",
+          "artifact": "validation/corpora/edge_case_binary_zero_cells.json",
+          "sha256": "981fe2037e72166b2a6054639174f8362a008b6a87695b4e50c7e1eb6059d87a"
+        }
+      ],
+      "limitations": [
+        "Does not cover cluster, crossover, or correlated multi-arm designs.",
+        "Production status applies to aggregate-data pairwise parallel-group studies only."
+      ]
+    },
+    {
+      "capability_id": "intervention_rct.complex_design",
+      "family": "intervention_rct",
+      "supported_designs": ["parallel_rct", "cluster_rct", "crossover_rct", "multi_arm_rct"],
+      "supported_outcome_types": ["dichotomous", "continuous", "time_to_event", "count"],
+      "supported_effect_measures": ["OR", "RR", "RD", "MD", "SMD", "HR", "IRR"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "design_specific_edge_case"],
+      "evidence": [
+        {
+          "evidence_id": "metafor_complex_rct_reml_2026_07_17",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/metafor_complex_rct_reml.json",
+          "sha256": "005794470892e4594f6943b4ca3af227b30ce34d66de502e84d807532877f0c9",
+          "source_url": "https://wviechtb.github.io/metafor/reference/rma.uni.html"
+        },
+        {
+          "evidence_id": "complex_rct_design_policy_cases_2026_07_17",
+          "evidence_class": "design_specific_edge_case",
+          "artifact": "validation/corpora/complex_rct_design_policy_cases.json",
+          "sha256": "4f17748852e07e80e5c34cbcfde7a718a9c6bbfb3b6a2c0f69e63a00e6a49383"
+        }
+      ],
+      "limitations": [
+        "Cluster RCTs require source-reported cluster-adjusted precision or both ICC and mean cluster size for a prespecified design-effect correction.",
+        "Crossover RCTs require a source-reported paired effect and paired precision; unpaired reconstruction is not permitted.",
+        "Multiple eligible contrasts from one multi-arm RCT require an explicit positive-definite covariance matrix and one common estimand before GLS consolidation."
+      ]
+    },
+    {
+      "capability_id": "intervention_nrsi.adjusted_cohort_reml",
+      "family": "intervention_nrsi",
+      "supported_designs": ["cohort"],
+      "supported_outcome_types": ["dichotomous", "time_to_event", "count"],
+      "supported_effect_measures": ["OR", "RR", "HR", "IRR"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "adjustment_policy_case"],
+      "evidence": [
+        {
+          "evidence_id": "metafor_reported_log_ratio_reml_2026_07_16",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/metafor_bcg_reported_effect_reml.json",
+          "sha256": "e1574902119f655f1f7b5ba464745dbfc8aaaac38fede72a636b9afd17602c23",
+          "source_url": "https://wviechtb.github.io/metafor/reference/rma.uni.html"
+        },
+        {
+          "evidence_id": "adjusted_effect_estimand_policy_1",
+          "evidence_class": "adjustment_policy_case",
+          "artifact": "validation/corpora/adjusted_effect_policy_cases.json",
+          "sha256": "d416ffb8f637dc19e21a35347abf4fcef7f1db7660664ab94ad1429a000128e5"
+        }
+      ],
+      "limitations": [
+        "Production status is limited to source-verified adjusted log-ratio estimates from cohort studies.",
+        "All studies must report the same effect measure and exact canonical adjustment set, with one independent estimate per study.",
+        "Residual confounding is evaluated with result-level ROBINS-I and certainty adjudication; statistical pooling does not remove it."
+      ]
+    },
+    {
+      "capability_id": "intervention_nrsi.other_designs",
+      "family": "intervention_nrsi",
+      "supported_designs": ["cohort", "case_control", "controlled_before_after", "interrupted_time_series", "regression_discontinuity", "instrumental_variable"],
+      "supported_outcome_types": ["dichotomous", "continuous", "time_to_event", "count"],
+      "supported_effect_measures": ["OR", "RR", "RD", "MD", "SMD", "HR", "IRR"],
+      "release_status": "blocked",
+      "required_evidence_classes": ["external_cross_engine", "design_specific_confounding_case"],
+      "evidence": [],
+      "limitations": [
+        "Case-control, quasi-experimental, continuous-outcome, mixed-design, and correlated-estimate synthesis require separate design-specific validation."
+      ]
+    },
+    {
+      "capability_id": "prevalence.proportion.glmm",
+      "family": "prevalence_incidence",
+      "supported_designs": ["cross_sectional", "cohort", "registry", "surveillance"],
+      "supported_outcome_types": ["proportion"],
+      "supported_effect_measures": ["PROP"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "boundary_case"],
+      "evidence": [
+        {
+          "evidence_id": "metafor_debruin_plo_glmm_2026_07_16",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/metafor_debruin_prevalence_glmm.json",
+          "sha256": "f5509d8c2212f4c94d37225009281b78e6d5fa7c652101c758eabb8dc89e55fa",
+          "source_url": "https://wviechtb.github.io/metafor/reference/rma.glmm.html"
+        },
+        {
+          "evidence_id": "prevalence_binomial_boundaries_1",
+          "evidence_class": "boundary_case",
+          "artifact": "validation/corpora/prevalence_boundary_cases.json",
+          "sha256": "d0644204b6c8c4363eb0b9bd8ec7046cd342dbbb8d0a5172af71f88a68076e24"
+        }
+      ],
+      "limitations": [
+        "Production status applies to single-arm proportions with a logit-link binomial-normal model.",
+        "Incidence rates use a separate blocked capability until Poisson-normal validation is complete."
+      ]
+    },
+    {
+      "capability_id": "incidence.poisson.glmm",
+      "family": "prevalence_incidence",
+      "supported_designs": ["cohort", "registry", "surveillance"],
+      "supported_outcome_types": ["incidence_rate"],
+      "supported_effect_measures": ["IR"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "time_unit_case", "zero_count_case"],
+      "evidence": [
+        {
+          "evidence_id": "metafor_nielweise_irln_glmm_2026_07_16",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/metafor_nielweise_incidence_glmm.json",
+          "sha256": "4371de0fb8ef5e3e03f580a0f43fdf4fd60ed22b535a63fa8b86441c6c502c1a",
+          "source_url": "https://wviechtb.github.io/metafor/reference/rma.glmm.html"
+        },
+        {
+          "evidence_id": "incidence_time_unit_policy_1",
+          "evidence_class": "time_unit_case",
+          "artifact": "validation/corpora/incidence_policy_cases.json",
+          "sha256": "49270752ee0b34449b02b8c44fca48c17d6a5d17e69ad6f4d1c633fc11d0bd47"
+        },
+        {
+          "evidence_id": "incidence_zero_count_policy_1",
+          "evidence_class": "zero_count_case",
+          "artifact": "validation/corpora/incidence_policy_cases.json",
+          "sha256": "49270752ee0b34449b02b8c44fca48c17d6a5d17e69ad6f4d1c633fc11d0bd47"
+        }
+      ],
+      "limitations": [
+        "Production status applies to single-arm event counts with a verified common person-time unit and a log-link Poisson-normal model.",
+        "Time units must be harmonized before synthesis; the engine will not infer conversions from free text.",
+        "All-zero strata use an exact aggregate Poisson interval because between-study variance is not identifiable."
+      ]
+    },
+    {
+      "capability_id": "diagnostic_accuracy.reitsma_reml",
+      "family": "diagnostic_accuracy",
+      "supported_designs": ["diagnostic_cross_sectional", "diagnostic_cohort"],
+      "supported_outcome_types": ["diagnostic_accuracy"],
+      "supported_effect_measures": ["SENS_SPEC", "DOR", "LR_POS", "LR_NEG"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "threshold_case"],
+      "evidence": [
+        {
+          "evidence_id": "mada_auditc_reitsma_reml_2026_07_16",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/mada_auditc_reitsma_reml.json",
+          "sha256": "81c7457bcc6fe64a325f3a2c14616b6f35c19848e9745a64e625acacaa588748",
+          "source_url": "https://rdrr.io/cran/mada/f/inst/doc/mada.pdf"
+        },
+        {
+          "evidence_id": "dta_common_threshold_fail_closed_1",
+          "evidence_class": "threshold_case",
+          "artifact": "validation/corpora/dta_threshold_cases.json",
+          "sha256": "a19bc904d556995e0a2fedbcee78a8720b25fe6b3a6173881de05a42fd0dbacc"
+        }
+      ],
+      "limitations": [
+        "Production status is limited to aggregate 2x2 data for one explicitly recorded common threshold.",
+        "Multiple-threshold meta-regression, paired-test comparisons, individual-participant data, and exact binomial hierarchical models are outside this capability."
+      ]
+    },
+    {
+      "capability_id": "diagnostic_accuracy.two_gate",
+      "family": "diagnostic_accuracy",
+      "supported_designs": ["two_gate"],
+      "supported_outcome_types": ["diagnostic_accuracy"],
+      "supported_effect_measures": ["SENS_SPEC", "DOR", "LR_POS", "LR_NEG"],
+      "release_status": "blocked",
+      "required_evidence_classes": ["external_cross_engine", "spectrum_bias_case"],
+      "evidence": [],
+      "limitations": [
+        "Two-gate diagnostic case-control designs require a separately validated spectrum-bias policy and are not covered by the production Reitsma capability."
+      ]
+    },
+    {
+      "capability_id": "prognostic_factor.adjusted_cohort_reml",
+      "family": "prognostic_factor",
+      "supported_designs": ["prognostic_cohort"],
+      "supported_outcome_types": ["dichotomous", "time_to_event"],
+      "supported_effect_measures": ["OR", "RR", "HR"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "adjustment_policy_case"],
+      "evidence": [
+        {
+          "evidence_id": "metafor_prognostic_log_ratio_reml_2026_07_16",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/metafor_bcg_reported_effect_reml.json",
+          "sha256": "e1574902119f655f1f7b5ba464745dbfc8aaaac38fede72a636b9afd17602c23",
+          "source_url": "https://wviechtb.github.io/metafor/reference/rma.uni.html"
+        },
+        {
+          "evidence_id": "prognostic_adjustment_estimand_policy_1",
+          "evidence_class": "adjustment_policy_case",
+          "artifact": "validation/corpora/adjusted_effect_policy_cases.json",
+          "sha256": "d416ffb8f637dc19e21a35347abf4fcef7f1db7660664ab94ad1429a000128e5"
+        }
+      ],
+      "limitations": [
+        "Production status is limited to source-verified adjusted ratio estimates from prognostic cohort studies at one explicitly recorded time horizon.",
+        "All studies must use one effect measure, outcome stratum, time horizon, subgroup, and exact canonical adjustment set, with one independent estimate per study.",
+        "The pooled value is a prognostic association and is not a treatment effect or prediction-model performance estimate."
+      ]
+    },
+    {
+      "capability_id": "prognostic_factor.other_designs",
+      "family": "prognostic_factor",
+      "supported_designs": ["prognostic_cohort", "case_cohort"],
+      "supported_outcome_types": ["dichotomous", "continuous", "time_to_event"],
+      "supported_effect_measures": ["OR", "RR", "HR", "MD", "SMD"],
+      "release_status": "blocked",
+      "required_evidence_classes": ["external_cross_engine", "design_specific_case"],
+      "evidence": [],
+      "limitations": [
+        "Case-cohort sampling, continuous associations, nonlinear effects, mixed horizons, and correlated estimates require separate validation."
+      ]
+    },
+    {
+      "capability_id": "prediction_model.external_cstat_reml",
+      "family": "prediction_model",
+      "supported_designs": ["prediction_validation"],
+      "supported_outcome_types": ["discrimination"],
+      "supported_effect_measures": ["C_STATISTIC"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "model_identity_case"],
+      "evidence": [
+        {
+          "evidence_id": "metamisc_euroscore_cstat_reml_2026_07_16",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/metamisc_euroscore_cstat_reml.json",
+          "sha256": "d82fcab22716a1117894a92909fa35e67249e2b41e7c75d557de8bb11fba56ea",
+          "source_url": "https://search.r-project.org/CRAN/refmans/metamisc/html/valmeta.html"
+        },
+        {
+          "evidence_id": "prediction_model_identity_fail_closed_1",
+          "evidence_class": "model_identity_case",
+          "artifact": "validation/corpora/prediction_model_identity_cases.json",
+          "sha256": "297102e40d0f49f03884dcd00514d6c33974251f052fa1a12932db7211e5c46f"
+        }
+      ],
+      "limitations": [
+        "Production status is metric-level and limited to external-validation c-statistics for one exact model version, outcome, population stratum, and time horizon.",
+        "A discrimination-only synthesis cannot establish calibration or clinical utility and must not be used alone to recommend deployment.",
+        "Brier scores, joint performance models, and model comparisons remain separate blocked capabilities."
+      ]
+    },
+    {
+      "capability_id": "prediction_model.external_oe_reml",
+      "family": "prediction_model",
+      "supported_designs": ["prediction_validation"],
+      "supported_outcome_types": ["calibration"],
+      "supported_effect_measures": ["OE_RATIO"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "model_identity_case", "metric_specific_case"],
+      "evidence": [
+        {
+          "evidence_id": "metamisc_euroscore_oe_reml_2026_07_16",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/metamisc_euroscore_oe_reml.json",
+          "sha256": "251cacb414f2d4f722ec83623ef11ea323eea5ede1811890b8dc009bee51f526",
+          "source_url": "https://search.r-project.org/CRAN/refmans/metamisc/html/valmeta.html"
+        },
+        {
+          "evidence_id": "prediction_model_identity_fail_closed_1",
+          "evidence_class": "model_identity_case",
+          "artifact": "validation/corpora/prediction_model_identity_cases.json",
+          "sha256": "297102e40d0f49f03884dcd00514d6c33974251f052fa1a12932db7211e5c46f"
+        },
+        {
+          "evidence_id": "prediction_calibration_policy_cases_1",
+          "evidence_class": "metric_specific_case",
+          "artifact": "validation/corpora/prediction_calibration_policy_cases.json",
+          "sha256": "425ae1ba6a78bc938060d7e2bf0cfbe81c2d2bd547ad5002dcdb480697010660"
+        }
+      ],
+      "limitations": [
+        "Production status is limited to external-validation O:E ratios for one exact model version, outcome, population stratum, and time horizon.",
+        "Raw reconstruction requires observed events, expected events, and sample size; zero observed-event studies require a source-reported estimate with restorable precision.",
+        "O:E measures calibration-in-the-large only and cannot establish individual-risk calibration, discrimination, clinical utility, or deployment readiness."
+      ]
+    },
+    {
+      "capability_id": "prediction_model.external_calibration_slope_reml",
+      "family": "prediction_model",
+      "supported_designs": ["prediction_validation"],
+      "supported_outcome_types": ["calibration"],
+      "supported_effect_measures": ["CALIBRATION_SLOPE"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "model_identity_case", "metric_specific_case"],
+      "evidence": [
+        {
+          "evidence_id": "metafor_calibration_slope_reml_2026_07_16",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/metafor_calibration_slope_reml.json",
+          "sha256": "a4adedc1b8e186536556cba80d284ccfe7ae406a240522340a68e651f616468b",
+          "source_url": "https://wviechtb.github.io/metafor/reference/rma.uni.html"
+        },
+        {
+          "evidence_id": "prediction_model_identity_fail_closed_1",
+          "evidence_class": "model_identity_case",
+          "artifact": "validation/corpora/prediction_model_identity_cases.json",
+          "sha256": "297102e40d0f49f03884dcd00514d6c33974251f052fa1a12932db7211e5c46f"
+        },
+        {
+          "evidence_id": "prediction_calibration_slope_policy_cases_1",
+          "evidence_class": "metric_specific_case",
+          "artifact": "validation/corpora/prediction_calibration_slope_policy_cases.json",
+          "sha256": "5c2c0222de7cd2c26c29d860372aa1d0f35994758f39d432f6d44691c425b574"
+        }
+      ],
+      "limitations": [
+        "Production status is limited to externally validated calibration slopes with source-reported SEs or confidence intervals for one exact model version, outcome, population stratum, and time horizon.",
+        "Slopes are pooled on the original scale using REML and Hartung-Knapp inference; a value of 1 is ideal.",
+        "Calibration slope alone cannot establish calibration-in-the-large, discrimination, clinical utility, or deployment readiness."
+      ]
+    },
+    {
+      "capability_id": "prediction_model.other_performance",
+      "family": "prediction_model",
+      "supported_designs": ["prediction_development", "prediction_validation", "prediction_update"],
+      "supported_outcome_types": ["discrimination", "calibration", "overall_performance"],
+      "supported_effect_measures": ["C_STATISTIC", "OE_RATIO", "CALIBRATION_SLOPE", "BRIER"],
+      "release_status": "blocked",
+      "required_evidence_classes": ["external_cross_engine", "metric_specific_case"],
+      "evidence": [],
+      "limitations": [
+        "Apparent/internal validation, Brier scores, model updates, and joint multivariate synthesis require metric-specific validation."
+      ]
+    },
+    {
+      "capability_id": "network_meta.aggregate",
+      "family": "network_meta",
+      "supported_designs": ["parallel_rct", "multi_arm_rct", "cluster_rct"],
+      "supported_outcome_types": ["dichotomous", "continuous", "time_to_event"],
+      "supported_effect_measures": ["OR", "RR", "MD", "SMD", "HR"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "inconsistency_case", "multi_arm_case"],
+      "evidence": [
+        {
+          "evidence_id": "netmeta_random_effects_oracle_2026_07_17",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/netmeta_network_oracles.json",
+          "sha256": "8e339230c44a59adeef5d54e75c46e625e479bb0786a109e9749c4f80c4e406a",
+          "source_url": "https://cran.r-project.org/package=netmeta"
+        },
+        {
+          "evidence_id": "netmeta_design_by_treatment_oracle_2026_07_17",
+          "evidence_class": "inconsistency_case",
+          "artifact": "validation/corpora/netmeta_network_oracles.json",
+          "sha256": "8e339230c44a59adeef5d54e75c46e625e479bb0786a109e9749c4f80c4e406a",
+          "source_url": "https://cran.r-project.org/package=netmeta"
+        },
+        {
+          "evidence_id": "netmeta_multiarm_covariance_oracle_2026_07_17",
+          "evidence_class": "multi_arm_case",
+          "artifact": "validation/corpora/netmeta_network_oracles.json",
+          "sha256": "8e339230c44a59adeef5d54e75c46e625e479bb0786a109e9749c4f80c4e406a",
+          "source_url": "https://cran.r-project.org/package=netmeta"
+        }
+      ],
+      "limitations": [
+        "Production status applies to connected aggregate-data contrast networks with a common effect measure and explicit positive-definite covariance for dependent multi-arm contrasts.",
+        "A prespecified effect-modifier assessment must establish transitivity before execution; concern or unresolved uncertainty stops synthesis.",
+        "Global inconsistency uses a design-by-treatment interaction model and local inconsistency uses independently refitted indirect networks; sparse networks can leave either diagnostic non-estimable.",
+        "Treatment rankings are descriptive uncertainty summaries and are not interpreted as proof of clinical superiority."
+      ]
+    },
+    {
+      "capability_id": "ipd_meta.parallel_two_stage",
+      "family": "ipd_meta",
+      "supported_designs": ["parallel_rct"],
+      "supported_outcome_types": ["dichotomous", "binary", "continuous", "time_to_event"],
+      "supported_effect_measures": ["OR", "MD", "HR"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "missing_data_case", "one_stage_case"],
+      "evidence": [
+        {
+          "evidence_id": "ipd_r_models_and_reml_2026_07_17",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/ipd_r_oracles.json",
+          "sha256": "b8ba1b664215d379a27bc7c8f2428edc54e744cd170aec13eca53348060f6451",
+          "source_url": "https://stat.ethz.ch/R-manual/R-devel/library/stats/html/glm.html"
+        },
+        {
+          "evidence_id": "ipd_complete_required_data_policy_2026_07_17",
+          "evidence_class": "missing_data_case",
+          "artifact": "validation/corpora/ipd_policy_cases.json",
+          "sha256": "dfe5e77572bcc854fb6c0236f6e2e761113c2ad84d3551fa5063ae95c59866ef"
+        },
+        {
+          "evidence_id": "ipd_one_stage_sensitivity_2026_07_17",
+          "evidence_class": "one_stage_case",
+          "artifact": "validation/corpora/ipd_r_oracles.json",
+          "sha256": "b8ba1b664215d379a27bc7c8f2428edc54e744cd170aec13eca53348060f6451",
+          "source_url": "https://stat.ethz.ch/R-manual/R-devel/library/survival/html/coxph.html"
+        }
+      ],
+      "limitations": [
+        "Production status is limited to participant-level parallel randomized trials with binary OR, continuous MD, or time-to-event HR outcomes.",
+        "The primary analysis fits one participant-level model per study and pools treatment coefficients by REML; HKSJ and a common-effect one-stage model are retained as sensitivities.",
+        "Requested outcomes and covariates must be complete for every analyzed participant; the engine rejects missing required values instead of silently deleting or imputing them.",
+        "Treatment-covariate interactions are centered within study. Cluster, crossover, observational, count, non-proportional-hazards, and multiple-imputation models require separate validation."
+      ]
+    },
+    {
+      "capability_id": "dose_response.aggregate_rcs_reml",
+      "family": "dose_response",
+      "supported_designs": ["cohort", "case_control", "parallel_rct"],
+      "supported_outcome_types": ["dichotomous", "continuous", "time_to_event"],
+      "supported_effect_measures": ["OR", "RR", "HR", "MD"],
+      "release_status": "production",
+      "required_evidence_classes": ["external_cross_engine", "covariance_case", "unit_harmonization_case"],
+      "evidence": [
+        {
+          "evidence_id": "dosresmeta_rcs_reml_2026_07_17",
+          "evidence_class": "external_cross_engine",
+          "artifact": "validation/corpora/dosresmeta_rcs_reml.json",
+          "sha256": "64021c60ed5ce039114042bdd37ae7f12c531f3d09c26ec7a64192e0e6dcd374",
+          "source_url": "https://cran.r-project.org/package=dosresmeta"
+        },
+        {
+          "evidence_id": "dose_response_covariance_policy_2026_07_17",
+          "evidence_class": "covariance_case",
+          "artifact": "validation/corpora/dose_response_policy_cases.json",
+          "sha256": "5631fe85a50cc49db657b0d3bb91da958cb9f1736dee5054238b15197f9c773f"
+        },
+        {
+          "evidence_id": "dose_response_unit_policy_2026_07_17",
+          "evidence_class": "unit_harmonization_case",
+          "artifact": "validation/corpora/dose_response_policy_cases.json",
+          "sha256": "5631fe85a50cc49db657b0d3bb91da958cb9f1736dee5054238b15197f9c773f"
+        }
+      ],
+      "limitations": [
+        "Production status applies to aggregate category-level effects with at least two non-reference doses per study and an explicit positive-definite within-study covariance matrix.",
+        "The primary curve is a two-stage two-parameter restricted cubic spline with multivariate REML and three locked dose knots; a linear REML sensitivity model is also retained.",
+        "Dose units must be identical or deterministically convertible within one dimension; mass per day is never mixed with mass per body weight per day.",
+        "Observational studies require source-verified adjusted effects with one exact canonical adjustment set across all included dose contrasts."
+      ]
+    }
+  ]
+}

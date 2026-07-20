@@ -1,0 +1,199 @@
+{
+  "benchmark_id": "corticosteroids_covid_2020_who_react_jama",
+  "title": "WHO REACT systemic corticosteroids for critically ill COVID-19",
+  "reference": {
+    "citation": "WHO REACT Working Group. Association Between Administration of Systemic Corticosteroids and Mortality Among Critically Ill Patients With COVID-19: A Meta-analysis. JAMA. 2020;324(13):1330-1341.",
+    "doi": "10.1001/jama.2020.17023",
+    "pmid": "32876694",
+    "source_url": "https://jamanetwork.com/journals/jama/fullarticle/2770279"
+  },
+  "topic": "systemic corticosteroids compared with usual care or placebo for all-cause mortality in critically ill COVID-19 patients",
+  "expected_primary_result": {
+    "n_trials": 7,
+    "n_participants": 1703,
+    "effect_measure": "OR",
+    "fixed_effect": {
+      "effect": 0.66,
+      "ci_lower": 0.53,
+      "ci_upper": 0.82
+    },
+    "random_effects": {
+      "effect": 0.70,
+      "ci_lower": 0.48,
+      "ci_upper": 1.01
+    },
+    "aggregate_events_intervention": 222,
+    "aggregate_total_intervention": 678,
+    "aggregate_events_control": 425,
+    "aggregate_total_control": 1025
+  },
+  "recall_thresholds": {
+    "search": 0.7,
+    "screening": 0.7,
+    "full_text": 0.5,
+    "publication_ready": 1.0
+  },
+  "expected_trials": [
+    {
+      "trial_id": "dexa_covid_19",
+      "trial_name": "DEXA-COVID 19",
+      "registration_id": "NCT04325061",
+      "aliases": [
+        "DEXA-COVID",
+        "DEXA COVID 19",
+        "Efficacy of dexamethasone treatment for patients with ARDS caused by COVID-19"
+      ],
+      "publication_pmids": [
+        "32799933"
+      ],
+      "publication_dois": [
+        "10.1186/s13063-020-04643-1"
+      ],
+      "expected_events_intervention": 2,
+      "expected_total_intervention": 7,
+      "expected_events_control": 2,
+      "expected_total_control": 12,
+      "notes": "Included in JAMA Table 1 as DEXA-COVID 19; the indexed publication is the protocol/design paper, not a complete results article."
+    },
+    {
+      "trial_id": "codex",
+      "trial_name": "CoDEX",
+      "registration_id": "NCT04327401",
+      "aliases": [
+        "CoDEX",
+        "COVID-19-associated ARDS treated with DEXamethasone",
+        "Effect of Dexamethasone on Days Alive and Ventilator-Free"
+      ],
+      "publication_pmids": [
+        "32876695"
+      ],
+      "publication_dois": [
+        "10.1001/jama.2020.17021"
+      ],
+      "expected_events_intervention": 69,
+      "expected_total_intervention": 128,
+      "expected_events_control": 76,
+      "expected_total_control": 128
+    },
+    {
+      "trial_id": "recovery",
+      "trial_name": "RECOVERY",
+      "registration_id": "NCT04381936",
+      "aliases": [
+        "RECOVERY",
+        "Dexamethasone in Hospitalized Patients with COVID-19",
+        "Effect of Dexamethasone in Hospitalized Patients with COVID-19"
+      ],
+      "publication_pmids": [
+        "32678530"
+      ],
+      "publication_dois": [
+        "10.1056/NEJMoa2021436",
+        "10.1101/2020.06.22.20137273"
+      ],
+      "expected_events_intervention": 95,
+      "expected_total_intervention": 324,
+      "expected_events_control": 283,
+      "expected_total_control": 683,
+      "notes": "JAMA benchmark uses the critically ill/mechanically ventilated subgroup, not the full hospitalized RECOVERY trial."
+    },
+    {
+      "trial_id": "cape_covid",
+      "trial_name": "CAPE COVID",
+      "registration_id": "NCT02517489",
+      "aliases": [
+        "CAPE COVID",
+        "Effect of Hydrocortisone on 21-Day Mortality or Respiratory Support"
+      ],
+      "publication_pmids": [
+        "32876689"
+      ],
+      "publication_dois": [
+        "10.1001/jama.2020.16761"
+      ],
+      "expected_events_intervention": 11,
+      "expected_total_intervention": 75,
+      "expected_events_control": 20,
+      "expected_total_control": 73,
+      "expected_primary_timepoint": "28-day all-cause mortality",
+      "accepted_timepoints": [
+        "21-day mortality or respiratory support",
+        "21-day treatment failure"
+      ],
+      "requires_timepoint_adjudication": true,
+      "timepoint_notes": "CAPE COVID reports a 21-day treatment-failure endpoint; using it in a 28-day mortality benchmark requires explicit protocol/user adjudication rather than silent pooling."
+    },
+    {
+      "trial_id": "covid_steroid",
+      "trial_name": "COVID STEROID",
+      "registration_id": "NCT04348305",
+      "aliases": [
+        "COVID STEROID",
+        "Hydrocortisone for COVID-19 and Severe Hypoxia"
+      ],
+      "publication_pmids": [],
+      "publication_dois": [],
+      "expected_events_intervention": 6,
+      "expected_total_intervention": 15,
+      "expected_events_control": 2,
+      "expected_total_control": 14,
+      "notes": "Included trial in the prospective meta-analysis; limited separately indexed results at the benchmark date."
+    },
+    {
+      "trial_id": "remap_cap",
+      "trial_name": "REMAP-CAP",
+      "registration_id": "NCT02735707",
+      "aliases": [
+        "REMAP-CAP",
+        "Randomized Embedded Multifactorial Adaptive Platform",
+        "Effect of Hydrocortisone on Mortality and Organ Support"
+      ],
+      "publication_pmids": [
+        "32876697"
+      ],
+      "publication_dois": [
+        "10.1001/jama.2020.17022"
+      ],
+      "expected_events_intervention": 26,
+      "expected_total_intervention": 105,
+      "expected_events_control": 29,
+      "expected_total_control": 92
+    },
+    {
+      "trial_id": "steroids_sari",
+      "trial_name": "Steroids-SARI",
+      "registration_id": "NCT04244591",
+      "aliases": [
+        "Steroids-SARI",
+        "Steroids SARI",
+        "Methylprednisolone in severe acute respiratory infection"
+      ],
+      "publication_pmids": [],
+      "publication_dois": [],
+      "expected_events_intervention": 13,
+      "expected_total_intervention": 24,
+      "expected_events_control": 13,
+      "expected_total_control": 23,
+      "notes": "Included in JAMA Table 1 as unpublished/randomized trial data."
+    }
+  ],
+  "adjacent_nonbenchmark_records": [
+    {
+      "label": "METCOVID",
+      "pmid": "32785710",
+      "doi": "10.1093/cid/ciaa1177",
+      "reason": "Relevant methylprednisolone RCT but not part of the seven-trial WHO REACT/JAMA critically ill benchmark set."
+    },
+    {
+      "label": "Edalatifard methylprednisolone",
+      "pmid": "32943404",
+      "doi": "10.1183/13993003.02808-2020",
+      "reason": "Adjacent severe COVID-19 RCT retrieved by the agent; not part of the seven-trial WHO REACT/JAMA benchmark set."
+    },
+    {
+      "label": "GLUCOCOVID",
+      "doi": "10.1101/2020.06.17.20133579",
+      "reason": "Adjacent hospitalized COVID-19 methylprednisolone trial; not part of the seven-trial WHO REACT/JAMA critically ill benchmark set."
+    }
+  ]
+}

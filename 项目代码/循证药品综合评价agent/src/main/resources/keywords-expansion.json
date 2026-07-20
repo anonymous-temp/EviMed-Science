@@ -1,0 +1,7 @@
+{
+  "老年": ["老年", "老年患者", "老年人群", "高龄", "≥60岁", ">60岁", "≥65岁", "elderly", "aged", "older", "geriatric", "≥60 years", ">60 years", "≥65 years"],
+  "儿童": ["儿童", "儿童患者", "小儿", "婴幼儿", "pediatric", "children", "child", "infant", "adolescent"],
+  "孕妇": ["孕妇", "妊娠", "妊娠期", "妊娠期妇女", "pregnancy", "pregnant", "gestation", "gestational"],
+  "肾功能不全": ["肾功能不全", "肾衰", "肾衰竭", "肾损伤", "慢性肾病", "renal insufficiency", "renal failure", "kidney failure", "kidney injury", "CKD", "chronic kidney disease"],
+  "肝功能不全": ["肝功能不全", "肝衰", "肝衰竭", "肝损伤", "肝硬化", "hepatic insufficiency", "liver failure", "liver injury", "cirrhosis"]
+}

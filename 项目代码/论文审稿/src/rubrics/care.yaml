@@ -1,0 +1,226 @@
+# CARE Checklist for Case Reports
+# Reference: Gagnier JJ, Kienle G, Altman DG, et al. The CARE guidelines: consensus-based clinical case reporting guideline development. BMJ Case Rep 2013
+
+name: CARE 2013
+version: "1.0"
+applicable_to:
+  - Case Report
+  - Case Series
+description: "Reporting checklist for clinical case reports"
+
+items:
+  - item_id: CARE_1
+    item_number: "1"
+    category: Title
+    question: "Does the title indicate this is a case report and contain key elements?"
+    evaluation_criteria: "Title should identify as case report and mention key patient demographics, diagnosis, or intervention."
+    evidence_location_hint: "title"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_2
+    item_number: "2"
+    category: Keywords
+    question: "Are 2-5 keywords provided for indexing?"
+    evaluation_criteria: "Should provide 2-5 keywords for database indexing."
+    evidence_location_hint: "keywords"
+    severity_if_missing: MINOR
+
+  - item_id: CARE_3a
+    item_number: "3a"
+    category: Abstract
+    question: "Does abstract include introduction with unique aspects of case?"
+    evaluation_criteria: "Abstract introduction should briefly state what makes this case unique or noteworthy."
+    evidence_location_hint: "abstract"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_3b
+    item_number: "3b"
+    category: Abstract
+    question: "Does abstract include patient information, clinical findings, diagnoses, interventions, and outcomes?"
+    evaluation_criteria: "Abstract should contain main clinical details and outcomes in structured format."
+    evidence_location_hint: "abstract"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_3c
+    item_number: "3c"
+    category: Abstract
+    question: "Does abstract include conclusion with main takeaways?"
+    evaluation_criteria: "Abstract should end with key lessons learned from the case."
+    evidence_location_hint: "abstract"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_4
+    item_number: "4"
+    category: Introduction
+    question: "Does introduction provide scientific background and explain uniqueness of case?"
+    evaluation_criteria: "Should provide brief background and clearly state why this case is being reported."
+    evidence_location_hint: "introduction"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_5a
+    item_number: "5a"
+    category: Patient Information
+    question: "Are demographic information and presenting concerns described?"
+    evaluation_criteria: "Should provide age, sex, and chief complaints with timeline."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: CRITICAL
+
+  - item_id: CARE_5b
+    item_number: "5b"
+    category: Patient Information
+    question: "Are medical, family, and psychosocial history relevant to case described?"
+    evaluation_criteria: "Should include relevant past medical history, family history, and social history."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_5c
+    item_number: "5c"
+    category: Patient Information
+    question: "Are relevant past interventions and their outcomes described?"
+    evaluation_criteria: "Should describe previous treatments and their outcomes if relevant."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_6a
+    item_number: "6a"
+    category: Clinical Findings
+    question: "Are relevant physical examination findings described?"
+    evaluation_criteria: "Should report pertinent physical examination findings."
+    evidence_location_hint: "results"
+    severity_if_missing: CRITICAL
+
+  - item_id: CARE_6b
+    item_number: "6b"
+    category: Clinical Findings
+    question: "Are relevant diagnostic test results reported?"
+    evaluation_criteria: "Should report laboratory tests, imaging, or other diagnostic procedures with results."
+    evidence_location_hint: "results"
+    severity_if_missing: CRITICAL
+
+  - item_id: CARE_7
+    item_number: "7"
+    category: Timeline
+    question: "Is a timeline of important dates and events provided?"
+    evaluation_criteria: "Should include table or figure showing chronology of key events (symptoms, diagnoses, interventions, outcomes)."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_8a
+    item_number: "8a"
+    category: Diagnostic Assessment
+    question: "Are diagnostic methods and challenges discussed?"
+    evaluation_criteria: "Should describe diagnostic reasoning including differential diagnosis and diagnostic challenges."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_8b
+    item_number: "8b"
+    category: Diagnostic Assessment
+    question: "Are prognostic characteristics if applicable described?"
+    evaluation_criteria: "Should mention prognostic factors or staging if relevant."
+    evidence_location_hint: "results"
+    severity_if_missing: MINOR
+
+  - item_id: CARE_9a
+    item_number: "9a"
+    category: Therapeutic Intervention
+    question: "Are types of interventions described?"
+    evaluation_criteria: "Should describe pharmacologic, surgical, preventive, or self-care interventions."
+    evidence_location_hint: "methods.interventions"
+    severity_if_missing: CRITICAL
+
+  - item_id: CARE_9b
+    item_number: "9b"
+    category: Therapeutic Intervention
+    question: "Are administration and dosage of interventions detailed?"
+    evaluation_criteria: "Should provide details on how interventions were administered (doses, frequency, duration)."
+    evidence_location_hint: "methods.interventions"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_9c
+    item_number: "9c"
+    category: Therapeutic Intervention
+    question: "Are changes in interventions with explanations reported?"
+    evaluation_criteria: "Should explain any changes to treatment plan and why they were made."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_10a
+    item_number: "10a"
+    category: Follow-up and Outcomes
+    question: "Are clinician-assessed outcomes reported?"
+    evaluation_criteria: "Should report clinical outcomes assessed by healthcare providers."
+    evidence_location_hint: "results.outcomes"
+    severity_if_missing: CRITICAL
+
+  - item_id: CARE_10b
+    item_number: "10b"
+    category: Follow-up and Outcomes
+    question: "Are patient-assessed outcomes reported?"
+    evaluation_criteria: "Should report patient-reported outcomes or quality of life if assessed."
+    evidence_location_hint: "results.outcomes"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_10c
+    item_number: "10c"
+    category: Follow-up and Outcomes
+    question: "Are important follow-up test results reported?"
+    evaluation_criteria: "Should report results of follow-up diagnostic tests or imaging."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_10d
+    item_number: "10d"
+    category: Follow-up and Outcomes
+    question: "Are adverse or unanticipated events reported?"
+    evaluation_criteria: "Should report any adverse events, complications, or unexpected outcomes."
+    evidence_location_hint: "results.adverse_events"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_11a
+    item_number: "11a"
+    category: Discussion
+    question: "Are strengths and limitations of case management discussed?"
+    evaluation_criteria: "Should discuss what was done well and what could have been done differently."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_11b
+    item_number: "11b"
+    category: Discussion
+    question: "Is relevant medical literature discussed?"
+    evaluation_criteria: "Should compare case to published literature and explain how this case adds to knowledge."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_11c
+    item_number: "11c"
+    category: Discussion
+    question: "Is the rationale for conclusions stated?"
+    evaluation_criteria: "Should explain reasoning behind conclusions drawn from the case."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_11d
+    item_number: "11d"
+    category: Discussion
+    question: "Are main takeaway lessons stated?"
+    evaluation_criteria: "Should clearly state practical lessons clinicians can learn from this case."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: CARE_12
+    item_number: "12"
+    category: Patient Perspective
+    question: "Is patient perspective included when appropriate?"
+    evaluation_criteria: "Should include patient's perspective on their illness and treatment when possible."
+    evidence_location_hint: "results"
+    severity_if_missing: MINOR
+
+  - item_id: CARE_13
+    item_number: "13"
+    category: Informed Consent
+    question: "Is patient consent for publication documented?"
+    evaluation_criteria: "Must state that informed consent was obtained from patient or next of kin for publication."
+    evidence_location_hint: "methods.ethics"
+    severity_if_missing: CRITICAL

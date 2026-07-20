@@ -1,0 +1,43 @@
+[project]
+name = "mr-agent"
+version = "1.0.0"
+description = "Conversational MR Analysis Agent - 对话驱动的孟德尔随机化分析Agent"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "MR Agent Team"}]
+
+dependencies = [
+    "openai>=1.50.0",
+    "pydantic>=2.0",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "biopython>=1.83",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "rich>=13.0",
+    "reportlab>=4.0",
+    "pypdf2>=3.0",
+    "python-docx>=1.0",
+    "python-dotenv>=1.0",
+    # WebSocket 服务依赖（与 meta/文献计量分析保持一致）
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "websockets>=12.0",
+    "aiohttp>=3.9.0",
+    "oss2>=2.18.0",
+]
+
+[project.optional-dependencies]
+web = ["streamlit>=1.30"]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[project.scripts]
+mr-agent = "start:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

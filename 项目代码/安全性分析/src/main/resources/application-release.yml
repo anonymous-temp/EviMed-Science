@@ -1,0 +1,161 @@
+server:
+  port: 2088
+
+spring:
+  application:
+    name: pharmacovigilance
+  servlet:
+    multipart:
+      max-request-size: 100MB
+      max-file-size: 100MB
+
+  # mongodb的连接
+  data:
+    mongodb:
+      database: evimed_new
+      host: 172.16.0.84
+      port: 27017
+      username: RWuser1
+      password: ${EVIMED_SPRING_DATA_MONGODB_PASSWORD:}
+
+
+  #Rides集群
+  redis:
+    host: r-2zerq5mckple6w1963pd.redis.rds.aliyuncs.com
+    port: 6379
+    database: 2
+    timeout: 10000
+    password: ${EVIMED_SPRING_REDIS_PASSWORD:}
+    lettuce:
+      shutdown-timeout: 2000ms
+
+
+  kafka:
+    #集群
+    bootstrap-servers: alikafka-pre-cn-36z46hih2006-1.alikafka.aliyuncs.com:9093,alikafka-pre-cn-36z46hih2006-2.alikafka.aliyuncs.com:9093,alikafka-pre-cn-36z46hih2006-3.alikafka.aliyuncs.com:9093
+    properties:
+      # 安全协议，使用 SASL_SSL
+      security.protocol: SASL_SSL
+      # SASL 认证机制，阿里云 Kafka 通常使用 PLAIN
+      sasl.mechanism: PLAIN
+      # SASL 认证配置，需替换为你的用户名和密码
+      sasl.jaas.config: ${EVIMED_SPRING_KAFKA_PROPERTIES_SASL_JAAS_CONFIG:}
+      ssl.truststore.location: /data/evimed_v4/only.4096.client.truststore.jks
+      # SSL 信任库密码
+      ssl.truststore.password: ${EVIMED_SPRING_KAFKA_PROPERTIES_SSL_TRUSTSTORE_PASSWORD:}
+      # hostname校验改成空
+      ssl:
+        endpoint:
+          identification:
+            algorithm: ""
+    producer:
+      # 发生错误后，消息重发的次数。
+      retries: 0
+      # 当有多个消息需要被发送到同一个分区时，生产者会把它们放在同一个批次里。
+      # 该参数指定了一个批次可以使用的内存大小，按照字节数计算。
+      batch-size: 16384
+      # 设置生产者内存缓冲区的大小。
+      buffer-memory: 33554432
+      # procedure要求leader在考虑完成请求之前收到的确认数，用于控制发送记录在服务端的持久化，其值可以为如下：
+      # acks = 0 如果设置为零，则生产者将不会等待来自服务器的任何确认，该记录将立即添加到套接字缓冲区并视为已发送。在这种情况下，无法保证服务器已收到记录，并且重试配置将不会生效（因为客户端通常不会知道任何故障），为每条记录返回的偏移量始终设置为-1。
+      # acks = 1 这意味着leader会将记录写入其本地日志，但无需等待所有副本服务器的完全确认即可做出回应，在这种情况下，如果leader在确认记录后立即失败，但在将数据复制到所有的副本服务器之前，则记录将会丢失。
+      # acks = all 这意味着leader将等待完整的同步副本集以确认记录，这保证了只要至少一个同步副本服务器仍然存活，记录就不会丢失，这是最强有力的保证，这相当于acks = -1的设置。
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # 值的序列化方式
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      # 自动提交的时间间隔,默认5秒
+      auto-commit-interval: 1S
+      # 该属性指定了消费者在读取一个没有偏移量的分区或者偏移量无效的情况下该作何处理：
+      # latest（默认值）在偏移量无效的情况下，消费者将从最新的记录开始读取数据（在消费者启动之后生成的记录）
+      # earliest ：在偏移量无效的情况下，消费者将从起始位置读取分区的记录
+      auto-offset-reset: latest
+      # 是否自动提交偏移量，默认值是true,为了避免出现重复数据和数据丢失，可以把它设置为false,然后手动提交偏移量
+      #enable-auto-commit: false
+      enable-auto-commit: true
+      # 键的反序列化方式
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # 值的反序列化方式
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      #value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+    #      properties: # 配置反序列化对应的消息类型包，多个包用逗号','分隔
+    #        spring:
+    #          json:
+    #            trusted:
+    #              packages: com.novo.system.domain
+    listener:
+      # 在侦听器容器中运行的线程数。
+      concurrency: 5
+      missing-topics-fatal: false
+      #listner负责ack，每调用一次，就立即commit
+      #ack-mode: manual_immediate
+
+  elasticsearch:
+    rest:
+      uris: http://es-cn-8t84ft4ee0003tib9.public.elasticsearch.aliyuncs.com:9200
+      username: elastic
+      password: ${EVIMED_SPRING_ELASTICSEARCH_REST_PASSWORD:}
+      read-timeout: 10s
+      connection-timeout: 10s
+
+
+#  #Rides集群
+#  redis:
+#    database: 2
+#    jedis:
+#      pool:
+#        max-active: 8
+#        max-wait: -1
+#        max-idle: 8
+#        min-idle: 0
+#    # 主从节点的的地址：端口
+#    cluster:
+#      nodes:
+#        - 172.16.0.2:6379
+#        - 172.16.0.103:6379
+#        - 172.16.0.249:6379
+#    # 链接超时时间
+#    timeout: 10000
+#    # 容灾切换哨兵配置
+#    sentinel:
+#      master: mymaster
+#      nodes: 172.16.0.2:26379,172.16.0.103:26379,172.16.0.249:26379
+#    # redis中链接密码
+# Credential moved to the runtime secret store.
+
+feign:
+  hystrix:
+    enabled: false
+  client:
+    config:
+      default:
+        #建立连接所用的时间，适用于网络状况正常的情况下，两端连接所需要的时间
+        ConnectTimeOut: 100000
+        #ConnectTimeOut: 10000
+        #指建立连接后从服务端读取到可用资源所用的时间
+        ReadTimeOut: 100000
+        #ReadTimeOut: 10000
+
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://eureka106.com:7001/eureka/,http://eureka102.com:7001/eureka/,http://eureka111.com:7001/eureka/
+  instance:
+    prefer-ip-address: true
+
+mongo:
+  dataName: ${EVIMED_MONGO_DATANAME:}
+  dataNameFears: ${EVIMED_MONGO_DATANAME_FEARS:}
+
+evaluation:
+  download:
+    url: https://www.evimed.com
+  title:
+    font:
+      path: /data/evimed_v4/myFont/simsun.TTF
+      path2: /data/evimed_v4/myFont/
+
+font:
+  path: /data/evimed_v4/myFont

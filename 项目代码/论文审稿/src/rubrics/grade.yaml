@@ -1,0 +1,210 @@
+# GRADE - Grading of Recommendations Assessment, Development and Evaluation
+# For clinical practice guidelines, expert consensus, and recommendations
+
+name: GRADE for Clinical Guidelines
+version: "1.0"
+applicable_to:
+  - "Clinical Practice Guideline"
+  - "Expert Consensus"
+  - "Recommendation"
+description: "GRADE-based checklist for clinical practice guidelines and expert consensus statements"
+
+items:
+  # Scope and Purpose
+  - item_id: GRADE_SCOPE_01
+    item_number: "1"
+    category: Scope and Purpose
+    question: "Are the overall objective(s) of the guideline specifically described?"
+    evaluation_criteria: "Should clearly state what clinical question or problem the guideline addresses."
+    evidence_location_hint: "introduction"
+    severity_if_missing: CRITICAL
+
+  - item_id: GRADE_SCOPE_02
+    item_number: "2"
+    category: Scope and Purpose
+    question: "Is the target population (patients, public, etc.) specifically described?"
+    evaluation_criteria: "Should define to whom the guideline applies (age, gender, clinical condition, comorbidities)."
+    evidence_location_hint: "methods or introduction"
+    severity_if_missing: MAJOR
+
+  - item_id: GRADE_SCOPE_03
+    item_number: "3"
+    category: Scope and Purpose
+    question: "Are the health questions covered by the guideline clearly formulated using PICO format?"
+    evaluation_criteria: "Should use Population, Intervention, Comparator, Outcome (PICO) framework for key questions."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Stakeholder Involvement
+  - item_id: GRADE_STAKE_01
+    item_number: "4"
+    category: Stakeholder Involvement
+    question: "Does the guideline development group include individuals from all relevant professional groups?"
+    evaluation_criteria: "Should have multidisciplinary panel (clinicians, methodologists, patient representatives)."
+    evidence_location_hint: "methods or authorship"
+    severity_if_missing: MAJOR
+
+  - item_id: GRADE_STAKE_02
+    item_number: "5"
+    category: Stakeholder Involvement
+    question: "Have the views and preferences of the target population been sought?"
+    evaluation_criteria: "Should describe patient/public involvement in guideline development."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: GRADE_STAKE_03
+    item_number: "6"
+    category: Stakeholder Involvement
+    question: "Are the target users of the guideline clearly defined?"
+    evaluation_criteria: "Should specify which healthcare professionals or settings the guideline targets."
+    evidence_location_hint: "introduction or methods"
+    severity_if_missing: MINOR
+
+  # Evidence Synthesis
+  - item_id: GRADE_EVIDENCE_01
+    item_number: "7"
+    category: Evidence Synthesis
+    question: "Are systematic methods used to search for evidence?"
+    evaluation_criteria: "Should describe search strategy, databases, date ranges, and search terms used."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: GRADE_EVIDENCE_02
+    item_number: "8"
+    category: Evidence Synthesis
+    question: "Are the criteria for selecting evidence clearly described?"
+    evaluation_criteria: "Should provide explicit inclusion/exclusion criteria for evidence."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: GRADE_EVIDENCE_03
+    item_number: "9"
+    category: Evidence Synthesis
+    question: "Are the strengths and limitations of the body of evidence clearly described?"
+    evaluation_criteria: "Should assess quality/certainty of evidence using structured approach (e.g., GRADE ratings)."
+    evidence_location_hint: "results or discussion"
+    severity_if_missing: CRITICAL
+
+  - item_id: GRADE_EVIDENCE_04
+    item_number: "10"
+    category: Evidence Synthesis
+    question: "Are methods for formulating recommendations described?"
+    evaluation_criteria: "Should explain how recommendations were derived from evidence (voting, consensus, etc.)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Recommendations
+  - item_id: GRADE_REC_01
+    item_number: "11"
+    category: Recommendations
+    question: "Are recommendations specific and unambiguous?"
+    evaluation_criteria: "Each recommendation should clearly state what should or should not be done."
+    evidence_location_hint: "results or recommendations section"
+    severity_if_missing: CRITICAL
+
+  - item_id: GRADE_REC_02
+    item_number: "12"
+    category: Recommendations
+    question: "Is the strength of each recommendation clearly indicated?"
+    evaluation_criteria: "Should use GRADE terminology: strong vs. conditional/weak recommendations."
+    evidence_location_hint: "results or recommendations section"
+    severity_if_missing: CRITICAL
+
+  - item_id: GRADE_REC_03
+    item_number: "13"
+    category: Recommendations
+    question: "Is the quality/certainty of evidence supporting each recommendation rated?"
+    evaluation_criteria: "Should provide GRADE quality ratings: High, Moderate, Low, Very Low."
+    evidence_location_hint: "results or recommendations section"
+    severity_if_missing: CRITICAL
+
+  - item_id: GRADE_REC_04
+    item_number: "14"
+    category: Recommendations
+    question: "Is the link between recommendations and supporting evidence explicit?"
+    evaluation_criteria: "Should cite specific evidence for each recommendation with rationale."
+    evidence_location_hint: "results or recommendations section"
+    severity_if_missing: MAJOR
+
+  - item_id: GRADE_REC_05
+    item_number: "15"
+    category: Recommendations
+    question: "Have benefits and harms been considered when formulating recommendations?"
+    evaluation_criteria: "Should discuss balance of benefits vs. harms/burdens for each recommendation."
+    evidence_location_hint: "discussion or evidence-to-decision tables"
+    severity_if_missing: MAJOR
+
+  - item_id: GRADE_REC_06
+    item_number: "16"
+    category: Recommendations
+    question: "Have resource implications (costs) been considered?"
+    evaluation_criteria: "Should address cost-effectiveness or resource use implications where relevant."
+    evidence_location_hint: "discussion or evidence-to-decision tables"
+    severity_if_missing: MAJOR
+
+  - item_id: GRADE_REC_07
+    item_number: "17"
+    category: Recommendations
+    question: "Are values and preferences considered in making recommendations?"
+    evaluation_criteria: "Should discuss how patient values and preferences influenced recommendations."
+    evidence_location_hint: "methods or evidence-to-decision tables"
+    severity_if_missing: MAJOR
+
+  # Transparency and Conflicts
+  - item_id: GRADE_TRANS_01
+    item_number: "18"
+    category: Transparency
+    question: "Is there a procedure for updating the guideline provided?"
+    evaluation_criteria: "Should state when and how the guideline will be updated."
+    evidence_location_hint: "methods or end_matter"
+    severity_if_missing: MINOR
+
+  - item_id: GRADE_TRANS_02
+    item_number: "19"
+    category: Transparency
+    question: "Are conflicts of interest of guideline development group members recorded and addressed?"
+    evaluation_criteria: "Must disclose financial and non-financial COI and explain how they were managed."
+    evidence_location_hint: "end_matter or methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: GRADE_TRANS_03
+    item_number: "20"
+    category: Transparency
+    question: "Is the guideline externally reviewed before publication?"
+    evaluation_criteria: "Should mention peer review or external stakeholder review process."
+    evidence_location_hint: "methods or acknowledgments"
+    severity_if_missing: MAJOR
+
+  - item_id: GRADE_TRANS_04
+    item_number: "21"
+    category: Transparency
+    question: "Are funding sources for guideline development disclosed?"
+    evaluation_criteria: "Must state funding source and any potential influence on recommendations."
+    evidence_location_hint: "end_matter"
+    severity_if_missing: CRITICAL
+
+  # Applicability
+  - item_id: GRADE_APP_01
+    item_number: "22"
+    category: Applicability
+    question: "Are facilitators and barriers to implementation discussed?"
+    evaluation_criteria: "Should identify potential challenges and enablers for guideline adoption."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MINOR
+
+  - item_id: GRADE_APP_02
+    item_number: "23"
+    category: Applicability
+    question: "Are monitoring and audit criteria provided?"
+    evaluation_criteria: "Should suggest key indicators for measuring guideline implementation."
+    evidence_location_hint: "discussion or implementation section"
+    severity_if_missing: MINOR
+
+  # Evidence Tables
+  - item_id: GRADE_TABLES_01
+    item_number: "24"
+    category: Supporting Evidence
+    question: "Are evidence tables or summary of findings tables provided?"
+    evaluation_criteria: "Should include structured tables summarizing key evidence for each recommendation."
+    evidence_location_hint: "tables or supplementary materials"
+    severity_if_missing: MAJOR

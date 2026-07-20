@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "description": "Single-arm anti-infective catheter incidence rates from dat.nielweise2008, fitted with a Poisson-normal GLMM.",
+  "source": {
+    "dataset": "metadat::dat.nielweise2008",
+    "article_doi": "10.1016/j.jhin.2008.02.020",
+    "method_article_doi": "10.1002/sim.4040"
+  },
+  "oracle": {
+    "runtime": "R 4.6.0",
+    "package": "metafor",
+    "package_version": "5.0-1",
+    "function": "rma.glmm",
+    "measure": "IRLN",
+    "method": "ML",
+    "nAGQ": 15,
+    "command": "rma.glmm(measure='IRLN', xi=x1i, ti=t1i, data=dat.nielweise2008, method='ML', nAGQ=15)"
+  },
+  "studies": [
+    {"study_id": "Bong 2003", "events": 7, "person_time": 1344, "time_unit": "catheter_days"},
+    {"study_id": "Ciresi 1996", "events": 8, "person_time": 1600, "time_unit": "catheter_days"},
+    {"study_id": "Hanna 2004", "events": 3, "person_time": 12012, "time_unit": "catheter_days"},
+    {"study_id": "Harter 2002", "events": 6, "person_time": 1536, "time_unit": "catheter_days"},
+    {"study_id": "Jaeger 2001", "events": 1, "person_time": 370, "time_unit": "catheter_days"},
+    {"study_id": "Jaeger 2005", "events": 1, "person_time": 729, "time_unit": "catheter_days"},
+    {"study_id": "Logghe 1997", "events": 17, "person_time": 6760, "time_unit": "catheter_days"},
+    {"study_id": "Ostendorf 2005", "events": 3, "person_time": 1107, "time_unit": "catheter_days"},
+    {"study_id": "Pemberton 1996", "events": 2, "person_time": 320, "time_unit": "catheter_days"}
+  ],
+  "expected": {
+    "pooled_log_rate": -6.05834348,
+    "standard_error_log_rate": 0.33024169,
+    "tau_squared": 0.65416452,
+    "log_likelihood": -15.45288,
+    "pooled_rate": 0.00233827,
+    "ci_lower": 0.00122403,
+    "ci_upper": 0.00446681,
+    "prediction_lower": 0.00042195,
+    "prediction_upper": 0.01295769,
+    "tolerance": 0.001
+  }
+}

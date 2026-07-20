@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration status="WARN" monitorInterval="30">
+    <properties>
+        <property name="CONSOLE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</property>
+        <property name="FILE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36}:%L - %msg%n</property>
+        <property name="LOG_BASE_PATH">${sys:user.dir}/logs</property>
+        <property name="LOG_FILE_NAME">test-application</property>
+    </properties>
+
+    <appenders>
+        <console name="Console" target="SYSTEM_OUT">
+            <patternLayout pattern="${CONSOLE_PATTERN}"/>
+            <thresholdFilter level="INFO" onMatch="ACCEPT" onMismatch="DENY"/>
+        </console>
+
+        <!-- 主日志 (每小时滚动) -->
+        <rollingFile name="MainLog"
+                     fileName="${LOG_BASE_PATH}/${LOG_FILE_NAME}.log"
+
+                     filePattern="${LOG_BASE_PATH}/archive/${LOG_FILE_NAME}-%d{yyyy-MM-dd_HH}.log.gz">
+            <patternLayout pattern="${FILE_PATTERN}"/>
+            <thresholdFilter level="INFO" onMatch="ACCEPT" onMismatch="DENY"/>
+            <policies>
+                <!-- 关键改动2: 使用时间滚动策略，每小时一次 -->
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <!-- 可选：保留文件大小限制作为兜底 -->
+                <sizeBasedTriggeringPolicy size="100MB"/>
+            </policies>
+            <!-- 保留策略：按小时滚动，保留30天 -->
+            <defaultRolloverStrategy max="720"> <!-- 30天 *  -->
+                <delete basePath="${LOG_BASE_PATH}/archive" maxDepth="1">
+                    <ifFileName glob="${LOG_FILE_NAME}-*.log.gz"/>
+                    <ifLastModified age="30d"/>
+                </delete>
+            </defaultRolloverStrategy>
+        </rollingFile>
+
+        <!-- 调试日志 (每小时滚动) -->
+        <rollingFile name="DebugLog"
+                     fileName="${LOG_BASE_PATH}/${LOG_FILE_NAME}-debug.log"
+
+                     filePattern="${LOG_BASE_PATH}/archive/${LOG_FILE_NAME}-debug-%d{yyyy-MM-dd_HH}.log.gz">
+            <patternLayout pattern="${FILE_PATTERN}"/>
+            <thresholdFilter level="DEBUG" onMatch="ACCEPT" onMismatch="DENY"/>
+            <policies>
+                <!-- 关键改动2: 使用时间滚动策略，每小时一次 -->
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <sizeBasedTriggeringPolicy size="100MB"/>
+            </policies>
+            <defaultRolloverStrategy max="720">
+                <delete basePath="${LOG_BASE_PATH}/archive" maxDepth="1">
+                    <ifFileName glob="${LOG_FILE_NAME}-debug-*.log.gz"/>
+                    <ifLastModified age="10d"/>
+                </delete>
+            </defaultRolloverStrategy>
+        </rollingFile>
+
+        <!-- 错误日志 (每小时滚动) -->
+        <rollingFile name="ErrorLog"
+                     fileName="${LOG_BASE_PATH}/${LOG_FILE_NAME}-error.log"
+
+                     filePattern="${LOG_BASE_PATH}/archive/${LOG_FILE_NAME}-error-%d{yyyy-MM-dd_HH}.log.gz">
+            <patternLayout pattern="${FILE_PATTERN}"/>
+            <thresholdFilter level="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
+            <policies>
+                <!-- 关键改动2: 使用时间滚动策略，每小时一次 -->
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <sizeBasedTriggeringPolicy size="100MB"/>
+            </policies>
+            <defaultRolloverStrategy max="720">
+                <delete basePath="${LOG_BASE_PATH}/archive" maxDepth="1">
+                    <ifFileName glob="${LOG_FILE_NAME}-error-*.log.gz"/>
+                    <ifLastModified age="7d"/>
+                </delete>
+            </defaultRolloverStrategy>
+        </rollingFile>
+    </appenders>
+
+    <loggers>
+        <logger name="com.sentum" level="INFO" additivity="false">
+            <appenderRef ref="Console"/>
+            <appenderRef ref="MainLog"/>
+        </logger>
+        <logger name="org.springframework" level="WARN" additivity="false">
+            <appenderRef ref="Console"/>
+            <appenderRef ref="MainLog"/>
+        </logger>
+        <root level="WARN">
+            <appenderRef ref="Console"/>
+            <appenderRef ref="MainLog"/>
+            <appenderRef ref="ErrorLog"/>
+        </root>
+    </loggers>
+</configuration>

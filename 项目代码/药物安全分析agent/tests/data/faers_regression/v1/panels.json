@@ -1,0 +1,83 @@
+[
+  {
+    "id": "semaglutide-nausea-2018-2020",
+    "drug": "semaglutide",
+    "reaction": "nausea",
+    "date_from": "2018-01-01",
+    "date_to": "2020-12-31",
+    "counts": {"joint": 1275, "drug_total": 6618, "event_total": 156244, "grand_total": 4317431},
+    "expected_project": {"ror": 6.3994023560648445, "ror_lower": 6.018898538484088, "prr": 5.359172981029686, "ebgm": 5.320126525414195, "eb05": 5.0794594695719555, "signal": true}
+  },
+  {
+    "id": "semaglutide-vomiting-2018-2020",
+    "drug": "semaglutide",
+    "reaction": "vomiting",
+    "date_from": "2018-01-01",
+    "date_to": "2020-12-31",
+    "counts": {"joint": 733, "drug_total": 6618, "event_total": 91066, "grand_total": 4317431},
+    "expected_project": {"ror": 5.819329126054988, "ror_lower": 5.387772986269783, "prr": 5.285547281177638, "ebgm": 5.245145231661619, "eb05": 4.934007124264415, "signal": true}
+  },
+  {
+    "id": "semaglutide-diarrhoea-2018-2020",
+    "drug": "semaglutide",
+    "reaction": "diarrhoea",
+    "date_from": "2018-01-01",
+    "date_to": "2020-12-31",
+    "counts": {"joint": 709, "drug_total": 6618, "event_total": 139584, "grand_total": 4317431},
+    "expected_project": {"ror": 3.604508208884859, "ror_lower": 3.333763215517824, "prr": 3.3254818685857703, "ebgm": 3.3104470098266456, "eb05": 3.1107623042927868, "signal": true}
+  },
+  {
+    "id": "semaglutide-constipation-2018-2020",
+    "drug": "semaglutide",
+    "reaction": "constipation",
+    "date_from": "2018-01-01",
+    "date_to": "2020-12-31",
+    "counts": {"joint": 326, "drug_total": 6618, "event_total": 43339, "grand_total": 4317431},
+    "expected_project": {"ror": 5.140829627507017, "ror_lower": 4.597345190861247, "prr": 4.93685403691057, "ebgm": 4.895349889929937, "eb05": 4.465049100094198, "signal": true}
+  },
+  {
+    "id": "osimertinib-cpk-increased-2015-2024q1",
+    "drug": "osimertinib",
+    "reaction": "blood creatine phosphokinase increased",
+    "date_from": "2015-01-01",
+    "date_to": "2024-03-31",
+    "counts": {"joint": 78, "drug_total": 21092, "event_total": 12202, "grand_total": 12727244},
+    "expected_project": {"ror": 3.886327529459316, "ror_lower": 3.1093532232554977, "prr": 3.8756536461245052, "ebgm": 3.8223234260388557, "eb05": 3.1589729433993226, "signal": true}
+  },
+  {
+    "id": "osimertinib-rhabdomyolysis-2015-2024q1",
+    "drug": "osimertinib",
+    "reaction": "rhabdomyolysis",
+    "date_from": "2015-01-01",
+    "date_to": "2024-03-31",
+    "counts": {"joint": 23, "drug_total": 21092, "event_total": 19365, "grand_total": 12727244},
+    "expected_project": {"ror": 0.7160361846169515, "ror_lower": 0.47559958112019945, "prr": 0.7163458360371018, "ebgm": 0.6818616775837743, "eb05": 0.482808938053752, "signal": false}
+  },
+  {
+    "id": "osimertinib-myositis-2015-2024q1",
+    "drug": "osimertinib",
+    "reaction": "myositis",
+    "date_from": "2015-01-01",
+    "date_to": "2024-03-31",
+    "counts": {"joint": 24, "drug_total": 21092, "event_total": 6961, "grand_total": 12727244},
+    "expected_project": {"ror": 2.085417979313619, "ror_lower": 1.396496627238653, "prr": 2.0841829123923445, "ebgm": 1.8977567050863282, "eb05": 1.2924032212453576, "signal": true}
+  },
+  {
+    "id": "osimertinib-myopathy-2015-2024q1",
+    "drug": "osimertinib",
+    "reaction": "myopathy",
+    "date_from": "2015-01-01",
+    "date_to": "2024-03-31",
+    "counts": {"joint": 14, "drug_total": 21092, "event_total": 5355, "grand_total": 12727244},
+    "expected_project": {"ror": 1.5794559233711845, "ror_lower": 0.9346233281257046, "prr": 1.5790713044195819, "ebgm": 1.313314727493556, "eb05": 0.8179081619816775, "signal": false}
+  },
+  {
+    "id": "metformin-lactic-acidosis-2018-2024q1",
+    "drug": "metformin",
+    "reaction": "lactic acidosis",
+    "date_from": "2018-01-01",
+    "date_to": "2024-03-31",
+    "counts": {"joint": 9765, "drug_total": 188612, "event_total": 15069, "grand_total": 9101621},
+    "expected_project": {"ror": 91.69652940225178, "ror_lower": 88.65270757011281, "prr": 87.00090234982146, "ebgm": 31.259702924383774, "eb05": 30.742782033430185, "signal": true}
+  }
+]

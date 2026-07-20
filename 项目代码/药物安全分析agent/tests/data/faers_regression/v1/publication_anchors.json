@@ -1,0 +1,38 @@
+[
+  {
+    "study": "Zhou et al. 2022 semaglutide gastrointestinal events",
+    "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8763271/",
+    "comparison_mode": "directional_with_tolerance",
+    "maximum_relative_ror_difference": 0.15,
+    "maximum_relative_case_difference": 0.20,
+    "events": {
+      "semaglutide-nausea-2018-2020": {"cases": 1158, "ror": 7.14, "signal": true},
+      "semaglutide-vomiting-2018-2020": {"cases": 688, "ror": 6.71, "signal": true},
+      "semaglutide-diarrhoea-2018-2020": {"cases": 608, "ror": 3.65, "signal": true},
+      "semaglutide-constipation-2018-2020": {"cases": 304, "ror": 5.42, "signal": true}
+    }
+  },
+  {
+    "study": "Tan et al. 2025 osimertinib myotoxicity",
+    "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12374422/",
+    "comparison_mode": "directional_with_declared_mismatch",
+    "maximum_relative_ror_difference": 0.55,
+    "maximum_relative_case_difference": 0.30,
+    "expected_mismatches": ["osimertinib-myopathy-2015-2024q1"],
+    "events": {
+      "osimertinib-cpk-increased-2015-2024q1": {"cases": 83, "ror": 6.20, "signal": true},
+      "osimertinib-rhabdomyolysis-2015-2024q1": {"cases": 23, "ror": 1.08, "signal": false},
+      "osimertinib-myositis-2015-2024q1": {"cases": 20, "ror": 4.22, "signal": true},
+      "osimertinib-myopathy-2015-2024q1": {"cases": 11, "ror": 2.32, "signal": true}
+    }
+  },
+  {
+    "study": "Zhang et al. 2025 metformin-associated lactic acidosis",
+    "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12499714/",
+    "comparison_mode": "qualitative_only",
+    "method_note": "The publication's supplementary 2x2 definition and EBGM/IC formulas are not method-compatible with this project.",
+    "events": {
+      "metformin-lactic-acidosis-2018-2024q1": {"cases": 10374, "ror": 353.96, "signal": true}
+    }
+  }
+]

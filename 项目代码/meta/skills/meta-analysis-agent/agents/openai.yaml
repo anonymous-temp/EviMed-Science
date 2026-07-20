@@ -1,0 +1,4 @@
+interface:
+  display_name: "Meta-Analysis Agent"
+  short_description: "Turn one research topic into a complete meta-analysis article"
+  default_prompt: "Use $meta-analysis-agent to turn my research topic into a complete editable systematic-review and meta-analysis article."

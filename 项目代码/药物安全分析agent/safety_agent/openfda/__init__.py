@@ -1,0 +1,53 @@
+"""openFDA data layer: async client + search-clause builders."""
+
+from .client import (
+    CountTerm,
+    DrugLabel,
+    EventSearchResult,
+    OpenFDAClient,
+)
+from .queries import (
+    DRUG_FIELD_MEDICINALPRODUCT,
+    DRUG_FIELD_OPENFDA_GENERIC,
+    FIELD_DRUG,
+    FIELD_DRUG_EXACT,
+    FIELD_REACTION,
+    FIELD_REACTION_EXACT,
+    EventQuery,
+    age_range_clause,
+    country_clause,
+    date_range_clause,
+    drug_clause,
+    outcome_clause,
+    quoted_term,
+    reaction_any_clause,
+    reaction_clause,
+    serious_clause,
+    sex_clause,
+    suspect_only_clause,
+)
+
+__all__ = [
+    "CountTerm",
+    "DRUG_FIELD_MEDICINALPRODUCT",
+    "DRUG_FIELD_OPENFDA_GENERIC",
+    "DrugLabel",
+    "EventQuery",
+    "EventSearchResult",
+    "FIELD_DRUG",
+    "FIELD_DRUG_EXACT",
+    "FIELD_REACTION",
+    "FIELD_REACTION_EXACT",
+    "OpenFDAClient",
+    "age_range_clause",
+    "country_clause",
+    "date_range_clause",
+    "drug_clause",
+    "outcome_clause",
+    "quoted_term",
+    "reaction_any_clause",
+    "reaction_clause",
+    "serious_clause",
+    "sex_clause",
+    "suspect_only_clause",
+]

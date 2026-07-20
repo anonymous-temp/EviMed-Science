@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "corpus_id": "edge_case_binary_zero_cells",
+  "description": "Binary-effect edge cases that require deterministic zero-cell handling and finite outputs.",
+  "oracle": {
+    "type": "analytic_continuity_correction",
+    "continuity_correction": 0.5
+  },
+  "cases": [
+    {"case_id": "single_zero_treatment", "events_i": 0, "non_events_i": 20, "events_c": 3, "non_events_c": 17},
+    {"case_id": "single_zero_control", "events_i": 4, "non_events_i": 16, "events_c": 0, "non_events_c": 20},
+    {"case_id": "double_zero", "events_i": 0, "non_events_i": 20, "events_c": 0, "non_events_c": 20},
+    {"case_id": "double_all_event", "events_i": 20, "non_events_i": 0, "events_c": 20, "non_events_c": 0}
+  ],
+  "required_invariants": [
+    "finite_log_effect",
+    "finite_positive_variance",
+    "arm_swap_negates_log_effect",
+    "double_zero_is_flagged_for_sensitivity"
+  ]
+}
