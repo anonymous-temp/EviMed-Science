@@ -485,6 +485,69 @@ def _evimed_record_url(value, fallback):
     return fallback
 
 
+_RELEVANCE_STOPWORDS = {
+    "a", "an", "and", "for", "in", "of", "on", "or", "the", "to", "with",
+    "analysis", "clinical", "disease", "disorder", "evidence", "patient", "patients",
+    "research", "study", "syndrome", "treatment",
+}
+
+
+def _normalized_relevance_text(value):
+    if isinstance(value, str):
+        text = value
+    else:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    return " ".join(re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]+", text.casefold()))
+
+
+def _concept_is_present(record_text, concept):
+    normalized = _normalized_relevance_text(concept)
+    if not normalized:
+        return True
+    if (
+        normalized in record_text
+        if re.search(r"[\u4e00-\u9fff]", normalized)
+        else bool(re.search(r"(?:^| )%s(?: |$)" % re.escape(normalized), record_text))
+    ):
+        return True
+    terms = [
+        term for term in normalized.split()
+        if term not in _RELEVANCE_STOPWORDS and (len(term) >= 2 or term.isdigit())
+    ]
+    if not terms:
+        return False
+    if all(term.isascii() and term.isalpha() for term in terms) and len(terms) >= 2:
+        acronym = "".join(term[0] for term in terms)
+        if re.search(r"(?:^| )%s(?: |$)" % re.escape(acronym), record_text):
+            return True
+    matches = sum(
+        bool(re.search(r"(?:^| )%s(?: |$)" % re.escape(term), record_text))
+        if term.isascii() else term in record_text
+        for term in terms
+    )
+    required = 1 if len(terms) == 1 else math.ceil(len(terms) * 0.6)
+    return matches >= required
+
+
+def _filter_evimed_records(records, required_concepts):
+    concepts = [
+        value.strip() for value in required_concepts or []
+        if isinstance(value, str) and value.strip()
+    ]
+    if not concepts:
+        return records, 0
+    kept = []
+    for record in records:
+        record_text = _normalized_relevance_text(record)
+        if all(_concept_is_present(record_text, concept) for concept in concepts):
+            kept.append(record)
+    return kept, len(records) - len(kept)
+
+
+def _evimed_candidate_limit(arguments, limit):
+    return min(max(limit * 5, limit), 100) if arguments.get("requiredConcepts") else limit
+
+
 def _evimed_evidence_records(query, limit):
     data, endpoint = _evimed_post("search/api/evidence", {"query": query[:512]})
     records = _list(data.get("paper"))
@@ -522,7 +585,7 @@ def _evimed_evidence_records(query, limit):
 
 def _evimed_literature_records(arguments):
     limit = min(arguments.get("limit", 10), 100)
-    body = {"query": arguments["query"][:512], "count": limit}
+    body = {"query": arguments["query"][:512], "count": _evimed_candidate_limit(arguments, limit)}
     field_map = {
         "articleTypes": "articleTypes",
         "hasPdf": "hasPdf",
@@ -540,8 +603,11 @@ def _evimed_literature_records(arguments):
         if isinstance(value, str) and len(value) >= 4:
             body[target_name] = int(value[:4])
     data, endpoint = _evimed_post("review/api/literature", body)
+    records, filtered_count = _filter_evimed_records(
+        _list(data.get("list")), arguments.get("requiredConcepts")
+    )
     items, sources = [], []
-    for index, value in enumerate(_list(data.get("list"))[:limit]):
+    for index, value in enumerate(records[:limit]):
         record = _dict(value)
         title = _first_text(record.get("title"))
         identifier = str(record.get("id") or index).strip()
@@ -567,7 +633,10 @@ def _evimed_literature_records(arguments):
         "summary": "Retrieved %d traceable EviMed literature records." % len(items),
         "data": {"items": items, "total": data.get("total")},
         "sources": sources,
-        "warnings": ["AI summaries and indexed metadata are discovery aids; verify material claims against the primary record."],
+        "warnings": [
+            "AI summaries and indexed metadata are discovery aids; verify material claims against the primary record.",
+            *(["Excluded %d EviMed literature candidates that did not match every required concept." % filtered_count] if filtered_count else []),
+        ],
         "next_actions": ["Open the primary record and verify the study design, population, outcomes, and effect estimates."],
     }
 
@@ -589,9 +658,10 @@ def _evimed_guidelines(arguments):
         limit = min(arguments.get("limit", 10), 100)
     else:
         limit = min(arguments.get("limit", 10), 100)
-        body["count"] = limit
+        body["count"] = _evimed_candidate_limit(arguments, limit)
         data, endpoint = _evimed_post("review/api/guide", body)
         records = _list(data.get("list"))
+    records, filtered_count = _filter_evimed_records(records, arguments.get("requiredConcepts"))
     items, sources = [], []
     for index, value in enumerate(records[:limit]):
         record = _dict(value)
@@ -624,7 +694,10 @@ def _evimed_guidelines(arguments):
             "enrichedQuery": data.get("enrichedQuery") if mode == "blocks" else None,
         },
         "sources": sources,
-        "warnings": ["Verify the guideline version, issuing body, jurisdiction, and original recommendation context before use."],
+        "warnings": [
+            "Verify the guideline version, issuing body, jurisdiction, and original recommendation context before use.",
+            *(["Excluded %d EviMed guideline candidates that did not match every required concept." % filtered_count] if filtered_count else []),
+        ],
         "next_actions": ["Open the original guideline and verify the relevant recommendation text and version."],
     }
 
@@ -633,7 +706,7 @@ def _evimed_trial_records(arguments):
     limit = min(arguments.get("limit", 10), 100)
     body = {
         "query": arguments["query"][:512],
-        "count": limit,
+        "count": _evimed_candidate_limit(arguments, limit),
         "registry": arguments.get("registry", 1),
     }
     for name in ("startYear", "endYear", "status", "phase", "studyType", "hasArticles", "source", "minSampleSize", "maxSampleSize"):
@@ -643,8 +716,11 @@ def _evimed_trial_records(arguments):
     if arguments.get("recruitmentStatus") and "status" not in body:
         body["status"] = [arguments["recruitmentStatus"]]
     data, endpoint = _evimed_post("review/api/clinical-trial", body)
+    records, filtered_count = _filter_evimed_records(
+        _list(data.get("list")), arguments.get("requiredConcepts")
+    )
     items, sources = [], []
-    for index, value in enumerate(_list(data.get("list"))[:limit]):
+    for index, value in enumerate(records[:limit]):
         record = _dict(value)
         title = _first_text(record.get("title"))
         identifier = str(record.get("registrationNo") or record.get("cochraneId") or index).strip()
@@ -667,11 +743,20 @@ def _evimed_trial_records(arguments):
         }
         items.append({key: value for key, value in item.items() if value not in (None, "", [])})
         sources.append(_source(identifier, title, record_url, "evimed-clinical-trial"))
-    return {
+    result = {
         "summary": "Retrieved %d traceable EviMed trial records." % len(items),
         "data": {"items": items, "total": data.get("total"), "registry": body["registry"]},
         "sources": sources,
     }
+    if filtered_count:
+        result.update({
+            "status": "warning",
+            "warnings": [
+                "Excluded %d EviMed trial candidates that did not match every required concept." % filtered_count
+            ],
+            "next_actions": ["Verify the current registry record and protocol before using trial fields in an assessment."],
+        })
+    return result
 
 
 def patent(arguments):
@@ -729,10 +814,10 @@ def _evimed_instruction_records(arguments):
     requested = str(arguments.get("jurisdiction") or "").strip()
     normalized = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", requested.casefold())
     aliases = {
-        "nmpa": {"cn", "china", "nmpa", "中国", "中國"},
-        "fda": {"us", "usa", "unitedstates", "fda", "美国", "美國"},
-        "ema": {"eu", "europeanunion", "ema", "欧盟", "歐盟"},
-        "pmda": {"jp", "japan", "pmda", "日本"},
+        "nmpa": {"cn", "china", "chinanmpa", "nmpa", "中国", "中國"},
+        "fda": {"us", "usa", "unitedstates", "unitedstatesfda", "fda", "美国", "美國"},
+        "ema": {"eu", "europeanunion", "europeanunionema", "ema", "欧盟", "歐盟"},
+        "pmda": {"jp", "japan", "japanpmda", "pmda", "日本"},
     }
     selected = [key for key, values in aliases.items() if normalized in values] if requested else list(registry_labels)
     if requested and not selected:
@@ -816,17 +901,23 @@ def literature(arguments):
     databases = arguments.get("databases") or ["internal", "pubmed"]
     if "internal" in databases:
         try:
-            return _evimed_literature_records(arguments)
+            result = _evimed_literature_records(arguments)
+            if result.get("data", {}).get("items") or "pubmed" not in databases:
+                return result
+            evimed_warning = "EviMed literature search returned no records matching all required concepts."
         except PublicSourceError as error:
             try:
                 legacy = _evimed_evidence_records(query, limit)
-                legacy["warnings"].insert(0, "The documented EviMed literature endpoint was unavailable: %s" % error)
-                return legacy
+                if legacy.get("data", {}).get("items"):
+                    legacy["warnings"].insert(0, "The documented EviMed literature endpoint was unavailable: %s" % error)
+                    return legacy
             except PublicSourceError:
-                fallback = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
-                fallback = _bibliographic_metadata_only(fallback)
-                fallback["warnings"].insert(0, "EviMed evidence search was unavailable: %s" % error)
-                return fallback
+                pass
+            evimed_warning = "EviMed evidence search was unavailable: %s" % error
+        fallback = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
+        fallback = _bibliographic_metadata_only(fallback)
+        fallback["warnings"].insert(0, evimed_warning)
+        return fallback
     if "pubmed" in databases:
         result = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
     else:
@@ -836,7 +927,10 @@ def literature(arguments):
 
 def guideline(arguments):
     try:
-        return _evimed_guidelines(arguments)
+        result = _evimed_guidelines(arguments)
+        if result.get("data", {}).get("items"):
+            return result
+        evimed_warning = "EviMed guideline search returned no records matching all required concepts."
     except PublicSourceError as error:
         evimed_warning = "EviMed guideline search was unavailable: %s" % error
     query = arguments["query"]
@@ -852,7 +946,10 @@ def guideline(arguments):
 
 def trials(arguments):
     try:
-        return _evimed_trial_records(arguments)
+        result = _evimed_trial_records(arguments)
+        if result.get("data", {}).get("items"):
+            return result
+        evimed_warning = "EviMed clinical-trial search returned no records matching all required concepts."
     except PublicSourceError as error:
         evimed_warning = "EviMed clinical-trial search was unavailable: %s" % error
     base = _base("EVIMED_CLINICAL_TRIALS_BASE_URL", "https://clinicaltrials.gov/api/v2")
@@ -902,13 +999,16 @@ def _openfda_search(field, term):
 
 def labels(arguments):
     try:
-        return _evimed_instruction_records(arguments)
+        result = _evimed_instruction_records(arguments)
+        if result.get("data", {}).get("items"):
+            return result
+        evimed_warning = "EviMed label search returned no records for the requested jurisdiction."
     except PublicSourceError as error:
         evimed_warning = "EviMed label search was unavailable: %s" % error
     requested_jurisdiction = str(arguments.get("jurisdiction") or "").strip()
     jurisdiction_key = requested_jurisdiction.casefold()
     normalized_jurisdiction = re.sub(r"[^a-z0-9]+", "", requested_jurisdiction.casefold())
-    us_jurisdictions = {"us", "usa", "unitedstates", "fda", "美国", "美國"}
+    us_jurisdictions = {"us", "usa", "unitedstates", "unitedstatesfda", "fda", "美国", "美國"}
     if requested_jurisdiction and jurisdiction_key not in us_jurisdictions and normalized_jurisdiction not in us_jurisdictions:
         return {
             "status": "warning",
@@ -1175,15 +1275,30 @@ def _composite(arguments, mode):
     drug = arguments["drug"]
     indication = arguments.get("proposedUse") or arguments.get("indication") or ""
     query = "%s %s" % (drug, indication)
+    required_concepts = [value for value in (drug, indication) if value]
     label_result = _capture(labels, {
         "drug": drug,
         "product": arguments.get("product"),
         "jurisdiction": arguments.get("jurisdiction"),
         "limit": 5,
     }, warnings)
-    guideline_result = _capture(guideline, {"query": query, "jurisdiction": arguments.get("jurisdiction"), "limit": 5}, warnings)
-    trial_result = _capture(trials, {"query": query, "limit": 5}, warnings)
-    literature_result = _capture(literature, {"query": query, "limit": 8, "databases": ["internal", "pubmed"]}, warnings)
+    guideline_result = _capture(guideline, {
+        "query": query,
+        "jurisdiction": arguments.get("jurisdiction"),
+        "limit": 5,
+        "requiredConcepts": required_concepts,
+    }, warnings)
+    trial_result = _capture(trials, {
+        "query": query,
+        "limit": 5,
+        "requiredConcepts": required_concepts,
+    }, warnings)
+    literature_result = _capture(literature, {
+        "query": query,
+        "limit": 8,
+        "databases": ["internal", "pubmed"],
+        "requiredConcepts": required_concepts,
+    }, warnings)
     data = {
         "mode": mode,
         "drug": drug,
@@ -1213,15 +1328,15 @@ def _composite(arguments, mode):
     if not sources:
         return {
             "status": "warning",
-            "summary": "Public evidence sources returned no traceable records.",
+            "summary": "Managed evidence sources returned no traceable records.",
             "data": {"items": []},
-            "warnings": warnings or ["No traceable public evidence was retrieved."],
+            "warnings": warnings or ["No traceable managed evidence was retrieved."],
             "next_actions": ["Broaden the question or configure a private EviMed evidence adapter."],
         }
-    common_warnings = warnings + ["Public-source coverage is not equivalent to a complete jurisdictional or HTA review."]
+    common_warnings = warnings + ["Retrieved-source coverage is not equivalent to a complete jurisdictional or HTA review."]
     return {
         "status": "warning",
-        "summary": "Assembled a traceable public evidence packet across labels, guidelines, trials, and literature.",
+        "summary": "Assembled a traceable managed evidence packet across labels, guidelines, trials, and literature.",
         "data": data,
         "sources": sources,
         "warnings": common_warnings,
