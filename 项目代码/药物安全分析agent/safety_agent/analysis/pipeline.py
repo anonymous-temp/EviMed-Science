@@ -140,8 +140,10 @@ class AnalysisPipeline:
         *,
         language: str = "zh",
     ) -> AnalysisResult:
-        async with asyncio.timeout(self._timeout):
-            return await self._run(drug, reactions or [], language=language)
+        return await asyncio.wait_for(
+            self._run(drug, reactions or [], language=language),
+            timeout=self._timeout,
+        )
 
     # -- stages -------------------------------------------------------------
 
