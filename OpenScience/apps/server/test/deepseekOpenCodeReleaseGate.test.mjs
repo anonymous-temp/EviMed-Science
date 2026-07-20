@@ -8,6 +8,7 @@ import {
   resolveOpenCodeBinary,
   openCodeHistoryEvidence,
   releaseTelemetryEvidence,
+  resolveArtifactProvenanceTool,
   runBoundedProcess,
   signDeepSeekReleaseReceipt,
   runDeepSeekOpenCodeReleaseGate,
@@ -16,6 +17,20 @@ import {
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const testReceiptSigningSecret = "release-gate-test-signing-secret-with-at-least-32-bytes";
+
+test("artifact provenance accepts equivalent explicit tool-name shapes", () => {
+  for (const artifact of [
+    { provenanceTool: "evimed_term_normalize" },
+    { provenance_tool: "evimed_term_normalize" },
+    { provenance: "evimed_term_normalize" },
+    { provenance: { tool: "evimed_term_normalize" } },
+    { provenance: { toolName: "evimed_term_normalize" } },
+    { provenance: { name: "evimed_term_normalize" } },
+  ]) {
+    assert.equal(resolveArtifactProvenanceTool(artifact), "evimed_term_normalize");
+  }
+  assert.equal(resolveArtifactProvenanceTool({ provenance: { source: "local" } }), undefined);
+});
 
 test("release evidence requires completed structured tool history, not prompt strings", () => {
   const workspace = "/workspace/project";

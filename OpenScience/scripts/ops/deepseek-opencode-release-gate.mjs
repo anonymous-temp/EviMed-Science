@@ -38,6 +38,16 @@ const DEFAULT_RECEIPT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_RECEIPT_FUTURE_MS = 5 * 60 * 1000;
 const normalizationTools = new Set(["evimed_term_normalize", "evimed_drug_term_normalize"]);
 
+export function resolveArtifactProvenanceTool(artifactData) {
+  const provenance = artifactData?.provenance;
+  return artifactData?.provenanceTool
+    ?? artifactData?.provenance_tool
+    ?? (typeof provenance === "string" ? provenance : null)
+    ?? provenance?.tool
+    ?? provenance?.toolName
+    ?? provenance?.name;
+}
+
 class ReleaseGateError extends Error {
   constructor(code) {
     super(`DeepSeek OpenCode release gate failed: ${code}`);
@@ -828,7 +838,7 @@ async function runOpenCodeChain({
       run = await runBoundedProcess(opencodeBin, [
         "run", "--pure", "--format", "json", "--auto", "--model", `deepseek/${REQUIRED_MODEL}`,
         "--dir", workspaceDir,
-        "Normalize acetaminophen in the drug domain with the available EviMed medical tool. Write exactly artifacts/deepseek-release-gate.json as a JSON object using the returned preferred value and provenance tool name. Then return exactly one unfenced JSON object with this schema and no other text: {\"normalized\":\"paracetamol\",\"artifact\":\"artifacts/deepseek-release-gate.json\"}.",
+        "Normalize acetaminophen in the drug domain with the available EviMed medical tool. Write exactly artifacts/deepseek-release-gate.json with exactly these JSON fields, taking every value from the tool input or result: {\"normalized\":\"paracetamol\",\"provenanceTool\":\"evimed_term_normalize\",\"sourceTerm\":\"acetaminophen\"}. Do not rename or nest those fields. Then return exactly one unfenced JSON object with this schema and no other text: {\"normalized\":\"paracetamol\",\"artifact\":\"artifacts/deepseek-release-gate.json\"}.",
       ], { cwd: workspaceDir, env, timeoutMs });
     } catch (error) {
       if (mode === "fake" && error && typeof error === "object") {
@@ -864,7 +874,7 @@ async function runOpenCodeChain({
     let artifactData;
     try { artifactData = JSON.parse(artifactContent); } catch { throw failure("opencode_tool_execution_missing"); }
     const normalized = artifactData?.normalized ?? artifactData?.preferred;
-    const provenanceTool = artifactData?.provenanceTool ?? artifactData?.provenance_tool ?? artifactData?.provenance?.tool;
+    const provenanceTool = resolveArtifactProvenanceTool(artifactData);
     const sourceTerm = artifactData?.sourceTerm ?? artifactData?.input?.term ?? artifactData?.input;
     if (
       normalized !== "paracetamol" ||
