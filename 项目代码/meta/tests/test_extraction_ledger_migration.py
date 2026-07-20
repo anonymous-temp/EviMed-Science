@@ -151,6 +151,38 @@ def test_complex_rct_label_without_dependency_metadata_fails_closed(tmp_path: Pa
         )
 
 
+def test_comparative_result_without_computable_effect_is_preserved_but_not_synthesized(
+    tmp_path: Path,
+) -> None:
+    project = Project("incomplete comparative result", output_dir=tmp_path / "project")
+    study = _study(tmp_path / "trial.pdf")
+    outcome = study.outcomes[0]
+    outcome.comparative_design = "parallel_rct"
+    outcome.treatment_arm = "Treatment"
+    outcome.reference_arm = "Control"
+    outcome.contrast_id = "treatment-v-control"
+    outcome.estimand_id = "primary-md"
+    outcome.precision_basis = "reported aggregate"
+    outcome.events_intervention = None
+    outcome.total_intervention = None
+    outcome.events_control = None
+    outcome.total_control = None
+
+    protocol = _protocol().model_copy(update={"effect_measure": "MD"})
+    report = migrate_extractions_to_ledger(
+        project,
+        protocol=protocol,
+        extracted_studies=[study],
+    )
+    ledger = EvidenceLedger(report.ledger_path, review_id=report.review_id)
+    result = ledger.current(report.result_ids[0], model=ResultEntity)
+
+    assert result.raw_data.data_type == "comparative_effect"
+    assert result.estimate is None
+    assert len(report.warnings) == 1
+    assert "excluded from synthesis pending source data" in report.warnings[0]
+
+
 def test_data_extraction_persists_legacy_and_ledger_views(
     tmp_path: Path,
     monkeypatch,
