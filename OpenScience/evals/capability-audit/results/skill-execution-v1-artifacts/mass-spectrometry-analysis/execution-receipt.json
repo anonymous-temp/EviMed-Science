@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 165,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/mass-spectrometry-analysis/results.json",
+      "sha256": "2d12f04478b2587438b475def744ada5a4c61fd49a4d178bd919b46f8be8ef96"
+    },
+    {
+      "bytes": 743,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/mass-spectrometry-analysis/mass-spectrometry-analysis-report.md",
+      "sha256": "15be4d0b5e934cb5d81b4419c7836343c5162f6d1e38a2c0aa221622518b3652"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:36.252342Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "mass-spectrometry-analysis",
+  "startedAt": "2026-07-19T19:31:36.251671Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for mass-spectrometry-analysis and wrote 2 verified artifacts.",
+  "warnings": [
+    "Peak summaries do not identify compounds; calibration, adducts, tolerances, libraries, and FDR controls are required."
+  ]
+}

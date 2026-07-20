@@ -1,0 +1,39 @@
+{
+  "status": "success",
+  "summary": "Retrieved the complete open-access article into the managed workspace.",
+  "data": {
+    "title": "Review of deep learning: concepts, CNN architectures, challenges, applications, future directions",
+    "doi": "10.1186/s40537-021-00444-8",
+    "pmcid": "PMC8010506",
+    "references": 343,
+    "markdownPath": ".evimed-sources/PMC8010506/fulltext.md",
+    "xmlPath": ".evimed-sources/PMC8010506/fulltext.xml",
+    "markdownCharacters": 238730,
+    "xmlBytes": 563646,
+    "provenance": {
+      "tool": "evimed_open_access_full_text",
+      "arguments": {
+        "identifier": "PMC8010506"
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "PMC8010506",
+      "title": "Review of deep learning: concepts, CNN architectures, challenges, applications, future directions",
+      "url": "https://europepmc.org/articles/PMC8010506",
+      "source": "europe-pmc-fulltext",
+      "retrievedAt": "2026-07-19T20:08:46.296362Z"
+    }
+  ],
+  "artifacts": [
+    ".evimed-sources/PMC8010506/fulltext.md",
+    ".evimed-sources/PMC8010506/fulltext.xml"
+  ]
+}

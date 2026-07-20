@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "label": "fidelity-gate-v1",
+  "corpusPath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/evals/title-to-paper/corpus-v3/manifest.json",
+  "startedAtCase": 0,
+  "requestedCases": 9,
+  "succeeded": 9,
+  "failed": 0,
+  "totalAssistantCharacters": 7477,
+  "totalArtifactCharacters": 143120,
+  "completedAt": "2026-07-18T04:14:27.886Z",
+  "cases": [
+    {
+      "caseId": "paper-008",
+      "status": "succeeded",
+      "runId": "run_b29c1458350d625c699c613b2f6da6fd",
+      "assistantCharacters": 1070,
+      "artifactCharacters": 31120,
+      "toolCalls": 16
+    },
+    {
+      "caseId": "paper-019",
+      "status": "succeeded",
+      "runId": "run_257953a71491ba8ef54d31d41a515e99",
+      "assistantCharacters": 879,
+      "artifactCharacters": 20435,
+      "toolCalls": 15
+    },
+    {
+      "caseId": "paper-021",
+      "status": "succeeded",
+      "runId": "run_a912fc31388cb7964e6a637884eb05f7",
+      "assistantCharacters": 742,
+      "artifactCharacters": 7078,
+      "toolCalls": 11
+    },
+    {
+      "caseId": "paper-022",
+      "status": "succeeded",
+      "runId": "run_87eab09b03e186f5efcf40725960bdbd",
+      "assistantCharacters": 758,
+      "artifactCharacters": 4124,
+      "toolCalls": 10
+    },
+    {
+      "caseId": "paper-031",
+      "status": "succeeded",
+      "runId": "run_8fa8ab37baa8faf01d6319ecd3c61a45",
+      "assistantCharacters": 703,
+      "artifactCharacters": 33283,
+      "toolCalls": 11
+    },
+    {
+      "caseId": "paper-034",
+      "status": "succeeded",
+      "runId": "run_c7b187d7c52ab3279359f3ac9ffd7a5c",
+      "assistantCharacters": 728,
+      "artifactCharacters": 12354,
+      "toolCalls": 13
+    },
+    {
+      "caseId": "paper-041",
+      "status": "succeeded",
+      "runId": "run_1717a9cc8fcf59fe3cd4744736036210",
+      "assistantCharacters": 780,
+      "artifactCharacters": 18413,
+      "toolCalls": 9
+    },
+    {
+      "caseId": "paper-045",
+      "status": "succeeded",
+      "runId": "run_8adc8848ff6321c56507734aaa0b3d05",
+      "assistantCharacters": 472,
+      "artifactCharacters": 9925,
+      "toolCalls": 12
+    },
+    {
+      "caseId": "paper-048",
+      "status": "succeeded",
+      "runId": "run_1699e9b2866bad1aaa73266fcae3e896",
+      "assistantCharacters": 1345,
+      "artifactCharacters": 6388,
+      "toolCalls": 18
+    }
+  ]
+}

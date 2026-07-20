@@ -1,0 +1,255 @@
+{
+  "summary": {
+    "registered": 35,
+    "pass": 35,
+    "empty": 0,
+    "error": 0
+  },
+  "results": [
+    {
+      "source": "arxiv",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1477
+    },
+    {
+      "source": "cbioportal",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1368
+    },
+    {
+      "source": "chebi",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1653
+    },
+    {
+      "source": "clinvar",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 2719
+    },
+    {
+      "source": "crossref",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1486
+    },
+    {
+      "source": "dailymed",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1724
+    },
+    {
+      "source": "dbsnp",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 2639
+    },
+    {
+      "source": "ena",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1673
+    },
+    {
+      "source": "europe-pmc",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1849
+    },
+    {
+      "source": "gdc-tcga",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1745
+    },
+    {
+      "source": "hpo",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 5053
+    },
+    {
+      "source": "interpro",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 18366
+    },
+    {
+      "source": "jaspar",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 5230
+    },
+    {
+      "source": "mesh",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 4411
+    },
+    {
+      "source": "monarch",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1677
+    },
+    {
+      "source": "mygene",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1276
+    },
+    {
+      "source": "myvariant",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1434
+    },
+    {
+      "source": "ncbi-gene",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 2942
+    },
+    {
+      "source": "ncbi-geo",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 2408
+    },
+    {
+      "source": "ncbi-protein",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 2519
+    },
+    {
+      "source": "ncbi-taxonomy",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 2619
+    },
+    {
+      "source": "openalex",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1636
+    },
+    {
+      "source": "openfda",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1829
+    },
+    {
+      "source": "pmc",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 2779
+    },
+    {
+      "source": "pride",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1738
+    },
+    {
+      "source": "pubchem",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1461
+    },
+    {
+      "source": "pubmed",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 3025
+    },
+    {
+      "source": "quickgo",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1663
+    },
+    {
+      "source": "reactome",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 2286
+    },
+    {
+      "source": "rxnorm",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1759
+    },
+    {
+      "source": "sra",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 2615
+    },
+    {
+      "source": "string",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 2098
+    },
+    {
+      "source": "uniprot",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 2066
+    },
+    {
+      "source": "who-gho",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1906
+    },
+    {
+      "source": "clinicaltrials-gov",
+      "status": "pass",
+      "records": 1,
+      "sources": 1,
+      "elapsedMs": 1282
+    }
+  ]
+}

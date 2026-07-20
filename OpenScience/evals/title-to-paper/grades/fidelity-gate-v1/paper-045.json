@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-045",
+  "category": "biomedical-ai",
+  "title": "Review of deep learning: concepts, CNN architectures, challenges, applications, future directions.",
+  "pmcid": "PMC8010506",
+  "doi": "10.1186/s40537-021-00444-8",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 9925,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 97,
+    "supportedUniqueNumbers": 86,
+    "unsupportedNumberTokens": [
+      "2.1",
+      "2.2",
+      "25500000",
+      "3.1",
+      "3.2",
+      "3.3",
+      "3.4",
+      "3.6",
+      "3900000",
+      "40000",
+      "40000000"
+    ],
+    "supportedNumericClaimPrecision": 0.8865979381443299,
+    "verbatimEightGramRate": 0.012014589143960523,
+    "toolCalls": 12,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "All factual claims in the generated summary align with the reference paper, including the review design (narrative review, search years and sources, number of papers included), CNN architecture descriptions, challenge taxonomy, application performance metrics (e.g., CheXNet AUC 0.7632, Chouhan et al. accuracy 96.4%), and discussion of limitations. No fabricated study designs, samples, effect estimates, or conclusions were detected."
+  },
+  "modelEvidenceCharacters": 180481,
+  "modelEvidenceComplete": false,
+  "overallVerdict": "pass"
+}

@@ -1,0 +1,34 @@
+id: research-topic-selection
+version: 1.0.1
+title: 科研选题
+category: 科研规划
+description: 梳理研究版图、矛盾、证据空白与可行性，把宽泛的生物医学方向转化为有证据依据且可检验的研究问题和优先议程。
+skill: research-topic-selection
+estimatedMinutes: [20, 90]
+starterPrompts:
+  - 为危重症成人抗菌药物精准给药识别高价值、可行的研究选题。
+requiredInputs:
+  - researchDirection
+optionalInputs:
+  - outputLanguage
+  - uploadedFiles
+requiredTools:
+  - evimed_research_topic_selection
+optionalTools:
+  - evimed_data_source_catalog
+  - evimed_biomedical_source_search
+  - evimed_literature_search
+  - evimed_clinical_trial_search
+dataSources:
+  - literature
+  - clinical-trials
+  - internal-evidence
+  - uploaded-files
+outputs:
+  - path: research-topic-report.md
+    required: true
+  - path: research-topic-run.json
+    required: true
+completionChecks:
+  - requiredOutputsExist
+  - citationsResolvable

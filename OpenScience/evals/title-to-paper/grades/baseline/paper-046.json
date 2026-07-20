@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-046",
+  "category": "methods-software",
+  "title": "clusterProfiler 4.0: A universal enrichment tool for interpreting omics data.",
+  "pmcid": "PMC8454663",
+  "doi": "10.1016/j.xinn.2021.100141",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 6855,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 23,
+    "supportedUniqueNumbers": 23,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.0005668934240362812,
+    "toolCalls": 23,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "生成的文本准确概括了 clusterProfiler 4.0 的核心功能、示例及局限性，与参考文献完全一致，无捏造或重大失实陈述。所有声称均可在原文中找到依据。"
+  },
+  "overallVerdict": "pass"
+}

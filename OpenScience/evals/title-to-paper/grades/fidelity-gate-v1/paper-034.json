@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-034",
+  "category": "pharmacovigilance-drug-safety",
+  "title": "Association between different GLP-1 receptor agonists and gastrointestinal adverse reactions: A real-world disproportionality study based on FDA adverse event reporting system database.",
+  "pmcid": "PMC9770009",
+  "doi": "10.3389/fendo.2022.1043789",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 8152,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 159,
+    "supportedUniqueNumbers": 152,
+    "unsupportedNumberTokens": [
+      "2.3",
+      "2018.01",
+      "2022.06",
+      "3.2",
+      "3.3",
+      "3.4",
+      "80"
+    ],
+    "supportedNumericClaimPrecision": 0.9559748427672956,
+    "verbatimEightGramRate": 0.010925819436457734,
+    "toolCalls": 13,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text faithfully summarizes the REFERENCE article, accurately reporting the study design, population, disproportionality analysis methods, key results (RORs, rankings, time-to-onset, severe proportions), and conclusions. All numbers and claims are directly supported by the full-text evidence, with no fabrications or contradictions."
+  },
+  "modelEvidenceCharacters": 45719,
+  "modelEvidenceComplete": true,
+  "overallVerdict": "pass"
+}

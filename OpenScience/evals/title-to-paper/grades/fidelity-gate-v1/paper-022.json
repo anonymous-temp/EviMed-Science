@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-022",
+  "category": "case-report",
+  "title": "New challenges in human monkeypox outside Africa: A review and case report from Italy.",
+  "pmcid": "PMC9528171",
+  "doi": "10.1016/j.tmaid.2022.102386",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 4124,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 71,
+    "supportedUniqueNumbers": 67,
+    "unsupportedNumberTokens": [
+      "-2019",
+      "-2021",
+      "-2022",
+      "-90%"
+    ],
+    "supportedNumericClaimPrecision": 0.9436619718309859,
+    "verbatimEightGramRate": 0.008277493102089082,
+    "toolCalls": 10,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 4,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [
+      "The statement that the two MPX patients treated with tecovirimat had 'no safety signals' is not explicitly supported by the reference; safety signals for tecovirimat in MPX are not discussed, and the cited evidence only mentions no significant safety signals in vaccinia cases."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text faithfully reproduces the case details, epidemiologic data, and conclusions of the reference. The only minor discrepancy is a claim about tecovirimat safety that the reference does not explicitly confirm for MPX. All major claims about study design, population, methods, and key results are accurate and well-supported."
+  },
+  "modelEvidenceCharacters": 65357,
+  "modelEvidenceComplete": true,
+  "overallVerdict": "pass"
+}

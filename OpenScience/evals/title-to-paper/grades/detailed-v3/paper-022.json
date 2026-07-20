@@ -1,0 +1,683 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-022",
+  "category": "case-report",
+  "title": "New challenges in human monkeypox outside Africa: A review and case report from Italy.",
+  "pmcid": "PMC9528171",
+  "doi": "10.1016/j.tmaid.2022.102386",
+  "selectedRunLabel": "fidelity-gate-v1",
+  "referenceSha256": "13fd677ff9130101aed374674cd6f60feb6a9b5d6b2c6e970fcad6174f83a1e8",
+  "generatedSha256": "0491fe5b37dd288bc821a2abed272b9f40d87c15be76af3285b4fab3fcd0d885",
+  "promptSha256": "ce7b94802c75797524119327f9bef453ae46c6e2f35a1f4f6e36003ae58ac967",
+  "cacheFingerprint": "3be661c02c4c23d62390fa74b3c4637e6e9e063db38d59a783ab7d35babd5374",
+  "referenceCharacters": 63536,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 4124,
+  "paperType": "case-report",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "To present an MPX case illustrating different clinical presentation and possible sexual transmission.",
+      "generatedFact": "本文报告一例MPX病例，临床表现与经典描述不同，提示可能存在性接触传播。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Outside Africa MPXV caused an outbreak in 2003 in the United States linked to importation of infected rodents from Ghana and a few travel-related cases in the USA, United Kingdom, Israel and Singapore. Actually, a worldwide outbreak with more than 1200 confirmed cases mainly concentrated among men who have sex with men is ongoing.Case reportWe present the case of an Italian man living in Portugal that was diagnosed with MPX at our clinic in Milan, Italy. Monkeypox virus infection was confirmed by a specific homemade Real-Time PCR."
+        ],
+        "quote": "Outside Africa MPXV caused an outbreak in 2003 in the United States linked to importation of infected rodents from Ghana and a few travel-related cases in the USA, United Kingdom, Israel and Singapore. Actually, a worldwide outbreak with more than 1200 confirmed cases mainly concentrated among men who have sex with men is ongoing.Case reportWe present the case of an Italian man living in Portugal that was diagnosed with MPX at our clinic in Milan, Italy. Monkeypox virus infection was confirmed by a specific homemade Real-Time PCR."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "## 摘要 **背景** 人猴痘（MPX）是由猴痘病毒（MPXV）引起的被忽视的人畜共患疾病，地方性流行于中非和西非热带雨林地区。2022年5月起，非洲以外出现前所未有的多国暴发，截至2022年6月8日已在29个国家报告超过1200例确诊病例，主要集中于男男性行为者（MSM）。**病例** 本文报告一例在意大利米兰Luigi Sacco医院确诊的MPX病例：33岁意大利男性HIV感染者，居住在葡萄牙里斯本，通过特异性自制Real-Time PCR在咽部、皮肤病变、肛周溃疡和精液中均检出MPXV，各部位病毒载量不同。Vero E6细胞中成功分离出病毒。**结论** 该病例临床表现与经典猴痘描述不同——皮损数量少（<10个），呈不同步进展模式，部分局限于生殖器和肛周区域，伴腹股沟淋巴结肿大，提示可能存在通过性接触的人传人传播。"
+        ],
+        "quote": "## 摘要 **背景** 人猴痘（MPX）是由猴痘病毒（MPXV）引起的被忽视的人畜共患疾病，地方性流行于中非和西非热带雨林地区。2022年5月起，非洲以外出现前所未有的多国暴发，截至2022年6月8日已在29个国家报告超过1200例确诊病例，主要集中于男男性行为者（MSM）。**病例** 本文报告一例在意大利米兰Luigi Sacco医院确诊的MPX病例：33岁意大利男性HIV感染者，居住在葡萄牙里斯本，通过特异性自制Real-Time PCR在咽部、皮肤病变、肛周溃疡和精液中均检出MPXV，各部位病毒载量不同。Vero E6细胞中成功分离出病毒。**结论** 该病例临床表现与经典猴痘描述不同——皮损数量少（<10个），呈不同步进展模式，部分局限于生殖器和肛周区域，伴腹股沟淋巴结肿大，提示可能存在通过性接触的人传人传播。"
+      },
+      "explanation": "Both state the objective of presenting the case and highlighting non-classical presentation and potential sexual transmission.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Case report combined with a literature review.",
+      "generatedFact": "病例报告结合文献综述。",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "We also made a review of monkeypox diagnosed in Africa and outside Africa with a discussion of many of the challenges faced by clinicians in non-endemic countries who provide care for patients with MPX. 2. Patient case presentation A 33-year old Italian man attended our clinic on May 24th at Luigi Sacco Hospital in Milan, Italy to investigate a perianal lesion that appeared a few days before. He was living in Lisbon (Portugal) since January 2022 and returned to Italy on May 18th."
+        ],
+        "quote": "We also made a review of monkeypox diagnosed in Africa and outside Africa with a discussion of many of the challenges faced by clinicians in non-endemic countries who provide care for patients with MPX. 2. Patient case presentation A 33-year old Italian man attended our clinic on May 24th at Luigi Sacco Hospital in Milan, Italy to investigate a perianal lesion that appeared a few days before. He was living in Lisbon (Portugal) since January 2022 and returned to Italy on May 18th."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "## 引言 人猴痘是由猴痘病毒（一种双链DNA病毒，属痘病毒科正痘病毒属）引起的人畜共患疾病。MPXV于1958年在丹麦的实验用食蟹猴中首次发现；人类首例感染于1970年在刚果民主共和国（DRC）一名疑似天花的9月龄患儿中得到确认。此后赤道非洲持续报告猴痘暴发，尤以DRC和尼日利亚为甚。一项系统综述显示2000-2019年间非洲报告了超过19,000例病例，而2021-2022年间WHO简报记录了15,600例。非洲以外，2003年美国曾因从加纳进口受感染的啮齿动物发生多州暴发（71例）；此后英国、美国、以色列和新加坡报告了少量与非洲旅行相关的散发病例。然而，自2022年5月7日起，13个欧洲国家以及加拿大、美国、澳大利亚、以色列几乎同时报告了与非洲旅行无明显关联的人猴痘病例，标志着流行病学模式的重大转变。"
+        ],
+        "quote": "## 引言 人猴痘是由猴痘病毒（一种双链DNA病毒，属痘病毒科正痘病毒属）引起的人畜共患疾病。MPXV于1958年在丹麦的实验用食蟹猴中首次发现；人类首例感染于1970年在刚果民主共和国（DRC）一名疑似天花的9月龄患儿中得到确认。此后赤道非洲持续报告猴痘暴发，尤以DRC和尼日利亚为甚。一项系统综述显示2000-2019年间非洲报告了超过19,000例病例，而2021-2022年间WHO简报记录了15,600例。非洲以外，2003年美国曾因从加纳进口受感染的啮齿动物发生多州暴发（71例）；此后英国、美国、以色列和新加坡报告了少量与非洲旅行相关的散发病例。然而，自2022年5月7日起，13个欧洲国家以及加拿大、美国、澳大利亚、以色列几乎同时报告了与非洲旅行无明显关联的人猴痘病例，标志着流行病学模式的重大转变。"
+      },
+      "explanation": "Reference explicitly states presentation of a case and a review. Generated describes both elements.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Patient: 33-year-old Italian man living in Portugal, HIV+, and literature review via PubMed and international organizations.",
+      "generatedFact": "患者为33岁意大利男性HIV感染者，居住在葡萄牙；检索PubMed、WHO、ECDC、CDC。",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "We also made a review of monkeypox diagnosed in Africa and outside Africa with a discussion of many of the challenges faced by clinicians in non-endemic countries who provide care for patients with MPX. 2. Patient case presentation A 33-year old Italian man attended our clinic on May 24th at Luigi Sacco Hospital in Milan, Italy to investigate a perianal lesion that appeared a few days before. He was living in Lisbon (Portugal) since January 2022 and returned to Italy on May 18th."
+        ],
+        "quote": "We also made a review of monkeypox diagnosed in Africa and outside Africa with a discussion of many of the challenges faced by clinicians in non-endemic countries who provide care for patients with MPX. 2. Patient case presentation A 33-year old Italian man attended our clinic on May 24th at Luigi Sacco Hospital in Milan, Italy to investigate a perianal lesion that appeared a few days before. He was living in Lisbon (Portugal) since January 2022 and returned to Italy on May 18th."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "### 文献检索策略 在PubMed中检索1970年1月1日至2022年6月3日的文献，无语言限制。检索词包括：\"Monkeypox\"、\"Monkeypox virus\"、\"Imported monkeypox\"、\"Monkeypox and Africa\"、\"Monkeypox and travel\"、\"Monkeypox and Europe\"、\"Monkeypox outbreak\"、\"Monkeypox reservoir\"、\"Monkeypox and treatment\"。选择关键参考文献、开创性论文、综述和病例报告；同时审阅WHO、ECDC和CDC的国际组织出版物，并通过已选文献的参考文献进行手动补充检索。 ## 结果 ### 病例报告 患者为33岁意大利男性，自2022年1月起居住于葡萄牙里斯本，5月18日返回意大利。既往病史：2016年确诊HIV感染，接受多替拉韦/利匹韦林 50/25 mg 治疗，病毒免疫学应答良好（CD4+淋巴细胞 771 cells/μL，HIV-RNA < 20 cp/mL）。已完成COVID-19全程疫苗接种（2剂Comirnaty + 1剂Moderna mRNA疫苗）。既往6个月内仅于2022年1月至马德里旅行一周。"
+        ],
+        "quote": "### 文献检索策略 在PubMed中检索1970年1月1日至2022年6月3日的文献，无语言限制。检索词包括：\"Monkeypox\"、\"Monkeypox virus\"、\"Imported monkeypox\"、\"Monkeypox and Africa\"、\"Monkeypox and travel\"、\"Monkeypox and Europe\"、\"Monkeypox outbreak\"、\"Monkeypox reservoir\"、\"Monkeypox and treatment\"。选择关键参考文献、开创性论文、综述和病例报告；同时审阅WHO、ECDC和CDC的国际组织出版物，并通过已选文献的参考文献进行手动补充检索。 ## 结果 ### 病例报告 患者为33岁意大利男性，自2022年1月起居住于葡萄牙里斯本，5月18日返回意大利。既往病史：2016年确诊HIV感染，接受多替拉韦/利匹韦林 50/25 mg 治疗，病毒免疫学应答良好（CD4+淋巴细胞 771 cells/μL，HIV-RNA < 20 cp/mL）。已完成COVID-19全程疫苗接种（2剂Comirnaty + 1剂Moderna mRNA疫苗）。既往6个月内仅于2022年1月至马德里旅行一周。"
+      },
+      "explanation": "Patient demographics and review data sources match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "One case report; review includes outbreaks up to June 2022 with over 1200 cases.",
+      "generatedFact": "1例病例；综述截至2022年6月8日全球1200多例。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Outside Africa MPXV caused an outbreak in 2003 in the United States linked to importation of infected rodents from Ghana and a few travel-related cases in the USA, United Kingdom, Israel and Singapore. Actually, a worldwide outbreak with more than 1200 confirmed cases mainly concentrated among men who have sex with men is ongoing.Case reportWe present the case of an Italian man living in Portugal that was diagnosed with MPX at our clinic in Milan, Italy. Monkeypox virus infection was confirmed by a specific homemade Real-Time PCR."
+        ],
+        "quote": "Outside Africa MPXV caused an outbreak in 2003 in the United States linked to importation of infected rodents from Ghana and a few travel-related cases in the USA, United Kingdom, Israel and Singapore. Actually, a worldwide outbreak with more than 1200 confirmed cases mainly concentrated among men who have sex with men is ongoing.Case reportWe present the case of an Italian man living in Portugal that was diagnosed with MPX at our clinic in Milan, Italy. Monkeypox virus infection was confirmed by a specific homemade Real-Time PCR."
+      },
+      "generatedEvidence": {
+        "locator": "G0001",
+        "locators": [
+          "G0001"
+        ],
+        "quotes": [
+          "## 摘要 **背景** 人猴痘（MPX）是由猴痘病毒（MPXV）引起的被忽视的人畜共患疾病，地方性流行于中非和西非热带雨林地区。2022年5月起，非洲以外出现前所未有的多国暴发，截至2022年6月8日已在29个国家报告超过1200例确诊病例，主要集中于男男性行为者（MSM）。**病例** 本文报告一例在意大利米兰Luigi Sacco医院确诊的MPX病例：33岁意大利男性HIV感染者，居住在葡萄牙里斯本，通过特异性自制Real-Time PCR在咽部、皮肤病变、肛周溃疡和精液中均检出MPXV，各部位病毒载量不同。Vero E6细胞中成功分离出病毒。**结论** 该病例临床表现与经典猴痘描述不同——皮损数量少（<10个），呈不同步进展模式，部分局限于生殖器和肛周区域，伴腹股沟淋巴结肿大，提示可能存在通过性接触的人传人传播。"
+        ],
+        "quote": "## 摘要 **背景** 人猴痘（MPX）是由猴痘病毒（MPXV）引起的被忽视的人畜共患疾病，地方性流行于中非和西非热带雨林地区。2022年5月起，非洲以外出现前所未有的多国暴发，截至2022年6月8日已在29个国家报告超过1200例确诊病例，主要集中于男男性行为者（MSM）。**病例** 本文报告一例在意大利米兰Luigi Sacco医院确诊的MPX病例：33岁意大利男性HIV感染者，居住在葡萄牙里斯本，通过特异性自制Real-Time PCR在咽部、皮肤病变、肛周溃疡和精液中均检出MPXV，各部位病毒载量不同。Vero E6细胞中成功分离出病毒。**结论** 该病例临床表现与经典猴痘描述不同——皮损数量少（<10个），呈不同步进展模式，部分局限于生殖器和肛周区域，伴腹股沟淋巴结肿大，提示可能存在通过性接触的人传人传播。"
+      },
+      "explanation": "Both indicate a single case and the large multi-country outbreak context.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Search in PubMed from 1970 to June 2022, no language restriction, specific terms, plus manual search and organizational publications.",
+      "generatedFact": "PubMed检索1970-2022年6月，无语言限制，指定检索词，手动补充，审阅WHO/ECDC/CDC。",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "The patient was instructed to remain isolated in his residence until all skin lesions recovered. During follow-up the RT-PCR turned negative on all examined specimens except the last oropharyngeal swab which showed a Ct of 35. 2.1. Search strategy and selection criteria We undertook a search of PubMed from Jan 1, 1970 to June 3, 2022, with no language restriction using the following search terms: “Monkeypox”, “Monkeypox virus”, “Imported monkeypox”, “Monkeypox and Africa”, “Monkeypox and travel”, “Monkeypox and Europe”, “Monkeypox outbreak”, “Monkeypox reservoir”, “Monkeypox and treatment”. We selected key references and seminal papers, review articles, patient reports."
+        ],
+        "quote": "The patient was instructed to remain isolated in his residence until all skin lesions recovered. During follow-up the RT-PCR turned negative on all examined specimens except the last oropharyngeal swab which showed a Ct of 35. 2.1. Search strategy and selection criteria We undertook a search of PubMed from Jan 1, 1970 to June 3, 2022, with no language restriction using the following search terms: “Monkeypox”, “Monkeypox virus”, “Imported monkeypox”, “Monkeypox and Africa”, “Monkeypox and travel”, “Monkeypox and Europe”, “Monkeypox outbreak”, “Monkeypox reservoir”, “Monkeypox and treatment”. We selected key references and seminal papers, review articles, patient reports."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "### 文献检索策略 在PubMed中检索1970年1月1日至2022年6月3日的文献，无语言限制。检索词包括：\"Monkeypox\"、\"Monkeypox virus\"、\"Imported monkeypox\"、\"Monkeypox and Africa\"、\"Monkeypox and travel\"、\"Monkeypox and Europe\"、\"Monkeypox outbreak\"、\"Monkeypox reservoir\"、\"Monkeypox and treatment\"。选择关键参考文献、开创性论文、综述和病例报告；同时审阅WHO、ECDC和CDC的国际组织出版物，并通过已选文献的参考文献进行手动补充检索。 ## 结果 ### 病例报告 患者为33岁意大利男性，自2022年1月起居住于葡萄牙里斯本，5月18日返回意大利。既往病史：2016年确诊HIV感染，接受多替拉韦/利匹韦林 50/25 mg 治疗，病毒免疫学应答良好（CD4+淋巴细胞 771 cells/μL，HIV-RNA < 20 cp/mL）。已完成COVID-19全程疫苗接种（2剂Comirnaty + 1剂Moderna mRNA疫苗）。既往6个月内仅于2022年1月至马德里旅行一周。"
+        ],
+        "quote": "### 文献检索策略 在PubMed中检索1970年1月1日至2022年6月3日的文献，无语言限制。检索词包括：\"Monkeypox\"、\"Monkeypox virus\"、\"Imported monkeypox\"、\"Monkeypox and Africa\"、\"Monkeypox and travel\"、\"Monkeypox and Europe\"、\"Monkeypox outbreak\"、\"Monkeypox reservoir\"、\"Monkeypox and treatment\"。选择关键参考文献、开创性论文、综述和病例报告；同时审阅WHO、ECDC和CDC的国际组织出版物，并通过已选文献的参考文献进行手动补充检索。 ## 结果 ### 病例报告 患者为33岁意大利男性，自2022年1月起居住于葡萄牙里斯本，5月18日返回意大利。既往病史：2016年确诊HIV感染，接受多替拉韦/利匹韦林 50/25 mg 治疗，病毒免疫学应答良好（CD4+淋巴细胞 771 cells/μL，HIV-RNA < 20 cp/mL）。已完成COVID-19全程疫苗接种（2剂Comirnaty + 1剂Moderna mRNA疫苗）。既往6个月内仅于2022年1月至马德里旅行一周。"
+      },
+      "explanation": "The search strategy and selection criteria match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "History of receptive anal intercourse with casual partner in Lisbon on May 8, 2022, travel from Portugal, possible sexual transmission.",
+      "generatedFact": "5月8日在里斯本与临时伴侣发生接受性肛交，自葡返意，疑为性接触传播。",
+      "sourceEvidence": {
+        "locator": "R0009",
+        "locators": [
+          "R0009"
+        ],
+        "quotes": [
+          "On May 15th he complained of asthenia, malaise, anorexia with the appearance of two small papular lesions on both elbows and an ulcerated perianal lesion; 3 days later (May 18th) a new lesion appeared on the right cheek associated with symptoms involving the upper respiratory tract (faryngodynia and sneezing). Before flying to Italy he underwent a nasopharyngeal swab for SARS-CoV-2 that resulted negative. On May 21 he complained of the appearance of fever (38.5 °C) with spontaneous resolution in one day. On May 24th he presented to our ward complaining of pain in the perianal region. He reported a receptive anal intercourse on May 8th with a casual partner in Lisbon."
+        ],
+        "quote": "On May 15th he complained of asthenia, malaise, anorexia with the appearance of two small papular lesions on both elbows and an ulcerated perianal lesion; 3 days later (May 18th) a new lesion appeared on the right cheek associated with symptoms involving the upper respiratory tract (faryngodynia and sneezing). Before flying to Italy he underwent a nasopharyngeal swab for SARS-CoV-2 that resulted negative. On May 21 he complained of the appearance of fever (38.5 °C) with spontaneous resolution in one day. On May 24th he presented to our ward complaining of pain in the perianal region. He reported a receptive anal intercourse on May 8th with a casual partner in Lisbon."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "临床病程：5月8日在里斯本与一名临时伴侣发生接受性肛交。5月15日出现乏力、不适、食欲减退，双肘出现2个小丘疹，伴肛周溃疡性病变。5月18日右脸颊出现新皮损，伴上呼吸道症状（咽痛、打喷嚏）；SARS-CoV-2鼻咽拭子阴性。5月21日发热38.5°C，1天内自行消退。5月24日因肛周疼痛就诊。体格检查：血压 100/55 mmHg，脉搏 105 次/分，室内空气血氧饱和度 95%；轻度口咽充血；面部、双肘、躯干、臀部和右足可见散在不同阶段皮损（总数 < 10个）；超声确认双侧腹股沟淋巴结肿大。实验室检查在正常范围内，仅中度血小板减少（146,000/μL）和C反应蛋白轻度升高（30 mg/L）。 病毒学结果：所有采样部位（咽部、皮肤病变、肛周溃疡、精液）MPXV Real-Time PCR均呈阳性，各部位病毒载量存在差异。Vero E6细胞成功分离出病毒，观察到典型细胞病变效应（单层分离和细胞圆缩）。患者在负压隔离病房住院期间始终保持良好临床状态，住院第7日出院。复查中除最后一次口咽拭子Ct值为35外，其余标本RT-PCR均转阴。出院后嘱其居家隔离至所有皮损愈合。"
+        ],
+        "quote": "临床病程：5月8日在里斯本与一名临时伴侣发生接受性肛交。5月15日出现乏力、不适、食欲减退，双肘出现2个小丘疹，伴肛周溃疡性病变。5月18日右脸颊出现新皮损，伴上呼吸道症状（咽痛、打喷嚏）；SARS-CoV-2鼻咽拭子阴性。5月21日发热38.5°C，1天内自行消退。5月24日因肛周疼痛就诊。体格检查：血压 100/55 mmHg，脉搏 105 次/分，室内空气血氧饱和度 95%；轻度口咽充血；面部、双肘、躯干、臀部和右足可见散在不同阶段皮损（总数 < 10个）；超声确认双侧腹股沟淋巴结肿大。实验室检查在正常范围内，仅中度血小板减少（146,000/μL）和C反应蛋白轻度升高（30 mg/L）。 病毒学结果：所有采样部位（咽部、皮肤病变、肛周溃疡、精液）MPXV Real-Time PCR均呈阳性，各部位病毒载量存在差异。Vero E6细胞成功分离出病毒，观察到典型细胞病变效应（单层分离和细胞圆缩）。患者在负压隔离病房住院期间始终保持良好临床状态，住院第7日出院。复查中除最后一次口咽拭子Ct值为35外，其余标本RT-PCR均转阴。出院后嘱其居家隔离至所有皮损愈合。"
+      },
+      "explanation": "The exposure details align with the index event and hypothesised transmission route.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No comparator, control group, or reference standard is used in this case report.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Confirmation of MPXV by PCR in multiple sites, viral culture, clinical course (mild, discharge day 7), and viral clearance on follow-up.",
+      "generatedFact": "PCR证实多部位MPXV阳性，病毒分离成功，临床过程轻微，住院7天出院，随访病毒转阴。",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "/ Negative / n.a. / Negative / 19 35 a.o. n.a. / Negative / n.a. / Negative / n.a. / Negative / List of abbreviations: n.a, not available; a.o, analysis ongoing; Polymerase Chain Reaction, PCR. Real-time Polymerase Chain Reaction (PCR) [RealStar Orthopoxvirus PCR Kit 1.0 – altona DIAGNOSTICS) targeting variola virus and non-variola Orthopoxvirus species (C owpox virus, Monkeypox virus, Raccoonpox virus, Camelpox virus, Vaccinia virus ] was used as Orthopoxvirus screening PCR. Monkeypox virus infection was confirmed by a specific homemade Real-Time PCR performed on Orthopoxvirus screening PCR positive samples as previously described [ 20 ]."
+        ],
+        "quote": "/ Negative / n.a. / Negative / 19 35 a.o. n.a. / Negative / n.a. / Negative / n.a. / Negative / List of abbreviations: n.a, not available; a.o, analysis ongoing; Polymerase Chain Reaction, PCR. Real-time Polymerase Chain Reaction (PCR) [RealStar Orthopoxvirus PCR Kit 1.0 – altona DIAGNOSTICS) targeting variola virus and non-variola Orthopoxvirus species (C owpox virus, Monkeypox virus, Raccoonpox virus, Camelpox virus, Vaccinia virus ] was used as Orthopoxvirus screening PCR. Monkeypox virus infection was confirmed by a specific homemade Real-Time PCR performed on Orthopoxvirus screening PCR positive samples as previously described [ 20 ]."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "临床病程：5月8日在里斯本与一名临时伴侣发生接受性肛交。5月15日出现乏力、不适、食欲减退，双肘出现2个小丘疹，伴肛周溃疡性病变。5月18日右脸颊出现新皮损，伴上呼吸道症状（咽痛、打喷嚏）；SARS-CoV-2鼻咽拭子阴性。5月21日发热38.5°C，1天内自行消退。5月24日因肛周疼痛就诊。体格检查：血压 100/55 mmHg，脉搏 105 次/分，室内空气血氧饱和度 95%；轻度口咽充血；面部、双肘、躯干、臀部和右足可见散在不同阶段皮损（总数 < 10个）；超声确认双侧腹股沟淋巴结肿大。实验室检查在正常范围内，仅中度血小板减少（146,000/μL）和C反应蛋白轻度升高（30 mg/L）。 病毒学结果：所有采样部位（咽部、皮肤病变、肛周溃疡、精液）MPXV Real-Time PCR均呈阳性，各部位病毒载量存在差异。Vero E6细胞成功分离出病毒，观察到典型细胞病变效应（单层分离和细胞圆缩）。患者在负压隔离病房住院期间始终保持良好临床状态，住院第7日出院。复查中除最后一次口咽拭子Ct值为35外，其余标本RT-PCR均转阴。出院后嘱其居家隔离至所有皮损愈合。"
+        ],
+        "quote": "临床病程：5月8日在里斯本与一名临时伴侣发生接受性肛交。5月15日出现乏力、不适、食欲减退，双肘出现2个小丘疹，伴肛周溃疡性病变。5月18日右脸颊出现新皮损，伴上呼吸道症状（咽痛、打喷嚏）；SARS-CoV-2鼻咽拭子阴性。5月21日发热38.5°C，1天内自行消退。5月24日因肛周疼痛就诊。体格检查：血压 100/55 mmHg，脉搏 105 次/分，室内空气血氧饱和度 95%；轻度口咽充血；面部、双肘、躯干、臀部和右足可见散在不同阶段皮损（总数 < 10个）；超声确认双侧腹股沟淋巴结肿大。实验室检查在正常范围内，仅中度血小板减少（146,000/μL）和C反应蛋白轻度升高（30 mg/L）。 病毒学结果：所有采样部位（咽部、皮肤病变、肛周溃疡、精液）MPXV Real-Time PCR均呈阳性，各部位病毒载量存在差异。Vero E6细胞成功分离出病毒，观察到典型细胞病变效应（单层分离和细胞圆缩）。患者在负压隔离病房住院期间始终保持良好临床状态，住院第7日出院。复查中除最后一次口咽拭子Ct值为35外，其余标本RT-PCR均转阴。出院后嘱其居家隔离至所有皮损愈合。"
+      },
+      "explanation": "The primary diagnostic and clinical outcomes are identically reported.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Daily sampling from day 9 to 19, discharge day 7, last oropharyngeal swab Ct 35; patient isolated at home until lesion resolution.",
+      "generatedFact": "住院第7日出院，末次口咽拭子Ct 35，居家隔离至愈合。未列出每日Ct值。",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "The patient was instructed to remain isolated in his residence until all skin lesions recovered. During follow-up the RT-PCR turned negative on all examined specimens except the last oropharyngeal swab which showed a Ct of 35. 2.1. Search strategy and selection criteria We undertook a search of PubMed from Jan 1, 1970 to June 3, 2022, with no language restriction using the following search terms: “Monkeypox”, “Monkeypox virus”, “Imported monkeypox”, “Monkeypox and Africa”, “Monkeypox and travel”, “Monkeypox and Europe”, “Monkeypox outbreak”, “Monkeypox reservoir”, “Monkeypox and treatment”. We selected key references and seminal papers, review articles, patient reports."
+        ],
+        "quote": "The patient was instructed to remain isolated in his residence until all skin lesions recovered. During follow-up the RT-PCR turned negative on all examined specimens except the last oropharyngeal swab which showed a Ct of 35. 2.1. Search strategy and selection criteria We undertook a search of PubMed from Jan 1, 1970 to June 3, 2022, with no language restriction using the following search terms: “Monkeypox”, “Monkeypox virus”, “Imported monkeypox”, “Monkeypox and Africa”, “Monkeypox and travel”, “Monkeypox and Europe”, “Monkeypox outbreak”, “Monkeypox reservoir”, “Monkeypox and treatment”. We selected key references and seminal papers, review articles, patient reports."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "临床病程：5月8日在里斯本与一名临时伴侣发生接受性肛交。5月15日出现乏力、不适、食欲减退，双肘出现2个小丘疹，伴肛周溃疡性病变。5月18日右脸颊出现新皮损，伴上呼吸道症状（咽痛、打喷嚏）；SARS-CoV-2鼻咽拭子阴性。5月21日发热38.5°C，1天内自行消退。5月24日因肛周疼痛就诊。体格检查：血压 100/55 mmHg，脉搏 105 次/分，室内空气血氧饱和度 95%；轻度口咽充血；面部、双肘、躯干、臀部和右足可见散在不同阶段皮损（总数 < 10个）；超声确认双侧腹股沟淋巴结肿大。实验室检查在正常范围内，仅中度血小板减少（146,000/μL）和C反应蛋白轻度升高（30 mg/L）。 病毒学结果：所有采样部位（咽部、皮肤病变、肛周溃疡、精液）MPXV Real-Time PCR均呈阳性，各部位病毒载量存在差异。Vero E6细胞成功分离出病毒，观察到典型细胞病变效应（单层分离和细胞圆缩）。患者在负压隔离病房住院期间始终保持良好临床状态，住院第7日出院。复查中除最后一次口咽拭子Ct值为35外，其余标本RT-PCR均转阴。出院后嘱其居家隔离至所有皮损愈合。"
+        ],
+        "quote": "临床病程：5月8日在里斯本与一名临时伴侣发生接受性肛交。5月15日出现乏力、不适、食欲减退，双肘出现2个小丘疹，伴肛周溃疡性病变。5月18日右脸颊出现新皮损，伴上呼吸道症状（咽痛、打喷嚏）；SARS-CoV-2鼻咽拭子阴性。5月21日发热38.5°C，1天内自行消退。5月24日因肛周疼痛就诊。体格检查：血压 100/55 mmHg，脉搏 105 次/分，室内空气血氧饱和度 95%；轻度口咽充血；面部、双肘、躯干、臀部和右足可见散在不同阶段皮损（总数 < 10个）；超声确认双侧腹股沟淋巴结肿大。实验室检查在正常范围内，仅中度血小板减少（146,000/μL）和C反应蛋白轻度升高（30 mg/L）。 病毒学结果：所有采样部位（咽部、皮肤病变、肛周溃疡、精液）MPXV Real-Time PCR均呈阳性，各部位病毒载量存在差异。Vero E6细胞成功分离出病毒，观察到典型细胞病变效应（单层分离和细胞圆缩）。患者在负压隔离病房住院期间始终保持良好临床状态，住院第7日出院。复查中除最后一次口咽拭子Ct值为35外，其余标本RT-PCR均转阴。出院后嘱其居家隔离至所有皮损愈合。"
+      },
+      "explanation": "The generated captures the key follow-up points without contradicting the reference; the full daily Ct timeline is omitted but core outcome is preserved.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "partial",
+      "issueKinds": [
+        "missing"
+      ],
+      "referenceFact": "DNA extraction from 200 μL sample eluted in 100 μL using ELITe InGenius® system.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "R0012",
+        "locators": [
+          "R0012"
+        ],
+        "quotes": [
+          "Sterile screw cap containers were used to collect urine and seminal fluid while blood samples were collected in the BD Vacutainer® K2EDTA tube and Thrombin tube to obtain plasma and serum respectively. The DNA was extracted from 200 μL of sample and eluted in 100 μL using the automated ELITe InGenius® system. Fig. 1 A–E. Skin lesions with different appearance obtained at time of diagnosis of MPX. A, buttock. B, perianal ulcerated lesion. C, trunk. D, one of the trunk lesions at major magnification. E, two vesicula/pustular lesion of the arm. F, one foot lesion. Arrows indicate two lesions of the trunk. Fig. 1 Fig. 2 Clinical and virological timeline of the patient affected by monkeypox."
+        ],
+        "quote": "Sterile screw cap containers were used to collect urine and seminal fluid while blood samples were collected in the BD Vacutainer® K2EDTA tube and Thrombin tube to obtain plasma and serum respectively. The DNA was extracted from 200 μL of sample and eluted in 100 μL using the automated ELITe InGenius® system. Fig. 1 A–E. Skin lesions with different appearance obtained at time of diagnosis of MPX. A, buttock. B, perianal ulcerated lesion. C, trunk. D, one of the trunk lesions at major magnification. E, two vesicula/pustular lesion of the arm. F, one foot lesion. Arrows indicate two lesions of the trunk. Fig. 1 Fig. 2 Clinical and virological timeline of the patient affected by monkeypox."
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The DNA extraction step is absent from the generated text, which only mentions sampling and PCR but not the extraction protocol.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "RealStar Orthopoxvirus screening PCR; confirmatory homemade Real-Time PCR for MPXV; viral isolation on Vero E6 cells.",
+      "generatedFact": "RealStar Orthopoxvirus PCR Kit筛查，特异性自制Real-Time PCR确认，Vero E6细胞病毒分离。",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "/ Negative / n.a. / Negative / 19 35 a.o. n.a. / Negative / n.a. / Negative / n.a. / Negative / List of abbreviations: n.a, not available; a.o, analysis ongoing; Polymerase Chain Reaction, PCR. Real-time Polymerase Chain Reaction (PCR) [RealStar Orthopoxvirus PCR Kit 1.0 – altona DIAGNOSTICS) targeting variola virus and non-variola Orthopoxvirus species (C owpox virus, Monkeypox virus, Raccoonpox virus, Camelpox virus, Vaccinia virus ] was used as Orthopoxvirus screening PCR. Monkeypox virus infection was confirmed by a specific homemade Real-Time PCR performed on Orthopoxvirus screening PCR positive samples as previously described [ 20 ]."
+        ],
+        "quote": "/ Negative / n.a. / Negative / 19 35 a.o. n.a. / Negative / n.a. / Negative / n.a. / Negative / List of abbreviations: n.a, not available; a.o, analysis ongoing; Polymerase Chain Reaction, PCR. Real-time Polymerase Chain Reaction (PCR) [RealStar Orthopoxvirus PCR Kit 1.0 – altona DIAGNOSTICS) targeting variola virus and non-variola Orthopoxvirus species (C owpox virus, Monkeypox virus, Raccoonpox virus, Camelpox virus, Vaccinia virus ] was used as Orthopoxvirus screening PCR. Monkeypox virus infection was confirmed by a specific homemade Real-Time PCR performed on Orthopoxvirus screening PCR positive samples as previously described [ 20 ]."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "## 方法 ### 病例诊断与病毒学检测 对一例2022年5月24日在意大Luigi Sacco医院就诊的疑似患者进行临床评估和多部位采样。使用RealStar Orthopoxvirus PCR Kit 1.0（altona DIAGNOSTICS）进行正痘病毒筛查PCR，该试剂盒可检测天花病毒和非天花正痘病毒（牛痘病毒、猴痘病毒、浣熊痘病毒、骆驼痘病毒、痘苗病毒）。阳性样本以特异性自制Real-Time PCR（方法参考 Li 等，2010）确认MPXV感染。每日采集咽部、皮肤病变、肛周溃疡、血浆、尿液和精液样本，以循环阈值（Ct）追踪病毒载量变化、病毒排放和清除动态。所有PCR阳性样本在Vero E6细胞上进行病毒分离：取200 μL样本接种于含80%-90%融合Vero E6细胞的24孔板中，加入800 μL含L-谷氨酰胺的DMEM培养基（补充2%热灭活胎牛血清和1%青霉素-链霉素），37°C、5% CO₂条件下培养，每24小时观察细胞病变效应。"
+        ],
+        "quote": "## 方法 ### 病例诊断与病毒学检测 对一例2022年5月24日在意大Luigi Sacco医院就诊的疑似患者进行临床评估和多部位采样。使用RealStar Orthopoxvirus PCR Kit 1.0（altona DIAGNOSTICS）进行正痘病毒筛查PCR，该试剂盒可检测天花病毒和非天花正痘病毒（牛痘病毒、猴痘病毒、浣熊痘病毒、骆驼痘病毒、痘苗病毒）。阳性样本以特异性自制Real-Time PCR（方法参考 Li 等，2010）确认MPXV感染。每日采集咽部、皮肤病变、肛周溃疡、血浆、尿液和精液样本，以循环阈值（Ct）追踪病毒载量变化、病毒排放和清除动态。所有PCR阳性样本在Vero E6细胞上进行病毒分离：取200 μL样本接种于含80%-90%融合Vero E6细胞的24孔板中，加入800 μL含L-谷氨酰胺的DMEM培养基（补充2%热灭活胎牛血清和1%青霉素-链霉素），37°C、5% CO₂条件下培养，每24小时观察细胞病变效应。"
+      },
+      "explanation": "The laboratory methods are fully and accurately reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No algorithm, model, or computational method is employed.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "partial",
+      "issueKinds": [
+        "missing"
+      ],
+      "referenceFact": "Ct values from Table 1: e.g., oropharyngeal 23 (day9), perianal 20, anal 17, foot 14, seminal fluid 31; lesion count <10.",
+      "generatedFact": "皮损 <10个，HIV相关数值，血小板146,000/μL，CRP 30 mg/L，末次口咽Ct 35，但未提供其他样本Ct。",
+      "sourceEvidence": {
+        "locator": "R0014",
+        "locators": [
+          "R0014"
+        ],
+        "quotes": [
+          "Table 1 Days from symptoms onset Oropharyngeal swab Ulcerated perianal lesion Anal swab Foot lesion Plasma Seminal fluid Urine PCR cycle threshold Viral Isolation PCR cycle threshold Viral Isolation PCR cycle threshold Viral Isolation PCR cycle threshold Viral Isolation PCR cycle threshold Viral Isolation PCR cycle threshold Viral Isolation PCR cycle threshold Cell culture 9 23 Positive 20 Positive 17 Positive 14 Positive / n.a. / n.a. / 10 36 Negative 20 Positive n.a. / n.a. / 33 Negative 31 Negative Negative / 11 33 Negative 22 Positive n.a. / n.a. / 33 Negative n.a. / n.a. / 12 33 Negative n.a. / 22 Positive n.a. / 34 Negative n.a. / n.a. / 15 Negative / n.a. / Negative / n.a."
+        ],
+        "quote": "Table 1 Days from symptoms onset Oropharyngeal swab Ulcerated perianal lesion Anal swab Foot lesion Plasma Seminal fluid Urine PCR cycle threshold Viral Isolation PCR cycle threshold Viral Isolation PCR cycle threshold Viral Isolation PCR cycle threshold Viral Isolation PCR cycle threshold Viral Isolation PCR cycle threshold Viral Isolation PCR cycle threshold Cell culture 9 23 Positive 20 Positive 17 Positive 14 Positive / n.a. / n.a. / 10 36 Negative 20 Positive n.a. / n.a. / 33 Negative 31 Negative Negative / 11 33 Negative 22 Positive n.a. / n.a. / 33 Negative n.a. / n.a. / 12 33 Negative n.a. / 22 Positive n.a. / 34 Negative n.a. / n.a. / 15 Negative / n.a. / Negative / n.a."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "临床病程：5月8日在里斯本与一名临时伴侣发生接受性肛交。5月15日出现乏力、不适、食欲减退，双肘出现2个小丘疹，伴肛周溃疡性病变。5月18日右脸颊出现新皮损，伴上呼吸道症状（咽痛、打喷嚏）；SARS-CoV-2鼻咽拭子阴性。5月21日发热38.5°C，1天内自行消退。5月24日因肛周疼痛就诊。体格检查：血压 100/55 mmHg，脉搏 105 次/分，室内空气血氧饱和度 95%；轻度口咽充血；面部、双肘、躯干、臀部和右足可见散在不同阶段皮损（总数 < 10个）；超声确认双侧腹股沟淋巴结肿大。实验室检查在正常范围内，仅中度血小板减少（146,000/μL）和C反应蛋白轻度升高（30 mg/L）。 病毒学结果：所有采样部位（咽部、皮肤病变、肛周溃疡、精液）MPXV Real-Time PCR均呈阳性，各部位病毒载量存在差异。Vero E6细胞成功分离出病毒，观察到典型细胞病变效应（单层分离和细胞圆缩）。患者在负压隔离病房住院期间始终保持良好临床状态，住院第7日出院。复查中除最后一次口咽拭子Ct值为35外，其余标本RT-PCR均转阴。出院后嘱其居家隔离至所有皮损愈合。"
+        ],
+        "quote": "临床病程：5月8日在里斯本与一名临时伴侣发生接受性肛交。5月15日出现乏力、不适、食欲减退，双肘出现2个小丘疹，伴肛周溃疡性病变。5月18日右脸颊出现新皮损，伴上呼吸道症状（咽痛、打喷嚏）；SARS-CoV-2鼻咽拭子阴性。5月21日发热38.5°C，1天内自行消退。5月24日因肛周疼痛就诊。体格检查：血压 100/55 mmHg，脉搏 105 次/分，室内空气血氧饱和度 95%；轻度口咽充血；面部、双肘、躯干、臀部和右足可见散在不同阶段皮损（总数 < 10个）；超声确认双侧腹股沟淋巴结肿大。实验室检查在正常范围内，仅中度血小板减少（146,000/μL）和C反应蛋白轻度升高（30 mg/L）。 病毒学结果：所有采样部位（咽部、皮肤病变、肛周溃疡、精液）MPXV Real-Time PCR均呈阳性，各部位病毒载量存在差异。Vero E6细胞成功分离出病毒，观察到典型细胞病变效应（单层分离和细胞圆缩）。患者在负压隔离病房住院期间始终保持良好临床状态，住院第7日出院。复查中除最后一次口咽拭子Ct值为35外，其余标本RT-PCR均转阴。出院后嘱其居家隔离至所有皮损愈合。"
+      },
+      "explanation": "The most informative virological numbers (Ct values for skin lesions, anal swab, etc.) are omitted, making the numerical results incomplete.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No P values, confidence intervals, or formal uncertainty measures are reported.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Mild illness, few asynchronous skin lesions (genital/anal), inguinal lymphadenopathy, different from classic MPX, possible sexual transmission, need for awareness.",
+      "generatedFact": "临床表现偏轻，皮损少且不同步，局限于生殖器/肛周，不同于经典描述，提示性传播可能，需加强认知。",
+      "sourceEvidence": {
+        "locator": "R0067",
+        "locators": [
+          "R0067"
+        ],
+        "quotes": [
+          "Conclusion This case report highlights the difficulties encountered by clinicians facing with patients with MPXV infection during the ongoing outbreak outside Africa. Diagnostic methods to confirm the diagnosis are sensitive but generally available only in few national reference laboratories. Differential diagnosis should consider several diseases including secondary syphilis, disseminated gonorrhea, herpes simplex, lymphogranuloma venereum, molluscum contagiosus, disseminated cryptococcosis."
+        ],
+        "quote": "Conclusion This case report highlights the difficulties encountered by clinicians facing with patients with MPXV infection during the ongoing outbreak outside Africa. Diagnostic methods to confirm the diagnosis are sensitive but generally available only in few national reference laboratories. Differential diagnosis should consider several diseases including secondary syphilis, disseminated gonorrhea, herpes simplex, lymphogranuloma venereum, molluscum contagiosus, disseminated cryptococcosis."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "从诊断角度看，Real-Time PCR是确认MPXV感染的金标准，可直接区分天花病毒与其他痘病毒，但通常仅限于少数国家级参比实验室使用。鉴别诊断需涵盖继发性梅毒、播散性淋病、单纯疱疹、性病性淋巴肉芽肿、传染性软疣和播散性隐球菌病。病毒核酸亦可在血液、尿液、上呼吸道和精液中检出。GeneXpert检测在结痂和水疱样本中表现良好，可作为扩大检测能力的补充平台。高通量鸟枪法宏基因组学可用于重建基因组序列，通过系统发育基因组数据分析暴发的演化轨迹。血清学检测因正痘病毒属内交叉反应而受限：抗正痘病毒IgG阳性因既往天花疫苗接种或接触其他正痘病毒不可作为确诊依据；抗正痘病毒IgM在近期暴露时可提供线索，但同样缺乏种内特异性。 原文未设立单独的局限性章节。原文结论提出的核心挑战包括：确诊方法可及性有限（集中于参比实验室）；非典型临床表现易致漏诊或误诊；多名患者与匿名伴侣的性行为使接触者追踪极为困难；非流行地区医护人员需加强对猴痘的认知。这些构成论文的核心发现而非传统的\"研究局限性\"——本重写文不补写原文未陈述的内容。"
+        ],
+        "quote": "从诊断角度看，Real-Time PCR是确认MPXV感染的金标准，可直接区分天花病毒与其他痘病毒，但通常仅限于少数国家级参比实验室使用。鉴别诊断需涵盖继发性梅毒、播散性淋病、单纯疱疹、性病性淋巴肉芽肿、传染性软疣和播散性隐球菌病。病毒核酸亦可在血液、尿液、上呼吸道和精液中检出。GeneXpert检测在结痂和水疱样本中表现良好，可作为扩大检测能力的补充平台。高通量鸟枪法宏基因组学可用于重建基因组序列，通过系统发育基因组数据分析暴发的演化轨迹。血清学检测因正痘病毒属内交叉反应而受限：抗正痘病毒IgG阳性因既往天花疫苗接种或接触其他正痘病毒不可作为确诊依据；抗正痘病毒IgM在近期暴露时可提供线索，但同样缺乏种内特异性。 原文未设立单独的局限性章节。原文结论提出的核心挑战包括：确诊方法可及性有限（集中于参比实验室）；非典型临床表现易致漏诊或误诊；多名患者与匿名伴侣的性行为使接触者追踪极为困难；非流行地区医护人员需加强对猴痘的认知。这些构成论文的核心发现而非传统的\"研究局限性\"——本重写文不补写原文未陈述的内容。"
+      },
+      "explanation": "The direction and strength of the conclusion are faithfully conveyed.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The article does not include an explicit limitations section or statement, and the generated does not invent one.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "In the review, brincidofovir caused liver enzyme elevation; tecovirimat showed no significant safety signals; no harms in the presented case.",
+      "generatedFact": "英国使用brincidofovir的3例患者转氨酶升高，tekovirimat无安全性信号；本病例无不良事件。",
+      "sourceEvidence": {
+        "locator": "R0053",
+        "locators": [
+          "R0053"
+        ],
+        "quotes": [
+          "Three patients were treated with brincidofovir (all experiencing a significant increase in liver enzyme) [ 14 , 60 ], two with tecovirimat [ 14 , 16 ] and one patient received post- exposure modified vaccina Ankara [ 14 ]. 3.4. Monkeypox laboratory diagnosis The swab of a lesion exudate or crust specimens is considered the best sample to obtain a rapid and definite diagnosis of MPX. In particular, the direct recognition of the viral DNA by means of real-time PCR allow the rapid discrimination between smallpox and other poxvirus [ 20 , [64] , [65] , [66] , [67] , [68] , [69] ]."
+        ],
+        "quote": "Three patients were treated with brincidofovir (all experiencing a significant increase in liver enzyme) [ 14 , 60 ], two with tecovirimat [ 14 , 16 ] and one patient received post- exposure modified vaccina Ankara [ 14 ]. 3.4. Monkeypox laboratory diagnosis The swab of a lesion exudate or crust specimens is considered the best sample to obtain a rapid and definite diagnosis of MPX. In particular, the direct recognition of the viral DNA by means of real-time PCR allow the rapid discrimination between smallpox and other poxvirus [ 20 , [64] , [65] , [66] , [67] , [68] , [69] ]."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "治疗方面，并无经临床试验证实对人猴痘有效的药物。brincidofovir和tekovirimat两种在美国获批用于天花的药物在动物模型中显示对正痘病毒（含MPXV）有效。tekovirimat通过抑制F13L基因产物（一种参与包膜形成的磷脂酶）阻断胞外包膜病毒产生；brincidofovir是西多福韦的脂质偶联物，细胞内摄取和活化更优但毒性也更高。临床经验极为有限：英国3例使用brincidofovir的MPX患者均出现转氨酶显著升高；英国1例和美国1例使用tekovirimat治疗的患者尚无安全性信号，但关于两种药物治疗MPX的疗效无法得出确切结论。 ## 讨论 本病例的临床特征与2022年多国暴发中其他报告一致：疾病表现偏轻、皮损数量少（<10个）、局限于生殖器和肛周区域、呈不同步进展模式，伴腹股沟淋巴结肿大。这不同于基于20世纪80年代Jezek等经典研究建立的猴痘\"同态、离心性分布\"经典描述。多篇同期报告亦记录了生殖器和肛门病变出现在疾病初期，且多个病例系列中患者群体以MSM为主、部分伴HIV感染，强烈提示性接触可能构成人传人传播途径。"
+        ],
+        "quote": "治疗方面，并无经临床试验证实对人猴痘有效的药物。brincidofovir和tekovirimat两种在美国获批用于天花的药物在动物模型中显示对正痘病毒（含MPXV）有效。tekovirimat通过抑制F13L基因产物（一种参与包膜形成的磷脂酶）阻断胞外包膜病毒产生；brincidofovir是西多福韦的脂质偶联物，细胞内摄取和活化更优但毒性也更高。临床经验极为有限：英国3例使用brincidofovir的MPX患者均出现转氨酶显著升高；英国1例和美国1例使用tekovirimat治疗的患者尚无安全性信号，但关于两种药物治疗MPX的疗效无法得出确切结论。 ## 讨论 本病例的临床特征与2022年多国暴发中其他报告一致：疾病表现偏轻、皮损数量少（<10个）、局限于生殖器和肛周区域、呈不同步进展模式，伴腹股沟淋巴结肿大。这不同于基于20世纪80年代Jezek等经典研究建立的猴痘\"同态、离心性分布\"经典描述。多篇同期报告亦记录了生殖器和肛门病变出现在疾病初期，且多个病例系列中患者群体以MSM为主、部分伴HIV感染，强烈提示性接触可能构成人传人传播途径。"
+      },
+      "explanation": "Safety information from the review is correctly captured, and the case itself had no adverse events.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "patient_and_timeline",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "33y M, Italy→Portugal, HIV since 2016 on DOL/RPV, CD4 771, HIV-RNA<20; May 8 sexual exposure, May 15 malaise+lesions, May 18 cheek lesion+URTI, May 21 fever, May 24 hospital; BP 100/55, HR 105, O2 95; <10 lesions, bilateral inguinal lymphadenopathy; thrombopenia 146k, CRP 30; isolation, discharge day 7, last Ct 35.",
+      "generatedFact": "33岁男性，HIV感染，CD4 771，病毒载量<20；5月8日性接触，5月15日出现症状，5月18日面颊皮损，5月21日发热，5月24日就诊；生命体征、皮损、化验一致；隔离7天出院，末次Ct 35。",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "We also made a review of monkeypox diagnosed in Africa and outside Africa with a discussion of many of the challenges faced by clinicians in non-endemic countries who provide care for patients with MPX. 2. Patient case presentation A 33-year old Italian man attended our clinic on May 24th at Luigi Sacco Hospital in Milan, Italy to investigate a perianal lesion that appeared a few days before. He was living in Lisbon (Portugal) since January 2022 and returned to Italy on May 18th."
+        ],
+        "quote": "We also made a review of monkeypox diagnosed in Africa and outside Africa with a discussion of many of the challenges faced by clinicians in non-endemic countries who provide care for patients with MPX. 2. Patient case presentation A 33-year old Italian man attended our clinic on May 24th at Luigi Sacco Hospital in Milan, Italy to investigate a perianal lesion that appeared a few days before. He was living in Lisbon (Portugal) since January 2022 and returned to Italy on May 18th."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "### 文献检索策略 在PubMed中检索1970年1月1日至2022年6月3日的文献，无语言限制。检索词包括：\"Monkeypox\"、\"Monkeypox virus\"、\"Imported monkeypox\"、\"Monkeypox and Africa\"、\"Monkeypox and travel\"、\"Monkeypox and Europe\"、\"Monkeypox outbreak\"、\"Monkeypox reservoir\"、\"Monkeypox and treatment\"。选择关键参考文献、开创性论文、综述和病例报告；同时审阅WHO、ECDC和CDC的国际组织出版物，并通过已选文献的参考文献进行手动补充检索。 ## 结果 ### 病例报告 患者为33岁意大利男性，自2022年1月起居住于葡萄牙里斯本，5月18日返回意大利。既往病史：2016年确诊HIV感染，接受多替拉韦/利匹韦林 50/25 mg 治疗，病毒免疫学应答良好（CD4+淋巴细胞 771 cells/μL，HIV-RNA < 20 cp/mL）。已完成COVID-19全程疫苗接种（2剂Comirnaty + 1剂Moderna mRNA疫苗）。既往6个月内仅于2022年1月至马德里旅行一周。"
+        ],
+        "quote": "### 文献检索策略 在PubMed中检索1970年1月1日至2022年6月3日的文献，无语言限制。检索词包括：\"Monkeypox\"、\"Monkeypox virus\"、\"Imported monkeypox\"、\"Monkeypox and Africa\"、\"Monkeypox and travel\"、\"Monkeypox and Europe\"、\"Monkeypox outbreak\"、\"Monkeypox reservoir\"、\"Monkeypox and treatment\"。选择关键参考文献、开创性论文、综述和病例报告；同时审阅WHO、ECDC和CDC的国际组织出版物，并通过已选文献的参考文献进行手动补充检索。 ## 结果 ### 病例报告 患者为33岁意大利男性，自2022年1月起居住于葡萄牙里斯本，5月18日返回意大利。既往病史：2016年确诊HIV感染，接受多替拉韦/利匹韦林 50/25 mg 治疗，病毒免疫学应答良好（CD4+淋巴细胞 771 cells/μL，HIV-RNA < 20 cp/mL）。已完成COVID-19全程疫苗接种（2剂Comirnaty + 1剂Moderna mRNA疫苗）。既往6个月内仅于2022年1月至马德里旅行一周。"
+      },
+      "explanation": "All major clinical and temporal details match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "diagnostic_workup",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "PCR from multiple sites, viral culture; differential includes syphilis, disseminated gonorrhea, HSV, LGV, molluscum contagiosum, cryptococcosis.",
+      "generatedFact": "多部位PCR和病毒分离；鉴别诊断列举六种疾病。",
+      "sourceEvidence": {
+        "locator": "R0067",
+        "locators": [
+          "R0067"
+        ],
+        "quotes": [
+          "Conclusion This case report highlights the difficulties encountered by clinicians facing with patients with MPXV infection during the ongoing outbreak outside Africa. Diagnostic methods to confirm the diagnosis are sensitive but generally available only in few national reference laboratories. Differential diagnosis should consider several diseases including secondary syphilis, disseminated gonorrhea, herpes simplex, lymphogranuloma venereum, molluscum contagiosus, disseminated cryptococcosis."
+        ],
+        "quote": "Conclusion This case report highlights the difficulties encountered by clinicians facing with patients with MPXV infection during the ongoing outbreak outside Africa. Diagnostic methods to confirm the diagnosis are sensitive but generally available only in few national reference laboratories. Differential diagnosis should consider several diseases including secondary syphilis, disseminated gonorrhea, herpes simplex, lymphogranuloma venereum, molluscum contagiosus, disseminated cryptococcosis."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "从诊断角度看，Real-Time PCR是确认MPXV感染的金标准，可直接区分天花病毒与其他痘病毒，但通常仅限于少数国家级参比实验室使用。鉴别诊断需涵盖继发性梅毒、播散性淋病、单纯疱疹、性病性淋巴肉芽肿、传染性软疣和播散性隐球菌病。病毒核酸亦可在血液、尿液、上呼吸道和精液中检出。GeneXpert检测在结痂和水疱样本中表现良好，可作为扩大检测能力的补充平台。高通量鸟枪法宏基因组学可用于重建基因组序列，通过系统发育基因组数据分析暴发的演化轨迹。血清学检测因正痘病毒属内交叉反应而受限：抗正痘病毒IgG阳性因既往天花疫苗接种或接触其他正痘病毒不可作为确诊依据；抗正痘病毒IgM在近期暴露时可提供线索，但同样缺乏种内特异性。 原文未设立单独的局限性章节。原文结论提出的核心挑战包括：确诊方法可及性有限（集中于参比实验室）；非典型临床表现易致漏诊或误诊；多名患者与匿名伴侣的性行为使接触者追踪极为困难；非流行地区医护人员需加强对猴痘的认知。这些构成论文的核心发现而非传统的\"研究局限性\"——本重写文不补写原文未陈述的内容。"
+        ],
+        "quote": "从诊断角度看，Real-Time PCR是确认MPXV感染的金标准，可直接区分天花病毒与其他痘病毒，但通常仅限于少数国家级参比实验室使用。鉴别诊断需涵盖继发性梅毒、播散性淋病、单纯疱疹、性病性淋巴肉芽肿、传染性软疣和播散性隐球菌病。病毒核酸亦可在血液、尿液、上呼吸道和精液中检出。GeneXpert检测在结痂和水疱样本中表现良好，可作为扩大检测能力的补充平台。高通量鸟枪法宏基因组学可用于重建基因组序列，通过系统发育基因组数据分析暴发的演化轨迹。血清学检测因正痘病毒属内交叉反应而受限：抗正痘病毒IgG阳性因既往天花疫苗接种或接触其他正痘病毒不可作为确诊依据；抗正痘病毒IgM在近期暴露时可提供线索，但同样缺乏种内特异性。 原文未设立单独的局限性章节。原文结论提出的核心挑战包括：确诊方法可及性有限（集中于参比实验室）；非典型临床表现易致漏诊或误诊；多名患者与匿名伴侣的性行为使接触者追踪极为困难；非流行地区医护人员需加强对猴痘的认知。这些构成论文的核心发现而非传统的\"研究局限性\"——本重写文不补写原文未陈述的内容。"
+      },
+      "explanation": "The diagnostic procedure and differential are accurately reported.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "treatment_and_outcome",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Isolation in negative-pressure room, no specific antiviral, discharged day 7, home isolation until lesion resolution; RT-PCR became negative except last swab Ct 35.",
+      "generatedFact": "负压隔离，无特异性抗病毒治疗，第7日出院，居家隔离至愈合；末次口咽Ct 35。",
+      "sourceEvidence": {
+        "locator": "R0017",
+        "locators": [
+          "R0017"
+        ],
+        "quotes": [
+          "Plates was incubated at 37 °C and 5% CO 2 atmospheric pressure and checked every 24 h. Cytopathic effect was observed in Vero E6 cells showing typical monolayer separation and cell rounding ( Fig. 3 ). Fig. 3 Isolation of Monkeypox virus in Vero E6 cells from skin lesions and oropharyngeal swab. a: mock-infected Vero E6 cells; b: Vero E6 cells at 3 days post-infection; c: Vero E6 cells at 6 days post-infection. Fig. 3 The patient was isolated in a negative-pressure room and remained well throughout admission until discharge. He was examined daily for new skin lesions and was discharged to home on day 7 of hospitalization."
+        ],
+        "quote": "Plates was incubated at 37 °C and 5% CO 2 atmospheric pressure and checked every 24 h. Cytopathic effect was observed in Vero E6 cells showing typical monolayer separation and cell rounding ( Fig. 3 ). Fig. 3 Isolation of Monkeypox virus in Vero E6 cells from skin lesions and oropharyngeal swab. a: mock-infected Vero E6 cells; b: Vero E6 cells at 3 days post-infection; c: Vero E6 cells at 6 days post-infection. Fig. 3 The patient was isolated in a negative-pressure room and remained well throughout admission until discharge. He was examined daily for new skin lesions and was discharged to home on day 7 of hospitalization."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "临床病程：5月8日在里斯本与一名临时伴侣发生接受性肛交。5月15日出现乏力、不适、食欲减退，双肘出现2个小丘疹，伴肛周溃疡性病变。5月18日右脸颊出现新皮损，伴上呼吸道症状（咽痛、打喷嚏）；SARS-CoV-2鼻咽拭子阴性。5月21日发热38.5°C，1天内自行消退。5月24日因肛周疼痛就诊。体格检查：血压 100/55 mmHg，脉搏 105 次/分，室内空气血氧饱和度 95%；轻度口咽充血；面部、双肘、躯干、臀部和右足可见散在不同阶段皮损（总数 < 10个）；超声确认双侧腹股沟淋巴结肿大。实验室检查在正常范围内，仅中度血小板减少（146,000/μL）和C反应蛋白轻度升高（30 mg/L）。 病毒学结果：所有采样部位（咽部、皮肤病变、肛周溃疡、精液）MPXV Real-Time PCR均呈阳性，各部位病毒载量存在差异。Vero E6细胞成功分离出病毒，观察到典型细胞病变效应（单层分离和细胞圆缩）。患者在负压隔离病房住院期间始终保持良好临床状态，住院第7日出院。复查中除最后一次口咽拭子Ct值为35外，其余标本RT-PCR均转阴。出院后嘱其居家隔离至所有皮损愈合。"
+        ],
+        "quote": "临床病程：5月8日在里斯本与一名临时伴侣发生接受性肛交。5月15日出现乏力、不适、食欲减退，双肘出现2个小丘疹，伴肛周溃疡性病变。5月18日右脸颊出现新皮损，伴上呼吸道症状（咽痛、打喷嚏）；SARS-CoV-2鼻咽拭子阴性。5月21日发热38.5°C，1天内自行消退。5月24日因肛周疼痛就诊。体格检查：血压 100/55 mmHg，脉搏 105 次/分，室内空气血氧饱和度 95%；轻度口咽充血；面部、双肘、躯干、臀部和右足可见散在不同阶段皮损（总数 < 10个）；超声确认双侧腹股沟淋巴结肿大。实验室检查在正常范围内，仅中度血小板减少（146,000/μL）和C反应蛋白轻度升高（30 mg/L）。 病毒学结果：所有采样部位（咽部、皮肤病变、肛周溃疡、精液）MPXV Real-Time PCR均呈阳性，各部位病毒载量存在差异。Vero E6细胞成功分离出病毒，观察到典型细胞病变效应（单层分离和细胞圆缩）。患者在负压隔离病房住院期间始终保持良好临床状态，住院第7日出院。复查中除最后一次口咽拭子Ct值为35外，其余标本RT-PCR均转阴。出院后嘱其居家隔离至所有皮损愈合。"
+      },
+      "explanation": "Treatment (supportive) and outcome are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "causal_calibration",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Raises possibility of sexual transmission but explicitly states 'not demonstrated a direct sexual transmission'.",
+      "generatedFact": "'提示可能存在通过性接触的人传人传播'，未声称已证实。",
+      "sourceEvidence": {
+        "locator": "R0065",
+        "locators": [
+          "R0065"
+        ],
+        "quotes": [
+          "All such cases raised the possibility that MPXV can be transmitted by close contact during sexual intercourse as previously reported for vaccinia virus [ [36] , [37] , [38] ]. Interestingly in our case we were able to demonstrate MPXV DNA in the seminal fluid with a Ct value of 31 which is similar to the results obtained by our colleagues in Rome who found positivity in the seminal fluid of 3 patients with a Ct ranging from 27 to 30 [ 69 ]. However, we were not able to culture MPXV from this specimen and actually it is not demonstrated a direct sexual transmission although the lesions localized on genitals suggests close physical contact during sexual intercourse as the route of acquisition."
+        ],
+        "quote": "All such cases raised the possibility that MPXV can be transmitted by close contact during sexual intercourse as previously reported for vaccinia virus [ [36] , [37] , [38] ]. Interestingly in our case we were able to demonstrate MPXV DNA in the seminal fluid with a Ct value of 31 which is similar to the results obtained by our colleagues in Rome who found positivity in the seminal fluid of 3 patients with a Ct ranging from 27 to 30 [ 69 ]. However, we were not able to culture MPXV from this specimen and actually it is not demonstrated a direct sexual transmission although the lesions localized on genitals suggests close physical contact during sexual intercourse as the route of acquisition."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "从诊断角度看，Real-Time PCR是确认MPXV感染的金标准，可直接区分天花病毒与其他痘病毒，但通常仅限于少数国家级参比实验室使用。鉴别诊断需涵盖继发性梅毒、播散性淋病、单纯疱疹、性病性淋巴肉芽肿、传染性软疣和播散性隐球菌病。病毒核酸亦可在血液、尿液、上呼吸道和精液中检出。GeneXpert检测在结痂和水疱样本中表现良好，可作为扩大检测能力的补充平台。高通量鸟枪法宏基因组学可用于重建基因组序列，通过系统发育基因组数据分析暴发的演化轨迹。血清学检测因正痘病毒属内交叉反应而受限：抗正痘病毒IgG阳性因既往天花疫苗接种或接触其他正痘病毒不可作为确诊依据；抗正痘病毒IgM在近期暴露时可提供线索，但同样缺乏种内特异性。 原文未设立单独的局限性章节。原文结论提出的核心挑战包括：确诊方法可及性有限（集中于参比实验室）；非典型临床表现易致漏诊或误诊；多名患者与匿名伴侣的性行为使接触者追踪极为困难；非流行地区医护人员需加强对猴痘的认知。这些构成论文的核心发现而非传统的\"研究局限性\"——本重写文不补写原文未陈述的内容。"
+        ],
+        "quote": "从诊断角度看，Real-Time PCR是确认MPXV感染的金标准，可直接区分天花病毒与其他痘病毒，但通常仅限于少数国家级参比实验室使用。鉴别诊断需涵盖继发性梅毒、播散性淋病、单纯疱疹、性病性淋巴肉芽肿、传染性软疣和播散性隐球菌病。病毒核酸亦可在血液、尿液、上呼吸道和精液中检出。GeneXpert检测在结痂和水疱样本中表现良好，可作为扩大检测能力的补充平台。高通量鸟枪法宏基因组学可用于重建基因组序列，通过系统发育基因组数据分析暴发的演化轨迹。血清学检测因正痘病毒属内交叉反应而受限：抗正痘病毒IgG阳性因既往天花疫苗接种或接触其他正痘病毒不可作为确诊依据；抗正痘病毒IgM在近期暴露时可提供线索，但同样缺乏种内特异性。 原文未设立单独的局限性章节。原文结论提出的核心挑战包括：确诊方法可及性有限（集中于参比实验室）；非典型临床表现易致漏诊或误诊；多名患者与匿名伴侣的性行为使接触者追踪极为困难；非流行地区医护人员需加强对猴痘的认知。这些构成论文的核心发现而非传统的\"研究局限性\"——本重写文不补写原文未陈述的内容。"
+      },
+      "explanation": "Both avoid causal overclaim and use cautious language.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 17,
+    "weightedFidelity": 0.9448,
+    "criticalFidelity": 0.9583,
+    "statusCounts": {
+      "exact": 14,
+      "not_applicable": 4,
+      "compatible": 1,
+      "partial": 2
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [
+      "key_numerical_results"
+    ],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [
+      "data_preprocessing",
+      "key_numerical_results"
+    ],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 91.4,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 50.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "critical_missing_fact"
+    ],
+    "usabilityGateFailures": [
+      "critical_missing_fact"
+    ],
+    "usabilityVerdict": "fail",
+    "verdict": "fail"
+  },
+  "adversarialAudit": null,
+  "overallAssessment": "The generated article accurately reproduces the case report and review content, with only minor omissions: the DNA extraction step and the detailed Ct values from Table 1 are missing. The core clinical data, timelines, diagnostic approach, review findings, and cautious conclusions are faithfully preserved. No contradictions or unsupported claims were identified.",
+  "gradedAt": "2026-07-18T15:30:42Z"
+}

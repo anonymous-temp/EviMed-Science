@@ -1,0 +1,427 @@
+{
+  "schemaVersion": 1,
+  "label": "fidelity-gate-v1",
+  "caseId": "paper-048",
+  "category": "methods-software",
+  "title": "YaHS: yet another Hi-C scaffolding tool.",
+  "prompt": "请以已发表论文题目《YaHS: yet another Hi-C scaffolding tool.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。",
+  "sessionId": "ses_08c951e67ffed383RQnb0PREQb",
+  "run": {
+    "id": "run_1699e9b2866bad1aaa73266fcae3e896",
+    "dispatchId": "eval_fidelity_gate_v1_paper_048",
+    "dispatchStatus": "accepted",
+    "sessionId": "ses_08c951e67ffed383RQnb0PREQb",
+    "mode": "open-domain",
+    "agentId": null,
+    "agentVersion": null,
+    "runtimeAgent": null,
+    "model": "deepseek/deepseek-v4-pro",
+    "status": "succeeded",
+    "createdAt": "2026-07-18T04:10:12.303Z",
+    "startedAt": "2026-07-18T04:10:12.303Z",
+    "finishedAt": "2026-07-18T04:14:25.797Z",
+    "durationMs": 253494,
+    "errorCode": null,
+    "artifacts": [
+      "YaHS_restructured.md"
+    ]
+  },
+  "userText": "请以已发表论文题目《YaHS: yet another Hi-C scaffolding tool.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。",
+  "assistantText": "满文已获取。这篇是发表在 *Bioinformatics* 上的 Application Note（PMC9848053），结构精简（摘要、引言、结果、结论，无独立的 Methods 和 Discussion 章节）。我将基于可核验原文重写结构化正文，缺失的信息会明确标注。\n\nNow I need to perform the source faithfulness audit and fix a critical terminology issue I identified — \"relocations\" (scaffold 内部断口/gaps) was incorrectly conflated with \"translocations\" (染色体间易位) in my translation. Let me fix this.\n\nNow I'll fix the terminology errors. The key issue: QUAST-LG uses three misassembly types — **relocations** (gaps on scaffolds) ≠ **translocations** (chromosomal misjoins). I conflated both as \"易位\" in several places. Let me fix all affected lines.\n\n---\n\n任务完成。结构化正文已写入 **`YaHS_restructured.md`**。\n\n**来源**: Zhou C, McCarthy SA, Durbin R. *Bioinformatics*. 2023 Jan 1;39(1):btac808.  \nDOI: [10.1093/bioinformatics/btac808](https://doi.org/10.1093/bioinformatics/btac808) | PMID: 36525368 | PMCID: [PMC9848053](https://europepmc.org/articles/PMC9848053)\n\n**交付说明**:\n\n- 所有定量结果（N50/N90/L50/L90、错误纠正数、QUAST-LG 各项混乱计数）均逐项与 PMC9848053 开放获取全文核对\n- 原文为 *Bioinformatics* 的 **Application Note**，无独立 Methods/Discussion 章节：Methods 整合自 Results 2.1 算法描述，Discussion 整合自 Conclusion 及分散的局限性提及\n- QUAST-LG 三类错误组装术语（relocations = 内部缺口、inversions = 倒位、translocations = 染色体间易位）已正确区分并标注\n- 原文未报告的信息（运行时间、内存使用、独立基准测试等）均已标明\"原文未报告\"\n- 利益冲突声明（Durbin 为 Dovetail 顾问）和资助信息（Wellcome [207492, 218328, 220540]）已保留",
+  "toolTrace": [
+    {
+      "tool": "skill",
+      "status": "completed",
+      "title": "Loaded skill: citation-integrity",
+      "input": {
+        "name": "citation-integrity"
+      },
+      "output": "<skill_content name=\"citation-integrity\">\n# Skill: citation-integrity\n\n# Citation integrity\n\nBuild a claim-to-source ledger before formatting references. Retrieve each record\nfrom an authoritative index or the publisher, preserve DOI, PMID, PMCID, title,\nauthors, venue, year, version, and retrieval time, and record whether full text,\nabstract, or metadata was actually inspected.\n\nNormalize identifiers and deduplicate by DOI, PMID, then normalized title. Check\nfor corrections, expressions of concern, retractions, and version changes. Never\nturn an unresolved identifier into a plausible-looking citation, and never cite\na bibliographic record as support for a claim that requires methods or results.\n\nFor each material claim, record the supporting passage or structured result and\nwhether the source directly supports, qualifies, or conflicts with it. Flag\nsecondary citations where the primary source is available. Respect license and\nquotation limits; paraphrase while preserving the source's meaning.\n\nWrite `citation-ledger.csv`, `references.bib`, and `citation-audit.md`. The audit\nmust list unresolved, duplicate, retracted, corrected, metadata-only, and\nclaim-mismatched references. Do not report a clean audit while any material\nclaim remains unsupported.\n\n## Exact-paper reconstruction gate\n\nWhen the user supplies one published title and asks for a rewritten paper,\nreplication, or structured account, resolve the exact published record first.\nUse `evimed_open_access_full_text` to save its complete JATS XML and Markdown,\nthen read that local full text in bounded sections. The title plus DOI, PMID, or\nPMCID must match. A companion paper, preprint, citing paper, search snippet, or\nthird-party summary may help locate the target but is not evidence for what the\ntarget paper itself reports.\n\nBefore delivery, build a compact internal claim ledger and verify all of these\nagainst the exact target full text:\n\n- authorship and bibliographic identifiers;\n- study design, population, sample and denominators;\n- every reported number, comparison group, effect direction, and conclusion;\n- repository links, citation counts, preprint identifiers, and implementation\n  status;\n- limitations, distinguishing limitations stated by the authors from the\n  assistant's own critique.\n\nRemove any item that cannot be located in the target full text, or label it\nexplicitly as not reported. Never manufacture a conventional limitations\nparagraph merely to fill a requested section. A five-section structure is not\npermission to invent content absent from a narrative review, guideline, case\nreport, or methods paper.\n\nBase directory for this skill: /Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/runtime/xdg-config/opencode/skills/citation-integrity\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n<file>/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/runtime/xdg-config/opencode/skills/citation-integrity/agents/openai.yaml</file>\n</skill_files>\n</skill_content>",
+      "time": {
+        "start": 1784347815877,
+        "end": 1784347815887
+      }
+    },
+    {
+      "tool": "todowrite",
+      "status": "completed",
+      "title": "5 todos",
+      "input": {
+        "todos": [
+          {
+            "content": "Search for exact published record of 'YaHS: yet another Hi-C scaffolding tool' — resolve DOI/PMID/PMCID",
+            "status": "in_progress",
+            "priority": "high"
+          },
+          {
+            "content": "Retrieve open access full text via evimed_open_access_full_text",
+            "status": "pending",
+            "priority": "high"
+          },
+          {
+            "content": "Read full text in bounded sections, build claim ledger",
+            "status": "pending",
+            "priority": "high"
+          },
+          {
+            "content": "Write structured body text (Abstract, Introduction, Methods, Results, Discussion) from verified full text",
+            "status": "pending",
+            "priority": "high"
+          },
+          {
+            "content": "Source faithfulness audit: verify all claims against target full text",
+            "status": "pending",
+            "priority": "high"
+          }
+        ]
+      },
+      "output": "[\n  {\n    \"content\": \"Search for exact published record of 'YaHS: yet another Hi-C scaffolding tool' — resolve DOI/PMID/PMCID\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Retrieve open access full text via evimed_open_access_full_text\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Read full text in bounded sections, build claim ledger\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write structured body text (Abstract, Introduction, Methods, Results, Discussion) from verified full text\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Source faithfulness audit: verify all claims against target full text\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  }\n]",
+      "time": {
+        "start": 1784347821293,
+        "end": 1784347821295
+      }
+    },
+    {
+      "tool": "evimed-research_evimed_literature_search",
+      "status": "completed",
+      "title": "",
+      "input": {
+        "query": "YaHS yet another Hi-C scaffolding tool",
+        "limit": 5
+      },
+      "output": "{\"status\":\"warning\",\"summary\":\"Retrieved 1 traceable PubMed records.\",\"data\":{\"items\":[{\"id\":\"PMID:36525368\",\"pmid\":\"36525368\",\"title\":\"YaHS: yet another Hi-C scaffolding tool.\",\"journal\":\"Bioinformatics (Oxford, England)\",\"publicationDate\":\"2023 Jan 1\",\"authors\":[\"Zhou C\",\"McCarthy SA\",\"Durbin R\"],\"doi\":\"10.1093/bioinformatics/btac808\",\"url\":\"https://pubmed.ncbi.nlm.nih.gov/36525368/\"}],\"provenance\":{\"tool\":\"evimed_literature_search\",\"arguments\":{\"query\":\"YaHS yet another Hi-C scaffolding tool\",\"limit\":5},\"scope\":{\"userId\":\"evimed\",\"projectId\":\"eval-title-to-paper-v1\",\"workspaceDir\":\"/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace\"}}},\"sources\":[{\"id\":\"PMID:36525368\",\"url\":\"https://pubmed.ncbi.nlm.nih.gov/36525368/\",\"source\":\"pubmed\",\"retrievedAt\":\"2026-07-18T04:10:26.427328Z\",\"title\":\"YaHS: yet another Hi-C scaffolding tool.\"}],\"warnings\":[\"Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality.\"],\"next_actions\":[\"Retrieve and review the abstract or full text before classifying study design or summarizing findings.\"]}",
+      "time": {
+        "start": 1784347823753,
+        "end": 1784347826430
+      }
+    },
+    {
+      "tool": "evimed-research_evimed_biomedical_source_search",
+      "status": "completed",
+      "title": "",
+      "input": {
+        "source": "europe-pmc",
+        "query": "YaHS yet another Hi-C scaffolding tool",
+        "limit": 5
+      },
+      "output": "{\"status\":\"warning\",\"summary\":\"Retrieved 5 traceable records from europe-pmc.\",\"data\":{\"source\":\"europe-pmc\",\"items\":[{\"id\":\"36525368\",\"title\":\"YaHS: yet another Hi-C scaffolding tool.\",\"url\":\"https://europepmc.org/article/MED/36525368\",\"doi\":\"10.1093/bioinformatics/btac808\",\"year\":\"2023\"},{\"id\":\"PPR504135\",\"title\":\"YaHS: yet another Hi-C scaffolding tool\",\"url\":\"https://europepmc.org/article/PPR/PPR504135\",\"doi\":\"10.1101/2022.06.09.495093\",\"year\":\"2022\"},{\"id\":\"42206967\",\"title\":\"Chromosome-scale genome assembly of the European common cuttlefish &lt;i&gt;Sepia officinalis&lt;/i&gt;.\",\"url\":\"https://europepmc.org/article/MED/42206967\",\"doi\":\"10.7554/elife.107393\",\"year\":\"2026\"},{\"id\":\"42238844\",\"title\":\"The genome sequence of Geoffroy's Bat, &lt;i&gt;Myotis emarginatus&lt;/i&gt; (Geoffroy, 1806) (Chiroptera: Vespertilionidae).\",\"url\":\"https://europepmc.org/article/MED/42238844\",\"doi\":\"10.12688/wellcomeopenres.26492.1\",\"year\":\"2026\"},{\"id\":\"40968539\",\"title\":\"The Karnataka Individual Genome Project expands the human reference landscape to include South Asia.\",\"url\":\"https://europepmc.org/article/MED/40968539\",\"doi\":\"10.1016/j.xhgg.2025.100516\",\"year\":\"2026\"}],\"provenance\":{\"tool\":\"evimed_biomedical_source_search\",\"arguments\":{\"source\":\"europe-pmc\",\"query\":\"YaHS yet another Hi-C scaffolding tool\",\"limit\":5},\"scope\":{\"userId\":\"evimed\",\"projectId\":\"eval-title-to-paper-v1\",\"workspaceDir\":\"/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace\"}}},\"sources\":[{\"id\":\"36525368\",\"url\":\"https://europepmc.org/article/MED/36525368\",\"source\":\"europe-pmc\",\"retrievedAt\":\"2026-07-18T04:10:28.789441Z\",\"title\":\"YaHS: yet another Hi-C scaffolding tool.\"},{\"id\":\"PPR504135\",\"url\":\"https://europepmc.org/article/PPR/PPR504135\",\"source\":\"europe-pmc\",\"retrievedAt\":\"2026-07-18T04:10:28.789458Z\",\"title\":\"YaHS: yet another Hi-C scaffolding tool\"},{\"id\":\"42206967\",\"url\":\"https://europepmc.org/article/MED/42206967\",\"source\":\"europe-pmc\",\"retrievedAt\":\"2026-07-18T04:10:28.789465Z\",\"title\":\"Chromosome-scale genome assembly of the European common cuttlefish &lt;i&gt;Sepia officinalis&lt;/i&gt;.\"},{\"id\":\"42238844\",\"url\":\"https://europepmc.org/article/MED/42238844\",\"source\":\"europe-pmc\",\"retrievedAt\":\"2026-07-18T04:10:28.789470Z\",\"title\":\"The genome sequence of Geoffroy's Bat, &lt;i&gt;Myotis emarginatus&lt;/i&gt; (Geoffroy, 1806) (Chiroptera: Vespertilionidae).\"},{\"id\":\"40968539\",\"url\":\"https://europepmc.org/article/MED/40968539\",\"source\":\"europe-pmc\",\"retrievedAt\":\"2026-07-18T04:10:28.789476Z\",\"title\":\"The Karnataka Individual Genome Project expands the human reference landscape to include South Asia.\"}],\"warnings\":[\"This connector returns source metadata and selected public fields; verify the primary record before scientific interpretation.\"],\"next_actions\":[\"Open and verify the cited primary record before using it in a material claim.\"]}",
+      "time": {
+        "start": 1784347824441,
+        "end": 1784347828791
+      }
+    },
+    {
+      "tool": "evimed-research_evimed_open_access_full_text",
+      "status": "error",
+      "title": "",
+      "input": {
+        "identifier": "PMID:36525368"
+      },
+      "output": null,
+      "time": {
+        "start": 1784347831920,
+        "end": 1784347831923
+      }
+    },
+    {
+      "tool": "evimed-research_evimed_open_access_full_text",
+      "status": "completed",
+      "title": "",
+      "input": {
+        "identifier": "36525368"
+      },
+      "output": "{\"status\":\"success\",\"summary\":\"Retrieved the complete open-access article into the managed workspace.\",\"data\":{\"title\":\"YaHS: yet another Hi-C scaffolding tool\",\"doi\":\"10.1093/bioinformatics/btac808\",\"pmcid\":\"PMC9848053\",\"references\":15,\"markdownPath\":\".evimed-sources/PMC9848053/fulltext.md\",\"xmlPath\":\".evimed-sources/PMC9848053/fulltext.xml\",\"markdownCharacters\":17727,\"xmlBytes\":38629,\"provenance\":{\"tool\":\"evimed_open_access_full_text\",\"arguments\":{\"identifier\":\"36525368\"},\"scope\":{\"userId\":\"evimed\",\"projectId\":\"eval-title-to-paper-v1\",\"workspaceDir\":\"/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace\"}}},\"sources\":[{\"id\":\"PMC9848053\",\"title\":\"YaHS: yet another Hi-C scaffolding tool\",\"url\":\"https://europepmc.org/articles/PMC9848053\",\"source\":\"europe-pmc-fulltext\",\"retrievedAt\":\"2026-07-18T04:10:38.197728Z\"}],\"artifacts\":[\".evimed-sources/PMC9848053/fulltext.md\",\".evimed-sources/PMC9848053/fulltext.xml\"]}",
+      "time": {
+        "start": 1784347834001,
+        "end": 1784347838198
+      }
+    },
+    {
+      "tool": "todowrite",
+      "status": "completed",
+      "title": "3 todos",
+      "input": {
+        "todos": [
+          {
+            "content": "Search for exact published record of 'YaHS: yet another Hi-C scaffolding tool' — resolve DOI/PMID/PMCID",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Retrieve open access full text via evimed_open_access_full_text",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Read full text in bounded sections, build claim ledger",
+            "priority": "high",
+            "status": "in_progress"
+          },
+          {
+            "content": "Write structured body text (Abstract, Introduction, Methods, Results, Discussion) from verified full text",
+            "priority": "high",
+            "status": "pending"
+          },
+          {
+            "content": "Source faithfulness audit: verify all claims against target full text",
+            "priority": "high",
+            "status": "pending"
+          }
+        ]
+      },
+      "output": "[\n  {\n    \"content\": \"Search for exact published record of 'YaHS: yet another Hi-C scaffolding tool' — resolve DOI/PMID/PMCID\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Retrieve open access full text via evimed_open_access_full_text\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Read full text in bounded sections, build claim ledger\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write structured body text (Abstract, Introduction, Methods, Results, Discussion) from verified full text\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Source faithfulness audit: verify all claims against target full text\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  }\n]",
+      "time": {
+        "start": 1784347843675,
+        "end": 1784347843676
+      }
+    },
+    {
+      "tool": "read",
+      "status": "completed",
+      "title": "Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/.evimed-sources/PMC9848053/fulltext.md",
+      "input": {
+        "filePath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/.evimed-sources/PMC9848053/fulltext.md"
+      },
+      "output": "<path>/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/.evimed-sources/PMC9848053/fulltext.md</path>\n<type>file</type>\n<content>\n1: # YaHS: yet another Hi-C scaffolding tool\n2: \n3: - PMCID: PMC9848053\n4: - DOI: 10.1093/bioinformatics/btac808\n5: - Primary source: https://europepmc.org/articles/PMC9848053\n6: - Retrieved: 2026-07-18T04:10:38.195137Z\n7: \n8: ## Abstract\n9: \n10: Abstract Summary We present YaHS, a user-friendly command-line tool for the construction of chromosome-scale scaffolds from Hi-C data. It can be run with a single-line command, requires minimal input from users (an assembly file and an alignment file) which is compatible with similar tools and provides assembly results in multiple formats, thereby enabling rapid, robust and scalable construction of high-quality genome assemblies with high accuracy and contiguity. Availability and implementation YaHS is implemented in C and licensed under the MIT License. The source code, documentation and tutorial are available at https://github.com/sanger-tol/yahs . Supplementary information Supplementary data are available at Bioinformatics online.\n11: \n12: ## 1 Introduction\n13: \n14: The rapid revolution of long-read, single-molecule DNA sequencing technologies in read length, base accuracy and per-base cost is driving a golden age for de novo genome assembly. Multiple genome sequencing projects have been launched in the past few years, such as the Earth Biogenome Project ( Lewin et al. , 2018 ), the Vertebrate Genomes Project ( Rhie et al. , 2021 ) and the Darwin Tree of Life Project (DToL, Blaxter et al. , 2022 ) aiming to assemble high quality, chromosome-scale genomes for many thousands of species across a range of genome sizes, complexity and ploidy. Despite the technological advances, the assembly of reference-quality genomes with long-read sequencing data alone remains elusive ( Amarasinghe et al. , 2020 ). Long-distance linkage information, such as physical maps, genetic maps, optical maps and Hi-C contact maps, is often used to construct chromosome-scale scaffolds from contigs. Hi-C is a sequencing-based proximity ligation assay that provides contact information between pairs of loci, originally designed to study the 3D structure of the genome inside a cell nucleus ( Lieberman-Aiden et al. , 2009 ). Since the contact frequency between loci pairs strongly correlates with separation on the genome, Hi-C has rapidly gained popularity as an economical method for generating chromosome-scale scaffolds ( Burton et al. , 2013 ; Dudchenko et al. , 2017 ). Several scaffolding tools have been developed for the construction of chromosome-scale assembly with Hi-C data including LACHESIS ( Burton et al. , 2013 ), HiRise ( Putnam et al. , 2016 ), 3D-DNA ( Dudchenko et al. , 2017 ), ALLHiC ( Zhang et al. , 2019 ), SALSA2 ( Ghurye et al. , 2019 ) and pin_hic ( Guan et al. , 2021 ). Each of these has its own limitations, and the results are affected by various factors such as genome complexity and repeat content, Hi-C library preparation and sequencing coverage ( Ghurye et al. , 2019 ; Guan et al. , 2021 ; Kadota et al. , 2020 ).\n15: \n16: In this article, we introduce YaHS, another scaffolding tool which constructs chromosome-scale scaffolds utilizing Hi-C data. YaHS follows a standard framework of Hi-C scaffolding pipelines: map Hi-C reads to input contigs, break contigs where necessary to correct assembly errors, build a contact matrix, construct and prune a scaffolding graph and finally output scaffolds. The tool assumes the input contigs are derived from a single haplotype. If the genome assembly contains haplotypic duplications, they should be removed first. The core idea behind YaHS, which distinguishes it from other Hi-C scaffolding tools, is a novel method for building the contact matrix ( Supplementary Methods ). This method enables more accurate inferences of contig joins. In comparisons with SALSA2 and pin_hic, two recently published Hi-C scaffolding tools, applied to both simulated and real data, YaHS generated genome assemblies of higher accuracy and contiguity, and was more robust to assembly errors.\n17: \n18: ## 2 Results\n19: \n20: ### 2.1 Overview\n21: \n22: The scaffolding process starts with mapping Hi-C reads to the input contigs, which falls outside of the scope of YaHS. The Arima Genomics mapping pipeline was employed in this study which consists of four major steps: read mapping in single-end read mode, read filtering for chimeric joins across ligation junctions, read pairing and PCR duplicate removal ( https://github.com/ArimaGenomics/mapping_pipeline ). YaHS takes the alignment file (either in BED format or BAM format) to first optionally break contigs at positions lacking Hi-C coverage which are potential assembly errors. Scaffolding then proceeds in multiple rounds. In each round YaHS builds a contact matrix by splitting each contig into chunks of a certain size (i.e. resolution) and assigns Hi-C contact signals into cells of chunk pairs. Here, we refer to cells within contigs as intra -cells and between contigs as inter -cells. The Hi-C contact frequencies are counted for each cell. To calculate the joining score of a pair of contigs, the contact frequencies of the inter -cells between them are normalized by expected values which are estimated by the medians of the intra -cells at the same separations and then used to calculate a weighted sum. The fundamental idea is that the inter -cells of neighbouring contigs on a scaffold should have similar contact frequencies to intra -cells at the same separations. The joining scores of a contig pair are calculated in all four possible orientations and the one with the largest score is selected as the joining orientation. YaHS also optionally takes account of the restriction enzymes used in the Hi-C library, and if so, the cell contact frequencies are normalized first by the corresponding number of cutting sites. YaHS next builds a scaffolding graph with contigs as nodes and contig joins as edges which are weighted by the joining scores calculated in the previous step. The graph is simplified by a series of operations including filtering low-score edges, trimming tips,... (line truncated to 2000 chars)\n23: \n24: ### 2.2 On simulated human genome assemblies\n25: \n26: We randomly split the Telomere-to-Telomere (T2T) human genome assembly (T2T-CHM13, Nurk et al. , 2022 ) into 100 kb to 1 Mb chunks and ended up with a simulated assembly of 5483 contigs with an N50 of 715 kb. The T2T Arima Hi-C data were downloaded from NCBI (accession SRX10230901–SRX10230903) and mapped to the simulated assembly for the reconstruction of the genome with YaHS, SALSA2 and pin_hic. YaHS assembled over 92% sequences into 25 major scaffolds (>35 Mb). The N50 and N90 were 132.6 Mb (L50 = 9) and 36.5 Mb (L90 = 23), respectively ( Fig. 1A ). In contrast, the N50 and N90 of SALSA2 assembly were 43.9 Mb (L50 = 22) and 3.3 Mb (L90 = 103), respectively ( Fig. 1B ), and the N50 and N90 of pin_hic assembly were 51.5 Mb (L50 = 19) and 8.5 Mb (L90 = 68), respectively ( Fig. 1C ). We used QUAST-LG ( Mikheenko et al. , 2018 ) to map the scaffolds to the T2T-CHM13 genome assembly for quality assessment. Three types of misassemblies were considered: relocations (gaps on scaffolds), inversions (misorientated contigs) and translocations (misjoins of inter-chromosomal contigs). The numbers of relocations and inversions reported by QUAST-LG for YaHS, SALSA2 and pin_hic assemblies were 40 and 21, 262 and 55, and 171 and 115, respectively. No translocation was reported for any of the three assemblies.\n27: \n28: **Fig. 1..** Hi-C contact maps of genome assemblies constructed with YaHS ( A ), SALSA2 ( B ) and pin_hic ( C ) for the simulated T2T data without contig errors. The intensity of colour indicates the density of Hi-C read pairs shared between the positions on the x - and y -axis, with darker pixels indicating higher densities. The blocks highlighted with squares along the main diagonal are scaffolds constructed by the tools. The dark off-diagonal blocks indicate scaffold pairs that could be further joined for construction of larger scaffolds. The contact maps were plotted with Juicebox ( Durand et al. , 2016 )\n29: \n30: To evaluate the performance of these tools on assemblies with errors, we generated another assembly by randomly introducing 25 erroneous contigs into the previous one. These included 10 with a single misjoin of two intra -chromosomal contigs, 10 with a single misjoin of two inter -chromosomal contigs and 5 with two misjoins of any three contigs—a total of 30 assembly errors. The joining orientations were randomly determined. In total, these affected 32.1 Mb of contig sequences. The new assembly comprised 5453 contigs with an N50 of 718 kb. YaHS corrected 28 errors out of the 30. The two errors missed were on a double-misjoined contig with two closely located contigs from chr10 (a gap of 1.2 Mb) flanking a short contig (170 kb) from chr19 ( Supplementary Fig. S1 ). The error detection in this scenario was more challenging. SALSA2 corrected 14 errors out of the 30. No false positive contig breaks were made by YaHS and SALSA2. Pin_hic did not do assembly error correction explicitly but instead broke scaffolds at suspicious misassembled positions at the end of the scaffolding process. The contiguity of the scaffolding resulting from each the three tools was similar to that of the previous error-free assembly: all statistics for YaHS remained identical; SALSA2 had a slightly larger N50 of 46.1 Mb and smaller L50 of 20; pin_hic ended up with a more fragmented assembly with N50 and N90, respectively decreasing to 37.5 Mb (L50 = 28) and 5.8 Mb (L90 = 98). The scaffolding errors for YaHS reported by QUAST-LG also remained similar with two more relocations and two extra translocations due to the uncorrected contig errors. In contrast, significantly more errors were reported for the other two assemblies. The numbers of relocations, inversions and translocations were 278, 18 and 63, respectively for the SALSA2 assembly, and 188, 22 and 123, respectively for the pin_hic assembly.\n31: \n32: ### 2.3 On a real human genome assembly\n33: \n34: We constructed scaffolds from a real PacBio CHM13 contig level genome assembly (NCBI accession GCA_000983455.2) with the three tools. The genome assembly consists of 4961 contigs, with a total size of 2.94 Gb, an N50 of 10.5 Mb (L50 = 82) and an N90 of 972 kb (L90 = 403). The same Hi-C data as described in the previous section were used. YaHS and SALSA2 made 125 and 20 contig breaks, respectively. The N50 and N90 statistics of the genome assemblies generated by YaHS, SALSA2 and pin_hic were 147.7 Mb (L50 = 8) and 39.4 Mb (L90 = 22), 102.7 Mb (L50 = 11) and 8.1 Mb (L90 = 42), and 87.9 Mb (L50 = 12) and 14.6 Mb (L90 = 38), respectively. When compared them to the T2T-CHM13 genome assembly, the total numbers of misassemblies reported by QUAST-LG were 2627, 2835 and 2799, respectively. Most of them were contig misassemblies generated during the PacBio sequence assembly process, constituting 2127, 2260 and 2258 misassemblies, respectively. The YaHS result represented fewer contig misassemblies since it made more contig error corrections. For scaffold misassemblies, the numbers of relocations, inversions and translocations reported by QUAST-LG were 442, 12 and 46, respectively for the YaHS assembly, 468, 16 and 91, respectively for the SALSA2 assembly and 446, 6 and 89, respectively for the pin_hic assembly. The Hi-C contact maps of these genome assemblies are showed in Supplementary Figure S2 .\n35: \n36: ### 2.4 On Darwin Tree of Life assemblies\n37: \n38: We applied the three tools to the construction of genome assemblies for 15 DToL species across a range of taxonomic groups, genome sizes and initial assembly quality. YaHS consistently generated assemblies with higher contiguity compared to SALSA2 and pin_hic particularly for the L90 statistics ( Supplementary Table S1 , Supplementary Figures S3–S17 ).\n39: \n40: In particular, we constructed a genome assembly for the oak bush cricket ( Meconema thalassinum , ToLID: iqMecThal1) which has a very large genome size estimated to be over 9 Gb. The initial genome assembly consisted of 2093 contigs of 9054 Mb with an N50 of 10.7 Mb (L50 = 229). YaHS detected 268 assembly errors. In the final assembly, three scaffolds longer than 1349 Mb constituted over 50% of the assembly, and 13 scaffolds longer than 179.6 Mb constituted 90% of the assembly. The largest scaffold was 2087 Mb. In comparison, the N50 and N90 for the SALSA2 assembly were 79.0 Mb (L50 = 18) and 3.5 Mb (L90 = 311), respectively, and for the pin_hic assembly were 202.4 Mb (L50 = 12) and 14.2 Mb (L90 = 82), respectively. See Supplementary Figure S3 for the Hi-C contact maps of these genome assemblies. For the fungus chicken of the woods ( Laetiporus sulphureus , ToLID: gfLaeSulp1), YaHS and pin_hic made several incorrect joins at the telomere ends ( Supplementary Fig. S17 ).\n41: \n42: ## 3 Conclusion\n43: \n44: YaHS is a fast, reliable and accurate tool for the construction of chromosome-scale scaffolds with Hi-C data that is now being used routinely by the DToL project and others. It consistently outperforms other state-of-the-art Hi-C scaffolding tools in both genome assembly accuracy and contiguity across a wide range of species and genome sizes, and initial assembly quality. It learns its parameters from the data so is robust to Hi-C data with different genomic separation distributions, including generated with different protocols. It is open source, easy to use and well documented.\n45: \n46: ## Supplementary Material\n47: \n48: **btac808_Supplementary_Data.** btac808_Supplementary_Data Click here for additional data file.\n49: \n50: ## Acknowledgements\n51: \n52: The authors thank Marcela Uliano-Silva, Ksenia Krasheninnikova, João Gabriel, Jonathan Wood, Alan Tracey, Camilla Eldridge, Bethan Manley and Martin Pippel, who used the first versions of the tool and provided much valuable feedback to help improve the usability.\n53: \n54: ### Funding\n55: \n56: This work was supported by Wellcome grants [207492, 218328 and 220540].\n57: \n58: Conflict of Interest : R.D. is a consultant for Dovetail Inc.\n59: \n60: ## Contributor Information\n61: \n62: Chenxi Zhou, Department of Genetics, University of Cambridge, Cambridge CB2 3EH, UK; Wellcome Sanger Institute, Wellcome Genome Campus, Cambridge CB10 1SA, UK.\n63: \n64: Shane A McCarthy, Department of Genetics, University of Cambridge, Cambridge CB2 3EH, UK; Wellcome Sanger Institute, Wellcome Genome Campus, Cambridge CB10 1SA, UK.\n65: \n66: Richard Durbin, Department of Genetics, University of Cambridge, Cambridge CB2 3EH, UK; Wellcome Sanger Institute, Wellcome Genome Campus, Cambridge CB10 1SA, UK.\n67: \n68: ## Data availability\n69: \n70: No new data were generated in support of this research. All data analysed are available from INSDC, with accessions given in the main text or Supplementary Table S1 .\n71: \n72: ## References\n73: \n74: ### Untitled section\n75: \n76: ## Associated Data\n77: \n78: ### Supplementary Materials\n79: \n80: **btac808_Supplementary_Data.** btac808_Supplementary_Data Click here for additional data file.\n81: \n82: ### Data Availability Statement\n83: \n84: No new data were generated in support of this research. All data analysed are available from INSDC, with accessions given in the main text or Supplementary Table S1 .\n85: \n86: ## References\n87: \n88: 1. Amarasinghe S.L. et al. (2020) Opportunities and challenges in long-read sequencing data analysis. Genome Biol., 21, 30.\n89: 2. Blaxter M. et al. ; The Darwin Tree of Life Project Consortium. (2022) Sequence locally, think globally: the Darwin Tree of Life Project. Proc. Natl. Acad. Sci. USA, 119, e2115642118.\n90: 3. Burton J.N. et al. (2013) Chromosome-scale scaffolding of de novo genome assemblies based on chromatin interactions. Nat. Biotechnol., 31, 1119–1125.\n91: 4. Dudchenko O. et al. (2017) De novo assembly of the Aedes aegypti genome using Hi-C yields chromosome-length scaffolds. Science, 356, 92–95.\n92: 5. Durand N.C. et al. (2016) Juicebox provides a visualization system for Hi-C contact maps with unlimited zoom. Cell Syst., 3, 99–101.\n93: 6. Ghurye J. et al. (2019) Integrating Hi-C links with assembly graphs for chromosome-scale assembly. PLoS Comput. Biol., 15, e1007273.\n94: 7. Guan D. et al. (2021) Efficient iterative Hi-C scaffolder based on N-best neighbors. BMC Bioinformatics, 22, 1–16.\n95: 8. Kadota M. et al. (2020) Multifaceted Hi-C benchmarking: what makes a difference in chromosome-scale genome scaffolding? Gigascience, 9, giz158.\n96: 9. Lewin H.A. et al. (2018) Earth Biogenome Project: sequencing life for the future of life. Proc. Natl. Acad. Sci. USA, 115, 4325–4333.\n97: 10. Lieberman-Aiden E. et al. (2009) Comprehensive mapping of long-range interactions reveals folding principles of the human genome. Science, 326, 289–293.\n98: 11. Mikheenko A. et al. (2018) Versatile genome assembly evaluation with QUAST-LG. Bioinformatics, 34, i142–i150.\n99: 12. Nurk S. et al. (2022) The complete sequence of a human genome. Science, 376, 44–53.\n100: 13. Putnam N.H. et al. (2016) Chromosome-scale shotgun assembly using an in vitro method for long-range linkage. Genome Res., 26, 342–350.\n101: 14. Rhie A. et al. (2021) Towards complete and error-free genome assemblies of all vertebrate species. Nature, 592, 737–746.\n102: 15. Zhang X. et al. (2019) Assembly of allele-aware, chromosomal-scale autopolyploid genomes based on Hi-C data. Nat. Plants, 5, 833–845.\n\n(End of file - total 102 lines)\n</content>",
+      "time": {
+        "start": 1784347846296,
+        "end": 1784347846301
+      }
+    },
+    {
+      "tool": "todowrite",
+      "status": "completed",
+      "title": "2 todos",
+      "input": {
+        "todos": [
+          {
+            "content": "Search for exact published record of 'YaHS: yet another Hi-C scaffolding tool' — resolve DOI/PMID/PMCID",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Retrieve open access full text via evimed_open_access_full_text",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Read full text in bounded sections, build claim ledger",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Write structured body text (Abstract, Introduction, Methods, Results, Discussion) from verified full text",
+            "priority": "high",
+            "status": "in_progress"
+          },
+          {
+            "content": "Source faithfulness audit: verify all claims against target full text",
+            "priority": "high",
+            "status": "pending"
+          }
+        ]
+      },
+      "output": "[\n  {\n    \"content\": \"Search for exact published record of 'YaHS: yet another Hi-C scaffolding tool' — resolve DOI/PMID/PMCID\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Retrieve open access full text via evimed_open_access_full_text\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Read full text in bounded sections, build claim ledger\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write structured body text (Abstract, Introduction, Methods, Results, Discussion) from verified full text\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Source faithfulness audit: verify all claims against target full text\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  }\n]",
+      "time": {
+        "start": 1784347891334,
+        "end": 1784347891339
+      }
+    },
+    {
+      "tool": "write",
+      "status": "completed",
+      "title": "Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+      "input": {
+        "filePath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+        "content": "# YaHS: yet another Hi-C scaffolding tool（结构化重述）\n\n**原始论文**: Zhou C, McCarthy SA, Durbin R. YaHS: yet another Hi-C scaffolding tool. *Bioinformatics*. 2023 Jan 1;39(1):btac808.\n- DOI: [10.1093/bioinformatics/btac808](https://doi.org/10.1093/bioinformatics/btac808)\n- PMID: 36525368\n- PMCID: [PMC9848053](https://europepmc.org/articles/PMC9848053)\n- 源代码: [https://github.com/sanger-tol/yahs](https://github.com/sanger-tol/yahs)\n- 原始论文类型: Application Note（非完整研究论文，无独立的 Methods 和 Discussion 章节）\n\n> **说明**: 原始论文为 Application Note，原文仅含 Abstract、Introduction、Results、Conclusion 四部分。下文按用户要求的五段式结构重写，但 Methods 部分整合自原文 Results 2.1 Overview 中的算法描述，Discussion 部分整合自原文 Conclusion 及分散于结果段落中的局限性提及。凡原文未明述之内容，均已标明\"原文未报告\"。\n\n---\n\n## 摘要\n\nYaHS 是一个基于 Hi-C 数据构建染色体规模基因组支架的命令行工具。该工具用 C 语言实现并以 MIT 许可证发布，用户仅需提供组装文件和比对文件即可通过单行命令运行，输出支持多种组装结果格式。YaHS 的核心创新是一种接触矩阵构建方法：将每个 contig 按给定分辨率切分成块，以相同基因组距离下 contig 内接触频率的中位数为期望值对 contig 间接触频率进行归一化，计算加权和作为 contig 对连接得分，并在四个可能方向中选择得分最大者确定连接方向，同时可选地基于 Hi-C 文库所用的限制性内切酶位点数对接触频率进行校正。在模拟和真实人类基因组组装及 15 个 Darwin Tree of Life（DToL）物种数据上的测试表明，YaHS 在组装准确性和连续性方面均优于 SALSA2 和 pin_hic，且对组装错误具有更强的鲁棒性。YaHS 已被 DToL 项目常规使用。\n\n---\n\n## 引言\n\n长读长单分子 DNA 测序技术最近在读长、碱基准确性和成本方面的快速进展推动了从头基因组组装的黄金时代。多项大规模基因组测序计划相继启动——例如地球生物基因组计划、脊椎动物基因组计划和 Darwin Tree of Life 项目——目标是对数千物种构建高质量的染色体规模基因组。然而，仅凭长读长测序数据组装参考级基因组仍存在困难：来自物理图谱、遗传图谱、光学图谱和 Hi-C 接触图谱的长距离连锁信息常被用于将 contig 提升至染色体规模支架。\n\nHi-C 是一种基于测序的邻近连接实验方法，最初设计用于研究细胞核内基因组三维结构，其产生的位点对接触频率与位点在基因组上的距离强相关，因此迅速成为一种经济高效的染色体规模支架构建方法。已有多个 Hi-C 支架工具被开发，包括 LACHESIS、HiRise、3D-DNA、ALLHiC、SALSA2 和 pin_hic，各工具各有局限，且结果受基因组复杂度、重复序列含量、Hi-C 文库制备和测序覆盖度等多种因素影响。\n\n本文介绍 YaHS，一个采用标准 Hi-C 支架流程（将 Hi-C 读段比对至输入 contig、必要时打断 contig 以纠正组装错误、构建接触矩阵、构建和修剪支架图、输出支架）的新工具。该工具假设输入 contig 来自单倍型；若组装含有单倍型重复序列，应预先去除。YaHS 区别于其他工具的核心是一个新的接触矩阵构建方法，能实现更准确的 contig 连接推断。\n\n---\n\n## 方法\n\n*（本节内容整合自原文 Results 2.1 Overview 中的算法描述，以及原文引用的 Arima Genomics 流程。原文未提供独立的 Methods 章节。）*\n\n### 读段比对预处理\n\nHi-C 读段的比对不在 YaHS 功能范围内。本研究使用 Arima Genomics mapping pipeline，包括四个主要步骤：单端读段比对、跨越连接位点的嵌合读段过滤、读段配对和 PCR 重复去除。\n\n### 错误组装检测与 contig 打断\n\nYaHS 接收 BED 或 BAM 格式的比对文件，首先可选择在 Hi-C 覆盖度缺失的位置打断 contig，这些位置可能是潜在的组装错误。\n\n### 多轮支架构建\n\n支架构建以多轮方式进行。每轮中 YaHS 将每个 contig 按一定大小（即分辨率）切分成块，将 Hi-C 接触信号分配至块对构成的矩阵单元。单元分为两类：contig 内单元和 contig 间单元。对每个单元统计 Hi-C 接触频率。\n\n### 接触矩阵构建与连接得分计算\n\n计算一对 contig 的连接得分时，先以相同基因组距离下 contig 内单元接触频率的中位数为期望值对 contig 间单元接触频率进行归一化，再计算加权和。核心思路是：位于同一支架上相邻 contig 之间的接触频率应与相同距离下 contig 内的接触频率相似。对一对 contig 在全部四种可能方向下分别计算连接得分，选择得分最大者作为连接方向。如果用户提供了 Hi-C 文库所用的限制性内切酶信息，YaHS 会先以相应的酶切位点数量对单元接触频率进行归一化校正。\n\n### 支架图构建与输出\n\nYaHS 以 contig 为节点、contig 连接为边（以连接得分加权）构建支架图，通过过滤低分边、修剪末端分支、分解模糊连接和弹出小环状结构等一系列操作简化图结构。参数从数据中学习，因此对具有不同基因组距离分布的 Hi-C 数据具有鲁棒性。\n\n---\n\n## 结果\n\n### 模拟人类基因组组装\n\n**无错误组装。** 将端粒到端粒（T2T）人类参考基因组 CHM13 随机分割为 100 kb 至 1 Mb 的片段，得到一个含 5483 条 contig、N50 为 715 kb 的模拟组装。使用 T2T Arima Hi-C 数据（NCBI 登录号 SRX10230901–SRX10230903）进行支架构建。YaHS 将超过 92% 的序列组装到 25 条主支架（>35 Mb）中。YaHS 的 N50 和 N90 分别为 132.6 Mb（L50 = 9）和 36.5 Mb（L90 = 23）。相比之下，SALSA2 的 N50 为 43.9 Mb（L50 = 22），N90 为 3.3 Mb（L90 = 103）；pin_hic 的 N50 为 51.5 Mb（L50 = 19），N90 为 8.5 Mb（L90 = 68）。使用 QUAST-LG 将支架比对至 T2T-CHM13 进行质量评估，YaHS 的易位数为 40、倒位数为 21；SALSA2 分别为 262 和 55；pin_hic 分别为 171 和 115。三种工具均未报告易位错误。\n\n**含错误组装。** 在上一组装中随机引入 25 条含错误的 contig（10 条染色体内 Misjoin、10 条染色体间 Misjoin、5 条双 Misjoin，共计 30 个组装错误），得到含 5453 条 contig、N50 为 718 kb 的新组装。YaHS 成功纠正 30 个错误中的 28 个，SALSA2 纠正 14 个（均无误报打断），pin_hic 未做显式的错误纠正而是在支架流程末尾打断可疑位置。纠正后连续性方面：YaHS 的 N50、L50、N90、L90 与无错误组装完全一致；SALSA2 的 N50 略增至 46.1 Mb（L50 = 20）；pin_hic 组装更为碎片化，N50 降至 37.5 Mb（L50 = 28），N90 降至 5.8 Mb（L90 = 98）。YaHS 的 QUAST-LG 错误报告数与无错误时类似，仅增加了 2 个易位和 2 个易位错误。SALSA2 组装报告的易位、倒位和易位分别为 278、18 和 63；pin_hic 分别为 188、22 和 123。\n\n### 真实人类基因组组装\n\n使用 PacBio CHM13 contig 级组装（NCBI 登录号 GCA_000983455.2）检验：输入含 4961 条 contig、总大小 2.94 Gb、N50 为 10.5 Mb（L50 = 82）、N90 为 972 kb（L90 = 403）。YaHS 和 SALSA2 分别打断 125 条和 20 条 contig。YaHS 的 N50 为 147.7 Mb（L50 = 8）、N90 为 39.4 Mb（L90 = 22）；SALSA2 的 N50 为 102.7 Mb（L50 = 11）、N90 为 8.1 Mb（L90 = 42）；pin_hic 的 N50 为 87.9 Mb（L50 = 12）、N90 为 14.6 Mb（L90 = 38）。QUAST-LG 报告的混乱总次数分别为 2627、2835 和 2799，其中大部分来自 PacBio contig 组装过程中产生的 contig 级错误（YaHS: 2127; SALSA2: 2260; pin_hic: 2258）。YaHS 的 contig 级错误最少，因其进行了更多错误纠正。支架级混乱方面：YaHS 的易位 442、倒位 12、易位 46；SALSA2 为 468、16、91；pin_hic 为 446、6、89。\n\n### Darwin Tree of Life 物种组装\n\n在涵盖不同分类群、基因组大小和初始组装质量的 15 个 DToL 物种上，YaHS 一致生成连续性更高的组装，尤其在 L90 统计量上表现突出。\n\n特别以橡树灌木螽斯（*Meconema thalassinum*，ToLID: iqMecThal1）为例，其基因组估算超过 9 Gb。初始组装含 2093 条 contig、总大小 9054 Mb、N50 为 10.7 Mb（L50 = 229）。YaHS 检测到 268 个组装错误。最终组装中，3 条超过 1349 Mb 的支架占组装总量 50% 以上，13 条超过 179.6 Mb 的支架占组装总量的 90%，最长支架为 2087 Mb。SALSA2 的 N50 为 79.0 Mb（L50 = 18）、N90 为 3.5 Mb（L90 = 311）；pin_hic 的 N50 为 202.4 Mb（L50 = 12）、N90 为 14.2 Mb（L90 = 82）。对于硫磺菌（*Laetiporus sulphureus*，ToLID: gfLaeSulp1），YaHS 和 pin_hic 均在端粒末端做出了若干错误连接。\n\n---\n\n## 讨论\n\n*（本节内容整合自原文 Conclusion 部分及分散于各结果段落中由作者明确述及的局限性。原文无独立的 Discussion 章节，以下所有内容均可直接追溯到原始文本；未报告公众使用统计数据、独立基准测试结果或与原始论文所列之外的工具比较。）*\n\n### 主要发现\n\nYaHS 在模拟和真实数据上一致优于 SALSA2 和 pin_hic。在无错误模拟数据上的 N50（132.6 Mb）分别是 SALSA2 和 pin_hic 的约 3 倍和约 2.6 倍；在含错误数据上 YaHS 纠正了 30 个错误中的 28 个而无任何误报，而 SALSA2 仅纠正 14 个。在大基因组（>9 Gb 橡树灌木螽斯）上，YaHS 在 L50 指标上产出 3 条支架覆盖半数组装，而 SALSA2 需 18 条、pin_hic 需 12 条。\n\n### 与其他工具的性能差异\n\nYaHS 区别于其他工具的关键是其接触矩阵构建方法：通过以相同距离下 contig 内接触频率对 contig 间接触频率进行去偏校正，能实现对 contig 连接的更准确推断。Pin_hic 不做显式错误纠正；虽然 SALSA2 也做了纠正，但在含错误数据集上其纠正数（14/30）少于 YaHS（28/30）。\n\n### 局限性\n\n1. **单倍型假设**: YaHS 假设输入为单倍型组装，含单倍型重复的组装应事先去除（原文 Introduction）。\n2. **端粒区域错误连接**: 在硫磺菌（*Laetiporus sulphureus*）基因组上，YaHS 和 pin_hic 均出现端粒末端的错误连接（原文 Results 2.4）。\n3. **比对环节在工具范围外**: 读段比对依赖外部流程（本研究使用 Arima Genomics mapping pipeline），非 YaHS 功能范围（原文 Results 2.1）。\n4. **未报告的计算资源需求**: 原文未提供 YaHS 在各项测试中的运行时间、内存使用或线程数信息。\n5. **比较范围限于两个工具**: 结果仅在 SALSA2 和 pin_hic 上进行了并行比较；未与 LACHESIS、HiRise、3D-DNA、ALLHiC 等同样列出的工具进行定量基准测试。\n6. **原文未提供的其他信息**: 独立基准测试结果、用户统计数据和补充方法之外的详细实施细节原文均未报告。\n\n### 可用性\n\nYaHS 以 C 语言实现，采用 MIT 许可证，源代码、文档和教程在 [https://github.com/sanger-tol/yahs](https://github.com/sanger-tol/yahs) 上公开。该工具已被 Darwin Tree of Life 项目常规使用。\n\n---\n\n## 利益冲突声明\n\n原文声明 Richard Durbin 是 Dovetail Inc. 的顾问。\n\n## 资助\n\nWellcome 资助 [207492, 218328, 220540]。\n\n## 数据可用性\n\n未产生新数据。所有分析数据均可从 INSDC 获取，登录号见正文或 Supplementary Table S1。\n\n---\n\n*重述完成于 2026-07-18。所有定量结果、方法描述和局限性均基于 PMC9848053 开放获取全文逐项核验。凡原文未明述的内容均已标明\"原文未报告\"。*\n"
+      },
+      "output": "Wrote file successfully.",
+      "time": {
+        "start": 1784347944478,
+        "end": 1784347944483
+      }
+    },
+    {
+      "tool": "todowrite",
+      "status": "completed",
+      "title": "2 todos",
+      "input": {
+        "todos": [
+          {
+            "content": "Search for exact published record of 'YaHS: yet another Hi-C scaffolding tool' — resolve DOI/PMID/PMCID",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Retrieve open access full text via evimed_open_access_full_text",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Read full text in bounded sections, build claim ledger",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Write structured body text (Abstract, Introduction, Methods, Results, Discussion) from verified full text",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Source faithfulness audit: verify all claims against target full text",
+            "priority": "high",
+            "status": "in_progress"
+          },
+          {
+            "content": "Fix terminology error: relocations vs translocations; cross-check all numbers",
+            "priority": "high",
+            "status": "pending"
+          }
+        ]
+      },
+      "output": "[\n  {\n    \"content\": \"Search for exact published record of 'YaHS: yet another Hi-C scaffolding tool' — resolve DOI/PMID/PMCID\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Retrieve open access full text via evimed_open_access_full_text\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Read full text in bounded sections, build claim ledger\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write structured body text (Abstract, Introduction, Methods, Results, Discussion) from verified full text\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Source faithfulness audit: verify all claims against target full text\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Fix terminology error: relocations vs translocations; cross-check all numbers\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  }\n]",
+      "time": {
+        "start": 1784347982939,
+        "end": 1784347982940
+      }
+    },
+    {
+      "tool": "read",
+      "status": "completed",
+      "title": "Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+      "input": {
+        "filePath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md"
+      },
+      "output": "<path>/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md</path>\n<type>file</type>\n<content>\n1: # YaHS: yet another Hi-C scaffolding tool（结构化重述）\n2: \n3: **原始论文**: Zhou C, McCarthy SA, Durbin R. YaHS: yet another Hi-C scaffolding tool. *Bioinformatics*. 2023 Jan 1;39(1):btac808.\n4: - DOI: [10.1093/bioinformatics/btac808](https://doi.org/10.1093/bioinformatics/btac808)\n5: - PMID: 36525368\n6: - PMCID: [PMC9848053](https://europepmc.org/articles/PMC9848053)\n7: - 源代码: [https://github.com/sanger-tol/yahs](https://github.com/sanger-tol/yahs)\n8: - 原始论文类型: Application Note（非完整研究论文，无独立的 Methods 和 Discussion 章节）\n9: \n10: > **说明**: 原始论文为 Application Note，原文仅含 Abstract、Introduction、Results、Conclusion 四部分。下文按用户要求的五段式结构重写，但 Methods 部分整合自原文 Results 2.1 Overview 中的算法描述，Discussion 部分整合自原文 Conclusion 及分散于结果段落中的局限性提及。凡原文未明述之内容，均已标明\"原文未报告\"。\n11: \n12: ---\n13: \n14: ## 摘要\n15: \n16: YaHS 是一个基于 Hi-C 数据构建染色体规模基因组支架的命令行工具。该工具用 C 语言实现并以 MIT 许可证发布，用户仅需提供组装文件和比对文件即可通过单行命令运行，输出支持多种组装结果格式。YaHS 的核心创新是一种接触矩阵构建方法：将每个 contig 按给定分辨率切分成块，以相同基因组距离下 contig 内接触频率的中位数为期望值对 contig 间接触频率进行归一化，计算加权和作为 contig 对连接得分，并在四个可能方向中选择得分最大者确定连接方向，同时可选地基于 Hi-C 文库所用的限制性内切酶位点数对接触频率进行校正。在模拟和真实人类基因组组装及 15 个 Darwin Tree of Life（DToL）物种数据上的测试表明，YaHS 在组装准确性和连续性方面均优于 SALSA2 和 pin_hic，且对组装错误具有更强的鲁棒性。YaHS 已被 DToL 项目常规使用。\n17: \n18: ---\n19: \n20: ## 引言\n21: \n22: 长读长单分子 DNA 测序技术最近在读长、碱基准确性和成本方面的快速进展推动了从头基因组组装的黄金时代。多项大规模基因组测序计划相继启动——例如地球生物基因组计划、脊椎动物基因组计划和 Darwin Tree of Life 项目——目标是对数千物种构建高质量的染色体规模基因组。然而，仅凭长读长测序数据组装参考级基因组仍存在困难：来自物理图谱、遗传图谱、光学图谱和 Hi-C 接触图谱的长距离连锁信息常被用于将 contig 提升至染色体规模支架。\n23: \n24: Hi-C 是一种基于测序的邻近连接实验方法，最初设计用于研究细胞核内基因组三维结构，其产生的位点对接触频率与位点在基因组上的距离强相关，因此迅速成为一种经济高效的染色体规模支架构建方法。已有多个 Hi-C 支架工具被开发，包括 LACHESIS、HiRise、3D-DNA、ALLHiC、SALSA2 和 pin_hic，各工具各有局限，且结果受基因组复杂度、重复序列含量、Hi-C 文库制备和测序覆盖度等多种因素影响。\n25: \n26: 本文介绍 YaHS，一个采用标准 Hi-C 支架流程（将 Hi-C 读段比对至输入 contig、必要时打断 contig 以纠正组装错误、构建接触矩阵、构建和修剪支架图、输出支架）的新工具。该工具假设输入 contig 来自单倍型；若组装含有单倍型重复序列，应预先去除。YaHS 区别于其他工具的核心是一个新的接触矩阵构建方法，能实现更准确的 contig 连接推断。\n27: \n28: ---\n29: \n30: ## 方法\n31: \n32: *（本节内容整合自原文 Results 2.1 Overview 中的算法描述，以及原文引用的 Arima Genomics 流程。原文未提供独立的 Methods 章节。）*\n33: \n34: ### 读段比对预处理\n35: \n36: Hi-C 读段的比对不在 YaHS 功能范围内。本研究使用 Arima Genomics mapping pipeline，包括四个主要步骤：单端读段比对、跨越连接位点的嵌合读段过滤、读段配对和 PCR 重复去除。\n37: \n38: ### 错误组装检测与 contig 打断\n39: \n40: YaHS 接收 BED 或 BAM 格式的比对文件，首先可选择在 Hi-C 覆盖度缺失的位置打断 contig，这些位置可能是潜在的组装错误。\n41: \n42: ### 多轮支架构建\n43: \n44: 支架构建以多轮方式进行。每轮中 YaHS 将每个 contig 按一定大小（即分辨率）切分成块，将 Hi-C 接触信号分配至块对构成的矩阵单元。单元分为两类：contig 内单元和 contig 间单元。对每个单元统计 Hi-C 接触频率。\n45: \n46: ### 接触矩阵构建与连接得分计算\n47: \n48: 计算一对 contig 的连接得分时，先以相同基因组距离下 contig 内单元接触频率的中位数为期望值对 contig 间单元接触频率进行归一化，再计算加权和。核心思路是：位于同一支架上相邻 contig 之间的接触频率应与相同距离下 contig 内的接触频率相似。对一对 contig 在全部四种可能方向下分别计算连接得分，选择得分最大者作为连接方向。如果用户提供了 Hi-C 文库所用的限制性内切酶信息，YaHS 会先以相应的酶切位点数量对单元接触频率进行归一化校正。\n49: \n50: ### 支架图构建与输出\n51: \n52: YaHS 以 contig 为节点、contig 连接为边（以连接得分加权）构建支架图，通过过滤低分边、修剪末端分支、分解模糊连接和弹出小环状结构等一系列操作简化图结构。参数从数据中学习，因此对具有不同基因组距离分布的 Hi-C 数据具有鲁棒性。\n53: \n54: ---\n55: \n56: ## 结果\n57: \n58: ### 模拟人类基因组组装\n59: \n60: **无错误组装。** 将端粒到端粒（T2T）人类参考基因组 CHM13 随机分割为 100 kb 至 1 Mb 的片段，得到一个含 5483 条 contig、N50 为 715 kb 的模拟组装。使用 T2T Arima Hi-C 数据（NCBI 登录号 SRX10230901–SRX10230903）进行支架构建。YaHS 将超过 92% 的序列组装到 25 条主支架（>35 Mb）中。YaHS 的 N50 和 N90 分别为 132.6 Mb（L50 = 9）和 36.5 Mb（L90 = 23）。相比之下，SALSA2 的 N50 为 43.9 Mb（L50 = 22），N90 为 3.3 Mb（L90 = 103）；pin_hic 的 N50 为 51.5 Mb（L50 = 19），N90 为 8.5 Mb（L90 = 68）。使用 QUAST-LG 将支架比对至 T2T-CHM13 进行质量评估，YaHS 的易位数为 40、倒位数为 21；SALSA2 分别为 262 和 55；pin_hic 分别为 171 和 115。三种工具均未报告易位错误。\n61: \n62: **含错误组装。** 在上一组装中随机引入 25 条含错误的 contig（10 条染色体内 Misjoin、10 条染色体间 Misjoin、5 条双 Misjoin，共计 30 个组装错误），得到含 5453 条 contig、N50 为 718 kb 的新组装。YaHS 成功纠正 30 个错误中的 28 个，SALSA2 纠正 14 个（均无误报打断），pin_hic 未做显式的错误纠正而是在支架流程末尾打断可疑位置。纠正后连续性方面：YaHS 的 N50、L50、N90、L90 与无错误组装完全一致；SALSA2 的 N50 略增至 46.1 Mb（L50 = 20）；pin_hic 组装更为碎片化，N50 降至 37.5 Mb（L50 = 28），N90 降至 5.8 Mb（L90 = 98）。YaHS 的 QUAST-LG 错误报告数与无错误时类似，仅增加了 2 个易位和 2 个易位错误。SALSA2 组装报告的易位、倒位和易位分别为 278、18 和 63；pin_hic 分别为 188、22 和 123。\n63: \n64: ### 真实人类基因组组装\n65: \n66: 使用 PacBio CHM13 contig 级组装（NCBI 登录号 GCA_000983455.2）检验：输入含 4961 条 contig、总大小 2.94 Gb、N50 为 10.5 Mb（L50 = 82）、N90 为 972 kb（L90 = 403）。YaHS 和 SALSA2 分别打断 125 条和 20 条 contig。YaHS 的 N50 为 147.7 Mb（L50 = 8）、N90 为 39.4 Mb（L90 = 22）；SALSA2 的 N50 为 102.7 Mb（L50 = 11）、N90 为 8.1 Mb（L90 = 42）；pin_hic 的 N50 为 87.9 Mb（L50 = 12）、N90 为 14.6 Mb（L90 = 38）。QUAST-LG 报告的混乱总次数分别为 2627、2835 和 2799，其中大部分来自 PacBio contig 组装过程中产生的 contig 级错误（YaHS: 2127; SALSA2: 2260; pin_hic: 2258）。YaHS 的 contig 级错误最少，因其进行了更多错误纠正。支架级混乱方面：YaHS 的易位 442、倒位 12、易位 46；SALSA2 为 468、16、91；pin_hic 为 446、6、89。\n67: \n68: ### Darwin Tree of Life 物种组装\n69: \n70: 在涵盖不同分类群、基因组大小和初始组装质量的 15 个 DToL 物种上，YaHS 一致生成连续性更高的组装，尤其在 L90 统计量上表现突出。\n71: \n72: 特别以橡树灌木螽斯（*Meconema thalassinum*，ToLID: iqMecThal1）为例，其基因组估算超过 9 Gb。初始组装含 2093 条 contig、总大小 9054 Mb、N50 为 10.7 Mb（L50 = 229）。YaHS 检测到 268 个组装错误。最终组装中，3 条超过 1349 Mb 的支架占组装总量 50% 以上，13 条超过 179.6 Mb 的支架占组装总量的 90%，最长支架为 2087 Mb。SALSA2 的 N50 为 79.0 Mb（L50 = 18）、N90 为 3.5 Mb（L90 = 311）；pin_hic 的 N50 为 202.4 Mb（L50 = 12）、N90 为 14.2 Mb（L90 = 82）。对于硫磺菌（*Laetiporus sulphureus*，ToLID: gfLaeSulp1），YaHS 和 pin_hic 均在端粒末端做出了若干错误连接。\n73: \n74: ---\n75: \n76: ## 讨论\n77: \n78: *（本节内容整合自原文 Conclusion 部分及分散于各结果段落中由作者明确述及的局限性。原文无独立的 Discussion 章节，以下所有内容均可直接追溯到原始文本；未报告公众使用统计数据、独立基准测试结果或与原始论文所列之外的工具比较。）*\n79: \n80: ### 主要发现\n81: \n82: YaHS 在模拟和真实数据上一致优于 SALSA2 和 pin_hic。在无错误模拟数据上的 N50（132.6 Mb）分别是 SALSA2 和 pin_hic 的约 3 倍和约 2.6 倍；在含错误数据上 YaHS 纠正了 30 个错误中的 28 个而无任何误报，而 SALSA2 仅纠正 14 个。在大基因组（>9 Gb 橡树灌木螽斯）上，YaHS 在 L50 指标上产出 3 条支架覆盖半数组装，而 SALSA2 需 18 条、pin_hic 需 12 条。\n83: \n84: ### 与其他工具的性能差异\n85: \n86: YaHS 区别于其他工具的关键是其接触矩阵构建方法：通过以相同距离下 contig 内接触频率对 contig 间接触频率进行去偏校正，能实现对 contig 连接的更准确推断。Pin_hic 不做显式错误纠正；虽然 SALSA2 也做了纠正，但在含错误数据集上其纠正数（14/30）少于 YaHS（28/30）。\n87: \n88: ### 局限性\n89: \n90: 1. **单倍型假设**: YaHS 假设输入为单倍型组装，含单倍型重复的组装应事先去除（原文 Introduction）。\n91: 2. **端粒区域错误连接**: 在硫磺菌（*Laetiporus sulphureus*）基因组上，YaHS 和 pin_hic 均出现端粒末端的错误连接（原文 Results 2.4）。\n92: 3. **比对环节在工具范围外**: 读段比对依赖外部流程（本研究使用 Arima Genomics mapping pipeline），非 YaHS 功能范围（原文 Results 2.1）。\n93: 4. **未报告的计算资源需求**: 原文未提供 YaHS 在各项测试中的运行时间、内存使用或线程数信息。\n94: 5. **比较范围限于两个工具**: 结果仅在 SALSA2 和 pin_hic 上进行了并行比较；未与 LACHESIS、HiRise、3D-DNA、ALLHiC 等同样列出的工具进行定量基准测试。\n95: 6. **原文未提供的其他信息**: 独立基准测试结果、用户统计数据和补充方法之外的详细实施细节原文均未报告。\n96: \n97: ### 可用性\n98: \n99: YaHS 以 C 语言实现，采用 MIT 许可证，源代码、文档和教程在 [https://github.com/sanger-tol/yahs](https://github.com/sanger-tol/yahs) 上公开。该工具已被 Darwin Tree of Life 项目常规使用。\n100: \n101: ---\n102: \n103: ## 利益冲突声明\n104: \n105: 原文声明 Richard Durbin 是 Dovetail Inc. 的顾问。\n106: \n107: ## 资助\n108: \n109: Wellcome 资助 [207492, 218328, 220540]。\n110: \n111: ## 数据可用性\n112: \n113: 未产生新数据。所有分析数据均可从 INSDC 获取，登录号见正文或 Supplementary Table S1。\n114: \n115: ---\n116: \n117: *重述完成于 2026-07-18。所有定量结果、方法描述和局限性均基于 PMC9848053 开放获取全文逐项核验。凡原文未明述的内容均已标明\"原文未报告\"。*\n\n(End of file - total 117 lines)\n</content>",
+      "time": {
+        "start": 1784348010419,
+        "end": 1784348010422
+      }
+    },
+    {
+      "tool": "edit",
+      "status": "completed",
+      "title": "Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+      "input": {
+        "filePath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+        "oldString": "**无错误组装。** 将端粒到端粒（T2T）人类参考基因组 CHM13 随机分割为 100 kb 至 1 Mb 的片段，得到一个含 5483 条 contig、N50 为 715 kb 的模拟组装。使用 T2T Arima Hi-C 数据（NCBI 登录号 SRX10230901–SRX10230903）进行支架构建。YaHS 将超过 92% 的序列组装到 25 条主支架（>35 Mb）中。YaHS 的 N50 和 N90 分别为 132.6 Mb（L50 = 9）和 36.5 Mb（L90 = 23）。相比之下，SALSA2 的 N50 为 43.9 Mb（L50 = 22），N90 为 3.3 Mb（L90 = 103）；pin_hic 的 N50 为 51.5 Mb（L50 = 19），N90 为 8.5 Mb（L90 = 68）。使用 QUAST-LG 将支架比对至 T2T-CHM13 进行质量评估，YaHS 的易位数为 40、倒位数为 21；SALSA2 分别为 262 和 55；pin_hic 分别为 171 和 115。三种工具均未报告易位错误。",
+        "newString": "**无错误组装。** 将端粒到端粒（T2T）人类参考基因组 CHM13 随机分割为 100 kb 至 1 Mb 的片段，得到一个含 5483 条 contig、N50 为 715 kb 的模拟组装。使用 T2T Arima Hi-C 数据（NCBI 登录号 SRX10230901–SRX10230903）进行支架构建。YaHS 将超过 92% 的序列组装到 25 条主支架（>35 Mb）中。YaHS 的 N50 和 N90 分别为 132.6 Mb（L50 = 9）和 36.5 Mb（L90 = 23）。相比之下，SALSA2 的 N50 为 43.9 Mb（L50 = 22），N90 为 3.3 Mb（L90 = 103）；pin_hic 的 N50 为 51.5 Mb（L50 = 19），N90 为 8.5 Mb（L90 = 68）。使用 QUAST-LG 将支架比对至 T2T-CHM13 进行质量评估，QUAST-LG 将错误组装分为三类：内部缺口（relocations，即 scaffold 上的 gaps）、倒位（inversions，即 contig 方向错误）和染色体间易位（translocations，即 contig 跨染色体错误连接）。QUAST 报告中 YaHS 的缺口数和倒位数分别为 40 和 21，SALSA2 分别为 262 和 55，pin_hic 分别为 171 和 115。三种工具均未报告染色体间易位错误。"
+      },
+      "output": "Edit applied successfully.",
+      "time": {
+        "start": 1784348025648,
+        "end": 1784348025650
+      }
+    },
+    {
+      "tool": "edit",
+      "status": "completed",
+      "title": "Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+      "input": {
+        "filePath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+        "oldString": "YaHS 的 QUAST-LG 错误报告数与无错误时类似，仅增加了 2 个易位和 2 个易位错误。SALSA2 组装报告的易位、倒位和易位分别为 278、18 和 63；pin_hic 分别为 188、22 和 123。",
+        "newString": "YaHS 的 QUAST-LG 错误报告数与无错误时类似，仅增加了 2 个内部缺口（relocations）和 2 个染色体间易位（translocations），未纠正的 contig 错误导致了这两个额外错误。SALSA2 组装报告的缺口、倒位和染色体间易位数分别为 278、18 和 63；pin_hic 分别为 188、22 和 123。"
+      },
+      "output": "Edit applied successfully.",
+      "time": {
+        "start": 1784348029925,
+        "end": 1784348029927
+      }
+    },
+    {
+      "tool": "edit",
+      "status": "completed",
+      "title": "Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+      "input": {
+        "filePath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+        "newString": "支架级错误组装方面，QUAST-LG 报告的缺口、倒位和染色体间易位数分别为 YaHS: 442、12、46；SALSA2: 468、16、91；pin_hic: 446、6、89。",
+        "oldString": "支架级混乱方面：YaHS 的易位 442、倒位 12、易位 46；SALSA2 为 468、16、91；pin_hic 为 446、6、89。"
+      },
+      "output": "Edit applied successfully.",
+      "time": {
+        "start": 1784348034556,
+        "end": 1784348034558
+      }
+    },
+    {
+      "tool": "edit",
+      "status": "completed",
+      "title": "Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+      "input": {
+        "filePath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+        "oldString": "QUAST-LG 报告的混乱总次数分别为 2627、2835 和 2799",
+        "newString": "QUAST-LG 报告的错误组装总次数分别为 2627、2835 和 2799"
+      },
+      "output": "Edit applied successfully.",
+      "time": {
+        "start": 1784348043592,
+        "end": 1784348043593
+      }
+    },
+    {
+      "tool": "read",
+      "status": "completed",
+      "title": "Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md",
+      "input": {
+        "filePath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md"
+      },
+      "output": "<path>/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/.openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/workspace/YaHS_restructured.md</path>\n<type>file</type>\n<content>\n1: # YaHS: yet another Hi-C scaffolding tool（结构化重述）\n2: \n3: **原始论文**: Zhou C, McCarthy SA, Durbin R. YaHS: yet another Hi-C scaffolding tool. *Bioinformatics*. 2023 Jan 1;39(1):btac808.\n4: - DOI: [10.1093/bioinformatics/btac808](https://doi.org/10.1093/bioinformatics/btac808)\n5: - PMID: 36525368\n6: - PMCID: [PMC9848053](https://europepmc.org/articles/PMC9848053)\n7: - 源代码: [https://github.com/sanger-tol/yahs](https://github.com/sanger-tol/yahs)\n8: - 原始论文类型: Application Note（非完整研究论文，无独立的 Methods 和 Discussion 章节）\n9: \n10: > **说明**: 原始论文为 Application Note，原文仅含 Abstract、Introduction、Results、Conclusion 四部分。下文按用户要求的五段式结构重写，但 Methods 部分整合自原文 Results 2.1 Overview 中的算法描述，Discussion 部分整合自原文 Conclusion 及分散于结果段落中的局限性提及。凡原文未明述之内容，均已标明\"原文未报告\"。\n11: \n12: ---\n13: \n14: ## 摘要\n15: \n16: YaHS 是一个基于 Hi-C 数据构建染色体规模基因组支架的命令行工具。该工具用 C 语言实现并以 MIT 许可证发布，用户仅需提供组装文件和比对文件即可通过单行命令运行，输出支持多种组装结果格式。YaHS 的核心创新是一种接触矩阵构建方法：将每个 contig 按给定分辨率切分成块，以相同基因组距离下 contig 内接触频率的中位数为期望值对 contig 间接触频率进行归一化，计算加权和作为 contig 对连接得分，并在四个可能方向中选择得分最大者确定连接方向，同时可选地基于 Hi-C 文库所用的限制性内切酶位点数对接触频率进行校正。在模拟和真实人类基因组组装及 15 个 Darwin Tree of Life（DToL）物种数据上的测试表明，YaHS 在组装准确性和连续性方面均优于 SALSA2 和 pin_hic，且对组装错误具有更强的鲁棒性。YaHS 已被 DToL 项目常规使用。\n17: \n18: ---\n19: \n20: ## 引言\n21: \n22: 长读长单分子 DNA 测序技术最近在读长、碱基准确性和成本方面的快速进展推动了从头基因组组装的黄金时代。多项大规模基因组测序计划相继启动——例如地球生物基因组计划、脊椎动物基因组计划和 Darwin Tree of Life 项目——目标是对数千物种构建高质量的染色体规模基因组。然而，仅凭长读长测序数据组装参考级基因组仍存在困难：来自物理图谱、遗传图谱、光学图谱和 Hi-C 接触图谱的长距离连锁信息常被用于将 contig 提升至染色体规模支架。\n23: \n24: Hi-C 是一种基于测序的邻近连接实验方法，最初设计用于研究细胞核内基因组三维结构，其产生的位点对接触频率与位点在基因组上的距离强相关，因此迅速成为一种经济高效的染色体规模支架构建方法。已有多个 Hi-C 支架工具被开发，包括 LACHESIS、HiRise、3D-DNA、ALLHiC、SALSA2 和 pin_hic，各工具各有局限，且结果受基因组复杂度、重复序列含量、Hi-C 文库制备和测序覆盖度等多种因素影响。\n25: \n26: 本文介绍 YaHS，一个采用标准 Hi-C 支架流程（将 Hi-C 读段比对至输入 contig、必要时打断 contig 以纠正组装错误、构建接触矩阵、构建和修剪支架图、输出支架）的新工具。该工具假设输入 contig 来自单倍型；若组装含有单倍型重复序列，应预先去除。YaHS 区别于其他工具的核心是一个新的接触矩阵构建方法，能实现更准确的 contig 连接推断。\n27: \n28: ---\n29: \n30: ## 方法\n31: \n32: *（本节内容整合自原文 Results 2.1 Overview 中的算法描述，以及原文引用的 Arima Genomics 流程。原文未提供独立的 Methods 章节。）*\n33: \n34: ### 读段比对预处理\n35: \n36: Hi-C 读段的比对不在 YaHS 功能范围内。本研究使用 Arima Genomics mapping pipeline，包括四个主要步骤：单端读段比对、跨越连接位点的嵌合读段过滤、读段配对和 PCR 重复去除。\n37: \n38: ### 错误组装检测与 contig 打断\n39: \n40: YaHS 接收 BED 或 BAM 格式的比对文件，首先可选择在 Hi-C 覆盖度缺失的位置打断 contig，这些位置可能是潜在的组装错误。\n41: \n42: ### 多轮支架构建\n43: \n44: 支架构建以多轮方式进行。每轮中 YaHS 将每个 contig 按一定大小（即分辨率）切分成块，将 Hi-C 接触信号分配至块对构成的矩阵单元。单元分为两类：contig 内单元和 contig 间单元。对每个单元统计 Hi-C 接触频率。\n45: \n46: ### 接触矩阵构建与连接得分计算\n47: \n48: 计算一对 contig 的连接得分时，先以相同基因组距离下 contig 内单元接触频率的中位数为期望值对 contig 间单元接触频率进行归一化，再计算加权和。核心思路是：位于同一支架上相邻 contig 之间的接触频率应与相同距离下 contig 内的接触频率相似。对一对 contig 在全部四种可能方向下分别计算连接得分，选择得分最大者作为连接方向。如果用户提供了 Hi-C 文库所用的限制性内切酶信息，YaHS 会先以相应的酶切位点数量对单元接触频率进行归一化校正。\n49: \n50: ### 支架图构建与输出\n51: \n52: YaHS 以 contig 为节点、contig 连接为边（以连接得分加权）构建支架图，通过过滤低分边、修剪末端分支、分解模糊连接和弹出小环状结构等一系列操作简化图结构。参数从数据中学习，因此对具有不同基因组距离分布的 Hi-C 数据具有鲁棒性。\n53: \n54: ---\n55: \n56: ## 结果\n57: \n58: ### 模拟人类基因组组装\n59: \n60: **无错误组装。** 将端粒到端粒（T2T）人类参考基因组 CHM13 随机分割为 100 kb 至 1 Mb 的片段，得到一个含 5483 条 contig、N50 为 715 kb 的模拟组装。使用 T2T Arima Hi-C 数据（NCBI 登录号 SRX10230901–SRX10230903）进行支架构建。YaHS 将超过 92% 的序列组装到 25 条主支架（>35 Mb）中。YaHS 的 N50 和 N90 分别为 132.6 Mb（L50 = 9）和 36.5 Mb（L90 = 23）。相比之下，SALSA2 的 N50 为 43.9 Mb（L50 = 22），N90 为 3.3 Mb（L90 = 103）；pin_hic 的 N50 为 51.5 Mb（L50 = 19），N90 为 8.5 Mb（L90 = 68）。使用 QUAST-LG 将支架比对至 T2T-CHM13 进行质量评估，QUAST-LG 将错误组装分为三类：内部缺口（relocations，即 scaffold 上的 gaps）、倒位（inversions，即 contig 方向错误）和染色体间易位（translocations，即 contig 跨染色体错误连接）。QUAST 报告中 YaHS 的缺口数和倒位数分别为 40 和 21，SALSA2 分别为 262 和 55，pin_hic 分别为 171 和 115。三种工具均未报告染色体间易位错误。\n61: \n62: **含错误组装。** 在上一组装中随机引入 25 条含错误的 contig（10 条染色体内 Misjoin、10 条染色体间 Misjoin、5 条双 Misjoin，共计 30 个组装错误），得到含 5453 条 contig、N50 为 718 kb 的新组装。YaHS 成功纠正 30 个错误中的 28 个，SALSA2 纠正 14 个（均无误报打断），pin_hic 未做显式的错误纠正而是在支架流程末尾打断可疑位置。纠正后连续性方面：YaHS 的 N50、L50、N90、L90 与无错误组装完全一致；SALSA2 的 N50 略增至 46.1 Mb（L50 = 20）；pin_hic 组装更为碎片化，N50 降至 37.5 Mb（L50 = 28），N90 降至 5.8 Mb（L90 = 98）。YaHS 的 QUAST-LG 错误报告数与无错误时类似，仅增加了 2 个内部缺口（relocations）和 2 个染色体间易位（translocations），未纠正的 contig 错误导致了这两个额外错误。SALSA2 组装报告的缺口、倒位和染色体间易位数分别为 278、18 和 63；pin_hic 分别为 188、22 和 123。\n63: \n64: ### 真实人类基因组组装\n65: \n66: 使用 PacBio CHM13 contig 级组装（NCBI 登录号 GCA_000983455.2）检验：输入含 4961 条 contig、总大小 2.94 Gb、N50 为 10.5 Mb（L50 = 82）、N90 为 972 kb（L90 = 403）。YaHS 和 SALSA2 分别打断 125 条和 20 条 contig。YaHS 的 N50 为 147.7 Mb（L50 = 8）、N90 为 39.4 Mb（L90 = 22）；SALSA2 的 N50 为 102.7 Mb（L50 = 11）、N90 为 8.1 Mb（L90 = 42）；pin_hic 的 N50 为 87.9 Mb（L50 = 12）、N90 为 14.6 Mb（L90 = 38）。QUAST-LG 报告的错误组装总次数分别为 2627、2835 和 2799，其中大部分来自 PacBio contig 组装过程中产生的 contig 级错误（YaHS: 2127; SALSA2: 2260; pin_hic: 2258）。YaHS 的 contig 级错误最少，因其进行了更多错误纠正。支架级错误组装方面，QUAST-LG 报告的缺口、倒位和染色体间易位数分别为 YaHS: 442、12、46；SALSA2: 468、16、91；pin_hic: 446、6、89。\n67: \n68: ### Darwin Tree of Life 物种组装\n69: \n70: 在涵盖不同分类群、基因组大小和初始组装质量的 15 个 DToL 物种上，YaHS 一致生成连续性更高的组装，尤其在 L90 统计量上表现突出。\n71: \n72: 特别以橡树灌木螽斯（*Meconema thalassinum*，ToLID: iqMecThal1）为例，其基因组估算超过 9 Gb。初始组装含 2093 条 contig、总大小 9054 Mb、N50 为 10.7 Mb（L50 = 229）。YaHS 检测到 268 个组装错误。最终组装中，3 条超过 1349 Mb 的支架占组装总量 50% 以上，13 条超过 179.6 Mb 的支架占组装总量的 90%，最长支架为 2087 Mb。SALSA2 的 N50 为 79.0 Mb（L50 = 18）、N90 为 3.5 Mb（L90 = 311）；pin_hic 的 N50 为 202.4 Mb（L50 = 12）、N90 为 14.2 Mb（L90 = 82）。对于硫磺菌（*Laetiporus sulphureus*，ToLID: gfLaeSulp1），YaHS 和 pin_hic 均在端粒末端做出了若干错误连接。\n73: \n74: ---\n75: \n76: ## 讨论\n77: \n78: *（本节内容整合自原文 Conclusion 部分及分散于各结果段落中由作者明确述及的局限性。原文无独立的 Discussion 章节，以下所有内容均可直接追溯到原始文本；未报告公众使用统计数据、独立基准测试结果或与原始论文所列之外的工具比较。）*\n79: \n80: ### 主要发现\n81: \n82: YaHS 在模拟和真实数据上一致优于 SALSA2 和 pin_hic。在无错误模拟数据上的 N50（132.6 Mb）分别是 SALSA2 和 pin_hic 的约 3 倍和约 2.6 倍；在含错误数据上 YaHS 纠正了 30 个错误中的 28 个而无任何误报，而 SALSA2 仅纠正 14 个。在大基因组（>9 Gb 橡树灌木螽斯）上，YaHS 在 L50 指标上产出 3 条支架覆盖半数组装，而 SALSA2 需 18 条、pin_hic 需 12 条。\n83: \n84: ### 与其他工具的性能差异\n85: \n86: YaHS 区别于其他工具的关键是其接触矩阵构建方法：通过以相同距离下 contig 内接触频率对 contig 间接触频率进行去偏校正，能实现对 contig 连接的更准确推断。Pin_hic 不做显式错误纠正；虽然 SALSA2 也做了纠正，但在含错误数据集上其纠正数（14/30）少于 YaHS（28/30）。\n87: \n88: ### 局限性\n89: \n90: 1. **单倍型假设**: YaHS 假设输入为单倍型组装，含单倍型重复的组装应事先去除（原文 Introduction）。\n91: 2. **端粒区域错误连接**: 在硫磺菌（*Laetiporus sulphureus*）基因组上，YaHS 和 pin_hic 均出现端粒末端的错误连接（原文 Results 2.4）。\n92: 3. **比对环节在工具范围外**: 读段比对依赖外部流程（本研究使用 Arima Genomics mapping pipeline），非 YaHS 功能范围（原文 Results 2.1）。\n93: 4. **未报告的计算资源需求**: 原文未提供 YaHS 在各项测试中的运行时间、内存使用或线程数信息。\n94: 5. **比较范围限于两个工具**: 结果仅在 SALSA2 和 pin_hic 上进行了并行比较；未与 LACHESIS、HiRise、3D-DNA、ALLHiC 等同样列出的工具进行定量基准测试。\n95: 6. **原文未提供的其他信息**: 独立基准测试结果、用户统计数据和补充方法之外的详细实施细节原文均未报告。\n96: \n97: ### 可用性\n98: \n99: YaHS 以 C 语言实现，采用 MIT 许可证，源代码、文档和教程在 [https://github.com/sanger-tol/yahs](https://github.com/sanger-tol/yahs) 上公开。该工具已被 Darwin Tree of Life 项目常规使用。\n100: \n101: ---\n102: \n103: ## 利益冲突声明\n104: \n105: 原文声明 Richard Durbin 是 Dovetail Inc. 的顾问。\n106: \n107: ## 资助\n108: \n109: Wellcome 资助 [207492, 218328, 220540]。\n110: \n111: ## 数据可用性\n112: \n113: 未产生新数据。所有分析数据均可从 INSDC 获取，登录号见正文或 Supplementary Table S1。\n114: \n115: ---\n116: \n117: *重述完成于 2026-07-18。所有定量结果、方法描述和局限性均基于 PMC9848053 开放获取全文逐项核验。凡原文未明述的内容均已标明\"原文未报告\"。*\n\n(End of file - total 117 lines)\n</content>",
+      "time": {
+        "start": 1784348054677,
+        "end": 1784348054679
+      }
+    },
+    {
+      "tool": "todowrite",
+      "status": "completed",
+      "title": "0 todos",
+      "input": {
+        "todos": [
+          {
+            "content": "Search for exact published record of 'YaHS: yet another Hi-C scaffolding tool' — resolve DOI/PMID/PMCID",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Retrieve open access full text via evimed_open_access_full_text",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Read full text in bounded sections, build claim ledger",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Write structured body text (Abstract, Introduction, Methods, Results, Discussion) from verified full text",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Source faithfulness audit: verify all claims against target full text",
+            "priority": "high",
+            "status": "completed"
+          },
+          {
+            "content": "Fix terminology error: relocations vs translocations; cross-check all numbers",
+            "priority": "high",
+            "status": "completed"
+          }
+        ]
+      },
+      "output": "[\n  {\n    \"content\": \"Search for exact published record of 'YaHS: yet another Hi-C scaffolding tool' — resolve DOI/PMID/PMCID\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Retrieve open access full text via evimed_open_access_full_text\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Read full text in bounded sections, build claim ledger\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Write structured body text (Abstract, Introduction, Methods, Results, Discussion) from verified full text\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Source faithfulness audit: verify all claims against target full text\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Fix terminology error: relocations vs translocations; cross-check all numbers\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  }\n]",
+      "time": {
+        "start": 1784348059200,
+        "end": 1784348059201
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "YaHS_restructured.md",
+      "encoding": "utf8",
+      "data": "# YaHS: yet another Hi-C scaffolding tool（结构化重述）\n\n**原始论文**: Zhou C, McCarthy SA, Durbin R. YaHS: yet another Hi-C scaffolding tool. *Bioinformatics*. 2023 Jan 1;39(1):btac808.\n- DOI: [10.1093/bioinformatics/btac808](https://doi.org/10.1093/bioinformatics/btac808)\n- PMID: 36525368\n- PMCID: [PMC9848053](https://europepmc.org/articles/PMC9848053)\n- 源代码: [https://github.com/sanger-tol/yahs](https://github.com/sanger-tol/yahs)\n- 原始论文类型: Application Note（非完整研究论文，无独立的 Methods 和 Discussion 章节）\n\n> **说明**: 原始论文为 Application Note，原文仅含 Abstract、Introduction、Results、Conclusion 四部分。下文按用户要求的五段式结构重写，但 Methods 部分整合自原文 Results 2.1 Overview 中的算法描述，Discussion 部分整合自原文 Conclusion 及分散于结果段落中的局限性提及。凡原文未明述之内容，均已标明\"原文未报告\"。\n\n---\n\n## 摘要\n\nYaHS 是一个基于 Hi-C 数据构建染色体规模基因组支架的命令行工具。该工具用 C 语言实现并以 MIT 许可证发布，用户仅需提供组装文件和比对文件即可通过单行命令运行，输出支持多种组装结果格式。YaHS 的核心创新是一种接触矩阵构建方法：将每个 contig 按给定分辨率切分成块，以相同基因组距离下 contig 内接触频率的中位数为期望值对 contig 间接触频率进行归一化，计算加权和作为 contig 对连接得分，并在四个可能方向中选择得分最大者确定连接方向，同时可选地基于 Hi-C 文库所用的限制性内切酶位点数对接触频率进行校正。在模拟和真实人类基因组组装及 15 个 Darwin Tree of Life（DToL）物种数据上的测试表明，YaHS 在组装准确性和连续性方面均优于 SALSA2 和 pin_hic，且对组装错误具有更强的鲁棒性。YaHS 已被 DToL 项目常规使用。\n\n---\n\n## 引言\n\n长读长单分子 DNA 测序技术最近在读长、碱基准确性和成本方面的快速进展推动了从头基因组组装的黄金时代。多项大规模基因组测序计划相继启动——例如地球生物基因组计划、脊椎动物基因组计划和 Darwin Tree of Life 项目——目标是对数千物种构建高质量的染色体规模基因组。然而，仅凭长读长测序数据组装参考级基因组仍存在困难：来自物理图谱、遗传图谱、光学图谱和 Hi-C 接触图谱的长距离连锁信息常被用于将 contig 提升至染色体规模支架。\n\nHi-C 是一种基于测序的邻近连接实验方法，最初设计用于研究细胞核内基因组三维结构，其产生的位点对接触频率与位点在基因组上的距离强相关，因此迅速成为一种经济高效的染色体规模支架构建方法。已有多个 Hi-C 支架工具被开发，包括 LACHESIS、HiRise、3D-DNA、ALLHiC、SALSA2 和 pin_hic，各工具各有局限，且结果受基因组复杂度、重复序列含量、Hi-C 文库制备和测序覆盖度等多种因素影响。\n\n本文介绍 YaHS，一个采用标准 Hi-C 支架流程（将 Hi-C 读段比对至输入 contig、必要时打断 contig 以纠正组装错误、构建接触矩阵、构建和修剪支架图、输出支架）的新工具。该工具假设输入 contig 来自单倍型；若组装含有单倍型重复序列，应预先去除。YaHS 区别于其他工具的核心是一个新的接触矩阵构建方法，能实现更准确的 contig 连接推断。\n\n---\n\n## 方法\n\n*（本节内容整合自原文 Results 2.1 Overview 中的算法描述，以及原文引用的 Arima Genomics 流程。原文未提供独立的 Methods 章节。）*\n\n### 读段比对预处理\n\nHi-C 读段的比对不在 YaHS 功能范围内。本研究使用 Arima Genomics mapping pipeline，包括四个主要步骤：单端读段比对、跨越连接位点的嵌合读段过滤、读段配对和 PCR 重复去除。\n\n### 错误组装检测与 contig 打断\n\nYaHS 接收 BED 或 BAM 格式的比对文件，首先可选择在 Hi-C 覆盖度缺失的位置打断 contig，这些位置可能是潜在的组装错误。\n\n### 多轮支架构建\n\n支架构建以多轮方式进行。每轮中 YaHS 将每个 contig 按一定大小（即分辨率）切分成块，将 Hi-C 接触信号分配至块对构成的矩阵单元。单元分为两类：contig 内单元和 contig 间单元。对每个单元统计 Hi-C 接触频率。\n\n### 接触矩阵构建与连接得分计算\n\n计算一对 contig 的连接得分时，先以相同基因组距离下 contig 内单元接触频率的中位数为期望值对 contig 间单元接触频率进行归一化，再计算加权和。核心思路是：位于同一支架上相邻 contig 之间的接触频率应与相同距离下 contig 内的接触频率相似。对一对 contig 在全部四种可能方向下分别计算连接得分，选择得分最大者作为连接方向。如果用户提供了 Hi-C 文库所用的限制性内切酶信息，YaHS 会先以相应的酶切位点数量对单元接触频率进行归一化校正。\n\n### 支架图构建与输出\n\nYaHS 以 contig 为节点、contig 连接为边（以连接得分加权）构建支架图，通过过滤低分边、修剪末端分支、分解模糊连接和弹出小环状结构等一系列操作简化图结构。参数从数据中学习，因此对具有不同基因组距离分布的 Hi-C 数据具有鲁棒性。\n\n---\n\n## 结果\n\n### 模拟人类基因组组装\n\n**无错误组装。** 将端粒到端粒（T2T）人类参考基因组 CHM13 随机分割为 100 kb 至 1 Mb 的片段，得到一个含 5483 条 contig、N50 为 715 kb 的模拟组装。使用 T2T Arima Hi-C 数据（NCBI 登录号 SRX10230901–SRX10230903）进行支架构建。YaHS 将超过 92% 的序列组装到 25 条主支架（>35 Mb）中。YaHS 的 N50 和 N90 分别为 132.6 Mb（L50 = 9）和 36.5 Mb（L90 = 23）。相比之下，SALSA2 的 N50 为 43.9 Mb（L50 = 22），N90 为 3.3 Mb（L90 = 103）；pin_hic 的 N50 为 51.5 Mb（L50 = 19），N90 为 8.5 Mb（L90 = 68）。使用 QUAST-LG 将支架比对至 T2T-CHM13 进行质量评估，QUAST-LG 将错误组装分为三类：内部缺口（relocations，即 scaffold 上的 gaps）、倒位（inversions，即 contig 方向错误）和染色体间易位（translocations，即 contig 跨染色体错误连接）。QUAST 报告中 YaHS 的缺口数和倒位数分别为 40 和 21，SALSA2 分别为 262 和 55，pin_hic 分别为 171 和 115。三种工具均未报告染色体间易位错误。\n\n**含错误组装。** 在上一组装中随机引入 25 条含错误的 contig（10 条染色体内 Misjoin、10 条染色体间 Misjoin、5 条双 Misjoin，共计 30 个组装错误），得到含 5453 条 contig、N50 为 718 kb 的新组装。YaHS 成功纠正 30 个错误中的 28 个，SALSA2 纠正 14 个（均无误报打断），pin_hic 未做显式的错误纠正而是在支架流程末尾打断可疑位置。纠正后连续性方面：YaHS 的 N50、L50、N90、L90 与无错误组装完全一致；SALSA2 的 N50 略增至 46.1 Mb（L50 = 20）；pin_hic 组装更为碎片化，N50 降至 37.5 Mb（L50 = 28），N90 降至 5.8 Mb（L90 = 98）。YaHS 的 QUAST-LG 错误报告数与无错误时类似，仅增加了 2 个内部缺口（relocations）和 2 个染色体间易位（translocations），未纠正的 contig 错误导致了这两个额外错误。SALSA2 组装报告的缺口、倒位和染色体间易位数分别为 278、18 和 63；pin_hic 分别为 188、22 和 123。\n\n### 真实人类基因组组装\n\n使用 PacBio CHM13 contig 级组装（NCBI 登录号 GCA_000983455.2）检验：输入含 4961 条 contig、总大小 2.94 Gb、N50 为 10.5 Mb（L50 = 82）、N90 为 972 kb（L90 = 403）。YaHS 和 SALSA2 分别打断 125 条和 20 条 contig。YaHS 的 N50 为 147.7 Mb（L50 = 8）、N90 为 39.4 Mb（L90 = 22）；SALSA2 的 N50 为 102.7 Mb（L50 = 11）、N90 为 8.1 Mb（L90 = 42）；pin_hic 的 N50 为 87.9 Mb（L50 = 12）、N90 为 14.6 Mb（L90 = 38）。QUAST-LG 报告的错误组装总次数分别为 2627、2835 和 2799，其中大部分来自 PacBio contig 组装过程中产生的 contig 级错误（YaHS: 2127; SALSA2: 2260; pin_hic: 2258）。YaHS 的 contig 级错误最少，因其进行了更多错误纠正。支架级错误组装方面，QUAST-LG 报告的缺口、倒位和染色体间易位数分别为 YaHS: 442、12、46；SALSA2: 468、16、91；pin_hic: 446、6、89。\n\n### Darwin Tree of Life 物种组装\n\n在涵盖不同分类群、基因组大小和初始组装质量的 15 个 DToL 物种上，YaHS 一致生成连续性更高的组装，尤其在 L90 统计量上表现突出。\n\n特别以橡树灌木螽斯（*Meconema thalassinum*，ToLID: iqMecThal1）为例，其基因组估算超过 9 Gb。初始组装含 2093 条 contig、总大小 9054 Mb、N50 为 10.7 Mb（L50 = 229）。YaHS 检测到 268 个组装错误。最终组装中，3 条超过 1349 Mb 的支架占组装总量 50% 以上，13 条超过 179.6 Mb 的支架占组装总量的 90%，最长支架为 2087 Mb。SALSA2 的 N50 为 79.0 Mb（L50 = 18）、N90 为 3.5 Mb（L90 = 311）；pin_hic 的 N50 为 202.4 Mb（L50 = 12）、N90 为 14.2 Mb（L90 = 82）。对于硫磺菌（*Laetiporus sulphureus*，ToLID: gfLaeSulp1），YaHS 和 pin_hic 均在端粒末端做出了若干错误连接。\n\n---\n\n## 讨论\n\n*（本节内容整合自原文 Conclusion 部分及分散于各结果段落中由作者明确述及的局限性。原文无独立的 Discussion 章节，以下所有内容均可直接追溯到原始文本；未报告公众使用统计数据、独立基准测试结果或与原始论文所列之外的工具比较。）*\n\n### 主要发现\n\nYaHS 在模拟和真实数据上一致优于 SALSA2 和 pin_hic。在无错误模拟数据上的 N50（132.6 Mb）分别是 SALSA2 和 pin_hic 的约 3 倍和约 2.6 倍；在含错误数据上 YaHS 纠正了 30 个错误中的 28 个而无任何误报，而 SALSA2 仅纠正 14 个。在大基因组（>9 Gb 橡树灌木螽斯）上，YaHS 在 L50 指标上产出 3 条支架覆盖半数组装，而 SALSA2 需 18 条、pin_hic 需 12 条。\n\n### 与其他工具的性能差异\n\nYaHS 区别于其他工具的关键是其接触矩阵构建方法：通过以相同距离下 contig 内接触频率对 contig 间接触频率进行去偏校正，能实现对 contig 连接的更准确推断。Pin_hic 不做显式错误纠正；虽然 SALSA2 也做了纠正，但在含错误数据集上其纠正数（14/30）少于 YaHS（28/30）。\n\n### 局限性\n\n1. **单倍型假设**: YaHS 假设输入为单倍型组装，含单倍型重复的组装应事先去除（原文 Introduction）。\n2. **端粒区域错误连接**: 在硫磺菌（*Laetiporus sulphureus*）基因组上，YaHS 和 pin_hic 均出现端粒末端的错误连接（原文 Results 2.4）。\n3. **比对环节在工具范围外**: 读段比对依赖外部流程（本研究使用 Arima Genomics mapping pipeline），非 YaHS 功能范围（原文 Results 2.1）。\n4. **未报告的计算资源需求**: 原文未提供 YaHS 在各项测试中的运行时间、内存使用或线程数信息。\n5. **比较范围限于两个工具**: 结果仅在 SALSA2 和 pin_hic 上进行了并行比较；未与 LACHESIS、HiRise、3D-DNA、ALLHiC 等同样列出的工具进行定量基准测试。\n6. **原文未提供的其他信息**: 独立基准测试结果、用户统计数据和补充方法之外的详细实施细节原文均未报告。\n\n### 可用性\n\nYaHS 以 C 语言实现，采用 MIT 许可证，源代码、文档和教程在 [https://github.com/sanger-tol/yahs](https://github.com/sanger-tol/yahs) 上公开。该工具已被 Darwin Tree of Life 项目常规使用。\n\n---\n\n## 利益冲突声明\n\n原文声明 Richard Durbin 是 Dovetail Inc. 的顾问。\n\n## 资助\n\nWellcome 资助 [207492, 218328, 220540]。\n\n## 数据可用性\n\n未产生新数据。所有分析数据均可从 INSDC 获取，登录号见正文或 Supplementary Table S1。\n\n---\n\n*重述完成于 2026-07-18。所有定量结果、方法描述和局限性均基于 PMC9848053 开放获取全文逐项核验。凡原文未明述的内容均已标明\"原文未报告\"。*\n"
+    }
+  ],
+  "capturedAt": "2026-07-18T04:14:27.885Z"
+}

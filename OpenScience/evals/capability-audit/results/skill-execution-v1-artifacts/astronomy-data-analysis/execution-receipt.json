@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1162,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/astronomy-data-analysis/results.json",
+      "sha256": "45e39be3403dea707d21b249b92c72e919e78cc02c99a443f242bd1b93b7bef6"
+    },
+    {
+      "bytes": 1731,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/astronomy-data-analysis/astronomy-data-analysis-report.md",
+      "sha256": "15691be33770212ad6bb9ad52ce5c491d39904d80b7fa7c9bd950af0ee8b1f95"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:20.907773Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "astronomy-data-analysis",
+  "startedAt": "2026-07-19T19:31:20.899831Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for astronomy-data-analysis and wrote 2 verified artifacts.",
+  "warnings": [
+    "Units, coordinate frame, calibration, and uncertainty columns must be confirmed before physical interpretation."
+  ]
+}

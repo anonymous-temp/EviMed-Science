@@ -1,0 +1,32 @@
+{
+  "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T155134Z-70a87b41/large-file/data.csv",
+  "size": "32 B",
+  "size_bytes": 32,
+  "format": "table",
+  "delimiter": ",",
+  "columns": [
+    {
+      "name": "drug",
+      "dtype": "str"
+    },
+    {
+      "name": "count",
+      "dtype": "int"
+    }
+  ],
+  "n_columns": 2,
+  "approx_rows": 2,
+  "sample_head": [
+    [
+      "aspirin",
+      "3"
+    ]
+  ],
+  "sample_tail": [
+    [
+      "warfarin",
+      "2"
+    ]
+  ],
+  "note": "Memory pointer — file introspected/sampled, not loaded. Work from this schema/sample; read specific ranges deterministically, never the whole file."
+}

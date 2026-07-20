@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 206,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bayesian-modeling/results.json",
+      "sha256": "d4d8dc36ef8e2642629e68c9aa50bf3370284cf59578e3ad2ade3ff7045761b6"
+    },
+    {
+      "bytes": 758,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bayesian-modeling/bayesian-modeling-report.md",
+      "sha256": "04fce379c58db3b68fe83d4a2f3e9787105fcb385e785bc7366f3cf302cb5164"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:21.735772Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "bayesian-modeling",
+  "startedAt": "2026-07-19T19:31:21.734285Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for bayesian-modeling and wrote 2 verified artifacts.",
+  "warnings": [
+    "Interpretation depends on the stated likelihood and prior; inspect sensitivity to defensible priors."
+  ]
+}

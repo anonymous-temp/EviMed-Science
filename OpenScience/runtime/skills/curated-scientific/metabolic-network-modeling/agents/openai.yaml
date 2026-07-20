@@ -1,0 +1,4 @@
+interface:
+  display_name: "Metabolic Network Modeling"
+  short_description: "Model metabolic networks with auditable constraints"
+  default_prompt: "Use $metabolic-network-modeling to run a constraint-based analysis of this metabolic network."

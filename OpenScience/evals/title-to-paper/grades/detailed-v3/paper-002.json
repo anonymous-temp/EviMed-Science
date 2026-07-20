@@ -1,0 +1,706 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-002",
+  "category": "randomized-trial",
+  "title": "Five-Year Survival Outcomes From the PACIFIC Trial: Durvalumab After Chemoradiotherapy in Stage III Non-Small-Cell Lung Cancer.",
+  "pmcid": "PMC9015199",
+  "doi": "10.1200/jco.21.01308",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "e0532bb89ef9ec16120fd49157326f5779a16440418de165fcc1433e7782596a",
+  "generatedSha256": "9f572915b53f3f1fbc53c297effb17d45d398c5844cdfa714e14a24146bfcc25",
+  "promptSha256": "030ec979269211a2989d1d68972b505487d92a7509b5b952bf4d9697d37964a6",
+  "cacheFingerprint": "05e844ccf5f6b590b7c5b849d0eff76691303b3780d136571b7c7ae531ee91d6",
+  "referenceCharacters": 70122,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 17609,
+  "paperType": "randomized-trial",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "We report updated, exploratory analyses of survival, approximately 5 years after the last patient was randomly assigned.",
+      "generatedFact": "This report presents updated exploratory survival analyses approximately five years after the last patient was randomly assigned.",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "CONTEXT Key Objective The phase III PACIFIC trial of patients with unresectable, stage III non–small-cell lung cancer whose disease had not progressed after chemoradiotherapy was, to our knowledge, the first study to demonstrate a survival advantage with immunotherapy in a curative-intent setting. Both primary end points of overall survival (OS) and progression-free survival (PFS) were improved with the programmed cell death-ligand 1 inhibitor durvalumab versus placebo. To provide insights into long-term outcomes, we report updated survival analyses, approximately 5 years after the last patient was randomly assigned."
+        ],
+        "quote": "CONTEXT Key Objective The phase III PACIFIC trial of patients with unresectable, stage III non–small-cell lung cancer whose disease had not progressed after chemoradiotherapy was, to our knowledge, the first study to demonstrate a survival advantage with immunotherapy in a curative-intent setting. Both primary end points of overall survival (OS) and progression-free survival (PFS) were improved with the programmed cell death-ligand 1 inhibitor durvalumab versus placebo. To provide insights into long-term outcomes, we report updated survival analyses, approximately 5 years after the last patient was randomly assigned."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "with unresectable, stage III non-small-cell lung cancer (NSCLC) without disease progression after concurrent chemoradiotherapy (CRT). This report presents updated exploratory survival analyses approximately five years after the last patient was randomly assigned. **Methods**: Patients with WHO performance status 0 or 1, irrespective of tumor PD-L1 expression level, were randomly assigned in a 2:1 ratio to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event outcomes were compared using stratified log-rank tests; medians and landmark survival rates were estimated by the Kaplan-Meier method."
+        ],
+        "quote": "with unresectable, stage III non-small-cell lung cancer (NSCLC) without disease progression after concurrent chemoradiotherapy (CRT). This report presents updated exploratory survival analyses approximately five years after the last patient was randomly assigned. **Methods**: Patients with WHO performance status 0 or 1, irrespective of tumor PD-L1 expression level, were randomly assigned in a 2:1 ratio to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event outcomes were compared using stratified log-rank tests; medians and landmark survival rates were estimated by the Kaplan-Meier method."
+      },
+      "explanation": "Both state the same research objective of reporting updated 5‑year survival analyses from the PACIFIC trial.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Phase III, randomized, placebo-controlled trial.",
+      "generatedFact": "Randomized, double-blind, placebo-controlled, multicenter phase III trial.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Five-Year Survival Outcomes From the PACIFIC Trial: Durvalumab After Chemoradiotherapy in Stage III Non-Small-Cell Lung Cancer.\", \"pmcid\": \"PMC9015199\", \"pmid\": \"35108059\", \"doi\": \"10.1200/jco.21.01308\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\", \"Research Support, N.I.H., Extramural\"], \"publicationDate\": \"2022-02-02\"} [ABSTRACT] AbstractPURPOSEThe phase III PACIFIC trial compared durvalumab with placebo in patients with unresectable, stage III non–small-cell lung cancer and no disease progression after concurrent chemoradiotherapy."
+        ],
+        "quote": "[METADATA] {\"title\": \"Five-Year Survival Outcomes From the PACIFIC Trial: Durvalumab After Chemoradiotherapy in Stage III Non-Small-Cell Lung Cancer.\", \"pmcid\": \"PMC9015199\", \"pmid\": \"35108059\", \"doi\": \"10.1200/jco.21.01308\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\", \"Research Support, N.I.H., Extramural\"], \"publicationDate\": \"2022-02-02\"} [ABSTRACT] AbstractPURPOSEThe phase III PACIFIC trial compared durvalumab with placebo in patients with unresectable, stage III non–small-cell lung cancer and no disease progression after concurrent chemoradiotherapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "To characterize long-term outcomes, we report updated exploratory analyses with approximately five years of follow-up since the last patient was randomly assigned, including updates of the primary endpoints, key secondary endpoints, and new exploratory analyses of prognostic baseline factors. --- ## 2. Methods ### 2.1 Study Design PACIFIC was a randomized, double-blind, placebo-controlled, multicenter phase III trial."
+        ],
+        "quote": "To characterize long-term outcomes, we report updated exploratory analyses with approximately five years of follow-up since the last patient was randomly assigned, including updates of the primary endpoints, key secondary endpoints, and new exploratory analyses of prognostic baseline factors. --- ## 2. Methods ### 2.1 Study Design PACIFIC was a randomized, double-blind, placebo-controlled, multicenter phase III trial."
+      },
+      "explanation": "Core design matches exactly; GENERATED adds 'double-blind' and 'multicenter', which are not explicitly stated in REFERENCE but do not contradict it.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Patients with unresectable, stage III non–small-cell lung cancer and no disease progression after concurrent chemoradiotherapy.",
+      "generatedFact": "Patients with unresectable, stage III non-small-cell lung cancer (NSCLC) without disease progression after concurrent chemoradiotherapy (CRT).",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Five-Year Survival Outcomes From the PACIFIC Trial: Durvalumab After Chemoradiotherapy in Stage III Non-Small-Cell Lung Cancer.\", \"pmcid\": \"PMC9015199\", \"pmid\": \"35108059\", \"doi\": \"10.1200/jco.21.01308\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\", \"Research Support, N.I.H., Extramural\"], \"publicationDate\": \"2022-02-02\"} [ABSTRACT] AbstractPURPOSEThe phase III PACIFIC trial compared durvalumab with placebo in patients with unresectable, stage III non–small-cell lung cancer and no disease progression after concurrent chemoradiotherapy."
+        ],
+        "quote": "[METADATA] {\"title\": \"Five-Year Survival Outcomes From the PACIFIC Trial: Durvalumab After Chemoradiotherapy in Stage III Non-Small-Cell Lung Cancer.\", \"pmcid\": \"PMC9015199\", \"pmid\": \"35108059\", \"doi\": \"10.1200/jco.21.01308\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\", \"Research Support, N.I.H., Extramural\"], \"publicationDate\": \"2022-02-02\"} [ABSTRACT] AbstractPURPOSEThe phase III PACIFIC trial compared durvalumab with placebo in patients with unresectable, stage III non–small-cell lung cancer and no disease progression after concurrent chemoradiotherapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**DOI**: [10.1200/JCO.21.01308](https://doi.org/10.1200/JCO.21.01308) **PMID**: [35108059](https://pubmed.ncbi.nlm.nih.gov/35108059/) **PMCID**: [PMC9015199](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9015199/) **Open access via Europe PMC**: [https://europepmc.org/articles/PMC9015199](https://europepmc.org/articles/PMC9015199) **License**: CC BY-NC-ND 4.0 **Data cutoff**: January 11, 2021 **Clinical trial**: NCT02125461 --- ## Abstract **Background**: The phase III PACIFIC trial demonstrated that consolidation durvalumab, a programmed cell death-ligand 1 (PD-L1) inhibitor, significantly improved overall survival (OS) and progression-free survival (PFS) compared with placebo in patients"
+        ],
+        "quote": "**DOI**: [10.1200/JCO.21.01308](https://doi.org/10.1200/JCO.21.01308) **PMID**: [35108059](https://pubmed.ncbi.nlm.nih.gov/35108059/) **PMCID**: [PMC9015199](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9015199/) **Open access via Europe PMC**: [https://europepmc.org/articles/PMC9015199](https://europepmc.org/articles/PMC9015199) **License**: CC BY-NC-ND 4.0 **Data cutoff**: January 11, 2021 **Clinical trial**: NCT02125461 --- ## Abstract **Background**: The phase III PACIFIC trial demonstrated that consolidation durvalumab, a programmed cell death-ligand 1 (PD-L1) inhibitor, significantly improved overall survival (OS) and progression-free survival (PFS) compared with placebo in patients"
+      },
+      "explanation": "Identical population description.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "709 of 713 randomly assigned patients received durvalumab (473 of 476) or placebo (236 of 237).",
+      "generatedFact": "Among 713 randomly assigned patients, 709 received study treatment (durvalumab, n = 473; placebo, n = 236).",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "We report updated, exploratory analyses of survival, approximately 5 years after the last patient was randomly assigned.METHODSPatients with WHO performance status 0 or 1 (any tumor programmed cell death-ligand 1 status) were randomly assigned (2:1) to durvalumab (10 mg/kg intravenously; administered once every 2 weeks for 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event end point analyses were performed using stratified log-rank tests. Medians and landmark survival rates were estimated using the Kaplan-Meier method.RESULTSSeven hundred and nine of 713 randomly assigned patients received durvalumab (473 of 476) or placebo (236 of 237)."
+        ],
+        "quote": "We report updated, exploratory analyses of survival, approximately 5 years after the last patient was randomly assigned.METHODSPatients with WHO performance status 0 or 1 (any tumor programmed cell death-ligand 1 status) were randomly assigned (2:1) to durvalumab (10 mg/kg intravenously; administered once every 2 weeks for 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event end point analyses were performed using stratified log-rank tests. Medians and landmark survival rates were estimated using the Kaplan-Meier method.RESULTSSeven hundred and nine of 713 randomly assigned patients received durvalumab (473 of 476) or placebo (236 of 237)."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Exploratory multivariable Cox regression analyses examined prognostic baseline factors. **Results**: Among 713 randomly assigned patients, 709 received study treatment (durvalumab, n = 473; placebo, n = 236). As of the January 11, 2021 data cutoff, median follow-up was 34.2 months for all patients and 61.6 months for censored patients. Updated OS (stratified HR, 0.72; 95% CI, 0.59–0.89) and PFS (stratified HR, 0.55; 95% CI, 0.45–0.68) remained consistent with primary analyses. Median OS was 47.5 months for durvalumab versus 29.1 months for placebo; median PFS was 16.9 versus 5.6 months."
+        ],
+        "quote": "Exploratory multivariable Cox regression analyses examined prognostic baseline factors. **Results**: Among 713 randomly assigned patients, 709 received study treatment (durvalumab, n = 473; placebo, n = 236). As of the January 11, 2021 data cutoff, median follow-up was 34.2 months for all patients and 61.6 months for censored patients. Updated OS (stratified HR, 0.72; 95% CI, 0.59–0.89) and PFS (stratified HR, 0.55; 95% CI, 0.45–0.68) remained consistent with primary analyses. Median OS was 47.5 months for durvalumab versus 29.1 months for placebo; median PFS was 16.9 versus 5.6 months."
+      },
+      "explanation": "Exact numbers match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "WHO PS 0/1, histologically/cytologically documented unresectable stage III NSCLC, prior concurrent CRT without progression, 1‑42 days post‑CRT, excluded unresolved grade >2 toxicity or grade ≥2 pneumonitis; no PD‑L1/oncogenic driver restriction.",
+      "generatedFact": "Histologically/cytologically documented unresectable stage III NSCLC, ≥2 cycles platinum‑based concurrent CRT, no progression, enrolled 1‑42 days post‑CRT; excluded unresolved CTCAE grade >2 toxicity or grade ≥2 pneumonitis/radiation pneumonitis; no PD‑L1 or driver mutation restriction.",
+      "sourceEvidence": {
+        "locator": "R0012",
+        "locators": [
+          "R0012"
+        ],
+        "quotes": [
+          "1 , 2 Patients with a WHO performance status (PS) of 0 or 1 and histologically or cytologically documented stage III (7th edition of the American Joint Committee on Cancer staging manual), unresectable NSCLC who had received concurrent CRT (≥ 2 cycles; total prescription radiation dose typically 60 to 66 Gy in 30 to 33 fractions) 18 without disease progression were randomly assigned 1-42 days after CRT. Patients with unresolved grade > 2 toxicities (Common Terminology Criteria for Adverse Events [AEs] v4.03) or grade ≥ 2 pneumonitis and/or radiation pneumonitis from prior CRT were excluded."
+        ],
+        "quote": "1 , 2 Patients with a WHO performance status (PS) of 0 or 1 and histologically or cytologically documented stage III (7th edition of the American Joint Committee on Cancer staging manual), unresectable NSCLC who had received concurrent CRT (≥ 2 cycles; total prescription radiation dose typically 60 to 66 Gy in 30 to 33 fractions) 18 without disease progression were randomly assigned 1-42 days after CRT. Patients with unresolved grade > 2 toxicities (Common Terminology Criteria for Adverse Events [AEs] v4.03) or grade ≥ 2 pneumonitis and/or radiation pneumonitis from prior CRT were excluded."
+      },
+      "generatedEvidence": {
+        "locator": "G0009",
+        "locators": [
+          "G0009"
+        ],
+        "quotes": [
+          "Patients with histologically or cytologically documented unresectable stage III NSCLC (AJCC 7th edition) who had received at least two cycles of platinum-based concurrent CRT (typical total dose 60–66 Gy in 30–33 fractions) without disease progression were enrolled 1–42 days after CRT completion. Patients with unresolved Common Terminology Criteria for Adverse Events (CTCAE v4.03) grade >2 toxicities or grade ≥2 pneumonitis/radiation pneumonitis from prior CRT were excluded. Tumor tissue collection and PD-L1 testing were not required for enrollment, and no restriction was placed on the basis of oncogenic driver mutation status."
+        ],
+        "quote": "Patients with histologically or cytologically documented unresectable stage III NSCLC (AJCC 7th edition) who had received at least two cycles of platinum-based concurrent CRT (typical total dose 60–66 Gy in 30–33 fractions) without disease progression were enrolled 1–42 days after CRT completion. Patients with unresolved Common Terminology Criteria for Adverse Events (CTCAE v4.03) grade >2 toxicities or grade ≥2 pneumonitis/radiation pneumonitis from prior CRT were excluded. Tumor tissue collection and PD-L1 testing were not required for enrollment, and no restriction was placed on the basis of oncogenic driver mutation status."
+      },
+      "explanation": "All eligibility criteria are identically described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Durvalumab 10 mg/kg intravenously every 2 weeks for up to 12 months.",
+      "generatedFact": "Durvalumab (10 mg/kg intravenously every two weeks for up to 12 months).",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "We report updated, exploratory analyses of survival, approximately 5 years after the last patient was randomly assigned.METHODSPatients with WHO performance status 0 or 1 (any tumor programmed cell death-ligand 1 status) were randomly assigned (2:1) to durvalumab (10 mg/kg intravenously; administered once every 2 weeks for 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event end point analyses were performed using stratified log-rank tests. Medians and landmark survival rates were estimated using the Kaplan-Meier method.RESULTSSeven hundred and nine of 713 randomly assigned patients received durvalumab (473 of 476) or placebo (236 of 237)."
+        ],
+        "quote": "We report updated, exploratory analyses of survival, approximately 5 years after the last patient was randomly assigned.METHODSPatients with WHO performance status 0 or 1 (any tumor programmed cell death-ligand 1 status) were randomly assigned (2:1) to durvalumab (10 mg/kg intravenously; administered once every 2 weeks for 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event end point analyses were performed using stratified log-rank tests. Medians and landmark survival rates were estimated using the Kaplan-Meier method.RESULTSSeven hundred and nine of 713 randomly assigned patients received durvalumab (473 of 476) or placebo (236 of 237)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "with unresectable, stage III non-small-cell lung cancer (NSCLC) without disease progression after concurrent chemoradiotherapy (CRT). This report presents updated exploratory survival analyses approximately five years after the last patient was randomly assigned. **Methods**: Patients with WHO performance status 0 or 1, irrespective of tumor PD-L1 expression level, were randomly assigned in a 2:1 ratio to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event outcomes were compared using stratified log-rank tests; medians and landmark survival rates were estimated by the Kaplan-Meier method."
+        ],
+        "quote": "with unresectable, stage III non-small-cell lung cancer (NSCLC) without disease progression after concurrent chemoradiotherapy (CRT). This report presents updated exploratory survival analyses approximately five years after the last patient was randomly assigned. **Methods**: Patients with WHO performance status 0 or 1, irrespective of tumor PD-L1 expression level, were randomly assigned in a 2:1 ratio to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event outcomes were compared using stratified log-rank tests; medians and landmark survival rates were estimated by the Kaplan-Meier method."
+      },
+      "explanation": "Exact dosage, route, frequency, and duration.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Placebo.",
+      "generatedFact": "Placebo.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Five-Year Survival Outcomes From the PACIFIC Trial: Durvalumab After Chemoradiotherapy in Stage III Non-Small-Cell Lung Cancer.\", \"pmcid\": \"PMC9015199\", \"pmid\": \"35108059\", \"doi\": \"10.1200/jco.21.01308\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\", \"Research Support, N.I.H., Extramural\"], \"publicationDate\": \"2022-02-02\"} [ABSTRACT] AbstractPURPOSEThe phase III PACIFIC trial compared durvalumab with placebo in patients with unresectable, stage III non–small-cell lung cancer and no disease progression after concurrent chemoradiotherapy."
+        ],
+        "quote": "[METADATA] {\"title\": \"Five-Year Survival Outcomes From the PACIFIC Trial: Durvalumab After Chemoradiotherapy in Stage III Non-Small-Cell Lung Cancer.\", \"pmcid\": \"PMC9015199\", \"pmid\": \"35108059\", \"doi\": \"10.1200/jco.21.01308\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\", \"Research Support, N.I.H., Extramural\"], \"publicationDate\": \"2022-02-02\"} [ABSTRACT] AbstractPURPOSEThe phase III PACIFIC trial compared durvalumab with placebo in patients with unresectable, stage III non–small-cell lung cancer and no disease progression after concurrent chemoradiotherapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "with unresectable, stage III non-small-cell lung cancer (NSCLC) without disease progression after concurrent chemoradiotherapy (CRT). This report presents updated exploratory survival analyses approximately five years after the last patient was randomly assigned. **Methods**: Patients with WHO performance status 0 or 1, irrespective of tumor PD-L1 expression level, were randomly assigned in a 2:1 ratio to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event outcomes were compared using stratified log-rank tests; medians and landmark survival rates were estimated by the Kaplan-Meier method."
+        ],
+        "quote": "with unresectable, stage III non-small-cell lung cancer (NSCLC) without disease progression after concurrent chemoradiotherapy (CRT). This report presents updated exploratory survival analyses approximately five years after the last patient was randomly assigned. **Methods**: Patients with WHO performance status 0 or 1, irrespective of tumor PD-L1 expression level, were randomly assigned in a 2:1 ratio to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event outcomes were compared using stratified log-rank tests; medians and landmark survival rates were estimated by the Kaplan-Meier method."
+      },
+      "explanation": "Identical comparator.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary endpoints: overall survival (OS) and progression‑free survival (PFS by blinded independent central review, RECIST v1.1).",
+      "generatedFact": "Primary endpoints were OS and PFS (assessed by blinded independent central review [BICR] per RECIST v1.1).",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Consolidation durvalumab was associated with significant improvements in the primary end points of overall survival (OS; stratified hazard ratio [HR], 0.68; 95% CI, 0.53 to 0.87; P = .00251) and progression-free survival (PFS [blinded independent central review; RECIST v1.1]; stratified HR, 0.52; 95% CI, 0.42 to 0.65; P < .0001), with manageable safety."
+        ],
+        "quote": "Consolidation durvalumab was associated with significant improvements in the primary end points of overall survival (OS; stratified hazard ratio [HR], 0.68; 95% CI, 0.53 to 0.87; P = .00251) and progression-free survival (PFS [blinded independent central review; RECIST v1.1]; stratified HR, 0.52; 95% CI, 0.42 to 0.65; P < .0001), with manageable safety."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "Eligible patients were randomly assigned (2:1) to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or matching placebo. Randomization was stratified by age (<65 vs ≥65 years), sex, and smoking history (current/former vs never). Study treatment was discontinued in the event of confirmed disease progression, initiation of alternative anticancer therapy, unacceptable toxicity, or withdrawal of consent. Patients were followed for survival after discontinuing study treatment. ### 2.2 Endpoints and Assessments Primary endpoints were OS and PFS (assessed by blinded independent central review [BICR] per RECIST v1.1), analyzed in the intent-to-treat (ITT) population."
+        ],
+        "quote": "Eligible patients were randomly assigned (2:1) to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or matching placebo. Randomization was stratified by age (<65 vs ≥65 years), sex, and smoking history (current/former vs never). Study treatment was discontinued in the event of confirmed disease progression, initiation of alternative anticancer therapy, unacceptable toxicity, or withdrawal of consent. Patients were followed for survival after discontinuing study treatment. ### 2.2 Endpoints and Assessments Primary endpoints were OS and PFS (assessed by blinded independent central review [BICR] per RECIST v1.1), analyzed in the intent-to-treat (ITT) population."
+      },
+      "explanation": "Primary endpoints identical in definition and assessment method.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "As of January 11, 2021, median follow‑up 34.2 mo (all patients) and 61.6 mo (censored patients).",
+      "generatedFact": "As of the January 11, 2021 data cutoff, median follow‑up was 34.2 months for all patients and 61.6 months for censored patients.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "As of January 11, 2021 (median follow-up, 34.2 months [all patients]; 61.6 months [censored patients]), updated OS (stratified HR, 0.72; 95% CI, 0.59 to 0.89; median, 47.5 v 29.1 months) and PFS (stratified HR, 0.55; 95% CI, 0.45 to 0.68; median, 16.9 v 5.6 months) remained consistent with the primary analyses. Estimated 5-year rates (95% CI) for durvalumab and placebo were 42.9% (38.2 to 47.4) versus 33.4% (27.3 to 39.6) for OS and 33.1% (28.0 to 38.2) versus 19.0% (13.6 to 25.2) for PFS.CONCLUSIONThese updated analyses demonstrate robust and sustained OS and durable PFS benefit with durvalumab after chemoradiotherapy."
+        ],
+        "quote": "As of January 11, 2021 (median follow-up, 34.2 months [all patients]; 61.6 months [censored patients]), updated OS (stratified HR, 0.72; 95% CI, 0.59 to 0.89; median, 47.5 v 29.1 months) and PFS (stratified HR, 0.55; 95% CI, 0.45 to 0.68; median, 16.9 v 5.6 months) remained consistent with the primary analyses. Estimated 5-year rates (95% CI) for durvalumab and placebo were 42.9% (38.2 to 47.4) versus 33.4% (27.3 to 39.6) for OS and 33.1% (28.0 to 38.2) versus 19.0% (13.6 to 25.2) for PFS.CONCLUSIONThese updated analyses demonstrate robust and sustained OS and durable PFS benefit with durvalumab after chemoradiotherapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Exploratory multivariable Cox regression analyses examined prognostic baseline factors. **Results**: Among 713 randomly assigned patients, 709 received study treatment (durvalumab, n = 473; placebo, n = 236). As of the January 11, 2021 data cutoff, median follow-up was 34.2 months for all patients and 61.6 months for censored patients. Updated OS (stratified HR, 0.72; 95% CI, 0.59–0.89) and PFS (stratified HR, 0.55; 95% CI, 0.45–0.68) remained consistent with primary analyses. Median OS was 47.5 months for durvalumab versus 29.1 months for placebo; median PFS was 16.9 versus 5.6 months."
+        ],
+        "quote": "Exploratory multivariable Cox regression analyses examined prognostic baseline factors. **Results**: Among 713 randomly assigned patients, 709 received study treatment (durvalumab, n = 473; placebo, n = 236). As of the January 11, 2021 data cutoff, median follow-up was 34.2 months for all patients and 61.6 months for censored patients. Updated OS (stratified HR, 0.72; 95% CI, 0.59–0.89) and PFS (stratified HR, 0.55; 95% CI, 0.45–0.68) remained consistent with primary analyses. Median OS was 47.5 months for durvalumab versus 29.1 months for placebo; median PFS was 16.9 versus 5.6 months."
+      },
+      "explanation": "Follow‑up times match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No data preprocessing, cleaning, or feature construction is described in either source.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Time‑to‑event endpoints compared by stratified log‑rank tests; medians/landmark rates by Kaplan‑Meier; subgroup analyses used unstratified Cox models; prognostic factors assessed by uni‑ and multivariable Cox regression.",
+      "generatedFact": "Time‑to‑event comparisons used stratified log‑rank tests; Kaplan‑Meier for medians/landmark rates; subgroup analyses used unstratified Cox models; uni‑ and multivariable Cox regression evaluated prognostic factors.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "We report updated, exploratory analyses of survival, approximately 5 years after the last patient was randomly assigned.METHODSPatients with WHO performance status 0 or 1 (any tumor programmed cell death-ligand 1 status) were randomly assigned (2:1) to durvalumab (10 mg/kg intravenously; administered once every 2 weeks for 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event end point analyses were performed using stratified log-rank tests. Medians and landmark survival rates were estimated using the Kaplan-Meier method.RESULTSSeven hundred and nine of 713 randomly assigned patients received durvalumab (473 of 476) or placebo (236 of 237)."
+        ],
+        "quote": "We report updated, exploratory analyses of survival, approximately 5 years after the last patient was randomly assigned.METHODSPatients with WHO performance status 0 or 1 (any tumor programmed cell death-ligand 1 status) were randomly assigned (2:1) to durvalumab (10 mg/kg intravenously; administered once every 2 weeks for 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event end point analyses were performed using stratified log-rank tests. Medians and landmark survival rates were estimated using the Kaplan-Meier method.RESULTSSeven hundred and nine of 713 randomly assigned patients received durvalumab (473 of 476) or placebo (236 of 237)."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "New exploratory analyses examined the prognostic association of baseline factors (other than assigned study treatment) with OS and PFS using univariate and multivariable Cox regression models. ### 2.3 Statistical Analysis Time-to-event comparisons between arms used log-rank tests stratified by the same factors as randomization. Medians and landmark survival rates (e.g., five-year OS) were estimated by the Kaplan-Meier method. Subgroup analyses used unstratified Cox regression models without adjustment for multiple comparisons."
+        ],
+        "quote": "New exploratory analyses examined the prognostic association of baseline factors (other than assigned study treatment) with OS and PFS using univariate and multivariable Cox regression models. ### 2.3 Statistical Analysis Time-to-event comparisons between arms used log-rank tests stratified by the same factors as randomization. Medians and landmark survival rates (e.g., five-year OS) were estimated by the Kaplan-Meier method. Subgroup analyses used unstratified Cox regression models without adjustment for multiple comparisons."
+      },
+      "explanation": "Statistical methods are identically described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Cox regression (proportional hazards) models used for subgroup and prognostic analyses.",
+      "generatedFact": "Univariable and multivariable Cox regression models evaluated prognostic association.",
+      "sourceEvidence": {
+        "locator": "R0019",
+        "locators": [
+          "R0019"
+        ],
+        "quotes": [
+          "Statistical Analysis For time-to-event end points, analyses comparing durvalumab with placebo (ITT population) were performed using log-rank tests stratified using the same factors used to stratify patients at random assignment; this was for consistency with the original analyses. 1 , 2 Unstratified Cox regression models (with no adjustment for multiple comparisons) were used for subgroup analyses. Medians and landmark rates (eg, 5-year OS) were estimated by Kaplan-Meier method. The prognostic association of baseline factors (other than assigned study treatment) with OS and PFS was analyzed using univariate and multivariable Cox regression models, as described in Appendix 1 ."
+        ],
+        "quote": "Statistical Analysis For time-to-event end points, analyses comparing durvalumab with placebo (ITT population) were performed using log-rank tests stratified using the same factors used to stratify patients at random assignment; this was for consistency with the original analyses. 1 , 2 Unstratified Cox regression models (with no adjustment for multiple comparisons) were used for subgroup analyses. Medians and landmark rates (eg, 5-year OS) were estimated by Kaplan-Meier method. The prognostic association of baseline factors (other than assigned study treatment) with OS and PFS was analyzed using univariate and multivariable Cox regression models, as described in Appendix 1 ."
+      },
+      "generatedEvidence": {
+        "locator": "G0013",
+        "locators": [
+          "G0013"
+        ],
+        "quotes": [
+          "Univariable and multivariable Cox regression models evaluated the prognostic association of baseline factors with OS and PFS; all prespecified variables were retained in final models without data-driven variable selection. --- ## 3. Results ### 3.1 Patient Disposition and Baseline Characteristics Of 713 randomly assigned patients, 709 received study treatment (durvalumab, 473/476; placebo, 236/237). Baseline characteristics were well balanced between arms. As of the January 11, 2021 data cutoff, 419 patients (58.8%) had died (durvalumab: 264/476 [55.5%]; placebo: 155/237 [65.4%])."
+        ],
+        "quote": "Univariable and multivariable Cox regression models evaluated the prognostic association of baseline factors with OS and PFS; all prespecified variables were retained in final models without data-driven variable selection. --- ## 3. Results ### 3.1 Patient Disposition and Baseline Characteristics Of 713 randomly assigned patients, 709 received study treatment (durvalumab, 473/476; placebo, 236/237). Baseline characteristics were well balanced between arms. As of the January 11, 2021 data cutoff, 419 patients (58.8%) had died (durvalumab: 264/476 [55.5%]; placebo: 155/237 [65.4%])."
+      },
+      "explanation": "Both specify the Cox regression model as the analytical model.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Updated OS: HR 0.72 (0.59–0.89), median 47.5 vs 29.1 mo, 5‑year 42.9% vs 33.4%. Updated PFS: HR 0.55 (0.45–0.68), median 16.9 vs 5.6 mo, 5‑year 33.1% vs 19.0%.",
+      "generatedFact": "Updated OS HR 0.72 (0.59–0.89), median 47.5 vs 29.1 mo, 5‑year 42.9% vs 33.4%; PFS HR 0.55 (0.45–0.68), median 16.9 vs 5.6 mo, 5‑year 33.1% vs 19.0%.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "As of January 11, 2021 (median follow-up, 34.2 months [all patients]; 61.6 months [censored patients]), updated OS (stratified HR, 0.72; 95% CI, 0.59 to 0.89; median, 47.5 v 29.1 months) and PFS (stratified HR, 0.55; 95% CI, 0.45 to 0.68; median, 16.9 v 5.6 months) remained consistent with the primary analyses. Estimated 5-year rates (95% CI) for durvalumab and placebo were 42.9% (38.2 to 47.4) versus 33.4% (27.3 to 39.6) for OS and 33.1% (28.0 to 38.2) versus 19.0% (13.6 to 25.2) for PFS.CONCLUSIONThese updated analyses demonstrate robust and sustained OS and durable PFS benefit with durvalumab after chemoradiotherapy."
+        ],
+        "quote": "As of January 11, 2021 (median follow-up, 34.2 months [all patients]; 61.6 months [censored patients]), updated OS (stratified HR, 0.72; 95% CI, 0.59 to 0.89; median, 47.5 v 29.1 months) and PFS (stratified HR, 0.55; 95% CI, 0.45 to 0.68; median, 16.9 v 5.6 months) remained consistent with the primary analyses. Estimated 5-year rates (95% CI) for durvalumab and placebo were 42.9% (38.2 to 47.4) versus 33.4% (27.3 to 39.6) for OS and 33.1% (28.0 to 38.2) versus 19.0% (13.6 to 25.2) for PFS.CONCLUSIONThese updated analyses demonstrate robust and sustained OS and durable PFS benefit with durvalumab after chemoradiotherapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Exploratory multivariable Cox regression analyses examined prognostic baseline factors. **Results**: Among 713 randomly assigned patients, 709 received study treatment (durvalumab, n = 473; placebo, n = 236). As of the January 11, 2021 data cutoff, median follow-up was 34.2 months for all patients and 61.6 months for censored patients. Updated OS (stratified HR, 0.72; 95% CI, 0.59–0.89) and PFS (stratified HR, 0.55; 95% CI, 0.45–0.68) remained consistent with primary analyses. Median OS was 47.5 months for durvalumab versus 29.1 months for placebo; median PFS was 16.9 versus 5.6 months."
+        ],
+        "quote": "Exploratory multivariable Cox regression analyses examined prognostic baseline factors. **Results**: Among 713 randomly assigned patients, 709 received study treatment (durvalumab, n = 473; placebo, n = 236). As of the January 11, 2021 data cutoff, median follow-up was 34.2 months for all patients and 61.6 months for censored patients. Updated OS (stratified HR, 0.72; 95% CI, 0.59–0.89) and PFS (stratified HR, 0.55; 95% CI, 0.45–0.68) remained consistent with primary analyses. Median OS was 47.5 months for durvalumab versus 29.1 months for placebo; median PFS was 16.9 versus 5.6 months."
+      },
+      "explanation": "All key HRs, medians, and 5‑year rates match precisely.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary OS HR 0.68 (0.53–0.87) P=0.00251; PFS HR 0.52 (0.42–0.65) P<0.0001. Updated efficacy given with 95% CIs (no p‑values reported).",
+      "generatedFact": "Primary analysis p‑values provided (0.00251 and <0.0001); updated results reported with 95% CIs only, matching REFERENCE.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Consolidation durvalumab was associated with significant improvements in the primary end points of overall survival (OS; stratified hazard ratio [HR], 0.68; 95% CI, 0.53 to 0.87; P = .00251) and progression-free survival (PFS [blinded independent central review; RECIST v1.1]; stratified HR, 0.52; 95% CI, 0.42 to 0.65; P < .0001), with manageable safety."
+        ],
+        "quote": "Consolidation durvalumab was associated with significant improvements in the primary end points of overall survival (OS; stratified hazard ratio [HR], 0.68; 95% CI, 0.53 to 0.87; P = .00251) and progression-free survival (PFS [blinded independent central review; RECIST v1.1]; stratified HR, 0.52; 95% CI, 0.42 to 0.65; P < .0001), with manageable safety."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "The phase III PACIFIC trial represented a milestone: it was the first study to demonstrate a survival advantage with immunotherapy in a curative-intent setting for NSCLC. The primary analyses (data cutoffs February 13, 2017 for PFS and March 22, 2018 for OS) established that durvalumab consolidation therapy, administered for up to 12 months, significantly improved OS (stratified HR, 0.68; 95% CI, 0.53–0.87; P = 0.00251) and PFS (stratified HR, 0.52; 95% CI, 0.42–0.65; P < 0.0001) compared with placebo. These findings, together with manageable safety and preserved patient-reported outcomes, led to global regulatory approvals and established the PACIFIC regimen as the standard of care."
+        ],
+        "quote": "The phase III PACIFIC trial represented a milestone: it was the first study to demonstrate a survival advantage with immunotherapy in a curative-intent setting for NSCLC. The primary analyses (data cutoffs February 13, 2017 for PFS and March 22, 2018 for OS) established that durvalumab consolidation therapy, administered for up to 12 months, significantly improved OS (stratified HR, 0.68; 95% CI, 0.53–0.87; P = 0.00251) and PFS (stratified HR, 0.52; 95% CI, 0.42–0.65; P < 0.0001) compared with placebo. These findings, together with manageable safety and preserved patient-reported outcomes, led to global regulatory approvals and established the PACIFIC regimen as the standard of care."
+      },
+      "explanation": "Uncertainty intervals and significance values are faithfully reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Robust and sustained OS and durable PFS benefit; 42.9% alive at 5 years, 33.1% progression‑free, establishing new SoC benchmark.",
+      "generatedFact": "Robust and sustained OS and PFS benefit; 42.9% alive at five years, 33.1% alive and progression‑free, establishing a new benchmark for standard of care.",
+      "sourceEvidence": {
+        "locator": "R0005",
+        "locators": [
+          "R0005"
+        ],
+        "quotes": [
+          "An estimated 42.9% of patients randomly assigned to durvalumab remain alive at 5 years and 33.1% of patients randomly assigned to durvalumab remain alive and free of disease progression, establishing a new benchmark for standard of care in this setting."
+        ],
+        "quote": "An estimated 42.9% of patients randomly assigned to durvalumab remain alive at 5 years and 33.1% of patients randomly assigned to durvalumab remain alive and free of disease progression, establishing a new benchmark for standard of care in this setting."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "An estimated 42.9% of patients in the durvalumab arm remained alive at five years, and 33.1% remained alive and progression-free, establishing a new benchmark for the standard of care in unresectable, stage III NSCLC. --- ## 1. Introduction For patients with unresectable, stage III NSCLC, the historical standard of care consisted of platinum-based concurrent CRT followed by observation. This approach was associated with poor long-term survival, and neither induction nor consolidation chemotherapy, nor radiation dose escalation, had been shown to improve outcomes."
+        ],
+        "quote": "An estimated 42.9% of patients in the durvalumab arm remained alive at five years, and 33.1% remained alive and progression-free, establishing a new benchmark for the standard of care in unresectable, stage III NSCLC. --- ## 1. Introduction For patients with unresectable, stage III NSCLC, the historical standard of care consisted of platinum-based concurrent CRT followed by observation. This approach was associated with poor long-term survival, and neither induction nor consolidation chemotherapy, nor radiation dose escalation, had been shown to improve outcomes."
+      },
+      "explanation": "Conclusion direction, magnitude, and strength are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Subgroup analyses underpowered, small sample sizes, no stratification for most factors; PD‑L1 testing on pre‑CRT tissue, 37% missing, TC<1% n=148, placebo overperformance; EGFR/ALK subgroup (n=43) uncertain, 26.4% unknown status; treatment duration empiric; retreatment analysis limited; safety not updated.",
+      "generatedFact": "Limitations include small subgroups, lack of power, PD‑L1 confounders (pre‑CRT tissue, incomplete availability, small TC<1%), uncertain EGFR/ALK benefit, empiric 12‑month duration, limited retreatment analysis, no safety update beyond primary analysis.",
+      "sourceEvidence": {
+        "locator": "R0040",
+        "locators": [
+          "R0040"
+        ],
+        "quotes": [
+          "Consistent with previous reports, 1 , 2 , 4 , 5 OS and PFS benefit continued to favor durvalumab over placebo in all prespecified patient subgroups in the updated analyses, supporting the use of the PACIFIC regimen in a broad population. Previous exploratory analyses from PACIFIC also demonstrated consistent benefit with durvalumab across subgroups defined by additional (post hoc) CRT-related variables, including the nonplatinum chemotherapy agents used, the total radiation dose, and the use of induction chemotherapy before CRT. 18 PACIFIC was designed to assess clinical outcomes with durvalumab in an all-comers population, preventing definitive conclusions for subgroups."
+        ],
+        "quote": "Consistent with previous reports, 1 , 2 , 4 , 5 OS and PFS benefit continued to favor durvalumab over placebo in all prespecified patient subgroups in the updated analyses, supporting the use of the PACIFIC regimen in a broad population. Previous exploratory analyses from PACIFIC also demonstrated consistent benefit with durvalumab across subgroups defined by additional (post hoc) CRT-related variables, including the nonplatinum chemotherapy agents used, the total radiation dose, and the use of induction chemotherapy before CRT. 18 PACIFIC was designed to assess clinical outcomes with durvalumab in an all-comers population, preventing definitive conclusions for subgroups."
+      },
+      "generatedEvidence": {
+        "locator": "G0025",
+        "locators": [
+          "G0025"
+        ],
+        "quotes": [
+          "First, PACIFIC enrolled only patients who had completed CRT and were free of disease progression with recovery from early CRT-related toxicities; these results cannot be directly compared with historical CRT-alone cohorts. Second, the study was not designed to support definitive subgroup conclusions. Subgroup analyses are limited by small sample sizes, lack of statistical power, and absence of stratification for most subgroup factors. In particular, the benefit of durvalumab in patients with EGFR/ALK aberration-positive tumors remains uncertain given the small subgroup size (n = 43) and incomplete mutation testing (26.4% unknown status)."
+        ],
+        "quote": "First, PACIFIC enrolled only patients who had completed CRT and were free of disease progression with recovery from early CRT-related toxicities; these results cannot be directly compared with historical CRT-alone cohorts. Second, the study was not designed to support definitive subgroup conclusions. Subgroup analyses are limited by small sample sizes, lack of statistical power, and absence of stratification for most subgroup factors. In particular, the benefit of durvalumab in patients with EGFR/ALK aberration-positive tumors remains uncertain given the small subgroup size (n = 43) and incomplete mutation testing (26.4% unknown status)."
+      },
+      "explanation": "All major limitations mentioned in REFERENCE are accurately captured.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary safety analysis: grade 3/4 AEs 30.5% vs 26.1%, fatal AEs 4.4% vs 6.4%, AE‑related discontinuation 15.4% vs 9.8% (mainly pneumonitis/radiation pneumonitis).",
+      "generatedFact": "Grade 3/4 AEs 30.5% vs 26.1%, fatal AEs 4.4% vs 6.4%, discontinuation due to AEs 15.4% vs 9.8% (pneumonitis, radiation pneumonitis, pneumonia).",
+      "sourceEvidence": {
+        "locator": "R0047",
+        "locators": [
+          "R0047"
+        ],
+        "quotes": [
+          "2 At the time of the primary OS analysis, all-causality AEs of maximum toxicity grade 3/4 occurred in 30.5% and 26.1% (and fatal AEs in 4.4% and 6.4%) of patients receiving durvalumab and placebo, respectively; 15.4% and 9.8% discontinued durvalumab and placebo because of AEs, mostly pneumonitis, radiation pneumonitis, and pneumonia. 2 Analyses of patient-reported outcomes from PACIFIC found no evidence for a detrimental effect of up to 12 months of durvalumab treatment on symptoms, functioning, or global health status and quality of life, with the results being comparable to placebo."
+        ],
+        "quote": "2 At the time of the primary OS analysis, all-causality AEs of maximum toxicity grade 3/4 occurred in 30.5% and 26.1% (and fatal AEs in 4.4% and 6.4%) of patients receiving durvalumab and placebo, respectively; 15.4% and 9.8% discontinued durvalumab and placebo because of AEs, mostly pneumonitis, radiation pneumonitis, and pneumonia. 2 Analyses of patient-reported outcomes from PACIFIC found no evidence for a detrimental effect of up to 12 months of durvalumab treatment on symptoms, functioning, or global health status and quality of life, with the results being comparable to placebo."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "Estimated five-year OS rates were 42.9% (95% CI, 38.2–47.4) versus 33.4% (95% CI, 27.3–39.6), and five-year PFS rates were 33.1% (95% CI, 28.0–38.2) versus 19.0% (95% CI, 13.6–25.2). In the primary safety analysis, grade 3/4 adverse events (AEs) occurred in 30.5% of durvalumab-treated patients versus 26.1% of placebo recipients; fatal AEs were reported in 4.4% versus 6.4%. Discontinuation due to AEs occurred in 15.4% versus 9.8% of patients. **Conclusions**: Durvalumab after CRT provides robust and sustained OS and PFS benefit."
+        ],
+        "quote": "Estimated five-year OS rates were 42.9% (95% CI, 38.2–47.4) versus 33.4% (95% CI, 27.3–39.6), and five-year PFS rates were 33.1% (95% CI, 28.0–38.2) versus 19.0% (95% CI, 13.6–25.2). In the primary safety analysis, grade 3/4 adverse events (AEs) occurred in 30.5% of durvalumab-treated patients versus 26.1% of placebo recipients; fatal AEs were reported in 4.4% versus 6.4%. Discontinuation due to AEs occurred in 15.4% versus 9.8% of patients. **Conclusions**: Durvalumab after CRT provides robust and sustained OS and PFS benefit."
+      },
+      "explanation": "Safety numbers are exactly reproduced from primary analysis.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "randomization_and_blinding",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Randomly assigned 2:1, stratified by age (<65 vs ≥65), sex, and smoking history (current/former vs never).",
+      "generatedFact": "Randomly assigned (2:1) stratified by age (<65 vs ≥65 years), sex, and smoking history (current/former vs never).",
+      "sourceEvidence": {
+        "locator": "R0014",
+        "locators": [
+          "R0014"
+        ],
+        "quotes": [
+          "Patients were randomly assigned (2:1), stratified by age (< 65 v ≥ 65 years), sex, and smoking history (current or former smoker v never smoked), to durvalumab (10 mg/kg intravenously) or placebo, administered once every 2 weeks for up to 12 months; study treatment was discontinued if there was confirmed disease progression, initiation of alternative anticancer therapy, or the patient experienced unacceptable toxicity or withdrew consent. Patients were followed for survival after discontinuing study treatment. The study Protocol (online only) and amendments were approved by the relevant ethics committees."
+        ],
+        "quote": "Patients were randomly assigned (2:1), stratified by age (< 65 v ≥ 65 years), sex, and smoking history (current or former smoker v never smoked), to durvalumab (10 mg/kg intravenously) or placebo, administered once every 2 weeks for up to 12 months; study treatment was discontinued if there was confirmed disease progression, initiation of alternative anticancer therapy, or the patient experienced unacceptable toxicity or withdrew consent. Patients were followed for survival after discontinuing study treatment. The study Protocol (online only) and amendments were approved by the relevant ethics committees."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "Eligible patients were randomly assigned (2:1) to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or matching placebo. Randomization was stratified by age (<65 vs ≥65 years), sex, and smoking history (current/former vs never). Study treatment was discontinued in the event of confirmed disease progression, initiation of alternative anticancer therapy, unacceptable toxicity, or withdrawal of consent. Patients were followed for survival after discontinuing study treatment. ### 2.2 Endpoints and Assessments Primary endpoints were OS and PFS (assessed by blinded independent central review [BICR] per RECIST v1.1), analyzed in the intent-to-treat (ITT) population."
+        ],
+        "quote": "Eligible patients were randomly assigned (2:1) to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or matching placebo. Randomization was stratified by age (<65 vs ≥65 years), sex, and smoking history (current/former vs never). Study treatment was discontinued in the event of confirmed disease progression, initiation of alternative anticancer therapy, unacceptable toxicity, or withdrawal of consent. Patients were followed for survival after discontinuing study treatment. ### 2.2 Endpoints and Assessments Primary endpoints were OS and PFS (assessed by blinded independent central review [BICR] per RECIST v1.1), analyzed in the intent-to-treat (ITT) population."
+      },
+      "explanation": "Randomization ratio and stratification factors match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "treatment_arms_and_dose",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Durvalumab 10 mg/kg IV every 2 weeks for 12 months; placebo.",
+      "generatedFact": "Durvalumab 10 mg/kg intravenously every two weeks for up to 12 months; matching placebo.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "We report updated, exploratory analyses of survival, approximately 5 years after the last patient was randomly assigned.METHODSPatients with WHO performance status 0 or 1 (any tumor programmed cell death-ligand 1 status) were randomly assigned (2:1) to durvalumab (10 mg/kg intravenously; administered once every 2 weeks for 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event end point analyses were performed using stratified log-rank tests. Medians and landmark survival rates were estimated using the Kaplan-Meier method.RESULTSSeven hundred and nine of 713 randomly assigned patients received durvalumab (473 of 476) or placebo (236 of 237)."
+        ],
+        "quote": "We report updated, exploratory analyses of survival, approximately 5 years after the last patient was randomly assigned.METHODSPatients with WHO performance status 0 or 1 (any tumor programmed cell death-ligand 1 status) were randomly assigned (2:1) to durvalumab (10 mg/kg intravenously; administered once every 2 weeks for 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event end point analyses were performed using stratified log-rank tests. Medians and landmark survival rates were estimated using the Kaplan-Meier method.RESULTSSeven hundred and nine of 713 randomly assigned patients received durvalumab (473 of 476) or placebo (236 of 237)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "with unresectable, stage III non-small-cell lung cancer (NSCLC) without disease progression after concurrent chemoradiotherapy (CRT). This report presents updated exploratory survival analyses approximately five years after the last patient was randomly assigned. **Methods**: Patients with WHO performance status 0 or 1, irrespective of tumor PD-L1 expression level, were randomly assigned in a 2:1 ratio to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event outcomes were compared using stratified log-rank tests; medians and landmark survival rates were estimated by the Kaplan-Meier method."
+        ],
+        "quote": "with unresectable, stage III non-small-cell lung cancer (NSCLC) without disease progression after concurrent chemoradiotherapy (CRT). This report presents updated exploratory survival analyses approximately five years after the last patient was randomly assigned. **Methods**: Patients with WHO performance status 0 or 1, irrespective of tumor PD-L1 expression level, were randomly assigned in a 2:1 ratio to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or placebo, stratified by age, sex, and smoking history. Time-to-event outcomes were compared using stratified log-rank tests; medians and landmark survival rates were estimated by the Kaplan-Meier method."
+      },
+      "explanation": "Arms, dose, schedule, and duration are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_population",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Intent-to-treat (ITT) population comprising all randomized patients.",
+      "generatedFact": "Intent-to-treat (ITT) population.",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "The study was performed in accordance with the International Conference on Harmonisation Guidelines on Good Clinical Practice and the Declaration of Helsinki. End Points and Assessments We updated the primary analyses of OS and PFS (RECIST v1.1; assessed by blinded independent central review [BICR]) with durvalumab versus placebo in the intent-to-treat (ITT) population."
+        ],
+        "quote": "The study was performed in accordance with the International Conference on Harmonisation Guidelines on Good Clinical Practice and the Declaration of Helsinki. End Points and Assessments We updated the primary analyses of OS and PFS (RECIST v1.1; assessed by blinded independent central review [BICR]) with durvalumab versus placebo in the intent-to-treat (ITT) population."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "Eligible patients were randomly assigned (2:1) to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or matching placebo. Randomization was stratified by age (<65 vs ≥65 years), sex, and smoking history (current/former vs never). Study treatment was discontinued in the event of confirmed disease progression, initiation of alternative anticancer therapy, unacceptable toxicity, or withdrawal of consent. Patients were followed for survival after discontinuing study treatment. ### 2.2 Endpoints and Assessments Primary endpoints were OS and PFS (assessed by blinded independent central review [BICR] per RECIST v1.1), analyzed in the intent-to-treat (ITT) population."
+        ],
+        "quote": "Eligible patients were randomly assigned (2:1) to receive durvalumab (10 mg/kg intravenously every two weeks for up to 12 months) or matching placebo. Randomization was stratified by age (<65 vs ≥65 years), sex, and smoking history (current/former vs never). Study treatment was discontinued in the event of confirmed disease progression, initiation of alternative anticancer therapy, unacceptable toxicity, or withdrawal of consent. Patients were followed for survival after discontinuing study treatment. ### 2.2 Endpoints and Assessments Primary endpoints were OS and PFS (assessed by blinded independent central review [BICR] per RECIST v1.1), analyzed in the intent-to-treat (ITT) population."
+      },
+      "explanation": "Both specify ITT as the primary analysis population.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "effect_estimate_context",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "For updated OS: HR 0.72 (durvalumab vs placebo), 95% CI 0.59–0.89, 5‑year rate 42.9% vs 33.4%.",
+      "generatedFact": "Updated OS HR 0.72 (95% CI 0.59–0.89) for durvalumab versus placebo; 5‑year OS 42.9% vs 33.4%.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "As of January 11, 2021 (median follow-up, 34.2 months [all patients]; 61.6 months [censored patients]), updated OS (stratified HR, 0.72; 95% CI, 0.59 to 0.89; median, 47.5 v 29.1 months) and PFS (stratified HR, 0.55; 95% CI, 0.45 to 0.68; median, 16.9 v 5.6 months) remained consistent with the primary analyses. Estimated 5-year rates (95% CI) for durvalumab and placebo were 42.9% (38.2 to 47.4) versus 33.4% (27.3 to 39.6) for OS and 33.1% (28.0 to 38.2) versus 19.0% (13.6 to 25.2) for PFS.CONCLUSIONThese updated analyses demonstrate robust and sustained OS and durable PFS benefit with durvalumab after chemoradiotherapy."
+        ],
+        "quote": "As of January 11, 2021 (median follow-up, 34.2 months [all patients]; 61.6 months [censored patients]), updated OS (stratified HR, 0.72; 95% CI, 0.59 to 0.89; median, 47.5 v 29.1 months) and PFS (stratified HR, 0.55; 95% CI, 0.45 to 0.68; median, 16.9 v 5.6 months) remained consistent with the primary analyses. Estimated 5-year rates (95% CI) for durvalumab and placebo were 42.9% (38.2 to 47.4) versus 33.4% (27.3 to 39.6) for OS and 33.1% (28.0 to 38.2) versus 19.0% (13.6 to 25.2) for PFS.CONCLUSIONThese updated analyses demonstrate robust and sustained OS and durable PFS benefit with durvalumab after chemoradiotherapy."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "Exploratory multivariable Cox regression analyses examined prognostic baseline factors. **Results**: Among 713 randomly assigned patients, 709 received study treatment (durvalumab, n = 473; placebo, n = 236). As of the January 11, 2021 data cutoff, median follow-up was 34.2 months for all patients and 61.6 months for censored patients. Updated OS (stratified HR, 0.72; 95% CI, 0.59–0.89) and PFS (stratified HR, 0.55; 95% CI, 0.45–0.68) remained consistent with primary analyses. Median OS was 47.5 months for durvalumab versus 29.1 months for placebo; median PFS was 16.9 versus 5.6 months."
+        ],
+        "quote": "Exploratory multivariable Cox regression analyses examined prognostic baseline factors. **Results**: Among 713 randomly assigned patients, 709 received study treatment (durvalumab, n = 473; placebo, n = 236). As of the January 11, 2021 data cutoff, median follow-up was 34.2 months for all patients and 61.6 months for censored patients. Updated OS (stratified HR, 0.72; 95% CI, 0.59–0.89) and PFS (stratified HR, 0.55; 95% CI, 0.45–0.68) remained consistent with primary analyses. Median OS was 47.5 months for durvalumab versus 29.1 months for placebo; median PFS was 16.9 versus 5.6 months."
+      },
+      "explanation": "Effect measure, arm order, endpoint, CI, and time point are faithfully reported.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 20,
+    "weightedFidelity": 0.9941,
+    "criticalFidelity": 0.9929,
+    "statusCounts": {
+      "exact": 19,
+      "compatible": 1,
+      "not_applicable": 1
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 95.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "pass",
+    "adversarialIssueCount": 0,
+    "adversarialUnsupportedClaimCount": 0,
+    "adversarialContradictionCount": 0,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "clean",
+    "issues": [],
+    "rationale": "All claims in the generated report are directly supported by the reference. Key endpoints, hazard ratios, survival rates, safety data, subgroup analyses, and limitations match the source article exactly. No unsupported claims, contradictions, or critical omissions were identified."
+  },
+  "overallAssessment": "The generated report accurately reproduces all critical scientific facts from the reference article. Study design, population, randomization, intervention, comparator, endpoints, key numerical results (HRs, medians, 5‑year rates), confidence intervals, safety, limitations, and conclusions are fully consistent. Minor differences, such as the addition of 'double-blind' and 'multicenter' without explicit source support, do not contradict the reference and do not affect scientific validity. No fabricated or contradictory statements are present, and no material facts are omitted.",
+  "gradedAt": "2026-07-18T15:08:41Z"
+}

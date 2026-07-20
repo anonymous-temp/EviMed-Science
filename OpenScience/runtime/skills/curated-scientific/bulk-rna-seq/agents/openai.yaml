@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bulk RNA-seq"
+  short_description: "Analyze bulk RNA sequencing with design-aware controls"
+  default_prompt: "Use $bulk-rna-seq to build a reproducible differential-expression workflow."

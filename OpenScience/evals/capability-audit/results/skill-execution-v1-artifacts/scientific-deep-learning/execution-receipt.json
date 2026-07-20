@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1284,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-deep-learning/results.json",
+      "sha256": "997ee89c8bbc79e029be91eca3e9a780dbe3083ac2acea355aecdc20a04884b8"
+    },
+    {
+      "bytes": 1815,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-deep-learning/scientific-deep-learning-report.md",
+      "sha256": "e7d221685eb9f1c133a9891536fb577ce7933fad20cfe5c3354550eb1dde6570"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:45.095548Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "scientific-deep-learning",
+  "startedAt": "2026-07-19T19:31:44.560294Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for scientific-deep-learning and wrote 2 verified artifacts.",
+  "warnings": [
+    "This is a bounded baseline, not a clinically validated predictive model."
+  ]
+}

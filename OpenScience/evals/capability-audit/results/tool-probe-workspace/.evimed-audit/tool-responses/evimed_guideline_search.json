@@ -1,0 +1,94 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 traceable PubMed records.",
+  "data": {
+    "items": [
+      {
+        "id": "PMID:40811516",
+        "pmid": "40811516",
+        "title": "2025 AHA/ACC/AANP/AAPA/ABC/ACCP/ACPM/AGS/AMA/ASPC/NMA/PCNA/SGIM Guideline for the Prevention, Detection, Evaluation and Management of High Blood Pressure in Adults: A Report of the American College of Cardiology/American Heart Association Joint Committee on Clinical Practice Guidelines.",
+        "journal": "Hypertension (Dallas, Tex. : 1979)",
+        "publicationDate": "2025 Oct",
+        "authors": [
+          "Writing Committee Members*",
+          "Jones DW",
+          "Ferdinand KC",
+          "Taler SJ",
+          "Johnson HM",
+          "Shimbo D",
+          "Abdalla M",
+          "Altieri MM",
+          "Bansal N",
+          "Bello NA",
+          "Bress AP",
+          "Carter J",
+          "Cohen JB",
+          "Collins KJ",
+          "Commodore-Mensah Y",
+          "Davis LL",
+          "Egan B",
+          "Khan SS",
+          "Lloyd-Jones DM",
+          "Melnyk BM",
+          "Mistry EA",
+          "Ogunniyi MO",
+          "Schott SL",
+          "Smith SC Jr",
+          "Talbot AW",
+          "Vongpatanasin W",
+          "Watson KE",
+          "Whelton PK",
+          "Williamson JD"
+        ],
+        "doi": "10.1161/HYP.0000000000000249",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/40811516/"
+      },
+      {
+        "id": "PMID:32443079",
+        "pmid": "32443079",
+        "title": "Gestational Hypertension and Preeclampsia: ACOG Practice Bulletin, Number 222.",
+        "journal": "Obstetrics and gynecology",
+        "publicationDate": "2020 Jun",
+        "authors": [],
+        "doi": "10.1097/AOG.0000000000003891",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/32443079/"
+      }
+    ],
+    "provenance": {
+      "tool": "evimed_guideline_search",
+      "arguments": {
+        "query": "hypertension clinical practice guideline",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "PMID:40811516",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/40811516/",
+      "source": "pubmed-guideline",
+      "retrievedAt": "2026-07-19T20:08:52.191475Z",
+      "title": "2025 AHA/ACC/AANP/AAPA/ABC/ACCP/ACPM/AGS/AMA/ASPC/NMA/PCNA/SGIM Guideline for the Prevention, Detection, Evaluation and Management of High Blood Pressure in Adults: A Report of the American College of Cardiology/American Heart Association Joint Committee on Clinical Practice Guidelines."
+    },
+    {
+      "id": "PMID:32443079",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/32443079/",
+      "source": "pubmed-guideline",
+      "retrievedAt": "2026-07-19T20:08:52.191496Z",
+      "title": "Gestational Hypertension and Preeclampsia: ACOG Practice Bulletin, Number 222."
+    }
+  ],
+  "warnings": [
+    "EviMed guideline search was unavailable: This connector requires the EviMed server gateway to inject a managed credential.",
+    "Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality."
+  ],
+  "next_actions": [
+    "Retrieve and review the abstract or full text before classifying study design or summarizing findings."
+  ]
+}

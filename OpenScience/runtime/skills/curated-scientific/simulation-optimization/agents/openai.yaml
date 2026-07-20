@@ -1,0 +1,4 @@
+interface:
+  display_name: "Simulation and Optimization"
+  short_description: "Build validated simulations and optimization studies"
+  default_prompt: "Use $simulation-optimization to run this simulation and optimization study."

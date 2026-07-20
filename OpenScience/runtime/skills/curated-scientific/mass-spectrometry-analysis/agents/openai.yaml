@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mass Spectrometry Analysis"
+  short_description: "Analyze traceable proteomics and metabolomics spectra"
+  default_prompt: "Use $mass-spectrometry-analysis to analyze and quality-check these mass spectra."

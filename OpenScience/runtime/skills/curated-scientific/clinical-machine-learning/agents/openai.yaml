@@ -1,0 +1,4 @@
+interface:
+  display_name: "Clinical Machine Learning"
+  short_description: "Develop clinically valid and auditable ML models"
+  default_prompt: "Use $clinical-machine-learning to design and evaluate this clinical prediction model."

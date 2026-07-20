@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-016",
+  "category": "diagnostic-prognostic",
+  "title": "Diagnostic accuracy of non-invasive tests for advanced fibrosis in patients with NAFLD: an individual patient data meta-analysis.",
+  "pmcid": "PMC8995830",
+  "doi": "10.1136/gutjnl-2021-324243",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 9492,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 129,
+    "supportedUniqueNumbers": 128,
+    "unsupportedNumberTokens": [
+      "10392"
+    ],
+    "supportedNumericClaimPrecision": 0.9922480620155039,
+    "verbatimEightGramRate": 0.0019623233908948193,
+    "toolCalls": 12,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text faithfully reproduces all factual elements from the reference: study design (IPD meta-analysis of 37 studies), sample size (n=5735), demographic details, AUROCs, exact cut‑offs, sequential combination performance, subgroup results, and limitations. No fabricated numbers, unsupported conclusions, or misinterpretations were detected. All claims are directly verifiable in the full text evidence."
+  },
+  "overallVerdict": "pass"
+}

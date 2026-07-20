@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-031",
+  "category": "pharmacovigilance-drug-safety",
+  "title": "The REporting of A Disproportionality Analysis for DrUg Safety Signal Detection Using Individual Case Safety Reports in PharmacoVigilance (READUS-PV): Explanation and Elaboration.",
+  "pmcid": "PMC11116264",
+  "doi": "10.1007/s40264-024-01423-7",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 33283,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 118,
+    "supportedUniqueNumbers": 87,
+    "unsupportedNumberTokens": [
+      "-258",
+      "-537",
+      "1112",
+      "1220",
+      "1225",
+      "2122",
+      "2324",
+      "253",
+      "2574",
+      "3132",
+      "361",
+      "363",
+      "3738",
+      "382",
+      "413",
+      "4346",
+      "491",
+      "495",
+      "499",
+      "519",
+      "531",
+      "535",
+      "5657",
+      "5859",
+      "6263",
+      "651",
+      "6869",
+      "7071",
+      "7475",
+      "7584",
+      "8182"
+    ],
+    "supportedNumericClaimPrecision": 0.7372881355932204,
+    "verbatimEightGramRate": 0.06628379995214166,
+    "toolCalls": 11,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [
+      "Retrieval date '2026-07-18' does not appear in the reference and is likely fabricated."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text faithfully reproduces the READUS-PV guideline explanations, with all item descriptions, background, and supporting details directly matched to the reference. No fabricated study design, sample, estimate, or conclusion is present. A minor unsupported extrapolation is the future retrieval date, which does not affect the scientific content."
+  },
+  "modelEvidenceCharacters": 73324,
+  "modelEvidenceComplete": true,
+  "overallVerdict": "pass"
+}

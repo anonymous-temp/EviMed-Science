@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bayesian Modeling"
+  short_description: "Build and diagnose reproducible Bayesian models"
+  default_prompt: "Use $bayesian-modeling to specify and validate a Bayesian model for this study."

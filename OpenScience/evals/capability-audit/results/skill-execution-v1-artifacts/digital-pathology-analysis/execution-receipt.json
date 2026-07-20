@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1321,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/digital-pathology-analysis/results.json",
+      "sha256": "345c358bf9587875557bc61ec6dcc3c67047ddc51bb43dcb2d5c32687122c1ba"
+    },
+    {
+      "bytes": 1887,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/digital-pathology-analysis/digital-pathology-analysis-report.md",
+      "sha256": "f3c9a0a0aade7f0f4df5a65f211b3de1e9c06071757d55f6a71b1e92921f5ad2"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:29.559074Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "digital-pathology-analysis",
+  "startedAt": "2026-07-19T19:31:29.555339Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for digital-pathology-analysis and wrote 2 verified artifacts.",
+  "warnings": [
+    "This baseline validates derived numeric imaging features; it does not decode DICOM or whole-slide pixels."
+  ]
+}

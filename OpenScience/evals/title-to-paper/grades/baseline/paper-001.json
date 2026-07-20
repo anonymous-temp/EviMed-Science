@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-001",
+  "category": "randomized-trial",
+  "title": "Empagliflozin in Patients with Chronic Kidney Disease.",
+  "pmcid": "PMC7614055",
+  "doi": "10.1056/nejmoa2204233",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 21024,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 189,
+    "supportedUniqueNumbers": 168,
+    "unsupportedNumberTokens": [
+      "0.9",
+      "1.12",
+      "184",
+      "2.1",
+      "2.2",
+      "2.3",
+      "2.5",
+      "2.6",
+      "282",
+      "3.1",
+      "3.2",
+      "3.3",
+      "3.5",
+      "305",
+      "544",
+      "56",
+      "569",
+      "609",
+      "611",
+      "85",
+      "895"
+    ],
+    "supportedNumericClaimPrecision": 0.8888888888888888,
+    "verbatimEightGramRate": 0.006723944714232349,
+    "toolCalls": 11,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [
+      "Mention of post‑trial extension analyses (EMPA-KIDNEY long‑term follow‑up) is not supported by the reference."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "All study design, population, methods, results, and conclusions are faithfully reproduced from the source. The only unsupported claim is a minor reference to a long‑term follow‑up study not present in the reference; no fabricated major endpoints, effect estimates, or conclusions."
+  },
+  "overallVerdict": "pass"
+}

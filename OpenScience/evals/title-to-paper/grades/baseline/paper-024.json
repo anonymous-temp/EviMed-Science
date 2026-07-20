@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-024",
+  "category": "case-report",
+  "title": "Case report: Transplantation of human induced pluripotent stem cell-derived cardiomyocyte patches for ischemic cardiomyopathy.",
+  "pmcid": "PMC9426776",
+  "doi": "10.3389/fcvm.2022.950829",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 14005,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 42,
+    "supportedUniqueNumbers": 42,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.009572072072072071,
+    "toolCalls": 16,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text is a faithful restatement of the reference case report, accurately reproducing all key clinical details, outcomes, safety data, and explicitly stated limitations. No fabricated or unsupported claims were identified; all factual statements are directly grounded in the published article."
+  },
+  "overallVerdict": "pass"
+}

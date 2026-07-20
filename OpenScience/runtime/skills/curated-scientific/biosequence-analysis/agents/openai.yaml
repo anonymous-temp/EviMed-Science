@@ -1,0 +1,4 @@
+interface:
+  display_name: "Biosequence Analysis"
+  short_description: "Analyze biological sequences with bounded tooling"
+  default_prompt: "Use $biosequence-analysis to analyze these local sequences reproducibly."

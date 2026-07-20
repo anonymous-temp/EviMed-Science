@@ -1,0 +1,13 @@
+{
+  "dataset": "SIDER 4.1",
+  "released": "2015-10-21",
+  "officialPage": "https://sideeffects.embl.de/download/",
+  "license": "Creative Commons Attribution-ShareAlike 4.0 International",
+  "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "attribution": "Kuhn M, Letunic I, Jensen LJ, Bork P. The SIDER database of drugs and side effects. Nucleic Acids Research. 2016;44(D1):D1075-D1079.",
+  "inputs": {
+    "drug_names.tsv": "6427a3e3202c71a81dff97092957aacf0700b9c01f34b07e452a1ec47c92b007",
+    "meddra_all_se.tsv.gz": "119b2f5319a9398da83e5fe3419889010dbacf8d3eef590251b00c025e2b3f99"
+  },
+  "boundary": "Research and education only. This 2015 label-derived release is not current clinical guidance and must not replace current product labels or pharmacovigilance review."
+}

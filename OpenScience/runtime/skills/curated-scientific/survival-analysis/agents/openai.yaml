@@ -1,0 +1,4 @@
+interface:
+  display_name: "Survival Analysis"
+  short_description: "Plan and run reproducible time-to-event analyses"
+  default_prompt: "Use $survival-analysis to analyze this censored time-to-event dataset."

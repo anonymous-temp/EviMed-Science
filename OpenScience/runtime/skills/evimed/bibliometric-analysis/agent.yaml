@@ -1,0 +1,33 @@
+id: bibliometric-analysis
+version: 1.0.1
+title: 文献计量分析
+category: 文献计量
+description: 基于可追溯的 PubMed 检索与清洗，分析发文趋势、合作网络、突现主题、演化路径和研究前沿。
+skill: bibliometric-analysis
+estimatedMinutes: [20, 120]
+starterPrompts:
+  - 分析 GLP-1 受体激动剂治疗肥胖的全球研究格局与新兴主题。
+requiredInputs:
+  - topic
+optionalInputs:
+  - dateFrom
+  - dateTo
+  - maxRecords
+  - outputLanguage
+requiredTools:
+  - evimed_bibliometric_analysis
+optionalTools:
+  - evimed_data_source_catalog
+  - evimed_literature_search
+  - evimed_evidence_deduplicate
+dataSources:
+  - bibliometric-records
+  - literature
+outputs:
+  - path: bibliometric-analysis-report.md
+    required: true
+  - path: bibliometric-analysis-run.json
+    required: true
+completionChecks:
+  - requiredOutputsExist
+  - citationsResolvable

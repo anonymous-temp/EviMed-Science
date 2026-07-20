@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-019",
+  "category": "diagnostic-prognostic",
+  "title": "Risk prediction of covid-19 related death and hospital admission in adults after covid-19 vaccination: national prospective cohort study.",
+  "pmcid": "PMC8446717",
+  "doi": "10.1136/bmj.n2244",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 7432,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 140,
+    "supportedUniqueNumbers": 109,
+    "unsupportedNumberTokens": [
+      "-0.22",
+      "-0.27",
+      "-0.33%",
+      "-10",
+      "-3.08",
+      "-3.73",
+      "-30",
+      "-69.6%",
+      "-77%",
+      "100000",
+      "24.4%",
+      "26.5%",
+      "2925",
+      "30.2%",
+      "31.5%",
+      "32.1%",
+      "3321",
+      "39.1%",
+      "4026",
+      "5150",
+      "56.1%",
+      "60%",
+      "61.8%",
+      "626656",
+      "65.7%",
+      "6952",
+      "70%",
+      "72.1%",
+      "83%",
+      "90.2%",
+      "92.2%"
+    ],
+    "supportedNumericClaimPrecision": 0.7785714285714286,
+    "verbatimEightGramRate": 0.0025235145675613674,
+    "toolCalls": 10,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 1,
+    "majorUnsupportedClaims": [
+      "The generated text fabricated proportions for the top 5% highest risk group: dementia 24.4% (source: 12.86%), coronary heart disease 39.1% (source: 26.05%), heart failure 26.5% (source: 11.53%), stroke 30.2% (source: 16.09%), atrial fibrillation 31.5% (source: 20.82%). None of these numbers appear in the reference."
+    ],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "fail",
+    "rationale": "While most of the generated text faithfully reproduces study design, population, and methods, the results section contains severely fabricated statistics for the characteristics of the top 5% risk group (e.g., dementia, coronary heart disease percentages). These invented numbers are not supported by the reference and constitute a major factual error, making the output unreliable."
+  },
+  "overallVerdict": "fail"
+}

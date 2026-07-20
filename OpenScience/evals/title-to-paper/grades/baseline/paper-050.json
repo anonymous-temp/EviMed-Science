@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-050",
+  "category": "methods-software",
+  "title": "MitoHiFi: a python pipeline for mitochondrial genome assembly from PacBio high fidelity reads.",
+  "pmcid": "PMC10354987",
+  "doi": "10.1186/s12859-023-05385-y",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 5176,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 41,
+    "supportedUniqueNumbers": 41,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.002250562640660165,
+    "toolCalls": 8,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "All factual claims in the generated text are directly supported by the reference. The study design, sample details (374 mitogenomes, source projects), methods (pipeline steps, parameters), results (assembly sizes, repeat content, plant organelle examples), and conclusions consistently match the article without fabrication or distortion."
+  },
+  "overallVerdict": "pass"
+}

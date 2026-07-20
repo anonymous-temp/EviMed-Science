@@ -1,0 +1,4 @@
+interface:
+  display_name: "Quantum Computing Analysis"
+  short_description: "Design and validate quantum computing experiments"
+  default_prompt: "Use $quantum-computing-analysis to design and validate this quantum experiment."

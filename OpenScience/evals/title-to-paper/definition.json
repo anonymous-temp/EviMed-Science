@@ -1,0 +1,44 @@
+{
+  "id": "title-to-paper-open-access-v1",
+  "version": "1.0.0",
+  "purpose": "Measure whether EviMed Science can use a published paper title as a retrieval entry point and produce a source-grounded, non-copying reconstruction without fabricating study details.",
+  "caseCount": 50,
+  "categories": {
+    "randomized-trial": 5,
+    "systematic-review-meta-analysis": 5,
+    "observational-cohort": 5,
+    "diagnostic-prognostic": 5,
+    "case-report": 5,
+    "public-health-epidemiology": 5,
+    "pharmacovigilance-drug-safety": 5,
+    "genomics-omics": 5,
+    "biomedical-ai": 5,
+    "methods-software": 5
+  },
+  "promptTemplate": "请以已发表论文题目《{title}》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。方法、样本量、主要数值、局限性和结论必须来自可核验原文，保留 DOI 或 PMCID 及来源链接；不得逐字复制，不得把题目或摘要推断成全文事实。若无法获得全文，请明确停止并列出缺失证据，不要编造。",
+  "referenceIsolation": "The EviMed generation run receives the title only through the prompt. PMCID, DOI, abstract, full text, extracted key facts, and grader outputs remain in the evaluator-only directory.",
+  "graders": [
+    "platform-run-terminal-status",
+    "source-identifier-resolution",
+    "required-section-coverage",
+    "study-design-fidelity",
+    "sample-and-population-fidelity",
+    "numeric-claim-support",
+    "methods-fidelity",
+    "results-and-conclusion-fidelity",
+    "unsupported-claim-rate",
+    "verbatim-copy-risk"
+  ],
+  "releaseThresholds": {
+    "corpusAcquisitionRate": 1.0,
+    "platformTerminalSuccessRate": 0.98,
+    "resolvedPrimarySourceRate": 0.9,
+    "requiredSectionCoverageRate": 0.9,
+    "studyDesignAccuracy": 0.9,
+    "supportedNumericClaimPrecision": 0.9,
+    "majorUnsupportedClaimRateMax": 0.05,
+    "conclusionFidelityMeanMin": 4.0,
+    "verbatimEightGramRateMax": 0.08
+  },
+  "stabilityGate": "All deterministic regression checks must pass three consecutive runs after the final agent or tool change."
+}

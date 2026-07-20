@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-011",
+  "category": "observational-cohort",
+  "title": "High-coverage whole-genome sequencing of the expanded 1000 Genomes Project cohort including 602 trios.",
+  "pmcid": "PMC9439720",
+  "doi": "10.1016/j.cell.2022.08.004",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 10153,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 226,
+    "supportedUniqueNumbers": 222,
+    "unsupportedNumberTokens": [
+      "-10",
+      "141456",
+      "150119",
+      "53831"
+    ],
+    "supportedNumericClaimPrecision": 0.9823008849557522,
+    "verbatimEightGramRate": 0.0042355788624445345,
+    "toolCalls": 18,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text accurately reflects the study design (high-coverage WGS of expanded 1kGP cohort), population/sample details (3,202 samples, 26 populations, 602 trios), methods (sequencing, variant calling, SV integration), and results/conclusions (variant counts, FDR, functional impacts, phasing accuracy, imputation performance). All major numbers and claims are verified against the reference, with no fabrications or critical omissions. Minor paraphrasing does not alter factual fidelity."
+  },
+  "overallVerdict": "pass"
+}

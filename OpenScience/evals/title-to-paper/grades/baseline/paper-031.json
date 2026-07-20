@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-031",
+  "category": "pharmacovigilance-drug-safety",
+  "title": "The REporting of A Disproportionality Analysis for DrUg Safety Signal Detection Using Individual Case Safety Reports in PharmacoVigilance (READUS-PV): Explanation and Elaboration.",
+  "pmcid": "PMC11116264",
+  "doi": "10.1007/s40264-024-01423-7",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 8079,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 43,
+    "supportedUniqueNumbers": 36,
+    "unsupportedNumberTokens": [
+      "1116242",
+      "38713346",
+      "575",
+      "584",
+      "74%",
+      "88%",
+      "97%"
+    ],
+    "supportedNumericClaimPrecision": 0.8372093023255814,
+    "verbatimEightGramRate": 0.01003052769297863,
+    "toolCalls": 11,
+    "usedEviMedResearchTool": false
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 1,
+    "populationSampleScore": 1,
+    "methodsScore": 1,
+    "resultsConclusionScore": 2,
+    "majorUnsupportedClaims": [
+      "The detailed guideline development process (consensus method, Delphi rounds, expert panel numbers, number of items retained at each stage) is not present in the REFERENCE (the explanation and elaboration paper). The REFERENCE explicitly states that the development procedure is described in the companion statement paper, not in this paper."
+    ],
+    "minorUnsupportedClaims": [
+      "A bulleted list of limitations specific to the READUS-PV guidelines themselves (e.g., ‘not for methodological quality scoring’, ‘implementation challenges’, ‘iterative need’) is fabricated; the REFERENCE only discusses limitations of disproportionality analysis reporting, not limitations of the guidelines."
+    ],
+    "missingCriticalFacts": [
+      "The REFERENCE clarifies that the guideline development procedure is detailed in a separate statement paper (PMC11116242), not in this explanation paper. The GENERATED text fails to make this distinction and presents the development process as part of the current article."
+    ],
+    "verdict": "fail",
+    "rationale": "The GENERATED text fabricates the entire section describing the guideline development process (consensus meeting, Delphi rounds, expert numbers), which is absent from the REFERENCE. This major fabrication undermines the factual fidelity of the output despite accurate summarization of the guideline items."
+  },
+  "overallVerdict": "fail"
+}

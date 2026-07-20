@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-023",
+  "category": "case-report",
+  "title": "Fecal Microbiota Transplantation (FMT) as an Adjunctive Therapy for Depression-Case Report.",
+  "pmcid": "PMC8891755",
+  "doi": "10.3389/fpsyt.2022.815422",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 18186,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 41,
+    "supportedUniqueNumbers": 41,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.009623797025371828,
+    "toolCalls": 7,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [
+      "Statement that the magnitude of HAMD change 'substantially exceeds the threshold generally considered clinically meaningful' is not stated in the source and lacks direct support."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "All demographic, clinical, and microbiome outcomes are accurately reproduced from the source. The generated text correctly reflects the case report design, population details, treatment, and results. The minor unsupported claim about exceeding a clinical meaningfulness threshold does not affect the overall fidelity of the report."
+  },
+  "overallVerdict": "pass"
+}

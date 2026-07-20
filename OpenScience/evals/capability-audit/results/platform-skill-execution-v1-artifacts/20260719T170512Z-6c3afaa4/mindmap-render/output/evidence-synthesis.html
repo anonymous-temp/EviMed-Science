@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>evidence-synthesis</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    color: #23324d;
+    font-family: 'SF Pro Text','Segoe UI','Noto Sans SC','Source Han Sans SC','PingFang SC',sans-serif;
+    overflow: visible;
+  }
+  body.theme-air { background: #f4f7ff; }
+
+  #mindmap-wrapper {
+    display: inline-block;
+    min-width: 100vw;
+    min-height: 100vh;
+    padding: 80px;
+    box-sizing: border-box;
+  }
+  /* Prevent markmap from creating a tiny 300x150 SVG on load */
+  .markmap {
+    display: block;
+    min-width: 2000px;
+    min-height: 2000px;
+  }
+  .markmap svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /*
+   * CRITICAL: .markmap-foreign is the class markmap uses BOTH for its internal
+   * measurement div (appended to <body>) AND for the final <foreignObject> in SVG.
+   * Styles here affect sizing calculations, so we must keep them consistent with
+   * the final rendered look.
+   */
+  .markmap-foreign {
+    font-family: 'SF Pro Text','Segoe UI','Noto Sans SC','Source Han Sans SC','PingFang SC',sans-serif !important;
+    font-size: 15px !important;
+    font-weight: 500 !important;
+    line-height: 1.75 !important;
+    color: #23324d !important;
+    max-width: 520px !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.85) !important;
+  }
+
+  /* Slightly smaller for very deep descriptive leaves */
+  .markmap-node-depth-4 .markmap-foreign,
+  .markmap-node-depth-5 .markmap-foreign {
+    font-size: 13px !important;
+    line-height: 1.8 !important;
+  }
+
+  /* SVG text nodes (shallow, usually single-line) */
+  .markmap-node text {
+    font-size: 15px !important;
+    font-weight: 600;
+    fill: #23324d !important;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.85);
+  }
+  .markmap-node-depth-0 text {
+    font-family: 'SF Pro Display','Segoe UI','Noto Sans SC','Source Han Sans SC','PingFang SC',sans-serif !important;
+    font-size: 26px !important;
+    font-weight: 700;
+  }
+  .markmap-node-depth-1 text {
+    font-family: 'SF Pro Display','Segoe UI','Noto Sans SC','Source Han Sans SC','PingFang SC',sans-serif !important;
+    font-size: 21px !important;
+    font-weight: 650;
+  }
+  .markmap-node-depth-2 text {
+    font-family: 'SF Pro Display','Segoe UI','Noto Sans SC','Source Han Sans SC','PingFang SC',sans-serif !important;
+    font-size: 17px !important;
+    font-weight: 600;
+  }
+
+  .markmap-link,
+  .markmap-node line {
+    stroke-width: 2.5px;
+    stroke-linecap: round;
+  }
+
+  /* Theme-specific injected CSS */
+  
+  body.theme-air {
+    background:
+      radial-gradient(circle at 18% 16%, rgba(127, 162, 255, 0.22) 0%, transparent 24%),
+      radial-gradient(circle at 82% 12%, rgba(170, 198, 255, 0.16) 0%, transparent 18%),
+      radial-gradient(circle at 52% 48%, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0) 52%),
+      linear-gradient(135deg, #f4f7ff 0%, #eef3ff 45%, #f8fbff 100%);
+  }
+  body.theme-air #mindmap-wrapper {
+    padding: 24px 30px;
+  }
+  body.theme-air .markmap.topic-matrix-host {
+    min-width: 0;
+    min-height: 0;
+  }
+  body.theme-air .topic-matrix {
+    position: relative;
+    overflow: hidden;
+  }
+  body.theme-air .topic-matrix-background {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 18% 16%, rgba(127, 162, 255, 0.22) 0%, transparent 24%),
+      radial-gradient(circle at 82% 12%, rgba(170, 198, 255, 0.16) 0%, transparent 18%),
+      radial-gradient(circle at 52% 48%, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0) 52%),
+      linear-gradient(135deg, #f4f7ff 0%, #eef3ff 45%, #f8fbff 100%);
+  }
+  body.theme-air .topic-matrix-content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    min-height: 100%;
+  }
+  body.theme-air .topic-matrix-svg {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: visible;
+    pointer-events: none;
+  }
+  body.theme-air .topic-matrix-root {
+    position: absolute;
+    z-index: 2;
+    box-sizing: border-box;
+    border-radius: 22px;
+    padding: 20px 24px;
+    background: linear-gradient(135deg, #4c6fff 0%, #667fff 55%, #738dff 100%);
+    box-shadow:
+      0 26px 58px rgba(76, 111, 255, 0.22),
+      0 8px 18px rgba(76, 111, 255, 0.16);
+    color: #ffffff;
+  }
+  body.theme-air .topic-matrix-root-text {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: -0.02em;
+    white-space: normal;
+  }
+  body.theme-air .topic-matrix-groups {
+    display: flex;
+    flex-direction: column;
+  }
+  body.theme-air .topic-matrix-group {
+    display: flex;
+    align-items: center;
+  }
+  body.theme-air .topic-matrix-branch {
+    position: relative;
+    z-index: 2;
+    box-sizing: border-box;
+    border-radius: 18px;
+    background: rgba(255,255,255,0.86);
+    border: 1px solid rgba(198, 209, 234, 0.56);
+    box-shadow:
+      0 14px 36px rgba(119, 138, 181, 0.10),
+      0 2px 10px rgba(119, 138, 181, 0.05);
+    backdrop-filter: blur(10px);
+    padding: 22px 24px 22px 28px;
+  }
+  body.theme-air .topic-matrix-branch-accent {
+    position: absolute;
+    left: 0;
+    top: 18px;
+    bottom: 18px;
+    width: 5px;
+    border-radius: 0 6px 6px 0;
+  }
+  body.theme-air .topic-matrix-branch-text {
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: -0.02em;
+    color: #24324d;
+    white-space: normal;
+  }
+  body.theme-air .topic-matrix-items {
+    display: flex;
+    flex-direction: column;
+  }
+  body.theme-air .topic-matrix-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    z-index: 2;
+    position: relative;
+    box-sizing: border-box;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.88);
+    border: 1px solid rgba(211, 220, 238, 0.58);
+    box-shadow:
+      0 10px 24px rgba(128, 145, 181, 0.08),
+      0 2px 8px rgba(128, 145, 181, 0.04);
+    backdrop-filter: blur(10px);
+    padding: 12px 16px;
+  }
+  body.theme-air .topic-matrix-badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  body.theme-air .topic-matrix-item-copy {
+    min-width: 0;
+  }
+  body.theme-air .topic-matrix-item-title {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.45;
+    color: #2e3b57;
+    letter-spacing: -0.01em;
+    white-space: normal;
+    word-break: break-word;
+  }
+  body.theme-air .topic-matrix-item-body {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #7281a1;
+    white-space: normal;
+    word-break: break-word;
+  }
+  body.pdf-export .topic-matrix-branch,
+  body.pdf-export .topic-matrix-item,
+  body.pdf-export .markmap-foreign > div {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+  }
+  body.pdf-export .topic-matrix-branch {
+    background: #ffffff !important;
+    border-color: rgba(166, 181, 214, 0.9) !important;
+  }
+  body.pdf-export .topic-matrix-item {
+    background: #ffffff !important;
+    border-color: rgba(188, 201, 229, 0.95) !important;
+  }
+  body.pdf-export .markmap-foreign > div {
+    background: #ffffff !important;
+    border-color: rgba(151,173,219,0.72) !important;
+  }
+  .markmap-node circle {
+    fill: #dbe6ff;
+    stroke: #f7faff;
+    stroke-width: 2px;
+  }
+  .markmap-link,
+  .markmap-node line {
+    stroke-width: 2px !important;
+    stroke-linecap: round;
+    opacity: 0.82;
+  }
+  .markmap-foreign > div {
+    background: rgba(255,255,255,0.92) !important;
+    border-radius: 16px !important;
+    padding: 10px 14px !important;
+    border: 1px solid rgba(151,173,219,0.26) !important;
+    box-shadow:
+      0 10px 30px rgba(122, 146, 193, 0.10),
+      0 2px 8px rgba(122, 146, 193, 0.06) !important;
+    backdrop-filter: blur(6px);
+  }
+  g[data-depth="1"] .markmap-foreign {
+    color: #ffffff !important;
+    text-shadow: none !important;
+  }
+  g[data-depth="1"] .markmap-foreign > div {
+    background: linear-gradient(135deg, #4c6fff 0%, #6a82ff 52%, #728dff 100%) !important;
+    border: 0 !important;
+    border-radius: 18px !important;
+    padding: 18px 22px !important;
+    box-shadow:
+      0 18px 42px rgba(76, 111, 255, 0.20),
+      0 6px 18px rgba(76, 111, 255, 0.14) !important;
+  }
+  g[data-depth="1"] line {
+    stroke: #6a8dff !important;
+  }
+  g[data-depth="1"] .markmap-foreign,
+  g[data-depth="2"] .markmap-foreign,
+  g[data-depth="3"] .markmap-foreign {
+    letter-spacing: -0.015em;
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
+  }
+  g[data-depth="1"] .markmap-foreign {
+    font-size: 24px !important;
+    font-weight: 700 !important;
+  }
+  g[data-depth="2"] .markmap-foreign {
+    font-size: 20px !important;
+    font-weight: 650 !important;
+  }
+  g[data-depth="3"] .markmap-foreign {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+  }
+
+</style>
+</head>
+<body class="theme-air">
+<div id="mindmap-wrapper">
+  <div class="markmap" data-markmap='{"duration": 0, "spacingVertical": 48, "spacingHorizontal": 90, "maxWidth": 520, "paddingX": 14, "paddingY": 10, "color": ["#6A8DFF", "#61C58E", "#C58CFF", "#FFB15C", "#62CFE0", "#FF8AA3", "#8BA8FF", "#7FD4B3", "#D0A2FF", "#FFC77A"], "colorFreezeLevel": 1}'>
+    <script type="text/template"># Evidence synthesis
+- Discovery
+  - Search
+  - Screen
+- Analysis
+  - Estimate
+</script>
+  </div>
+</div>
+<script>
+(function() {
+  const BASE_COLORS = ["#6A8DFF", "#61C58E", "#C58CFF", "#FFB15C", "#62CFE0", "#FF8AA3", "#8BA8FF", "#7FD4B3", "#D0A2FF", "#FFC77A"];
+  const IS_DARK = false;
+  const ORTHOGONAL_LINKS = false;
+  const CUSTOM_LAYOUT = "topic-matrix";
+  const LAYOUT_CONFIG = {"distribution": "single-right", "canvas_width": 1220, "root_left": 56, "root_width": 254, "root_trunk_gap": 44, "groups_left": 370, "branch_width": 240, "branch_gap": 72, "item_width": 454, "group_gap": 58, "item_gap": 12, "padding_y": 42, "padding_right": 32, "side_padding": 56, "branch_hub_gap": 34};
+  const MARKMAP_SCRIPT_URLS = ["https://cdn.jsdelivr.net/npm/markmap-autoloader@0.17.2/dist/index.min.js", "https://unpkg.com/markmap-autoloader@0.17.2/dist/index.min.js"];
+  const MD_FILE = 'topic_matrix.md';
+
+  window.markmap = window.markmap || {};
+  window.markmap.autoLoader = Object.assign({}, window.markmap.autoLoader, {
+    manual: true,
+  });
+  window.__MARKMAP_READY__ = false;
+  window.__MARKMAP_ERROR__ = null;
+
+  
+  function fixForeignObjects() {
+    const svg = document.querySelector('.markmap svg');
+    if (!svg) return;
+    svg.querySelectorAll('foreignObject.markmap-foreign').forEach(function(fo) {
+      const div = fo.querySelector('div');
+      if (!div) return;
+      const neededHeight = Math.ceil(div.scrollHeight);
+      const neededWidth = Math.ceil(div.scrollWidth);
+      const currentH = parseFloat(fo.getAttribute('height') || 0);
+      const currentW = parseFloat(fo.getAttribute('width') || 0);
+      if (neededHeight > currentH) fo.setAttribute('height', neededHeight);
+      if (neededWidth > currentW) fo.setAttribute('width', neededWidth);
+    });
+  }
+
+  function hexToRgb(hex) {
+    hex = hex.replace('#','');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    const n = parseInt(hex, 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+
+  function rgbToHsl(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const mx = Math.max(r, g, b);
+    const mn = Math.min(r, g, b);
+    let h = 0;
+    let s = 0;
+    const l = (mx + mn) / 2;
+    if (mx !== mn) {
+      const d = mx - mn;
+      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+      switch (mx) {
+        case r:
+          h = (g - b) / d + (g < b ? 6 : 0);
+          break;
+        case g:
+          h = (b - r) / d + 2;
+          break;
+        case b:
+          h = (r - g) / d + 4;
+          break;
+      }
+      h *= 60;
+    }
+    return { h, s: s * 100, l: l * 100 };
+  }
+
+  function hslToHex(h, s, l) {
+    s /= 100;
+    l /= 100;
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+    const R = Math.round(255 * f(0));
+    const G = Math.round(255 * f(8));
+    const B = Math.round(255 * f(4));
+    return '#' + [R, G, B].map(x => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  function shade(hex, depth, isDark) {
+    const { r, g, b } = hexToRgb(hex);
+    const { h, s, l } = rgbToHsl(r, g, b);
+    const step = Math.max(0, depth - 1);
+    let newL;
+    let newS;
+    if (isDark) {
+      newL = Math.max(45, l - step * 5);
+      newS = Math.max(55, s - step * 3);
+    } else {
+      newL = Math.min(62, l + step * 6);
+      newS = Math.max(32, s - step * 4);
+    }
+    return hslToHex(h, newS, newL);
+  }
+
+  function applyFamilyShading(baseColors, isDark) {
+    const svg = document.querySelector('.markmap svg');
+    if (!svg) return;
+    const nodeGs = Array.from(svg.querySelectorAll('g.markmap-node'));
+    const nodeColors = new Map();
+    nodeGs.forEach(g => {
+      const d = g.__data__;
+      if (!d) return;
+      if (d.depth === 0) {
+        const rootCircle = g.querySelector('circle');
+        if (rootCircle) {
+          rootCircle.style.display = 'none';
+        }
+        return;
+      }
+      let top = d;
+      while (top.parent && top.depth > 1) top = top.parent;
+      const siblings = (top.parent && top.parent.children) || [];
+      const idx = Math.max(0, siblings.indexOf(top));
+      const base = baseColors[idx % baseColors.length];
+      const color = shade(base, d.depth, isDark);
+      nodeColors.set(d, color);
+      const circle = g.querySelector('circle');
+      if (circle) {
+        circle.style.fill = color;
+        circle.style.stroke = color;
+        circle.style.display = 'none';
+      }
+      const line = g.querySelector('line');
+      if (line) line.style.stroke = color;
+      const card = g.querySelector('.markmap-foreign > div');
+      if (card) {
+        card.style.setProperty('border-color', color, 'important');
+      }
+    });
+    const links = Array.from(svg.querySelectorAll('path.markmap-link'));
+    links.forEach(path => {
+      const d = path.__data__;
+      if (!d) return;
+      const target = d.target || d;
+      const color = nodeColors.get(target);
+      if (color) path.style.stroke = color;
+    });
+  }
+
+  function parseCubicPath(pathData) {
+    const match = /^M([-\d.]+),([-\d.]+)C([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)$/.exec(pathData);
+    if (!match) return null;
+    return {
+      sx: parseFloat(match[1]),
+      sy: parseFloat(match[2]),
+      cx1: parseFloat(match[3]),
+      cy1: parseFloat(match[4]),
+      cx2: parseFloat(match[5]),
+      cy2: parseFloat(match[6]),
+      ex: parseFloat(match[7]),
+      ey: parseFloat(match[8]),
+    };
+  }
+
+  function applyOrthogonalLinks() {
+    const svg = document.querySelector('.markmap svg');
+    if (!svg) return;
+    svg.querySelectorAll('path.markmap-link').forEach(path => {
+      const d = path.getAttribute('d');
+      const parsed = parseCubicPath(d || '');
+      if (!parsed) return;
+      const midX = parsed.sx + (parsed.ex - parsed.sx) / 2;
+      path.setAttribute(
+        'd',
+        `M${parsed.sx},${parsed.sy}H${midX}V${parsed.ey}H${parsed.ex}`
+      );
+    });
+  }
+
+  function createSvgElement(name, attrs) {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', name);
+    Object.entries(attrs || {}).forEach(([key, value]) => {
+      el.setAttribute(key, String(value));
+    });
+    return el;
+  }
+
+  function getHierarchyRootData() {
+    const svg = document.querySelector('.markmap svg');
+    if (!svg) return null;
+    const firstNode = Array.from(svg.querySelectorAll('g.markmap-node'))
+      .map(g => g.__data__)
+      .find(d => d && d.data);
+    if (!firstNode) return null;
+    let root = firstNode;
+    while (root.parent && root.parent.data) {
+      root = root.parent;
+    }
+    return root.data || null;
+  }
+
+  function decodeHtmlEntities(text) {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text || '';
+    return textarea.value;
+  }
+
+  function buildRenderableTree(node) {
+    const children = Array.isArray(node.children) ? node.children : [];
+    return {
+      title: decodeHtmlEntities((node.content || '').trim()),
+      children: children
+        .map(child => buildRenderableTree(child))
+        .filter(child => child.title),
+      level: 0,
+      siblingIndex: 0,
+      siblingCount: 1,
+      color: '',
+      card: null,
+      cardWidth: 0,
+      cardHeight: 0,
+      subtreeHeight: 0,
+      left: 0,
+      top: 0,
+    };
+  }
+
+  function getRelativeRect(element, ancestor) {
+    const rect = element.getBoundingClientRect();
+    const ancestorRect = ancestor.getBoundingClientRect();
+    const left = rect.left - ancestorRect.left;
+    const top = rect.top - ancestorRect.top;
+    return {
+      left,
+      top,
+      right: left + rect.width,
+      bottom: top + rect.height,
+      width: rect.width,
+      height: rect.height,
+      cx: left + rect.width / 2,
+      cy: top + rect.height / 2,
+    };
+  }
+
+  function styleTopicMatrixConnector(path, color, width) {
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', color);
+    path.setAttribute('stroke-width', width);
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+  }
+
+  function splitBranchesForDistribution(branches, distribution) {
+    if (distribution !== 'balanced' || branches.length <= 1) {
+      return { left: [], right: branches.slice() };
+    }
+    const midpoint = Math.ceil(branches.length / 2);
+    return {
+      left: branches.slice(0, midpoint),
+      right: branches.slice(midpoint),
+    };
+  }
+
+  function getLevelWidth(level, layoutConfig) {
+    return level === 0 ? layoutConfig.branch_width : layoutConfig.item_width;
+  }
+
+  function getColumnGap(layoutConfig) {
+    return layoutConfig.column_gap || layoutConfig.branch_gap;
+  }
+
+  function getFirstColumnGap(layoutConfig) {
+    return layoutConfig.first_column_gap || Math.max(40, layoutConfig.groups_left - (layoutConfig.root_left + layoutConfig.root_width));
+  }
+
+  function getSideMaxDepth(nodes) {
+    function getNodeDepth(node) {
+      if (!node.children.length) return 1;
+      return 1 + Math.max(...node.children.map(getNodeDepth));
+    }
+    if (!nodes.length) return 0;
+    return Math.max(...nodes.map(getNodeDepth));
+  }
+
+  function getSideWidth(depth, layoutConfig) {
+    if (depth <= 0) return 0;
+    let total = getFirstColumnGap(layoutConfig);
+    for (let level = 0; level < depth; level += 1) {
+      total += getLevelWidth(level, layoutConfig);
+      if (level < depth - 1) total += getColumnGap(layoutConfig);
+    }
+    return total;
+  }
+
+  function getTopicMatrixCanvasWidth(layoutConfig, distribution, leftDepth, rightDepth) {
+    if (distribution !== 'balanced') {
+      return Math.max(
+        layoutConfig.canvas_width,
+        layoutConfig.root_left + layoutConfig.root_width + getSideWidth(rightDepth, layoutConfig) + layoutConfig.padding_right + 48
+      );
+    }
+    const sidePadding = layoutConfig.side_padding || 32;
+    return sidePadding * 2 + getSideWidth(leftDepth, layoutConfig) + layoutConfig.root_width + getSideWidth(rightDepth, layoutConfig);
+  }
+
+  function createTreeCard(node, level, color) {
+    if (level === 0) {
+      const branchCard = document.createElement('div');
+      branchCard.className = 'topic-matrix-branch';
+      branchCard.style.width = `${node.cardWidth || getLevelWidth(level, { branch_width: 240, item_width: 454 })}px`;
+      const accent = document.createElement('span');
+      accent.className = 'topic-matrix-branch-accent';
+      accent.style.background = color;
+      const branchText = document.createElement('div');
+      branchText.className = 'topic-matrix-branch-text';
+      branchText.textContent = node.title;
+      branchCard.append(accent, branchText);
+      return branchCard;
+    }
+
+    const card = document.createElement('div');
+    card.className = 'topic-matrix-item';
+
+    const copy = document.createElement('div');
+    copy.className = 'topic-matrix-item-copy';
+    const title = document.createElement('div');
+    title.className = 'topic-matrix-item-title';
+    title.textContent = node.title;
+    copy.appendChild(title);
+
+    if (node.siblingCount > 1) {
+      const badge = document.createElement('span');
+      badge.className = 'topic-matrix-badge';
+      badge.textContent = String(node.siblingIndex + 1);
+      badge.style.color = color;
+      badge.style.background = `${color}14`;
+      badge.style.border = `1px solid ${color}33`;
+      card.append(badge, copy);
+    } else {
+      card.append(copy);
+    }
+    return card;
+  }
+
+  function initializeTreeNodes(nodes, content, baseColors, startIndex, level) {
+    nodes.forEach((node, index) => {
+      node.level = level;
+      node.siblingIndex = index;
+      node.siblingCount = nodes.length;
+      node.color = baseColors[(startIndex + index) % baseColors.length];
+      const card = createTreeCard(node, level, node.color);
+      card.style.position = 'absolute';
+      card.style.width = `${getLevelWidth(level, window.__TOPIC_MATRIX_LAYOUT_CONFIG__)}px`;
+      node.card = card;
+      content.appendChild(card);
+      initializeTreeNodes(node.children, content, [node.color], 0, level + 1);
+    });
+  }
+
+  function computeTreeMetrics(node, layoutConfig) {
+    node.cardWidth = node.card.offsetWidth;
+    node.cardHeight = node.card.offsetHeight;
+    if (!node.children.length) {
+      node.subtreeHeight = node.cardHeight;
+      return node.subtreeHeight;
+    }
+
+    const gap = layoutConfig.item_gap;
+    const childrenHeight = node.children.reduce((sum, child) => sum + computeTreeMetrics(child, layoutConfig), 0)
+      + gap * Math.max(0, node.children.length - 1);
+    node.subtreeHeight = Math.max(node.cardHeight, childrenHeight);
+    return node.subtreeHeight;
+  }
+
+  function getTopLevelBlockHeight(nodes, layoutConfig) {
+    if (!nodes.length) return 0;
+    return nodes.reduce((sum, node) => sum + node.subtreeHeight, 0) + layoutConfig.group_gap * Math.max(0, nodes.length - 1);
+  }
+
+  function getRightColumnXs(rootRect, depth, layoutConfig) {
+    const xs = [];
+    let currentX = rootRect.right + getFirstColumnGap(layoutConfig);
+    for (let level = 0; level < depth; level += 1) {
+      xs.push(currentX);
+      currentX += getLevelWidth(level, layoutConfig) + getColumnGap(layoutConfig);
+    }
+    return xs;
+  }
+
+  function getLeftColumnXs(rootRect, depth, layoutConfig) {
+    const xs = [];
+    if (depth <= 0) return xs;
+    let currentX = rootRect.left - getFirstColumnGap(layoutConfig) - getLevelWidth(0, layoutConfig);
+    xs.push(currentX);
+    for (let level = 1; level < depth; level += 1) {
+      currentX -= getColumnGap(layoutConfig) + getLevelWidth(level, layoutConfig);
+      xs.push(currentX);
+    }
+    return xs;
+  }
+
+  function layoutTreeNode(node, columnXs, topY, layoutConfig) {
+    node.left = columnXs[node.level];
+    node.top = topY + (node.subtreeHeight - node.cardHeight) / 2;
+    node.card.style.left = `${node.left}px`;
+    node.card.style.top = `${node.top}px`;
+
+    if (!node.children.length) return;
+
+    const childrenBlockHeight = node.children.reduce((sum, child) => sum + child.subtreeHeight, 0)
+      + layoutConfig.item_gap * Math.max(0, node.children.length - 1);
+    let childTop = topY + (node.subtreeHeight - childrenBlockHeight) / 2;
+    node.children.forEach(child => {
+      layoutTreeNode(child, columnXs, childTop, layoutConfig);
+      childTop += child.subtreeHeight + layoutConfig.item_gap;
+    });
+  }
+
+  function layoutTopLevelNodes(nodes, columnXs, startY, layoutConfig) {
+    let currentY = startY;
+    nodes.forEach(node => {
+      layoutTreeNode(node, columnXs, currentY, layoutConfig);
+      currentY += node.subtreeHeight + layoutConfig.group_gap;
+    });
+  }
+
+  function getNodeRect(node) {
+    return {
+      left: node.left,
+      top: node.top,
+      right: node.left + node.cardWidth,
+      bottom: node.top + node.cardHeight,
+      cx: node.left + node.cardWidth / 2,
+      cy: node.top + node.cardHeight / 2,
+    };
+  }
+
+  function getHubOffset(distance, layoutConfig) {
+    return Math.max(18, Math.min(layoutConfig.branch_hub_gap, distance / 2));
+  }
+
+  function drawNodeChildrenConnectors(svg, node, side, layoutConfig, connectorColor) {
+    if (!node.children.length) return;
+
+    const parentRect = getNodeRect(node);
+    const childRects = node.children.map(child => getNodeRect(child));
+
+    if (side === 'right') {
+      const hubX = parentRect.right + getHubOffset(childRects[0].left - parentRect.right, layoutConfig);
+      const parentToHub = createSvgElement('path', {
+        d: `M ${parentRect.right} ${parentRect.cy} C ${parentRect.right + 12} ${parentRect.cy} ${hubX - 12} ${parentRect.cy} ${hubX} ${parentRect.cy}`,
+      });
+      styleTopicMatrixConnector(parentToHub, connectorColor, 2);
+      svg.appendChild(parentToHub);
+
+      if (childRects.length > 1) {
+        const hubLine = createSvgElement('path', {
+          d: `M ${hubX} ${childRects[0].cy} V ${childRects[childRects.length - 1].cy}`,
+        });
+        styleTopicMatrixConnector(hubLine, connectorColor, 2);
+        svg.appendChild(hubLine);
+      }
+
+      node.children.forEach((child, index) => {
+        const childRect = childRects[index];
+        const childPath = createSvgElement('path', {
+          d: `M ${hubX} ${childRect.cy} C ${hubX + 10} ${childRect.cy} ${childRect.left - 14} ${childRect.cy} ${childRect.left} ${childRect.cy}`,
+        });
+        styleTopicMatrixConnector(childPath, connectorColor, 2);
+        svg.appendChild(childPath);
+        drawNodeChildrenConnectors(svg, child, side, layoutConfig, connectorColor);
+      });
+    } else {
+      const hubX = parentRect.left - getHubOffset(parentRect.left - childRects[0].right, layoutConfig);
+      const parentToHub = createSvgElement('path', {
+        d: `M ${parentRect.left} ${parentRect.cy} C ${parentRect.left - 12} ${parentRect.cy} ${hubX + 12} ${parentRect.cy} ${hubX} ${parentRect.cy}`,
+      });
+      styleTopicMatrixConnector(parentToHub, connectorColor, 2);
+      svg.appendChild(parentToHub);
+
+      if (childRects.length > 1) {
+        const hubLine = createSvgElement('path', {
+          d: `M ${hubX} ${childRects[0].cy} V ${childRects[childRects.length - 1].cy}`,
+        });
+        styleTopicMatrixConnector(hubLine, connectorColor, 2);
+        svg.appendChild(hubLine);
+      }
+
+      node.children.forEach((child, index) => {
+        const childRect = childRects[index];
+        const childPath = createSvgElement('path', {
+          d: `M ${hubX} ${childRect.cy} C ${hubX - 10} ${childRect.cy} ${childRect.right + 14} ${childRect.cy} ${childRect.right} ${childRect.cy}`,
+        });
+        styleTopicMatrixConnector(childPath, connectorColor, 2);
+        svg.appendChild(childPath);
+        drawNodeChildrenConnectors(svg, child, side, layoutConfig, connectorColor);
+      });
+    }
+  }
+
+  function drawRootSideConnectors(svg, rootRect, nodes, side, layoutConfig, connectorColor) {
+    if (!nodes.length) return;
+    if (side === 'right') {
+      const trunkX = rootRect.right + layoutConfig.root_trunk_gap;
+      const rootLine = createSvgElement('path', {
+        d: `M ${rootRect.right} ${rootRect.cy} H ${trunkX}`,
+      });
+      styleTopicMatrixConnector(rootLine, connectorColor, 2.2);
+      svg.appendChild(rootLine);
+
+      const nodeRects = nodes.map(node => getNodeRect(node));
+      if (nodeRects.length > 1) {
+        const vertical = createSvgElement('path', {
+          d: `M ${trunkX} ${nodeRects[0].cy} V ${nodeRects[nodeRects.length - 1].cy}`,
+        });
+        styleTopicMatrixConnector(vertical, connectorColor, 2.2);
+        svg.appendChild(vertical);
+      }
+
+      nodes.forEach((node, index) => {
+        const rect = nodeRects[index];
+        const path = createSvgElement('path', {
+          d: `M ${trunkX} ${rect.cy} C ${trunkX + 16} ${rect.cy} ${rect.left - 18} ${rect.cy} ${rect.left} ${rect.cy}`,
+        });
+        styleTopicMatrixConnector(path, connectorColor, 2.2);
+        svg.appendChild(path);
+        drawNodeChildrenConnectors(svg, node, side, layoutConfig, connectorColor);
+      });
+    } else {
+      const trunkX = rootRect.left - layoutConfig.root_trunk_gap;
+      const rootLine = createSvgElement('path', {
+        d: `M ${rootRect.left} ${rootRect.cy} H ${trunkX}`,
+      });
+      styleTopicMatrixConnector(rootLine, connectorColor, 2.2);
+      svg.appendChild(rootLine);
+
+      const nodeRects = nodes.map(node => getNodeRect(node));
+      if (nodeRects.length > 1) {
+        const vertical = createSvgElement('path', {
+          d: `M ${trunkX} ${nodeRects[0].cy} V ${nodeRects[nodeRects.length - 1].cy}`,
+        });
+        styleTopicMatrixConnector(vertical, connectorColor, 2.2);
+        svg.appendChild(vertical);
+      }
+
+      nodes.forEach((node, index) => {
+        const rect = nodeRects[index];
+        const path = createSvgElement('path', {
+          d: `M ${trunkX} ${rect.cy} C ${trunkX - 16} ${rect.cy} ${rect.right + 18} ${rect.cy} ${rect.right} ${rect.cy}`,
+        });
+        styleTopicMatrixConnector(path, connectorColor, 2.2);
+        svg.appendChild(path);
+        drawNodeChildrenConnectors(svg, node, side, layoutConfig, connectorColor);
+      });
+    }
+  }
+
+  function renderTopicMatrixLayout(baseColors, layoutConfig) {
+    const host = document.querySelector('.markmap');
+    const wrapper = document.getElementById('mindmap-wrapper');
+    if (!host || !wrapper || wrapper.dataset.customLayoutApplied === 'topic-matrix') {
+      return;
+    }
+
+    const rootData = getHierarchyRootData();
+    if (!rootData || !Array.isArray(rootData.children) || !rootData.children.length) {
+      return;
+    }
+
+    const rootTree = buildRenderableTree(rootData);
+    const distribution = layoutConfig.distribution || 'single-right';
+    const split = splitBranchesForDistribution(rootTree.children, distribution);
+    const leftDepth = getSideMaxDepth(split.left);
+    const rightDepth = getSideMaxDepth(split.right);
+
+    wrapper.dataset.customLayoutApplied = 'topic-matrix';
+    window.__TOPIC_MATRIX_LAYOUT_CONFIG__ = layoutConfig;
+
+    host.innerHTML = '';
+    host.classList.add('topic-matrix-host');
+
+    const layout = document.createElement('div');
+    layout.className = 'topic-matrix';
+    layout.style.width = `${getTopicMatrixCanvasWidth(layoutConfig, distribution, leftDepth, rightDepth)}px`;
+
+    const background = document.createElement('div');
+    background.className = 'topic-matrix-background';
+
+    const content = document.createElement('div');
+    content.className = 'topic-matrix-content';
+    content.style.paddingTop = `${layoutConfig.padding_y}px`;
+    content.style.paddingBottom = `${layoutConfig.padding_y}px`;
+    content.style.paddingRight = `${layoutConfig.padding_right}px`;
+
+    const svg = createSvgElement('svg', { class: 'topic-matrix-svg' });
+
+    const rootCard = document.createElement('div');
+    rootCard.className = 'topic-matrix-root';
+    rootCard.style.width = `${layoutConfig.root_width}px`;
+    const rootText = document.createElement('div');
+    rootText.className = 'topic-matrix-root-text';
+    rootText.textContent = rootTree.title;
+    rootCard.appendChild(rootText);
+    rootCard.style.position = 'absolute';
+
+    content.append(rootCard);
+    layout.append(background, svg, content);
+    host.appendChild(layout);
+
+    initializeTreeNodes(split.left, content, baseColors, 0, 0);
+    initializeTreeNodes(split.right, content, baseColors, split.left.length, 0);
+
+    split.left.forEach(node => computeTreeMetrics(node, layoutConfig));
+    split.right.forEach(node => computeTreeMetrics(node, layoutConfig));
+
+    const rootHeight = rootCard.offsetHeight;
+    const rootWidth = rootCard.offsetWidth;
+    const leftBlockHeight = getTopLevelBlockHeight(split.left, layoutConfig);
+    const rightBlockHeight = getTopLevelBlockHeight(split.right, layoutConfig);
+    const sideBlockHeight = Math.max(leftBlockHeight, rightBlockHeight, rootHeight);
+    const totalHeight = sideBlockHeight + layoutConfig.padding_y * 2;
+
+    let rootLeft = layoutConfig.root_left;
+    if (distribution === 'balanced') {
+      const sidePadding = layoutConfig.side_padding || 32;
+      rootLeft = sidePadding + getSideWidth(leftDepth, layoutConfig);
+    }
+    const rootTop = layoutConfig.padding_y + (sideBlockHeight - rootHeight) / 2;
+    rootCard.style.left = `${rootLeft}px`;
+    rootCard.style.top = `${rootTop}px`;
+
+    const rootRect = getRelativeRect(rootCard, content);
+    const leftColumnXs = getLeftColumnXs(rootRect, leftDepth, layoutConfig);
+    const rightColumnXs = getRightColumnXs(rootRect, rightDepth, layoutConfig);
+
+    layoutTopLevelNodes(
+      split.left,
+      leftColumnXs,
+      layoutConfig.padding_y + (sideBlockHeight - leftBlockHeight) / 2,
+      layoutConfig
+    );
+    layoutTopLevelNodes(
+      split.right,
+      rightColumnXs,
+      layoutConfig.padding_y + (sideBlockHeight - rightBlockHeight) / 2,
+      layoutConfig
+    );
+
+    layout.style.height = `${totalHeight}px`;
+    svg.setAttribute('width', String(layout.offsetWidth));
+    svg.setAttribute('height', String(totalHeight));
+    svg.setAttribute('viewBox', `0 0 ${layout.offsetWidth} ${totalHeight}`);
+
+    drawRootSideConnectors(svg, rootRect, split.left, 'left', layoutConfig, '#c6d5fb');
+    drawRootSideConnectors(svg, rootRect, split.right, 'right', layoutConfig, '#c6d5fb');
+
+    wrapper.style.minWidth = `${layout.offsetWidth + 24}px`;
+    wrapper.style.minHeight = `${Math.ceil(totalHeight)}px`;
+  }
+
+  function runPasses(baseColors, isDark, orthogonalLinks, customLayout, layoutConfig) {
+    if (customLayout === 'topic-matrix') {
+      renderTopicMatrixLayout(baseColors, layoutConfig);
+      return;
+    }
+    fixForeignObjects();
+    applyFamilyShading(baseColors, isDark);
+    if (orthogonalLinks) applyOrthogonalLinks();
+  }
+
+
+  function escapeHtml(text) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  async function loadMdAndRender() {
+    if (MD_FILE) {
+      try {
+        const response = await fetch('./' + MD_FILE);
+        if (response.ok) {
+          const md = await response.text();
+          const container = document.getElementById('target-markmap');
+          if (container) {
+            container.innerHTML = '<script type="text/template">' + escapeHtml(md) + '<\/script>';
+          }
+        }
+      } catch (e) {
+        // fetch failed (file:// protocol or network error), use embedded fallback
+      }
+    }
+    loadMarkmapScripts(MARKMAP_SCRIPT_URLS);
+  }
+
+  function schedulePasses() {
+    setTimeout(function() { runPasses(BASE_COLORS, IS_DARK, ORTHOGONAL_LINKS, CUSTOM_LAYOUT, LAYOUT_CONFIG); }, 600);
+    setTimeout(function() { runPasses(BASE_COLORS, IS_DARK, ORTHOGONAL_LINKS, CUSTOM_LAYOUT, LAYOUT_CONFIG); }, 1400);
+  }
+
+  function waitForSvg(attemptsLeft) {
+    if (document.querySelector('.markmap svg')) {
+      schedulePasses();
+      return;
+    }
+    if (window.__MARKMAP_ERROR__ || attemptsLeft <= 0) return;
+    setTimeout(function() { waitForSvg(attemptsLeft - 1); }, 250);
+  }
+
+  function loadMarkmapScripts(urls) {
+    const remaining = urls.slice();
+
+    function tryNext() {
+      const src = remaining.shift();
+      if (!src) {
+        window.__MARKMAP_ERROR__ = 'Failed to load markmap-autoloader from all configured CDNs.';
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.onload = function() {
+        window.__MARKMAP_READY__ = true;
+        if (window.markmap && window.markmap.autoLoader && window.markmap.autoLoader.renderAll) {
+          window.markmap.autoLoader.renderAll();
+        }
+        waitForSvg(120);
+      };
+      script.onerror = function() {
+        script.remove();
+        tryNext();
+      };
+      document.head.appendChild(script);
+    }
+
+    tryNext();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      loadMdAndRender();
+    }, { once: true });
+  } else {
+    loadMdAndRender();
+  }
+})();
+</script>
+</body>
+</html>

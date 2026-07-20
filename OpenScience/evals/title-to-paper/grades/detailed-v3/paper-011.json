@@ -1,0 +1,721 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-011",
+  "category": "observational-cohort",
+  "title": "High-coverage whole-genome sequencing of the expanded 1000 Genomes Project cohort including 602 trios.",
+  "pmcid": "PMC9439720",
+  "doi": "10.1016/j.cell.2022.08.004",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "c824b085cfcde66be07ac078a2c9a612b49aefa263940a6904d25fdf7d31d348",
+  "generatedSha256": "89503e651cae5967a650aad07925e8369df7eda75d86fe440c0cf7969d52f78f",
+  "promptSha256": "148d5af2de1370a0fd869aaebe6fb33bff7a45b340bd98ed18b1b21d3d997421",
+  "cacheFingerprint": "0d5f9f4d18359e931a2c4d420b987c3d2923fbcbd2028d09363d54e50387206f",
+  "referenceCharacters": 108641,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 10153,
+  "paperType": "observational-cohort",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "To present a high-coverage WGS resource of 3,202 1kGP samples including 602 trios at 30X, discover SNVs, INDELs, and SVs, show gains over phase 3, and provide an improved imputation panel.",
+      "generatedFact": "Present high-coverage sequencing of the expanded 1kGP cohort (3,202 samples, 602 trios) on Illumina NovaSeq 6000 at 30X depth, and detect SNVs, INDELs, SVs, compare to phase 3, and generate imputation panel.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "The final, phase 3 release of the 1kGP included 2,504 unrelated samples from 26 populations and was based primarily on low-coverage WGS. Here, we present a high-coverage 3,202-sample WGS 1kGP resource, which now includes 602 complete trios, sequenced to a depth of 30X using Illumina. We performed single-nucleotide variant (SNV) and short insertion and deletion (INDEL) discovery and generated a comprehensive set of structural variants (SVs) by integrating multiple analytic methods through a machine learning model. We show gains in sensitivity and precision of variant calls compared to phase 3, especially among rare SNVs as well as INDELs and SVs spanning frequency spectrum."
+        ],
+        "quote": "The final, phase 3 release of the 1kGP included 2,504 unrelated samples from 26 populations and was based primarily on low-coverage WGS. Here, we present a high-coverage 3,202-sample WGS 1kGP resource, which now includes 602 complete trios, sequenced to a depth of 30X using Illumina. We performed single-nucleotide variant (SNV) and short insertion and deletion (INDEL) discovery and generated a comprehensive set of structural variants (SVs) by integrating multiple analytic methods through a machine learning model. We show gains in sensitivity and precision of variant calls compared to phase 3, especially among rare SNVs as well as INDELs and SVs spanning frequency spectrum."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+        ],
+        "quote": "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+      },
+      "explanation": "Identical objective.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Observational cohort study with high-coverage WGS and comparison to previous phase 3 data.",
+      "generatedFact": "High-coverage whole-genome sequencing of 3,202 samples, comparison with phase 3 low-coverage data.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "The final, phase 3 release of the 1kGP included 2,504 unrelated samples from 26 populations and was based primarily on low-coverage WGS. Here, we present a high-coverage 3,202-sample WGS 1kGP resource, which now includes 602 complete trios, sequenced to a depth of 30X using Illumina. We performed single-nucleotide variant (SNV) and short insertion and deletion (INDEL) discovery and generated a comprehensive set of structural variants (SVs) by integrating multiple analytic methods through a machine learning model. We show gains in sensitivity and precision of variant calls compared to phase 3, especially among rare SNVs as well as INDELs and SVs spanning frequency spectrum."
+        ],
+        "quote": "The final, phase 3 release of the 1kGP included 2,504 unrelated samples from 26 populations and was based primarily on low-coverage WGS. Here, we present a high-coverage 3,202-sample WGS 1kGP resource, which now includes 602 complete trios, sequenced to a depth of 30X using Illumina. We performed single-nucleotide variant (SNV) and short insertion and deletion (INDEL) discovery and generated a comprehensive set of structural variants (SVs) by integrating multiple analytic methods through a machine learning model. We show gains in sensitivity and precision of variant calls compared to phase 3, especially among rare SNVs as well as INDELs and SVs spanning frequency spectrum."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+        ],
+        "quote": "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+      },
+      "explanation": "Same design.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "3,202 LCL samples from 26 populations across five continental groups, including 2,504 unrelated from phase 3 and 698 additional related samples completing 602 trios.",
+      "generatedFact": "LCL samples from 26 populations, 2,504 original plus 698 new to yield 602 parent-child trios; 5 super-population groups (AFR, EUR, EAS, SAS, AMR).",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "While the phase 3 dataset captured the vast majority of common SNVs (minor-allele frequency [MAF] >1%) in the population (>99%) ( The 1000 Genomes Project Consortium, 2015 ), detection of rare SNVs (MAF ≤1%) as well as INDELs and SVs across the entire frequency spectrum was limited due to low sequencing coverage outside of the coding genome as well as shortcomings in INDEL and SV discovery algorithms that existed at the time of phase 3 data analysis. Here, we present high-coverage WGS and comprehensive analyses of the original 2,504 1kGP samples, as well as of 698 additional related samples that now complete 602 trios in the 1kGP cohort."
+        ],
+        "quote": "While the phase 3 dataset captured the vast majority of common SNVs (minor-allele frequency [MAF] >1%) in the population (>99%) ( The 1000 Genomes Project Consortium, 2015 ), detection of rare SNVs (MAF ≤1%) as well as INDELs and SVs across the entire frequency spectrum was limited due to low sequencing coverage outside of the coding genome as well as shortcomings in INDEL and SV discovery algorithms that existed at the time of phase 3 data analysis. Here, we present high-coverage WGS and comprehensive analyses of the original 2,504 1kGP samples, as well as of 698 additional related samples that now complete 602 trios in the 1kGP cohort."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+        ],
+        "quote": "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+      },
+      "explanation": "Population description matches.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "3,202 samples (1,598 males, 1,604 females), 602 complete trios.",
+      "generatedFact": "3,202 samples with 602 trios added.",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "While the phase 3 dataset captured the vast majority of common SNVs (minor-allele frequency [MAF] >1%) in the population (>99%) ( The 1000 Genomes Project Consortium, 2015 ), detection of rare SNVs (MAF ≤1%) as well as INDELs and SVs across the entire frequency spectrum was limited due to low sequencing coverage outside of the coding genome as well as shortcomings in INDEL and SV discovery algorithms that existed at the time of phase 3 data analysis. Here, we present high-coverage WGS and comprehensive analyses of the original 2,504 1kGP samples, as well as of 698 additional related samples that now complete 602 trios in the 1kGP cohort."
+        ],
+        "quote": "While the phase 3 dataset captured the vast majority of common SNVs (minor-allele frequency [MAF] >1%) in the population (>99%) ( The 1000 Genomes Project Consortium, 2015 ), detection of rare SNVs (MAF ≤1%) as well as INDELs and SVs across the entire frequency spectrum was limited due to low sequencing coverage outside of the coding genome as well as shortcomings in INDEL and SV discovery algorithms that existed at the time of phase 3 data analysis. Here, we present high-coverage WGS and comprehensive analyses of the original 2,504 1kGP samples, as well as of 698 additional related samples that now complete 602 trios in the 1kGP cohort."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+        ],
+        "quote": "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+      },
+      "explanation": "No discrepancy.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Samples drawn from the 1kGP collection; no explicit exclusion criteria beyond availability and confirmed relationships; LCL DNA from Coriell.",
+      "generatedFact": "Samples from Coriell, 26 populations, 602 trios, 6 duos; relationships confirmed by IBD.",
+      "sourceEvidence": {
+        "locator": "R0110",
+        "locators": [
+          "R0110"
+        ],
+        "quotes": [
+          "Materials availability This study did not generate new unique reagents. Experimental model and subject details 1000 Genomes Project cohort As part of this publication, we sequenced 3,202 lymphoblastoid cell line (LCL) samples from the 1kGP collection, including 1,598 males and 1,604 females. The 3,202 samples were drawn from 26 populations (listed in Table S1 ) across the following 5 continental ancestry groups: African (AFR, n = 893), European (EUR, n = 633), East Asian (EAS, n = 601), South Asian (SAS, n = 585), and American (AMR, n = 490) ( Figures 1 A and 1 Table S1 )."
+        ],
+        "quote": "Materials availability This study did not generate new unique reagents. Experimental model and subject details 1000 Genomes Project cohort As part of this publication, we sequenced 3,202 lymphoblastoid cell line (LCL) samples from the 1kGP collection, including 1,598 males and 1,604 females. The 3,202 samples were drawn from 26 populations (listed in Table S1 ) across the following 5 continental ancestry groups: African (AFR, n = 893), European (EUR, n = 633), East Asian (EAS, n = 601), South Asian (SAS, n = 585), and American (AMR, n = 490) ( Figures 1 A and 1 Table S1 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 研究队列与测序 从 Coriell Institute 获取 3,202 份 LCL 样本的基因组 DNA，其中包括 1,598 名男性和 1,604 名女性，来源于 26 个群体、5 个超群体组：非洲（AFR, n=893）、欧洲（EUR, n=633）、东亚（EAS, n=601）、南亚（SAS, n=585）和美洲混合群体（AMR, n=490）。其中包含 602 个父亲-母亲-子代 trio 及 6 个亲代-子代 duo。所有报告的血缘关系均通过 KING v2.2.3 进行 IBD 分析确认。 文库使用 TruSeq DNA PCR-Free High Throughput Library Prep Kit 构建，在 Illumina NovaSeq 6000 系统上以 2×150 bp 循环进行测序。每份样本的平均基因组覆盖度为 34X（范围 27X–71X），至少 91% 的碱基质量分数 ≥30。中位插入片段长度为 433 bp，平均重复率为 9%（5 份样本超过 20%）。使用 VerifyBamID 评估污染，平均污染率为 0.018%，无样本超过 2% 阈值。所有样本的基因芯片一致性 >97%。"
+        ],
+        "quote": "--- ## 方法 ### 研究队列与测序 从 Coriell Institute 获取 3,202 份 LCL 样本的基因组 DNA，其中包括 1,598 名男性和 1,604 名女性，来源于 26 个群体、5 个超群体组：非洲（AFR, n=893）、欧洲（EUR, n=633）、东亚（EAS, n=601）、南亚（SAS, n=585）和美洲混合群体（AMR, n=490）。其中包含 602 个父亲-母亲-子代 trio 及 6 个亲代-子代 duo。所有报告的血缘关系均通过 KING v2.2.3 进行 IBD 分析确认。 文库使用 TruSeq DNA PCR-Free High Throughput Library Prep Kit 构建，在 Illumina NovaSeq 6000 系统上以 2×150 bp 循环进行测序。每份样本的平均基因组覆盖度为 34X（范围 27X–71X），至少 91% 的碱基质量分数 ≥30。中位插入片段长度为 433 bp，平均重复率为 9%（5 份样本超过 20%）。使用 VerifyBamID 评估污染，平均污染率为 0.018%，无样本超过 2% 阈值。所有样本的基因芯片一致性 >97%。"
+      },
+      "explanation": "Consistent eligibility information.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "High-coverage WGS at targeted 30X depth on Illumina NovaSeq 6000.",
+      "generatedFact": "High-depth resequencing at target 30X on Illumina NovaSeq 6000.",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "We sequenced LCL-derived DNA from the expanded cohort of 3,202 samples to a targeted depth of 30X genome coverage using Illumina NovaSeq 6000 instruments. We aligned reads to the GRCh38 reference and performed SNV/INDEL calling using GATK HaplotypeCaller ( Poplin et al., 2017 ). We also discovered and genotyped a comprehensive set of SVs, including insertions (INSs), deletions (DELs), duplications (DUPs), inversions (INVs), and multiallelic copy number variants (mCNVs), by integrating multiple algorithms and analytic pipelines, including GATK-SV ( Collins et al., 2020 ), svtools ( Larson et al., 2019 ), and Absinthe ( Corvelo et al., 2021 )."
+        ],
+        "quote": "We sequenced LCL-derived DNA from the expanded cohort of 3,202 samples to a targeted depth of 30X genome coverage using Illumina NovaSeq 6000 instruments. We aligned reads to the GRCh38 reference and performed SNV/INDEL calling using GATK HaplotypeCaller ( Poplin et al., 2017 ). We also discovered and genotyped a comprehensive set of SVs, including insertions (INSs), deletions (DELs), duplications (DUPs), inversions (INVs), and multiallelic copy number variants (mCNVs), by integrating multiple algorithms and analytic pipelines, including GATK-SV ( Collins et al., 2020 ), svtools ( Larson et al., 2019 ), and Absinthe ( Corvelo et al., 2021 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+        ],
+        "quote": "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+      },
+      "explanation": "Exposure identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Phase 3 low-coverage WGS (mean depth 7.4X) from the 1kGP, consisting of 2,504 unrelated samples.",
+      "generatedFact": "Phase 3 dataset with 2,504 samples at low coverage (~7.4X).",
+      "sourceEvidence": {
+        "locator": "R0009",
+        "locators": [
+          "R0009"
+        ],
+        "quotes": [
+          "Comparison with previous low-coverage sequencing performed in phase 3 of the 1kGP demonstrates significant improvements in sensitivity and precision of variant calls, highlighting that the resequencing effort and expansion of the cohort to include trios brought significant value to the resource. One of the major applications of the phase 3 1kGP call set has been its widespread use as a reference panel for variant imputation in sparse, array-based genotyping data with a goal of improving the statistical power of downstream genome-wide association studies (GWAS) and facilitating fine-mapping of causal variants."
+        ],
+        "quote": "Comparison with previous low-coverage sequencing performed in phase 3 of the 1kGP demonstrates significant improvements in sensitivity and precision of variant calls, highlighting that the resequencing effort and expansion of the cohort to include trios brought significant value to the resource. One of the major applications of the phase 3 1kGP call set has been its widespread use as a reference panel for variant imputation in sparse, array-based genotyping data with a goal of improving the statistical power of downstream genome-wide association studies (GWAS) and facilitating fine-mapping of causal variants."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+        ],
+        "quote": "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+      },
+      "explanation": "Matching comparator.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary outcomes include variant counts, sensitivity/precision (FDR), phasing and imputation accuracy.",
+      "generatedFact": "Variant counts, FDR, sensitivity/precision, phasing accuracy, imputation performance.",
+      "sourceEvidence": {
+        "locator": "R0014",
+        "locators": [
+          "R0014"
+        ],
+        "quotes": [
+          "At the cohort level, we discovered a total of 117,175,809 small variant loci, which represent 125,484,020 distinct alternate alleles, including 111,048,944 SNVs and 14,435,076 INDELs ( Table 1 ). Across all SNVs and INDELs, there are 58,379,163 (47.6%) singletons (allele count [AC] = 1), 45,931,977 (37.5%) rare (allele frequency [AF] ≤ 1%), and 18,212,589 (14.9%) common (AF > 1%) alleles, as defined using AF estimates based on unrelated samples in the cohort ( Figure 1 B). Out of all small variants, 7,473,575 (5.9%) represent novel alleles, defined here as not reported in SNP database (dbSNP) build 155 ( Sherry et al., 1999 ) ( Figure 1 B)."
+        ],
+        "quote": "At the cohort level, we discovered a total of 117,175,809 small variant loci, which represent 125,484,020 distinct alternate alleles, including 111,048,944 SNVs and 14,435,076 INDELs ( Table 1 ). Across all SNVs and INDELs, there are 58,379,163 (47.6%) singletons (allele count [AC] = 1), 45,931,977 (37.5%) rare (allele frequency [AF] ≤ 1%), and 18,212,589 (14.9%) common (AF > 1%) alleles, as defined using AF estimates based on unrelated samples in the cohort ( Figure 1 B). Out of all small variants, 7,473,575 (5.9%) represent novel alleles, defined here as not reported in SNP database (dbSNP) build 155 ( Sherry et al., 1999 ) ( Figure 1 B)."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+        ],
+        "quote": "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+      },
+      "explanation": "Outcomes align.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No follow-up or time horizon; cross-sectional data snapshot.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "QC with FastQC, Picard, VerifyBamID; alignment with BWA-MEM; duplicate marking; BQSR.",
+      "generatedFact": "QC (coverage, duplication rate, contamination); alignment to GRCh38 with BWA-MEM; duplicate marking; BQSR.",
+      "sourceEvidence": {
+        "locator": "R0117",
+        "locators": [
+          "R0117"
+        ],
+        "quotes": [
+          "We ran FastQC ( Andrews, 2019 ) v0.11.3 on the raw sequence data to assess yield and raw base qualities. We ran Picard ( Broad Institute, 2019 ) v2.4.1 CollectMultipleMetrics and CollectWGSMetrics on the aligned BAM to collect alignment and insert size metrics. Picard CollectGcBiasMetrics was run to compute normalized coverage across multiple GC bins. Read duplication metrics were quantified by running Picard MarkDuplicates on the BAM. All the samples had at least 27X mean coverage across the genome (average per sample coverage: 34X, range: 27X-71X) and at least 91% of the bases at base quality score 30 or higher. The median insert size per sample was 433 bp."
+        ],
+        "quote": "We ran FastQC ( Andrews, 2019 ) v0.11.3 on the raw sequence data to assess yield and raw base qualities. We ran Picard ( Broad Institute, 2019 ) v2.4.1 CollectMultipleMetrics and CollectWGSMetrics on the aligned BAM to collect alignment and insert size metrics. Picard CollectGcBiasMetrics was run to compute normalized coverage across multiple GC bins. Read duplication metrics were quantified by running Picard MarkDuplicates on the BAM. All the samples had at least 27X mean coverage across the genome (average per sample coverage: 34X, range: 27X-71X) and at least 91% of the bases at base quality score 30 or higher. The median insert size per sample was 433 bp."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 研究队列与测序 从 Coriell Institute 获取 3,202 份 LCL 样本的基因组 DNA，其中包括 1,598 名男性和 1,604 名女性，来源于 26 个群体、5 个超群体组：非洲（AFR, n=893）、欧洲（EUR, n=633）、东亚（EAS, n=601）、南亚（SAS, n=585）和美洲混合群体（AMR, n=490）。其中包含 602 个父亲-母亲-子代 trio 及 6 个亲代-子代 duo。所有报告的血缘关系均通过 KING v2.2.3 进行 IBD 分析确认。 文库使用 TruSeq DNA PCR-Free High Throughput Library Prep Kit 构建，在 Illumina NovaSeq 6000 系统上以 2×150 bp 循环进行测序。每份样本的平均基因组覆盖度为 34X（范围 27X–71X），至少 91% 的碱基质量分数 ≥30。中位插入片段长度为 433 bp，平均重复率为 9%（5 份样本超过 20%）。使用 VerifyBamID 评估污染，平均污染率为 0.018%，无样本超过 2% 阈值。所有样本的基因芯片一致性 >97%。"
+        ],
+        "quote": "--- ## 方法 ### 研究队列与测序 从 Coriell Institute 获取 3,202 份 LCL 样本的基因组 DNA，其中包括 1,598 名男性和 1,604 名女性，来源于 26 个群体、5 个超群体组：非洲（AFR, n=893）、欧洲（EUR, n=633）、东亚（EAS, n=601）、南亚（SAS, n=585）和美洲混合群体（AMR, n=490）。其中包含 602 个父亲-母亲-子代 trio 及 6 个亲代-子代 duo。所有报告的血缘关系均通过 KING v2.2.3 进行 IBD 分析确认。 文库使用 TruSeq DNA PCR-Free High Throughput Library Prep Kit 构建，在 Illumina NovaSeq 6000 系统上以 2×150 bp 循环进行测序。每份样本的平均基因组覆盖度为 34X（范围 27X–71X），至少 91% 的碱基质量分数 ≥30。中位插入片段长度为 433 bp，平均重复率为 9%（5 份样本超过 20%）。使用 VerifyBamID 评估污染，平均污染率为 0.018%，无样本超过 2% 阈值。所有样本的基因芯片一致性 >97%。"
+      },
+      "explanation": "Preprocessing steps match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Variant discovery with GATK HaplotypeCaller; SV integration with GATK-SV, svtools, Absinthe and LightGBM; phasing with SHAPEIT; imputation with IMPUTE.",
+      "generatedFact": "GATK HaplotypeCaller for SNV/INDEL; ensemble SV calling (GATK-SV, svtools, Absinthe) with LightGBM; SHAPEIT for phasing; IMPUTE for imputation.",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "We sequenced LCL-derived DNA from the expanded cohort of 3,202 samples to a targeted depth of 30X genome coverage using Illumina NovaSeq 6000 instruments. We aligned reads to the GRCh38 reference and performed SNV/INDEL calling using GATK HaplotypeCaller ( Poplin et al., 2017 ). We also discovered and genotyped a comprehensive set of SVs, including insertions (INSs), deletions (DELs), duplications (DUPs), inversions (INVs), and multiallelic copy number variants (mCNVs), by integrating multiple algorithms and analytic pipelines, including GATK-SV ( Collins et al., 2020 ), svtools ( Larson et al., 2019 ), and Absinthe ( Corvelo et al., 2021 )."
+        ],
+        "quote": "We sequenced LCL-derived DNA from the expanded cohort of 3,202 samples to a targeted depth of 30X genome coverage using Illumina NovaSeq 6000 instruments. We aligned reads to the GRCh38 reference and performed SNV/INDEL calling using GATK HaplotypeCaller ( Poplin et al., 2017 ). We also discovered and genotyped a comprehensive set of SVs, including insertions (INSs), deletions (DELs), duplications (DUPs), inversions (INVs), and multiallelic copy number variants (mCNVs), by integrating multiple algorithms and analytic pipelines, including GATK-SV ( Collins et al., 2020 ), svtools ( Larson et al., 2019 ), and Absinthe ( Corvelo et al., 2021 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 读段比对与 SNV/INDEL 检测 使用 BWA-MEM v0.7.15 将读段比对至 GRCh38 人类参考基因组，通过 Picard MarkDuplicates v2.4.1 标记重复，并以 GATK v3.5 BaseRecalibrator 进行碱基质量分数校正。SNV/INDEL 检测使用 GATK HaplotypeCaller 在 GVCF 模式下进行，染色体 X 和 Y 采用性别依赖性倍性设置。每约 200 份样本的 GVCF 合并后，全部 3,202 份样本进行联合基因分型。Variant Quality Score Recalibration（VQSR）模型训练使用 GATK VariantRecalibrator（SNV 使用 maxGaussians=8，INDEL 使用 maxGaussians=4），并以 SNV 99.8% 和 INDEL 99.0% 的 truth sensitivity 水平应用 ApplyRecalibration 进行过滤。"
+        ],
+        "quote": "### 读段比对与 SNV/INDEL 检测 使用 BWA-MEM v0.7.15 将读段比对至 GRCh38 人类参考基因组，通过 Picard MarkDuplicates v2.4.1 标记重复，并以 GATK v3.5 BaseRecalibrator 进行碱基质量分数校正。SNV/INDEL 检测使用 GATK HaplotypeCaller 在 GVCF 模式下进行，染色体 X 和 Y 采用性别依赖性倍性设置。每约 200 份样本的 GVCF 合并后，全部 3,202 份样本进行联合基因分型。Variant Quality Score Recalibration（VQSR）模型训练使用 GATK VariantRecalibrator（SNV 使用 maxGaussians=8，INDEL 使用 maxGaussians=4），并以 SNV 99.8% 和 INDEL 99.0% 的 truth sensitivity 水平应用 ApplyRecalibration 进行过滤。"
+      },
+      "explanation": "Methods consistent.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "GATK HaplotypeCaller for small variants; GATK-SV, svtools, Absinthe for SV; LightGBM for SV integration; SHAPEIT4 and Eagle for phasing; IMPUTE for imputation.",
+      "generatedFact": "Same algorithms listed: GATK, GATK-SV, svtools, Absinthe, LightGBM, SHAPEIT4, Eagle, IMPUTE.",
+      "sourceEvidence": {
+        "locator": "R0009",
+        "locators": [
+          "R0009"
+        ],
+        "quotes": [
+          "Comparison with previous low-coverage sequencing performed in phase 3 of the 1kGP demonstrates significant improvements in sensitivity and precision of variant calls, highlighting that the resequencing effort and expansion of the cohort to include trios brought significant value to the resource. One of the major applications of the phase 3 1kGP call set has been its widespread use as a reference panel for variant imputation in sparse, array-based genotyping data with a goal of improving the statistical power of downstream genome-wide association studies (GWAS) and facilitating fine-mapping of causal variants."
+        ],
+        "quote": "Comparison with previous low-coverage sequencing performed in phase 3 of the 1kGP demonstrates significant improvements in sensitivity and precision of variant calls, highlighting that the resequencing effort and expansion of the cohort to include trios brought significant value to the resource. One of the major applications of the phase 3 1kGP call set has been its widespread use as a reference panel for variant imputation in sparse, array-based genotyping data with a goal of improving the statistical power of downstream genome-wide association studies (GWAS) and facilitating fine-mapping of causal variants."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 读段比对与 SNV/INDEL 检测 使用 BWA-MEM v0.7.15 将读段比对至 GRCh38 人类参考基因组，通过 Picard MarkDuplicates v2.4.1 标记重复，并以 GATK v3.5 BaseRecalibrator 进行碱基质量分数校正。SNV/INDEL 检测使用 GATK HaplotypeCaller 在 GVCF 模式下进行，染色体 X 和 Y 采用性别依赖性倍性设置。每约 200 份样本的 GVCF 合并后，全部 3,202 份样本进行联合基因分型。Variant Quality Score Recalibration（VQSR）模型训练使用 GATK VariantRecalibrator（SNV 使用 maxGaussians=8，INDEL 使用 maxGaussians=4），并以 SNV 99.8% 和 INDEL 99.0% 的 truth sensitivity 水平应用 ApplyRecalibration 进行过滤。"
+        ],
+        "quote": "### 读段比对与 SNV/INDEL 检测 使用 BWA-MEM v0.7.15 将读段比对至 GRCh38 人类参考基因组，通过 Picard MarkDuplicates v2.4.1 标记重复，并以 GATK v3.5 BaseRecalibrator 进行碱基质量分数校正。SNV/INDEL 检测使用 GATK HaplotypeCaller 在 GVCF 模式下进行，染色体 X 和 Y 采用性别依赖性倍性设置。每约 200 份样本的 GVCF 合并后，全部 3,202 份样本进行联合基因分型。Variant Quality Score Recalibration（VQSR）模型训练使用 GATK VariantRecalibrator（SNV 使用 maxGaussians=8，INDEL 使用 maxGaussians=4），并以 SNV 99.8% 和 INDEL 99.0% 的 truth sensitivity 水平应用 ApplyRecalibration 进行过滤。"
+      },
+      "explanation": "All algorithms mentioned.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Total small variant alternate alleles: 125,484,020 (111,048,944 SNVs, 14,435,076 INDELs); SVs: 173,366; per-genome average 4,952,915 small variants and 9,679 SVs; 676-fold increase in singleton INDELs vs phase 3; genes altered by SVs per genome: 162 vs 32; FDR SNV 0.1% vs 0.6%, INDEL 1.1% vs 12.4% (2,504-sample set); phasing SER 0.07% vs 0.76%.",
+      "generatedFact": "Same numbers reported: SNV 111,048,944, INDEL 14,435,076, SV 173,366, avg 4,952,915 small vars and 9,679 SV, 676-fold INDEL singleton increase, 162 vs 32 genes altered, FDR 0.1% vs 0.6% SNV, 1.1% vs 12.4% INDEL, SER 0.07% vs 0.76%.",
+      "sourceEvidence": {
+        "locator": "R0014",
+        "locators": [
+          "R0014"
+        ],
+        "quotes": [
+          "At the cohort level, we discovered a total of 117,175,809 small variant loci, which represent 125,484,020 distinct alternate alleles, including 111,048,944 SNVs and 14,435,076 INDELs ( Table 1 ). Across all SNVs and INDELs, there are 58,379,163 (47.6%) singletons (allele count [AC] = 1), 45,931,977 (37.5%) rare (allele frequency [AF] ≤ 1%), and 18,212,589 (14.9%) common (AF > 1%) alleles, as defined using AF estimates based on unrelated samples in the cohort ( Figure 1 B). Out of all small variants, 7,473,575 (5.9%) represent novel alleles, defined here as not reported in SNP database (dbSNP) build 155 ( Sherry et al., 1999 ) ( Figure 1 B)."
+        ],
+        "quote": "At the cohort level, we discovered a total of 117,175,809 small variant loci, which represent 125,484,020 distinct alternate alleles, including 111,048,944 SNVs and 14,435,076 INDELs ( Table 1 ). Across all SNVs and INDELs, there are 58,379,163 (47.6%) singletons (allele count [AC] = 1), 45,931,977 (37.5%) rare (allele frequency [AF] ≤ 1%), and 18,212,589 (14.9%) common (AF > 1%) alleles, as defined using AF estimates based on unrelated samples in the cohort ( Figure 1 B). Out of all small variants, 7,473,575 (5.9%) represent novel alleles, defined here as not reported in SNP database (dbSNP) build 155 ( Sherry et al., 1999 ) ( Figure 1 B)."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+        ],
+        "quote": "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+      },
+      "explanation": "All key numbers exactly reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "FDR estimates: overall SNV 0.3%, INDEL 1.15% (3,202-sample); compared with phase 3 on 2,504 samples, SNV 0.1% vs 0.6%, INDEL 1.1% vs 12.4%.",
+      "generatedFact": "FDR reduction: SNV 0.6%→0.1%, INDEL 12.4%→1.1%.",
+      "sourceEvidence": {
+        "locator": "R0048",
+        "locators": [
+          "R0048"
+        ],
+        "quotes": [
+          "Shared variants displayed high correlation of AF between the high-coverage and phase 3 call sets ( Figure S4 C). The FDR of the 2,504-sample high-coverage call set is 0.1% for SNVs and 1.1% for INDELs as compared to 0.6% for SNVs and 12.4% for INDELs in the phase 3 call set. In a stratified analysis, we observed significantly lower FDR across the entire AF spectrum, in both easy and difficult genomic regions, in the high-coverage as compared to the phase 3 call set ( Figures 3 C, 3D, and S4 B). This trend was particularly pronounced among rare (AF ≤ 1%) SNVs and INDELs in the difficult regions of the genome."
+        ],
+        "quote": "Shared variants displayed high correlation of AF between the high-coverage and phase 3 call sets ( Figure S4 C). The FDR of the 2,504-sample high-coverage call set is 0.1% for SNVs and 1.1% for INDELs as compared to 0.6% for SNVs and 12.4% for INDELs in the phase 3 call set. In a stratified analysis, we observed significantly lower FDR across the entire AF spectrum, in both easy and difficult genomic regions, in the high-coverage as compared to the phase 3 call set ( Figures 3 C, 3D, and S4 B). This trend was particularly pronounced among rare (AF ≤ 1%) SNVs and INDELs in the difficult regions of the genome."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+        ],
+        "quote": "--- ## 摘要 千人基因组计划（1kGP）第三阶段数据集包含来自 26 个群体的 2,504 份无亲缘关系样本，主要依赖低深度全基因组测序，深度约为 7.4X。本工作将此队列扩展至 3,202 份样本——新增 698 份亲缘样本后构成了 602 个完整的父母-子代 trio——并以 Illumina NovaSeq 6000 平台对其进行目标深度 30X 的高深度重测序，随后在 GRCh38 参考基因组上进行变异检测。 在全队列水平，共鉴定出 111,048,944 个单核苷酸变异（SNV）和 14,435,076 个短插入缺失（INDEL），各类小变异交替等位基因共计 125,484,020 个。此外，通过整合 GATK-SV、svtools 和 Absinthe 三种分析流程并以 LightGBM 机器学习模型进行集成，获得了包含 173,366 个结构变异（SV）的集合，涵盖缺失、重复、插入、倒位、多等位基因拷贝数变异、复杂 SV 以及染色体间易位等类别。 与第三阶段数据集比较（基于共同 2,504 份样本），高深度数据集在常染色体上的 SNV 数量增加了 1.24 倍，INDEL 增加了 4.05 倍（其中单例 INDEL 增加 676 倍），SV 位点数量增加了约 2.47 倍。错误发现率（FDR）在 SNV 中从 0.6% 降至 0.1%，在 INDEL 中从 12.4% 降至 1.1%。每个基因组的平均变异数目为 4,952,915 个小变异和 9,679 个 SV，AFR 群体在所有类别中均携带最多变异。"
+      },
+      "explanation": "FDR values match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "High-coverage sequencing greatly expands variant discovery, particularly rare and non-coding variants, INDELs, SVs; improved imputation panel; open resource.",
+      "generatedFact": "High-depth WGS significantly expands variant discovery capacity of 1kGP; average per genome increases: 190,885 SNVs, 268,182 INDELs, 5,835 SVs; improved phasing and imputation.",
+      "sourceEvidence": {
+        "locator": "R0095",
+        "locators": [
+          "R0095"
+        ],
+        "quotes": [
+          "These datasets have produced scientific insights into population genetics and genome biology, as well as provided an openly sharable resource that has been widely used in methods development and testing as well as for technical validation. By generating high-coverage sequencing data for the complete phase 3 set of individuals and completing 602 trios with additional samples, we have updated this critical resource with benchmarks and standards for the next generation of large-scale international WGS initiatives. The higher coverage plus advances in sequencing and analytic methods greatly expanded the discovery of all rare variants and of INDELs and SVs across the frequency spectrum."
+        ],
+        "quote": "These datasets have produced scientific insights into population genetics and genome biology, as well as provided an openly sharable resource that has been widely used in methods development and testing as well as for technical validation. By generating high-coverage sequencing data for the complete phase 3 set of individuals and completing 602 trios with additional samples, we have updated this critical resource with benchmarks and standards for the next generation of large-scale international WGS initiatives. The higher coverage plus advances in sequencing and analytic methods greatly expanded the discovery of all rare variants and of INDELs and SVs across the frequency spectrum."
+      },
+      "generatedEvidence": {
+        "locator": "G0015",
+        "locators": [
+          "G0015"
+        ],
+        "quotes": [
+          "对于 SV 定相，评估显示缺失的定相翻转率为 0.89%，插入为 0.24%。正交方法（亲代翻转率）给出的每个子代平均翻转率为：插入 0.65%、缺失 0.99%、重复 1.63%、倒位 1.20%，进一步支持所有 SV 类型的高定相准确度。 SNV 填补性能在两大面板间相当，而 INDEL 填补在使用高深度面板时在所有超级群体和全频率谱范围内均表现更优。在常见 MAF 区间，使用高深度面板填补的 INDEL 数量约增加 1.7 倍。SV 填补准确率在 MAF >5% 时与小变异相当，但在更稀有的区间内低于小变异。在 info >0.4 时，32% 的 SV 被成功填补（24% 达到 info >0.8）。值得注意的是，评估受限于整合 SV 集合与长读长 HGSVC 真集之间较小的交集，仅覆盖约 10% 的填补插入和缺失。 --- ## 讨论 本工作展示了高深度 WGS 结合最新分析手段能够显著扩展 1kGP 资源的变异检测能力。与 2015 年的第三阶段相比，每位基因组平均多检出 190,885 个 SNV、268,182 个 INDEL 和 5,835 个 SV。全队列水平则增加了超过 1,860 万 SNV、980 万 INDEL 和约 10 万 SV。 由于第三阶段已鉴定了人群中绝大多数常见 SNV，高深度集中新发现的 SNV 绝大多数属于稀有频率区间（MAF ≤1%），且多为非编码区变异。这一分布反映了第三阶段高深度外显子组测序对编码区变异的较完整捕获。在 INDEL 方面，受益于更高的测序覆盖度和当代变异调用器的算法进步，增益覆盖了全频率谱，且稀有端的增加最为突出。"
+        ],
+        "quote": "对于 SV 定相，评估显示缺失的定相翻转率为 0.89%，插入为 0.24%。正交方法（亲代翻转率）给出的每个子代平均翻转率为：插入 0.65%、缺失 0.99%、重复 1.63%、倒位 1.20%，进一步支持所有 SV 类型的高定相准确度。 SNV 填补性能在两大面板间相当，而 INDEL 填补在使用高深度面板时在所有超级群体和全频率谱范围内均表现更优。在常见 MAF 区间，使用高深度面板填补的 INDEL 数量约增加 1.7 倍。SV 填补准确率在 MAF >5% 时与小变异相当，但在更稀有的区间内低于小变异。在 info >0.4 时，32% 的 SV 被成功填补（24% 达到 info >0.8）。值得注意的是，评估受限于整合 SV 集合与长读长 HGSVC 真集之间较小的交集，仅覆盖约 10% 的填补插入和缺失。 --- ## 讨论 本工作展示了高深度 WGS 结合最新分析手段能够显著扩展 1kGP 资源的变异检测能力。与 2015 年的第三阶段相比，每位基因组平均多检出 190,885 个 SNV、268,182 个 INDEL 和 5,835 个 SV。全队列水平则增加了超过 1,860 万 SNV、980 万 INDEL 和约 10 万 SV。 由于第三阶段已鉴定了人群中绝大多数常见 SNV，高深度集中新发现的 SNV 绝大多数属于稀有频率区间（MAF ≤1%），且多为非编码区变异。这一分布反映了第三阶段高深度外显子组测序对编码区变异的较完整捕获。在 INDEL 方面，受益于更高的测序覆盖度和当代变异调用器的算法进步，增益覆盖了全频率谱，且稀有端的增加最为突出。"
+      },
+      "explanation": "Conclusions aligned.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Limitations: lift-over comparison (99.9% successful), GIAB high-confidence region coverage limited in difficult regions; short-read SV detection sensitivity limited; STRs not included; SV imputation evaluation limited by small overlap; LCL artefacts (~5% singletons).",
+      "generatedFact": "Same limitations listed: reference build differences and lift-over, short-read SV sensitivity in repeats, LCL cell-line artefacts (~5% singletons), limited SV imputation evaluation due to small overlap.",
+      "sourceEvidence": {
+        "locator": "R0097",
+        "locators": [
+          "R0097"
+        ],
+        "quotes": [
+          "Although many larger sequencing projects have now been conducted, the open nature of the 1kGP samples will continue to make this a foundational resource for the community in the years to come. Limitations of the study A direct comparison of the high-coverage 1kGP SNV/INDEL dataset to the phase 3 set was impossible due to differences in genomic reference builds that were used for variant calling during generation of the two call sets. To enable a locus-level comparison, we lifted-over the phase 3 dataset from the GRCh37 to the GRCh38 reference, which was successful for 99.9% of phase 3 SNVs/INDELs (the phase 3 SV call set is available on GRCh38)."
+        ],
+        "quote": "Although many larger sequencing projects have now been conducted, the open nature of the 1kGP samples will continue to make this a foundational resource for the community in the years to come. Limitations of the study A direct comparison of the high-coverage 1kGP SNV/INDEL dataset to the phase 3 set was impossible due to differences in genomic reference builds that were used for variant calling during generation of the two call sets. To enable a locus-level comparison, we lifted-over the phase 3 dataset from the GRCh37 to the GRCh38 reference, which was successful for 99.9% of phase 3 SNVs/INDELs (the phase 3 SV call set is available on GRCh38)."
+      },
+      "generatedEvidence": {
+        "locator": "G0016",
+        "locators": [
+          "G0016"
+        ],
+        "quotes": [
+          "SV 数据的提升同样可观。集成调用集发现的 SV 位点数量是第三阶段的 2 倍以上，且涵盖率高达 87.7%。基于系谱设计的遗传评估、长读长测序的正交验证以及 de novo SV 率（3.5%）均支持本调用集的质量。每基因组中由 SV 改变基因数从 32 提升至 162，接近长读长 WGS 研究（约 189 个）的水平。 包含 602 个 trio 的高深度定相面板是本研究的一个重要产出。trio 的纳入使单倍型定相准确率较第三阶段提高了约 10 倍，这源于亲缘样本间长程单倍型共享的增加以及统计定相后对子代施加的系谱一致性校正。SV 也首次被成功定相并纳入填补面板——大多数已存参考面板（如 HRC、TOPMed）尚未包含 SV。虽然 SV 填补准确率的评估受限于与长读长真集之间较小的交集，但在 MAF >5% 时已达到与小变异相当的水平。这使得更多常见 INDEL 和 SV 通过填补的方式可用于关联研究。 尽管 gnomAD 和 TOPMed 等项目已生成更大规模的测序数据集，但 1kGP 样本的开放共享属性仍是其不可替代的核心价值。所有数据均可无条件公开下载，无需面对临床数据共享中的隐私限制，这使该资源仍然适用于方法开发、基准测试以及教学用途。 ### 局限性 1."
+        ],
+        "quote": "SV 数据的提升同样可观。集成调用集发现的 SV 位点数量是第三阶段的 2 倍以上，且涵盖率高达 87.7%。基于系谱设计的遗传评估、长读长测序的正交验证以及 de novo SV 率（3.5%）均支持本调用集的质量。每基因组中由 SV 改变基因数从 32 提升至 162，接近长读长 WGS 研究（约 189 个）的水平。 包含 602 个 trio 的高深度定相面板是本研究的一个重要产出。trio 的纳入使单倍型定相准确率较第三阶段提高了约 10 倍，这源于亲缘样本间长程单倍型共享的增加以及统计定相后对子代施加的系谱一致性校正。SV 也首次被成功定相并纳入填补面板——大多数已存参考面板（如 HRC、TOPMed）尚未包含 SV。虽然 SV 填补准确率的评估受限于与长读长真集之间较小的交集，但在 MAF >5% 时已达到与小变异相当的水平。这使得更多常见 INDEL 和 SV 通过填补的方式可用于关联研究。 尽管 gnomAD 和 TOPMed 等项目已生成更大规模的测序数据集，但 1kGP 样本的开放共享属性仍是其不可替代的核心价值。所有数据均可无条件公开下载，无需面对临床数据共享中的隐私限制，这使该资源仍然适用于方法开发、基准测试以及教学用途。 ### 局限性 1."
+      },
+      "explanation": "All limitations accurately captured.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No safety or harms; observational sequencing study.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "cohort_construction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Cohort built from original 2,504 unrelated 1kGP samples plus 698 additional related samples to complete 602 trios; all LCL-derived DNA, relationships confirmed by KING.",
+      "generatedFact": "Starting from 2,504 original plus 698 new samples to form 602 trios; KING confirmed relationships.",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "While the phase 3 dataset captured the vast majority of common SNVs (minor-allele frequency [MAF] >1%) in the population (>99%) ( The 1000 Genomes Project Consortium, 2015 ), detection of rare SNVs (MAF ≤1%) as well as INDELs and SVs across the entire frequency spectrum was limited due to low sequencing coverage outside of the coding genome as well as shortcomings in INDEL and SV discovery algorithms that existed at the time of phase 3 data analysis. Here, we present high-coverage WGS and comprehensive analyses of the original 2,504 1kGP samples, as well as of 698 additional related samples that now complete 602 trios in the 1kGP cohort."
+        ],
+        "quote": "While the phase 3 dataset captured the vast majority of common SNVs (minor-allele frequency [MAF] >1%) in the population (>99%) ( The 1000 Genomes Project Consortium, 2015 ), detection of rare SNVs (MAF ≤1%) as well as INDELs and SVs across the entire frequency spectrum was limited due to low sequencing coverage outside of the coding genome as well as shortcomings in INDEL and SV discovery algorithms that existed at the time of phase 3 data analysis. Here, we present high-coverage WGS and comprehensive analyses of the original 2,504 1kGP samples, as well as of 698 additional related samples that now complete 602 trios in the 1kGP cohort."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 研究队列与测序 从 Coriell Institute 获取 3,202 份 LCL 样本的基因组 DNA，其中包括 1,598 名男性和 1,604 名女性，来源于 26 个群体、5 个超群体组：非洲（AFR, n=893）、欧洲（EUR, n=633）、东亚（EAS, n=601）、南亚（SAS, n=585）和美洲混合群体（AMR, n=490）。其中包含 602 个父亲-母亲-子代 trio 及 6 个亲代-子代 duo。所有报告的血缘关系均通过 KING v2.2.3 进行 IBD 分析确认。 文库使用 TruSeq DNA PCR-Free High Throughput Library Prep Kit 构建，在 Illumina NovaSeq 6000 系统上以 2×150 bp 循环进行测序。每份样本的平均基因组覆盖度为 34X（范围 27X–71X），至少 91% 的碱基质量分数 ≥30。中位插入片段长度为 433 bp，平均重复率为 9%（5 份样本超过 20%）。使用 VerifyBamID 评估污染，平均污染率为 0.018%，无样本超过 2% 阈值。所有样本的基因芯片一致性 >97%。"
+        ],
+        "quote": "--- ## 方法 ### 研究队列与测序 从 Coriell Institute 获取 3,202 份 LCL 样本的基因组 DNA，其中包括 1,598 名男性和 1,604 名女性，来源于 26 个群体、5 个超群体组：非洲（AFR, n=893）、欧洲（EUR, n=633）、东亚（EAS, n=601）、南亚（SAS, n=585）和美洲混合群体（AMR, n=490）。其中包含 602 个父亲-母亲-子代 trio 及 6 个亲代-子代 duo。所有报告的血缘关系均通过 KING v2.2.3 进行 IBD 分析确认。 文库使用 TruSeq DNA PCR-Free High Throughput Library Prep Kit 构建，在 Illumina NovaSeq 6000 系统上以 2×150 bp 循环进行测序。每份样本的平均基因组覆盖度为 34X（范围 27X–71X），至少 91% 的碱基质量分数 ≥30。中位插入片段长度为 433 bp，平均重复率为 9%（5 份样本超过 20%）。使用 VerifyBamID 评估污染，平均污染率为 0.018%，无样本超过 2% 阈值。所有样本的基因芯片一致性 >97%。"
+      },
+      "explanation": "Cohort construction precisely described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "confounding_adjustment",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No confounding adjustment or matching; descriptive variant resource.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "missing_data_and_censoring",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Genotype missingness filter <5% applied for phasing-quality variants; other quality filters include HWE and MER.",
+      "generatedFact": "Mention of genotype missingness rate <5% filter for phasing.",
+      "sourceEvidence": {
+        "locator": "R0156",
+        "locators": [
+          "R0156"
+        ],
+        "quotes": [
+          "The following criteria were used to filter SNVs and INDELs for phasing: FILTER (column in the VCF) = PASS, GT missingness rate <5%, HWE exact test p value > 1e-10 in at least one super-population, mendelian error rate (MER) ≤ 5%, and minor allele count (MAC) ≥ 2 (singletons were removed because they are not informative for phasing). Filtering was done using BCFtools v1.9 ( Li, 2011 ), except for MER filtration which was done using plink v1.90 ( Chang et al., 2015 ) after VCF to plink conversion (required to run phasing). For VCF to plink conversion we used plink v2.0 ( Chang et al., 2015 )."
+        ],
+        "quote": "The following criteria were used to filter SNVs and INDELs for phasing: FILTER (column in the VCF) = PASS, GT missingness rate <5%, HWE exact test p value > 1e-10 in at least one super-population, mendelian error rate (MER) ≤ 5%, and minor allele count (MAC) ≥ 2 (singletons were removed because they are not informative for phasing). Filtering was done using BCFtools v1.9 ( Li, 2011 ), except for MER filtration which was done using plink v1.90 ( Chang et al., 2015 ) after VCF to plink conversion (required to run phasing). For VCF to plink conversion we used plink v2.0 ( Chang et al., 2015 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0009",
+        "locators": [
+          "G0009"
+        ],
+        "quotes": [
+          "### 单倍型定相与参考填补面板 对高质量非单例 SNV/INDEL（通过 VQSR、基因型缺失率 <5%、每个超级群体中 HWE 精确检验 p > 1×10^-10、完整 trio 中的孟德尔错误率过滤）进行统计定相（SHAPEIT4 v4.2.2），随后在子代样本上应用基于系谱的校正（duohmm）。定相后的 SNV/INDEL 集作为单倍型 scaffold，用于后续 SV（缺失、插入、重复、倒位）的定相。mCNV、CTX 和 CPX 由于过于稀有或多等位基因性质而被排除。通过比较样本 NA12878 与 Platinum Genomes 标准真集的全染色体切换错误率（SER）评估定相准确率。 填补性能通过将 SGDP 数据集的 110 份样本以集成高深度面板进行基因型填补来评估，以填补等位基因剂量与 WGS 真集之间的平方 Pearson 相关系数（r²）作为准确度指标。"
+        ],
+        "quote": "### 单倍型定相与参考填补面板 对高质量非单例 SNV/INDEL（通过 VQSR、基因型缺失率 <5%、每个超级群体中 HWE 精确检验 p > 1×10^-10、完整 trio 中的孟德尔错误率过滤）进行统计定相（SHAPEIT4 v4.2.2），随后在子代样本上应用基于系谱的校正（duohmm）。定相后的 SNV/INDEL 集作为单倍型 scaffold，用于后续 SV（缺失、插入、重复、倒位）的定相。mCNV、CTX 和 CPX 由于过于稀有或多等位基因性质而被排除。通过比较样本 NA12878 与 Platinum Genomes 标准真集的全染色体切换错误率（SER）评估定相准确率。 填补性能通过将 SGDP 数据集的 110 份样本以集成高深度面板进行基因型填补来评估，以填补等位基因剂量与 WGS 真集之间的平方 Pearson 相关系数（r²）作为准确度指标。"
+      },
+      "explanation": "Missing data handling filter noted.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "association_measure_context",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No association measure; resource study without odds ratios or hazard ratios.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    }
+  ],
+  "metrics": {
+    "applicableItems": 17,
+    "weightedFidelity": 1.0,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 17,
+      "not_applicable": 4
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "adversarial_contradiction"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail",
+    "adversarialIssueCount": 1,
+    "adversarialUnsupportedClaimCount": 0,
+    "adversarialContradictionCount": 1,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "issues_found",
+    "issues": [
+      {
+        "id": "analysis_methods",
+        "importance": "minor",
+        "status": "contradicted",
+        "issueKinds": [
+          "contradicted"
+        ],
+        "referenceFact": "",
+        "generatedFact": "对高质量非单例 SNV/INDEL…进行统计定相（SHAPEIT4 v4.2.2），随后在子代样本上应用基于系谱的校正（duohmm）",
+        "sourceEvidence": {
+          "locator": "R0157",
+          "locators": [
+            "R0157"
+          ],
+          "quotes": [
+            "For haplotype phasing we used statistical phasing with pedigree-based correction, as implemented in SHAPEIT-duohmm v2.r904 ( Delaneau et al., 2011 ; O’Connell et al., 2014 ). Phasing with SHAPEIT-duohmm was performed per chromosome using default settings, except for the window size parameter \"-W'' which was increased from 2Mb (default) to 5Mb to account for increased amounts of shared IBD due to pedigrees being present in the dataset (as recommended in the SHAPEIT manual). SHAPEIT-duohmm supports phasing of autosomal variants only. Therefore, to phase variants on chromosome X, we used statistical phasing as implemented in the Eagle v2.4.1 software ( Loh et al., 2016 )."
+          ],
+          "quote": "For haplotype phasing we used statistical phasing with pedigree-based correction, as implemented in SHAPEIT-duohmm v2.r904 ( Delaneau et al., 2011 ; O’Connell et al., 2014 ). Phasing with SHAPEIT-duohmm was performed per chromosome using default settings, except for the window size parameter \"-W'' which was increased from 2Mb (default) to 5Mb to account for increased amounts of shared IBD due to pedigrees being present in the dataset (as recommended in the SHAPEIT manual). SHAPEIT-duohmm supports phasing of autosomal variants only. Therefore, to phase variants on chromosome X, we used statistical phasing as implemented in the Eagle v2.4.1 software ( Loh et al., 2016 )."
+        },
+        "generatedEvidence": {
+          "locator": "G0009",
+          "locators": [
+            "G0009"
+          ],
+          "quotes": [
+            "### 单倍型定相与参考填补面板 对高质量非单例 SNV/INDEL（通过 VQSR、基因型缺失率 <5%、每个超级群体中 HWE 精确检验 p > 1×10^-10、完整 trio 中的孟德尔错误率过滤）进行统计定相（SHAPEIT4 v4.2.2），随后在子代样本上应用基于系谱的校正（duohmm）。定相后的 SNV/INDEL 集作为单倍型 scaffold，用于后续 SV（缺失、插入、重复、倒位）的定相。mCNV、CTX 和 CPX 由于过于稀有或多等位基因性质而被排除。通过比较样本 NA12878 与 Platinum Genomes 标准真集的全染色体切换错误率（SER）评估定相准确率。 填补性能通过将 SGDP 数据集的 110 份样本以集成高深度面板进行基因型填补来评估，以填补等位基因剂量与 WGS 真集之间的平方 Pearson 相关系数（r²）作为准确度指标。"
+          ],
+          "quote": "### 单倍型定相与参考填补面板 对高质量非单例 SNV/INDEL（通过 VQSR、基因型缺失率 <5%、每个超级群体中 HWE 精确检验 p > 1×10^-10、完整 trio 中的孟德尔错误率过滤）进行统计定相（SHAPEIT4 v4.2.2），随后在子代样本上应用基于系谱的校正（duohmm）。定相后的 SNV/INDEL 集作为单倍型 scaffold，用于后续 SV（缺失、插入、重复、倒位）的定相。mCNV、CTX 和 CPX 由于过于稀有或多等位基因性质而被排除。通过比较样本 NA12878 与 Platinum Genomes 标准真集的全染色体切换错误率（SER）评估定相准确率。 填补性能通过将 SGDP 数据集的 110 份样本以集成高深度面板进行基因型填补来评估，以填补等位基因剂量与 WGS 真集之间的平方 Pearson 相关系数（r²）作为准确度指标。"
+        },
+        "explanation": "原文中小变异定相使用SHAPEIT-duohmm v2.r904（R0157），而非SHAPEIT4 v4.2.2（后者仅用于SV定相）。版本混淆可能误导方法复现。",
+        "sourceEvidenceValid": true,
+        "generatedEvidenceValid": true,
+        "criterionId": "analysis_methods",
+        "kind": "contradicted",
+        "severity": "minor",
+        "claim": "对高质量非单例 SNV/INDEL…进行统计定相（SHAPEIT4 v4.2.2），随后在子代样本上应用基于系谱的校正（duohmm）"
+      }
+    ],
+    "rationale": "筛查了研究目的、设计、样本、结果数字、结论和局限性。绝大多数声明与原文一致，但方法中错将小变异定相工具写成SHAPEIT4，而实际应为SHAPEIT-duohmm v2.r904，属于方法学上的轻微矛盾。其他所有关键数值、统计量、局限性等均获原文支持，无缺失关键事实。"
+  },
+  "overallAssessment": "The GENERATED summary is highly accurate and faithfully reflects the original reference. All critical study aspects—objective, design, population, sample size, exposure, comparator, primary outcomes, analytical methods, algorithms, key numerical results (with correct units and context), conclusions, and limitations—are reproduced without contradiction. Minor nuances such as the distinction between the 3,202-sample overall FDR (0.3% SNV) and the 2,504-sample comparison FDR (0.1%) are not misrepresented. The generated text retains all essential facts, and no unsupported claims are introduced. It successfully mirrors the original article's scope and findings.",
+  "gradedAt": "2026-07-18T15:19:50Z"
+}

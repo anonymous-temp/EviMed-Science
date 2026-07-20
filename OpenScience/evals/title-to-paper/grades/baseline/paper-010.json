@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-010",
+  "category": "systematic-review-meta-analysis",
+  "title": "The global epidemiology of nonalcoholic fatty liver disease (NAFLD) and nonalcoholic steatohepatitis (NASH): a systematic review.",
+  "pmcid": "PMC10026948",
+  "doi": "10.1097/hep.0000000000000004",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 7699,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 174,
+    "supportedUniqueNumbers": 150,
+    "unsupportedNumberTokens": [
+      "1.51e+08",
+      "1.62e+08",
+      "1.659e+09",
+      "2.01%",
+      "2.24%",
+      "2.38%",
+      "2.5%",
+      "2.586e+09",
+      "2.63%",
+      "2.65%",
+      "2.71%",
+      "2.93%",
+      "21.59%",
+      "28.4%",
+      "29.33%",
+      "3.25e+08",
+      "3.55%",
+      "3.75e+08",
+      "33.09%",
+      "33.71%",
+      "42.49%",
+      "46000000",
+      "9.49",
+      "9.49e+08"
+    ],
+    "supportedNumericClaimPrecision": 0.8620689655172413,
+    "verbatimEightGramRate": 0.002386634844868735,
+    "toolCalls": 6,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "All claims in the generated text accurately reflect the reference, including study design (systematic review with meta-analysis per PRISMA), population (adults ≥20 years, sample sizes, characteristics), methods (searches, inclusion/exclusion, JBI quality assessment, random-effects pooling, post hoc adjustments, subgroup and meta-regression), and results (prevalence 30.05%, regional rates, incidence 48.89/1000 PY, mortality rates, 2019 case estimates, NASH estimates). Numerical values, confidence intervals, p-values, and heterogeneity measures are replicated without fabrication. The discussion and limitations are faithfully summarized without introducing unsupported statements."
+  },
+  "overallVerdict": "pass"
+}

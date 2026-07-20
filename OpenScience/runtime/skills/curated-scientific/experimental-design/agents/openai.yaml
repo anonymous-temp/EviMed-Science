@@ -1,0 +1,4 @@
+interface:
+  display_name: "Experimental Design"
+  short_description: "Design reproducible experiments and analysis plans"
+  default_prompt: "Use $experimental-design to create a reproducible study and analysis plan."

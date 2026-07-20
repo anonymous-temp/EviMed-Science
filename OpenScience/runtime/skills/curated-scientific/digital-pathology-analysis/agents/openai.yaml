@@ -1,0 +1,4 @@
+interface:
+  display_name: "Digital Pathology Analysis"
+  short_description: "Analyze whole-slide pathology images reproducibly"
+  default_prompt: "Use $digital-pathology-analysis to build this validated pathology workflow."

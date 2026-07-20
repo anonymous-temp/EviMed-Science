@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-047",
+  "category": "methods-software",
+  "title": "Interactive Tree Of Life (iTOL) v5: an online tool for phylogenetic tree display and annotation.",
+  "pmcid": "PMC8265157",
+  "doi": "10.1093/nar/gkab301",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 3442,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 14,
+    "supportedUniqueNumbers": 14,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.0,
+    "toolCalls": 14,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "所有声明均可在原文中找到明确支持，包括新增功能、限制条件和用户规模等，无虚构或曲解。生成内容高度忠实于原始文献。"
+  },
+  "overallVerdict": "pass"
+}

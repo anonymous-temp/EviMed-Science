@@ -1,0 +1,4 @@
+interface:
+  display_name: "Drug Discovery Data"
+  short_description: "Build leakage-aware drug discovery benchmarks"
+  default_prompt: "Use $drug-discovery-data to create a traceable drug-discovery benchmark."

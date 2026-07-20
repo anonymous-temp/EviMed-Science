@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-008",
+  "category": "systematic-review-meta-analysis",
+  "title": "Global prevalence and burden of depressive and anxiety disorders in 204 countries and territories in 2020 due to the COVID-19 pandemic.",
+  "pmcid": "PMC8500697",
+  "doi": "10.1016/s0140-6736(21)02143-7",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 19836,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 125,
+    "supportedUniqueNumbers": 110,
+    "unsupportedNumberTokens": [
+      "-18",
+      "12800000",
+      "14900000",
+      "2.24e+08",
+      "2.85e+08",
+      "28%",
+      "3.48e+08",
+      "30.3%",
+      "4.36e+08",
+      "50100000",
+      "53900000",
+      "62500000",
+      "62900000",
+      "68700000",
+      "90600000"
+    ],
+    "supportedNumericClaimPrecision": 0.88,
+    "verbatimEightGramRate": 0.04414742810854597,
+    "toolCalls": 16,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [
+      "Pre-pandemic prevalence incorrectly attributed to GBD 2019; the source used GBD 2020 estimates from DisMod-MR 2.1 without COVID-19 data."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text faithfully reproduces the design, sample, methods, effect estimates, and conclusions from the reference. The only minor discrepancy is the misattribution of pre-pandemic prevalence to GBD 2019 rather than the 2020 pre-COVID estimates from the same modelling framework. No fabricated endpoints or unsupported major claims are present."
+  },
+  "modelEvidenceCharacters": 73010,
+  "modelEvidenceComplete": true,
+  "overallVerdict": "pass"
+}

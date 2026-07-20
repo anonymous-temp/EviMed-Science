@@ -1,0 +1,37 @@
+id: meta-analysis
+version: 1.0.0
+title: Automated Meta-Analysis
+category: Evidence Synthesis
+description: Run a traceable systematic review and deterministic meta-analysis pipeline, with risk-of-bias, GRADE, manuscript, figures, and release gates.
+skill: meta-analysis
+estimatedMinutes: [30, 180]
+starterPrompts:
+  - Conduct a systematic review and meta-analysis for a clearly defined PICO question.
+  - Resume an automated meta-analysis job and explain its release-gate status.
+requiredInputs:
+  - topic
+optionalInputs:
+  - population
+  - intervention
+  - comparator
+  - outcomes
+  - studyDesign
+  - analysisType
+  - uploadedFiles
+  - ipdData
+requiredTools:
+  - evimed_meta_analysis
+optionalTools: []
+dataSources:
+  - metaagent
+  - literature
+  - clinical-trials
+  - uploaded-files
+outputs:
+  - path: meta-analysis-report.md
+    required: true
+  - path: meta-analysis-run.json
+    required: true
+completionChecks:
+  - requiredOutputsExist
+  - citationsResolvable

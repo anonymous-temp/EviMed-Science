@@ -1,0 +1,4 @@
+interface:
+  display_name: "Biomedical Signal Analysis"
+  short_description: "Analyze physiological and biomedical time-series signals"
+  default_prompt: "Use $biomedical-signal-analysis to process and analyze these physiological signals."

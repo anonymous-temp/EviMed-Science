@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 358,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/time-series-forecasting/results.json",
+      "sha256": "7a464844b0b13d0f45bd9887497ff7963aa96877f7f9daa0908d2ea484f64b6b"
+    },
+    {
+      "bytes": 938,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/time-series-forecasting/time-series-forecasting-report.md",
+      "sha256": "45656ad3b190dcc926c502774b96bb7dbc5d2758e5e3cfc21223df63c45a2888"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:49.670739Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "time-series-forecasting",
+  "startedAt": "2026-07-19T19:31:49.669631Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for time-series-forecasting and wrote 2 verified artifacts.",
+  "warnings": [
+    "Linear extrapolation is a baseline; validate stationarity, leakage, autocorrelation, seasonality, and out-of-sample error."
+  ]
+}

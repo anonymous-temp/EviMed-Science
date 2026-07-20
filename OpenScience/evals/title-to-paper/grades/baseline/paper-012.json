@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-012",
+  "category": "observational-cohort",
+  "title": "Clinical features and management of human monkeypox: a retrospective observational study in the UK.",
+  "pmcid": "PMC9300470",
+  "doi": "10.1016/s1473-3099(22)00228-6",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 6294,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 54,
+    "supportedUniqueNumbers": 53,
+    "unsupportedNumberTokens": [
+      "-1162"
+    ],
+    "supportedNumericClaimPrecision": 0.9814814814814815,
+    "verbatimEightGramRate": 0.004331087584215592,
+    "toolCalls": 12,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text is a highly faithful restructuring of the original article. All claims regarding study design (retrospective observational chart review), population (7 patients in UK HCID centres), methods (chart review, PCR sampling), results (e.g., ALT elevations with brincidofovir, PCR negativity with tecovirimat, abscess details), and conclusions (challenges of prolonged PCR positivity, need for prospective antiviral studies) are directly supported by the reference. No fabricated or unsupported claims were identified, and no critical facts are missing."
+  },
+  "overallVerdict": "pass"
+}

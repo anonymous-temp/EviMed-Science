@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "belowQualityThreshold": 0,
+    "count": 2,
+    "types": {
+      "SNV": 1,
+      "insertion": 1
+    }
+  }
+}

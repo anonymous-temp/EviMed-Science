@@ -1,0 +1,654 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-014",
+  "category": "observational-cohort",
+  "title": "An introduction to inverse probability of treatment weighting in observational research.",
+  "pmcid": "PMC8757413",
+  "doi": "10.1093/ckj/sfab158",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "1834a23ff9a0816eacef91cbe78a98169c76c1ff2e42f9d921410bf5812a28b7",
+  "generatedSha256": "9fd985eeb5e60ff6bb829c9aa949f4a1175525d5454b324091eaa8c37b192a27",
+  "promptSha256": "148d5af2de1370a0fd869aaebe6fb33bff7a45b340bd98ed18b1b21d3d997421",
+  "cacheFingerprint": "9f4fd15aea649c0db0fd9e43f0a4d713ba2728629c9aaedf745911686a834892",
+  "referenceCharacters": 33346,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 8187,
+  "paperType": "observational-cohort",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "To introduce IPTW and describe how this method can be applied to adjust for measured confounding in observational research, illustrated by a clinical example from nephrology.",
+      "generatedFact": "系统地介绍了 IPTW 的核心原理与实施步骤，并以肾脏病学中的临床示例演示其在观察性研究中处理混杂的应用。",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"An introduction to inverse probability of treatment weighting in observational research.\", \"pmcid\": \"PMC8757413\", \"pmid\": \"35035932\", \"doi\": \"10.1093/ckj/sfab158\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-08-26\"} [ABSTRACT] ABSTRACTIn this article we introduce the concept of inverse probability of treatment weighting (IPTW) and describe how this method can be applied to adjust for measured confounding in observational research, illustrated by a clinical example from nephrology. IPTW involves two main steps."
+        ],
+        "quote": "[METADATA] {\"title\": \"An introduction to inverse probability of treatment weighting in observational research.\", \"pmcid\": \"PMC8757413\", \"pmid\": \"35035932\", \"doi\": \"10.1093/ckj/sfab158\", \"publicationTypes\": [\"research-article\", \"Journal Article\"], \"publicationDate\": \"2021-08-26\"} [ABSTRACT] ABSTRACTIn this article we introduce the concept of inverse probability of treatment weighting (IPTW) and describe how this method can be applied to adjust for measured confounding in observational research, illustrated by a clinical example from nephrology. IPTW involves two main steps."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "Chesnaye (n.c.chesnaye@amsterdamumc.nl) | | 利益冲突 | 作者声明无利益冲突 | --- ## 摘要 **背景**：观察性研究因缺乏随机化而常受混杂偏倚影响，逆概率治疗加权（inverse probability of treatment weighting, IPTW）是一种基于倾向性评分的方法，旨在模拟随机化以平衡组间协变量分布。 **方法**：本综述系统介绍了 IPTW 的核心原理与实施步骤。首先通过逻辑回归（或其他建模方法）估计每位个体接受实际暴露的倾向性评分；其次以倾向性评分的倒数作为权重，构建一个暴露组与未暴露组间测量混杂因素均衡分布的\"伪人群\"。此外，本文扩展讨论了 IPTW 在纵向研究中处理时变混杂和治疗-混杂反馈的应用，以及逆概率删失加权（IPCW）对信息性删失的校正方法。 **主要发现**：IPTW 通过标准化差异（standardized difference）评估加权前后协变量平衡，以 <10% 作为可忽略不平衡的阈值；极端权重可通过稳定化权重（以粗暴露概率替换分子 1）和权重截尾（如 1st 与 99th 百分位数）处理；稳健方差估计（sandwich estimator 或 bootstrap）须用于校正伪人群引入的样本间相关性。IPTW 可提供平均治疗效应估计，其因果解释依赖四个假设：条件可交换性、倾向性评分模型正确设定、正数性（positivity）与一致性（consistency）。"
+        ],
+        "quote": "Chesnaye (n.c.chesnaye@amsterdamumc.nl) | | 利益冲突 | 作者声明无利益冲突 | --- ## 摘要 **背景**：观察性研究因缺乏随机化而常受混杂偏倚影响，逆概率治疗加权（inverse probability of treatment weighting, IPTW）是一种基于倾向性评分的方法，旨在模拟随机化以平衡组间协变量分布。 **方法**：本综述系统介绍了 IPTW 的核心原理与实施步骤。首先通过逻辑回归（或其他建模方法）估计每位个体接受实际暴露的倾向性评分；其次以倾向性评分的倒数作为权重，构建一个暴露组与未暴露组间测量混杂因素均衡分布的\"伪人群\"。此外，本文扩展讨论了 IPTW 在纵向研究中处理时变混杂和治疗-混杂反馈的应用，以及逆概率删失加权（IPCW）对信息性删失的校正方法。 **主要发现**：IPTW 通过标准化差异（standardized difference）评估加权前后协变量平衡，以 <10% 作为可忽略不平衡的阈值；极端权重可通过稳定化权重（以粗暴露概率替换分子 1）和权重截尾（如 1st 与 99th 百分位数）处理；稳健方差估计（sandwich estimator 或 bootstrap）须用于校正伪人群引入的样本间相关性。IPTW 可提供平均治疗效应估计，其因果解释依赖四个假设：条件可交换性、倾向性评分模型正确设定、正数性（positivity）与一致性（consistency）。"
+      },
+      "explanation": "Both state the objective is to introduce IPTW for confounding adjustment in observational research with a nephrology clinical example.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Methodological tutorial using a hypothetical example from nephrology (observational ERA-EDTA registry data), not an original empirical study.",
+      "generatedFact": "本文为一篇方法学综述（methodological tutorial），并非原始经验性研究。正文以 ERA-EDTA 注册数据中延长透析时长（EHD）与常规血液透析（CHD）对患者生存影响的比较作为假设性示例。",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+        ],
+        "quote": "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "为应对这一挑战，Rosenbaum 和 Rubin 于 1983 年首次提出了倾向性评分（propensity score）的概念，将其定义为\"给定一组已观测协变量条件下接受特定治疗的条件概率\"。此后，多种基于倾向性评分的混杂控制方法在文献中被日益广泛使用，其中逆概率治疗加权（IPTW）便是其中之一。IPTW 的核心思想包括两个阶段：首先计算每位个体在给定其基线特征条件下接受暴露的倾向性评分；随后以该评分的倒数作为权重，创建一个测量混杂因素在组间均匀分布的\"伪人群\"。本综述旨在以肾脏病学中的临床示例，介绍 IPTW 的基本概念、实施步骤与适用情境，并进一步阐述该方法在纵向研究中处理时变混杂、治疗-混杂反馈以及信息性删失的扩展应用。 --- ## 方法 ### 研究设计 本文为一篇方法学综述（methodological tutorial），并非原始经验性研究。正文以 ERA-EDTA 注册数据中延长透析时长（extended-hours haemodialysis, EHD；>6 小时/次）与常规血液透析（conventional HD, CHD）对患者生存影响的比较作为**假设性示例**，演示 IPTW 的具体实施步骤。在该示例中，EHD 组患者更年轻、糖尿病与心血管合并症患病率更低、透析龄更短、既往接受肾移植的比例更高，这些基线特征符合混杂变量的标准，可能在直接比较中遮蔽透析时长的真实效应。"
+        ],
+        "quote": "为应对这一挑战，Rosenbaum 和 Rubin 于 1983 年首次提出了倾向性评分（propensity score）的概念，将其定义为\"给定一组已观测协变量条件下接受特定治疗的条件概率\"。此后，多种基于倾向性评分的混杂控制方法在文献中被日益广泛使用，其中逆概率治疗加权（IPTW）便是其中之一。IPTW 的核心思想包括两个阶段：首先计算每位个体在给定其基线特征条件下接受暴露的倾向性评分；随后以该评分的倒数作为权重，创建一个测量混杂因素在组间均匀分布的\"伪人群\"。本综述旨在以肾脏病学中的临床示例，介绍 IPTW 的基本概念、实施步骤与适用情境，并进一步阐述该方法在纵向研究中处理时变混杂、治疗-混杂反馈以及信息性删失的扩展应用。 --- ## 方法 ### 研究设计 本文为一篇方法学综述（methodological tutorial），并非原始经验性研究。正文以 ERA-EDTA 注册数据中延长透析时长（extended-hours haemodialysis, EHD；>6 小时/次）与常规血液透析（conventional HD, CHD）对患者生存影响的比较作为**假设性示例**，演示 IPTW 的具体实施步骤。在该示例中，EHD 组患者更年轻、糖尿病与心血管合并症患病率更低、透析龄更短、既往接受肾移植的比例更高，这些基线特征符合混杂变量的标准，可能在直接比较中遮蔽透析时长的真实效应。"
+      },
+      "explanation": "Both describe the design as a methodological tutorial with a hypothetical ERA-EDTA registry example, no empirical data.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Hypothetical example from observational European Renal Association–European Dialysis and Transplant Association (ERA-EDTA) Registry data comparing extended-hours haemodialysis (EHD) and conventional HD (CHD).",
+      "generatedFact": "使用 ERA-EDTA 注册数据中延长透析时长（EHD）与常规血液透析（CHD）对患者生存影响的比较作为假设性示例。",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+        ],
+        "quote": "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "为应对这一挑战，Rosenbaum 和 Rubin 于 1983 年首次提出了倾向性评分（propensity score）的概念，将其定义为\"给定一组已观测协变量条件下接受特定治疗的条件概率\"。此后，多种基于倾向性评分的混杂控制方法在文献中被日益广泛使用，其中逆概率治疗加权（IPTW）便是其中之一。IPTW 的核心思想包括两个阶段：首先计算每位个体在给定其基线特征条件下接受暴露的倾向性评分；随后以该评分的倒数作为权重，创建一个测量混杂因素在组间均匀分布的\"伪人群\"。本综述旨在以肾脏病学中的临床示例，介绍 IPTW 的基本概念、实施步骤与适用情境，并进一步阐述该方法在纵向研究中处理时变混杂、治疗-混杂反馈以及信息性删失的扩展应用。 --- ## 方法 ### 研究设计 本文为一篇方法学综述（methodological tutorial），并非原始经验性研究。正文以 ERA-EDTA 注册数据中延长透析时长（extended-hours haemodialysis, EHD；>6 小时/次）与常规血液透析（conventional HD, CHD）对患者生存影响的比较作为**假设性示例**，演示 IPTW 的具体实施步骤。在该示例中，EHD 组患者更年轻、糖尿病与心血管合并症患病率更低、透析龄更短、既往接受肾移植的比例更高，这些基线特征符合混杂变量的标准，可能在直接比较中遮蔽透析时长的真实效应。"
+        ],
+        "quote": "为应对这一挑战，Rosenbaum 和 Rubin 于 1983 年首次提出了倾向性评分（propensity score）的概念，将其定义为\"给定一组已观测协变量条件下接受特定治疗的条件概率\"。此后，多种基于倾向性评分的混杂控制方法在文献中被日益广泛使用，其中逆概率治疗加权（IPTW）便是其中之一。IPTW 的核心思想包括两个阶段：首先计算每位个体在给定其基线特征条件下接受暴露的倾向性评分；随后以该评分的倒数作为权重，创建一个测量混杂因素在组间均匀分布的\"伪人群\"。本综述旨在以肾脏病学中的临床示例，介绍 IPTW 的基本概念、实施步骤与适用情境，并进一步阐述该方法在纵向研究中处理时变混杂、治疗-混杂反馈以及信息性删失的扩展应用。 --- ## 方法 ### 研究设计 本文为一篇方法学综述（methodological tutorial），并非原始经验性研究。正文以 ERA-EDTA 注册数据中延长透析时长（extended-hours haemodialysis, EHD；>6 小时/次）与常规血液透析（conventional HD, CHD）对患者生存影响的比较作为**假设性示例**，演示 IPTW 的具体实施步骤。在该示例中，EHD 组患者更年轻、糖尿病与心血管合并症患病率更低、透析龄更短、既往接受肾移植的比例更高，这些基线特征符合混杂变量的标准，可能在直接比较中遮蔽透析时长的真实效应。"
+      },
+      "explanation": "The data source is the hypothetical ERA-EDTA registry comparison, identical in both.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No sample size reported for the hypothetical example.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+        ],
+        "quote": "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The reference is a methodological tutorial with a hypothetical example; no sample size is provided. Hence not applicable.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No eligibility or selection criteria specified; the example merely describes baseline differences between EHD and CHD groups.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+        ],
+        "quote": "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No eligibility or selection rules are defined in the reference, making this item not applicable.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Exposure is extended-hours haemodialysis (EHD) (>6-h sessions) compared with conventional HD (CHD).",
+      "generatedFact": "延长透析时长（EHD；>6 小时/次）与常规血液透析（conventional HD, CHD）",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+        ],
+        "quote": "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "为应对这一挑战，Rosenbaum 和 Rubin 于 1983 年首次提出了倾向性评分（propensity score）的概念，将其定义为\"给定一组已观测协变量条件下接受特定治疗的条件概率\"。此后，多种基于倾向性评分的混杂控制方法在文献中被日益广泛使用，其中逆概率治疗加权（IPTW）便是其中之一。IPTW 的核心思想包括两个阶段：首先计算每位个体在给定其基线特征条件下接受暴露的倾向性评分；随后以该评分的倒数作为权重，创建一个测量混杂因素在组间均匀分布的\"伪人群\"。本综述旨在以肾脏病学中的临床示例，介绍 IPTW 的基本概念、实施步骤与适用情境，并进一步阐述该方法在纵向研究中处理时变混杂、治疗-混杂反馈以及信息性删失的扩展应用。 --- ## 方法 ### 研究设计 本文为一篇方法学综述（methodological tutorial），并非原始经验性研究。正文以 ERA-EDTA 注册数据中延长透析时长（extended-hours haemodialysis, EHD；>6 小时/次）与常规血液透析（conventional HD, CHD）对患者生存影响的比较作为**假设性示例**，演示 IPTW 的具体实施步骤。在该示例中，EHD 组患者更年轻、糖尿病与心血管合并症患病率更低、透析龄更短、既往接受肾移植的比例更高，这些基线特征符合混杂变量的标准，可能在直接比较中遮蔽透析时长的真实效应。"
+        ],
+        "quote": "为应对这一挑战，Rosenbaum 和 Rubin 于 1983 年首次提出了倾向性评分（propensity score）的概念，将其定义为\"给定一组已观测协变量条件下接受特定治疗的条件概率\"。此后，多种基于倾向性评分的混杂控制方法在文献中被日益广泛使用，其中逆概率治疗加权（IPTW）便是其中之一。IPTW 的核心思想包括两个阶段：首先计算每位个体在给定其基线特征条件下接受暴露的倾向性评分；随后以该评分的倒数作为权重，创建一个测量混杂因素在组间均匀分布的\"伪人群\"。本综述旨在以肾脏病学中的临床示例，介绍 IPTW 的基本概念、实施步骤与适用情境，并进一步阐述该方法在纵向研究中处理时变混杂、治疗-混杂反馈以及信息性删失的扩展应用。 --- ## 方法 ### 研究设计 本文为一篇方法学综述（methodological tutorial），并非原始经验性研究。正文以 ERA-EDTA 注册数据中延长透析时长（extended-hours haemodialysis, EHD；>6 小时/次）与常规血液透析（conventional HD, CHD）对患者生存影响的比较作为**假设性示例**，演示 IPTW 的具体实施步骤。在该示例中，EHD 组患者更年轻、糖尿病与心血管合并症患病率更低、透析龄更短、既往接受肾移植的比例更高，这些基线特征符合混杂变量的标准，可能在直接比较中遮蔽透析时长的真实效应。"
+      },
+      "explanation": "The exposure definition is identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Comparator is conventional HD (CHD).",
+      "generatedFact": "常规血液透析（conventional HD, CHD）作为对照组。",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+        ],
+        "quote": "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "为应对这一挑战，Rosenbaum 和 Rubin 于 1983 年首次提出了倾向性评分（propensity score）的概念，将其定义为\"给定一组已观测协变量条件下接受特定治疗的条件概率\"。此后，多种基于倾向性评分的混杂控制方法在文献中被日益广泛使用，其中逆概率治疗加权（IPTW）便是其中之一。IPTW 的核心思想包括两个阶段：首先计算每位个体在给定其基线特征条件下接受暴露的倾向性评分；随后以该评分的倒数作为权重，创建一个测量混杂因素在组间均匀分布的\"伪人群\"。本综述旨在以肾脏病学中的临床示例，介绍 IPTW 的基本概念、实施步骤与适用情境，并进一步阐述该方法在纵向研究中处理时变混杂、治疗-混杂反馈以及信息性删失的扩展应用。 --- ## 方法 ### 研究设计 本文为一篇方法学综述（methodological tutorial），并非原始经验性研究。正文以 ERA-EDTA 注册数据中延长透析时长（extended-hours haemodialysis, EHD；>6 小时/次）与常规血液透析（conventional HD, CHD）对患者生存影响的比较作为**假设性示例**，演示 IPTW 的具体实施步骤。在该示例中，EHD 组患者更年轻、糖尿病与心血管合并症患病率更低、透析龄更短、既往接受肾移植的比例更高，这些基线特征符合混杂变量的标准，可能在直接比较中遮蔽透析时长的真实效应。"
+        ],
+        "quote": "为应对这一挑战，Rosenbaum 和 Rubin 于 1983 年首次提出了倾向性评分（propensity score）的概念，将其定义为\"给定一组已观测协变量条件下接受特定治疗的条件概率\"。此后，多种基于倾向性评分的混杂控制方法在文献中被日益广泛使用，其中逆概率治疗加权（IPTW）便是其中之一。IPTW 的核心思想包括两个阶段：首先计算每位个体在给定其基线特征条件下接受暴露的倾向性评分；随后以该评分的倒数作为权重，创建一个测量混杂因素在组间均匀分布的\"伪人群\"。本综述旨在以肾脏病学中的临床示例，介绍 IPTW 的基本概念、实施步骤与适用情境，并进一步阐述该方法在纵向研究中处理时变混杂、治疗-混杂反馈以及信息性删失的扩展应用。 --- ## 方法 ### 研究设计 本文为一篇方法学综述（methodological tutorial），并非原始经验性研究。正文以 ERA-EDTA 注册数据中延长透析时长（extended-hours haemodialysis, EHD；>6 小时/次）与常规血液透析（conventional HD, CHD）对患者生存影响的比较作为**假设性示例**，演示 IPTW 的具体实施步骤。在该示例中，EHD 组患者更年轻、糖尿病与心血管合并症患病率更低、透析龄更短、既往接受肾移植的比例更高，这些基线特征符合混杂变量的标准，可能在直接比较中遮蔽透析时长的真实效应。"
+      },
+      "explanation": "The comparator is the same.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary outcome in the hypothetical example is patient survival.",
+      "generatedFact": "患者生存。",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+        ],
+        "quote": "In this example we will use observational European Renal Association–European Dialysis and Transplant Association Registry data to compare patient survival in those treated with extended-hours haemodialysis (EHD) (>6-h sessions of HD) with those treated with conventional HD (CHD) among European patients [ 6 ]. In this example, patients treated with EHD were younger, suffered less from diabetes and various cardiovascular comorbidities, had spent a shorter time on dialysis and were more likely to have received a kidney transplantation in the past compared with those treated with CHD."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "为应对这一挑战，Rosenbaum 和 Rubin 于 1983 年首次提出了倾向性评分（propensity score）的概念，将其定义为\"给定一组已观测协变量条件下接受特定治疗的条件概率\"。此后，多种基于倾向性评分的混杂控制方法在文献中被日益广泛使用，其中逆概率治疗加权（IPTW）便是其中之一。IPTW 的核心思想包括两个阶段：首先计算每位个体在给定其基线特征条件下接受暴露的倾向性评分；随后以该评分的倒数作为权重，创建一个测量混杂因素在组间均匀分布的\"伪人群\"。本综述旨在以肾脏病学中的临床示例，介绍 IPTW 的基本概念、实施步骤与适用情境，并进一步阐述该方法在纵向研究中处理时变混杂、治疗-混杂反馈以及信息性删失的扩展应用。 --- ## 方法 ### 研究设计 本文为一篇方法学综述（methodological tutorial），并非原始经验性研究。正文以 ERA-EDTA 注册数据中延长透析时长（extended-hours haemodialysis, EHD；>6 小时/次）与常规血液透析（conventional HD, CHD）对患者生存影响的比较作为**假设性示例**，演示 IPTW 的具体实施步骤。在该示例中，EHD 组患者更年轻、糖尿病与心血管合并症患病率更低、透析龄更短、既往接受肾移植的比例更高，这些基线特征符合混杂变量的标准，可能在直接比较中遮蔽透析时长的真实效应。"
+        ],
+        "quote": "为应对这一挑战，Rosenbaum 和 Rubin 于 1983 年首次提出了倾向性评分（propensity score）的概念，将其定义为\"给定一组已观测协变量条件下接受特定治疗的条件概率\"。此后，多种基于倾向性评分的混杂控制方法在文献中被日益广泛使用，其中逆概率治疗加权（IPTW）便是其中之一。IPTW 的核心思想包括两个阶段：首先计算每位个体在给定其基线特征条件下接受暴露的倾向性评分；随后以该评分的倒数作为权重，创建一个测量混杂因素在组间均匀分布的\"伪人群\"。本综述旨在以肾脏病学中的临床示例，介绍 IPTW 的基本概念、实施步骤与适用情境，并进一步阐述该方法在纵向研究中处理时变混杂、治疗-混杂反馈以及信息性删失的扩展应用。 --- ## 方法 ### 研究设计 本文为一篇方法学综述（methodological tutorial），并非原始经验性研究。正文以 ERA-EDTA 注册数据中延长透析时长（extended-hours haemodialysis, EHD；>6 小时/次）与常规血液透析（conventional HD, CHD）对患者生存影响的比较作为**假设性示例**，演示 IPTW 的具体实施步骤。在该示例中，EHD 组患者更年轻、糖尿病与心血管合并症患病率更低、透析龄更短、既往接受肾移植的比例更高，这些基线特征符合混杂变量的标准，可能在直接比较中遮蔽透析时长的真实效应。"
+      },
+      "explanation": "Both mention patient survival as the outcome.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No follow-up length or study period reported for the hypothetical example.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The reference does not specify a follow-up period; therefore not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No data cleaning or preprocessing described; the tutorial focuses on modeling steps.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No data preprocessing procedures are mentioned, making this item not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "IPTW via logistic regression for propensity scores, weight calculation, balance assessment with standardized differences, weighted Cox regression for survival, robust variance estimation.",
+      "generatedFact": "使用逻辑回归估计倾向性评分、计算逆概率权重、标准化差异评估平衡、加权 Cox 回归、稳健方差估计。",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "We include in the model all known baseline confounders as covariates: patient sex, age, dialysis vintage, having received a transplant in the past and various pre-existing comorbidities. In addition, as we expect the effect of age on the probability of EHD will be non-linear, we include a cubic spline for age. We also include an interaction term between sex and diabetes, as—based on the literature—we expect the confounding effect of diabetes to vary by sex. The logistic regression model gives the probability, or propensity score, of receiving EHD for each patient given their characteristics. IPTW IPTW uses the propensity score to balance baseline patient characteristics in the exposed (i.e."
+        ],
+        "quote": "We include in the model all known baseline confounders as covariates: patient sex, age, dialysis vintage, having received a transplant in the past and various pre-existing comorbidities. In addition, as we expect the effect of age on the probability of EHD will be non-linear, we include a cubic spline for age. We also include an interaction term between sex and diabetes, as—based on the literature—we expect the confounding effect of diabetes to vary by sex. The logistic regression model gives the probability, or propensity score, of receiving EHD for each patient given their characteristics. IPTW IPTW uses the propensity score to balance baseline patient characteristics in the exposed (i.e."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 示例中的倾向性评分 原作者在示例中以逻辑回归估计每位患者接受 EHD（相对于 CHD）的概率，纳入的基线混杂协变量包括：性别、年龄、透析龄、既往肾移植史及多种既往合并症。考虑到年龄对 EHD 概率的影响可能存在非线性，模型中纳入了年龄的三次样条；基于文献提示糖尿病的混杂效应可能因性别而不同，模型中亦纳入了性别与糖尿病的交互项。 ### 逆概率治疗加权 (IPTW) IPTW 的基本公式为：暴露组权重 = 1/倾向性评分，未暴露组权重 = 1/(1 − 倾向性评分)。暴露概率较低的暴露组个体（和暴露概率较高的未暴露组个体）获得更大的权重，从而增加其在对组比较中的相对影响力。将权重纳入分析后，接受暴露或非暴露的\"分配\"将独立于倾向性评分模型中包含的变量。 原作者以糖尿病分布为例提供了一个数值演示：假设糖尿病患者接受 EHD 的概率为 25%（倾向性评分为 0.25），则每位糖尿病患者的 EHD 组权重为 1/0.25 = 4，CHD 组权重为 1/(1 − 0.25) = 1.33。无糖尿病患者中，接受 EHD 的概率为 75%，EHD 组权重为 1/0.75 = 1.33，CHD 组权重为 1/(1 − 0.75) = 4。在原始样本中，糖尿病分布为 EHD 组 25% 与 CHD 组 75%；加权后形成伪人群，两组糖尿病比例均为 50%，概念上 IPTW 可视为与标准化数学等价。"
+        ],
+        "quote": "### 示例中的倾向性评分 原作者在示例中以逻辑回归估计每位患者接受 EHD（相对于 CHD）的概率，纳入的基线混杂协变量包括：性别、年龄、透析龄、既往肾移植史及多种既往合并症。考虑到年龄对 EHD 概率的影响可能存在非线性，模型中纳入了年龄的三次样条；基于文献提示糖尿病的混杂效应可能因性别而不同，模型中亦纳入了性别与糖尿病的交互项。 ### 逆概率治疗加权 (IPTW) IPTW 的基本公式为：暴露组权重 = 1/倾向性评分，未暴露组权重 = 1/(1 − 倾向性评分)。暴露概率较低的暴露组个体（和暴露概率较高的未暴露组个体）获得更大的权重，从而增加其在对组比较中的相对影响力。将权重纳入分析后，接受暴露或非暴露的\"分配\"将独立于倾向性评分模型中包含的变量。 原作者以糖尿病分布为例提供了一个数值演示：假设糖尿病患者接受 EHD 的概率为 25%（倾向性评分为 0.25），则每位糖尿病患者的 EHD 组权重为 1/0.25 = 4，CHD 组权重为 1/(1 − 0.25) = 1.33。无糖尿病患者中，接受 EHD 的概率为 75%，EHD 组权重为 1/0.75 = 1.33，CHD 组权重为 1/(1 − 0.75) = 4。在原始样本中，糖尿病分布为 EHD 组 25% 与 CHD 组 75%；加权后形成伪人群，两组糖尿病比例均为 50%，概念上 IPTW 可视为与标准化数学等价。"
+      },
+      "explanation": "Both detail the same statistical analysis methods.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Propensity score model (logistic regression), IPTW, weight stabilization/truncation, weighted Cox regression (marginal structural model for time-dependent confounding), IPCW.",
+      "generatedFact": "逻辑回归估计倾向性评分、IPTW 权重的稳定化与截尾、加权 Cox 模型、边际结构模型 (MSM) 用于时变混杂、IPCW 处理信息性删失。",
+      "sourceEvidence": {
+        "locator": "R0012",
+        "locators": [
+          "R0012"
+        ],
+        "quotes": [
+          "assigned to the intervention or risk factor) given their baseline characteristics. The aim of the propensity score in observational research is to control for measured confounders by achieving balance in characteristics between exposed and unexposed groups. By accounting for any differences in measured baseline characteristics, the propensity score aims to approximate what would have been achieved through randomization in an RCT (i.e. pseudorandomization). In contrast to true randomization, it should be emphasized that the propensity score can only account for measured confounders, not for any unmeasured confounders [ 8 ]."
+        ],
+        "quote": "assigned to the intervention or risk factor) given their baseline characteristics. The aim of the propensity score in observational research is to control for measured confounders by achieving balance in characteristics between exposed and unexposed groups. By accounting for any differences in measured baseline characteristics, the propensity score aims to approximate what would have been achieved through randomization in an RCT (i.e. pseudorandomization). In contrast to true randomization, it should be emphasized that the propensity score can only account for measured confounders, not for any unmeasured confounders [ 8 ]."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "### 倾向性评分的估计 倾向性评分定义为\"给定已观测协变量条件下接受特定治疗的条件概率\"。对于二分类暴露变量，通常采用逻辑回归为每位个体估计倾向性评分；对于复杂数据结构，也可使用机器学习或数据驱动方法。倾向性评分的计算不仅限于二分类暴露，还可扩展至连续型或多分类暴露情境，亦可用于多层数据或竞争风险分析。 关于倾向性评分模型中应纳入的协变量，文献中存在一定争议，但一般建议至少纳入所有可能混淆暴露-结局关系的基线协变量（遵循混杂判定标准），同时还应纳入仅与结局相关的已知协变量；与之相反，仅与暴露相关而与结局无关的协变量应避免纳入，以防止方差不必要的膨胀。模型还应纳入混杂变量之间的交互效应及非线性函数形式。研究者不应使用基于 P 值的变量选择方法（如逐步回归），因为此举可能导致重要混杂变量被排除；协变量的选择应依据现有文献和领域专业知识，即使其 P>0.05 也不应排除。关键一点是，仅应纳入暴露发生前测量的变量，以避免调整处于因果通路上的中介变量。 倾向性评分模型正确设定后，在任意给定的倾向性评分水平上，个体将具有平均相似的已测量基线特征（即协变量平衡）。随后，该倾向性评分可用于混杂控制，实现方式包括倾向性评分分层、匹配、多变量调整或加权。除 IPTW 外，还有多种基于倾向性评分的加权方法，如精细分层加权、匹配加权和重叠加权，它们在推断人群、平衡性和精确度方面各有差异。"
+        ],
+        "quote": "### 倾向性评分的估计 倾向性评分定义为\"给定已观测协变量条件下接受特定治疗的条件概率\"。对于二分类暴露变量，通常采用逻辑回归为每位个体估计倾向性评分；对于复杂数据结构，也可使用机器学习或数据驱动方法。倾向性评分的计算不仅限于二分类暴露，还可扩展至连续型或多分类暴露情境，亦可用于多层数据或竞争风险分析。 关于倾向性评分模型中应纳入的协变量，文献中存在一定争议，但一般建议至少纳入所有可能混淆暴露-结局关系的基线协变量（遵循混杂判定标准），同时还应纳入仅与结局相关的已知协变量；与之相反，仅与暴露相关而与结局无关的协变量应避免纳入，以防止方差不必要的膨胀。模型还应纳入混杂变量之间的交互效应及非线性函数形式。研究者不应使用基于 P 值的变量选择方法（如逐步回归），因为此举可能导致重要混杂变量被排除；协变量的选择应依据现有文献和领域专业知识，即使其 P>0.05 也不应排除。关键一点是，仅应纳入暴露发生前测量的变量，以避免调整处于因果通路上的中介变量。 倾向性评分模型正确设定后，在任意给定的倾向性评分水平上，个体将具有平均相似的已测量基线特征（即协变量平衡）。随后，该倾向性评分可用于混杂控制，实现方式包括倾向性评分分层、匹配、多变量调整或加权。除 IPTW 外，还有多种基于倾向性评分的加权方法，如精细分层加权、匹配加权和重叠加权，它们在推断人群、平衡性和精确度方面各有差异。"
+      },
+      "explanation": "The algorithms and models described are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Illustrative numbers: diabetes prevalence in original sample: EHD 25%, CHD 75%; after weighting both 50%; weight calculation example: 1/0.25=4 for exposed, 1/(1-0.25)=1.33 for unexposed. No real effect estimates.",
+      "generatedFact": "糖尿病在原始样本中 EHD 组占 25%、CHD 组占 75%，加权后两组均为 50%；权重示例：暴露组 1/0.25 = 4，未暴露组 1/(1-0.25) = 1.33；并无实际效应估计。",
+      "sourceEvidence": {
+        "locator": "R0020",
+        "locators": [
+          "R0020"
+        ],
+        "quotes": [
+          "Subsequent inclusion of the weights in the analysis renders ‘assignment’ to either the exposed or unexposed group independent of the variables included in the propensity score model. For example, suppose that the percentage of patients with diabetes at baseline is lower in the exposed group (EHD) compared with the unexposed group (CHD) and that we wish to balance the groups with regards to the distribution of diabetes. In patients with diabetes, the probability of receiving EHD treatment is 25% (i.e. a propensity score of 0.25)."
+        ],
+        "quote": "Subsequent inclusion of the weights in the analysis renders ‘assignment’ to either the exposed or unexposed group independent of the variables included in the propensity score model. For example, suppose that the percentage of patients with diabetes at baseline is lower in the exposed group (EHD) compared with the unexposed group (CHD) and that we wish to balance the groups with regards to the distribution of diabetes. In patients with diabetes, the probability of receiving EHD treatment is 25% (i.e. a propensity score of 0.25)."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 示例中的倾向性评分 原作者在示例中以逻辑回归估计每位患者接受 EHD（相对于 CHD）的概率，纳入的基线混杂协变量包括：性别、年龄、透析龄、既往肾移植史及多种既往合并症。考虑到年龄对 EHD 概率的影响可能存在非线性，模型中纳入了年龄的三次样条；基于文献提示糖尿病的混杂效应可能因性别而不同，模型中亦纳入了性别与糖尿病的交互项。 ### 逆概率治疗加权 (IPTW) IPTW 的基本公式为：暴露组权重 = 1/倾向性评分，未暴露组权重 = 1/(1 − 倾向性评分)。暴露概率较低的暴露组个体（和暴露概率较高的未暴露组个体）获得更大的权重，从而增加其在对组比较中的相对影响力。将权重纳入分析后，接受暴露或非暴露的\"分配\"将独立于倾向性评分模型中包含的变量。 原作者以糖尿病分布为例提供了一个数值演示：假设糖尿病患者接受 EHD 的概率为 25%（倾向性评分为 0.25），则每位糖尿病患者的 EHD 组权重为 1/0.25 = 4，CHD 组权重为 1/(1 − 0.25) = 1.33。无糖尿病患者中，接受 EHD 的概率为 75%，EHD 组权重为 1/0.75 = 1.33，CHD 组权重为 1/(1 − 0.75) = 4。在原始样本中，糖尿病分布为 EHD 组 25% 与 CHD 组 75%；加权后形成伪人群，两组糖尿病比例均为 50%，概念上 IPTW 可视为与标准化数学等价。"
+        ],
+        "quote": "### 示例中的倾向性评分 原作者在示例中以逻辑回归估计每位患者接受 EHD（相对于 CHD）的概率，纳入的基线混杂协变量包括：性别、年龄、透析龄、既往肾移植史及多种既往合并症。考虑到年龄对 EHD 概率的影响可能存在非线性，模型中纳入了年龄的三次样条；基于文献提示糖尿病的混杂效应可能因性别而不同，模型中亦纳入了性别与糖尿病的交互项。 ### 逆概率治疗加权 (IPTW) IPTW 的基本公式为：暴露组权重 = 1/倾向性评分，未暴露组权重 = 1/(1 − 倾向性评分)。暴露概率较低的暴露组个体（和暴露概率较高的未暴露组个体）获得更大的权重，从而增加其在对组比较中的相对影响力。将权重纳入分析后，接受暴露或非暴露的\"分配\"将独立于倾向性评分模型中包含的变量。 原作者以糖尿病分布为例提供了一个数值演示：假设糖尿病患者接受 EHD 的概率为 25%（倾向性评分为 0.25），则每位糖尿病患者的 EHD 组权重为 1/0.25 = 4，CHD 组权重为 1/(1 − 0.25) = 1.33。无糖尿病患者中，接受 EHD 的概率为 75%，EHD 组权重为 1/0.75 = 1.33，CHD 组权重为 1/(1 − 0.75) = 4。在原始样本中，糖尿病分布为 EHD 组 25% 与 CHD 组 75%；加权后形成伪人群，两组糖尿病比例均为 50%，概念上 IPTW 可视为与标准化数学等价。"
+      },
+      "explanation": "The illustrative numerical example is reproduced exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No confidence intervals, P-values, or empirical uncertainty estimates are reported because it is a methodological tutorial without real data.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The reference contains no actual uncertainty metrics, so this item is not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "IPTW is an intuitive approach to balance baseline characteristics in observational research, extendable to time-dependent confounding and informative censoring, requiring careful covariate selection and extreme weight handling.",
+      "generatedFact": "IPTW 为观察性研究中处理组间基线不平衡提供了直观且可扩展的分析框架，可推广至时变混杂和信息性删失，需审慎选择协变量并妥善处理极端权重。",
+      "sourceEvidence": {
+        "locator": "R0054",
+        "locators": [
+          "R0054"
+        ],
+        "quotes": [
+          "CONCLUSION Conceptually analogous to what RCTs achieve through randomization in interventional studies, IPTW provides an intuitive approach in observational research for dealing with imbalances between exposed and non-exposed groups with regards to baseline characteristics. After careful consideration of the covariates to be included in the propensity score model, and appropriate treatment of any extreme weights, IPTW offers a fairly straightforward analysis approach in observational studies. Moreover, the weighting procedure can readily be extended to longitudinal studies suffering from both time-dependent confounding and informative censoring. CONFLICT OF INTEREST STATEMENT None declared."
+        ],
+        "quote": "CONCLUSION Conceptually analogous to what RCTs achieve through randomization in interventional studies, IPTW provides an intuitive approach in observational research for dealing with imbalances between exposed and non-exposed groups with regards to baseline characteristics. After careful consideration of the covariates to be included in the propensity score model, and appropriate treatment of any extreme weights, IPTW offers a fairly straightforward analysis approach in observational studies. Moreover, the weighting procedure can readily be extended to longitudinal studies suffering from both time-dependent confounding and informative censoring. CONFLICT OF INTEREST STATEMENT None declared."
+      },
+      "generatedEvidence": {
+        "locator": "G0015",
+        "locators": [
+          "G0015"
+        ],
+        "quotes": [
+          ""
+        ],
+        "quote": ""
+      },
+      "explanation": "Both conclude the same direction and strength of IPTW's utility.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Only addresses measured confounders, sensitivity to propensity model misspecification, sample size <150 may underestimate variance, not always superior to multivariable regression.",
+      "generatedFact": "仅能控制已测量混杂；倾向性评分模型误设敏感；样本量<150 时方差可能被低估；在某些情境下不优于多变量回归。",
+      "sourceEvidence": {
+        "locator": "R0052",
+        "locators": [
+          "R0052"
+        ],
+        "quotes": [
+          "Furthermore, compared with propensity score stratification or adjustment using the propensity score, IPTW has been shown to estimate hazard ratios with less bias [ 40 ]. In the longitudinal study setting, as described above, the main strength of MSMs is their ability to appropriately correct for time-dependent confounders in the setting of treatment-confounder feedback, as opposed to the potential biases introduced by simply adjusting for confounders in a regression model. IPTW also has limitations."
+        ],
+        "quote": "Furthermore, compared with propensity score stratification or adjustment using the propensity score, IPTW has been shown to estimate hazard ratios with less bias [ 40 ]. In the longitudinal study setting, as described above, the main strength of MSMs is their ability to appropriately correct for time-dependent confounders in the setting of treatment-confounder feedback, as opposed to the potential biases introduced by simply adjusting for confounders in a regression model. IPTW also has limitations."
+      },
+      "generatedEvidence": {
+        "locator": "G0014",
+        "locators": [
+          "G0014"
+        ],
+        "quotes": [
+          "### 局限性 IPTW 也非没有局限。部分模拟研究表明，在特定设置下，基于倾向性评分的方法（包括 IPTW）其表现并不优于多变量回归；另有研究警告，在样本量 <150 时 IPTW 可能导致效应估计的方差（标准误、置信区间和 P 值）被低估。IPTW 对倾向性评分模型的误设较为敏感：遗漏交互效应或误设纳入协变量的函数形式均可导致组间不平衡，从而偏倚效应估计。此外，该方法仅能控制已测量混杂因子，无法处理未测量混杂，充其量仅能实现\"条件可交换性\"。 --- ## 结论 IPTW 在概念上类似于随机对照试验通过随机化所实现的目标——为观察性研究中被比较组之间的基线特征不平衡问题提供了一种直观的处理方法。在审慎选择纳入倾向性评分模型的协变量并妥善处理极端权重后，IPTW 提供了一个在观察性研究中相对简洁的分析途径。此外，该加权方法可较直接地扩展至同时受时变混杂和信息性删失困扰的纵向研究。研究者在使用 IPTW 时应严格遵循协变量平衡评估、极端权重处理和稳健方差估计的操作步骤，并充分意识到该方法对未测量混杂和模型误设的敏感性。 --- **引用依据**：本综述的全部方法学描述、示例、假设、局限性陈述和结论均来自 Chesnaye et al. (2022) 的开放获取全文（PMCID: PMC8757413, DOI: 10.1093/ckj/sfab158）。该论文为 Clinical Kidney Journal 发表的方法学教程，属于 CC BY-NC 4.0 许可的开放获取文献，未包含任何原始经验性数据或统计检验结果。"
+        ],
+        "quote": "### 局限性 IPTW 也非没有局限。部分模拟研究表明，在特定设置下，基于倾向性评分的方法（包括 IPTW）其表现并不优于多变量回归；另有研究警告，在样本量 <150 时 IPTW 可能导致效应估计的方差（标准误、置信区间和 P 值）被低估。IPTW 对倾向性评分模型的误设较为敏感：遗漏交互效应或误设纳入协变量的函数形式均可导致组间不平衡，从而偏倚效应估计。此外，该方法仅能控制已测量混杂因子，无法处理未测量混杂，充其量仅能实现\"条件可交换性\"。 --- ## 结论 IPTW 在概念上类似于随机对照试验通过随机化所实现的目标——为观察性研究中被比较组之间的基线特征不平衡问题提供了一种直观的处理方法。在审慎选择纳入倾向性评分模型的协变量并妥善处理极端权重后，IPTW 提供了一个在观察性研究中相对简洁的分析途径。此外，该加权方法可较直接地扩展至同时受时变混杂和信息性删失困扰的纵向研究。研究者在使用 IPTW 时应严格遵循协变量平衡评估、极端权重处理和稳健方差估计的操作步骤，并充分意识到该方法对未测量混杂和模型误设的敏感性。 --- **引用依据**：本综述的全部方法学描述、示例、假设、局限性陈述和结论均来自 Chesnaye et al. (2022) 的开放获取全文（PMCID: PMC8757413, DOI: 10.1093/ckj/sfab158）。该论文为 Clinical Kidney Journal 发表的方法学教程，属于 CC BY-NC 4.0 许可的开放获取文献，未包含任何原始经验性数据或统计检验结果。"
+      },
+      "explanation": "Limitations listed are exactly the same.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No harms or adverse events; the article is a methodological tutorial.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The topic is methodological; safety/harms are not discussed.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "cohort_construction",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No explicit index date or exclusion criteria defined for the hypothetical example; only baseline characteristics are mentioned.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The reference does not detail cohort construction steps, so not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "confounding_adjustment",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "IPTW adjusts for measured baseline confounders; includes weight stabilization and truncation for extreme weights; evaluates balance via standardized differences.",
+      "generatedFact": "IPTW 通过逆概率权重调整已测量基线混杂；包括权重稳定化与截尾处理极端权重；以标准化差异评估平衡。",
+      "sourceEvidence": {
+        "locator": "R0018",
+        "locators": [
+          "R0018"
+        ],
+        "quotes": [
+          "We include in the model all known baseline confounders as covariates: patient sex, age, dialysis vintage, having received a transplant in the past and various pre-existing comorbidities. In addition, as we expect the effect of age on the probability of EHD will be non-linear, we include a cubic spline for age. We also include an interaction term between sex and diabetes, as—based on the literature—we expect the confounding effect of diabetes to vary by sex. The logistic regression model gives the probability, or propensity score, of receiving EHD for each patient given their characteristics. IPTW IPTW uses the propensity score to balance baseline patient characteristics in the exposed (i.e."
+        ],
+        "quote": "We include in the model all known baseline confounders as covariates: patient sex, age, dialysis vintage, having received a transplant in the past and various pre-existing comorbidities. In addition, as we expect the effect of age on the probability of EHD will be non-linear, we include a cubic spline for age. We also include an interaction term between sex and diabetes, as—based on the literature—we expect the confounding effect of diabetes to vary by sex. The logistic regression model gives the probability, or propensity score, of receiving EHD for each patient given their characteristics. IPTW IPTW uses the propensity score to balance baseline patient characteristics in the exposed (i.e."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "### 协变量平衡评估 IPTW 实施后，应评估暴露组与未暴露组之间所有基线特征的标准化差异（standardized difference），用于比较组间均值差异（以标准差为单位），适用于连续变量和分类变量。标准化差异 <10%（即 <0.10）被视为组间不平衡可忽略的经验阈值。P 值不应被用于评估平衡，因其高度受样本量影响（样本量足够大时，即使可忽略的组间差异也会在统计学上显著）。若加权后标准化差异仍过大，应重新审视倾向性模型（如增加交互项、转换变量、纳入样条函数）。除均值比较外，连续变量的分布和方差也应通过箱线图和/或 Kolmogorov–Smirnov 检验进行考察。 ### 极端权重处理 当组间特征差异较大时，某些个体的倾向性评分可能极度接近 0（暴露组）或接近 1（未暴露组），取其倒数将产生极端权重，膨胀效应估计的方差和置信区间。此情况在暴露于某小型亚组中极为罕见时尤为突出。研究者应审视这些极端个体是否真正属于目标人群，抑或应被视为离群值并排除——毕竟，100% 确定会接受某特定治疗的患者本来就不具备被随机分配至两种治疗的条件。此外，极端权重可通过以下两种方式处理： 1. **权重稳定化**：将分子从 1（未稳定化权重）替换为粗暴露概率（在二分类暴露中即为暴露组的样本比例）。稳定化权重公式为：暴露组 = 暴露比例/倾向性评分，未暴露组 = 未暴露比例/(1 − 倾向性评分)。稳定化权重优于未稳定化权重，因其倾向于减小效应估计的方差。连续型暴露的权重必须始终稳定化。 2."
+        ],
+        "quote": "### 协变量平衡评估 IPTW 实施后，应评估暴露组与未暴露组之间所有基线特征的标准化差异（standardized difference），用于比较组间均值差异（以标准差为单位），适用于连续变量和分类变量。标准化差异 <10%（即 <0.10）被视为组间不平衡可忽略的经验阈值。P 值不应被用于评估平衡，因其高度受样本量影响（样本量足够大时，即使可忽略的组间差异也会在统计学上显著）。若加权后标准化差异仍过大，应重新审视倾向性模型（如增加交互项、转换变量、纳入样条函数）。除均值比较外，连续变量的分布和方差也应通过箱线图和/或 Kolmogorov–Smirnov 检验进行考察。 ### 极端权重处理 当组间特征差异较大时，某些个体的倾向性评分可能极度接近 0（暴露组）或接近 1（未暴露组），取其倒数将产生极端权重，膨胀效应估计的方差和置信区间。此情况在暴露于某小型亚组中极为罕见时尤为突出。研究者应审视这些极端个体是否真正属于目标人群，抑或应被视为离群值并排除——毕竟，100% 确定会接受某特定治疗的患者本来就不具备被随机分配至两种治疗的条件。此外，极端权重可通过以下两种方式处理： 1. **权重稳定化**：将分子从 1（未稳定化权重）替换为粗暴露概率（在二分类暴露中即为暴露组的样本比例）。稳定化权重公式为：暴露组 = 暴露比例/倾向性评分，未暴露组 = 未暴露比例/(1 − 倾向性评分)。稳定化权重优于未稳定化权重，因其倾向于减小效应估计的方差。连续型暴露的权重必须始终稳定化。 2."
+      },
+      "explanation": "Both describe the same confounding adjustment approach.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "missing_data_and_censoring",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Discusses informative censoring and IPCW to adjust for it by up-weighting remaining individuals with similar characteristics to censored ones.",
+      "generatedFact": "IPCW 通过放大仍留在研究中且与删失者特征相似的个体的影响力，来校正信息性删失。",
+      "sourceEvidence": {
+        "locator": "R0048",
+        "locators": [
+          "R0048"
+        ],
+        "quotes": [
+          "Methods developed for the analysis of survival data, such as Cox regression, assume that the reasons for censoring are unrelated to the event of interest. In the case of administrative censoring, for instance, this is likely to be true. In other cases, however, the censoring mechanism may be directly related to certain patient characteristics [ 37 ]. For instance, patients with a poorer health status will be more likely to drop out of the study prematurely, biasing the results towards the healthier survivors (i.e. selection bias). As these censored patients are no longer able to encounter the event, this will lead to fewer events and thus an overestimated survival probability."
+        ],
+        "quote": "Methods developed for the analysis of survival data, such as Cox regression, assume that the reasons for censoring are unrelated to the event of interest. In the case of administrative censoring, for instance, this is likely to be true. In other cases, however, the censoring mechanism may be directly related to certain patient characteristics [ 37 ]. For instance, patients with a poorer health status will be more likely to drop out of the study prematurely, biasing the results towards the healthier survivors (i.e. selection bias). As these censored patients are no longer able to encounter the event, this will lead to fewer events and thus an overestimated survival probability."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "### 逆概率删失加权（IPCW） 在时间-事件分析中，当患者失访或研究期结束时未发生事件被定义为删失。传统方法假设删失原因与结局事件无关——这在管理性删失中通常成立，但在其他情境下，删失机制可能直接与患者特征相关：健康状态较差的患者更可能提前退出研究，导致结果偏向更为健康的幸存者（选择偏倚），由于删失患者不再能经历事件，将导致事件数量减少、生存概率高估。IPCW 通过放大仍留在研究中且与删失者特征相似的个体的影响力，来校正信息性删失。每个时间点的 IPCWs 计算为该个体直至当前时间点仍留在研究中的逆概率，条件为既往暴露及与删失相关的患者特征。若研究中同时估算了逆概率治疗权重，可将其与删失权重简单相乘，获得单一权重纳入模型。作者引用了 EVOLVE 试验（西那卡塞降低心血管事件评价试验）作为 IPCW 应用的示例，该试验中通过人为删失（诱导信息性删失）以估计符合方案效应。 --- ## 主要发现（方法学论述摘要） 本综述原文未报告任何经验性原始数据或统计检验结果。以下为基于原文方法的论述要点： 1. **IPTW 的核心机制**：通过构建伪人群实现已测量混杂因子在暴露组与未暴露组间的平衡，概念上与标准化等价。原作者通过数值演示（糖尿病患者在原始样本中 EHD 组占 25%、CHD 组占 75%，加权后两组均为 50%）说明了这一原理。 2. **协变量平衡评估**：标准化差异（standardized difference）是评估加权前后协变量平衡的主要工具，阈值 <0.10。原作者图 2 展示了示例中所有协变量加权后标准化差异均低于 0.10。 3."
+        ],
+        "quote": "### 逆概率删失加权（IPCW） 在时间-事件分析中，当患者失访或研究期结束时未发生事件被定义为删失。传统方法假设删失原因与结局事件无关——这在管理性删失中通常成立，但在其他情境下，删失机制可能直接与患者特征相关：健康状态较差的患者更可能提前退出研究，导致结果偏向更为健康的幸存者（选择偏倚），由于删失患者不再能经历事件，将导致事件数量减少、生存概率高估。IPCW 通过放大仍留在研究中且与删失者特征相似的个体的影响力，来校正信息性删失。每个时间点的 IPCWs 计算为该个体直至当前时间点仍留在研究中的逆概率，条件为既往暴露及与删失相关的患者特征。若研究中同时估算了逆概率治疗权重，可将其与删失权重简单相乘，获得单一权重纳入模型。作者引用了 EVOLVE 试验（西那卡塞降低心血管事件评价试验）作为 IPCW 应用的示例，该试验中通过人为删失（诱导信息性删失）以估计符合方案效应。 --- ## 主要发现（方法学论述摘要） 本综述原文未报告任何经验性原始数据或统计检验结果。以下为基于原文方法的论述要点： 1. **IPTW 的核心机制**：通过构建伪人群实现已测量混杂因子在暴露组与未暴露组间的平衡，概念上与标准化等价。原作者通过数值演示（糖尿病患者在原始样本中 EHD 组占 25%、CHD 组占 75%，加权后两组均为 50%）说明了这一原理。 2. **协变量平衡评估**：标准化差异（standardized difference）是评估加权前后协变量平衡的主要工具，阈值 <0.10。原作者图 2 展示了示例中所有协变量加权后标准化差异均低于 0.10。 3."
+      },
+      "explanation": "Both describe the same method for handling informative censoring.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "association_measure_context",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "No specific hazard ratio, reference group, CI, or time point reported; the article is methodological.",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No association measure is reported because the article is a tutorial without empirical estimates.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    }
+  ],
+  "metrics": {
+    "applicableItems": 13,
+    "weightedFidelity": 1.0,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 13,
+      "not_applicable": 8
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [
+      "conclusion_direction"
+    ],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "unverifiable_evidence_quote"
+    ],
+    "usabilityGateFailures": [
+      "unverifiable_evidence_quote"
+    ],
+    "usabilityVerdict": "fail",
+    "verdict": "fail"
+  },
+  "adversarialAudit": null,
+  "overallAssessment": "The generated article is a faithful Chinese summary of the reference method tutorial. All substantive scientific facts, from the study objective, design, and methods to the illustrative example, limitations, and conclusions, are captured exactly or compatibly. There are no contradicted or unsupported claims. Items such as sample size, eligibility, follow-up, uncertainty, cohort construction, and association measure are marked not_applicable because the reference does not report empirical data. No critical or major discrepancies exist, and the translation maintains the original article's accuracy and completeness within the scope of a tutorial.",
+  "gradedAt": "2026-07-18T15:20:28Z"
+}

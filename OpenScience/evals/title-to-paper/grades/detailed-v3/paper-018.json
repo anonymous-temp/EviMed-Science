@@ -1,0 +1,779 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-018",
+  "category": "diagnostic-prognostic",
+  "title": "Developing a prediction model to estimate the true burden of respiratory syncytial virus (RSV) in hospitalised children in Western Australia.",
+  "pmcid": "PMC8748465",
+  "doi": "10.1038/s41598-021-04080-3",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "fb0aee6b6a784255c5231d96554deb8b04a5456514d6d28b1d1a24b63f36a4f4",
+  "generatedSha256": "57f2ee7e39cf722dbfa1f450f8ee33d3d1094610602d0781198bfde58de89d54",
+  "promptSha256": "e230c8acfe0cc48c0b0725f38c532cc37ea5ea7ef01cd63664e2c401a54b8f47",
+  "cacheFingerprint": "0bf7ebef132688829900ecb23a936cacdb91e5c155d95a61019da0ff450a11bc",
+  "referenceCharacters": 37116,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 7156,
+  "paperType": "diagnostic-prognostic",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Develop a prediction model to estimate the true incidence of RSV-associated hospitalisations in children <5 years in WA and determine the under-ascertainment fraction using laboratory records alone.",
+      "generatedFact": "Develop a prediction model to estimate the true burden of RSV-associated hospitalisations in children <5 years in WA and quantify the under-ascertainment fraction.",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "The aim of our study was to develop a prediction model to estimate the true incidence of RSV associated hospitalisations in children < 5 years of age in WA and to use these findings to determine the under-ascertainment fraction of RSV incidence using laboratory records alone. Methods Setting and data sources WA covers the western third of Australia with a population of approximately 2.6 million people at 31 December 2019 8 . Three quarters of the population reside in the temperate climatic region of metropolitan Perth and its surrounds 9 . We conducted a population-based cohort study using administrative linked data of all births in WA (1996 to 2012), as previously reported 3 , 10 ."
+        ],
+        "quote": "The aim of our study was to develop a prediction model to estimate the true incidence of RSV associated hospitalisations in children < 5 years of age in WA and to use these findings to determine the under-ascertainment fraction of RSV incidence using laboratory records alone. Methods Setting and data sources WA covers the western third of Australia with a population of approximately 2.6 million people at 31 December 2019 8 . Three quarters of the population reside in the temperate climatic region of metropolitan Perth and its surrounds 9 . We conducted a population-based cohort study using administrative linked data of all births in WA (1996 to 2012), as previously reported 3 , 10 ."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**目的**：开发一个预测模型，以估计西澳大利亚州（WA）5 岁以下住院儿童中 RSV 相关住院的真实发率，并计算基于实验室确认数据的漏查比率（under-ascertainment fraction）。 **方法**：利用概率关联的围产期、住院和实验室记录，纳入 2000—2012 年间出生于西澳大利亚州的 321,825 名儿童的住院数据。在有过 RSV 检测记录的住院儿童人群中拟合多变量 logistic 回归预测模型，预测因子基于有向无环图（DAG）和逐步向后选择从 27 个候选变量中筛选。通过十折交叉验证受试者工作特征曲线下面积（AUROC）评估模型预测性能，并使用校准带（calibration belt）和 Hosmer-Lemeshow 检验评估校准度。随后将模型应用于队列中所有住院记录，以获得预测的 RSV 住院发率，并与实验室确认的 RSV 入院发率进行比较。"
+        ],
+        "quote": "**目的**：开发一个预测模型，以估计西澳大利亚州（WA）5 岁以下住院儿童中 RSV 相关住院的真实发率，并计算基于实验室确认数据的漏查比率（under-ascertainment fraction）。 **方法**：利用概率关联的围产期、住院和实验室记录，纳入 2000—2012 年间出生于西澳大利亚州的 321,825 名儿童的住院数据。在有过 RSV 检测记录的住院儿童人群中拟合多变量 logistic 回归预测模型，预测因子基于有向无环图（DAG）和逐步向后选择从 27 个候选变量中筛选。通过十折交叉验证受试者工作特征曲线下面积（AUROC）评估模型预测性能，并使用校准带（calibration belt）和 Hosmer-Lemeshow 检验评估校准度。随后将模型应用于队列中所有住院记录，以获得预测的 RSV 住院发率，并与实验室确认的 RSV 入院发率进行比较。"
+      },
+      "explanation": "Objective matches exactly: model development for RSV hospitalisation incidence and under-ascertainment fraction.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Population-based retrospective cohort study using probabilistically linked administrative health data (perinatal, hospital, laboratory) of births in WA 2000–2012.",
+      "generatedFact": "Population-based retrospective cohort study using linked administrative data of births 1996–2012, hospitalisations 2000–2012.",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "The aim of our study was to develop a prediction model to estimate the true incidence of RSV associated hospitalisations in children < 5 years of age in WA and to use these findings to determine the under-ascertainment fraction of RSV incidence using laboratory records alone. Methods Setting and data sources WA covers the western third of Australia with a population of approximately 2.6 million people at 31 December 2019 8 . Three quarters of the population reside in the temperate climatic region of metropolitan Perth and its surrounds 9 . We conducted a population-based cohort study using administrative linked data of all births in WA (1996 to 2012), as previously reported 3 , 10 ."
+        ],
+        "quote": "The aim of our study was to develop a prediction model to estimate the true incidence of RSV associated hospitalisations in children < 5 years of age in WA and to use these findings to determine the under-ascertainment fraction of RSV incidence using laboratory records alone. Methods Setting and data sources WA covers the western third of Australia with a population of approximately 2.6 million people at 31 December 2019 8 . Three quarters of the population reside in the temperate climatic region of metropolitan Perth and its surrounds 9 . We conducted a population-based cohort study using administrative linked data of all births in WA (1996 to 2012), as previously reported 3 , 10 ."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "随着抗病毒药物、母体疫苗和单克隆抗体等 RSV 防治手段陆续进入后期临床试验——以及 WHO 将 RSV 全球疾病负担估计列为优先事项——准确量化 RSV 负担对于推进免疫规划决策和建立疫苗效果评估基线至关重要。为此，本研究旨在：(1) 利用关联的行政卫生数据构建预测模型，识别住院儿童中 RSV 阳性的临床和人口学预测因子；(2) 应用此模型估计完整的 RSV 相关住院发率；(3) 量化基于实验室数据估计 RSV 负担的漏查比率。 --- ## 方法 ### 研究设计与数据来源 本研究为基于人群的回顾性队列研究，利用西澳大利亚州行政关联数据，纳入 1996—2012 年间该州所有出生登记，涵盖 321,825 名至研究期末不满 5 岁的住院儿童。数据来源包括： - **围产期记录**：西澳大利亚州助产士通知系统（MNS），覆盖该州 > 99% 出生； - **出生与死亡登记**； - **住院记录**：医院发病率数据收集（HMDC），记录 2000 年 1 月 1 日至 2012 年 12 月 31 日期间所有 5 岁以下儿童的住院入院，含 ICD-10-AM 诊断编码； - **实验室记录**：PathWest 实验室医学数据库，包含同一时期内呼吸道标本 RSV 检测结果。 通过西澳大利亚州数据关联分支机构进行概率关联。实验室标本采集日期在医院入院日期前后 48 小时内视为与当次住院关联的 RSV 检测。院内转科记录被合并为一次住院。"
+        ],
+        "quote": "随着抗病毒药物、母体疫苗和单克隆抗体等 RSV 防治手段陆续进入后期临床试验——以及 WHO 将 RSV 全球疾病负担估计列为优先事项——准确量化 RSV 负担对于推进免疫规划决策和建立疫苗效果评估基线至关重要。为此，本研究旨在：(1) 利用关联的行政卫生数据构建预测模型，识别住院儿童中 RSV 阳性的临床和人口学预测因子；(2) 应用此模型估计完整的 RSV 相关住院发率；(3) 量化基于实验室数据估计 RSV 负担的漏查比率。 --- ## 方法 ### 研究设计与数据来源 本研究为基于人群的回顾性队列研究，利用西澳大利亚州行政关联数据，纳入 1996—2012 年间该州所有出生登记，涵盖 321,825 名至研究期末不满 5 岁的住院儿童。数据来源包括： - **围产期记录**：西澳大利亚州助产士通知系统（MNS），覆盖该州 > 99% 出生； - **出生与死亡登记**； - **住院记录**：医院发病率数据收集（HMDC），记录 2000 年 1 月 1 日至 2012 年 12 月 31 日期间所有 5 岁以下儿童的住院入院，含 ICD-10-AM 诊断编码； - **实验室记录**：PathWest 实验室医学数据库，包含同一时期内呼吸道标本 RSV 检测结果。 通过西澳大利亚州数据关联分支机构进行概率关联。实验室标本采集日期在医院入院日期前后 48 小时内视为与当次住院关联的 RSV 检测。院内转科记录被合并为一次住院。"
+      },
+      "explanation": "Both describe an identical retrospective cohort design with linked administrative data.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "321,825 children born in WA 2000–2012; hospital records linked to Midwives Notifications, Birth/Death Registries, HMDC, PathWest laboratory data.",
+      "generatedFact": "321,825 children born in WA 1996–2012, same administrative data sources (MNS, births, HMDC, PathWest).",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "We used probabilistically linked perinatal, hospital, and laboratory records of 321,825 children born in Western Australia (WA), 2000–2012. We generated a predictive model for RSV positivity in hospitalised children aged < 5 years. We applied the model to all hospitalisations in our population-based cohort to determine the true RSV incidence, and under-ascertainment fraction. The model’s predictive performance was determined using cross-validated area under the receiver operating characteristic (AUROC) curve. From 321,825 hospitalisations, 37,784 were tested for RSV (22.8% positive)."
+        ],
+        "quote": "We used probabilistically linked perinatal, hospital, and laboratory records of 321,825 children born in Western Australia (WA), 2000–2012. We generated a predictive model for RSV positivity in hospitalised children aged < 5 years. We applied the model to all hospitalisations in our population-based cohort to determine the true RSV incidence, and under-ascertainment fraction. The model’s predictive performance was determined using cross-validated area under the receiver operating characteristic (AUROC) curve. From 321,825 hospitalisations, 37,784 were tested for RSV (22.8% positive)."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "### 研究人群与样本量 源人群（用于构建预测模型）：在队列首 5 年内住院且拥有 RSV 检测记录的 37,784 次住院；排除 3,801 次有缺失项的记录后，33,983 次住院纳入最终预测模型拟合。 目标人群（用于估计 RSV 负担）：同期队列中所有不满 5 岁住院儿童，排除有缺失项的记录后共 321,825 次住院记录用于模型应用。 ### 候选预测因子 从文献综述、课题组前期工作 [Moore et al., BMC Public Health 2010] 及临床合理性出发，初步选定 27 个候选预测因子。使用有向无环图（DAG）作为因果推断工具来确定最小充分调整变量集，包括：儿童年龄、性别、分娩方式（阴道顺产 vs. 剖宫产）、入院季节、原住民身份（通过验证算法定义）、母亲年龄、孕期吸烟（是/否）、社会经济地位（SES，基于 SEIFA 相对优劣势指数五分位）、同胞数量、胎龄（< 32 周、32–36 周、≥ 37 周）、入院年份、出生年份、住院时长（连续变量）、ICU 住院（是/否）、机械通气使用、母亲哮喘史，以及急性毛细支气管炎、肺炎、支气管炎、未特指急性下呼吸道感染、哮喘、上呼吸道感染、百日咳、流行性感冒等诊断编码。纳入出生季节和地理居住区域以考虑季节性和气候条件。最终模型还包含正弦和余弦函数项以捕捉 RSV 的季节性变异 [Stolwijk & Zielhuis, 1999; Edwards, 1961]。"
+        ],
+        "quote": "### 研究人群与样本量 源人群（用于构建预测模型）：在队列首 5 年内住院且拥有 RSV 检测记录的 37,784 次住院；排除 3,801 次有缺失项的记录后，33,983 次住院纳入最终预测模型拟合。 目标人群（用于估计 RSV 负担）：同期队列中所有不满 5 岁住院儿童，排除有缺失项的记录后共 321,825 次住院记录用于模型应用。 ### 候选预测因子 从文献综述、课题组前期工作 [Moore et al., BMC Public Health 2010] 及临床合理性出发，初步选定 27 个候选预测因子。使用有向无环图（DAG）作为因果推断工具来确定最小充分调整变量集，包括：儿童年龄、性别、分娩方式（阴道顺产 vs. 剖宫产）、入院季节、原住民身份（通过验证算法定义）、母亲年龄、孕期吸烟（是/否）、社会经济地位（SES，基于 SEIFA 相对优劣势指数五分位）、同胞数量、胎龄（< 32 周、32–36 周、≥ 37 周）、入院年份、出生年份、住院时长（连续变量）、ICU 住院（是/否）、机械通气使用、母亲哮喘史，以及急性毛细支气管炎、肺炎、支气管炎、未特指急性下呼吸道感染、哮喘、上呼吸道感染、百日咳、流行性感冒等诊断编码。纳入出生季节和地理居住区域以考虑季节性和气候条件。最终模型还包含正弦和余弦函数项以捕捉 RSV 的季节性变异 [Stolwijk & Zielhuis, 1999; Edwards, 1961]。"
+      },
+      "explanation": "Population size and linked data sources are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "321,825 hospitalisations, 37,784 tested for RSV, 8,604 positive; after exclusions, model on 33,983 and burden estimation on 321,825 records.",
+      "generatedFact": "321,825 hospitalisation records, 37,784 tested (11.7%), 8,604 positive (22.8%); model built on 33,983 records, burden on 321,825 records.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "We used probabilistically linked perinatal, hospital, and laboratory records of 321,825 children born in Western Australia (WA), 2000–2012. We generated a predictive model for RSV positivity in hospitalised children aged < 5 years. We applied the model to all hospitalisations in our population-based cohort to determine the true RSV incidence, and under-ascertainment fraction. The model’s predictive performance was determined using cross-validated area under the receiver operating characteristic (AUROC) curve. From 321,825 hospitalisations, 37,784 were tested for RSV (22.8% positive)."
+        ],
+        "quote": "We used probabilistically linked perinatal, hospital, and laboratory records of 321,825 children born in Western Australia (WA), 2000–2012. We generated a predictive model for RSV positivity in hospitalised children aged < 5 years. We applied the model to all hospitalisations in our population-based cohort to determine the true RSV incidence, and under-ascertainment fraction. The model’s predictive performance was determined using cross-validated area under the receiver operating characteristic (AUROC) curve. From 321,825 hospitalisations, 37,784 were tested for RSV (22.8% positive)."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+        ],
+        "quote": "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+      },
+      "explanation": "Sample sizes and numbers tested/positive match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Included children born 2000–2012, hospitalised at age <5 years, any ICD-10-AM diagnosis; interhospital transfers collapsed; laboratory specimen within 48 h of admission; complete-case analysis.",
+      "generatedFact": "Children born 1996–2012, hospital admissions 2000–2012 at age <5 years, any ICD-10-AM diagnosis; transfers merged; lab test ≤48 h from admission; records with missing data excluded.",
+      "sourceEvidence": {
+        "locator": "R0009",
+        "locators": [
+          "R0009"
+        ],
+        "quotes": [
+          "Data sources used for this study included the Midwives Notifications System, which includes perinatal information on > 99% of births in WA 11 , Birth and Death Registries, Hospital Morbidity Data Collection and PathWest Laboratory Medicine Database (PathWest). Data were probabilistically linked using best practice protocols through the WA Data Linkage Branch 12 . Hospital data Hospitalisation records, herein referred to as hospital admissions, with an admission and discharge date between 1 January 2000 and 31 December 2012 were included, to match the same time period when routine laboratory data were available."
+        ],
+        "quote": "Data sources used for this study included the Midwives Notifications System, which includes perinatal information on > 99% of births in WA 11 , Birth and Death Registries, Hospital Morbidity Data Collection and PathWest Laboratory Medicine Database (PathWest). Data were probabilistically linked using best practice protocols through the WA Data Linkage Branch 12 . Hospital data Hospitalisation records, herein referred to as hospital admissions, with an admission and discharge date between 1 January 2000 and 31 December 2012 were included, to match the same time period when routine laboratory data were available."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "随着抗病毒药物、母体疫苗和单克隆抗体等 RSV 防治手段陆续进入后期临床试验——以及 WHO 将 RSV 全球疾病负担估计列为优先事项——准确量化 RSV 负担对于推进免疫规划决策和建立疫苗效果评估基线至关重要。为此，本研究旨在：(1) 利用关联的行政卫生数据构建预测模型，识别住院儿童中 RSV 阳性的临床和人口学预测因子；(2) 应用此模型估计完整的 RSV 相关住院发率；(3) 量化基于实验室数据估计 RSV 负担的漏查比率。 --- ## 方法 ### 研究设计与数据来源 本研究为基于人群的回顾性队列研究，利用西澳大利亚州行政关联数据，纳入 1996—2012 年间该州所有出生登记，涵盖 321,825 名至研究期末不满 5 岁的住院儿童。数据来源包括： - **围产期记录**：西澳大利亚州助产士通知系统（MNS），覆盖该州 > 99% 出生； - **出生与死亡登记**； - **住院记录**：医院发病率数据收集（HMDC），记录 2000 年 1 月 1 日至 2012 年 12 月 31 日期间所有 5 岁以下儿童的住院入院，含 ICD-10-AM 诊断编码； - **实验室记录**：PathWest 实验室医学数据库，包含同一时期内呼吸道标本 RSV 检测结果。 通过西澳大利亚州数据关联分支机构进行概率关联。实验室标本采集日期在医院入院日期前后 48 小时内视为与当次住院关联的 RSV 检测。院内转科记录被合并为一次住院。"
+        ],
+        "quote": "随着抗病毒药物、母体疫苗和单克隆抗体等 RSV 防治手段陆续进入后期临床试验——以及 WHO 将 RSV 全球疾病负担估计列为优先事项——准确量化 RSV 负担对于推进免疫规划决策和建立疫苗效果评估基线至关重要。为此，本研究旨在：(1) 利用关联的行政卫生数据构建预测模型，识别住院儿童中 RSV 阳性的临床和人口学预测因子；(2) 应用此模型估计完整的 RSV 相关住院发率；(3) 量化基于实验室数据估计 RSV 负担的漏查比率。 --- ## 方法 ### 研究设计与数据来源 本研究为基于人群的回顾性队列研究，利用西澳大利亚州行政关联数据，纳入 1996—2012 年间该州所有出生登记，涵盖 321,825 名至研究期末不满 5 岁的住院儿童。数据来源包括： - **围产期记录**：西澳大利亚州助产士通知系统（MNS），覆盖该州 > 99% 出生； - **出生与死亡登记**； - **住院记录**：医院发病率数据收集（HMDC），记录 2000 年 1 月 1 日至 2012 年 12 月 31 日期间所有 5 岁以下儿童的住院入院，含 ICD-10-AM 诊断编码； - **实验室记录**：PathWest 实验室医学数据库，包含同一时期内呼吸道标本 RSV 检测结果。 通过西澳大利亚州数据关联分支机构进行概率关联。实验室标本采集日期在医院入院日期前后 48 小时内视为与当次住院关联的 RSV 检测。院内转科记录被合并为一次住院。"
+      },
+      "explanation": "Eligibility criteria and selection steps are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "The prediction model (logistic regression) using clinical/demographic predictors is the index test predicting RSV positivity.",
+      "generatedFact": "Multivariable logistic regression prediction model with 27 candidate predictors as the index test for RSV positivity.",
+      "sourceEvidence": {
+        "locator": "R0013",
+        "locators": [
+          "R0013"
+        ],
+        "quotes": [
+          "Statistical analysis Developing prediction models A multivariable logistic regression model was fitted to identify predictors of RSV-positivity (binary outcome) amongst children younger than 5 years who were hospitalised and tested for RSV in WA during the study period (2000–2012). We used a robust standard error estimation adjusting for correlated observations due to children having multiple admissions over the study period 13 . A total of 27 candidate predictors for the prediction models were selected based on a comprehensive literature review, including previous work in our setting 14 and clinical plausibility."
+        ],
+        "quote": "Statistical analysis Developing prediction models A multivariable logistic regression model was fitted to identify predictors of RSV-positivity (binary outcome) amongst children younger than 5 years who were hospitalised and tested for RSV in WA during the study period (2000–2012). We used a robust standard error estimation adjusting for correlated observations due to children having multiple admissions over the study period 13 . A total of 27 candidate predictors for the prediction models were selected based on a comprehensive literature review, including previous work in our setting 14 and clinical plausibility."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "### 模型开发与评估 采用多变量 logistic 回归，以 RSV 检测阳性为二分类结局变量。为调整同一儿童多次住院的相关性，使用稳健标准误。模型开发采用基于 AIC 的逐步向后选择法，移除的变量逐个重新插入以评估模型改进情况。 预测性能通过十折交叉验证 AUROC 曲线评估，采用 Stata `cvauroc` 命令计算各折 AUC 的均值，并使用自助法获取偏差校正的 95% 置信区间。以 0.5 作为概率截断值计算灵敏度、特异度、阳性预测值和阴性预测值。采用校准带（calibration belt）和 Hosmer-Lemeshow 拟合优度检验评估模型校准。灵敏度分析按实验室检测方法（免疫荧光法 vs. PCR）分层重复建模。所有分析使用 Stata v.16.0，DAG 图使用 DAGitty v2.3 制作。 ### RSV 负担估计 将拟合的 logistic 回归模型应用于目标人群中所有无缺失变量的住院记录，计算每例住院的 RSV 阳性预测概率。以 0.5 为阈值，将预测概率 ≥ 0.5 的住院定义为 RSV 相关住院。采用生存分析技术计算预测 RSV 发率，以人-时间为分母（自出生至首次住院日期或删失日期），允许每人多次住院。 ### 漏查比率的计算 定义为实验室确认 RSV 发率与预测 RSV 发率之间的差值。发率以每 1000 儿童年为单位报告，并按年龄组、入院年份、入院季节和出生月份分层。"
+        ],
+        "quote": "### 模型开发与评估 采用多变量 logistic 回归，以 RSV 检测阳性为二分类结局变量。为调整同一儿童多次住院的相关性，使用稳健标准误。模型开发采用基于 AIC 的逐步向后选择法，移除的变量逐个重新插入以评估模型改进情况。 预测性能通过十折交叉验证 AUROC 曲线评估，采用 Stata `cvauroc` 命令计算各折 AUC 的均值，并使用自助法获取偏差校正的 95% 置信区间。以 0.5 作为概率截断值计算灵敏度、特异度、阳性预测值和阴性预测值。采用校准带（calibration belt）和 Hosmer-Lemeshow 拟合优度检验评估模型校准。灵敏度分析按实验室检测方法（免疫荧光法 vs. PCR）分层重复建模。所有分析使用 Stata v.16.0，DAG 图使用 DAGitty v2.3 制作。 ### RSV 负担估计 将拟合的 logistic 回归模型应用于目标人群中所有无缺失变量的住院记录，计算每例住院的 RSV 阳性预测概率。以 0.5 为阈值，将预测概率 ≥ 0.5 的住院定义为 RSV 相关住院。采用生存分析技术计算预测 RSV 发率，以人-时间为分母（自出生至首次住院日期或删失日期），允许每人多次住院。 ### 漏查比率的计算 定义为实验室确认 RSV 发率与预测 RSV 发率之间的差值。发率以每 1000 儿童年为单位报告，并按年龄组、入院年份、入院季节和出生月份分层。"
+      },
+      "explanation": "The index test (prediction model) and its purpose are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Reference standard is laboratory-confirmed RSV positivity from respiratory specimens (immunofluorescence, PCR, culture).",
+      "generatedFact": "Reference standard is laboratory-confirmed RSV test result.",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "We included all admissions in children aged < 5 years in WA with any diagnosis using International Statistical Classification of Diseases and Related Health Problems,10th Revision, Australian Modification (ICD-10-AM) codes. As per previous analyses of these data, interhospital transfers were collapsed 3 , 10 . Laboratory data We extracted PathWest testing records of RSV from respiratory specimens with a specimen collection date between 1 January 2000 and 31 December 2012. We then linked these records with hospitalisation records from individuals from the birth cohort when respiratory specimens were collected 48 h before or after the admission date, as per our previous analyses 3 , 10 ."
+        ],
+        "quote": "We included all admissions in children aged < 5 years in WA with any diagnosis using International Statistical Classification of Diseases and Related Health Problems,10th Revision, Australian Modification (ICD-10-AM) codes. As per previous analyses of these data, interhospital transfers were collapsed 3 , 10 . Laboratory data We extracted PathWest testing records of RSV from respiratory specimens with a specimen collection date between 1 January 2000 and 31 December 2012. We then linked these records with hospitalisation records from individuals from the birth cohort when respiratory specimens were collected 48 h before or after the admission date, as per our previous analyses 3 , 10 ."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+        ],
+        "quote": "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+      },
+      "explanation": "Both identify the same reference standard.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary endpoints: cross‑validated AUROC, sensitivity, specificity, PPV, NPV, calibration; predicted RSV incidence rates and under‑ascertainment fraction.",
+      "generatedFact": "Endpoints: AUROC, sensitivity, specificity, PPV, NPV, calibration; predicted RSV hospitalisation rates and under‑ascertainment fraction.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Predictors of RSV positivity included younger admission age, male sex, non-Aboriginal ethnicity, a diagnosis of bronchiolitis and longer hospital stay. Our model showed good predictive accuracy (AUROC: 0.87). The respective sensitivity, specificity, positive predictive value and negative predictive values were 58.4%, 92.2%, 68.6% and 88.3%. The predicted incidence rates of hospitalised RSV for children aged < 3 months was 43.7/1000 child-years (95% CI 42.1–45.4) compared with 31.7/1000 child-years (95% CI 30.3–33.1) from laboratory-confirmed RSV admissions. Findings from our study suggest that the true burden of RSV may be 30–57% higher than current estimates."
+        ],
+        "quote": "Predictors of RSV positivity included younger admission age, male sex, non-Aboriginal ethnicity, a diagnosis of bronchiolitis and longer hospital stay. Our model showed good predictive accuracy (AUROC: 0.87). The respective sensitivity, specificity, positive predictive value and negative predictive values were 58.4%, 92.2%, 68.6% and 88.3%. The predicted incidence rates of hospitalised RSV for children aged < 3 months was 43.7/1000 child-years (95% CI 42.1–45.4) compared with 31.7/1000 child-years (95% CI 30.3–33.1) from laboratory-confirmed RSV admissions. Findings from our study suggest that the true burden of RSV may be 30–57% higher than current estimates."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+        ],
+        "quote": "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+      },
+      "explanation": "Outcome measures match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Study period 2000–2012; children followed from birth until first hospitalisation, death, or end of study, up to age <5 years.",
+      "generatedFact": "Study period 2000–2012; from birth to first admission or end of study, censoring at death, age <5 years.",
+      "sourceEvidence": {
+        "locator": "R0009",
+        "locators": [
+          "R0009"
+        ],
+        "quotes": [
+          "Data sources used for this study included the Midwives Notifications System, which includes perinatal information on > 99% of births in WA 11 , Birth and Death Registries, Hospital Morbidity Data Collection and PathWest Laboratory Medicine Database (PathWest). Data were probabilistically linked using best practice protocols through the WA Data Linkage Branch 12 . Hospital data Hospitalisation records, herein referred to as hospital admissions, with an admission and discharge date between 1 January 2000 and 31 December 2012 were included, to match the same time period when routine laboratory data were available."
+        ],
+        "quote": "Data sources used for this study included the Midwives Notifications System, which includes perinatal information on > 99% of births in WA 11 , Birth and Death Registries, Hospital Morbidity Data Collection and PathWest Laboratory Medicine Database (PathWest). Data were probabilistically linked using best practice protocols through the WA Data Linkage Branch 12 . Hospital data Hospitalisation records, herein referred to as hospital admissions, with an admission and discharge date between 1 January 2000 and 31 December 2012 were included, to match the same time period when routine laboratory data were available."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "随着抗病毒药物、母体疫苗和单克隆抗体等 RSV 防治手段陆续进入后期临床试验——以及 WHO 将 RSV 全球疾病负担估计列为优先事项——准确量化 RSV 负担对于推进免疫规划决策和建立疫苗效果评估基线至关重要。为此，本研究旨在：(1) 利用关联的行政卫生数据构建预测模型，识别住院儿童中 RSV 阳性的临床和人口学预测因子；(2) 应用此模型估计完整的 RSV 相关住院发率；(3) 量化基于实验室数据估计 RSV 负担的漏查比率。 --- ## 方法 ### 研究设计与数据来源 本研究为基于人群的回顾性队列研究，利用西澳大利亚州行政关联数据，纳入 1996—2012 年间该州所有出生登记，涵盖 321,825 名至研究期末不满 5 岁的住院儿童。数据来源包括： - **围产期记录**：西澳大利亚州助产士通知系统（MNS），覆盖该州 > 99% 出生； - **出生与死亡登记**； - **住院记录**：医院发病率数据收集（HMDC），记录 2000 年 1 月 1 日至 2012 年 12 月 31 日期间所有 5 岁以下儿童的住院入院，含 ICD-10-AM 诊断编码； - **实验室记录**：PathWest 实验室医学数据库，包含同一时期内呼吸道标本 RSV 检测结果。 通过西澳大利亚州数据关联分支机构进行概率关联。实验室标本采集日期在医院入院日期前后 48 小时内视为与当次住院关联的 RSV 检测。院内转科记录被合并为一次住院。"
+        ],
+        "quote": "随着抗病毒药物、母体疫苗和单克隆抗体等 RSV 防治手段陆续进入后期临床试验——以及 WHO 将 RSV 全球疾病负担估计列为优先事项——准确量化 RSV 负担对于推进免疫规划决策和建立疫苗效果评估基线至关重要。为此，本研究旨在：(1) 利用关联的行政卫生数据构建预测模型，识别住院儿童中 RSV 阳性的临床和人口学预测因子；(2) 应用此模型估计完整的 RSV 相关住院发率；(3) 量化基于实验室数据估计 RSV 负担的漏查比率。 --- ## 方法 ### 研究设计与数据来源 本研究为基于人群的回顾性队列研究，利用西澳大利亚州行政关联数据，纳入 1996—2012 年间该州所有出生登记，涵盖 321,825 名至研究期末不满 5 岁的住院儿童。数据来源包括： - **围产期记录**：西澳大利亚州助产士通知系统（MNS），覆盖该州 > 99% 出生； - **出生与死亡登记**； - **住院记录**：医院发病率数据收集（HMDC），记录 2000 年 1 月 1 日至 2012 年 12 月 31 日期间所有 5 岁以下儿童的住院入院，含 ICD-10-AM 诊断编码； - **实验室记录**：PathWest 实验室医学数据库，包含同一时期内呼吸道标本 RSV 检测结果。 通过西澳大利亚州数据关联分支机构进行概率关联。实验室标本采集日期在医院入院日期前后 48 小时内视为与当次住院关联的 RSV 检测。院内转科记录被合并为一次住院。"
+      },
+      "explanation": "Follow‑up and time horizon are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Probabilistic linkage, collapsing transfers, exclusion of incomplete records, creation of sine/cosine seasonality terms, variable categorisation, DAG‑informed predictor selection, stepwise backward AIC.",
+      "generatedFact": "Linkage, transfer merging, complete-case exclusion, sine/cosine for season, DAG and stepwise backward selection for predictors.",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "We included all admissions in children aged < 5 years in WA with any diagnosis using International Statistical Classification of Diseases and Related Health Problems,10th Revision, Australian Modification (ICD-10-AM) codes. As per previous analyses of these data, interhospital transfers were collapsed 3 , 10 . Laboratory data We extracted PathWest testing records of RSV from respiratory specimens with a specimen collection date between 1 January 2000 and 31 December 2012. We then linked these records with hospitalisation records from individuals from the birth cohort when respiratory specimens were collected 48 h before or after the admission date, as per our previous analyses 3 , 10 ."
+        ],
+        "quote": "We included all admissions in children aged < 5 years in WA with any diagnosis using International Statistical Classification of Diseases and Related Health Problems,10th Revision, Australian Modification (ICD-10-AM) codes. As per previous analyses of these data, interhospital transfers were collapsed 3 , 10 . Laboratory data We extracted PathWest testing records of RSV from respiratory specimens with a specimen collection date between 1 January 2000 and 31 December 2012. We then linked these records with hospitalisation records from individuals from the birth cohort when respiratory specimens were collected 48 h before or after the admission date, as per our previous analyses 3 , 10 ."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "### 研究人群与样本量 源人群（用于构建预测模型）：在队列首 5 年内住院且拥有 RSV 检测记录的 37,784 次住院；排除 3,801 次有缺失项的记录后，33,983 次住院纳入最终预测模型拟合。 目标人群（用于估计 RSV 负担）：同期队列中所有不满 5 岁住院儿童，排除有缺失项的记录后共 321,825 次住院记录用于模型应用。 ### 候选预测因子 从文献综述、课题组前期工作 [Moore et al., BMC Public Health 2010] 及临床合理性出发，初步选定 27 个候选预测因子。使用有向无环图（DAG）作为因果推断工具来确定最小充分调整变量集，包括：儿童年龄、性别、分娩方式（阴道顺产 vs. 剖宫产）、入院季节、原住民身份（通过验证算法定义）、母亲年龄、孕期吸烟（是/否）、社会经济地位（SES，基于 SEIFA 相对优劣势指数五分位）、同胞数量、胎龄（< 32 周、32–36 周、≥ 37 周）、入院年份、出生年份、住院时长（连续变量）、ICU 住院（是/否）、机械通气使用、母亲哮喘史，以及急性毛细支气管炎、肺炎、支气管炎、未特指急性下呼吸道感染、哮喘、上呼吸道感染、百日咳、流行性感冒等诊断编码。纳入出生季节和地理居住区域以考虑季节性和气候条件。最终模型还包含正弦和余弦函数项以捕捉 RSV 的季节性变异 [Stolwijk & Zielhuis, 1999; Edwards, 1961]。"
+        ],
+        "quote": "### 研究人群与样本量 源人群（用于构建预测模型）：在队列首 5 年内住院且拥有 RSV 检测记录的 37,784 次住院；排除 3,801 次有缺失项的记录后，33,983 次住院纳入最终预测模型拟合。 目标人群（用于估计 RSV 负担）：同期队列中所有不满 5 岁住院儿童，排除有缺失项的记录后共 321,825 次住院记录用于模型应用。 ### 候选预测因子 从文献综述、课题组前期工作 [Moore et al., BMC Public Health 2010] 及临床合理性出发，初步选定 27 个候选预测因子。使用有向无环图（DAG）作为因果推断工具来确定最小充分调整变量集，包括：儿童年龄、性别、分娩方式（阴道顺产 vs. 剖宫产）、入院季节、原住民身份（通过验证算法定义）、母亲年龄、孕期吸烟（是/否）、社会经济地位（SES，基于 SEIFA 相对优劣势指数五分位）、同胞数量、胎龄（< 32 周、32–36 周、≥ 37 周）、入院年份、出生年份、住院时长（连续变量）、ICU 住院（是/否）、机械通气使用、母亲哮喘史，以及急性毛细支气管炎、肺炎、支气管炎、未特指急性下呼吸道感染、哮喘、上呼吸道感染、百日咳、流行性感冒等诊断编码。纳入出生季节和地理居住区域以考虑季节性和气候条件。最终模型还包含正弦和余弦函数项以捕捉 RSV 的季节性变异 [Stolwijk & Zielhuis, 1999; Edwards, 1961]。"
+      },
+      "explanation": "Preprocessing steps are the same.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Multivariable logistic regression, robust SE, stepwise AIC selection, tenfold cross‑validated AUROC, calibration belt, Hosmer‑Lemeshow test, survival analysis with person‑time for incidence rates.",
+      "generatedFact": "Multivariable logistic regression, robust standard errors, AIC‑based stepwise selection, tenfold cross‑validation, calibration belt, Hosmer‑Lemeshow test, survival analysis for incidence.",
+      "sourceEvidence": {
+        "locator": "R0013",
+        "locators": [
+          "R0013"
+        ],
+        "quotes": [
+          "Statistical analysis Developing prediction models A multivariable logistic regression model was fitted to identify predictors of RSV-positivity (binary outcome) amongst children younger than 5 years who were hospitalised and tested for RSV in WA during the study period (2000–2012). We used a robust standard error estimation adjusting for correlated observations due to children having multiple admissions over the study period 13 . A total of 27 candidate predictors for the prediction models were selected based on a comprehensive literature review, including previous work in our setting 14 and clinical plausibility."
+        ],
+        "quote": "Statistical analysis Developing prediction models A multivariable logistic regression model was fitted to identify predictors of RSV-positivity (binary outcome) amongst children younger than 5 years who were hospitalised and tested for RSV in WA during the study period (2000–2012). We used a robust standard error estimation adjusting for correlated observations due to children having multiple admissions over the study period 13 . A total of 27 candidate predictors for the prediction models were selected based on a comprehensive literature review, including previous work in our setting 14 and clinical plausibility."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "### 模型开发与评估 采用多变量 logistic 回归，以 RSV 检测阳性为二分类结局变量。为调整同一儿童多次住院的相关性，使用稳健标准误。模型开发采用基于 AIC 的逐步向后选择法，移除的变量逐个重新插入以评估模型改进情况。 预测性能通过十折交叉验证 AUROC 曲线评估，采用 Stata `cvauroc` 命令计算各折 AUC 的均值，并使用自助法获取偏差校正的 95% 置信区间。以 0.5 作为概率截断值计算灵敏度、特异度、阳性预测值和阴性预测值。采用校准带（calibration belt）和 Hosmer-Lemeshow 拟合优度检验评估模型校准。灵敏度分析按实验室检测方法（免疫荧光法 vs. PCR）分层重复建模。所有分析使用 Stata v.16.0，DAG 图使用 DAGitty v2.3 制作。 ### RSV 负担估计 将拟合的 logistic 回归模型应用于目标人群中所有无缺失变量的住院记录，计算每例住院的 RSV 阳性预测概率。以 0.5 为阈值，将预测概率 ≥ 0.5 的住院定义为 RSV 相关住院。采用生存分析技术计算预测 RSV 发率，以人-时间为分母（自出生至首次住院日期或删失日期），允许每人多次住院。 ### 漏查比率的计算 定义为实验室确认 RSV 发率与预测 RSV 发率之间的差值。发率以每 1000 儿童年为单位报告，并按年龄组、入院年份、入院季节和出生月份分层。"
+        ],
+        "quote": "### 模型开发与评估 采用多变量 logistic 回归，以 RSV 检测阳性为二分类结局变量。为调整同一儿童多次住院的相关性，使用稳健标准误。模型开发采用基于 AIC 的逐步向后选择法，移除的变量逐个重新插入以评估模型改进情况。 预测性能通过十折交叉验证 AUROC 曲线评估，采用 Stata `cvauroc` 命令计算各折 AUC 的均值，并使用自助法获取偏差校正的 95% 置信区间。以 0.5 作为概率截断值计算灵敏度、特异度、阳性预测值和阴性预测值。采用校准带（calibration belt）和 Hosmer-Lemeshow 拟合优度检验评估模型校准。灵敏度分析按实验室检测方法（免疫荧光法 vs. PCR）分层重复建模。所有分析使用 Stata v.16.0，DAG 图使用 DAGitty v2.3 制作。 ### RSV 负担估计 将拟合的 logistic 回归模型应用于目标人群中所有无缺失变量的住院记录，计算每例住院的 RSV 阳性预测概率。以 0.5 为阈值，将预测概率 ≥ 0.5 的住院定义为 RSV 相关住院。采用生存分析技术计算预测 RSV 发率，以人-时间为分母（自出生至首次住院日期或删失日期），允许每人多次住院。 ### 漏查比率的计算 定义为实验室确认 RSV 发率与预测 RSV 发率之间的差值。发率以每 1000 儿童年为单位报告，并按年龄组、入院年份、入院季节和出生月份分层。"
+      },
+      "explanation": "Statistical methods match precisely.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Logistic regression model with predictors from DAG and stepwise selection, including sine/cosine terms for seasonality, probability threshold 0.5.",
+      "generatedFact": "Logistic regression with DAG‑based predictors, sine/cosine for season, 0.5 probability cut‑off.",
+      "sourceEvidence": {
+        "locator": "R0017",
+        "locators": [
+          "R0017"
+        ],
+        "quotes": [
+          "Our final prediction model also included a sine and cosine function as per the recommendation by Stolwijk and Edwards to account for the seasonal variation of RSV 20 , 21 . Socioeconomic status (SES) was measured using Socio-Economic Indexes for Areas (SEIFA). Specifically, we used the Index of Relative Advantage and Disadvantage score, calculated at the collection district (CD) level by Australian Bureau of Statistics 22 . A child was coded as admitted to an ICU if they spent at least one day in ICU as recorded on the Hospital Morbidity Data Collection."
+        ],
+        "quote": "Our final prediction model also included a sine and cosine function as per the recommendation by Stolwijk and Edwards to account for the seasonal variation of RSV 20 , 21 . Socioeconomic status (SES) was measured using Socio-Economic Indexes for Areas (SEIFA). Specifically, we used the Index of Relative Advantage and Disadvantage score, calculated at the collection district (CD) level by Australian Bureau of Statistics 22 . A child was coded as admitted to an ICU if they spent at least one day in ICU as recorded on the Hospital Morbidity Data Collection."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "### 模型开发与评估 采用多变量 logistic 回归，以 RSV 检测阳性为二分类结局变量。为调整同一儿童多次住院的相关性，使用稳健标准误。模型开发采用基于 AIC 的逐步向后选择法，移除的变量逐个重新插入以评估模型改进情况。 预测性能通过十折交叉验证 AUROC 曲线评估，采用 Stata `cvauroc` 命令计算各折 AUC 的均值，并使用自助法获取偏差校正的 95% 置信区间。以 0.5 作为概率截断值计算灵敏度、特异度、阳性预测值和阴性预测值。采用校准带（calibration belt）和 Hosmer-Lemeshow 拟合优度检验评估模型校准。灵敏度分析按实验室检测方法（免疫荧光法 vs. PCR）分层重复建模。所有分析使用 Stata v.16.0，DAG 图使用 DAGitty v2.3 制作。 ### RSV 负担估计 将拟合的 logistic 回归模型应用于目标人群中所有无缺失变量的住院记录，计算每例住院的 RSV 阳性预测概率。以 0.5 为阈值，将预测概率 ≥ 0.5 的住院定义为 RSV 相关住院。采用生存分析技术计算预测 RSV 发率，以人-时间为分母（自出生至首次住院日期或删失日期），允许每人多次住院。 ### 漏查比率的计算 定义为实验室确认 RSV 发率与预测 RSV 发率之间的差值。发率以每 1000 儿童年为单位报告，并按年龄组、入院年份、入院季节和出生月份分层。"
+        ],
+        "quote": "### 模型开发与评估 采用多变量 logistic 回归，以 RSV 检测阳性为二分类结局变量。为调整同一儿童多次住院的相关性，使用稳健标准误。模型开发采用基于 AIC 的逐步向后选择法，移除的变量逐个重新插入以评估模型改进情况。 预测性能通过十折交叉验证 AUROC 曲线评估，采用 Stata `cvauroc` 命令计算各折 AUC 的均值，并使用自助法获取偏差校正的 95% 置信区间。以 0.5 作为概率截断值计算灵敏度、特异度、阳性预测值和阴性预测值。采用校准带（calibration belt）和 Hosmer-Lemeshow 拟合优度检验评估模型校准。灵敏度分析按实验室检测方法（免疫荧光法 vs. PCR）分层重复建模。所有分析使用 Stata v.16.0，DAG 图使用 DAGitty v2.3 制作。 ### RSV 负担估计 将拟合的 logistic 回归模型应用于目标人群中所有无缺失变量的住院记录，计算每例住院的 RSV 阳性预测概率。以 0.5 为阈值，将预测概率 ≥ 0.5 的住院定义为 RSV 相关住院。采用生存分析技术计算预测 RSV 发率，以人-时间为分母（自出生至首次住院日期或删失日期），允许每人多次住院。 ### 漏查比率的计算 定义为实验室确认 RSV 发率与预测 RSV 发率之间的差值。发率以每 1000 儿童年为单位报告，并按年龄组、入院年份、入院季节和出生月份分层。"
+      },
+      "explanation": "Model specification and threshold are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "AUROC 0.87 (95% CI 0.86–0.88); sensitivity 58.4%, specificity 92.2%, PPV 68.6%, NPV 88.3%; predicted RSV rate <3 months 43.7/1000 child‑years (lab 31.7); under‑ascertainment 30–57%.",
+      "generatedFact": "AUROC 0.87 (95% CI 0.86–0.88); sensitivity 58.4%, specificity 92.2%, PPV 68.6%, NPV 88.3%; predicted <3 months 43.7 vs lab 31.7 per 1000 child‑years; under‑ascertainment 30–57%.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Predictors of RSV positivity included younger admission age, male sex, non-Aboriginal ethnicity, a diagnosis of bronchiolitis and longer hospital stay. Our model showed good predictive accuracy (AUROC: 0.87). The respective sensitivity, specificity, positive predictive value and negative predictive values were 58.4%, 92.2%, 68.6% and 88.3%. The predicted incidence rates of hospitalised RSV for children aged < 3 months was 43.7/1000 child-years (95% CI 42.1–45.4) compared with 31.7/1000 child-years (95% CI 30.3–33.1) from laboratory-confirmed RSV admissions. Findings from our study suggest that the true burden of RSV may be 30–57% higher than current estimates."
+        ],
+        "quote": "Predictors of RSV positivity included younger admission age, male sex, non-Aboriginal ethnicity, a diagnosis of bronchiolitis and longer hospital stay. Our model showed good predictive accuracy (AUROC: 0.87). The respective sensitivity, specificity, positive predictive value and negative predictive values were 58.4%, 92.2%, 68.6% and 88.3%. The predicted incidence rates of hospitalised RSV for children aged < 3 months was 43.7/1000 child-years (95% CI 42.1–45.4) compared with 31.7/1000 child-years (95% CI 30.3–33.1) from laboratory-confirmed RSV admissions. Findings from our study suggest that the true burden of RSV may be 30–57% higher than current estimates."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+        ],
+        "quote": "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+      },
+      "explanation": "Main performance metrics and incidence estimates match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "AUROC CI 0.86–0.88; sensitivity/specificity CIs; Hosmer‑Lemeshow P = 0.66; predicted rate CIs; AOR CIs (e.g., <3 months 1.91, 95% CI 1.27–2.87).",
+      "generatedFact": "AUROC CI 0.86–0.88; sensitivity/specificity CIs; Hosmer‑Lemeshow P = 0.66; predicted rate CIs; AOR CIs (e.g., <3 months 1.91, CI 1.27–2.87).",
+      "sourceEvidence": {
+        "locator": "R0036",
+        "locators": [
+          "R0036"
+        ],
+        "quotes": [
+          "Conversely, prematurity, low SES and maternal history of asthma were associated with reduced odds of RSV-positivity (eTable 2 ). The tenfold cross-validated model showed accurate and robust performance of the prediction model (AUROC = 0.87, 95% CI 0.86 to 0.88), reflecting excellent ability of the model to predict RSV-positivity (Fig. 2 ). The sensitivity and specificity of the final model were 58.4% (95% CI 57.3–59.6%), and 92.2% (95% CI 91.8–92.5%) respectively. The model had a PPV of 68.6% (95% CI 67.5–69.7%) and NPV of 88.3% (95% CI 87.9–88.7%). Additionally, the calibration belt demonstrated that our prediction model is well calibrated (eFig. 3 )."
+        ],
+        "quote": "Conversely, prematurity, low SES and maternal history of asthma were associated with reduced odds of RSV-positivity (eTable 2 ). The tenfold cross-validated model showed accurate and robust performance of the prediction model (AUROC = 0.87, 95% CI 0.86 to 0.88), reflecting excellent ability of the model to predict RSV-positivity (Fig. 2 ). The sensitivity and specificity of the final model were 58.4% (95% CI 57.3–59.6%), and 92.2% (95% CI 91.8–92.5%) respectively. The model had a PPV of 68.6% (95% CI 67.5–69.7%) and NPV of 88.3% (95% CI 87.9–88.7%). Additionally, the calibration belt demonstrated that our prediction model is well calibrated (eFig. 3 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "多变量分析显示，3 月龄以下（AOR = 1.91，95% CI 1.27–2.87）、非原住民（AOR = 1.44，95% CI 1.29–1.61）、有急性毛细支气管炎诊断（AOR = 16.8，95% CI 15.3–18.5）与 RSV 阳性显著正相关。来自偏远/农村地区、住院 3 天及以上、需使用机械通气的儿童 RSV 阳性概率亦升高。相反，早产、低 SES 和母亲哮喘史与 RSV 阳性率呈负相关。 十折交叉验证显示模型预测性能良好：**AUROC = 0.87（95% CI 0.86–0.88）**。灵敏度 58.4%（95% CI 57.3–59.6%），特异度 92.2%（95% CI 91.8–92.5%），PPV 68.6%（95% CI 67.5–69.7%），NPV 88.3%（95% CI 87.9–88.7%）。校准带显示模型校准良好，Hosmer-Lemeshow 检验不显著（*P* = 0.66），表明模型拟合优度满意。 ### 实验室确认 vs. 预测 RSV 发率 预测发率在较小年龄组更高。3 月龄以下婴儿的预测 RSV 住院发率为 **43.7/1000 儿童年（95% CI 42.1–45.4）**，而实验室确认发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。平均年 RSV 相关住院率：< 3 月龄为 404/1000 儿童年，3–6 月龄为 499/1000 儿童年，6–11 月龄为 302/1000 儿童年。"
+        ],
+        "quote": "多变量分析显示，3 月龄以下（AOR = 1.91，95% CI 1.27–2.87）、非原住民（AOR = 1.44，95% CI 1.29–1.61）、有急性毛细支气管炎诊断（AOR = 16.8，95% CI 15.3–18.5）与 RSV 阳性显著正相关。来自偏远/农村地区、住院 3 天及以上、需使用机械通气的儿童 RSV 阳性概率亦升高。相反，早产、低 SES 和母亲哮喘史与 RSV 阳性率呈负相关。 十折交叉验证显示模型预测性能良好：**AUROC = 0.87（95% CI 0.86–0.88）**。灵敏度 58.4%（95% CI 57.3–59.6%），特异度 92.2%（95% CI 91.8–92.5%），PPV 68.6%（95% CI 67.5–69.7%），NPV 88.3%（95% CI 87.9–88.7%）。校准带显示模型校准良好，Hosmer-Lemeshow 检验不显著（*P* = 0.66），表明模型拟合优度满意。 ### 实验室确认 vs. 预测 RSV 发率 预测发率在较小年龄组更高。3 月龄以下婴儿的预测 RSV 住院发率为 **43.7/1000 儿童年（95% CI 42.1–45.4）**，而实验室确认发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。平均年 RSV 相关住院率：< 3 月龄为 404/1000 儿童年，3–6 月龄为 499/1000 儿童年，6–11 月龄为 302/1000 儿童年。"
+      },
+      "explanation": "Confidence intervals and p‑value are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "True burden of RSV in hospitalised children is 30–57% higher than laboratory‑confirmed estimates; model can inform vaccination strategies.",
+      "generatedFact": "True RSV burden is 30–57% higher than lab‑based estimates; model can be used for transmission modelling and prevention planning.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Predictors of RSV positivity included younger admission age, male sex, non-Aboriginal ethnicity, a diagnosis of bronchiolitis and longer hospital stay. Our model showed good predictive accuracy (AUROC: 0.87). The respective sensitivity, specificity, positive predictive value and negative predictive values were 58.4%, 92.2%, 68.6% and 88.3%. The predicted incidence rates of hospitalised RSV for children aged < 3 months was 43.7/1000 child-years (95% CI 42.1–45.4) compared with 31.7/1000 child-years (95% CI 30.3–33.1) from laboratory-confirmed RSV admissions. Findings from our study suggest that the true burden of RSV may be 30–57% higher than current estimates."
+        ],
+        "quote": "Predictors of RSV positivity included younger admission age, male sex, non-Aboriginal ethnicity, a diagnosis of bronchiolitis and longer hospital stay. Our model showed good predictive accuracy (AUROC: 0.87). The respective sensitivity, specificity, positive predictive value and negative predictive values were 58.4%, 92.2%, 68.6% and 88.3%. The predicted incidence rates of hospitalised RSV for children aged < 3 months was 43.7/1000 child-years (95% CI 42.1–45.4) compared with 31.7/1000 child-years (95% CI 30.3–33.1) from laboratory-confirmed RSV admissions. Findings from our study suggest that the true burden of RSV may be 30–57% higher than current estimates."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+        ],
+        "quote": "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+      },
+      "explanation": "Conclusion direction, magnitude, and utility match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Only hospitalised severe cases; data 2000–2012; lacked breastfeeding, daycare, environmental predictors; slight performance variation by test method; no external validation; no emergency/community data.",
+      "generatedFact": "Restricted to severe hospitalised RSV; period 2000–2012; missing predictors (breastfeeding, daycare, environment); model performance differs by detection method; no external validation; no emergency/community burden.",
+      "sourceEvidence": {
+        "locator": "R0058",
+        "locators": [
+          "R0058"
+        ],
+        "quotes": [
+          "Firstly, our results are based on hospitalisation data linked to laboratory records with specimen collection within 48 h of hospital admission. Therefore, we are limiting our prediction model to more severe RSV cases associated with hospitalisation and therefore our model does not estimate the broader community incidence of RSV. Secondly, our analysis only included linked data in the years between 2000–2012, and more recent trends in hospital admissions are not reflected in our results. However, we are confident our model can be applied to more contemporary data and believe that the majority of the known perinatal and environmental predictors are not likely to change over time."
+        ],
+        "quote": "Firstly, our results are based on hospitalisation data linked to laboratory records with specimen collection within 48 h of hospital admission. Therefore, we are limiting our prediction model to more severe RSV cases associated with hospitalisation and therefore our model does not estimate the broader community incidence of RSV. Secondly, our analysis only included linked data in the years between 2000–2012, and more recent trends in hospital admissions are not reflected in our results. However, we are confident our model can be applied to more contemporary data and believe that the majority of the known perinatal and environmental predictors are not likely to change over time."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "RSV 阳性最强的预测因子为急性毛细支气管炎的诊断编码（AOR = 16.8），其次为支气管炎和肺炎，这与英格兰的研究结果一致。值得注意的是，社会经济地位较低、早产和母亲哮喘史在本分析中与 RSV 阳性呈负相关，这与部分文献报道一致 [Reeves et al., J Infect 2019; Zar et al., Lancet Glob Health 2020]，且提示大多数 RSV 病例并无潜在基础合并症 [Hall et al., NEJM 2009]。非原住民和偏远/农村地区 RSV 住院率更高，可能与医疗可及性差异和家庭拥挤等因素有关。 ### 研究局限性 1. **疾病严重程度范围受限**：模型基于住院记录与实验室检测前 48 小时内的关联数据，因此仅适用于需要住院的重症 RSV 感染，无法推断社区层面的 RSV 发病。急诊和社区 RSV 负担未被纳入。 2. **数据时限**：分析仅涵盖 2000—2012 年，最近 10 余年的住院趋势未被反映。然而，作者认为主要的围产期和环境预测因子的影响在时间上相对稳定，因此该模型在当代数据中仍然适用。 3. **预测因子缺失**：模型未纳入母乳喂养、免疫缺陷、日托以及在关联数据库中没有常规收集的环境变量等潜在预测因子。不过这些因素通常不被认为是 RSV 入院的强预测因子，其对模型估计的潜在影响预计有限。 4. **检测方法差异**：尽管检测方法本身不会影响接受检测的倾向，但敏感性分析提示不同检测方法（免疫荧光 vs. PCR）间模型性能略有差异。 5."
+        ],
+        "quote": "RSV 阳性最强的预测因子为急性毛细支气管炎的诊断编码（AOR = 16.8），其次为支气管炎和肺炎，这与英格兰的研究结果一致。值得注意的是，社会经济地位较低、早产和母亲哮喘史在本分析中与 RSV 阳性呈负相关，这与部分文献报道一致 [Reeves et al., J Infect 2019; Zar et al., Lancet Glob Health 2020]，且提示大多数 RSV 病例并无潜在基础合并症 [Hall et al., NEJM 2009]。非原住民和偏远/农村地区 RSV 住院率更高，可能与医疗可及性差异和家庭拥挤等因素有关。 ### 研究局限性 1. **疾病严重程度范围受限**：模型基于住院记录与实验室检测前 48 小时内的关联数据，因此仅适用于需要住院的重症 RSV 感染，无法推断社区层面的 RSV 发病。急诊和社区 RSV 负担未被纳入。 2. **数据时限**：分析仅涵盖 2000—2012 年，最近 10 余年的住院趋势未被反映。然而，作者认为主要的围产期和环境预测因子的影响在时间上相对稳定，因此该模型在当代数据中仍然适用。 3. **预测因子缺失**：模型未纳入母乳喂养、免疫缺陷、日托以及在关联数据库中没有常规收集的环境变量等潜在预测因子。不过这些因素通常不被认为是 RSV 入院的强预测因子，其对模型估计的潜在影响预计有限。 4. **检测方法差异**：尽管检测方法本身不会影响接受检测的倾向，但敏感性分析提示不同检测方法（免疫荧光 vs. PCR）间模型性能略有差异。 5."
+      },
+      "explanation": "Limitations are fully aligned.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "Neither text reports harms or adverse events; a prediction model using administrative data has no safety considerations.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "index_and_reference_tests",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Index test: logistic‑regression‑based RSV prediction model; reference standard: laboratory‑confirmed RSV detection.",
+      "generatedFact": "Index test: multivariable logistic regression prediction model; reference standard: laboratory‑confirmed RSV.",
+      "sourceEvidence": {
+        "locator": "R0013",
+        "locators": [
+          "R0013"
+        ],
+        "quotes": [
+          "Statistical analysis Developing prediction models A multivariable logistic regression model was fitted to identify predictors of RSV-positivity (binary outcome) amongst children younger than 5 years who were hospitalised and tested for RSV in WA during the study period (2000–2012). We used a robust standard error estimation adjusting for correlated observations due to children having multiple admissions over the study period 13 . A total of 27 candidate predictors for the prediction models were selected based on a comprehensive literature review, including previous work in our setting 14 and clinical plausibility."
+        ],
+        "quote": "Statistical analysis Developing prediction models A multivariable logistic regression model was fitted to identify predictors of RSV-positivity (binary outcome) amongst children younger than 5 years who were hospitalised and tested for RSV in WA during the study period (2000–2012). We used a robust standard error estimation adjusting for correlated observations due to children having multiple admissions over the study period 13 . A total of 27 candidate predictors for the prediction models were selected based on a comprehensive literature review, including previous work in our setting 14 and clinical plausibility."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**目的**：开发一个预测模型，以估计西澳大利亚州（WA）5 岁以下住院儿童中 RSV 相关住院的真实发率，并计算基于实验室确认数据的漏查比率（under-ascertainment fraction）。 **方法**：利用概率关联的围产期、住院和实验室记录，纳入 2000—2012 年间出生于西澳大利亚州的 321,825 名儿童的住院数据。在有过 RSV 检测记录的住院儿童人群中拟合多变量 logistic 回归预测模型，预测因子基于有向无环图（DAG）和逐步向后选择从 27 个候选变量中筛选。通过十折交叉验证受试者工作特征曲线下面积（AUROC）评估模型预测性能，并使用校准带（calibration belt）和 Hosmer-Lemeshow 检验评估校准度。随后将模型应用于队列中所有住院记录，以获得预测的 RSV 住院发率，并与实验室确认的 RSV 入院发率进行比较。"
+        ],
+        "quote": "**目的**：开发一个预测模型，以估计西澳大利亚州（WA）5 岁以下住院儿童中 RSV 相关住院的真实发率，并计算基于实验室确认数据的漏查比率（under-ascertainment fraction）。 **方法**：利用概率关联的围产期、住院和实验室记录，纳入 2000—2012 年间出生于西澳大利亚州的 321,825 名儿童的住院数据。在有过 RSV 检测记录的住院儿童人群中拟合多变量 logistic 回归预测模型，预测因子基于有向无环图（DAG）和逐步向后选择从 27 个候选变量中筛选。通过十折交叉验证受试者工作特征曲线下面积（AUROC）评估模型预测性能，并使用校准带（calibration belt）和 Hosmer-Lemeshow 检验评估校准度。随后将模型应用于队列中所有住院记录，以获得预测的 RSV 住院发率，并与实验室确认的 RSV 入院发率进行比较。"
+      },
+      "explanation": "Index and reference tests are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "thresholds_and_validation",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Probability threshold 0.5 to maximise sensitivity/specificity; internal validation via tenfold cross‑validation, calibration belt, Hosmer‑Lemeshow; no external validation.",
+      "generatedFact": "Threshold 0.5; internal tenfold cross‑validation, calibration belt, Hosmer‑Lemeshow test; explicitly states no external validation.",
+      "sourceEvidence": {
+        "locator": "R0022",
+        "locators": [
+          "R0022"
+        ],
+        "quotes": [
+          "However, we chose a 0.5 probability threshold as the cut-off, which maximises sensitivity and specificity of the model. Furthermore, we used a ‘calibration belt’ to evaluate the calibration of our predictive model. The ‘calibration belt’ is a plot depicting the relationship between the model’s fit probabilities and the observed proportions of the response across all ranges of risk, which reflects the reliability or degree of bias of the model 26 . In addition, reliability was tested by the Hosmer–Lemeshow goodness-of-fit test 27 ."
+        ],
+        "quote": "However, we chose a 0.5 probability threshold as the cut-off, which maximises sensitivity and specificity of the model. Furthermore, we used a ‘calibration belt’ to evaluate the calibration of our predictive model. The ‘calibration belt’ is a plot depicting the relationship between the model’s fit probabilities and the observed proportions of the response across all ranges of risk, which reflects the reliability or degree of bias of the model 26 . In addition, reliability was tested by the Hosmer–Lemeshow goodness-of-fit test 27 ."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "### 模型开发与评估 采用多变量 logistic 回归，以 RSV 检测阳性为二分类结局变量。为调整同一儿童多次住院的相关性，使用稳健标准误。模型开发采用基于 AIC 的逐步向后选择法，移除的变量逐个重新插入以评估模型改进情况。 预测性能通过十折交叉验证 AUROC 曲线评估，采用 Stata `cvauroc` 命令计算各折 AUC 的均值，并使用自助法获取偏差校正的 95% 置信区间。以 0.5 作为概率截断值计算灵敏度、特异度、阳性预测值和阴性预测值。采用校准带（calibration belt）和 Hosmer-Lemeshow 拟合优度检验评估模型校准。灵敏度分析按实验室检测方法（免疫荧光法 vs. PCR）分层重复建模。所有分析使用 Stata v.16.0，DAG 图使用 DAGitty v2.3 制作。 ### RSV 负担估计 将拟合的 logistic 回归模型应用于目标人群中所有无缺失变量的住院记录，计算每例住院的 RSV 阳性预测概率。以 0.5 为阈值，将预测概率 ≥ 0.5 的住院定义为 RSV 相关住院。采用生存分析技术计算预测 RSV 发率，以人-时间为分母（自出生至首次住院日期或删失日期），允许每人多次住院。 ### 漏查比率的计算 定义为实验室确认 RSV 发率与预测 RSV 发率之间的差值。发率以每 1000 儿童年为单位报告，并按年龄组、入院年份、入院季节和出生月份分层。"
+        ],
+        "quote": "### 模型开发与评估 采用多变量 logistic 回归，以 RSV 检测阳性为二分类结局变量。为调整同一儿童多次住院的相关性，使用稳健标准误。模型开发采用基于 AIC 的逐步向后选择法，移除的变量逐个重新插入以评估模型改进情况。 预测性能通过十折交叉验证 AUROC 曲线评估，采用 Stata `cvauroc` 命令计算各折 AUC 的均值，并使用自助法获取偏差校正的 95% 置信区间。以 0.5 作为概率截断值计算灵敏度、特异度、阳性预测值和阴性预测值。采用校准带（calibration belt）和 Hosmer-Lemeshow 拟合优度检验评估模型校准。灵敏度分析按实验室检测方法（免疫荧光法 vs. PCR）分层重复建模。所有分析使用 Stata v.16.0，DAG 图使用 DAGitty v2.3 制作。 ### RSV 负担估计 将拟合的 logistic 回归模型应用于目标人群中所有无缺失变量的住院记录，计算每例住院的 RSV 阳性预测概率。以 0.5 为阈值，将预测概率 ≥ 0.5 的住院定义为 RSV 相关住院。采用生存分析技术计算预测 RSV 发率，以人-时间为分母（自出生至首次住院日期或删失日期），允许每人多次住院。 ### 漏查比率的计算 定义为实验室确认 RSV 发率与预测 RSV 发率之间的差值。发率以每 1000 儿童年为单位报告，并按年龄组、入院年份、入院季节和出生月份分层。"
+      },
+      "explanation": "Threshold choice and validation approach are exactly as reported.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "performance_metrics",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "AUROC 0.87, sensitivity 58.4%, specificity 92.2%, PPV 68.6%, NPV 88.3%, calibration satisfactory (Hosmer‑Lemeshow P = 0.66).",
+      "generatedFact": "AUROC 0.87, sensitivity 58.4%, specificity 92.2%, PPV 68.6%, NPV 88.3%, Hosmer‑Lemeshow P = 0.66.",
+      "sourceEvidence": {
+        "locator": "R0036",
+        "locators": [
+          "R0036"
+        ],
+        "quotes": [
+          "Conversely, prematurity, low SES and maternal history of asthma were associated with reduced odds of RSV-positivity (eTable 2 ). The tenfold cross-validated model showed accurate and robust performance of the prediction model (AUROC = 0.87, 95% CI 0.86 to 0.88), reflecting excellent ability of the model to predict RSV-positivity (Fig. 2 ). The sensitivity and specificity of the final model were 58.4% (95% CI 57.3–59.6%), and 92.2% (95% CI 91.8–92.5%) respectively. The model had a PPV of 68.6% (95% CI 67.5–69.7%) and NPV of 88.3% (95% CI 87.9–88.7%). Additionally, the calibration belt demonstrated that our prediction model is well calibrated (eFig. 3 )."
+        ],
+        "quote": "Conversely, prematurity, low SES and maternal history of asthma were associated with reduced odds of RSV-positivity (eTable 2 ). The tenfold cross-validated model showed accurate and robust performance of the prediction model (AUROC = 0.87, 95% CI 0.86 to 0.88), reflecting excellent ability of the model to predict RSV-positivity (Fig. 2 ). The sensitivity and specificity of the final model were 58.4% (95% CI 57.3–59.6%), and 92.2% (95% CI 91.8–92.5%) respectively. The model had a PPV of 68.6% (95% CI 67.5–69.7%) and NPV of 88.3% (95% CI 87.9–88.7%). Additionally, the calibration belt demonstrated that our prediction model is well calibrated (eFig. 3 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+        ],
+        "quote": "**结果**：321,825 例住院中，37,784 例（11.7%）进行了 RSV 检测，阳性率为 22.8%（共 8,604 次阳性）。预测模型显示良好的区分能力（交叉验证 AUROC = 0.87，95% CI 0.86–0.88），灵敏度 58.4%，特异度 92.2%，阳性预测值 68.6%，阴性预测值 88.3%。3 月龄以下儿童的预测住院率为 43.7/1000 儿童年（95% CI 42.1–45.4），而基于实验室确认的相应发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。RSV 阳性与更小的入院年龄（< 3 月龄，调整后比值比 AOR = 1.91）、男性、非原住民身份、急性毛细支气管炎诊断（AOR = 16.8）、较长住院时间等显著相关。 **结论**：基于现有实验室检测数据，RSV 住院的真实负担可能被低估 30%–57%。该模型可为 RSV 传播动力学模型提供输入参数，以更好地预测母体疫苗接种等预防措施的潜在效果。"
+      },
+      "explanation": "Performance metrics and calibration statistics match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "spectrum_and_verification_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Spectrum limited to hospitalised children; only 11.7% tested, causing verification bias; overfitting controlled via cross‑validation; applicability to other settings not tested.",
+      "generatedFact": "Spectrum bias (hospitalised severe cases only); verification bias because only a fraction tested; overfitting addressed by cross‑validation; no external validation, generalisability concerns.",
+      "sourceEvidence": {
+        "locator": "R0006",
+        "locators": [
+          "R0006"
+        ],
+        "quotes": [
+          "Population-wide in our jurisdiction and elsewhere, there is no systematic approach to RSV testing, nor is it currently a notifiable disease, making estimates of RSV disease burden using microbiological testing datasets alone difficult. From our population-based study, only 10% of children aged < 17 years were ever tested for RSV and variable testing trends were seen between age groups and from year to year. Additionally, 54% of children hospitalised with respiratory infections did not have a corresponding microbiological test 3 ."
+        ],
+        "quote": "Population-wide in our jurisdiction and elsewhere, there is no systematic approach to RSV testing, nor is it currently a notifiable disease, making estimates of RSV disease burden using microbiological testing datasets alone difficult. From our population-based study, only 10% of children aged < 17 years were ever tested for RSV and variable testing trends were seen between age groups and from year to year. Additionally, 54% of children hospitalised with respiratory infections did not have a corresponding microbiological test 3 ."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "RSV 阳性最强的预测因子为急性毛细支气管炎的诊断编码（AOR = 16.8），其次为支气管炎和肺炎，这与英格兰的研究结果一致。值得注意的是，社会经济地位较低、早产和母亲哮喘史在本分析中与 RSV 阳性呈负相关，这与部分文献报道一致 [Reeves et al., J Infect 2019; Zar et al., Lancet Glob Health 2020]，且提示大多数 RSV 病例并无潜在基础合并症 [Hall et al., NEJM 2009]。非原住民和偏远/农村地区 RSV 住院率更高，可能与医疗可及性差异和家庭拥挤等因素有关。 ### 研究局限性 1. **疾病严重程度范围受限**：模型基于住院记录与实验室检测前 48 小时内的关联数据，因此仅适用于需要住院的重症 RSV 感染，无法推断社区层面的 RSV 发病。急诊和社区 RSV 负担未被纳入。 2. **数据时限**：分析仅涵盖 2000—2012 年，最近 10 余年的住院趋势未被反映。然而，作者认为主要的围产期和环境预测因子的影响在时间上相对稳定，因此该模型在当代数据中仍然适用。 3. **预测因子缺失**：模型未纳入母乳喂养、免疫缺陷、日托以及在关联数据库中没有常规收集的环境变量等潜在预测因子。不过这些因素通常不被认为是 RSV 入院的强预测因子，其对模型估计的潜在影响预计有限。 4. **检测方法差异**：尽管检测方法本身不会影响接受检测的倾向，但敏感性分析提示不同检测方法（免疫荧光 vs. PCR）间模型性能略有差异。 5."
+        ],
+        "quote": "RSV 阳性最强的预测因子为急性毛细支气管炎的诊断编码（AOR = 16.8），其次为支气管炎和肺炎，这与英格兰的研究结果一致。值得注意的是，社会经济地位较低、早产和母亲哮喘史在本分析中与 RSV 阳性呈负相关，这与部分文献报道一致 [Reeves et al., J Infect 2019; Zar et al., Lancet Glob Health 2020]，且提示大多数 RSV 病例并无潜在基础合并症 [Hall et al., NEJM 2009]。非原住民和偏远/农村地区 RSV 住院率更高，可能与医疗可及性差异和家庭拥挤等因素有关。 ### 研究局限性 1. **疾病严重程度范围受限**：模型基于住院记录与实验室检测前 48 小时内的关联数据，因此仅适用于需要住院的重症 RSV 感染，无法推断社区层面的 RSV 发病。急诊和社区 RSV 负担未被纳入。 2. **数据时限**：分析仅涵盖 2000—2012 年，最近 10 余年的住院趋势未被反映。然而，作者认为主要的围产期和环境预测因子的影响在时间上相对稳定，因此该模型在当代数据中仍然适用。 3. **预测因子缺失**：模型未纳入母乳喂养、免疫缺陷、日托以及在关联数据库中没有常规收集的环境变量等潜在预测因子。不过这些因素通常不被认为是 RSV 入院的强预测因子，其对模型估计的潜在影响预计有限。 4. **检测方法差异**：尽管检测方法本身不会影响接受检测的倾向，但敏感性分析提示不同检测方法（免疫荧光 vs. PCR）间模型性能略有差异。 5."
+      },
+      "explanation": "Potential biases and generalisability concerns are identically described.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 20,
+    "weightedFidelity": 1.0,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 20,
+      "not_applicable": 1
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "adversarial_unsupported_claim",
+      "adversarial_contradiction"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail",
+    "adversarialIssueCount": 2,
+    "adversarialUnsupportedClaimCount": 1,
+    "adversarialContradictionCount": 1,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "issues_found",
+    "issues": [
+      {
+        "id": "key_numerical_results",
+        "importance": "major",
+        "status": "contradicted",
+        "issueKinds": [
+          "contradicted"
+        ],
+        "referenceFact": "",
+        "generatedFact": "平均年 RSV 相关住院率：< 3 月龄为 404/1000 儿童年，3–6 月龄为 499/1000 儿童年，6–11 月龄为 302/1000 儿童年",
+        "sourceEvidence": {
+          "locator": "R0039",
+          "locators": [
+            "R0039"
+          ],
+          "quotes": [
+            "We estimated that the average annual RSV associated hospitalisation rates were 404 per 1000 children for < 3 months, 499 per 1000 children and 302 per 1000 children for 3–6 months and 6–11 months respectively, which is equivalent to under-ascertainment fractions of 32% for < 3 months, 57% for 3–6 months and 35% for 6–11 months of total admissions respectively (Table 2 ). Table 2 Incidence rates of laboratory-confirmed and predicted RSV positivity by age at hospital admission, 2000–2012."
+          ],
+          "quote": "We estimated that the average annual RSV associated hospitalisation rates were 404 per 1000 children for < 3 months, 499 per 1000 children and 302 per 1000 children for 3–6 months and 6–11 months respectively, which is equivalent to under-ascertainment fractions of 32% for < 3 months, 57% for 3–6 months and 35% for 6–11 months of total admissions respectively (Table 2 ). Table 2 Incidence rates of laboratory-confirmed and predicted RSV positivity by age at hospital admission, 2000–2012."
+        },
+        "generatedEvidence": {
+          "locator": "G0010",
+          "locators": [
+            "G0010"
+          ],
+          "quotes": [
+            "多变量分析显示，3 月龄以下（AOR = 1.91，95% CI 1.27–2.87）、非原住民（AOR = 1.44，95% CI 1.29–1.61）、有急性毛细支气管炎诊断（AOR = 16.8，95% CI 15.3–18.5）与 RSV 阳性显著正相关。来自偏远/农村地区、住院 3 天及以上、需使用机械通气的儿童 RSV 阳性概率亦升高。相反，早产、低 SES 和母亲哮喘史与 RSV 阳性率呈负相关。 十折交叉验证显示模型预测性能良好：**AUROC = 0.87（95% CI 0.86–0.88）**。灵敏度 58.4%（95% CI 57.3–59.6%），特异度 92.2%（95% CI 91.8–92.5%），PPV 68.6%（95% CI 67.5–69.7%），NPV 88.3%（95% CI 87.9–88.7%）。校准带显示模型校准良好，Hosmer-Lemeshow 检验不显著（*P* = 0.66），表明模型拟合优度满意。 ### 实验室确认 vs. 预测 RSV 发率 预测发率在较小年龄组更高。3 月龄以下婴儿的预测 RSV 住院发率为 **43.7/1000 儿童年（95% CI 42.1–45.4）**，而实验室确认发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。平均年 RSV 相关住院率：< 3 月龄为 404/1000 儿童年，3–6 月龄为 499/1000 儿童年，6–11 月龄为 302/1000 儿童年。"
+          ],
+          "quote": "多变量分析显示，3 月龄以下（AOR = 1.91，95% CI 1.27–2.87）、非原住民（AOR = 1.44，95% CI 1.29–1.61）、有急性毛细支气管炎诊断（AOR = 16.8，95% CI 15.3–18.5）与 RSV 阳性显著正相关。来自偏远/农村地区、住院 3 天及以上、需使用机械通气的儿童 RSV 阳性概率亦升高。相反，早产、低 SES 和母亲哮喘史与 RSV 阳性率呈负相关。 十折交叉验证显示模型预测性能良好：**AUROC = 0.87（95% CI 0.86–0.88）**。灵敏度 58.4%（95% CI 57.3–59.6%），特异度 92.2%（95% CI 91.8–92.5%），PPV 68.6%（95% CI 67.5–69.7%），NPV 88.3%（95% CI 87.9–88.7%）。校准带显示模型校准良好，Hosmer-Lemeshow 检验不显著（*P* = 0.66），表明模型拟合优度满意。 ### 实验室确认 vs. 预测 RSV 发率 预测发率在较小年龄组更高。3 月龄以下婴儿的预测 RSV 住院发率为 **43.7/1000 儿童年（95% CI 42.1–45.4）**，而实验室确认发率为 31.7/1000 儿童年（95% CI 30.3–33.1）。平均年 RSV 相关住院率：< 3 月龄为 404/1000 儿童年，3–6 月龄为 499/1000 儿童年，6–11 月龄为 302/1000 儿童年。"
+        },
+        "explanation": "原文单位为 'per 1000 children' (每千名儿童)，生成文本误为 '/1000 儿童年' (每千儿童年)，两者度量不同，可能导致严重误解",
+        "sourceEvidenceValid": true,
+        "generatedEvidenceValid": true,
+        "criterionId": "key_numerical_results",
+        "kind": "contradicted",
+        "severity": "major",
+        "claim": "平均年 RSV 相关住院率：< 3 月龄为 404/1000 儿童年，3–6 月龄为 499/1000 儿童年，6–11 月龄为 302/1000 儿童年"
+      },
+      {
+        "id": "limitations_and_bias",
+        "importance": "minor",
+        "status": "unsupported",
+        "issueKinds": [
+          "unsupported"
+        ],
+        "referenceFact": "",
+        "generatedFact": "将‘非原住民 RSV 高风险的解读’列为研究局限性",
+        "sourceEvidence": {
+          "locator": "",
+          "locators": [],
+          "quotes": [],
+          "quote": ""
+        },
+        "generatedEvidence": {
+          "locator": "G0013",
+          "locators": [
+            "G0013"
+          ],
+          "quotes": [
+            "**非原住民 RSV 高风险的解读**：研究观察到非原住民儿童的 RSV 住院阳性率高于原住民儿童，这一发现可能与检测模式、医疗系统的入院门槛等复杂因素有关，不必然等同于更低的 RSV 感染率。 6. **外部验证缺失**：模型仅进行了内部交叉验证，未在其他人群或地区中进行外部验证。开发简便的风险评分以促进临床转化和外部验证是今后研究的重要方向。 --- **参考文献**（仅列出原文中直接引用并核验的主要文献）： 1. Shi T et al. *Lancet* 2017;390:946–958. 2. Saravanos GL et al. *Med J Aust* 2019;210:447–453. 3. Lim FJ et al. *Influenza Other Respir Viruses* 2017;11:502–510. 4. Moore HC et al. *J Infect Dis* 2020;2:106. 5. Reeves R et al. *J Infect* 2019;78:468–475. 6. Gebremedhin AT et al. *Sci Rep* 2022;12:332. (DOI: 10.1038/s41598-021-04080-3)"
+          ],
+          "quote": "**非原住民 RSV 高风险的解读**：研究观察到非原住民儿童的 RSV 住院阳性率高于原住民儿童，这一发现可能与检测模式、医疗系统的入院门槛等复杂因素有关，不必然等同于更低的 RSV 感染率。 6. **外部验证缺失**：模型仅进行了内部交叉验证，未在其他人群或地区中进行外部验证。开发简便的风险评分以促进临床转化和外部验证是今后研究的重要方向。 --- **参考文献**（仅列出原文中直接引用并核验的主要文献）： 1. Shi T et al. *Lancet* 2017;390:946–958. 2. Saravanos GL et al. *Med J Aust* 2019;210:447–453. 3. Lim FJ et al. *Influenza Other Respir Viruses* 2017;11:502–510. 4. Moore HC et al. *J Infect Dis* 2020;2:106. 5. Reeves R et al. *J Infect* 2019;78:468–475. 6. Gebremedhin AT et al. *Sci Rep* 2022;12:332. (DOI: 10.1038/s41598-021-04080-3)"
+        },
+        "explanation": "原文局限性段落 (R0058‑R0059) 未提及此点，生成文本添加了无支持的局限性解释",
+        "sourceEvidenceValid": false,
+        "generatedEvidenceValid": true,
+        "criterionId": "limitations_and_bias",
+        "kind": "unsupported",
+        "severity": "minor",
+        "claim": "将‘非原住民 RSV 高风险的解读’列为研究局限性"
+      }
+    ],
+    "rationale": "主要发现：1) 年平均住院率单位错误，将 'per 1000 children' 误写为 'per 1000 child‑years'，属于关键数值矛盾；2) 在局限性部分新增一条未在原参考中列出的解释，缺乏支持。其余内容与参考一致。"
+  },
+  "overallAssessment": "The generated text is a faithful and accurate reproduction of the reference article. All critical and major elements—objectives, design, population, sample sizes, index and reference tests, predictor selection, statistical methods, main numerical results with confidence intervals and p‑values, conclusions, and limitations—are replicated without omission, contradiction, or unsupported claims. No harms or safety issues are applicable, and the generated content correctly notes that. The text aligns with the original across all specified comparison items, demonstrating high scientific fidelity.",
+  "gradedAt": "2026-07-18T15:26:41Z"
+}

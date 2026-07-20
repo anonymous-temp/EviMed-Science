@@ -1,0 +1,4 @@
+interface:
+  display_name: "Geospatial Analysis"
+  short_description: "Analyze spatial scientific data reproducibly"
+  default_prompt: "Use $geospatial-analysis to perform this spatial analysis with provenance."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Statistical Analysis"
+  short_description: "Run assumption-aware reproducible statistical analysis"
+  default_prompt: "Use $statistical-analysis to plan and execute an auditable analysis."

@@ -1,0 +1,710 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-001",
+  "category": "randomized-trial",
+  "title": "Empagliflozin in Patients with Chronic Kidney Disease.",
+  "pmcid": "PMC7614055",
+  "doi": "10.1056/nejmoa2204233",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "50d6a1caeb44b1776a5427f4d64fc15d37db6e112e1a6f7982bdaf2c19757786",
+  "generatedSha256": "ccc7ff061a687805c7e73d8416bcb819f96b3d2e40202a2611c6fe79c6453b0b",
+  "promptSha256": "030ec979269211a2989d1d68972b505487d92a7509b5b952bf4d9697d37964a6",
+  "cacheFingerprint": "a8dd30f9d4b0f6e98fda9da6c582e18a636cdd8f1f2cd8a90370bbe4331946d8",
+  "referenceCharacters": 36367,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 21024,
+  "paperType": "randomized-trial",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "To assess effects of empagliflozin in a broad range of patients with chronic kidney disease at risk of progression.",
+      "generatedFact": "To evaluate empagliflozin in a clinically diverse CKD population, including those without diabetes and low albuminuria, for kidney disease progression or cardiovascular death.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+        ],
+        "quote": "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "Black Box Warning) are never inferred beyond what the source provides. No sentence is a verbatim reproduction. --- ## Abstract **Background** — The sodium–glucose cotransporter 2 (SGLT2) inhibitor empagliflozin had demonstrated kidney and cardiovascular benefits in selected populations, but its effects across a broad spectrum of chronic kidney disease (CKD) — including patients without diabetes, those with preserved or moderately reduced filtration, and those with low-grade albuminuria — remained uncertain. EMPA-KIDNEY was designed to address this evidence gap."
+        ],
+        "quote": "Black Box Warning) are never inferred beyond what the source provides. No sentence is a verbatim reproduction. --- ## Abstract **Background** — The sodium–glucose cotransporter 2 (SGLT2) inhibitor empagliflozin had demonstrated kidney and cardiovascular benefits in selected populations, but its effects across a broad spectrum of chronic kidney disease (CKD) — including patients without diabetes, those with preserved or moderately reduced filtration, and those with low-grade albuminuria — remained uncertain. EMPA-KIDNEY was designed to address this evidence gap."
+      },
+      "explanation": "Both state the objective of assessing empagliflozin's effects in a wide CKD population; wording differs but factual content aligns exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Multicentre international randomised parallel-group double-blind placebo-controlled clinical trial.",
+      "generatedFact": "Multicentre, international, randomised, double‑blind, parallel‑group, placebo‑controlled clinical trial conducted at 241 sites.",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "7 , 12 , 13 This multicenter international randomized parallel group double-blind placebo-controlled clinical trial of EMPAgliflozin once daily to assess cardio-renal outcomes in patients with chronic KIDNEY disease (EMPA-KIDNEY) was designed to assess the effects of SGLT2 inhibition with empagliflozin on kidney disease progression, cardiovascular disease and safety in a wide range of patients with CKD, and aimed to include large numbers of patients without diabetes, patients with an eGFR) less than 30 ml per minute per 1.73 m 2 of body-surface area, and patients with low levels of proteinuria, as measured by urinary ACR."
+        ],
+        "quote": "7 , 12 , 13 This multicenter international randomized parallel group double-blind placebo-controlled clinical trial of EMPAgliflozin once daily to assess cardio-renal outcomes in patients with chronic KIDNEY disease (EMPA-KIDNEY) was designed to assess the effects of SGLT2 inhibition with empagliflozin on kidney disease progression, cardiovascular disease and safety in a wide range of patients with CKD, and aimed to include large numbers of patients without diabetes, patients with an eGFR) less than 30 ml per minute per 1.73 m 2 of body-surface area, and patients with low levels of proteinuria, as measured by urinary ACR."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "Methods ### 2.1 Trial Design and Governance EMPA-KIDNEY was a multicentre, international, randomised, double‑blind, parallel‑group, placebo‑controlled clinical trial conducted at 241 sites across eight countries. The study was governed by a Steering Committee with representation from the University of Oxford central coordinating office, regional leads, the sponsor (Boehringer Ingelheim), and independent statistical and clinical experts. An independent Data Safety Monitoring Board reviewed unblinded data at regular intervals and performed a protocol‑specified formal interim analysis for efficacy [5]. Regulatory authorities and local ethics committees approved the protocol at every site."
+        ],
+        "quote": "Methods ### 2.1 Trial Design and Governance EMPA-KIDNEY was a multicentre, international, randomised, double‑blind, parallel‑group, placebo‑controlled clinical trial conducted at 241 sites across eight countries. The study was governed by a Steering Committee with representation from the University of Oxford central coordinating office, regional leads, the sponsor (Boehringer Ingelheim), and independent statistical and clinical experts. An independent Data Safety Monitoring Board reviewed unblinded data at regular intervals and performed a protocol‑specified formal interim analysis for efficacy [5]. Regulatory authorities and local ethics committees approved the protocol at every site."
+      },
+      "explanation": "Both describe the identical design, including parallel-group and blinding; generated adds number of sites correctly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Adults with CKD meeting eGFR and urinary ACR criteria; 6,609 randomised.",
+      "generatedFact": "6,609 adults with CKD at risk of progression, meeting specified eGFR and ACR eligibility.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+        ],
+        "quote": "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+        ],
+        "quote": "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+      },
+      "explanation": "Both identify 6,609 adults with CKD satisfying the same eligibility thresholds.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "6,609 participants randomised.",
+      "generatedFact": "6,609 adults with CKD were allocated 1:1 to empagliflozin or placebo.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+        ],
+        "quote": "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+        ],
+        "quote": "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+      },
+      "explanation": "Identical sample size number.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "eGFR 20–<45 any albuminuria, or 45–<90 with ACR ≥200 mg/g; RAS inhibitor unless intolerance; excluded polycystic kidney disease or transplant.",
+      "generatedFact": "eGFR 20–<45 any albuminuria, or 45–<90 with ACR≥200 mg/g; RAS inhibitor required if tolerated; excluded polycystic kidney disease, transplant.",
+      "sourceEvidence": {
+        "locator": "R0010",
+        "locators": [
+          "R0010"
+        ],
+        "quotes": [
+          "The Protocol and the Data Analysis Plan (DAP) are available with the full text of this article at NEJM.org and at empakidney.org. The trial was conducted at 241 centers in eight countries. Regulatory authorities and ethics committees for each center approved the trial. Participants Adults with a race-adjusted CKD-EPI 16 eGFR of at least 20 but less than 45 ml per minute per 1.73 m 2 of body-surface area (irrespective of level of albuminuria); or an eGFR of at least 45 but less than 90 ml per minute per 1.73 m 2 with a urinary ACR of at least 200 mg/g at the screening visit were eligible provided they were prescribed a clinically appropriate dose of single-agent RAS-inhibitor."
+        ],
+        "quote": "The Protocol and the Data Analysis Plan (DAP) are available with the full text of this article at NEJM.org and at empakidney.org. The trial was conducted at 241 centers in eight countries. Regulatory authorities and ethics committees for each center approved the trial. Participants Adults with a race-adjusted CKD-EPI 16 eGFR of at least 20 but less than 45 ml per minute per 1.73 m 2 of body-surface area (irrespective of level of albuminuria); or an eGFR of at least 45 but less than 90 ml per minute per 1.73 m 2 with a urinary ACR of at least 200 mg/g at the screening visit were eligible provided they were prescribed a clinically appropriate dose of single-agent RAS-inhibitor."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+        ],
+        "quote": "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+      },
+      "explanation": "Eligibility exactly matches, including RAS requirement and exclusions.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Empagliflozin 10 mg once daily.",
+      "generatedFact": "Empagliflozin 10 mg once daily.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+        ],
+        "quote": "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+        ],
+        "quote": "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+      },
+      "explanation": "Identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Matching placebo.",
+      "generatedFact": "Matching placebo.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+        ],
+        "quote": "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+        ],
+        "quote": "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+      },
+      "explanation": "Identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary outcome: kidney disease progression (ESKD, sustained eGFR<10, sustained ≥40% eGFR decline, renal death) or CV death.",
+      "generatedFact": "Primary endpoint: composite of kidney disease progression (ESKD, sustained eGFR<10, sustained ≥40% eGFR decline, renal death) or CV death.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "The primary outcome was a composite of kidney disease progression (end-stage kidney disease, a sustained eGFR <10 ml/minute/1.73m2, a sustained decline in eGFR of ≥40%, or a renal death) or death from cardiovascular causes.ResultsDuring a median of 2.0 years follow-up, a primary outcome event occurred in 432 of 3304 patients (13.1%) in the empagliflozin group and in 558 of 3305 patients (16.9%) in the placebo group (hazard ratio, 0.72; 95% CI 0.64 to 0.82; P<0.001), with consistent results in those with or without diabetes and across the range of eGFR studied."
+        ],
+        "quote": "The primary outcome was a composite of kidney disease progression (end-stage kidney disease, a sustained eGFR <10 ml/minute/1.73m2, a sustained decline in eGFR of ≥40%, or a renal death) or death from cardiovascular causes.ResultsDuring a median of 2.0 years follow-up, a primary outcome event occurred in 432 of 3304 patients (13.1%) in the empagliflozin group and in 558 of 3305 patients (16.9%) in the placebo group (hazard ratio, 0.72; 95% CI 0.64 to 0.82; P<0.001), with consistent results in those with or without diabetes and across the range of eGFR studied."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+        ],
+        "quote": "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+      },
+      "explanation": "Exact same composite components and definition.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Median follow-up 2.0 years (IQR 1.5–2.4).",
+      "generatedFact": "Median follow-up 2.0 years (IQR 1.5–2.4).",
+      "sourceEvidence": {
+        "locator": "R0026",
+        "locators": [
+          "R0026"
+        ],
+        "quotes": [
+          "Follow-up was completed on July 05 2022, at which time median follow-up was 2.0 years (interquartile range, 1.5 to 2.4 years). In all, 6552 participants (99.1%) were alive and completed final follow-up or had died during follow-up. Vital status was missing for 18 (0.3%) participants, and 39 participants (0.6%) withdrew consent ( Fig. S1 ). All eligible events were adjudicated. At 12 months of follow-up (the approximate midpoint), 2909 [89.6%] of the empagliflozin group and 2924 [90.3%] of the placebo group reported taking most (i.e. >80%) of their study treatment."
+        ],
+        "quote": "Follow-up was completed on July 05 2022, at which time median follow-up was 2.0 years (interquartile range, 1.5 to 2.4 years). In all, 6552 participants (99.1%) were alive and completed final follow-up or had died during follow-up. Vital status was missing for 18 (0.3%) participants, and 39 participants (0.6%) withdrew consent ( Fig. S1 ). All eligible events were adjudicated. At 12 months of follow-up (the approximate midpoint), 2909 [89.6%] of the empagliflozin group and 2924 [90.3%] of the placebo group reported taking most (i.e. >80%) of their study treatment."
+      },
+      "generatedEvidence": {
+        "locator": "G0020",
+        "locators": [
+          "G0020"
+        ],
+        "quotes": [
+          "By the final visit, study treatment had been permanently discontinued by 16.9 % of surviving empagliflozin‑allocated participants and 19.4 % in the placebo arm; only 0.5 % (empagliflozin) and 0.9 % (placebo) had started open‑label SGLT2 inhibitor therapy. On 7 March 2022 the independent Data Safety Monitoring Board reported that both prespecified efficacy stopping criteria were satisfied at the formal interim analysis (624 first primary outcomes). Follow‑up was completed on 5 July 2022, yielding a median observation time of 2.0 years (interquartile range 1.5–2.4). Vital status was known for 99.1 % of the cohort; only 18 (0.3 %) had missing vital status and 39 (0.6 %) had withdrawn consent."
+        ],
+        "quote": "By the final visit, study treatment had been permanently discontinued by 16.9 % of surviving empagliflozin‑allocated participants and 19.4 % in the placebo arm; only 0.5 % (empagliflozin) and 0.9 % (placebo) had started open‑label SGLT2 inhibitor therapy. On 7 March 2022 the independent Data Safety Monitoring Board reported that both prespecified efficacy stopping criteria were satisfied at the formal interim analysis (624 first primary outcomes). Follow‑up was completed on 5 July 2022, yielding a median observation time of 2.0 years (interquartile range 1.5–2.4). Vital status was known for 99.1 % of the cohort; only 18 (0.3 %) had missing vital status and 39 (0.6 %) had withdrawn consent."
+      },
+      "explanation": "Exact match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "eGFR estimated via CKD-EPI equation; central laboratory creatinine used, supplemented by local lab values when missing.",
+      "generatedFact": "Central-laboratory serum creatinine used preferentially for eGFR estimation; local lab values used when central missing.",
+      "sourceEvidence": {
+        "locator": "R0015",
+        "locators": [
+          "R0015"
+        ],
+        "quotes": [
+          "The term ‘sustained’ was defined as either as measured at two consecutive scheduled study follow-up visits at least 30 days apart, or as measured at the final follow-up visit or the last scheduled visit before death (or withdrawal of consent or loss to follow-up). Central laboratory serum creatinine measurements were used to estimate GFR, with local laboratory creatinine measurements used when central results were missing. The prespecified key secondary outcomes were hospitalization for heart failure or cardiovascular death; all-cause hospitalizations (first and subsequent, combined); and death from any cause."
+        ],
+        "quote": "The term ‘sustained’ was defined as either as measured at two consecutive scheduled study follow-up visits at least 30 days apart, or as measured at the final follow-up visit or the last scheduled visit before death (or withdrawal of consent or loss to follow-up). Central laboratory serum creatinine measurements were used to estimate GFR, with local laboratory creatinine measurements used when central results were missing. The prespecified key secondary outcomes were hospitalization for heart failure or cardiovascular death; all-cause hospitalizations (first and subsequent, combined); and death from any cause."
+      },
+      "generatedEvidence": {
+        "locator": "G0013",
+        "locators": [
+          "G0013"
+        ],
+        "quotes": [
+          "At scheduled visits participants provided information on kidney status (dialysis initiation, transplantation), adherence (with reasons for discontinuation), concomitant medications, and serious adverse events (ascertained via structured interview). Clinical measurements included body weight and blood pressure; locally collected blood samples were assessed for creatinine, liver enzymes, and potassium. Central‑laboratory serum creatinine was used preferentially for eGFR estimation, supplemented by local values when central results were missing. Urine samples were obtained at selected visits."
+        ],
+        "quote": "At scheduled visits participants provided information on kidney status (dialysis initiation, transplantation), adherence (with reasons for discontinuation), concomitant medications, and serious adverse events (ascertained via structured interview). Clinical measurements included body weight and blood pressure; locally collected blood samples were assessed for creatinine, liver enzymes, and potassium. Central‑laboratory serum creatinine was used preferentially for eGFR estimation, supplemented by local values when central results were missing. Urine samples were obtained at selected visits."
+      },
+      "explanation": "Same data handling rule for creatinine source.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Cox regression adjusted for minimization variables; Hochberg step-up for key secondary outcomes; joint frailty model for recurrent hospitalisations; shared parameter models for eGFR slope.",
+      "generatedFact": "Cox proportional-hazards adjusted for minimization variables; recurrent hospitalisations via joint frailty model; eGFR slopes via shared-parameter models; Hochberg procedure for multiplicity.",
+      "sourceEvidence": {
+        "locator": "R0019",
+        "locators": [
+          "R0019"
+        ],
+        "quotes": [
+          "All analyses were performed according to the intention-to-treat principle and included data from all randomized participants including information collected between the formal interim analysis and final follow-up visits. 18 – 20 A Cox proportional hazards regression model adjusted for baseline variables specified in the minimization algorithm (age, sex, prior diabetes, eGFR, urinary ACR, and region) was used to estimate the hazard ratio and 95% confidence intervals (CI) for empagliflozin versus placebo for time-to-event analyses. 21 Key secondary outcomes were prespecified to be adjusted for multiple testing using the Hochberg “step-up” procedure with a family-wise error rate of 0.029."
+        ],
+        "quote": "All analyses were performed according to the intention-to-treat principle and included data from all randomized participants including information collected between the formal interim analysis and final follow-up visits. 18 – 20 A Cox proportional hazards regression model adjusted for baseline variables specified in the minimization algorithm (age, sex, prior diabetes, eGFR, urinary ACR, and region) was used to estimate the hazard ratio and 95% confidence intervals (CI) for empagliflozin versus placebo for time-to-event analyses. 21 Key secondary outcomes were prespecified to be adjusted for multiple testing using the Hochberg “step-up” procedure with a family-wise error rate of 0.029."
+      },
+      "generatedEvidence": {
+        "locator": "G0017",
+        "locators": [
+          "G0017"
+        ],
+        "quotes": [
+          "The prespecified stopping boundaries required **both** conditions to be met: (i) a hazard ratio for the primary outcome of < 0.778 with a two‑sided P < 0.0017, and (ii) a hazard ratio for ESKD or cardiovascular death of < 0.778 with a two‑sided P < 0.05. All analyses followed the intention‑to‑treat principle. Time‑to‑event endpoints were evaluated with Cox proportional‑hazards models adjusted for the minimisation variables (age, sex, prior diabetes, eGFR, urinary ACR, and region) [8]. Recurrent all‑cause hospitalisations were analysed with a joint frailty model [9]. Annual eGFR slopes were estimated with shared‑parameter models [10]."
+        ],
+        "quote": "The prespecified stopping boundaries required **both** conditions to be met: (i) a hazard ratio for the primary outcome of < 0.778 with a two‑sided P < 0.0017, and (ii) a hazard ratio for ESKD or cardiovascular death of < 0.778 with a two‑sided P < 0.05. All analyses followed the intention‑to‑treat principle. Time‑to‑event endpoints were evaluated with Cox proportional‑hazards models adjusted for the minimisation variables (age, sex, prior diabetes, eGFR, urinary ACR, and region) [8]. Recurrent all‑cause hospitalisations were analysed with a joint frailty model [9]. Annual eGFR slopes were estimated with shared‑parameter models [10]."
+      },
+      "explanation": "All analytical methods and multiplicity adjustment described identically.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Cox proportional-hazards, joint frailty model, shared parameter models.",
+      "generatedFact": "Cox proportional-hazards models, joint frailty model, shared-parameter models.",
+      "sourceEvidence": {
+        "locator": "R0019",
+        "locators": [
+          "R0019"
+        ],
+        "quotes": [
+          "All analyses were performed according to the intention-to-treat principle and included data from all randomized participants including information collected between the formal interim analysis and final follow-up visits. 18 – 20 A Cox proportional hazards regression model adjusted for baseline variables specified in the minimization algorithm (age, sex, prior diabetes, eGFR, urinary ACR, and region) was used to estimate the hazard ratio and 95% confidence intervals (CI) for empagliflozin versus placebo for time-to-event analyses. 21 Key secondary outcomes were prespecified to be adjusted for multiple testing using the Hochberg “step-up” procedure with a family-wise error rate of 0.029."
+        ],
+        "quote": "All analyses were performed according to the intention-to-treat principle and included data from all randomized participants including information collected between the formal interim analysis and final follow-up visits. 18 – 20 A Cox proportional hazards regression model adjusted for baseline variables specified in the minimization algorithm (age, sex, prior diabetes, eGFR, urinary ACR, and region) was used to estimate the hazard ratio and 95% confidence intervals (CI) for empagliflozin versus placebo for time-to-event analyses. 21 Key secondary outcomes were prespecified to be adjusted for multiple testing using the Hochberg “step-up” procedure with a family-wise error rate of 0.029."
+      },
+      "generatedEvidence": {
+        "locator": "G0017",
+        "locators": [
+          "G0017"
+        ],
+        "quotes": [
+          "The prespecified stopping boundaries required **both** conditions to be met: (i) a hazard ratio for the primary outcome of < 0.778 with a two‑sided P < 0.0017, and (ii) a hazard ratio for ESKD or cardiovascular death of < 0.778 with a two‑sided P < 0.05. All analyses followed the intention‑to‑treat principle. Time‑to‑event endpoints were evaluated with Cox proportional‑hazards models adjusted for the minimisation variables (age, sex, prior diabetes, eGFR, urinary ACR, and region) [8]. Recurrent all‑cause hospitalisations were analysed with a joint frailty model [9]. Annual eGFR slopes were estimated with shared‑parameter models [10]."
+        ],
+        "quote": "The prespecified stopping boundaries required **both** conditions to be met: (i) a hazard ratio for the primary outcome of < 0.778 with a two‑sided P < 0.0017, and (ii) a hazard ratio for ESKD or cardiovascular death of < 0.778 with a two‑sided P < 0.05. All analyses followed the intention‑to‑treat principle. Time‑to‑event endpoints were evaluated with Cox proportional‑hazards models adjusted for the minimisation variables (age, sex, prior diabetes, eGFR, urinary ACR, and region) [8]. Recurrent all‑cause hospitalisations were analysed with a joint frailty model [9]. Annual eGFR slopes were estimated with shared‑parameter models [10]."
+      },
+      "explanation": "Same statistical models used.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary outcome: empagliflozin 13.1% (432/3304) vs placebo 16.9% (558/3305); HR 0.72; 42 fewer events per 1000 patients over 2 years.",
+      "generatedFact": "432/3 304 (13.1%) vs 558/3 305 (16.9%); HR 0.72; absolute difference 42 fewer primary events per 1 000 patients over median 2 y.",
+      "sourceEvidence": {
+        "locator": "R0027",
+        "locators": [
+          "R0027"
+        ],
+        "quotes": [
+          "By final follow-up, study treatment was discontinued by 557 (16.9%) surviving participants allocated empagliflozin, and by 640 (19.4%) allocated placebo. This included 18 (0.5%) participants in the empagliflozin group and 31 (0.9%) in the placebo group who started treatment with an open-label SGLT2 inhibitor. Table S3 provides details of the reasons for discontinuation. Primary and Secondary Outcomes The primary outcome of kidney disease progression or death from cardiovascular causes occurred in 432 participants (13.1%) in the empagliflozin group and 558 participants (16.9%) in the placebo group (hazard ratio, 0.72; 95% CI 0.64 to 0.82; P<0.001) ( Fig. 1 )."
+        ],
+        "quote": "By final follow-up, study treatment was discontinued by 557 (16.9%) surviving participants allocated empagliflozin, and by 640 (19.4%) allocated placebo. This included 18 (0.5%) participants in the empagliflozin group and 31 (0.9%) in the placebo group who started treatment with an open-label SGLT2 inhibitor. Table S3 provides details of the reasons for discontinuation. Primary and Secondary Outcomes The primary outcome of kidney disease progression or death from cardiovascular causes occurred in 432 participants (13.1%) in the empagliflozin group and 558 participants (16.9%) in the placebo group (hazard ratio, 0.72; 95% CI 0.64 to 0.82; P<0.001) ( Fig. 1 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "**Results** — Over a median follow-up of 2.0 years, the primary composite outcome was recorded in 432 of 3 304 participants (13.1 %) receiving empagliflozin and in 558 of 3 305 participants (16.9 %) receiving placebo (hazard ratio [HR] 0.72; 95 % confidence interval [CI] 0.64–0.82; P < 0.001). This absolute difference equated to 42 fewer primary events per 1 000 patients treated over two years. The effect was consistent irrespective of diabetes status and across the eGFR range studied."
+        ],
+        "quote": "**Results** — Over a median follow-up of 2.0 years, the primary composite outcome was recorded in 432 of 3 304 participants (13.1 %) receiving empagliflozin and in 558 of 3 305 participants (16.9 %) receiving placebo (hazard ratio [HR] 0.72; 95 % confidence interval [CI] 0.64–0.82; P < 0.001). This absolute difference equated to 42 fewer primary events per 1 000 patients treated over two years. The effect was consistent irrespective of diabetes status and across the eGFR range studied."
+      },
+      "explanation": "All numbers, percentages, HR, and absolute effect matched exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary 95% CI 0.64–0.82, P<0.001; all-cause hosp HR 0.86 (0.78–0.95) P=0.003; HF/CV death HR 0.84 (0.67–1.07) P=0.15; all-cause death HR 0.87 (0.70–1.08) P=0.21.",
+      "generatedFact": "HR 0.72 (95% CI 0.64–0.82) P<0.001; all-cause hospitalisation HR 0.86 (0.78–0.95) P=0.003; HF/CV death HR 0.84 (0.67–1.07) P=0.15; all‑cause mortality HR 0.87 (0.70–1.08) P=0.21.",
+      "sourceEvidence": {
+        "locator": "R0027",
+        "locators": [
+          "R0027"
+        ],
+        "quotes": [
+          "By final follow-up, study treatment was discontinued by 557 (16.9%) surviving participants allocated empagliflozin, and by 640 (19.4%) allocated placebo. This included 18 (0.5%) participants in the empagliflozin group and 31 (0.9%) in the placebo group who started treatment with an open-label SGLT2 inhibitor. Table S3 provides details of the reasons for discontinuation. Primary and Secondary Outcomes The primary outcome of kidney disease progression or death from cardiovascular causes occurred in 432 participants (13.1%) in the empagliflozin group and 558 participants (16.9%) in the placebo group (hazard ratio, 0.72; 95% CI 0.64 to 0.82; P<0.001) ( Fig. 1 )."
+        ],
+        "quote": "By final follow-up, study treatment was discontinued by 557 (16.9%) surviving participants allocated empagliflozin, and by 640 (19.4%) allocated placebo. This included 18 (0.5%) participants in the empagliflozin group and 31 (0.9%) in the placebo group who started treatment with an open-label SGLT2 inhibitor. Table S3 provides details of the reasons for discontinuation. Primary and Secondary Outcomes The primary outcome of kidney disease progression or death from cardiovascular causes occurred in 432 participants (13.1%) in the empagliflozin group and 558 participants (16.9%) in the placebo group (hazard ratio, 0.72; 95% CI 0.64 to 0.82; P<0.001) ( Fig. 1 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0023",
+        "locators": [
+          "G0023"
+        ],
+        "quotes": [
+          "### 3.3 Key Secondary Outcomes Results for the key secondary endpoints, adjusted for multiplicity, were: | Endpoint | Empagliflozin | Placebo | HR (95 % CI) | P | |---|---|---|---|---| | HF hospitalisation or CV death | 131 (4.0 %) | 152 (4.6 %) | 0.84 (0.67–1.07) | 0.15 | | All‑cause hospitalisations (rate) | 24.8 / 100 PY | 29.2 / 100 PY | 0.86 (0.78–0.95) | 0.003 | | Death from any cause | 148 (4.5 %) | 167 (5.1 %) | 0.87 (0.70–1.08) | 0.21 | The composite of heart‑failure hospitalisation or cardiovascular death and the endpoint of all‑cause mortality each showed point estimates favouring empagliflozin but did not cross the multiplicity‑adjusted significance threshold."
+        ],
+        "quote": "### 3.3 Key Secondary Outcomes Results for the key secondary endpoints, adjusted for multiplicity, were: | Endpoint | Empagliflozin | Placebo | HR (95 % CI) | P | |---|---|---|---|---| | HF hospitalisation or CV death | 131 (4.0 %) | 152 (4.6 %) | 0.84 (0.67–1.07) | 0.15 | | All‑cause hospitalisations (rate) | 24.8 / 100 PY | 29.2 / 100 PY | 0.86 (0.78–0.95) | 0.003 | | Death from any cause | 148 (4.5 %) | 167 (5.1 %) | 0.87 (0.70–1.08) | 0.21 | The composite of heart‑failure hospitalisation or cardiovascular death and the endpoint of all‑cause mortality each showed point estimates favouring empagliflozin but did not cross the multiplicity‑adjusted significance threshold."
+      },
+      "explanation": "All key CIs and P-values replicated exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Empagliflozin reduced risk of kidney disease progression or CV death (~28% reduction) in a wide range of CKD patients.",
+      "generatedFact": "Empagliflozin reduced the risk of kidney disease progression or CV death by 28% over 2.0 years in a broad CKD population.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "There were fewer hospitalizations from any cause in the empagliflozin group (0.86; 0.78 to 0.95, P=0.003), but no statistically significant effect on hospitalization for heart failure or cardiovascular death (4.0% vs 4.6%), or death from any cause (4.5% vs 5.1%). The rates of serious adverse events were broadly similar in the two groups.ConclusionsEmpagliflozin reduced the risk of the composite outcome of kidney disease progression or cardiovascular death in a wide range of patients at risk of CKD progression. (Funding:Boehringer Ingelheim, Eli Lilly and others; Clinicaltrials.gov:NCT03594110, EuDRACT: 2017-002971-24)."
+        ],
+        "quote": "There were fewer hospitalizations from any cause in the empagliflozin group (0.86; 0.78 to 0.95, P=0.003), but no statistically significant effect on hospitalization for heart failure or cardiovascular death (4.0% vs 4.6%), or death from any cause (4.5% vs 5.1%). The rates of serious adverse events were broadly similar in the two groups.ConclusionsEmpagliflozin reduced the risk of the composite outcome of kidney disease progression or cardiovascular death in a wide range of patients at risk of CKD progression. (Funding:Boehringer Ingelheim, Eli Lilly and others; Clinicaltrials.gov:NCT03594110, EuDRACT: 2017-002971-24)."
+      },
+      "generatedEvidence": {
+        "locator": "G0036",
+        "locators": [
+          "G0036"
+        ],
+        "quotes": [
+          "### Conclusion In a CKD population intentionally designed to reflect the breadth of patients encountered in clinical practice — including substantial proportions without diabetes, with markedly reduced eGFR, and with low‑grade albuminuria — empagliflozin 10 mg daily reduced the risk of kidney disease progression or cardiovascular death by 28 % over a median of 2.0 years, with a tolerable safety profile. These data support the use of SGLT2 inhibition as a cornerstone therapy for a wide spectrum of chronic kidney disease. --- ## Source Citation The EMPA-KIDNEY Collaborative Group. Empagliflozin in Patients with Chronic Kidney Disease. *New England Journal of Medicine* 2023; **388**: 117–127."
+        ],
+        "quote": "### Conclusion In a CKD population intentionally designed to reflect the breadth of patients encountered in clinical practice — including substantial proportions without diabetes, with markedly reduced eGFR, and with low‑grade albuminuria — empagliflozin 10 mg daily reduced the risk of kidney disease progression or cardiovascular death by 28 % over a median of 2.0 years, with a tolerable safety profile. These data support the use of SGLT2 inhibition as a cornerstone therapy for a wide spectrum of chronic kidney disease. --- ## Source Citation The EMPA-KIDNEY Collaborative Group. Empagliflozin in Patients with Chronic Kidney Disease. *New England Journal of Medicine* 2023; **388**: 117–127."
+      },
+      "explanation": "Same direction, magnitude (28%), and population scope.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "partial",
+      "issueKinds": [
+        "unsupported"
+      ],
+      "referenceFact": "Lower-than-expected CV event rate reduced power; limited primary-outcome events in low-ACR subgroup due to slower progression.",
+      "generatedFact": "Limited CV event rate; low-ACR events limited, evidence from eGFR slope; median 2-y follow‑up may underestimate late safety; generalisability limits in underrepresented subgroups; industry-sponsored but academic independence preserved.",
+      "sourceEvidence": {
+        "locator": "R0044",
+        "locators": [
+          "R0044"
+        ],
+        "quotes": [
+          "Prespecified exploratory analyses of the annual rate of change in eGFR - an accepted surrogate for kidney disease progression 24 – showed empagliflozin slowed the rate of chronic eGFR decline in patients with a urinary ACR below 300 mg/g at baseline (including those with urinary ACR <30 mg/g). Key trial strengths are its large size and broad eligibility criteria, the high level of adherence to study treatment, and the almost complete follow-up of all participants. The trial has certain limitations, including the lower-than-expected cardiovascular event rate, which reduced statistical power to assess the secondary or tertiary cardiovascular outcomes."
+        ],
+        "quote": "Prespecified exploratory analyses of the annual rate of change in eGFR - an accepted surrogate for kidney disease progression 24 – showed empagliflozin slowed the rate of chronic eGFR decline in patients with a urinary ACR below 300 mg/g at baseline (including those with urinary ACR <30 mg/g). Key trial strengths are its large size and broad eligibility criteria, the high level of adherence to study treatment, and the almost complete follow-up of all participants. The trial has certain limitations, including the lower-than-expected cardiovascular event rate, which reduced statistical power to assess the secondary or tertiary cardiovascular outcomes."
+      },
+      "generatedEvidence": {
+        "locator": "G0033",
+        "locators": [
+          "G0033"
+        ],
+        "quotes": [
+          "The chronic‑slope difference of 1.37 mL/min/1.73 m² per year — observed even in participants with normal or low‑grade albuminuria — suggests nephroprotection across a broader phenotype than previously demonstrated, although the number of hard primary‑outcome events in the low‑ACR stratum was limited because of slower underlying progression. **Limitations** must be acknowledged. First, cardiovascular event rates were lower than anticipated, which curtailed statistical power for secondary and tertiary cardiovascular analyses; the trial cannot therefore resolve whether empagliflozin independently prevents cardiovascular death or heart‑failure hospitalisation in this mix of patients."
+        ],
+        "quote": "The chronic‑slope difference of 1.37 mL/min/1.73 m² per year — observed even in participants with normal or low‑grade albuminuria — suggests nephroprotection across a broader phenotype than previously demonstrated, although the number of hard primary‑outcome events in the low‑ACR stratum was limited because of slower underlying progression. **Limitations** must be acknowledged. First, cardiovascular event rates were lower than anticipated, which curtailed statistical power for secondary and tertiary cardiovascular analyses; the trial cannot therefore resolve whether empagliflozin independently prevents cardiovascular death or heart‑failure hospitalisation in this mix of patients."
+      },
+      "explanation": "Generated adds claims about late safety underestimation, generalisability limits, and industry sponsorship as a limitation, none of which are stated in the reference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Ketoacidosis 6 vs 1; amputations 28 vs 19; similar rates of serious AEs. No specific organ class excess.",
+      "generatedFact": "Ketoacidosis 6 vs 1; amputations 28 vs 19; serious AEs broadly similar. No MedDRA organ class excess.",
+      "sourceEvidence": {
+        "locator": "R0039",
+        "locators": [
+          "R0039"
+        ],
+        "quotes": [
+          "There were no significant effects of empagliflozin on any specific cause of death ( Figure S3 ), major cardiovascular events (hazard ratio, 0.93 95% CI 0.76-1.12), self-reported episodes of gout, or development of new-onset diabetes ( Tables S5 and S6 ). Safety Outcomes and Adverse Events Ketoacidosis occurred in 6 patients in the empagliflozin group versus 1 patient in the placebo group (0.09 versus 0.02 per 100 patient-years). Lower limb amputations occurred in 28 patients in the empagliflozin group and 19 in the placebo group (0.43 versus 0.29 per 100 patient-years)."
+        ],
+        "quote": "There were no significant effects of empagliflozin on any specific cause of death ( Figure S3 ), major cardiovascular events (hazard ratio, 0.93 95% CI 0.76-1.12), self-reported episodes of gout, or development of new-onset diabetes ( Tables S5 and S6 ). Safety Outcomes and Adverse Events Ketoacidosis occurred in 6 patients in the empagliflozin group versus 1 patient in the placebo group (0.09 versus 0.02 per 100 patient-years). Lower limb amputations occurred in 28 patients in the empagliflozin group and 19 in the placebo group (0.43 versus 0.29 per 100 patient-years)."
+      },
+      "generatedEvidence": {
+        "locator": "G0027",
+        "locators": [
+          "G0027"
+        ],
+        "quotes": [
+          "| Safety endpoint | Empagliflozin | Placebo | |---|---|---| | Ketoacidosis | 6 (0.09/100 PY) | 1 (0.02/100 PY) | | Lower‑limb amputation | 28 (0.43/100 PY) | 19 (0.29/100 PY) | | Serious urinary tract infection | 52 (1.6 %) | 54 (1.6 %) | | Serious hyperkalemia | 92 (2.8 %) | 109 (3.3 %) | | Serious acute kidney injury | 107 (3.2 %) | 135 (4.1 %) | | Serious dehydration | 30 (0.9 %) | 24 (0.7 %) | | Liver injury (adjudicated) | 13 (0.4 %) | 12 (0.4 %) | | Bone fracture | 133 (4.0 %) | 123 (3.7 %) | | Severe hypoglycaemia | 77 (2.3 %) | 77 (2.3 %) | The ketoacidosis signal was numerically small (0.09 versus 0.02 per 100 patient‑years) and included one event in a participant without baseline"
+        ],
+        "quote": "| Safety endpoint | Empagliflozin | Placebo | |---|---|---| | Ketoacidosis | 6 (0.09/100 PY) | 1 (0.02/100 PY) | | Lower‑limb amputation | 28 (0.43/100 PY) | 19 (0.29/100 PY) | | Serious urinary tract infection | 52 (1.6 %) | 54 (1.6 %) | | Serious hyperkalemia | 92 (2.8 %) | 109 (3.3 %) | | Serious acute kidney injury | 107 (3.2 %) | 135 (4.1 %) | | Serious dehydration | 30 (0.9 %) | 24 (0.7 %) | | Liver injury (adjudicated) | 13 (0.4 %) | 12 (0.4 %) | | Bone fracture | 133 (4.0 %) | 123 (3.7 %) | | Severe hypoglycaemia | 77 (2.3 %) | 77 (2.3 %) | The ketoacidosis signal was numerically small (0.09 versus 0.02 per 100 patient‑years) and included one event in a participant without baseline"
+      },
+      "explanation": "Safety events, counts, and overall comparison match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "randomization_and_blinding",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Double-blind; minimised randomisation with 10% stochastic element, balanced for age, sex, diabetes, eGFR, ACR, region.",
+      "generatedFact": "Double-blind; minimisation algorithm with 10% stochastic element, balanced for age, sex, prior diabetes, eGFR, ACR, region.",
+      "sourceEvidence": {
+        "locator": "R0012",
+        "locators": [
+          "R0012"
+        ],
+        "quotes": [
+          "During this time, local investigators reviewed screening data, assessed current RAS-inhibitor use, and approved potential participants for later randomization. Throughout the trial, clinical responsibility for participants remained with their local doctors. After completing at least 6 weeks of run-in, willing participants had central samples of blood and urine collected for central analysis and storage, and were randomly allocated to receive empagliflozin (10 mg once daily) or matching placebo using minimized randomization with a 10% stochastic element."
+        ],
+        "quote": "During this time, local investigators reviewed screening data, assessed current RAS-inhibitor use, and approved potential participants for later randomization. Throughout the trial, clinical responsibility for participants remained with their local doctors. After completing at least 6 weeks of run-in, willing participants had central samples of blood and urine collected for central analysis and storage, and were randomly allocated to receive empagliflozin (10 mg once daily) or matching placebo using minimized randomization with a 10% stochastic element."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "### 2.3 Procedures All consenting individuals entered a pre‑randomisation run‑in phase during which they received single‑blind placebo for at least six weeks. This period allowed site investigators to confirm eligibility, optimise background therapy, and assess tolerability. Those who completed the run‑in and remained willing were randomly assigned 1∶1 to oral empagliflozin 10 mg once daily or indistinguishable placebo. Randomisation used a minimisation algorithm incorporating a 10 % stochastic element, balanced for age, sex, prior diabetes status, eGFR, urinary ACR, and geographic region [7]."
+        ],
+        "quote": "### 2.3 Procedures All consenting individuals entered a pre‑randomisation run‑in phase during which they received single‑blind placebo for at least six weeks. This period allowed site investigators to confirm eligibility, optimise background therapy, and assess tolerability. Those who completed the run‑in and remained willing were randomly assigned 1∶1 to oral empagliflozin 10 mg once daily or indistinguishable placebo. Randomisation used a minimisation algorithm incorporating a 10 % stochastic element, balanced for age, sex, prior diabetes status, eGFR, urinary ACR, and geographic region [7]."
+      },
+      "explanation": "Exact replication of blinding and minimisation details.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "treatment_arms_and_dose",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Empagliflozin 10 mg once daily vs matching placebo; background RAS inhibitor.",
+      "generatedFact": "Empagliflozin 10 mg once daily vs indistinguishable placebo. Background RAS inhibition encouraged.",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+        ],
+        "quote": "[METADATA] {\"title\": \"Empagliflozin in Patients with Chronic Kidney Disease.\", \"pmcid\": \"PMC7614055\", \"pmid\": \"36331190\", \"doi\": \"10.1056/nejmoa2204233\", \"publicationTypes\": [\"Research Support, Non-U.S. Gov't\", \"research-article\", \"Randomized Controlled Trial\", \"Journal Article\"], \"publicationDate\": \"2022-11-04\"} [ABSTRACT] AbstractBackgroundThis study, the EMPA-KIDNEY trial, was designed to assess the effects of empagliflozin in a broad range of patients with chronic kidney disease (CKD) at risk of progression.MethodsWe randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+        ],
+        "quote": "**Methods** — In this international, multicentre, double-blind, randomised trial, 6 609 adults with CKD at risk of progression were allocated 1∶1 to empagliflozin 10 mg once daily or matching placebo. Key eligibility criteria were an estimated glomerular filtration rate (eGFR) between 20 and <45 mL/min/1.73 m² (any albuminuria) or between 45 and <90 mL/min/1.73 m² with a urinary albumin-to-creatinine ratio (ACR) of at least 200 mg/g. The primary endpoint was a composite of kidney disease progression (onset of end-stage kidney disease, a sustained eGFR below 10 mL/min/1.73 m², a sustained ≥ 40 % decline in eGFR, or renal death) or death from cardiovascular causes."
+      },
+      "explanation": "Arms, dose, and schedule exactly matched.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_population",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Intention-to-treat (all randomised participants).",
+      "generatedFact": "Intention‑to‑treat principle, all randomised participants.",
+      "sourceEvidence": {
+        "locator": "R0019",
+        "locators": [
+          "R0019"
+        ],
+        "quotes": [
+          "All analyses were performed according to the intention-to-treat principle and included data from all randomized participants including information collected between the formal interim analysis and final follow-up visits. 18 – 20 A Cox proportional hazards regression model adjusted for baseline variables specified in the minimization algorithm (age, sex, prior diabetes, eGFR, urinary ACR, and region) was used to estimate the hazard ratio and 95% confidence intervals (CI) for empagliflozin versus placebo for time-to-event analyses. 21 Key secondary outcomes were prespecified to be adjusted for multiple testing using the Hochberg “step-up” procedure with a family-wise error rate of 0.029."
+        ],
+        "quote": "All analyses were performed according to the intention-to-treat principle and included data from all randomized participants including information collected between the formal interim analysis and final follow-up visits. 18 – 20 A Cox proportional hazards regression model adjusted for baseline variables specified in the minimization algorithm (age, sex, prior diabetes, eGFR, urinary ACR, and region) was used to estimate the hazard ratio and 95% confidence intervals (CI) for empagliflozin versus placebo for time-to-event analyses. 21 Key secondary outcomes were prespecified to be adjusted for multiple testing using the Hochberg “step-up” procedure with a family-wise error rate of 0.029."
+      },
+      "generatedEvidence": {
+        "locator": "G0017",
+        "locators": [
+          "G0017"
+        ],
+        "quotes": [
+          "The prespecified stopping boundaries required **both** conditions to be met: (i) a hazard ratio for the primary outcome of < 0.778 with a two‑sided P < 0.0017, and (ii) a hazard ratio for ESKD or cardiovascular death of < 0.778 with a two‑sided P < 0.05. All analyses followed the intention‑to‑treat principle. Time‑to‑event endpoints were evaluated with Cox proportional‑hazards models adjusted for the minimisation variables (age, sex, prior diabetes, eGFR, urinary ACR, and region) [8]. Recurrent all‑cause hospitalisations were analysed with a joint frailty model [9]. Annual eGFR slopes were estimated with shared‑parameter models [10]."
+        ],
+        "quote": "The prespecified stopping boundaries required **both** conditions to be met: (i) a hazard ratio for the primary outcome of < 0.778 with a two‑sided P < 0.0017, and (ii) a hazard ratio for ESKD or cardiovascular death of < 0.778 with a two‑sided P < 0.05. All analyses followed the intention‑to‑treat principle. Time‑to‑event endpoints were evaluated with Cox proportional‑hazards models adjusted for the minimisation variables (age, sex, prior diabetes, eGFR, urinary ACR, and region) [8]. Recurrent all‑cause hospitalisations were analysed with a joint frailty model [9]. Annual eGFR slopes were estimated with shared‑parameter models [10]."
+      },
+      "explanation": "Same ITT population.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "effect_estimate_context",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "HR 0.72 (95% CI 0.64–0.82) for primary composite outcome, empagliflozin vs placebo, median 2.0 y.",
+      "generatedFact": "HR 0.72 (95% CI 0.64–0.82) for kidney disease progression or CV death, empagliflozin vs placebo, over median 2.0 y.",
+      "sourceEvidence": {
+        "locator": "R0027",
+        "locators": [
+          "R0027"
+        ],
+        "quotes": [
+          "By final follow-up, study treatment was discontinued by 557 (16.9%) surviving participants allocated empagliflozin, and by 640 (19.4%) allocated placebo. This included 18 (0.5%) participants in the empagliflozin group and 31 (0.9%) in the placebo group who started treatment with an open-label SGLT2 inhibitor. Table S3 provides details of the reasons for discontinuation. Primary and Secondary Outcomes The primary outcome of kidney disease progression or death from cardiovascular causes occurred in 432 participants (13.1%) in the empagliflozin group and 558 participants (16.9%) in the placebo group (hazard ratio, 0.72; 95% CI 0.64 to 0.82; P<0.001) ( Fig. 1 )."
+        ],
+        "quote": "By final follow-up, study treatment was discontinued by 557 (16.9%) surviving participants allocated empagliflozin, and by 640 (19.4%) allocated placebo. This included 18 (0.5%) participants in the empagliflozin group and 31 (0.9%) in the placebo group who started treatment with an open-label SGLT2 inhibitor. Table S3 provides details of the reasons for discontinuation. Primary and Secondary Outcomes The primary outcome of kidney disease progression or death from cardiovascular causes occurred in 432 participants (13.1%) in the empagliflozin group and 558 participants (16.9%) in the placebo group (hazard ratio, 0.72; 95% CI 0.64 to 0.82; P<0.001) ( Fig. 1 )."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "**Results** — Over a median follow-up of 2.0 years, the primary composite outcome was recorded in 432 of 3 304 participants (13.1 %) receiving empagliflozin and in 558 of 3 305 participants (16.9 %) receiving placebo (hazard ratio [HR] 0.72; 95 % confidence interval [CI] 0.64–0.82; P < 0.001). This absolute difference equated to 42 fewer primary events per 1 000 patients treated over two years. The effect was consistent irrespective of diabetes status and across the eGFR range studied."
+        ],
+        "quote": "**Results** — Over a median follow-up of 2.0 years, the primary composite outcome was recorded in 432 of 3 304 participants (13.1 %) receiving empagliflozin and in 558 of 3 305 participants (16.9 %) receiving placebo (hazard ratio [HR] 0.72; 95 % confidence interval [CI] 0.64–0.82; P < 0.001). This absolute difference equated to 42 fewer primary events per 1 000 patients treated over two years. The effect was consistent irrespective of diabetes status and across the eGFR range studied."
+      },
+      "explanation": "Effect measure, endpoint, arm order, CI, and time point identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 21,
+    "weightedFidelity": 0.9857,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 20,
+      "partial": 1
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [
+      "limitations_and_bias"
+    ],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 87.5,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "unsupported_claim"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail"
+  },
+  "adversarialAudit": null,
+  "overallAssessment": "The generated summary faithfully reproduces all critical factual elements (objectives, design, size, interventions, endpoints, results, conclusions, and analytical details) of the EMPA-KIDNEY trial as reported in the reference. Key numerical results, effect estimates, CIs, and significance levels are exact. Limitations are mostly aligned, though the generated text introduces three unsupported limitations (late safety underestimation, generalisability concerns, and industry sponsorship as a limitation) not mentioned in the source, leading to a partial on that item. All other items are exact. The text is a dependable representation of the trial's scientific content.",
+  "gradedAt": "2026-07-18T15:07:25Z"
+}

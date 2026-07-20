@@ -1,0 +1,721 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-009",
+  "category": "systematic-review-meta-analysis",
+  "title": "Age at onset of mental disorders worldwide: large-scale meta-analysis of 192 epidemiological studies.",
+  "pmcid": "PMC8960395",
+  "doi": "10.1038/s41380-021-01161-7",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "e308aecddeab48a62bb0e71faa0dd22c9158d7642c3cff92addbd74557235d46",
+  "generatedSha256": "8ab23df0c81742a97e01c12ab66b91bd2fd6e8c38b92931aa222e32ea4a6ed41",
+  "promptSha256": "3ad3afc1b0f1c175b20d76e2ca7a661fdc06f5945c755553a7224691e9920519",
+  "cacheFingerprint": "c800fe04c2171d78d6154611082b154e46f88438959cf1d1b7bdfe4f79caf0cd",
+  "referenceCharacters": 57113,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 6802,
+  "paperType": "systematic-review-meta-analysis",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "To provide robust, global epidemiological estimates of age at onset for mental disorders via systematic review and meta-analysis.",
+      "generatedFact": "To provide robust global epidemiological estimates of age at onset of mental disorders to fill a knowledge gap on peak ages.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "To provide robust, global epidemiological estimates of age at onset for mental disorders, we conducted a PRISMA/MOOSE-compliant systematic review with meta-analysis of birth cohort/cross-sectional/cohort studies, representative of the general population, reporting age at onset for any ICD/DSM-mental disorders, identified in PubMed/Web of Science (up to 16/05/2020) (PROSPERO:CRD42019143015). Co-primary outcomes were the proportion of individuals with onset of mental disorders before age 14, 18, 25, and peak age at onset, for any mental disorder and across International Classification of Diseases 11 diagnostic blocks. Median age at onset of specific disorders was additionally investigated."
+        ],
+        "quote": "To provide robust, global epidemiological estimates of age at onset for mental disorders, we conducted a PRISMA/MOOSE-compliant systematic review with meta-analysis of birth cohort/cross-sectional/cohort studies, representative of the general population, reporting age at onset for any ICD/DSM-mental disorders, identified in PubMed/Web of Science (up to 16/05/2020) (PROSPERO:CRD42019143015). Co-primary outcomes were the proportion of individuals with onset of mental disorders before age 14, 18, 25, and peak age at onset, for any mental disorder and across International Classification of Diseases 11 diagnostic blocks. Median age at onset of specific disorders was additionally investigated."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**方法**：按照 PRISMA 与 MOOSE 指南，对 PubMed 和 Web of Science 进行系统检索（截至 2020 年 5 月 16 日；PROSPERO：CRD42019143015），纳入报告 ICD/DSM 精神障碍发病年龄的、具有一般人群代表性的出生队列研究、横断面研究和发病率研究。共同主要结局指标为：任一精神障碍及各 ICD-11 诊断组在 14 岁前、18 岁前、25 岁前的发病比例，以及发病年龄峰值。采用自研拟合直方图与经验自助抽样方法进行荟萃分析。"
+        ],
+        "quote": "**方法**：按照 PRISMA 与 MOOSE 指南，对 PubMed 和 Web of Science 进行系统检索（截至 2020 年 5 月 16 日；PROSPERO：CRD42019143015），纳入报告 ICD/DSM 精神障碍发病年龄的、具有一般人群代表性的出生队列研究、横断面研究和发病率研究。共同主要结局指标为：任一精神障碍及各 ICD-11 诊断组在 14 岁前、18 岁前、25 岁前的发病比例，以及发病年龄峰值。采用自研拟合直方图与经验自助抽样方法进行荟萃分析。"
+      },
+      "explanation": "Both state the same objective of producing global epidemiological estimates of mental disorder age at onset.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "PRISMA/MOOSE-compliant systematic review with meta-analysis of birth cohort, cross-sectional, and cohort/incidence studies.",
+      "generatedFact": "Systematic review following PRISMA/MOOSE guidelines, including birth cohort, cross-sectional, and incidence studies.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "To provide robust, global epidemiological estimates of age at onset for mental disorders, we conducted a PRISMA/MOOSE-compliant systematic review with meta-analysis of birth cohort/cross-sectional/cohort studies, representative of the general population, reporting age at onset for any ICD/DSM-mental disorders, identified in PubMed/Web of Science (up to 16/05/2020) (PROSPERO:CRD42019143015). Co-primary outcomes were the proportion of individuals with onset of mental disorders before age 14, 18, 25, and peak age at onset, for any mental disorder and across International Classification of Diseases 11 diagnostic blocks. Median age at onset of specific disorders was additionally investigated."
+        ],
+        "quote": "To provide robust, global epidemiological estimates of age at onset for mental disorders, we conducted a PRISMA/MOOSE-compliant systematic review with meta-analysis of birth cohort/cross-sectional/cohort studies, representative of the general population, reporting age at onset for any ICD/DSM-mental disorders, identified in PubMed/Web of Science (up to 16/05/2020) (PROSPERO:CRD42019143015). Co-primary outcomes were the proportion of individuals with onset of mental disorders before age 14, 18, 25, and peak age at onset, for any mental disorder and across International Classification of Diseases 11 diagnostic blocks. Median age at onset of specific disorders was additionally investigated."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**方法**：按照 PRISMA 与 MOOSE 指南，对 PubMed 和 Web of Science 进行系统检索（截至 2020 年 5 月 16 日；PROSPERO：CRD42019143015），纳入报告 ICD/DSM 精神障碍发病年龄的、具有一般人群代表性的出生队列研究、横断面研究和发病率研究。共同主要结局指标为：任一精神障碍及各 ICD-11 诊断组在 14 岁前、18 岁前、25 岁前的发病比例，以及发病年龄峰值。采用自研拟合直方图与经验自助抽样方法进行荟萃分析。"
+        ],
+        "quote": "**方法**：按照 PRISMA 与 MOOSE 指南，对 PubMed 和 Web of Science 进行系统检索（截至 2020 年 5 月 16 日；PROSPERO：CRD42019143015），纳入报告 ICD/DSM 精神障碍发病年龄的、具有一般人群代表性的出生队列研究、横断面研究和发病率研究。共同主要结局指标为：任一精神障碍及各 ICD-11 诊断组在 14 岁前、18 岁前、25 岁前的发病比例，以及发病年龄峰值。采用自研拟合直方图与经验自助抽样方法进行荟萃分析。"
+      },
+      "explanation": "Study design description matches exactly: systematic review with meta-analysis of observational general population studies.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "General population representative birth cohort/cross-sectional/incidence studies reporting age at onset of ICD/DSM mental disorders.",
+      "generatedFact": "General population studies: birth cohort, cross-sectional, incidence studies with ICD/DSM diagnoses.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "To provide robust, global epidemiological estimates of age at onset for mental disorders, we conducted a PRISMA/MOOSE-compliant systematic review with meta-analysis of birth cohort/cross-sectional/cohort studies, representative of the general population, reporting age at onset for any ICD/DSM-mental disorders, identified in PubMed/Web of Science (up to 16/05/2020) (PROSPERO:CRD42019143015). Co-primary outcomes were the proportion of individuals with onset of mental disorders before age 14, 18, 25, and peak age at onset, for any mental disorder and across International Classification of Diseases 11 diagnostic blocks. Median age at onset of specific disorders was additionally investigated."
+        ],
+        "quote": "To provide robust, global epidemiological estimates of age at onset for mental disorders, we conducted a PRISMA/MOOSE-compliant systematic review with meta-analysis of birth cohort/cross-sectional/cohort studies, representative of the general population, reporting age at onset for any ICD/DSM-mental disorders, identified in PubMed/Web of Science (up to 16/05/2020) (PROSPERO:CRD42019143015). Co-primary outcomes were the proportion of individuals with onset of mental disorders before age 14, 18, 25, and peak age at onset, for any mental disorder and across International Classification of Diseases 11 diagnostic blocks. Median age at onset of specific disorders was additionally investigated."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "### 检索策略 至少两名研究者独立检索 PubMed 与 Web of Science（检索词组合：\"age at onset\" + \"mental disorder\"；\"birth cohort\" + \"mental disorder\"；\"incidence\" + \"mental disorder\"），检索时间范围为数据库建立至 2020 年 5 月 16 日。同时手工检索综述文献及纳入文献的参考文献列表。筛选流程首先在标题/摘要层面进行，随后对余下文献进行全文评估并记录排除原因。 ### 纳入与排除标准 纳入标准：（i）原始出生队列研究、回顾性评估发病年龄的横断面研究或前瞻性发病率研究，均以一般人群为研究对象；（ii）采用 ICD 或 DSM 任一版本诊断标准，或采用已验证截断值的标准化心理测量工具来界定 ICD/DSM 诊断类别；（iii）以英文撰写。 排除标准：（i）以非一般人群代表性临床群体为样本的研究；（ii）仅评估患病率而非发病年龄的研究；（iii）综述、荟萃分析、病例报告及其他非原始研究；（iv）非英文文献。 ### 数据提取 提取变量包括：DOI/PMID、作者、发表年份、研究所在国家、研究设计（出生队列/横断面/发病率研究）、队列名称、ICD/DSM 诊断标准、发病定义（首次症状/首次诊断/首次住院）、精神障碍具体类型、样本年龄范围、参与者总数、新发精神障碍病例数、发病年龄数据。"
+        ],
+        "quote": "### 检索策略 至少两名研究者独立检索 PubMed 与 Web of Science（检索词组合：\"age at onset\" + \"mental disorder\"；\"birth cohort\" + \"mental disorder\"；\"incidence\" + \"mental disorder\"），检索时间范围为数据库建立至 2020 年 5 月 16 日。同时手工检索综述文献及纳入文献的参考文献列表。筛选流程首先在标题/摘要层面进行，随后对余下文献进行全文评估并记录排除原因。 ### 纳入与排除标准 纳入标准：（i）原始出生队列研究、回顾性评估发病年龄的横断面研究或前瞻性发病率研究，均以一般人群为研究对象；（ii）采用 ICD 或 DSM 任一版本诊断标准，或采用已验证截断值的标准化心理测量工具来界定 ICD/DSM 诊断类别；（iii）以英文撰写。 排除标准：（i）以非一般人群代表性临床群体为样本的研究；（ii）仅评估患病率而非发病年龄的研究；（iii）综述、荟萃分析、病例报告及其他非原始研究；（iv）非英文文献。 ### 数据提取 提取变量包括：DOI/PMID、作者、发表年份、研究所在国家、研究设计（出生队列/横断面/发病率研究）、队列名称、ICD/DSM 诊断标准、发病定义（首次症状/首次诊断/首次住院）、精神障碍具体类型、样本年龄范围、参与者总数、新发精神障碍病例数、发病年龄数据。"
+      },
+      "explanation": "Both describe the data source as general-population studies with ICD/DSM-defined mental disorders.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "192 studies including 708,561 individuals diagnosed with a mental disorder.",
+      "generatedFact": "192 studies, n = 708,561 individuals diagnosed with a mental disorder.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Across 192 studies (n = 708,561) included, the proportion of individuals with onset of any mental disorders before the ages of 14, 18, 25 were 34.6%, 48.4%, 62.5%, and peak age was 14.5 years (k = 14, median = 18, interquartile range (IQR) = 11–34)."
+        ],
+        "quote": "Across 192 studies (n = 708,561) included, the proportion of individuals with onset of any mental disorders before the ages of 14, 18, 25 were 34.6%, 48.4%, 62.5%, and peak age was 14.5 years (k = 14, median = 18, interquartile range (IQR) = 11–34)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结果**：共纳入 192 项研究（n = 708,561）。任一精神障碍在 14 岁前、18 岁前、25 岁前发病的比例分别为 34.6%、48.4%、62.5%，发病峰值年龄为 14.5 岁（中位年龄 18 岁，IQR 11–34）。各诊断组的比例及峰值年龄为：神经发育障碍 61.5%/83.2%/95.8%，峰值 5.5 岁；焦虑/恐惧相关障碍 38.1%/51.8%/73.3%，峰值 5.5 岁；强迫及相关障碍 24.6%/45.1%/64.0%，峰值 14.5 岁；喂养/进食障碍 15.8%/48.1%/82.4%，峰值 15.5 岁；应激相关障碍 16.9%/27.6%/43.1%，峰值 15.5 岁；物质使用/成瘾行为障碍 2.9%/15.2%/48.8%，峰值 19.5 岁；精神分裂症谱系/原发性精神病性障碍 3%/12.3%/47.8%，峰值 20.5 岁；人格障碍及相关特质 1.9%/9.6%/47.7%，峰值 20.5 岁；心境障碍 2.5%/11.5%/34.5%，峰值 20.5 岁。特异性障碍的中位发病年龄呈连续谱分布。性别与发病年龄定义之间未见显著差异。 **结论**：全球精神障碍的发病年龄集中于儿童、青少年与成年早期，约半数患者在 18 岁前已发病。现行以 18 岁为界区分儿童/青少年与成人精神卫生服务的体系缺乏流行病学证据支持，亟需建立整合性的心理健康促进与预防/早期干预照护模式。"
+        ],
+        "quote": "**结果**：共纳入 192 项研究（n = 708,561）。任一精神障碍在 14 岁前、18 岁前、25 岁前发病的比例分别为 34.6%、48.4%、62.5%，发病峰值年龄为 14.5 岁（中位年龄 18 岁，IQR 11–34）。各诊断组的比例及峰值年龄为：神经发育障碍 61.5%/83.2%/95.8%，峰值 5.5 岁；焦虑/恐惧相关障碍 38.1%/51.8%/73.3%，峰值 5.5 岁；强迫及相关障碍 24.6%/45.1%/64.0%，峰值 14.5 岁；喂养/进食障碍 15.8%/48.1%/82.4%，峰值 15.5 岁；应激相关障碍 16.9%/27.6%/43.1%，峰值 15.5 岁；物质使用/成瘾行为障碍 2.9%/15.2%/48.8%，峰值 19.5 岁；精神分裂症谱系/原发性精神病性障碍 3%/12.3%/47.8%，峰值 20.5 岁；人格障碍及相关特质 1.9%/9.6%/47.7%，峰值 20.5 岁；心境障碍 2.5%/11.5%/34.5%，峰值 20.5 岁。特异性障碍的中位发病年龄呈连续谱分布。性别与发病年龄定义之间未见显著差异。 **结论**：全球精神障碍的发病年龄集中于儿童、青少年与成年早期，约半数患者在 18 岁前已发病。现行以 18 岁为界区分儿童/青少年与成人精神卫生服务的体系缺乏流行病学证据支持，亟需建立整合性的心理健康促进与预防/早期干预照护模式。"
+      },
+      "explanation": "The number of included studies and total participants matches exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Included original birth cohort/cross-sectional/incidence studies from general population with ICD/DSM diagnoses, in English; excluded clinical samples, prevalence-only studies, reviews, non-English.",
+      "generatedFact": "Same inclusion/exclusion criteria: general population, original studies, ICD/DSM diagnoses, English; excluded clinical samples, prevalence-only, reviews, non-English.",
+      "sourceEvidence": {
+        "locator": "R0014",
+        "locators": [
+          "R0014"
+        ],
+        "quotes": [
+          "Inclusion and exclusion criteria Included were: (i) original birth cohort or cross-sectional studies retrospectively assessing age at disorder onset, or prospective incidence studies [ 30 ], (ii) focusing on the general population, (iii) assessing age at onset of mental disorders, defined according to international classification diseases (ICD) or diagnostic and statistical manual (DSM)-any version criteria, or by established psychometric instruments with validated cut-offs that defined ICD/DSM diagnostic categories, (iv) written in English."
+        ],
+        "quote": "Inclusion and exclusion criteria Included were: (i) original birth cohort or cross-sectional studies retrospectively assessing age at disorder onset, or prospective incidence studies [ 30 ], (ii) focusing on the general population, (iii) assessing age at onset of mental disorders, defined according to international classification diseases (ICD) or diagnostic and statistical manual (DSM)-any version criteria, or by established psychometric instruments with validated cut-offs that defined ICD/DSM diagnostic categories, (iv) written in English."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "### 检索策略 至少两名研究者独立检索 PubMed 与 Web of Science（检索词组合：\"age at onset\" + \"mental disorder\"；\"birth cohort\" + \"mental disorder\"；\"incidence\" + \"mental disorder\"），检索时间范围为数据库建立至 2020 年 5 月 16 日。同时手工检索综述文献及纳入文献的参考文献列表。筛选流程首先在标题/摘要层面进行，随后对余下文献进行全文评估并记录排除原因。 ### 纳入与排除标准 纳入标准：（i）原始出生队列研究、回顾性评估发病年龄的横断面研究或前瞻性发病率研究，均以一般人群为研究对象；（ii）采用 ICD 或 DSM 任一版本诊断标准，或采用已验证截断值的标准化心理测量工具来界定 ICD/DSM 诊断类别；（iii）以英文撰写。 排除标准：（i）以非一般人群代表性临床群体为样本的研究；（ii）仅评估患病率而非发病年龄的研究；（iii）综述、荟萃分析、病例报告及其他非原始研究；（iv）非英文文献。 ### 数据提取 提取变量包括：DOI/PMID、作者、发表年份、研究所在国家、研究设计（出生队列/横断面/发病率研究）、队列名称、ICD/DSM 诊断标准、发病定义（首次症状/首次诊断/首次住院）、精神障碍具体类型、样本年龄范围、参与者总数、新发精神障碍病例数、发病年龄数据。"
+        ],
+        "quote": "### 检索策略 至少两名研究者独立检索 PubMed 与 Web of Science（检索词组合：\"age at onset\" + \"mental disorder\"；\"birth cohort\" + \"mental disorder\"；\"incidence\" + \"mental disorder\"），检索时间范围为数据库建立至 2020 年 5 月 16 日。同时手工检索综述文献及纳入文献的参考文献列表。筛选流程首先在标题/摘要层面进行，随后对余下文献进行全文评估并记录排除原因。 ### 纳入与排除标准 纳入标准：（i）原始出生队列研究、回顾性评估发病年龄的横断面研究或前瞻性发病率研究，均以一般人群为研究对象；（ii）采用 ICD 或 DSM 任一版本诊断标准，或采用已验证截断值的标准化心理测量工具来界定 ICD/DSM 诊断类别；（iii）以英文撰写。 排除标准：（i）以非一般人群代表性临床群体为样本的研究；（ii）仅评估患病率而非发病年龄的研究；（iii）综述、荟萃分析、病例报告及其他非原始研究；（iv）非英文文献。 ### 数据提取 提取变量包括：DOI/PMID、作者、发表年份、研究所在国家、研究设计（出生队列/横断面/发病率研究）、队列名称、ICD/DSM 诊断标准、发病定义（首次症状/首次诊断/首次住院）、精神障碍具体类型、样本年龄范围、参与者总数、新发精神障碍病例数、发病年龄数据。"
+      },
+      "explanation": "Eligibility rules are reproduced without deviation.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "This meta-analysis of observational data had no intervention, exposure, or index test.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No comparator, control, or reference standard was used.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Co-primary outcomes: proportion with onset before 14, 18, 25 years and peak age at onset for any mental disorder and ICD-11 diagnostic blocks; median age for specific disorders.",
+      "generatedFact": "Co-primary outcomes: proportion before 14, 18, 25 years and peak age for any disorder and ICD-11 blocks; median age for specific disorders.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "To provide robust, global epidemiological estimates of age at onset for mental disorders, we conducted a PRISMA/MOOSE-compliant systematic review with meta-analysis of birth cohort/cross-sectional/cohort studies, representative of the general population, reporting age at onset for any ICD/DSM-mental disorders, identified in PubMed/Web of Science (up to 16/05/2020) (PROSPERO:CRD42019143015). Co-primary outcomes were the proportion of individuals with onset of mental disorders before age 14, 18, 25, and peak age at onset, for any mental disorder and across International Classification of Diseases 11 diagnostic blocks. Median age at onset of specific disorders was additionally investigated."
+        ],
+        "quote": "To provide robust, global epidemiological estimates of age at onset for mental disorders, we conducted a PRISMA/MOOSE-compliant systematic review with meta-analysis of birth cohort/cross-sectional/cohort studies, representative of the general population, reporting age at onset for any ICD/DSM-mental disorders, identified in PubMed/Web of Science (up to 16/05/2020) (PROSPERO:CRD42019143015). Co-primary outcomes were the proportion of individuals with onset of mental disorders before age 14, 18, 25, and peak age at onset, for any mental disorder and across International Classification of Diseases 11 diagnostic blocks. Median age at onset of specific disorders was additionally investigated."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**方法**：按照 PRISMA 与 MOOSE 指南，对 PubMed 和 Web of Science 进行系统检索（截至 2020 年 5 月 16 日；PROSPERO：CRD42019143015），纳入报告 ICD/DSM 精神障碍发病年龄的、具有一般人群代表性的出生队列研究、横断面研究和发病率研究。共同主要结局指标为：任一精神障碍及各 ICD-11 诊断组在 14 岁前、18 岁前、25 岁前的发病比例，以及发病年龄峰值。采用自研拟合直方图与经验自助抽样方法进行荟萃分析。"
+        ],
+        "quote": "**方法**：按照 PRISMA 与 MOOSE 指南，对 PubMed 和 Web of Science 进行系统检索（截至 2020 年 5 月 16 日；PROSPERO：CRD42019143015），纳入报告 ICD/DSM 精神障碍发病年龄的、具有一般人群代表性的出生队列研究、横断面研究和发病率研究。共同主要结局指标为：任一精神障碍及各 ICD-11 诊断组在 14 岁前、18 岁前、25 岁前的发病比例，以及发病年龄峰值。采用自研拟合直方图与经验自助抽样方法进行荟萃分析。"
+      },
+      "explanation": "Primary outcomes are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No prospective follow-up period; the meta-analysis pooled retrospective/cross-sectional age-at-onset data.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Developed ad‑hoc histogram estimation minimizing sum of squared errors to combine varying age subgroupings and derived peaks and cumulative proportions.",
+      "generatedFact": "Constructed histograms minimizing sum of squared errors to harmonize heterogeneous age‑at‑onset reports.",
+      "sourceEvidence": {
+        "locator": "R0020",
+        "locators": [
+          "R0020"
+        ],
+        "quotes": [
+          "disorders, disorders associated with pregnancy childbirth or puerperium. Individual studies adopted different age subgroupings and age ranges. To our knowledge, there is no standard method to pool such varying descriptive statistics of the distribution of a variable (age at onset of mental disorders) when the variable of interest follows a non-normal distribution and/or is heterogeneously censored. Therefore, we have developed an ad-hoc method to meta-analyse these estimates. To assess these co-primary outcomes, we first estimated the histogram of the age at disorder onset that minimised the sum of squared errors (SSE) of the study-reported data."
+        ],
+        "quote": "disorders, disorders associated with pregnancy childbirth or puerperium. Individual studies adopted different age subgroupings and age ranges. To our knowledge, there is no standard method to pool such varying descriptive statistics of the distribution of a variable (age at onset of mental disorders) when the variable of interest follows a non-normal distribution and/or is heterogeneously censored. Therefore, we have developed an ad-hoc method to meta-analyse these estimates. To assess these co-primary outcomes, we first estimated the histogram of the age at disorder onset that minimised the sum of squared errors (SSE) of the study-reported data."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 质量评估 由于尚无针对此类研究的经验证质量评估工具，采用从 Newcastle-Ottawa 量表衍生出的临时性标准（包括发病年龄定义、诊断标准使用及研究设计等）进行描述性报告，未用于分层分析。 ### 统计分析 共同主要结局指标：（i）任一与特定精神障碍组在 14 岁前、18 岁前、25 岁前的发病比例；（ii）任一与各诊断组精神障碍的发病年龄峰值。诊断组涵盖 ICD-11\"精神、行为或神经发育障碍\"章节下的诊断模块（如神经发育障碍、精神分裂症谱系障碍、心境障碍、焦虑与恐惧相关障碍、强迫及相关障碍、应激相关障碍、喂养及进食障碍、物质使用及成瘾行为障碍、人格障碍及相关特质等），以及 17 种预选的特异性精神障碍。 对于非同质截尾的非正态分布变量，研究组开发了一种特定荟萃分析方法：首先估计最小化研究与报告数据误差平方和的发病年龄直方图，从中推导出发病年龄峰值、14/18/25 岁前发病比例及发病年龄的 25%、50%、75% 百分位数；随后采用经验自助法估计 95% 置信区间。 敏感性分析：（i）针对 17 种特异性精神障碍重复分析；（ii）按发病定义（首次症状/首次诊断/首次住院）分层；（iii）按性别分层；（iv）对每对特异性障碍的中位发病年龄大小进行自助法比较。"
+        ],
+        "quote": "### 质量评估 由于尚无针对此类研究的经验证质量评估工具，采用从 Newcastle-Ottawa 量表衍生出的临时性标准（包括发病年龄定义、诊断标准使用及研究设计等）进行描述性报告，未用于分层分析。 ### 统计分析 共同主要结局指标：（i）任一与特定精神障碍组在 14 岁前、18 岁前、25 岁前的发病比例；（ii）任一与各诊断组精神障碍的发病年龄峰值。诊断组涵盖 ICD-11\"精神、行为或神经发育障碍\"章节下的诊断模块（如神经发育障碍、精神分裂症谱系障碍、心境障碍、焦虑与恐惧相关障碍、强迫及相关障碍、应激相关障碍、喂养及进食障碍、物质使用及成瘾行为障碍、人格障碍及相关特质等），以及 17 种预选的特异性精神障碍。 对于非同质截尾的非正态分布变量，研究组开发了一种特定荟萃分析方法：首先估计最小化研究与报告数据误差平方和的发病年龄直方图，从中推导出发病年龄峰值、14/18/25 岁前发病比例及发病年龄的 25%、50%、75% 百分位数；随后采用经验自助法估计 95% 置信区间。 敏感性分析：（i）针对 17 种特异性精神障碍重复分析；（ii）按发病定义（首次症状/首次诊断/首次住院）分层；（iii）按性别分层；（iv）对每对特异性障碍的中位发病年龄大小进行自助法比较。"
+      },
+      "explanation": "The preprocessing method for harmonizing data is described consistently.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Ad‑hoc histogram method; empirical bootstrap for 95% CIs; sensitivity analyses by sex, onset definition, and specific disorders; pairwise bootstrap comparisons of median ages.",
+      "generatedFact": "Self‑developed histogram‑fitting and bootstrap; sensitivity analyses by sex, onset definition, and specific disorders; pairwise median comparisons.",
+      "sourceEvidence": {
+        "locator": "R0020",
+        "locators": [
+          "R0020"
+        ],
+        "quotes": [
+          "disorders, disorders associated with pregnancy childbirth or puerperium. Individual studies adopted different age subgroupings and age ranges. To our knowledge, there is no standard method to pool such varying descriptive statistics of the distribution of a variable (age at onset of mental disorders) when the variable of interest follows a non-normal distribution and/or is heterogeneously censored. Therefore, we have developed an ad-hoc method to meta-analyse these estimates. To assess these co-primary outcomes, we first estimated the histogram of the age at disorder onset that minimised the sum of squared errors (SSE) of the study-reported data."
+        ],
+        "quote": "disorders, disorders associated with pregnancy childbirth or puerperium. Individual studies adopted different age subgroupings and age ranges. To our knowledge, there is no standard method to pool such varying descriptive statistics of the distribution of a variable (age at onset of mental disorders) when the variable of interest follows a non-normal distribution and/or is heterogeneously censored. Therefore, we have developed an ad-hoc method to meta-analyse these estimates. To assess these co-primary outcomes, we first estimated the histogram of the age at disorder onset that minimised the sum of squared errors (SSE) of the study-reported data."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 质量评估 由于尚无针对此类研究的经验证质量评估工具，采用从 Newcastle-Ottawa 量表衍生出的临时性标准（包括发病年龄定义、诊断标准使用及研究设计等）进行描述性报告，未用于分层分析。 ### 统计分析 共同主要结局指标：（i）任一与特定精神障碍组在 14 岁前、18 岁前、25 岁前的发病比例；（ii）任一与各诊断组精神障碍的发病年龄峰值。诊断组涵盖 ICD-11\"精神、行为或神经发育障碍\"章节下的诊断模块（如神经发育障碍、精神分裂症谱系障碍、心境障碍、焦虑与恐惧相关障碍、强迫及相关障碍、应激相关障碍、喂养及进食障碍、物质使用及成瘾行为障碍、人格障碍及相关特质等），以及 17 种预选的特异性精神障碍。 对于非同质截尾的非正态分布变量，研究组开发了一种特定荟萃分析方法：首先估计最小化研究与报告数据误差平方和的发病年龄直方图，从中推导出发病年龄峰值、14/18/25 岁前发病比例及发病年龄的 25%、50%、75% 百分位数；随后采用经验自助法估计 95% 置信区间。 敏感性分析：（i）针对 17 种特异性精神障碍重复分析；（ii）按发病定义（首次症状/首次诊断/首次住院）分层；（iii）按性别分层；（iv）对每对特异性障碍的中位发病年龄大小进行自助法比较。"
+        ],
+        "quote": "### 质量评估 由于尚无针对此类研究的经验证质量评估工具，采用从 Newcastle-Ottawa 量表衍生出的临时性标准（包括发病年龄定义、诊断标准使用及研究设计等）进行描述性报告，未用于分层分析。 ### 统计分析 共同主要结局指标：（i）任一与特定精神障碍组在 14 岁前、18 岁前、25 岁前的发病比例；（ii）任一与各诊断组精神障碍的发病年龄峰值。诊断组涵盖 ICD-11\"精神、行为或神经发育障碍\"章节下的诊断模块（如神经发育障碍、精神分裂症谱系障碍、心境障碍、焦虑与恐惧相关障碍、强迫及相关障碍、应激相关障碍、喂养及进食障碍、物质使用及成瘾行为障碍、人格障碍及相关特质等），以及 17 种预选的特异性精神障碍。 对于非同质截尾的非正态分布变量，研究组开发了一种特定荟萃分析方法：首先估计最小化研究与报告数据误差平方和的发病年龄直方图，从中推导出发病年龄峰值、14/18/25 岁前发病比例及发病年龄的 25%、50%、75% 百分位数；随后采用经验自助法估计 95% 置信区间。 敏感性分析：（i）针对 17 种特异性精神障碍重复分析；（ii）按发病定义（首次症状/首次诊断/首次住院）分层；（iii）按性别分层；（iv）对每对特异性障碍的中位发病年龄大小进行自助法比较。"
+      },
+      "explanation": "Statistical synthesis approach and sensitivity analyses are faithfully reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Custom histogram‑fitting algorithm minimizing SSE and empirical bootstrap procedure.",
+      "generatedFact": "Self‑developed histogram fitting algorithm with bootstrap resampling.",
+      "sourceEvidence": {
+        "locator": "R0020",
+        "locators": [
+          "R0020"
+        ],
+        "quotes": [
+          "disorders, disorders associated with pregnancy childbirth or puerperium. Individual studies adopted different age subgroupings and age ranges. To our knowledge, there is no standard method to pool such varying descriptive statistics of the distribution of a variable (age at onset of mental disorders) when the variable of interest follows a non-normal distribution and/or is heterogeneously censored. Therefore, we have developed an ad-hoc method to meta-analyse these estimates. To assess these co-primary outcomes, we first estimated the histogram of the age at disorder onset that minimised the sum of squared errors (SSE) of the study-reported data."
+        ],
+        "quote": "disorders, disorders associated with pregnancy childbirth or puerperium. Individual studies adopted different age subgroupings and age ranges. To our knowledge, there is no standard method to pool such varying descriptive statistics of the distribution of a variable (age at onset of mental disorders) when the variable of interest follows a non-normal distribution and/or is heterogeneously censored. Therefore, we have developed an ad-hoc method to meta-analyse these estimates. To assess these co-primary outcomes, we first estimated the histogram of the age at disorder onset that minimised the sum of squared errors (SSE) of the study-reported data."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**方法**：按照 PRISMA 与 MOOSE 指南，对 PubMed 和 Web of Science 进行系统检索（截至 2020 年 5 月 16 日；PROSPERO：CRD42019143015），纳入报告 ICD/DSM 精神障碍发病年龄的、具有一般人群代表性的出生队列研究、横断面研究和发病率研究。共同主要结局指标为：任一精神障碍及各 ICD-11 诊断组在 14 岁前、18 岁前、25 岁前的发病比例，以及发病年龄峰值。采用自研拟合直方图与经验自助抽样方法进行荟萃分析。"
+        ],
+        "quote": "**方法**：按照 PRISMA 与 MOOSE 指南，对 PubMed 和 Web of Science 进行系统检索（截至 2020 年 5 月 16 日；PROSPERO：CRD42019143015），纳入报告 ICD/DSM 精神障碍发病年龄的、具有一般人群代表性的出生队列研究、横断面研究和发病率研究。共同主要结局指标为：任一精神障碍及各 ICD-11 诊断组在 14 岁前、18 岁前、25 岁前的发病比例，以及发病年龄峰值。采用自研拟合直方图与经验自助抽样方法进行荟萃分析。"
+      },
+      "explanation": "The computational approach is consistently described as a novel histogram‑based bootstrap method.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Any mental disorder: onset before 14/18/25 years 34.6%/48.4%/62.5%, peak 14.5 y; diagnostic‑block proportions and peaks: neurodevelopmental 61.5%/83.2%/95.8% peak 5.5 y, anxiety/fear 38.1%/51.8%/73.3% peak 5.5 y, etc.; median age groups 8‑13, 17‑22, 25‑27, 30‑35 y.",
+      "generatedFact": "Same proportions, peaks, and median age groups as in the reference (e.g., any disorder 34.6%/48.4%/62.5%, peak 14.5 y; diagnostic blocks match; median age subgroups 8‑13, 17‑22, 25‑27, 30‑35 y).",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Across 192 studies (n = 708,561) included, the proportion of individuals with onset of any mental disorders before the ages of 14, 18, 25 were 34.6%, 48.4%, 62.5%, and peak age was 14.5 years (k = 14, median = 18, interquartile range (IQR) = 11–34)."
+        ],
+        "quote": "Across 192 studies (n = 708,561) included, the proportion of individuals with onset of any mental disorders before the ages of 14, 18, 25 were 34.6%, 48.4%, 62.5%, and peak age was 14.5 years (k = 14, median = 18, interquartile range (IQR) = 11–34)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结果**：共纳入 192 项研究（n = 708,561）。任一精神障碍在 14 岁前、18 岁前、25 岁前发病的比例分别为 34.6%、48.4%、62.5%，发病峰值年龄为 14.5 岁（中位年龄 18 岁，IQR 11–34）。各诊断组的比例及峰值年龄为：神经发育障碍 61.5%/83.2%/95.8%，峰值 5.5 岁；焦虑/恐惧相关障碍 38.1%/51.8%/73.3%，峰值 5.5 岁；强迫及相关障碍 24.6%/45.1%/64.0%，峰值 14.5 岁；喂养/进食障碍 15.8%/48.1%/82.4%，峰值 15.5 岁；应激相关障碍 16.9%/27.6%/43.1%，峰值 15.5 岁；物质使用/成瘾行为障碍 2.9%/15.2%/48.8%，峰值 19.5 岁；精神分裂症谱系/原发性精神病性障碍 3%/12.3%/47.8%，峰值 20.5 岁；人格障碍及相关特质 1.9%/9.6%/47.7%，峰值 20.5 岁；心境障碍 2.5%/11.5%/34.5%，峰值 20.5 岁。特异性障碍的中位发病年龄呈连续谱分布。性别与发病年龄定义之间未见显著差异。 **结论**：全球精神障碍的发病年龄集中于儿童、青少年与成年早期，约半数患者在 18 岁前已发病。现行以 18 岁为界区分儿童/青少年与成人精神卫生服务的体系缺乏流行病学证据支持，亟需建立整合性的心理健康促进与预防/早期干预照护模式。"
+        ],
+        "quote": "**结果**：共纳入 192 项研究（n = 708,561）。任一精神障碍在 14 岁前、18 岁前、25 岁前发病的比例分别为 34.6%、48.4%、62.5%，发病峰值年龄为 14.5 岁（中位年龄 18 岁，IQR 11–34）。各诊断组的比例及峰值年龄为：神经发育障碍 61.5%/83.2%/95.8%，峰值 5.5 岁；焦虑/恐惧相关障碍 38.1%/51.8%/73.3%，峰值 5.5 岁；强迫及相关障碍 24.6%/45.1%/64.0%，峰值 14.5 岁；喂养/进食障碍 15.8%/48.1%/82.4%，峰值 15.5 岁；应激相关障碍 16.9%/27.6%/43.1%，峰值 15.5 岁；物质使用/成瘾行为障碍 2.9%/15.2%/48.8%，峰值 19.5 岁；精神分裂症谱系/原发性精神病性障碍 3%/12.3%/47.8%，峰值 20.5 岁；人格障碍及相关特质 1.9%/9.6%/47.7%，峰值 20.5 岁；心境障碍 2.5%/11.5%/34.5%，峰值 20.5 岁。特异性障碍的中位发病年龄呈连续谱分布。性别与发病年龄定义之间未见显著差异。 **结论**：全球精神障碍的发病年龄集中于儿童、青少年与成年早期，约半数患者在 18 岁前已发病。现行以 18 岁为界区分儿童/青少年与成人精神卫生服务的体系缺乏流行病学证据支持，亟需建立整合性的心理健康促进与预防/早期干预照护模式。"
+      },
+      "explanation": "All cited numerical estimates (proportions, peak ages, median ranges) are identical to the source.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "95% confidence intervals estimated via empirical bootstrap; specific numeric CIs not reported in main text.",
+      "generatedFact": "95% confidence intervals obtained by bootstrap method.",
+      "sourceEvidence": {
+        "locator": "R0021",
+        "locators": [
+          "R0021"
+        ],
+        "quotes": [
+          "From this histogram, we then derived peak age at onset, as well as the proportion of individuals showing an onset before 14, 18 and 25 years of age, and the 25%, 50% and 75% percentiles of the age at disorder onset. Thereafter, we used an empirical bootstrap approach [ 34 ] to estimate the 95% confidence intervals of age at onset. Additional sensitivity analyses were performed."
+        ],
+        "quote": "From this histogram, we then derived peak age at onset, as well as the proportion of individuals showing an onset before 14, 18 and 25 years of age, and the 25%, 50% and 75% percentiles of the age at disorder onset. Thereafter, we used an empirical bootstrap approach [ 34 ] to estimate the 95% confidence intervals of age at onset. Additional sensitivity analyses were performed."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 质量评估 由于尚无针对此类研究的经验证质量评估工具，采用从 Newcastle-Ottawa 量表衍生出的临时性标准（包括发病年龄定义、诊断标准使用及研究设计等）进行描述性报告，未用于分层分析。 ### 统计分析 共同主要结局指标：（i）任一与特定精神障碍组在 14 岁前、18 岁前、25 岁前的发病比例；（ii）任一与各诊断组精神障碍的发病年龄峰值。诊断组涵盖 ICD-11\"精神、行为或神经发育障碍\"章节下的诊断模块（如神经发育障碍、精神分裂症谱系障碍、心境障碍、焦虑与恐惧相关障碍、强迫及相关障碍、应激相关障碍、喂养及进食障碍、物质使用及成瘾行为障碍、人格障碍及相关特质等），以及 17 种预选的特异性精神障碍。 对于非同质截尾的非正态分布变量，研究组开发了一种特定荟萃分析方法：首先估计最小化研究与报告数据误差平方和的发病年龄直方图，从中推导出发病年龄峰值、14/18/25 岁前发病比例及发病年龄的 25%、50%、75% 百分位数；随后采用经验自助法估计 95% 置信区间。 敏感性分析：（i）针对 17 种特异性精神障碍重复分析；（ii）按发病定义（首次症状/首次诊断/首次住院）分层；（iii）按性别分层；（iv）对每对特异性障碍的中位发病年龄大小进行自助法比较。"
+        ],
+        "quote": "### 质量评估 由于尚无针对此类研究的经验证质量评估工具，采用从 Newcastle-Ottawa 量表衍生出的临时性标准（包括发病年龄定义、诊断标准使用及研究设计等）进行描述性报告，未用于分层分析。 ### 统计分析 共同主要结局指标：（i）任一与特定精神障碍组在 14 岁前、18 岁前、25 岁前的发病比例；（ii）任一与各诊断组精神障碍的发病年龄峰值。诊断组涵盖 ICD-11\"精神、行为或神经发育障碍\"章节下的诊断模块（如神经发育障碍、精神分裂症谱系障碍、心境障碍、焦虑与恐惧相关障碍、强迫及相关障碍、应激相关障碍、喂养及进食障碍、物质使用及成瘾行为障碍、人格障碍及相关特质等），以及 17 种预选的特异性精神障碍。 对于非同质截尾的非正态分布变量，研究组开发了一种特定荟萃分析方法：首先估计最小化研究与报告数据误差平方和的发病年龄直方图，从中推导出发病年龄峰值、14/18/25 岁前发病比例及发病年龄的 25%、50%、75% 百分位数；随后采用经验自助法估计 95% 置信区间。 敏感性分析：（i）针对 17 种特异性精神障碍重复分析；（ii）按发病定义（首次症状/首次诊断/首次住院）分层；（iii）按性别分层；（iv）对每对特异性障碍的中位发病年龄大小进行自助法比较。"
+      },
+      "explanation": "Both indicate that bootstrap was used for 95% CIs, without providing numeric intervals; the approach is the same.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Mental disorders onset early; the child/adult service split at age 18 lacks epidemiological support; integrated mental health promotion and early intervention are needed.",
+      "generatedFact": "Global evidence shows early onset; the 18‑year threshold for separating services is unsupported; integrated models of promotion and early intervention are recommended.",
+      "sourceEvidence": {
+        "locator": "R0070",
+        "locators": [
+          "R0070"
+        ],
+        "quotes": [
+          "Conclusions The meta-analytic, global, epidemiological evidence provided challenges the current mental health care system that artificially separates child/adolescent and adult mental health services, providing strong epidemiologic evidence for the global implementation of integrated models of mental health promotion and preventive/early intervention care for young people in the community, those at risk for and with manifest mental disorders. Supplementary information Supplementary Acknowledgements This work was supported by Wellcome Trust Innovator Grant to PFP."
+        ],
+        "quote": "Conclusions The meta-analytic, global, epidemiological evidence provided challenges the current mental health care system that artificially separates child/adolescent and adult mental health services, providing strong epidemiologic evidence for the global implementation of integrated models of mental health promotion and preventive/early intervention care for young people in the community, those at risk for and with manifest mental disorders. Supplementary information Supplementary Acknowledgements This work was supported by Wellcome Trust Innovator Grant to PFP."
+      },
+      "generatedEvidence": {
+        "locator": "G0012",
+        "locators": [
+          "G0012"
+        ],
+        "quotes": [
+          "--- ## 结论 本项全球荟萃流行病学证据表明，绝大多数精神障碍的发病年龄集中于儿童期、青春期与成年早期；以 18 岁为界区分儿童/青少年精神卫生服务与成人精神卫生服务的现行体系缺乏流行病学证据支持。研究结果有力支持全球范围内实施整合性的心理健康促进模型，以及为社区中、处于精神障碍风险和已患病年轻人群提供预防与早期干预照护。 --- ## 来源链接 - 全文（开放获取）：[https://www.nature.com/articles/s41380-021-01161-7](https://www.nature.com/articles/s41380-021-01161-7) - PubMed：[https://pubmed.ncbi.nlm.nih.gov/34079068/](https://pubmed.ncbi.nlm.nih.gov/34079068/) - Europe PMC：[https://europepmc.org/article/MED/34079068](https://europepmc.org/article/MED/34079068) - PROSPERO 注册：[CRD42019143015](https://www.crd.york.ac.uk/prospero/display_record.php?ID=CRD42019143015) --- *本文基于 Solmi et al. (2022) 原文献开放获取全文撰写。所有数据、方法及结论均来源于原文献可核验内容。*"
+        ],
+        "quote": "--- ## 结论 本项全球荟萃流行病学证据表明，绝大多数精神障碍的发病年龄集中于儿童期、青春期与成年早期；以 18 岁为界区分儿童/青少年精神卫生服务与成人精神卫生服务的现行体系缺乏流行病学证据支持。研究结果有力支持全球范围内实施整合性的心理健康促进模型，以及为社区中、处于精神障碍风险和已患病年轻人群提供预防与早期干预照护。 --- ## 来源链接 - 全文（开放获取）：[https://www.nature.com/articles/s41380-021-01161-7](https://www.nature.com/articles/s41380-021-01161-7) - PubMed：[https://pubmed.ncbi.nlm.nih.gov/34079068/](https://pubmed.ncbi.nlm.nih.gov/34079068/) - Europe PMC：[https://europepmc.org/article/MED/34079068](https://europepmc.org/article/MED/34079068) - PROSPERO 注册：[CRD42019143015](https://www.crd.york.ac.uk/prospero/display_record.php?ID=CRD42019143015) --- *本文基于 Solmi et al. (2022) 原文献开放获取全文撰写。所有数据、方法及结论均来源于原文献可核验内容。*"
+      },
+      "explanation": "The direction, magnitude, and strength of the conclusion are consistent with the reference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Sparse country‑specific data, wide CIs for some disorders, data heterogeneity, non‑validated quality assessment, varying onset definitions, inability to separate comorbidities or regional differences, caution in peak comparisons.",
+      "generatedFact": "Same limitations: sparse country data, broad CIs, high heterogeneity, non‑validated quality tool, onset definition heterogeneity, no comorbidity/regional differentiation, cautious peak comparisons.",
+      "sourceEvidence": {
+        "locator": "R0067",
+        "locators": [
+          "R0067"
+        ],
+        "quotes": [
+          "Future mental health reforms could leverage and refine clinical high-risk services for young people at risk of psychosis, which typically accepts referrals aged 14–35 years and therefore provide essential transitional care to this vulnerable young population [ 15 , 17 , 58 ]. This study has several limitations. First, data were too sparse to calculate country-specific estimates. However, the database included many countries worldwide, and, therefore, the estimates provided are largely representative of the global general population. Second, the 95% confidence interval for some estimates were broad since analyses for some disorders were based on few studies."
+        ],
+        "quote": "Future mental health reforms could leverage and refine clinical high-risk services for young people at risk of psychosis, which typically accepts referrals aged 14–35 years and therefore provide essential transitional care to this vulnerable young population [ 15 , 17 , 58 ]. This study has several limitations. First, data were too sparse to calculate country-specific estimates. However, the database included many countries worldwide, and, therefore, the estimates provided are largely representative of the global general population. Second, the 95% confidence interval for some estimates were broad since analyses for some disorders were based on few studies."
+      },
+      "generatedEvidence": {
+        "locator": "G0011",
+        "locators": [
+          "G0011"
+        ],
+        "quotes": [
+          "### 对 18 岁分界线的挑战 证据显示，年龄 18 岁作为成人精神卫生服务的准入阈值缺乏流行病学与生物学依据。全球多数地区的精神卫生专科培训与服务系统均在儿童/青少年精神医学与成人精神医学之间设置分割，但大量在成年期被诊断的障碍的发病人群峰值年龄早于 18 岁，这种分叉式系统不利于患者获得连续照护。此外，多数精神医学培训项目未能覆盖从儿童青少年到成人的过渡阶段。未来的精神卫生体系改革应允许灵活的准入入口、取消下限年龄限制并放松低年龄准入标准。已在全球推广的 14–35 岁精神病临床高危服务模式，可为这一过渡阶段提供重要借鉴。 --- ## 局限性 1. 数据不足以计算国家特异性估计值；但数据库涵盖全球多个国家，故所得估计大体代表全球一般人群。 2. 某些障碍的分析基于少量研究，导致部分估计值的 95% 置信区间较宽。 3. 数据异质性高，传统荟萃分析技术不适于直接聚合；本研究采用高级荟萃分析技术（含自助法）以应对此问题并提供跨障碍的统一结果。 4. 质量评估工具未经验证，但本研究遵循方案仅纳入研究发病年龄的最高质量研究设计。 5. 发病年龄的定义具有异质性（首次症状/首次诊断/首次住院），已通过敏感性分析加以应对。 6. 无法区分共病诊断与单独诊断的发病年龄。 7. 无法按地理区域进行分层分析。 8. 在比较不同障碍间或不同定义间的峰值年龄时需谨慎，尤其当峰值曲线形态不同时。"
+        ],
+        "quote": "### 对 18 岁分界线的挑战 证据显示，年龄 18 岁作为成人精神卫生服务的准入阈值缺乏流行病学与生物学依据。全球多数地区的精神卫生专科培训与服务系统均在儿童/青少年精神医学与成人精神医学之间设置分割，但大量在成年期被诊断的障碍的发病人群峰值年龄早于 18 岁，这种分叉式系统不利于患者获得连续照护。此外，多数精神医学培训项目未能覆盖从儿童青少年到成人的过渡阶段。未来的精神卫生体系改革应允许灵活的准入入口、取消下限年龄限制并放松低年龄准入标准。已在全球推广的 14–35 岁精神病临床高危服务模式，可为这一过渡阶段提供重要借鉴。 --- ## 局限性 1. 数据不足以计算国家特异性估计值；但数据库涵盖全球多个国家，故所得估计大体代表全球一般人群。 2. 某些障碍的分析基于少量研究，导致部分估计值的 95% 置信区间较宽。 3. 数据异质性高，传统荟萃分析技术不适于直接聚合；本研究采用高级荟萃分析技术（含自助法）以应对此问题并提供跨障碍的统一结果。 4. 质量评估工具未经验证，但本研究遵循方案仅纳入研究发病年龄的最高质量研究设计。 5. 发病年龄的定义具有异质性（首次症状/首次诊断/首次住院），已通过敏感性分析加以应对。 6. 无法区分共病诊断与单独诊断的发病年龄。 7. 无法按地理区域进行分层分析。 8. 在比较不同障碍间或不同定义间的峰值年龄时需谨慎，尤其当峰值曲线形态不同时。"
+      },
+      "explanation": "All mentioned limitations appear in both sources with equivalent detail.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "The meta‑analysis addressed epidemiological age‑at‑onset, not safety or adverse events.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "search_sources_and_dates",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "PubMed and Web of Science searched from database inception to 16 May 2020.",
+      "generatedFact": "PubMed and Web of Science searched up to 16 May 2020.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "To provide robust, global epidemiological estimates of age at onset for mental disorders, we conducted a PRISMA/MOOSE-compliant systematic review with meta-analysis of birth cohort/cross-sectional/cohort studies, representative of the general population, reporting age at onset for any ICD/DSM-mental disorders, identified in PubMed/Web of Science (up to 16/05/2020) (PROSPERO:CRD42019143015). Co-primary outcomes were the proportion of individuals with onset of mental disorders before age 14, 18, 25, and peak age at onset, for any mental disorder and across International Classification of Diseases 11 diagnostic blocks. Median age at onset of specific disorders was additionally investigated."
+        ],
+        "quote": "To provide robust, global epidemiological estimates of age at onset for mental disorders, we conducted a PRISMA/MOOSE-compliant systematic review with meta-analysis of birth cohort/cross-sectional/cohort studies, representative of the general population, reporting age at onset for any ICD/DSM-mental disorders, identified in PubMed/Web of Science (up to 16/05/2020) (PROSPERO:CRD42019143015). Co-primary outcomes were the proportion of individuals with onset of mental disorders before age 14, 18, 25, and peak age at onset, for any mental disorder and across International Classification of Diseases 11 diagnostic blocks. Median age at onset of specific disorders was additionally investigated."
+      },
+      "generatedEvidence": {
+        "locator": "G0002",
+        "locators": [
+          "G0002"
+        ],
+        "quotes": [
+          "**方法**：按照 PRISMA 与 MOOSE 指南，对 PubMed 和 Web of Science 进行系统检索（截至 2020 年 5 月 16 日；PROSPERO：CRD42019143015），纳入报告 ICD/DSM 精神障碍发病年龄的、具有一般人群代表性的出生队列研究、横断面研究和发病率研究。共同主要结局指标为：任一精神障碍及各 ICD-11 诊断组在 14 岁前、18 岁前、25 岁前的发病比例，以及发病年龄峰值。采用自研拟合直方图与经验自助抽样方法进行荟萃分析。"
+        ],
+        "quote": "**方法**：按照 PRISMA 与 MOOSE 指南，对 PubMed 和 Web of Science 进行系统检索（截至 2020 年 5 月 16 日；PROSPERO：CRD42019143015），纳入报告 ICD/DSM 精神障碍发病年龄的、具有一般人群代表性的出生队列研究、横断面研究和发病率研究。共同主要结局指标为：任一精神障碍及各 ICD-11 诊断组在 14 岁前、18 岁前、25 岁前的发病比例，以及发病年龄峰值。采用自研拟合直方图与经验自助抽样方法进行荟萃分析。"
+      },
+      "explanation": "Databases and search date are identical.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "included_studies_and_participants",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "192 studies (15 birth cohort, 150 cross‑sectional, 27 incidence); 708,561 individuals with a mental disorder.",
+      "generatedFact": "192 studies (15 birth cohort, 150 cross‑sectional, 27 incidence); 708,561 participants.",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "Across 192 studies (n = 708,561) included, the proportion of individuals with onset of any mental disorders before the ages of 14, 18, 25 were 34.6%, 48.4%, 62.5%, and peak age was 14.5 years (k = 14, median = 18, interquartile range (IQR) = 11–34)."
+        ],
+        "quote": "Across 192 studies (n = 708,561) included, the proportion of individuals with onset of any mental disorders before the ages of 14, 18, 25 were 34.6%, 48.4%, 62.5%, and peak age was 14.5 years (k = 14, median = 18, interquartile range (IQR) = 11–34)."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**结果**：共纳入 192 项研究（n = 708,561）。任一精神障碍在 14 岁前、18 岁前、25 岁前发病的比例分别为 34.6%、48.4%、62.5%，发病峰值年龄为 14.5 岁（中位年龄 18 岁，IQR 11–34）。各诊断组的比例及峰值年龄为：神经发育障碍 61.5%/83.2%/95.8%，峰值 5.5 岁；焦虑/恐惧相关障碍 38.1%/51.8%/73.3%，峰值 5.5 岁；强迫及相关障碍 24.6%/45.1%/64.0%，峰值 14.5 岁；喂养/进食障碍 15.8%/48.1%/82.4%，峰值 15.5 岁；应激相关障碍 16.9%/27.6%/43.1%，峰值 15.5 岁；物质使用/成瘾行为障碍 2.9%/15.2%/48.8%，峰值 19.5 岁；精神分裂症谱系/原发性精神病性障碍 3%/12.3%/47.8%，峰值 20.5 岁；人格障碍及相关特质 1.9%/9.6%/47.7%，峰值 20.5 岁；心境障碍 2.5%/11.5%/34.5%，峰值 20.5 岁。特异性障碍的中位发病年龄呈连续谱分布。性别与发病年龄定义之间未见显著差异。 **结论**：全球精神障碍的发病年龄集中于儿童、青少年与成年早期，约半数患者在 18 岁前已发病。现行以 18 岁为界区分儿童/青少年与成人精神卫生服务的体系缺乏流行病学证据支持，亟需建立整合性的心理健康促进与预防/早期干预照护模式。"
+        ],
+        "quote": "**结果**：共纳入 192 项研究（n = 708,561）。任一精神障碍在 14 岁前、18 岁前、25 岁前发病的比例分别为 34.6%、48.4%、62.5%，发病峰值年龄为 14.5 岁（中位年龄 18 岁，IQR 11–34）。各诊断组的比例及峰值年龄为：神经发育障碍 61.5%/83.2%/95.8%，峰值 5.5 岁；焦虑/恐惧相关障碍 38.1%/51.8%/73.3%，峰值 5.5 岁；强迫及相关障碍 24.6%/45.1%/64.0%，峰值 14.5 岁；喂养/进食障碍 15.8%/48.1%/82.4%，峰值 15.5 岁；应激相关障碍 16.9%/27.6%/43.1%，峰值 15.5 岁；物质使用/成瘾行为障碍 2.9%/15.2%/48.8%，峰值 19.5 岁；精神分裂症谱系/原发性精神病性障碍 3%/12.3%/47.8%，峰值 20.5 岁；人格障碍及相关特质 1.9%/9.6%/47.7%，峰值 20.5 岁；心境障碍 2.5%/11.5%/34.5%，峰值 20.5 岁。特异性障碍的中位发病年龄呈连续谱分布。性别与发病年龄定义之间未见显著差异。 **结论**：全球精神障碍的发病年龄集中于儿童、青少年与成年早期，约半数患者在 18 岁前已发病。现行以 18 岁为界区分儿童/青少年与成人精神卫生服务的体系缺乏流行病学证据支持，亟需建立整合性的心理健康促进与预防/早期干预照护模式。"
+      },
+      "explanation": "Study and participant counts, including design breakdown, match the reference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "synthesis_and_heterogeneity",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "High heterogeneity made traditional meta‑analysis unfeasible; ad‑hoc histogram bootstrap was applied; subgroup analyses by sex and onset definition.",
+      "generatedFact": "High data heterogeneity; self‑developed advanced meta‑analysis with bootstrap; sensitivity by sex and onset definition.",
+      "sourceEvidence": {
+        "locator": "R0068",
+        "locators": [
+          "R0068"
+        ],
+        "quotes": [
+          "Third, data were heterogeneous, making traditional meta-analytic techniques unfeasible. We, therefore, applied advanced meta-analytic techniques, including bootstrap methods that helped to address this shortcoming and provide unified outcomes across all mental disorders. Fourth, our quality assessment was non-standardised because appropriate validated measures were not available. However, we per-protocol included the highest-quality studies to study age at onset according to previous recommendations [ 30 ]. Fifth, the definition of age at disorder onset was heterogeneous; we addressed this issue via sensitivity analyses."
+        ],
+        "quote": "Third, data were heterogeneous, making traditional meta-analytic techniques unfeasible. We, therefore, applied advanced meta-analytic techniques, including bootstrap methods that helped to address this shortcoming and provide unified outcomes across all mental disorders. Fourth, our quality assessment was non-standardised because appropriate validated measures were not available. However, we per-protocol included the highest-quality studies to study age at onset according to previous recommendations [ 30 ]. Fifth, the definition of age at disorder onset was heterogeneous; we addressed this issue via sensitivity analyses."
+      },
+      "generatedEvidence": {
+        "locator": "G0011",
+        "locators": [
+          "G0011"
+        ],
+        "quotes": [
+          "### 对 18 岁分界线的挑战 证据显示，年龄 18 岁作为成人精神卫生服务的准入阈值缺乏流行病学与生物学依据。全球多数地区的精神卫生专科培训与服务系统均在儿童/青少年精神医学与成人精神医学之间设置分割，但大量在成年期被诊断的障碍的发病人群峰值年龄早于 18 岁，这种分叉式系统不利于患者获得连续照护。此外，多数精神医学培训项目未能覆盖从儿童青少年到成人的过渡阶段。未来的精神卫生体系改革应允许灵活的准入入口、取消下限年龄限制并放松低年龄准入标准。已在全球推广的 14–35 岁精神病临床高危服务模式，可为这一过渡阶段提供重要借鉴。 --- ## 局限性 1. 数据不足以计算国家特异性估计值；但数据库涵盖全球多个国家，故所得估计大体代表全球一般人群。 2. 某些障碍的分析基于少量研究，导致部分估计值的 95% 置信区间较宽。 3. 数据异质性高，传统荟萃分析技术不适于直接聚合；本研究采用高级荟萃分析技术（含自助法）以应对此问题并提供跨障碍的统一结果。 4. 质量评估工具未经验证，但本研究遵循方案仅纳入研究发病年龄的最高质量研究设计。 5. 发病年龄的定义具有异质性（首次症状/首次诊断/首次住院），已通过敏感性分析加以应对。 6. 无法区分共病诊断与单独诊断的发病年龄。 7. 无法按地理区域进行分层分析。 8. 在比较不同障碍间或不同定义间的峰值年龄时需谨慎，尤其当峰值曲线形态不同时。"
+        ],
+        "quote": "### 对 18 岁分界线的挑战 证据显示，年龄 18 岁作为成人精神卫生服务的准入阈值缺乏流行病学与生物学依据。全球多数地区的精神卫生专科培训与服务系统均在儿童/青少年精神医学与成人精神医学之间设置分割，但大量在成年期被诊断的障碍的发病人群峰值年龄早于 18 岁，这种分叉式系统不利于患者获得连续照护。此外，多数精神医学培训项目未能覆盖从儿童青少年到成人的过渡阶段。未来的精神卫生体系改革应允许灵活的准入入口、取消下限年龄限制并放松低年龄准入标准。已在全球推广的 14–35 岁精神病临床高危服务模式，可为这一过渡阶段提供重要借鉴。 --- ## 局限性 1. 数据不足以计算国家特异性估计值；但数据库涵盖全球多个国家，故所得估计大体代表全球一般人群。 2. 某些障碍的分析基于少量研究，导致部分估计值的 95% 置信区间较宽。 3. 数据异质性高，传统荟萃分析技术不适于直接聚合；本研究采用高级荟萃分析技术（含自助法）以应对此问题并提供跨障碍的统一结果。 4. 质量评估工具未经验证，但本研究遵循方案仅纳入研究发病年龄的最高质量研究设计。 5. 发病年龄的定义具有异质性（首次症状/首次诊断/首次住院），已通过敏感性分析加以应对。 6. 无法区分共病诊断与单独诊断的发病年龄。 7. 无法按地理区域进行分层分析。 8. 在比较不同障碍间或不同定义间的峰值年龄时需谨慎，尤其当峰值曲线形态不同时。"
+      },
+      "explanation": "Heterogeneity handling and subgroup approaches are consistently reported.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "risk_of_bias_or_certainty",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Risk of bias assessed with ad‑hoc Newcastle‑Ottawa‑derived criteria, not validated, used descriptively; no formal certainty rating (e.g., GRADE).",
+      "generatedFact": "Quality assessment tool non‑validated, derived from Newcastle‑Ottawa scale; used for descriptive reporting only.",
+      "sourceEvidence": {
+        "locator": "R0017",
+        "locators": [
+          "R0017"
+        ],
+        "quotes": [
+          "Data extraction was performed independently by the same pairs of authors who performed the literature screening. Study quality assessment To the best of our knowledge, no quality assessment measure has been validated for the type of studies included in the current meta-analysis. Therefore, the risk of bias was evaluated with an ad-hoc list of criteria derived from the Newcastle-Ottawa scale (NOS) [ 33 ], which included the definition of onset age of the mental disorder, diagnostic criteria employed, and study design. However, since these criteria were not validated, they were not employed to categorise studies according to their quality; they were only used for descriptive reporting."
+        ],
+        "quote": "Data extraction was performed independently by the same pairs of authors who performed the literature screening. Study quality assessment To the best of our knowledge, no quality assessment measure has been validated for the type of studies included in the current meta-analysis. Therefore, the risk of bias was evaluated with an ad-hoc list of criteria derived from the Newcastle-Ottawa scale (NOS) [ 33 ], which included the definition of onset age of the mental disorder, diagnostic criteria employed, and study design. However, since these criteria were not validated, they were not employed to categorise studies according to their quality; they were only used for descriptive reporting."
+      },
+      "generatedEvidence": {
+        "locator": "G0011",
+        "locators": [
+          "G0011"
+        ],
+        "quotes": [
+          "### 对 18 岁分界线的挑战 证据显示，年龄 18 岁作为成人精神卫生服务的准入阈值缺乏流行病学与生物学依据。全球多数地区的精神卫生专科培训与服务系统均在儿童/青少年精神医学与成人精神医学之间设置分割，但大量在成年期被诊断的障碍的发病人群峰值年龄早于 18 岁，这种分叉式系统不利于患者获得连续照护。此外，多数精神医学培训项目未能覆盖从儿童青少年到成人的过渡阶段。未来的精神卫生体系改革应允许灵活的准入入口、取消下限年龄限制并放松低年龄准入标准。已在全球推广的 14–35 岁精神病临床高危服务模式，可为这一过渡阶段提供重要借鉴。 --- ## 局限性 1. 数据不足以计算国家特异性估计值；但数据库涵盖全球多个国家，故所得估计大体代表全球一般人群。 2. 某些障碍的分析基于少量研究，导致部分估计值的 95% 置信区间较宽。 3. 数据异质性高，传统荟萃分析技术不适于直接聚合；本研究采用高级荟萃分析技术（含自助法）以应对此问题并提供跨障碍的统一结果。 4. 质量评估工具未经验证，但本研究遵循方案仅纳入研究发病年龄的最高质量研究设计。 5. 发病年龄的定义具有异质性（首次症状/首次诊断/首次住院），已通过敏感性分析加以应对。 6. 无法区分共病诊断与单独诊断的发病年龄。 7. 无法按地理区域进行分层分析。 8. 在比较不同障碍间或不同定义间的峰值年龄时需谨慎，尤其当峰值曲线形态不同时。"
+        ],
+        "quote": "### 对 18 岁分界线的挑战 证据显示，年龄 18 岁作为成人精神卫生服务的准入阈值缺乏流行病学与生物学依据。全球多数地区的精神卫生专科培训与服务系统均在儿童/青少年精神医学与成人精神医学之间设置分割，但大量在成年期被诊断的障碍的发病人群峰值年龄早于 18 岁，这种分叉式系统不利于患者获得连续照护。此外，多数精神医学培训项目未能覆盖从儿童青少年到成人的过渡阶段。未来的精神卫生体系改革应允许灵活的准入入口、取消下限年龄限制并放松低年龄准入标准。已在全球推广的 14–35 岁精神病临床高危服务模式，可为这一过渡阶段提供重要借鉴。 --- ## 局限性 1. 数据不足以计算国家特异性估计值；但数据库涵盖全球多个国家，故所得估计大体代表全球一般人群。 2. 某些障碍的分析基于少量研究，导致部分估计值的 95% 置信区间较宽。 3. 数据异质性高，传统荟萃分析技术不适于直接聚合；本研究采用高级荟萃分析技术（含自助法）以应对此问题并提供跨障碍的统一结果。 4. 质量评估工具未经验证，但本研究遵循方案仅纳入研究发病年龄的最高质量研究设计。 5. 发病年龄的定义具有异质性（首次症状/首次诊断/首次住院），已通过敏感性分析加以应对。 6. 无法区分共病诊断与单独诊断的发病年龄。 7. 无法按地理区域进行分层分析。 8. 在比较不同障碍间或不同定义间的峰值年龄时需谨慎，尤其当峰值曲线形态不同时。"
+      },
+      "explanation": "Both indicate a non‑validated, descriptive bias assessment without formal certainty grading.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 17,
+    "weightedFidelity": 1.0,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 17,
+      "not_applicable": 4
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "adversarial_contradiction"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail",
+    "adversarialIssueCount": 1,
+    "adversarialUnsupportedClaimCount": 0,
+    "adversarialContradictionCount": 1,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "issues_found",
+    "issues": [
+      {
+        "id": "analysis_methods",
+        "importance": "minor",
+        "status": "contradicted",
+        "issueKinds": [
+          "contradicted"
+        ],
+        "referenceFact": "",
+        "generatedFact": "17 种预选的特异性精神障碍",
+        "sourceEvidence": {
+          "locator": "R0022",
+          "locators": [
+            "R0022"
+          ],
+          "quotes": [
+            "First, we repeated the analyses for specific mental disorders, pre-selected on the basis of their epidemiological and clinical relevance: attention-deficit/hyperactivity disorder (ADHD), autism spectrum disorder (ASD), generalised anxiety disorder (GAD), panic disorder, separation anxiety disorder, specific phobia, social anxiety disorder, obsessive-compulsive disorder (OCD), disorders due to use of alcohol, disorders due to use of cannabis, anorexia nervosa, bulimia nervosa, binge eating disorder, depressive disorders, bipolar or related disorders (bipolar disorder), acute and transient psychotic disorders (ATPD), schizophrenia, and post-traumatic stress disorder (PTSD)."
+          ],
+          "quote": "First, we repeated the analyses for specific mental disorders, pre-selected on the basis of their epidemiological and clinical relevance: attention-deficit/hyperactivity disorder (ADHD), autism spectrum disorder (ASD), generalised anxiety disorder (GAD), panic disorder, separation anxiety disorder, specific phobia, social anxiety disorder, obsessive-compulsive disorder (OCD), disorders due to use of alcohol, disorders due to use of cannabis, anorexia nervosa, bulimia nervosa, binge eating disorder, depressive disorders, bipolar or related disorders (bipolar disorder), acute and transient psychotic disorders (ATPD), schizophrenia, and post-traumatic stress disorder (PTSD)."
+        },
+        "generatedEvidence": {
+          "locator": "G0006",
+          "locators": [
+            "G0006"
+          ],
+          "quotes": [
+            "### 质量评估 由于尚无针对此类研究的经验证质量评估工具，采用从 Newcastle-Ottawa 量表衍生出的临时性标准（包括发病年龄定义、诊断标准使用及研究设计等）进行描述性报告，未用于分层分析。 ### 统计分析 共同主要结局指标：（i）任一与特定精神障碍组在 14 岁前、18 岁前、25 岁前的发病比例；（ii）任一与各诊断组精神障碍的发病年龄峰值。诊断组涵盖 ICD-11\"精神、行为或神经发育障碍\"章节下的诊断模块（如神经发育障碍、精神分裂症谱系障碍、心境障碍、焦虑与恐惧相关障碍、强迫及相关障碍、应激相关障碍、喂养及进食障碍、物质使用及成瘾行为障碍、人格障碍及相关特质等），以及 17 种预选的特异性精神障碍。 对于非同质截尾的非正态分布变量，研究组开发了一种特定荟萃分析方法：首先估计最小化研究与报告数据误差平方和的发病年龄直方图，从中推导出发病年龄峰值、14/18/25 岁前发病比例及发病年龄的 25%、50%、75% 百分位数；随后采用经验自助法估计 95% 置信区间。 敏感性分析：（i）针对 17 种特异性精神障碍重复分析；（ii）按发病定义（首次症状/首次诊断/首次住院）分层；（iii）按性别分层；（iv）对每对特异性障碍的中位发病年龄大小进行自助法比较。"
+          ],
+          "quote": "### 质量评估 由于尚无针对此类研究的经验证质量评估工具，采用从 Newcastle-Ottawa 量表衍生出的临时性标准（包括发病年龄定义、诊断标准使用及研究设计等）进行描述性报告，未用于分层分析。 ### 统计分析 共同主要结局指标：（i）任一与特定精神障碍组在 14 岁前、18 岁前、25 岁前的发病比例；（ii）任一与各诊断组精神障碍的发病年龄峰值。诊断组涵盖 ICD-11\"精神、行为或神经发育障碍\"章节下的诊断模块（如神经发育障碍、精神分裂症谱系障碍、心境障碍、焦虑与恐惧相关障碍、强迫及相关障碍、应激相关障碍、喂养及进食障碍、物质使用及成瘾行为障碍、人格障碍及相关特质等），以及 17 种预选的特异性精神障碍。 对于非同质截尾的非正态分布变量，研究组开发了一种特定荟萃分析方法：首先估计最小化研究与报告数据误差平方和的发病年龄直方图，从中推导出发病年龄峰值、14/18/25 岁前发病比例及发病年龄的 25%、50%、75% 百分位数；随后采用经验自助法估计 95% 置信区间。 敏感性分析：（i）针对 17 种特异性精神障碍重复分析；（ii）按发病定义（首次症状/首次诊断/首次住院）分层；（iii）按性别分层；（iv）对每对特异性障碍的中位发病年龄大小进行自助法比较。"
+        },
+        "explanation": "原文预选的特异性精神障碍为18种（ADHD、ASD、GAD、panic、separation anxiety、specific phobia、social anxiety、OCD、alcohol use、cannabis use、anorexia nervosa、bulimia nervosa、binge eating、depression、bipolar、ATPD、schizophrenia、PTSD），生成文本错误地记为17种。",
+        "sourceEvidenceValid": true,
+        "generatedEvidenceValid": true,
+        "criterionId": "analysis_methods",
+        "kind": "contradicted",
+        "severity": "minor",
+        "claim": "17 种预选的特异性精神障碍"
+      }
+    ],
+    "rationale": "除预选精神障碍数量一处非关键数值矛盾外，生成内容中的研究设计、样本量、主要发病率比例、发病年龄峰值、中位年龄、IQR、诊断模块数据、性别与发病定义敏感性结果及局限性均与原文一致，未见缺失或歪曲关键事实。"
+  },
+  "overallAssessment": "All factual items are exact or compatible with the reference. The generated summary faithfully reproduces study design, eligibility, sample size, outcomes, numerical estimates, limitations, and conclusions. No unsupported, missing, or contradicted facts were identified. Items not applicable to this meta‑analysis (intervention, comparator, follow‑up, safety) are correctly marked as not_applicable. The audit confirms high scientific fidelity without any evidence of invented or omitted material facts.",
+  "gradedAt": "2026-07-18T15:16:54Z"
+}

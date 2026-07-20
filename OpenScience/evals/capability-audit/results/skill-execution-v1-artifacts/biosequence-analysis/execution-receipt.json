@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 342,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biosequence-analysis/results.json",
+      "sha256": "4a80030a6c61d438a883b9f9509376419db7642d3283809ba0c8a8cb4e543c43"
+    },
+    {
+      "bytes": 918,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biosequence-analysis/biosequence-analysis-report.md",
+      "sha256": "d7dc088310cca1bc94285982d6bd989751115e310b3179f7b7b9682e7d1bda23"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:24.995391Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "biosequence-analysis",
+  "startedAt": "2026-07-19T19:31:24.994853Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for biosequence-analysis and wrote 2 verified artifacts.",
+  "warnings": [
+    "Confirm sequence alphabet, orientation, reference build, alignment method, and evolutionary model before inferential use."
+  ]
+}

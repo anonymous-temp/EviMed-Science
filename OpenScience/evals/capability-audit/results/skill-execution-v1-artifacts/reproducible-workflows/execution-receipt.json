@@ -1,0 +1,29 @@
+{
+  "artifacts": [
+    {
+      "bytes": 206,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/reproducible-workflows/results.json",
+      "sha256": "2b85f684cb83db5e385b56ec408e47ddcd520f48cdee248f0ba8d3f6b3778b4a"
+    },
+    {
+      "bytes": 629,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/reproducible-workflows/reproducible-workflows-report.md",
+      "sha256": "c25e317e811198c87b3c66b0dc18dac5be3dce5e1f46c6a271c0e8e0200edfaf"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:42.353817Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "reproducible-workflows",
+  "startedAt": "2026-07-19T19:31:42.353335Z",
+  "status": "success",
+  "summary": "Executed the bounded deterministic baseline for reproducible-workflows and wrote 2 verified artifacts.",
+  "warnings": []
+}

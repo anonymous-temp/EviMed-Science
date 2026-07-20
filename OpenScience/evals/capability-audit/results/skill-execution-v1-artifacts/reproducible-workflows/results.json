@@ -1,0 +1,11 @@
+{
+  "workflow": {
+    "inputManifest": [],
+    "resumePolicy": "Only artifacts with verified hashes are complete.",
+    "steps": [
+      "validate-input",
+      "analyze",
+      "render-report"
+    ]
+  }
+}

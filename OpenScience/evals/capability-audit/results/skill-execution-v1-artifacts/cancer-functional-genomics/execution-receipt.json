@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1288,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/cancer-functional-genomics/results.json",
+      "sha256": "958e4e41b11c7b97fd0502dd2e44dd67166bfcfd2d39c4e3113beed4cc8a2f34"
+    },
+    {
+      "bytes": 1830,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/cancer-functional-genomics/cancer-functional-genomics-report.md",
+      "sha256": "e3903c6da7835703d9428aafd9e81abe3fcb0c80559b055ea38c0328aa137dbd"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:26.482358Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "cancer-functional-genomics",
+  "startedAt": "2026-07-19T19:31:26.479125Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for cancer-functional-genomics and wrote 2 verified artifacts.",
+  "warnings": [
+    "Dependency scores are context-specific and are not evidence of clinical efficacy."
+  ]
+}

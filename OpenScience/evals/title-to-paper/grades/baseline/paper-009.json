@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-009",
+  "category": "systematic-review-meta-analysis",
+  "title": "Age at onset of mental disorders worldwide: large-scale meta-analysis of 192 epidemiological studies.",
+  "pmcid": "PMC8960395",
+  "doi": "10.1038/s41380-021-01161-7",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 6802,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 96,
+    "supportedUniqueNumbers": 96,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.0012787723785166241,
+    "toolCalls": 10,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "生成文本忠实复写了原文的研究设计、样本量、统计方法、关键数值（如发病比例、峰值年龄）、敏感性分析结果、局限性及结论。所有事实性声明均可在REFERENCE中找到依据，未发现任何捏造、错引或严重遗漏。"
+  },
+  "overallVerdict": "pass"
+}

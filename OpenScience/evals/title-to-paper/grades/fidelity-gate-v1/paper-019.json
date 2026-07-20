@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-019",
+  "category": "diagnostic-prognostic",
+  "title": "Risk prediction of covid-19 related death and hospital admission in adults after covid-19 vaccination: national prospective cohort study.",
+  "pmcid": "PMC8446717",
+  "doi": "10.1136/bmj.n2244",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 10321,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 109,
+    "supportedUniqueNumbers": 102,
+    "unsupportedNumberTokens": [
+      "100000",
+      "2925",
+      "3321",
+      "4026",
+      "5150",
+      "626656",
+      "6952"
+    ],
+    "supportedNumericClaimPrecision": 0.9357798165137615,
+    "verbatimEightGramRate": 0.001758031005274093,
+    "toolCalls": 15,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "All factual claims in the generated text are directly supported by the reference article. Study design, cohort characteristics (6.9 million vaccinated adults), methods (cause-specific Cox regression, fractional polynomials, multiple imputation, independent validation), results (hazard ratios for comorbidities, C-statistic 92.5, R² 74.1%, sensitivity 78.7%), and discussion/limitations are accurately reproduced without fabrication. No unsupported statements or critical omissions were identified."
+  },
+  "modelEvidenceCharacters": 68996,
+  "modelEvidenceComplete": true,
+  "overallVerdict": "pass"
+}

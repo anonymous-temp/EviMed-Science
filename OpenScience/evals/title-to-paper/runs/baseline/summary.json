@@ -1,0 +1,414 @@
+{
+  "schemaVersion": 1,
+  "label": "baseline",
+  "corpusPath": "/Users/wangzeyuan/Desktop/EviMed Science/OpenScience/evals/title-to-paper/corpus-v3/manifest.json",
+  "startedAtCase": 0,
+  "requestedCases": 50,
+  "succeeded": 50,
+  "failed": 0,
+  "totalAssistantCharacters": 69175,
+  "totalArtifactCharacters": 426354,
+  "completedAt": "2026-07-18T03:13:54.092Z",
+  "cases": [
+    {
+      "caseId": "paper-001",
+      "status": "succeeded",
+      "runId": "run_ac8720f99c59cfb8c36bf27957da83d5",
+      "assistantCharacters": 411,
+      "artifactCharacters": 21024,
+      "toolCalls": 11
+    },
+    {
+      "caseId": "paper-002",
+      "status": "succeeded",
+      "runId": "run_477f16afff246db85b2a607407145674",
+      "assistantCharacters": 1020,
+      "artifactCharacters": 17609,
+      "toolCalls": 17
+    },
+    {
+      "caseId": "paper-003",
+      "status": "succeeded",
+      "runId": "run_8a3b1dfb88b9b3f4e183cb9c08ac8265",
+      "assistantCharacters": 916,
+      "artifactCharacters": 6440,
+      "toolCalls": 6
+    },
+    {
+      "caseId": "paper-004",
+      "status": "succeeded",
+      "runId": "run_0baebdaea96d6e0eb72df843eb93eef5",
+      "assistantCharacters": 523,
+      "artifactCharacters": 7096,
+      "toolCalls": 8
+    },
+    {
+      "caseId": "paper-005",
+      "status": "succeeded",
+      "runId": "run_8eea182beaf845f62ffbf40a5cd816f6",
+      "assistantCharacters": 951,
+      "artifactCharacters": 16692,
+      "toolCalls": 9
+    },
+    {
+      "caseId": "paper-006",
+      "status": "succeeded",
+      "runId": "run_993941f2590cfaed6f82282dfad61e81",
+      "assistantCharacters": 757,
+      "artifactCharacters": 7883,
+      "toolCalls": 5
+    },
+    {
+      "caseId": "paper-007",
+      "status": "succeeded",
+      "runId": "run_be483f0a3a219e47a54102d138f1b7bc",
+      "assistantCharacters": 709,
+      "artifactCharacters": 7401,
+      "toolCalls": 18
+    },
+    {
+      "caseId": "paper-008",
+      "status": "succeeded",
+      "runId": "run_cff5f60226f7b9df6dfa657b0b6c551d",
+      "assistantCharacters": 1095,
+      "artifactCharacters": 7622,
+      "toolCalls": 23
+    },
+    {
+      "caseId": "paper-009",
+      "status": "succeeded",
+      "runId": "run_631345a863181bcb25919f2b30fc019b",
+      "assistantCharacters": 440,
+      "artifactCharacters": 6802,
+      "toolCalls": 10
+    },
+    {
+      "caseId": "paper-010",
+      "status": "succeeded",
+      "runId": "run_0674900529cc11b160428c7acedd5fe8",
+      "assistantCharacters": 7699,
+      "artifactCharacters": 0,
+      "toolCalls": 6
+    },
+    {
+      "caseId": "paper-011",
+      "status": "succeeded",
+      "runId": "run_3729bc397fe0f30298beaebfe203ff7e",
+      "assistantCharacters": 686,
+      "artifactCharacters": 10153,
+      "toolCalls": 18
+    },
+    {
+      "caseId": "paper-012",
+      "status": "succeeded",
+      "runId": "run_229fef53ed20dccc9e3d9bb39f52528c",
+      "assistantCharacters": 730,
+      "artifactCharacters": 6294,
+      "toolCalls": 12
+    },
+    {
+      "caseId": "paper-013",
+      "status": "succeeded",
+      "runId": "run_833fa893ecfcbe884388d25e8b89ce76",
+      "assistantCharacters": 744,
+      "artifactCharacters": 10020,
+      "toolCalls": 13
+    },
+    {
+      "caseId": "paper-014",
+      "status": "succeeded",
+      "runId": "run_4678fc290bbbbb5758e742a641cf6372",
+      "assistantCharacters": 413,
+      "artifactCharacters": 8187,
+      "toolCalls": 13
+    },
+    {
+      "caseId": "paper-015",
+      "status": "succeeded",
+      "runId": "run_00c8efcc400dce0ea2b0a3319d3ed9c7",
+      "assistantCharacters": 430,
+      "artifactCharacters": 8285,
+      "toolCalls": 20
+    },
+    {
+      "caseId": "paper-016",
+      "status": "succeeded",
+      "runId": "run_cbc1798759ce94129be55d0e0f4cfa16",
+      "assistantCharacters": 970,
+      "artifactCharacters": 9492,
+      "toolCalls": 12
+    },
+    {
+      "caseId": "paper-017",
+      "status": "succeeded",
+      "runId": "run_db935fb1f61c7d93d941365384ee118c",
+      "assistantCharacters": 815,
+      "artifactCharacters": 15619,
+      "toolCalls": 13
+    },
+    {
+      "caseId": "paper-018",
+      "status": "succeeded",
+      "runId": "run_1bcf6f668662dc75c4489f4e3bd8db69",
+      "assistantCharacters": 654,
+      "artifactCharacters": 7156,
+      "toolCalls": 9
+    },
+    {
+      "caseId": "paper-019",
+      "status": "succeeded",
+      "runId": "run_895e0ac70783b02343044d33e6b6e0fd",
+      "assistantCharacters": 659,
+      "artifactCharacters": 7432,
+      "toolCalls": 10
+    },
+    {
+      "caseId": "paper-020",
+      "status": "succeeded",
+      "runId": "run_a472e76fd42767916bbd2b7780d2d84f",
+      "assistantCharacters": 724,
+      "artifactCharacters": 17109,
+      "toolCalls": 8
+    },
+    {
+      "caseId": "paper-021",
+      "status": "succeeded",
+      "runId": "run_d29a9e901cd702d25e81bb388a5ea1e6",
+      "assistantCharacters": 735,
+      "artifactCharacters": 13088,
+      "toolCalls": 8
+    },
+    {
+      "caseId": "paper-022",
+      "status": "succeeded",
+      "runId": "run_46eb557f2395d9c23247540b55b4d60d",
+      "assistantCharacters": 846,
+      "artifactCharacters": 6777,
+      "toolCalls": 11
+    },
+    {
+      "caseId": "paper-023",
+      "status": "succeeded",
+      "runId": "run_d1e2c1799272f6adbc4a9216154f89a3",
+      "assistantCharacters": 977,
+      "artifactCharacters": 18186,
+      "toolCalls": 7
+    },
+    {
+      "caseId": "paper-024",
+      "status": "succeeded",
+      "runId": "run_4a8ae19ba9da7533a6547bee674a0270",
+      "assistantCharacters": 1258,
+      "artifactCharacters": 14005,
+      "toolCalls": 16
+    },
+    {
+      "caseId": "paper-025",
+      "status": "succeeded",
+      "runId": "run_9646e7d41f7d0e65c7589888c3c8a570",
+      "assistantCharacters": 742,
+      "artifactCharacters": 6721,
+      "toolCalls": 5
+    },
+    {
+      "caseId": "paper-026",
+      "status": "succeeded",
+      "runId": "run_c06e37b63e54ecb34cda9d19e50527c0",
+      "assistantCharacters": 793,
+      "artifactCharacters": 8420,
+      "toolCalls": 16
+    },
+    {
+      "caseId": "paper-027",
+      "status": "succeeded",
+      "runId": "run_f312c41f0c08cd08fe80048dc1e0bb20",
+      "assistantCharacters": 1114,
+      "artifactCharacters": 8682,
+      "toolCalls": 16
+    },
+    {
+      "caseId": "paper-028",
+      "status": "succeeded",
+      "runId": "run_9a35f0de954441ee6f9d72f2f7d65b15",
+      "assistantCharacters": 581,
+      "artifactCharacters": 8553,
+      "toolCalls": 11
+    },
+    {
+      "caseId": "paper-029",
+      "status": "succeeded",
+      "runId": "run_0f75b21c7f0c8181f8b9ed4bdaf35a72",
+      "assistantCharacters": 827,
+      "artifactCharacters": 7105,
+      "toolCalls": 11
+    },
+    {
+      "caseId": "paper-030",
+      "status": "succeeded",
+      "runId": "run_b0c5555e767d69acd69fcb4144f3c0e1",
+      "assistantCharacters": 1278,
+      "artifactCharacters": 14957,
+      "toolCalls": 17
+    },
+    {
+      "caseId": "paper-031",
+      "status": "succeeded",
+      "runId": "run_5a6d2e54c1f6eb8f8c9cf548a142c647",
+      "assistantCharacters": 525,
+      "artifactCharacters": 8079,
+      "toolCalls": 11
+    },
+    {
+      "caseId": "paper-032",
+      "status": "succeeded",
+      "runId": "run_8540fb22df7da0bb9c9a8b78b2d88eb3",
+      "assistantCharacters": 806,
+      "artifactCharacters": 5298,
+      "toolCalls": 10
+    },
+    {
+      "caseId": "paper-033",
+      "status": "succeeded",
+      "runId": "run_e2b1003ca427a95c81575c1c14a0248b",
+      "assistantCharacters": 1244,
+      "artifactCharacters": 7821,
+      "toolCalls": 19
+    },
+    {
+      "caseId": "paper-034",
+      "status": "succeeded",
+      "runId": "run_28265dae2b24133743d6babdd1cdc34f",
+      "assistantCharacters": 5773,
+      "artifactCharacters": 0,
+      "toolCalls": 7
+    },
+    {
+      "caseId": "paper-035",
+      "status": "succeeded",
+      "runId": "run_f91f035e357fe4de4e6182f481d7e524",
+      "assistantCharacters": 560,
+      "artifactCharacters": 7305,
+      "toolCalls": 13
+    },
+    {
+      "caseId": "paper-036",
+      "status": "succeeded",
+      "runId": "run_dbe44602acf092bc4c4ae694a996b33a",
+      "assistantCharacters": 659,
+      "artifactCharacters": 7583,
+      "toolCalls": 18
+    },
+    {
+      "caseId": "paper-037",
+      "status": "succeeded",
+      "runId": "run_70ba4c1922a1d535b36c8dc0fbcd418c",
+      "assistantCharacters": 878,
+      "artifactCharacters": 7836,
+      "toolCalls": 9
+    },
+    {
+      "caseId": "paper-038",
+      "status": "succeeded",
+      "runId": "run_c07d3ed29730c0d7b2ff1a87a856779d",
+      "assistantCharacters": 4739,
+      "artifactCharacters": 0,
+      "toolCalls": 8
+    },
+    {
+      "caseId": "paper-039",
+      "status": "succeeded",
+      "runId": "run_29378c494baef1ac50f3552b4e1c585c",
+      "assistantCharacters": 954,
+      "artifactCharacters": 6357,
+      "toolCalls": 8
+    },
+    {
+      "caseId": "paper-040",
+      "status": "succeeded",
+      "runId": "run_629783a82b98b049ae0156b903761f46",
+      "assistantCharacters": 1244,
+      "artifactCharacters": 5849,
+      "toolCalls": 14
+    },
+    {
+      "caseId": "paper-041",
+      "status": "succeeded",
+      "runId": "run_81f7f530a3acb2b9f04a447992396ca1",
+      "assistantCharacters": 1155,
+      "artifactCharacters": 5774,
+      "toolCalls": 9
+    },
+    {
+      "caseId": "paper-042",
+      "status": "succeeded",
+      "runId": "run_39e51e18a363d9cc87ff63128e37f83e",
+      "assistantCharacters": 674,
+      "artifactCharacters": 8985,
+      "toolCalls": 9
+    },
+    {
+      "caseId": "paper-043",
+      "status": "succeeded",
+      "runId": "run_5f38a3feaacc16043d3bd506c5de7ef3",
+      "assistantCharacters": 864,
+      "artifactCharacters": 24677,
+      "toolCalls": 11
+    },
+    {
+      "caseId": "paper-044",
+      "status": "succeeded",
+      "runId": "run_8714b7afbbdff639f3d4b9fa221ec2b4",
+      "assistantCharacters": 4309,
+      "artifactCharacters": 0,
+      "toolCalls": 11
+    },
+    {
+      "caseId": "paper-045",
+      "status": "succeeded",
+      "runId": "run_9f48bceae36914857102216d7a2141b6",
+      "assistantCharacters": 116,
+      "artifactCharacters": 0,
+      "toolCalls": 9
+    },
+    {
+      "caseId": "paper-046",
+      "status": "succeeded",
+      "runId": "run_1a5ad0d4a24166e2fa706022b60153ae",
+      "assistantCharacters": 876,
+      "artifactCharacters": 6855,
+      "toolCalls": 23
+    },
+    {
+      "caseId": "paper-047",
+      "status": "succeeded",
+      "runId": "run_e75baf74e0f13891332cceebddd113f5",
+      "assistantCharacters": 3442,
+      "artifactCharacters": 0,
+      "toolCalls": 14
+    },
+    {
+      "caseId": "paper-048",
+      "status": "succeeded",
+      "runId": "run_d32c81c4a74f60c777f8c4006fcd9d74",
+      "assistantCharacters": 752,
+      "artifactCharacters": 13949,
+      "toolCalls": 14
+    },
+    {
+      "caseId": "paper-049",
+      "status": "succeeded",
+      "runId": "run_d71c510cb2777305f7558fb79544db08",
+      "assistantCharacters": 8167,
+      "artifactCharacters": 0,
+      "toolCalls": 7
+    },
+    {
+      "caseId": "paper-050",
+      "status": "succeeded",
+      "runId": "run_90a25f41ba522680f2d2fb2c3f164e0c",
+      "assistantCharacters": 941,
+      "artifactCharacters": 5176,
+      "toolCalls": 8
+    }
+  ]
+}

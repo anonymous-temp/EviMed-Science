@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 155,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-knowledge-graph/results.json",
+      "sha256": "de7edc8b44f1d5fba3f228e98c6413da2f24cbcd459b603323ee594d5cc2f01f"
+    },
+    {
+      "bytes": 671,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-knowledge-graph/biomedical-knowledge-graph-report.md",
+      "sha256": "ea0d442a1c2ec5d750def41edd47cc57b3beb013aef6f8b85d9a489a109b146d"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:23.358522Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "biomedical-knowledge-graph",
+  "startedAt": "2026-07-19T19:31:23.358030Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for biomedical-knowledge-graph and wrote 2 verified artifacts.",
+  "warnings": [
+    "Graph topology does not establish biological causality."
+  ]
+}

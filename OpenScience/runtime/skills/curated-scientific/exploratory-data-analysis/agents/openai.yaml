@@ -1,0 +1,4 @@
+interface:
+  display_name: "Exploratory Data Analysis"
+  short_description: "Profile and validate research datasets safely"
+  default_prompt: "Use $exploratory-data-analysis to audit and explore this dataset."

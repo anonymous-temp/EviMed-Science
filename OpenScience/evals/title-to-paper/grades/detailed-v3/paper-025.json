@@ -1,0 +1,748 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-025",
+  "category": "case-report",
+  "title": "Case Report: VEXAS Syndrome: From Mild Symptoms to Life-Threatening Macrophage Activation Syndrome.",
+  "pmcid": "PMC8147557",
+  "doi": "10.3389/fimmu.2021.678927",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "af242991371e679d3c57ce73e7dfde61b67514c200f56624076f3f3e89dca91e",
+  "generatedSha256": "0f00bd5cd12bf5cd68604bb87c8f14d99748820de31f0a24965816b4ef305517",
+  "promptSha256": "ce7b94802c75797524119327f9bef453ae46c6e2f35a1f4f6e36003ae58ac967",
+  "cacheFingerprint": "a66e1000f981848bffa285dfd277ff4d164db7e2c79948b81955548fadd13501",
+  "referenceCharacters": 13831,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 6721,
+  "paperType": "case-report",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Describe clinical course of two VEXAS patients with somatic UBA1 mutations, one mild and one with MAS/iMCD.",
+      "generatedFact": "Report two VEXAS patients to show clinical spectrum from mild to life-threatening MAS and suggest siltuximab as candidate treatment.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "All patients had myeloid lineage-restricted somatic mutations in UBA1 affecting the Met41 residue of the protein and resulting in decreased cellular ubiquitylation activity and hyperinflammation. We here describe the clinical disease course of two VEXAS syndrome patients with somatic UBA1 mutations of which one with a mild phenotype characterized by recurrent rash and symmetric polyarthritis, and another who was initially diagnosed with idiopathic multicentric Castleman disease and developed macrophage activation syndrome as a complication of the VEXAS syndrome."
+        ],
+        "quote": "All patients had myeloid lineage-restricted somatic mutations in UBA1 affecting the Met41 residue of the protein and resulting in decreased cellular ubiquitylation activity and hyperinflammation. We here describe the clinical disease course of two VEXAS syndrome patients with somatic UBA1 mutations of which one with a mild phenotype characterized by recurrent rash and symmetric polyarthritis, and another who was initially diagnosed with idiopathic multicentric Castleman disease and developed macrophage activation syndrome as a complication of the VEXAS syndrome."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "- **License**: Creative Commons Attribution (CC BY 4.0) --- ## 摘要 VEXAS（vacuoles, E1 enzyme, X-linked, autoinflammatory, somatic）综合征是一种由 UBA1 基因体细胞突变驱动的成年发病自身炎症性疾病，常伴骨髓增生异常综合征（MDS）。本文报告两例携带不同 UBA1 体细胞突变的 VEXAS 患者（n = 2），展示该疾病的临床谱系：从相对轻微的复发性皮疹和对称性多关节炎，到危及生命的巨噬细胞活化综合征（MAS）。一例患者（P1, p.Met41Thr）因符合特发性多中心 Castleman 病（iMCD）诊断标准并合并 MAS 而接受 siltuximab（抗 IL-6 单克隆抗体）治疗，治疗后全身炎症消退、输血依赖减少。另一例患者（P2, p.Met41Leu）表现为较轻表型，对多种改善病情抗风湿药（DMARD）应答有限，并在使用 anakinra 后出现严重注射部位反应。本研究扩展了 VEXAS 综合征的皮肤和血液学表现谱，并提示 siltuximab 可能作为该病的治疗候选药物，需进一步临床评估。"
+        ],
+        "quote": "- **License**: Creative Commons Attribution (CC BY 4.0) --- ## 摘要 VEXAS（vacuoles, E1 enzyme, X-linked, autoinflammatory, somatic）综合征是一种由 UBA1 基因体细胞突变驱动的成年发病自身炎症性疾病，常伴骨髓增生异常综合征（MDS）。本文报告两例携带不同 UBA1 体细胞突变的 VEXAS 患者（n = 2），展示该疾病的临床谱系：从相对轻微的复发性皮疹和对称性多关节炎，到危及生命的巨噬细胞活化综合征（MAS）。一例患者（P1, p.Met41Thr）因符合特发性多中心 Castleman 病（iMCD）诊断标准并合并 MAS 而接受 siltuximab（抗 IL-6 单克隆抗体）治疗，治疗后全身炎症消退、输血依赖减少。另一例患者（P2, p.Met41Leu）表现为较轻表型，对多种改善病情抗风湿药（DMARD）应答有限，并在使用 anakinra 后出现严重注射部位反应。本研究扩展了 VEXAS 综合征的皮肤和血液学表现谱，并提示 siltuximab 可能作为该病的治疗候选药物，需进一步临床评估。"
+      },
+      "explanation": "Both state the objective of reporting two VEXAS cases to illustrate the clinical spectrum and treatment response. No discrepancy.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Case report describing two patients.",
+      "generatedFact": "Retrospective descriptive case report (n=2) without statistical testing.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "All patients had myeloid lineage-restricted somatic mutations in UBA1 affecting the Met41 residue of the protein and resulting in decreased cellular ubiquitylation activity and hyperinflammation. We here describe the clinical disease course of two VEXAS syndrome patients with somatic UBA1 mutations of which one with a mild phenotype characterized by recurrent rash and symmetric polyarthritis, and another who was initially diagnosed with idiopathic multicentric Castleman disease and developed macrophage activation syndrome as a complication of the VEXAS syndrome."
+        ],
+        "quote": "All patients had myeloid lineage-restricted somatic mutations in UBA1 affecting the Met41 residue of the protein and resulting in decreased cellular ubiquitylation activity and hyperinflammation. We here describe the clinical disease course of two VEXAS syndrome patients with somatic UBA1 mutations of which one with a mild phenotype characterized by recurrent rash and symmetric polyarthritis, and another who was initially diagnosed with idiopathic multicentric Castleman disease and developed macrophage activation syndrome as a complication of the VEXAS syndrome."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "### 基因检测 采用 Sanger 测序对外周血或骨髓标本进行 UBA1 基因突变筛查。对患者 1 还通过新一代测序（NGS）评估髓系突变谱，检测到 DNMT3A 剪接位点突变（c.1014+1G>T），变异等位基因频率（VAF）为 31%–46%。 ### 骨髓与组织病理学评估 骨髓穿刺/活检标本进行形态学分析、网硬蛋白染色（WHO 2016 分类标准）和 CD68 免疫组化染色。外周淋巴结切除活检和皮肤结节活检由病理科进行组织病理学评估。 ### 实验室与细胞因子检测 常规实验室检查包括全血细胞计数、C 反应蛋白（CRP）和铁蛋白。血清 IL-6 水平在 siltuximab 治疗前后进行测定（健康对照 n = 6，IL-6 正常值 <9.5 pg/mL）。符合 6/8 项 HLH-2004 标准时确认噬血细胞性淋巴组织细胞增多症（HLH）/MAS 的诊断。 ### 报告方法 本报告为回顾性病例描述研究（n = 2），未涉及统计推断或假设检验。 --- ## 结果 ### 遗传学特征 两名男性患者均检出骨髓系限制性 UBA1 体细胞突变：患者 1（P1）携带 p.Met41Thr，患者 2（P2）携带 p.Met41Leu。骨髓核型均为正常男性核型（46, XY[10]）。P1 额外携带 DNMT3A c.1014+1G>T 剪接位点突变（VAF 31%–46%）；P2 NGS 检测未见其他髓系突变（Table 1）。"
+        ],
+        "quote": "### 基因检测 采用 Sanger 测序对外周血或骨髓标本进行 UBA1 基因突变筛查。对患者 1 还通过新一代测序（NGS）评估髓系突变谱，检测到 DNMT3A 剪接位点突变（c.1014+1G>T），变异等位基因频率（VAF）为 31%–46%。 ### 骨髓与组织病理学评估 骨髓穿刺/活检标本进行形态学分析、网硬蛋白染色（WHO 2016 分类标准）和 CD68 免疫组化染色。外周淋巴结切除活检和皮肤结节活检由病理科进行组织病理学评估。 ### 实验室与细胞因子检测 常规实验室检查包括全血细胞计数、C 反应蛋白（CRP）和铁蛋白。血清 IL-6 水平在 siltuximab 治疗前后进行测定（健康对照 n = 6，IL-6 正常值 <9.5 pg/mL）。符合 6/8 项 HLH-2004 标准时确认噬血细胞性淋巴组织细胞增多症（HLH）/MAS 的诊断。 ### 报告方法 本报告为回顾性病例描述研究（n = 2），未涉及统计推断或假设检验。 --- ## 结果 ### 遗传学特征 两名男性患者均检出骨髓系限制性 UBA1 体细胞突变：患者 1（P1）携带 p.Met41Thr，患者 2（P2）携带 p.Met41Leu。骨髓核型均为正常男性核型（46, XY[10]）。P1 额外携带 DNMT3A c.1014+1G>T 剪接位点突变（VAF 31%–46%）；P2 NGS 检测未见其他髓系突变（Table 1）。"
+      },
+      "explanation": "Design is correctly identified as a case report. The generated text explicitly states it is a retrospective descriptive study of two cases.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Two male patients, ages 69 and 76, with VEXAS syndrome from University Hospitals Leuven.",
+      "generatedFact": "Two male patients (P1 69 yo, P2 76 yo) with VEXAS syndrome diagnosed at University Hospitals Leuven.",
+      "sourceEvidence": {
+        "locator": "R0005",
+        "locators": [
+          "R0005"
+        ],
+        "quotes": [
+          "III-V) Nodular lesions on extremities and abdomen: biopsy-confirmed complement-mediated vasculopathy. (B. VI) Episcleritis, periorbital erythema (B .VII) Urticarial vasculitis of gluteal region. (C) Representative aberrant vacuolized bone marrow cells (x40 magnification); left panel also a normal band neutrophil, third panel also a normal erythroblast. Case Description Patient 1 ( Figure 1A and Table 1 ) is a 69-year-old male with a medical history of an abdominal hernia for which he had surgery."
+        ],
+        "quote": "III-V) Nodular lesions on extremities and abdomen: biopsy-confirmed complement-mediated vasculopathy. (B. VI) Episcleritis, periorbital erythema (B .VII) Urticarial vasculitis of gluteal region. (C) Representative aberrant vacuolized bone marrow cells (x40 magnification); left panel also a normal band neutrophil, third panel also a normal erythroblast. Case Description Patient 1 ( Figure 1A and Table 1 ) is a 69-year-old male with a medical history of an abdominal hernia for which he had surgery."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 临床症状与实验室特征 **患者 1**（69 岁，既往腹壁疝手术史）：表现为一年内体重下降 15 kg，一月来发热（最高 38.2°C）、盗汗及乏力，伴双侧颈部淋巴结肿大、关节痛、巩膜外层炎、鼻软骨炎、血栓性静脉炎和结节性皮损。实验室检查示正细胞正色素性贫血（Hb 6.6 g/dL, MCV 96 fL），中性粒细胞绝对值 2.2 × 10⁹/L，血小板减少（46 × 10⁹/L），CRP 93.1 mg/L（正常 <5 mg/L），铁蛋白 720 µg/L（正常 30–400 µg/L）。颈部淋巴结切除活检提示 HHV-8 阴性浆细胞型 iMCD 伴噬血现象；皮肤结节活检显示补体介导的血管病变。骨髓检查示三系发育异常伴空泡形成和噬血现象（CD68+），网硬蛋白染色轻度阳性（MF 1 级，WHO 2016）。由于叶酸缺乏，MDS 分型无法评估。 **患者 2**（76 岁，既往深静脉血栓伴肺栓塞、B 型主动脉夹层史）：表现为复发性皮疹和累及大、小关节的对称性多关节炎。无发热，症状相对轻微。实验室检查示大细胞性贫血（具体数值原文未详列），CRP 280.9 mg/L，铁蛋白 1161 µg/L。皮肤活检示荨麻疹性血管炎。骨髓检查示三系发育异常伴髓系空泡形成、反应性浆细胞增多（6%），未见浆细胞病证据，亦不符合 MDS 诊断标准（Table 1）。"
+        ],
+        "quote": "### 临床症状与实验室特征 **患者 1**（69 岁，既往腹壁疝手术史）：表现为一年内体重下降 15 kg，一月来发热（最高 38.2°C）、盗汗及乏力，伴双侧颈部淋巴结肿大、关节痛、巩膜外层炎、鼻软骨炎、血栓性静脉炎和结节性皮损。实验室检查示正细胞正色素性贫血（Hb 6.6 g/dL, MCV 96 fL），中性粒细胞绝对值 2.2 × 10⁹/L，血小板减少（46 × 10⁹/L），CRP 93.1 mg/L（正常 <5 mg/L），铁蛋白 720 µg/L（正常 30–400 µg/L）。颈部淋巴结切除活检提示 HHV-8 阴性浆细胞型 iMCD 伴噬血现象；皮肤结节活检显示补体介导的血管病变。骨髓检查示三系发育异常伴空泡形成和噬血现象（CD68+），网硬蛋白染色轻度阳性（MF 1 级，WHO 2016）。由于叶酸缺乏，MDS 分型无法评估。 **患者 2**（76 岁，既往深静脉血栓伴肺栓塞、B 型主动脉夹层史）：表现为复发性皮疹和累及大、小关节的对称性多关节炎。无发热，症状相对轻微。实验室检查示大细胞性贫血（具体数值原文未详列），CRP 280.9 mg/L，铁蛋白 1161 µg/L。皮肤活检示荨麻疹性血管炎。骨髓检查示三系发育异常伴髓系空泡形成、反应性浆细胞增多（6%），未见浆细胞病证据，亦不符合 MDS 诊断标准（Table 1）。"
+      },
+      "explanation": "Age, sex, and diagnosis match exactly between reference and generated summary.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Two VEXAS patients (n=2).",
+      "generatedFact": "n = 2 VEXAS patients.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "All patients had myeloid lineage-restricted somatic mutations in UBA1 affecting the Met41 residue of the protein and resulting in decreased cellular ubiquitylation activity and hyperinflammation. We here describe the clinical disease course of two VEXAS syndrome patients with somatic UBA1 mutations of which one with a mild phenotype characterized by recurrent rash and symmetric polyarthritis, and another who was initially diagnosed with idiopathic multicentric Castleman disease and developed macrophage activation syndrome as a complication of the VEXAS syndrome."
+        ],
+        "quote": "All patients had myeloid lineage-restricted somatic mutations in UBA1 affecting the Met41 residue of the protein and resulting in decreased cellular ubiquitylation activity and hyperinflammation. We here describe the clinical disease course of two VEXAS syndrome patients with somatic UBA1 mutations of which one with a mild phenotype characterized by recurrent rash and symmetric polyarthritis, and another who was initially diagnosed with idiopathic multicentric Castleman disease and developed macrophage activation syndrome as a complication of the VEXAS syndrome."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "- **License**: Creative Commons Attribution (CC BY 4.0) --- ## 摘要 VEXAS（vacuoles, E1 enzyme, X-linked, autoinflammatory, somatic）综合征是一种由 UBA1 基因体细胞突变驱动的成年发病自身炎症性疾病，常伴骨髓增生异常综合征（MDS）。本文报告两例携带不同 UBA1 体细胞突变的 VEXAS 患者（n = 2），展示该疾病的临床谱系：从相对轻微的复发性皮疹和对称性多关节炎，到危及生命的巨噬细胞活化综合征（MAS）。一例患者（P1, p.Met41Thr）因符合特发性多中心 Castleman 病（iMCD）诊断标准并合并 MAS 而接受 siltuximab（抗 IL-6 单克隆抗体）治疗，治疗后全身炎症消退、输血依赖减少。另一例患者（P2, p.Met41Leu）表现为较轻表型，对多种改善病情抗风湿药（DMARD）应答有限，并在使用 anakinra 后出现严重注射部位反应。本研究扩展了 VEXAS 综合征的皮肤和血液学表现谱，并提示 siltuximab 可能作为该病的治疗候选药物，需进一步临床评估。"
+        ],
+        "quote": "- **License**: Creative Commons Attribution (CC BY 4.0) --- ## 摘要 VEXAS（vacuoles, E1 enzyme, X-linked, autoinflammatory, somatic）综合征是一种由 UBA1 基因体细胞突变驱动的成年发病自身炎症性疾病，常伴骨髓增生异常综合征（MDS）。本文报告两例携带不同 UBA1 体细胞突变的 VEXAS 患者（n = 2），展示该疾病的临床谱系：从相对轻微的复发性皮疹和对称性多关节炎，到危及生命的巨噬细胞活化综合征（MAS）。一例患者（P1, p.Met41Thr）因符合特发性多中心 Castleman 病（iMCD）诊断标准并合并 MAS 而接受 siltuximab（抗 IL-6 单克隆抗体）治疗，治疗后全身炎症消退、输血依赖减少。另一例患者（P2, p.Met41Leu）表现为较轻表型，对多种改善病情抗风湿药（DMARD）应答有限，并在使用 anakinra 后出现严重注射部位反应。本研究扩展了 VEXAS 综合征的皮肤和血液学表现谱，并提示 siltuximab 可能作为该病的治疗候选药物，需进一步临床评估。"
+      },
+      "explanation": "Both indicate a sample size of two patients. No discrepancy.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No explicit eligibility or selection rules are described in the reference case report, nor does the generated text claim formal selection criteria.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "VEXAS syndrome driven by somatic UBA1 mutations; clinical spectrum and treatment responses observed.",
+      "generatedFact": "VEXAS syndrome as disease model; clinical spectrum and response to siltuximab and other drugs analyzed.",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "All patients had myeloid lineage-restricted somatic mutations in UBA1 affecting the Met41 residue of the protein and resulting in decreased cellular ubiquitylation activity and hyperinflammation. We here describe the clinical disease course of two VEXAS syndrome patients with somatic UBA1 mutations of which one with a mild phenotype characterized by recurrent rash and symmetric polyarthritis, and another who was initially diagnosed with idiopathic multicentric Castleman disease and developed macrophage activation syndrome as a complication of the VEXAS syndrome."
+        ],
+        "quote": "All patients had myeloid lineage-restricted somatic mutations in UBA1 affecting the Met41 residue of the protein and resulting in decreased cellular ubiquitylation activity and hyperinflammation. We here describe the clinical disease course of two VEXAS syndrome patients with somatic UBA1 mutations of which one with a mild phenotype characterized by recurrent rash and symmetric polyarthritis, and another who was initially diagnosed with idiopathic multicentric Castleman disease and developed macrophage activation syndrome as a complication of the VEXAS syndrome."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "- **License**: Creative Commons Attribution (CC BY 4.0) --- ## 摘要 VEXAS（vacuoles, E1 enzyme, X-linked, autoinflammatory, somatic）综合征是一种由 UBA1 基因体细胞突变驱动的成年发病自身炎症性疾病，常伴骨髓增生异常综合征（MDS）。本文报告两例携带不同 UBA1 体细胞突变的 VEXAS 患者（n = 2），展示该疾病的临床谱系：从相对轻微的复发性皮疹和对称性多关节炎，到危及生命的巨噬细胞活化综合征（MAS）。一例患者（P1, p.Met41Thr）因符合特发性多中心 Castleman 病（iMCD）诊断标准并合并 MAS 而接受 siltuximab（抗 IL-6 单克隆抗体）治疗，治疗后全身炎症消退、输血依赖减少。另一例患者（P2, p.Met41Leu）表现为较轻表型，对多种改善病情抗风湿药（DMARD）应答有限，并在使用 anakinra 后出现严重注射部位反应。本研究扩展了 VEXAS 综合征的皮肤和血液学表现谱，并提示 siltuximab 可能作为该病的治疗候选药物，需进一步临床评估。"
+        ],
+        "quote": "- **License**: Creative Commons Attribution (CC BY 4.0) --- ## 摘要 VEXAS（vacuoles, E1 enzyme, X-linked, autoinflammatory, somatic）综合征是一种由 UBA1 基因体细胞突变驱动的成年发病自身炎症性疾病，常伴骨髓增生异常综合征（MDS）。本文报告两例携带不同 UBA1 体细胞突变的 VEXAS 患者（n = 2），展示该疾病的临床谱系：从相对轻微的复发性皮疹和对称性多关节炎，到危及生命的巨噬细胞活化综合征（MAS）。一例患者（P1, p.Met41Thr）因符合特发性多中心 Castleman 病（iMCD）诊断标准并合并 MAS 而接受 siltuximab（抗 IL-6 单克隆抗体）治疗，治疗后全身炎症消退、输血依赖减少。另一例患者（P2, p.Met41Leu）表现为较轻表型，对多种改善病情抗风湿药（DMARD）应答有限，并在使用 anakinra 后出现严重注射部位反应。本研究扩展了 VEXAS 综合征的皮肤和血液学表现谱，并提示 siltuximab 可能作为该病的治疗候选药物，需进一步临床评估。"
+      },
+      "explanation": "The analyzed system is VEXAS syndrome and its clinical manifestations, which both texts describe consistently.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "This is a case report without a control group or reference standard. Neither text defines a comparator.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Resolution of fever, skin lesions, normalization of inflammatory markers, and HLH criteria no longer met after siltuximab.",
+      "generatedFact": "After siltuximab: fever resolved, skin lesions healed, inflammatory markers normalized, HLH criteria no longer met.",
+      "sourceEvidence": {
+        "locator": "R0009",
+        "locators": [
+          "R0009"
+        ],
+        "quotes": [
+          "He developed confusion, dyspnea, high grade fever >40°Celsius, complement-mediated vasculopathy with skin ulcerations, anemia (Hb 6.3g/dL, severe thrombocytopenia 3 x 10 9 /L with bleeding complications, and ferritin levels of 3640µg/L (partly due to >28 units red blood cell transfusions). The patient was started on siltuximab (in medical need) and prednisolone 10 mg/day in third line. This resulted in resolution of fever, skin lesions, and normalization of inflammatory markers. From hindsight, serum IL-6 was significantly elevated (102pg/mL, healthy controls <9.5pg/mL, n = 6) prior to siltuximab treatment."
+        ],
+        "quote": "He developed confusion, dyspnea, high grade fever >40°Celsius, complement-mediated vasculopathy with skin ulcerations, anemia (Hb 6.3g/dL, severe thrombocytopenia 3 x 10 9 /L with bleeding complications, and ferritin levels of 3640µg/L (partly due to >28 units red blood cell transfusions). The patient was started on siltuximab (in medical need) and prednisolone 10 mg/day in third line. This resulted in resolution of fever, skin lesions, and normalization of inflammatory markers. From hindsight, serum IL-6 was significantly elevated (102pg/mL, healthy controls <9.5pg/mL, n = 6) prior to siltuximab treatment."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+        ],
+        "quote": "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+      },
+      "explanation": "Primary clinical outcomes are identically captured. No difference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "P1 platelet and hemoglobin only partially recovered after 2 months of siltuximab.",
+      "generatedFact": "After 2 months of siltuximab, P1's platelet and hemoglobin only partially recovered.",
+      "sourceEvidence": {
+        "locator": "R0009",
+        "locators": [
+          "R0009"
+        ],
+        "quotes": [
+          "He developed confusion, dyspnea, high grade fever >40°Celsius, complement-mediated vasculopathy with skin ulcerations, anemia (Hb 6.3g/dL, severe thrombocytopenia 3 x 10 9 /L with bleeding complications, and ferritin levels of 3640µg/L (partly due to >28 units red blood cell transfusions). The patient was started on siltuximab (in medical need) and prednisolone 10 mg/day in third line. This resulted in resolution of fever, skin lesions, and normalization of inflammatory markers. From hindsight, serum IL-6 was significantly elevated (102pg/mL, healthy controls <9.5pg/mL, n = 6) prior to siltuximab treatment."
+        ],
+        "quote": "He developed confusion, dyspnea, high grade fever >40°Celsius, complement-mediated vasculopathy with skin ulcerations, anemia (Hb 6.3g/dL, severe thrombocytopenia 3 x 10 9 /L with bleeding complications, and ferritin levels of 3640µg/L (partly due to >28 units red blood cell transfusions). The patient was started on siltuximab (in medical need) and prednisolone 10 mg/day in third line. This resulted in resolution of fever, skin lesions, and normalization of inflammatory markers. From hindsight, serum IL-6 was significantly elevated (102pg/mL, healthy controls <9.5pg/mL, n = 6) prior to siltuximab treatment."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+        ],
+        "quote": "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+      },
+      "explanation": "The 2‑month follow‑up for haematological response is stated in both. Exact match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No data cleaning, feature engineering, or harmonisation steps are described in the reference or the generated text.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Sanger sequencing for UBA1 mutation, NGS for myeloid mutations, bone marrow pathology, IL-6 measurement.",
+      "generatedFact": "Sanger sequencing of UBA1, NGS for patient 1, bone marrow morphology, IL-6 measurement, HLH‑2004 criteria.",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "This promotes the production of an inactive isoform (UBA1c) from a downstream translation site (Met67), resulting in decreased ubiquitylation activity and hyperinflammation ( 1 ). We describe the clinical disease course of two VEXAS syndrome patients (P1 and P2) with two different myeloid lineage-restricted somatic UBA1 mutations ( Figure 1A ). One of these patients was initially diagnosed with idiopathic multicentric Castleman disease (iMCD) and was ultimately treated with siltuximab, a registered IL-6 antagonist. Figure 1 (A) Sanger sequence of UBA1 . (B. I) Episcleritis, nose chondritis. (B. II) Urticarial lesion of the neck. (B."
+        ],
+        "quote": "This promotes the production of an inactive isoform (UBA1c) from a downstream translation site (Met67), resulting in decreased ubiquitylation activity and hyperinflammation ( 1 ). We describe the clinical disease course of two VEXAS syndrome patients (P1 and P2) with two different myeloid lineage-restricted somatic UBA1 mutations ( Figure 1A ). One of these patients was initially diagnosed with idiopathic multicentric Castleman disease (iMCD) and was ultimately treated with siltuximab, a registered IL-6 antagonist. Figure 1 (A) Sanger sequence of UBA1 . (B. I) Episcleritis, nose chondritis. (B. II) Urticarial lesion of the neck. (B."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "### 基因检测 采用 Sanger 测序对外周血或骨髓标本进行 UBA1 基因突变筛查。对患者 1 还通过新一代测序（NGS）评估髓系突变谱，检测到 DNMT3A 剪接位点突变（c.1014+1G>T），变异等位基因频率（VAF）为 31%–46%。 ### 骨髓与组织病理学评估 骨髓穿刺/活检标本进行形态学分析、网硬蛋白染色（WHO 2016 分类标准）和 CD68 免疫组化染色。外周淋巴结切除活检和皮肤结节活检由病理科进行组织病理学评估。 ### 实验室与细胞因子检测 常规实验室检查包括全血细胞计数、C 反应蛋白（CRP）和铁蛋白。血清 IL-6 水平在 siltuximab 治疗前后进行测定（健康对照 n = 6，IL-6 正常值 <9.5 pg/mL）。符合 6/8 项 HLH-2004 标准时确认噬血细胞性淋巴组织细胞增多症（HLH）/MAS 的诊断。 ### 报告方法 本报告为回顾性病例描述研究（n = 2），未涉及统计推断或假设检验。 --- ## 结果 ### 遗传学特征 两名男性患者均检出骨髓系限制性 UBA1 体细胞突变：患者 1（P1）携带 p.Met41Thr，患者 2（P2）携带 p.Met41Leu。骨髓核型均为正常男性核型（46, XY[10]）。P1 额外携带 DNMT3A c.1014+1G>T 剪接位点突变（VAF 31%–46%）；P2 NGS 检测未见其他髓系突变（Table 1）。"
+        ],
+        "quote": "### 基因检测 采用 Sanger 测序对外周血或骨髓标本进行 UBA1 基因突变筛查。对患者 1 还通过新一代测序（NGS）评估髓系突变谱，检测到 DNMT3A 剪接位点突变（c.1014+1G>T），变异等位基因频率（VAF）为 31%–46%。 ### 骨髓与组织病理学评估 骨髓穿刺/活检标本进行形态学分析、网硬蛋白染色（WHO 2016 分类标准）和 CD68 免疫组化染色。外周淋巴结切除活检和皮肤结节活检由病理科进行组织病理学评估。 ### 实验室与细胞因子检测 常规实验室检查包括全血细胞计数、C 反应蛋白（CRP）和铁蛋白。血清 IL-6 水平在 siltuximab 治疗前后进行测定（健康对照 n = 6，IL-6 正常值 <9.5 pg/mL）。符合 6/8 项 HLH-2004 标准时确认噬血细胞性淋巴组织细胞增多症（HLH）/MAS 的诊断。 ### 报告方法 本报告为回顾性病例描述研究（n = 2），未涉及统计推断或假设检验。 --- ## 结果 ### 遗传学特征 两名男性患者均检出骨髓系限制性 UBA1 体细胞突变：患者 1（P1）携带 p.Met41Thr，患者 2（P2）携带 p.Met41Leu。骨髓核型均为正常男性核型（46, XY[10]）。P1 额外携带 DNMT3A c.1014+1G>T 剪接位点突变（VAF 31%–46%）；P2 NGS 检测未见其他髓系突变（Table 1）。"
+      },
+      "explanation": "Laboratory and genetic methods match exactly; no statistical inference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No algorithm, computational model, or estimator is used. Not applicable.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "P1: Hb 6.6 g/dL, MCV 96 fL, plt 46→3×10⁹/L, CRP 93.1 mg/L, ferritin 720→3640 µg/L, IL‑6 102 pg/mL; P2: CRP 280.9 mg/L, ferritin 1161 µg/L.",
+      "generatedFact": "P1: Hb 6.6, MCV 96, plt 46→3, CRP 93.1, ferritin 720→3640, IL‑6 102; P2: CRP 280.9, ferritin 1161.",
+      "sourceEvidence": {
+        "locator": "R0006",
+        "locators": [
+          "R0006"
+        ],
+        "quotes": [
+          "He presented with 15 kg weight loss over one year, fever up to 38.2° Celsius, night sweats and fatigue since one month, bilateral cervical lymphadenopathy, arthralgia, episcleritis, nose chondritis, thrombophlebitis and nodular lesions ( Figure 1B .I-V). Laboratory examination showed normocytic anemia (Hb 6.6g/dL, MCV 96fL; reference range 76-96fL), absolute neutrophil count 2.2 x 10 9 /L, thrombocytopenia 46 x 10 9 /L and raised inflammatory markers (CRP 93.1mg/L, normal <5mg/L; ferritin 720µg/L, reference range 30-400µg/L)."
+        ],
+        "quote": "He presented with 15 kg weight loss over one year, fever up to 38.2° Celsius, night sweats and fatigue since one month, bilateral cervical lymphadenopathy, arthralgia, episcleritis, nose chondritis, thrombophlebitis and nodular lesions ( Figure 1B .I-V). Laboratory examination showed normocytic anemia (Hb 6.6g/dL, MCV 96fL; reference range 76-96fL), absolute neutrophil count 2.2 x 10 9 /L, thrombocytopenia 46 x 10 9 /L and raised inflammatory markers (CRP 93.1mg/L, normal <5mg/L; ferritin 720µg/L, reference range 30-400µg/L)."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+        ],
+        "quote": "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+      },
+      "explanation": "All key laboratory values, units, and time points (when provided) are identical. No numerical discrepancies.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No confidence intervals, p‑values, or formal uncertainty measures are reported in either text.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "VEXAS spectrum ranges from mild to life‑threatening MAS; siltuximab warrants further evaluation.",
+      "generatedFact": "VEXAS spans from mild corticosteroid‑controlled disease to MAS; siltuximab needs larger prospective evaluation.",
+      "sourceEvidence": {
+        "locator": "R0020",
+        "locators": [
+          "R0020"
+        ],
+        "quotes": [
+          "Siltuximab binds IL-6 itself rather than its receptor as is the case with tocilizumab. Similar unexpected disparities in response were reported previously for infliximab, an anti-TNF-α antibody vs. etanercept, targeting TNF-α as a decoy receptor ( 4 ). In conclusion, the clinical spectrum of somatic UBA1 mutations may vary from a relatively easily low-dose prednisolone-treated VEXAS syndrome to a life-threatening MAS. We extend on the spectrum of cutaneous and hematologic manifestations associated with VEXAS syndrome. Finally, based on our observations, treatment of VEXAS syndrome with siltuximab warrants further evaluation in the absence of evidence-based recommendations."
+        ],
+        "quote": "Siltuximab binds IL-6 itself rather than its receptor as is the case with tocilizumab. Similar unexpected disparities in response were reported previously for infliximab, an anti-TNF-α antibody vs. etanercept, targeting TNF-α as a decoy receptor ( 4 ). In conclusion, the clinical spectrum of somatic UBA1 mutations may vary from a relatively easily low-dose prednisolone-treated VEXAS syndrome to a life-threatening MAS. We extend on the spectrum of cutaneous and hematologic manifestations associated with VEXAS syndrome. Finally, based on our observations, treatment of VEXAS syndrome with siltuximab warrants further evaluation in the absence of evidence-based recommendations."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "**P2 部分实验室数值未详列**（如具体血红蛋白、血小板计数），限制了跨患者定量比较。 5. **MDS 分型在 P1 中因叶酸缺乏无法评估**，P2 不符合 MDS 标准，无法评估 VEXAS-MDS 关系的普遍性。 6. **单中心经验**，不排除转诊偏倚。 7. 原作者明确指出 siltuximab 的疗效\"warrants further evaluation in the absence of evidence-based recommendations\"，即目前尚无证据级别的治疗推荐，其疗效需在更大样本中验证。 --- ## 结论 该病例报告展示了两例 UBA1 体细胞突变驱动的 VEXAS 综合征患者，临床表型从低剂量皮质类固醇可控制的轻型自身炎症到危及生命的 MAS，跨度极大。本研究扩展了 VEXAS 的皮肤（补体介导血管病变、荨麻疹性血管炎）和血液学（噬血现象、iMCD 样表现）表现谱。基于 P1 对 siltuximab 的显著临床应答——包括炎症消退和 HLH 标准逆转——原作者建议对 siltuximab 进行更大样本的 VEXAS 前瞻性评估，并呼吁在治疗前后系统检测细胞因子谱以识别关键炎症介质和潜在治疗靶点。anakinra 相关严重皮肤反应在 VEXAS 患者中的高发生率（原文引用 Beck 等队列中 62%）可能成为该病的诊断线索，但其发病机制尚待阐明。 上述结论均直接来源于原文讨论部分的具体陈述，未进行任何超出原文的推断或推广。 --- ## 参考文献（原文引用） 1."
+        ],
+        "quote": "**P2 部分实验室数值未详列**（如具体血红蛋白、血小板计数），限制了跨患者定量比较。 5. **MDS 分型在 P1 中因叶酸缺乏无法评估**，P2 不符合 MDS 标准，无法评估 VEXAS-MDS 关系的普遍性。 6. **单中心经验**，不排除转诊偏倚。 7. 原作者明确指出 siltuximab 的疗效\"warrants further evaluation in the absence of evidence-based recommendations\"，即目前尚无证据级别的治疗推荐，其疗效需在更大样本中验证。 --- ## 结论 该病例报告展示了两例 UBA1 体细胞突变驱动的 VEXAS 综合征患者，临床表型从低剂量皮质类固醇可控制的轻型自身炎症到危及生命的 MAS，跨度极大。本研究扩展了 VEXAS 的皮肤（补体介导血管病变、荨麻疹性血管炎）和血液学（噬血现象、iMCD 样表现）表现谱。基于 P1 对 siltuximab 的显著临床应答——包括炎症消退和 HLH 标准逆转——原作者建议对 siltuximab 进行更大样本的 VEXAS 前瞻性评估，并呼吁在治疗前后系统检测细胞因子谱以识别关键炎症介质和潜在治疗靶点。anakinra 相关严重皮肤反应在 VEXAS 患者中的高发生率（原文引用 Beck 等队列中 62%）可能成为该病的诊断线索，但其发病机制尚待阐明。 上述结论均直接来源于原文讨论部分的具体陈述，未进行任何超出原文的推断或推广。 --- ## 参考文献（原文引用） 1."
+      },
+      "explanation": "Both conclude a wide clinical spectrum and the need for further siltuximab assessment. Direction and strength match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "compatible",
+      "issueKinds": [],
+      "referenceFact": "Authors note need for further evaluation (no evidence‑based recommendations) and call for cytokine profiling.",
+      "generatedFact": "Explicitly lists limitations: extremely small n=2, retrospective, single‑centre, lack of systematic cytokine data.",
+      "sourceEvidence": {
+        "locator": "R0020",
+        "locators": [
+          "R0020"
+        ],
+        "quotes": [
+          "Siltuximab binds IL-6 itself rather than its receptor as is the case with tocilizumab. Similar unexpected disparities in response were reported previously for infliximab, an anti-TNF-α antibody vs. etanercept, targeting TNF-α as a decoy receptor ( 4 ). In conclusion, the clinical spectrum of somatic UBA1 mutations may vary from a relatively easily low-dose prednisolone-treated VEXAS syndrome to a life-threatening MAS. We extend on the spectrum of cutaneous and hematologic manifestations associated with VEXAS syndrome. Finally, based on our observations, treatment of VEXAS syndrome with siltuximab warrants further evaluation in the absence of evidence-based recommendations."
+        ],
+        "quote": "Siltuximab binds IL-6 itself rather than its receptor as is the case with tocilizumab. Similar unexpected disparities in response were reported previously for infliximab, an anti-TNF-α antibody vs. etanercept, targeting TNF-α as a decoy receptor ( 4 ). In conclusion, the clinical spectrum of somatic UBA1 mutations may vary from a relatively easily low-dose prednisolone-treated VEXAS syndrome to a life-threatening MAS. We extend on the spectrum of cutaneous and hematologic manifestations associated with VEXAS syndrome. Finally, based on our observations, treatment of VEXAS syndrome with siltuximab warrants further evaluation in the absence of evidence-based recommendations."
+      },
+      "generatedEvidence": {
+        "locator": "G0009",
+        "locators": [
+          "G0009"
+        ],
+        "quotes": [
+          "本报告最重要的治疗发现是 P1 对 siltuximab 的显著应答——MDS/HMAS 相关炎症完全消退，HLH 标准不再满足，皮质类固醇成功减量至 10 mg/d。这与 Beck 等报道的 tocilizumab 缺乏应答形成对比。作者推测 siltuximab（直接结合 IL-6 配体）与 tocilizumab（阻断 IL-6 受体）在作用机制上的差异可能是造成应答差异的原因，类似于既往 infliximab（抗 TNF-α 单抗）与 etanercept（TNF-α 诱饵受体）之间观察到的治疗不一致。 P2 出现 anakinra 严重皮肤反应，其发生率在 Beck 等的原始队列中达 62%，可能成为 VEXAS 的一个辅助诊断线索。但其病理生理机制（原文用语为 \"elusive\"，即尚不明确）有待进一步细胞因子分析阐明。 ### 延伸的临床谱系 原文扩展了以下与 VEXAS 相关的临床表现：（1）补体介导的血管病变伴皮下补体沉积；（2）iMCD 样淋巴增殖作为 VEXAS 的表现之一；（3）MAS/HMAS 作为危及生命的并发症；（4）DNMT3A 共突变在部分患者中的存在。 ### 局限性 1. **极低样本量**（n = 2，均为男性），无法就 siltuximab 或其他治疗的普遍有效性得出结论。 2. **回顾性病例描述设计**，缺乏对照，无法排除自然病程波动对治疗评估的影响。 3. **缺乏系统性的治疗前后细胞因子谱**——原文仅报告了 P1 的 siltuximab 治疗前 IL-6 测量值，其余细胞因子及治疗后水平未报告。 4."
+        ],
+        "quote": "本报告最重要的治疗发现是 P1 对 siltuximab 的显著应答——MDS/HMAS 相关炎症完全消退，HLH 标准不再满足，皮质类固醇成功减量至 10 mg/d。这与 Beck 等报道的 tocilizumab 缺乏应答形成对比。作者推测 siltuximab（直接结合 IL-6 配体）与 tocilizumab（阻断 IL-6 受体）在作用机制上的差异可能是造成应答差异的原因，类似于既往 infliximab（抗 TNF-α 单抗）与 etanercept（TNF-α 诱饵受体）之间观察到的治疗不一致。 P2 出现 anakinra 严重皮肤反应，其发生率在 Beck 等的原始队列中达 62%，可能成为 VEXAS 的一个辅助诊断线索。但其病理生理机制（原文用语为 \"elusive\"，即尚不明确）有待进一步细胞因子分析阐明。 ### 延伸的临床谱系 原文扩展了以下与 VEXAS 相关的临床表现：（1）补体介导的血管病变伴皮下补体沉积；（2）iMCD 样淋巴增殖作为 VEXAS 的表现之一；（3）MAS/HMAS 作为危及生命的并发症；（4）DNMT3A 共突变在部分患者中的存在。 ### 局限性 1. **极低样本量**（n = 2，均为男性），无法就 siltuximab 或其他治疗的普遍有效性得出结论。 2. **回顾性病例描述设计**，缺乏对照，无法排除自然病程波动对治疗评估的影响。 3. **缺乏系统性的治疗前后细胞因子谱**——原文仅报告了 P1 的 siltuximab 治疗前 IL-6 测量值，其余细胞因子及治疗后水平未报告。 4."
+      },
+      "explanation": "Reference implicitly acknowledges limitations; generated text spells them out. The added points are factual and consistent with the study, so compatible.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "P1: toxic sirolimus levels and opportunistic infections; P2: severe delayed injection‑site reaction to anakinra.",
+      "generatedFact": "P1: high sirolimus concentration with opportunistic infections; P2: pronounced delayed injection site reaction to anakinra.",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "As siltuximab is not reimbursed in Belgium, the patient was treated for iMCD with prednisolone 40 mg and 2 infusions of rituximab (1000 mg) with a time interval of 2 weeks. As corticosteroids could not be tapered and the patient remained transfusion dependent, sirolimus was initiated in second line with good results. However, the patient relapsed quickly after cessation of sirolimus because of toxic concentrations and opportunistic infections."
+        ],
+        "quote": "As siltuximab is not reimbursed in Belgium, the patient was treated for iMCD with prednisolone 40 mg and 2 infusions of rituximab (1000 mg) with a time interval of 2 weeks. As corticosteroids could not be tapered and the patient remained transfusion dependent, sirolimus was initiated in second line with good results. However, the patient relapsed quickly after cessation of sirolimus because of toxic concentrations and opportunistic infections."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+        ],
+        "quote": "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+      },
+      "explanation": "Adverse events are accurately reported with identical context and drugs.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "patient_and_timeline",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "P1: 69M, abdominal hernia surgery, weight loss, fever, lymphadenopathy; P2: 76M, DVT/PE, recurrent rash, polyarthritis.",
+      "generatedFact": "P1: 69M, hernia surgery, 15 kg weight loss, fever 38.2°C, cervical lymphadenopathy; P2: 76M, DVT/PE, rash, symmetric polyarthritis.",
+      "sourceEvidence": {
+        "locator": "R0005",
+        "locators": [
+          "R0005"
+        ],
+        "quotes": [
+          "III-V) Nodular lesions on extremities and abdomen: biopsy-confirmed complement-mediated vasculopathy. (B. VI) Episcleritis, periorbital erythema (B .VII) Urticarial vasculitis of gluteal region. (C) Representative aberrant vacuolized bone marrow cells (x40 magnification); left panel also a normal band neutrophil, third panel also a normal erythroblast. Case Description Patient 1 ( Figure 1A and Table 1 ) is a 69-year-old male with a medical history of an abdominal hernia for which he had surgery."
+        ],
+        "quote": "III-V) Nodular lesions on extremities and abdomen: biopsy-confirmed complement-mediated vasculopathy. (B. VI) Episcleritis, periorbital erythema (B .VII) Urticarial vasculitis of gluteal region. (C) Representative aberrant vacuolized bone marrow cells (x40 magnification); left panel also a normal band neutrophil, third panel also a normal erythroblast. Case Description Patient 1 ( Figure 1A and Table 1 ) is a 69-year-old male with a medical history of an abdominal hernia for which he had surgery."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 临床症状与实验室特征 **患者 1**（69 岁，既往腹壁疝手术史）：表现为一年内体重下降 15 kg，一月来发热（最高 38.2°C）、盗汗及乏力，伴双侧颈部淋巴结肿大、关节痛、巩膜外层炎、鼻软骨炎、血栓性静脉炎和结节性皮损。实验室检查示正细胞正色素性贫血（Hb 6.6 g/dL, MCV 96 fL），中性粒细胞绝对值 2.2 × 10⁹/L，血小板减少（46 × 10⁹/L），CRP 93.1 mg/L（正常 <5 mg/L），铁蛋白 720 µg/L（正常 30–400 µg/L）。颈部淋巴结切除活检提示 HHV-8 阴性浆细胞型 iMCD 伴噬血现象；皮肤结节活检显示补体介导的血管病变。骨髓检查示三系发育异常伴空泡形成和噬血现象（CD68+），网硬蛋白染色轻度阳性（MF 1 级，WHO 2016）。由于叶酸缺乏，MDS 分型无法评估。 **患者 2**（76 岁，既往深静脉血栓伴肺栓塞、B 型主动脉夹层史）：表现为复发性皮疹和累及大、小关节的对称性多关节炎。无发热，症状相对轻微。实验室检查示大细胞性贫血（具体数值原文未详列），CRP 280.9 mg/L，铁蛋白 1161 µg/L。皮肤活检示荨麻疹性血管炎。骨髓检查示三系发育异常伴髓系空泡形成、反应性浆细胞增多（6%），未见浆细胞病证据，亦不符合 MDS 诊断标准（Table 1）。"
+        ],
+        "quote": "### 临床症状与实验室特征 **患者 1**（69 岁，既往腹壁疝手术史）：表现为一年内体重下降 15 kg，一月来发热（最高 38.2°C）、盗汗及乏力，伴双侧颈部淋巴结肿大、关节痛、巩膜外层炎、鼻软骨炎、血栓性静脉炎和结节性皮损。实验室检查示正细胞正色素性贫血（Hb 6.6 g/dL, MCV 96 fL），中性粒细胞绝对值 2.2 × 10⁹/L，血小板减少（46 × 10⁹/L），CRP 93.1 mg/L（正常 <5 mg/L），铁蛋白 720 µg/L（正常 30–400 µg/L）。颈部淋巴结切除活检提示 HHV-8 阴性浆细胞型 iMCD 伴噬血现象；皮肤结节活检显示补体介导的血管病变。骨髓检查示三系发育异常伴空泡形成和噬血现象（CD68+），网硬蛋白染色轻度阳性（MF 1 级，WHO 2016）。由于叶酸缺乏，MDS 分型无法评估。 **患者 2**（76 岁，既往深静脉血栓伴肺栓塞、B 型主动脉夹层史）：表现为复发性皮疹和累及大、小关节的对称性多关节炎。无发热，症状相对轻微。实验室检查示大细胞性贫血（具体数值原文未详列），CRP 280.9 mg/L，铁蛋白 1161 µg/L。皮肤活检示荨麻疹性血管炎。骨髓检查示三系发育异常伴髓系空泡形成、反应性浆细胞增多（6%），未见浆细胞病证据，亦不符合 MDS 诊断标准（Table 1）。"
+      },
+      "explanation": "Demographics, medical history, and presenting symptoms are faithfully reproduced. Timeline of events matches.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "diagnostic_workup",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "P1: lymph node biopsy iMCD with hemophagocytosis, bone marrow trilineage dysplasia with vacuolization, HLH criteria met. P2: skin biopsy urticarial vasculitis, bone marrow dysplasia with plasmocytosis.",
+      "generatedFact": "P1: lymph node biopsy (iMCD, hemophagocytosis), bone marrow (trilineage dysplasia, vacuoles, HLH). P2: skin (urticarial vasculitis), bone marrow (dysplasia, reactive plasmocytosis).",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "Cervical lymph node excision biopsy was suggestive of human herpes virus (HHV-)8-negative plasma cell type iMCD and additionally showed hemophagocytosis, while skin nodule biopsy demonstrated subendothelial complement depositions consistent with vasculopathy. Bone marrow examination at diagnosis ( Figure 1C and Table 1 ) showed trilineage dysplasia with vacuolization and hemophagocytosis (CD68+). Reticulin staining was mildly positive indicating the presence of myelofibrosis (MF grade 1 according to the WHO 2016 classification criteria). Six out of eight hemophagocytic lymphohistiocytosis (HLH)-2004 criteria were fulfilled confirming the diagnosis of HLH."
+        ],
+        "quote": "Cervical lymph node excision biopsy was suggestive of human herpes virus (HHV-)8-negative plasma cell type iMCD and additionally showed hemophagocytosis, while skin nodule biopsy demonstrated subendothelial complement depositions consistent with vasculopathy. Bone marrow examination at diagnosis ( Figure 1C and Table 1 ) showed trilineage dysplasia with vacuolization and hemophagocytosis (CD68+). Reticulin staining was mildly positive indicating the presence of myelofibrosis (MF grade 1 according to the WHO 2016 classification criteria). Six out of eight hemophagocytic lymphohistiocytosis (HLH)-2004 criteria were fulfilled confirming the diagnosis of HLH."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "### 临床症状与实验室特征 **患者 1**（69 岁，既往腹壁疝手术史）：表现为一年内体重下降 15 kg，一月来发热（最高 38.2°C）、盗汗及乏力，伴双侧颈部淋巴结肿大、关节痛、巩膜外层炎、鼻软骨炎、血栓性静脉炎和结节性皮损。实验室检查示正细胞正色素性贫血（Hb 6.6 g/dL, MCV 96 fL），中性粒细胞绝对值 2.2 × 10⁹/L，血小板减少（46 × 10⁹/L），CRP 93.1 mg/L（正常 <5 mg/L），铁蛋白 720 µg/L（正常 30–400 µg/L）。颈部淋巴结切除活检提示 HHV-8 阴性浆细胞型 iMCD 伴噬血现象；皮肤结节活检显示补体介导的血管病变。骨髓检查示三系发育异常伴空泡形成和噬血现象（CD68+），网硬蛋白染色轻度阳性（MF 1 级，WHO 2016）。由于叶酸缺乏，MDS 分型无法评估。 **患者 2**（76 岁，既往深静脉血栓伴肺栓塞、B 型主动脉夹层史）：表现为复发性皮疹和累及大、小关节的对称性多关节炎。无发热，症状相对轻微。实验室检查示大细胞性贫血（具体数值原文未详列），CRP 280.9 mg/L，铁蛋白 1161 µg/L。皮肤活检示荨麻疹性血管炎。骨髓检查示三系发育异常伴髓系空泡形成、反应性浆细胞增多（6%），未见浆细胞病证据，亦不符合 MDS 诊断标准（Table 1）。"
+        ],
+        "quote": "### 临床症状与实验室特征 **患者 1**（69 岁，既往腹壁疝手术史）：表现为一年内体重下降 15 kg，一月来发热（最高 38.2°C）、盗汗及乏力，伴双侧颈部淋巴结肿大、关节痛、巩膜外层炎、鼻软骨炎、血栓性静脉炎和结节性皮损。实验室检查示正细胞正色素性贫血（Hb 6.6 g/dL, MCV 96 fL），中性粒细胞绝对值 2.2 × 10⁹/L，血小板减少（46 × 10⁹/L），CRP 93.1 mg/L（正常 <5 mg/L），铁蛋白 720 µg/L（正常 30–400 µg/L）。颈部淋巴结切除活检提示 HHV-8 阴性浆细胞型 iMCD 伴噬血现象；皮肤结节活检显示补体介导的血管病变。骨髓检查示三系发育异常伴空泡形成和噬血现象（CD68+），网硬蛋白染色轻度阳性（MF 1 级，WHO 2016）。由于叶酸缺乏，MDS 分型无法评估。 **患者 2**（76 岁，既往深静脉血栓伴肺栓塞、B 型主动脉夹层史）：表现为复发性皮疹和累及大、小关节的对称性多关节炎。无发热，症状相对轻微。实验室检查示大细胞性贫血（具体数值原文未详列），CRP 280.9 mg/L，铁蛋白 1161 µg/L。皮肤活检示荨麻疹性血管炎。骨髓检查示三系发育异常伴髓系空泡形成、反应性浆细胞增多（6%），未见浆细胞病证据，亦不符合 MDS 诊断标准（Table 1）。"
+      },
+      "explanation": "Diagnostic procedures, histopathological findings, and differential diagnoses are correctly and completely summarised.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "treatment_and_outcome",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "P1: prednisolone 40 mg + rituximab 1000 mg ×2, then sirolimus, then siltuximab + prednisolone 10 mg; P2: methotrexate, anakinra 100 mg/d, infliximab; outcomes described.",
+      "generatedFact": "P1: prednisolone 40 mg/d + rituximab 1000 mg ×2, sirolimus, then siltuximab + prednisolone 10 mg/d. P2: MTX, anakinra 100 mg/d, infliximab; outcomes match.",
+      "sourceEvidence": {
+        "locator": "R0008",
+        "locators": [
+          "R0008"
+        ],
+        "quotes": [
+          "As siltuximab is not reimbursed in Belgium, the patient was treated for iMCD with prednisolone 40 mg and 2 infusions of rituximab (1000 mg) with a time interval of 2 weeks. As corticosteroids could not be tapered and the patient remained transfusion dependent, sirolimus was initiated in second line with good results. However, the patient relapsed quickly after cessation of sirolimus because of toxic concentrations and opportunistic infections."
+        ],
+        "quote": "As siltuximab is not reimbursed in Belgium, the patient was treated for iMCD with prednisolone 40 mg and 2 infusions of rituximab (1000 mg) with a time interval of 2 weeks. As corticosteroids could not be tapered and the patient remained transfusion dependent, sirolimus was initiated in second line with good results. However, the patient relapsed quickly after cessation of sirolimus because of toxic concentrations and opportunistic infections."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+        ],
+        "quote": "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+      },
+      "explanation": "All drug names, doses, sequences, and clinical responses are in agreement with the reference.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "causal_calibration",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Siltuximab warrants further evaluation; no causal claim of efficacy from a single case.",
+      "generatedFact": "Siltuximab warrants further evaluation in larger studies; no overstatement of efficacy.",
+      "sourceEvidence": {
+        "locator": "R0020",
+        "locators": [
+          "R0020"
+        ],
+        "quotes": [
+          "Siltuximab binds IL-6 itself rather than its receptor as is the case with tocilizumab. Similar unexpected disparities in response were reported previously for infliximab, an anti-TNF-α antibody vs. etanercept, targeting TNF-α as a decoy receptor ( 4 ). In conclusion, the clinical spectrum of somatic UBA1 mutations may vary from a relatively easily low-dose prednisolone-treated VEXAS syndrome to a life-threatening MAS. We extend on the spectrum of cutaneous and hematologic manifestations associated with VEXAS syndrome. Finally, based on our observations, treatment of VEXAS syndrome with siltuximab warrants further evaluation in the absence of evidence-based recommendations."
+        ],
+        "quote": "Siltuximab binds IL-6 itself rather than its receptor as is the case with tocilizumab. Similar unexpected disparities in response were reported previously for infliximab, an anti-TNF-α antibody vs. etanercept, targeting TNF-α as a decoy receptor ( 4 ). In conclusion, the clinical spectrum of somatic UBA1 mutations may vary from a relatively easily low-dose prednisolone-treated VEXAS syndrome to a life-threatening MAS. We extend on the spectrum of cutaneous and hematologic manifestations associated with VEXAS syndrome. Finally, based on our observations, treatment of VEXAS syndrome with siltuximab warrants further evaluation in the absence of evidence-based recommendations."
+      },
+      "generatedEvidence": {
+        "locator": "G0010",
+        "locators": [
+          "G0010"
+        ],
+        "quotes": [
+          "**P2 部分实验室数值未详列**（如具体血红蛋白、血小板计数），限制了跨患者定量比较。 5. **MDS 分型在 P1 中因叶酸缺乏无法评估**，P2 不符合 MDS 标准，无法评估 VEXAS-MDS 关系的普遍性。 6. **单中心经验**，不排除转诊偏倚。 7. 原作者明确指出 siltuximab 的疗效\"warrants further evaluation in the absence of evidence-based recommendations\"，即目前尚无证据级别的治疗推荐，其疗效需在更大样本中验证。 --- ## 结论 该病例报告展示了两例 UBA1 体细胞突变驱动的 VEXAS 综合征患者，临床表型从低剂量皮质类固醇可控制的轻型自身炎症到危及生命的 MAS，跨度极大。本研究扩展了 VEXAS 的皮肤（补体介导血管病变、荨麻疹性血管炎）和血液学（噬血现象、iMCD 样表现）表现谱。基于 P1 对 siltuximab 的显著临床应答——包括炎症消退和 HLH 标准逆转——原作者建议对 siltuximab 进行更大样本的 VEXAS 前瞻性评估，并呼吁在治疗前后系统检测细胞因子谱以识别关键炎症介质和潜在治疗靶点。anakinra 相关严重皮肤反应在 VEXAS 患者中的高发生率（原文引用 Beck 等队列中 62%）可能成为该病的诊断线索，但其发病机制尚待阐明。 上述结论均直接来源于原文讨论部分的具体陈述，未进行任何超出原文的推断或推广。 --- ## 参考文献（原文引用） 1."
+        ],
+        "quote": "**P2 部分实验室数值未详列**（如具体血红蛋白、血小板计数），限制了跨患者定量比较。 5. **MDS 分型在 P1 中因叶酸缺乏无法评估**，P2 不符合 MDS 标准，无法评估 VEXAS-MDS 关系的普遍性。 6. **单中心经验**，不排除转诊偏倚。 7. 原作者明确指出 siltuximab 的疗效\"warrants further evaluation in the absence of evidence-based recommendations\"，即目前尚无证据级别的治疗推荐，其疗效需在更大样本中验证。 --- ## 结论 该病例报告展示了两例 UBA1 体细胞突变驱动的 VEXAS 综合征患者，临床表型从低剂量皮质类固醇可控制的轻型自身炎症到危及生命的 MAS，跨度极大。本研究扩展了 VEXAS 的皮肤（补体介导血管病变、荨麻疹性血管炎）和血液学（噬血现象、iMCD 样表现）表现谱。基于 P1 对 siltuximab 的显著临床应答——包括炎症消退和 HLH 标准逆转——原作者建议对 siltuximab 进行更大样本的 VEXAS 前瞻性评估，并呼吁在治疗前后系统检测细胞因子谱以识别关键炎症介质和潜在治疗靶点。anakinra 相关严重皮肤反应在 VEXAS 患者中的高发生率（原文引用 Beck 等队列中 62%）可能成为该病的诊断线索，但其发病机制尚待阐明。 上述结论均直接来源于原文讨论部分的具体陈述，未进行任何超出原文的推断或推广。 --- ## 参考文献（原文引用） 1."
+      },
+      "explanation": "Both texts avoid causal overclaim and stress the need for further evidence. Conclusion is appropriately cautious.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    }
+  ],
+  "metrics": {
+    "applicableItems": 16,
+    "weightedFidelity": 0.9964,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 15,
+      "not_applicable": 5,
+      "compatible": 1
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 97.5,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [
+      "adversarial_unsupported_claim",
+      "adversarial_contradiction"
+    ],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "fail",
+    "adversarialIssueCount": 2,
+    "adversarialUnsupportedClaimCount": 1,
+    "adversarialContradictionCount": 1,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "issues_found",
+    "issues": [
+      {
+        "id": "analysis_methods",
+        "importance": "minor",
+        "status": "unsupported",
+        "issueKinds": [
+          "unsupported"
+        ],
+        "referenceFact": "",
+        "generatedFact": "Serum IL-6 was measured before and after siltuximab treatment.",
+        "sourceEvidence": {
+          "locator": "",
+          "locators": [],
+          "quotes": [],
+          "quote": ""
+        },
+        "generatedEvidence": {
+          "locator": "G0005",
+          "locators": [
+            "G0005"
+          ],
+          "quotes": [
+            "### 基因检测 采用 Sanger 测序对外周血或骨髓标本进行 UBA1 基因突变筛查。对患者 1 还通过新一代测序（NGS）评估髓系突变谱，检测到 DNMT3A 剪接位点突变（c.1014+1G>T），变异等位基因频率（VAF）为 31%–46%。 ### 骨髓与组织病理学评估 骨髓穿刺/活检标本进行形态学分析、网硬蛋白染色（WHO 2016 分类标准）和 CD68 免疫组化染色。外周淋巴结切除活检和皮肤结节活检由病理科进行组织病理学评估。 ### 实验室与细胞因子检测 常规实验室检查包括全血细胞计数、C 反应蛋白（CRP）和铁蛋白。血清 IL-6 水平在 siltuximab 治疗前后进行测定（健康对照 n = 6，IL-6 正常值 <9.5 pg/mL）。符合 6/8 项 HLH-2004 标准时确认噬血细胞性淋巴组织细胞增多症（HLH）/MAS 的诊断。 ### 报告方法 本报告为回顾性病例描述研究（n = 2），未涉及统计推断或假设检验。 --- ## 结果 ### 遗传学特征 两名男性患者均检出骨髓系限制性 UBA1 体细胞突变：患者 1（P1）携带 p.Met41Thr，患者 2（P2）携带 p.Met41Leu。骨髓核型均为正常男性核型（46, XY[10]）。P1 额外携带 DNMT3A c.1014+1G>T 剪接位点突变（VAF 31%–46%）；P2 NGS 检测未见其他髓系突变（Table 1）。"
+          ],
+          "quote": "### 基因检测 采用 Sanger 测序对外周血或骨髓标本进行 UBA1 基因突变筛查。对患者 1 还通过新一代测序（NGS）评估髓系突变谱，检测到 DNMT3A 剪接位点突变（c.1014+1G>T），变异等位基因频率（VAF）为 31%–46%。 ### 骨髓与组织病理学评估 骨髓穿刺/活检标本进行形态学分析、网硬蛋白染色（WHO 2016 分类标准）和 CD68 免疫组化染色。外周淋巴结切除活检和皮肤结节活检由病理科进行组织病理学评估。 ### 实验室与细胞因子检测 常规实验室检查包括全血细胞计数、C 反应蛋白（CRP）和铁蛋白。血清 IL-6 水平在 siltuximab 治疗前后进行测定（健康对照 n = 6，IL-6 正常值 <9.5 pg/mL）。符合 6/8 项 HLH-2004 标准时确认噬血细胞性淋巴组织细胞增多症（HLH）/MAS 的诊断。 ### 报告方法 本报告为回顾性病例描述研究（n = 2），未涉及统计推断或假设检验。 --- ## 结果 ### 遗传学特征 两名男性患者均检出骨髓系限制性 UBA1 体细胞突变：患者 1（P1）携带 p.Met41Thr，患者 2（P2）携带 p.Met41Leu。骨髓核型均为正常男性核型（46, XY[10]）。P1 额外携带 DNMT3A c.1014+1G>T 剪接位点突变（VAF 31%–46%）；P2 NGS 检测未见其他髓系突变（Table 1）。"
+        },
+        "explanation": "Reference only reports pre-treatment IL-6 measurement (R0009); no post-treatment measurement is described.",
+        "sourceEvidenceValid": false,
+        "generatedEvidenceValid": true,
+        "criterionId": "analysis_methods",
+        "kind": "unsupported",
+        "severity": "minor",
+        "claim": "Serum IL-6 was measured before and after siltuximab treatment."
+      },
+      {
+        "id": "key_numerical_results",
+        "importance": "minor",
+        "status": "contradicted",
+        "issueKinds": [
+          "contradicted"
+        ],
+        "referenceFact": "",
+        "generatedFact": "Ferritin peak of 3640 µg/L during relapse is presented without mentioning that it was partly due to red blood cell transfusions.",
+        "sourceEvidence": {
+          "locator": "R0009",
+          "locators": [
+            "R0009"
+          ],
+          "quotes": [
+            "He developed confusion, dyspnea, high grade fever >40°Celsius, complement-mediated vasculopathy with skin ulcerations, anemia (Hb 6.3g/dL, severe thrombocytopenia 3 x 10 9 /L with bleeding complications, and ferritin levels of 3640µg/L (partly due to >28 units red blood cell transfusions). The patient was started on siltuximab (in medical need) and prednisolone 10 mg/day in third line. This resulted in resolution of fever, skin lesions, and normalization of inflammatory markers. From hindsight, serum IL-6 was significantly elevated (102pg/mL, healthy controls <9.5pg/mL, n = 6) prior to siltuximab treatment."
+          ],
+          "quote": "He developed confusion, dyspnea, high grade fever >40°Celsius, complement-mediated vasculopathy with skin ulcerations, anemia (Hb 6.3g/dL, severe thrombocytopenia 3 x 10 9 /L with bleeding complications, and ferritin levels of 3640µg/L (partly due to >28 units red blood cell transfusions). The patient was started on siltuximab (in medical need) and prednisolone 10 mg/day in third line. This resulted in resolution of fever, skin lesions, and normalization of inflammatory markers. From hindsight, serum IL-6 was significantly elevated (102pg/mL, healthy controls <9.5pg/mL, n = 6) prior to siltuximab treatment."
+        },
+        "generatedEvidence": {
+          "locator": "G0007",
+          "locators": [
+            "G0007"
+          ],
+          "quotes": [
+            "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+          ],
+          "quote": "### 关键数值汇总 | 指标 | 患者 1 | 患者 2 | 参考范围 | |------|--------|--------|----------| | 血红蛋白 | 6.6 g/dL | 未详列（大细胞性贫血） | — | | MCV | 96 fL | 未详列（大细胞性） | 76–96 fL | | 血小板 | 46 → 3 × 10⁹/L（复发时） | 未详列 | — | | CRP | 93.1 mg/L | 280.9 mg/L | <5 mg/L | | 铁蛋白 | 720 → 3640 µg/L（复发时） | 1161 µg/L | 30–400 µg/L | | 血清 IL-6 | 102 pg/mL | 未详列 | <9.5 pg/mL | | 红细胞输注 | >28 单位 | 未详列 | — | ### 治疗与转归 **P1 治疗路径**：因 siltuximab 在比利时不予报销，P1 最初按 iMCD 接受泼尼松龙 40 mg/d 联合利妥昔单抗（1000 mg × 2，间隔 2 周）。皮质类固醇无法减量且持续输血依赖后，二线启用西罗莫司有效，但因血药浓度过高并发机会性感染后停药即复发。复发时出现意识模糊、呼吸困难、>40°C 高热、补体介导的血管病变伴皮肤溃疡、重度血小板减少（3 × 10⁹/L）伴出血、铁蛋白升至 3640 µg/L。三线治疗（医疗急需途径）使用 siltuximab 联合泼尼松龙 10 mg/d，治疗后发热消退、皮损愈合、炎症指标恢复正常，输血需求减少，但治疗 2 个月后血小板和血红蛋白仅部分恢复（Table 1）。"
+        },
+        "explanation": "The reference states ferritin 3640 µg/L 'partly due to >28 units red blood cell transfusions', which could affect interpretation of disease activity. The generated text omits this caveat.",
+        "sourceEvidenceValid": true,
+        "generatedEvidenceValid": true,
+        "criterionId": "key_numerical_results",
+        "kind": "contradicted",
+        "severity": "minor",
+        "claim": "Ferritin peak of 3640 µg/L during relapse is presented without mentioning that it was partly due to red blood cell transfusions."
+      }
+    ],
+    "rationale": "The generated summary is largely faithful to the reference case report, but two minor inaccuracies were identified: (1) an unsupported claim that post-siltuximab IL-6 measurement was performed when only pre-treatment data are reported, and (2) omission of the reference's note that the high ferritin level was partially attributable to transfusions rather than solely to disease activity. These do not fundamentally alter the overall interpretation but represent small factual imprecisions."
+  },
+  "overallAssessment": "The generated summary faithfully reproduces the reference case report. Research objective, study design, patient characteristics, key numerical results, and conclusions are exact. Minor differences in the explicit listing of limitations are compatible with the original content. No factual errors, unsupported claims, or contradictions were found. The summary provides a scientifically accurate representation suitable for a case report.",
+  "gradedAt": "2026-07-18T15:35:21Z"
+}

@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "bytes": 1257,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bulk-rna-seq/results.json",
+      "sha256": "b0f70bffd8426ec41313cf24fea3f6fa262fad916c55f750d10e9241b180aa42"
+    },
+    {
+      "bytes": 1828,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bulk-rna-seq/bulk-rna-seq-report.md",
+      "sha256": "74e7b869f2f03d46b7cef0ed1ecffb13bac1222cf27addbd1cf4567ec3a58c0d"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:25.763635Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "bulk-rna-seq",
+  "startedAt": "2026-07-19T19:31:25.758680Z",
+  "status": "warning",
+  "summary": "Executed the bounded deterministic baseline for bulk-rna-seq and wrote 2 verified artifacts.",
+  "warnings": [
+    "The baseline performs count-matrix QC only; differential inference requires a replicated design and a validated count model."
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "groups": [
+    {
+      "name": "open-science-availability",
+      "rules": [
+        {
+          "alert": "OpenScienceApiMetricsUnavailable",
+          "expr": "up{job=\"open-science-web\"} == 0",
+          "for": "2m",
+          "labels": { "severity": "critical" },
+          "annotations": {
+            "summary": "EviMed metrics endpoint is unavailable",
+            "description": "Prometheus has been unable to scrape the protected API metrics endpoint for two minutes."
+          }
+        },
+        {
+          "alert": "OpenScienceHealthProbeFailed",
+          "expr": "probe_success{job=\"open-science-health\"} == 0",
+          "for": "2m",
+          "labels": { "severity": "critical" },
+          "annotations": {
+            "summary": "EviMed health probe is failing",
+            "description": "The API liveness endpoint has failed from the monitoring network for two minutes."
+          }
+        },
+        {
+          "alert": "OpenScienceReadinessProbeFailed",
+          "expr": "probe_success{job=\"open-science-readiness\"} == 0",
+          "for": "5m",
+          "labels": { "severity": "critical" },
+          "annotations": {
+            "summary": "EviMed deployment is not ready",
+            "description": "The readiness endpoint has returned a non-success response for five minutes."
+          }
+        },
+        {
+          "alert": "OpenScienceReadinessCheckFailed",
+          "expr": "open_science_readiness_check == 0",
+          "for": "5m",
+          "labels": { "severity": "warning" },
+          "annotations": {
+            "summary": "EviMed readiness sub-check is failing",
+            "description": "Readiness check {{ $labels.check }} is failing with code {{ $labels.code }}."
+          }
+        }
+      ]
+    },
+    {
+      "name": "open-science-api",
+      "rules": [
+        {
+          "alert": "OpenScienceApiServerErrors",
+          "expr": "sum(rate(open_science_http_requests_total{status_class=\"5xx\"}[5m])) > 0.05",
+          "for": "10m",
+          "labels": { "severity": "warning" },
+          "annotations": {
+            "summary": "EviMed API has sustained server errors",
+            "description": "The API has exceeded 0.05 server-error responses per second for ten minutes."
+          }
+        },
+        {
+          "alert": "OpenScienceApiHighErrorRatio",
+          "expr": "sum(rate(open_science_http_requests_total{status_class=~\"4xx|5xx\"}[5m])) / clamp_min(sum(rate(open_science_http_requests_total[5m])), 0.001) > 0.2",
+          "for": "15m",
+          "labels": { "severity": "warning" },
+          "annotations": {
+            "summary": "EviMed API error ratio is high",
+            "description": "More than 20 percent of API responses have been errors for fifteen minutes."
+          }
+        },
+        {
+          "alert": "OpenScienceRateLimitPressure",
+          "expr": "sum(increase(open_science_http_errors_total{code=~\".*_rate_limited|rate_limited|too_many_commands\"}[10m])) > 25",
+          "for": "5m",
+          "labels": { "severity": "warning" },
+          "annotations": {
+            "summary": "EviMed rate limits are under pressure",
+            "description": "More than 25 rate-limit or command-capacity rejections occurred in ten minutes."
+          }
+        }
+      ]
+    },
+    {
+      "name": "open-science-capacity",
+      "rules": [
+        {
+          "alert": "OpenScienceTaskQueueNearCapacity",
+          "expr": "open_science_task_queued / ignoring(scope) open_science_task_queue_limit{scope=\"global\"} > 0.8",
+          "for": "10m",
+          "labels": { "severity": "warning" },
+          "annotations": {
+            "summary": "EviMed task queue is near capacity",
+            "description": "The global task queue has remained above 80 percent of its configured limit."
+          }
+        },
+        {
+          "alert": "OpenScienceRuntimeCapacityNearLimit",
+          "expr": "(open_science_runtime_running + open_science_runtime_starting) / ignoring(scope) open_science_runtime_limit{scope=\"global\"} > 0.8",
+          "for": "10m",
+          "labels": { "severity": "warning" },
+          "annotations": {
+            "summary": "EviMed runtime capacity is near its limit",
+            "description": "Attached and starting runtimes have remained above 80 percent of the global limit."
+          }
+        },
+        {
+          "alert": "OpenScienceRuntimeQuotaMonitorGap",
+          "expr": "open_science_runtime_running > open_science_runtime_quota_monitored",
+          "for": "2m",
+          "labels": { "severity": "critical" },
+          "annotations": {
+            "summary": "A running runtime lacks quota monitoring",
+            "description": "At least one attached runtime is not covered by the periodic project quota monitor."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,344 @@
+import { useEffect, useState } from "react";
+import { ChevronRight, Loader2 } from "lucide-react";
+import type { ThreadBlock, ToolCallBlock } from "@ai4s/shared";
+import { cn } from "@/lib/cn";
+import { STATUS } from "./ToolCallRow";
+
+// Codex-style tool activity: consecutive quiet tool steps fold into one
+// summary line ("Ran 3 commands, created a file"); expanding shows the list;
+// expanding a step shows its detail (shell output, diff, file content)
+// inline. While a step runs the group stays open and the running command
+// shows a live output tail — a long training run never looks hung.
+
+export type BlockListItem =
+  | { kind: "group"; start: number; blocks: ToolCallBlock[] }
+  | { kind: "block"; index: number; block: ThreadBlock };
+
+/** Fold runs of tool-call blocks into groups. Failures stay IN the group —
+ *  an agent trying, failing, and adjusting is routine, and a card per failed
+ *  fetch would drown the thread (the group summary counts them instead).
+ *  Only a step that needs the USER (waiting-approval) or a non-tool block
+ *  breaks the run and renders on its own. Pure — exported for tests. */
+export function groupToolBlocks(blocks: ThreadBlock[]): BlockListItem[] {
+  const items: BlockListItem[] = [];
+  let group: { start: number; blocks: ToolCallBlock[] } | null = null;
+  const flush = () => {
+    if (group) items.push({ kind: "group", start: group.start, blocks: group.blocks });
+    group = null;
+  };
+  blocks.forEach((b, i) => {
+    if (b.kind === "tool-call" && b.status !== "waiting-approval") {
+      group ??= { start: i, blocks: [] };
+      group.blocks.push(b);
+    } else {
+      flush();
+      items.push({ kind: "block", index: i, block: b });
+    }
+  });
+  flush();
+  return items;
+}
+
+/** One concise Chinese phrase per verb, in first-seen order. */
+export function summarizeGroup(blocks: ToolCallBlock[]): string {
+  const counts = new Map<string, number>();
+  for (const b of blocks) {
+    const verb = b.verb ?? "";
+    counts.set(verb, (counts.get(verb) ?? 0) + 1);
+  }
+  const phrase = (verb: string, n: number): string => {
+    switch (verb) {
+      case "Ran":
+        return `执行了 ${n} 个命令`;
+      case "Created":
+        return `创建了 ${n} 个文件`;
+      case "Edited":
+        return `编辑了 ${n} 个文件`;
+      case "Read":
+        return `读取了 ${n} 个文件`;
+      case "Searched":
+        return `完成了 ${n} 次检索`;
+      case "Listed":
+        return "列出了文件";
+      case "Fetched":
+        return `获取了 ${n} 个页面`;
+      default:
+        return `执行了 ${n} 个步骤`;
+    }
+  };
+  return [...counts.entries()].map(([verb, n]) => phrase(verb, n)).join("，");
+}
+
+function fmtDuration(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  if (m < 60) return r ? `${m}m ${r}s` : `${m}m`;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return mm ? `${h}h ${mm}m` : `${h}h`;
+}
+
+/** Ticking elapsed time for a running step ("2m 41s"). */
+export function Elapsed({ start }: { start: number }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  return (
+    <span className="shrink-0 font-mono text-caption tabular-nums text-muted">
+      {fmtDuration(Date.now() - start)}
+    </span>
+  );
+}
+
+/** Smooth expand/collapse without measuring content (grid-rows 0fr→1fr).
+ *  Closed content is NOT mounted — a history session can hold a hundred tool
+ *  steps whose details total megabytes of text; mounting them all up front
+ *  makes opening the session jank. Opening mounts collapsed and expands on
+ *  the next frame (so the animation still runs); closing unmounts after the
+ *  transition finishes. */
+function Collapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(open);
+  const [shown, setShown] = useState(open);
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const raf = window.requestAnimationFrame(() => setShown(true));
+      return () => window.cancelAnimationFrame(raf);
+    }
+    setShown(false);
+    const t = window.setTimeout(() => setMounted(false), 300);
+    return () => window.clearTimeout(t);
+  }, [open]);
+  if (!mounted) return null;
+  return (
+    <div
+      className={cn(
+        "grid transition-[grid-template-rows] duration-300 ease-out",
+        shown ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+      )}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
+  );
+}
+
+const PANE =
+  "whitespace-pre-wrap break-all px-3 py-2 font-mono text-xs leading-5";
+
+/** Last few lines of a running command's stdout — the "it's alive" signal. */
+function LiveTail({ text }: { text: string }) {
+  const tail = text.replace(/\s+$/, "").split("\n").slice(-8).join("\n");
+  if (!tail) return null;
+  return (
+    <pre className={cn(PANE, "ml-7 mb-1 mt-0.5 rounded-input bg-surface-2 text-muted")}>{tail}</pre>
+  );
+}
+
+/** Shell detail: one panel, `$ command` header + scrollable output. */
+function BashDetail({ block }: { block: ToolCallBlock }) {
+  const out = block.output ?? block.outputSummary;
+  return (
+    <div className="ml-7 mb-1 mt-0.5 overflow-hidden rounded-input bg-surface-2">
+      {block.command && (
+        <pre className={cn(PANE, "text-muted", out && "border-b border-faint")}>
+          {"$ "}
+          {block.command}
+        </pre>
+      )}
+      {out && <pre className={cn(PANE, "max-h-64 overflow-y-auto text-text")}>{out}</pre>}
+    </div>
+  );
+}
+
+function DiffDetail({ diff }: { diff: string }) {
+  return (
+    <div className={cn(PANE, "ml-7 mb-1 mt-0.5 max-h-64 overflow-y-auto rounded-input bg-surface-2")}>
+      {diff.split("\n").map((line, i) => (
+        <div
+          key={i}
+          className={cn(
+            line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")
+              ? "text-muted"
+              : line.startsWith("+")
+                ? "text-ok"
+                : line.startsWith("-")
+                  ? "text-error"
+                  : "text-muted",
+          )}
+        >
+          {line || " "}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TextDetail({ text, muted }: { text: string; muted?: boolean }) {
+  return (
+    <pre
+      className={cn(
+        PANE,
+        "ml-7 mb-1 mt-0.5 max-h-64 overflow-y-auto rounded-input bg-surface-2",
+        muted ? "text-muted" : "text-text",
+      )}
+    >
+      {text}
+    </pre>
+  );
+}
+
+function detailFor(block: ToolCallBlock): React.ReactNode | null {
+  if (block.tool === "bash") {
+    return block.command || block.output || block.outputSummary ? (
+      <BashDetail block={block} />
+    ) : null;
+  }
+  if (block.diff) return <DiffDetail diff={block.diff} />;
+  if (block.content) return <TextDetail text={block.content} />;
+  if (block.output) return <TextDetail text={block.output} />;
+  return null;
+}
+
+function ToolRow({ block, activity }: { block: ToolCallBlock; activity?: string }) {
+  const s = STATUS[block.status];
+  const running = block.status === "running";
+  // While running the live tail is already on screen — the row only becomes
+  // expandable once there is a settled detail to reveal.
+  const detail = running ? null : detailFor(block);
+  // A user-typed "!" command ran for its output — its detail opens by default.
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  const open = (userOpen ?? !!block.outputSummary) && !!detail;
+  const done = block.startedAt !== undefined && block.endedAt !== undefined;
+  const duration = done ? block.endedAt! - block.startedAt! : 0;
+  return (
+    <div data-status={block.status}>
+      <div
+        role={detail ? "button" : undefined}
+        tabIndex={detail ? 0 : undefined}
+        onClick={detail ? () => setUserOpen(!open) : undefined}
+        onKeyDown={
+          detail
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setUserOpen(!open);
+                }
+              }
+            : undefined
+        }
+        className={cn(
+          "group flex items-center gap-2 rounded-input px-2 py-1 text-ui-sm",
+          detail && "cursor-pointer hover:bg-surface-2",
+        )}
+      >
+        <span className={cn("shrink-0", s.className)} aria-label={s.label} role="img">
+          {s.icon}
+        </span>
+        {block.verb && <span className="shrink-0 text-muted">{block.verb}</span>}
+        <span
+          className={cn("min-w-0 truncate font-mono", running ? "text-text" : "text-muted")}
+          title={block.command ?? block.title}
+        >
+          {block.title}
+        </span>
+        {detail && (
+          <ChevronRight
+            size={12}
+            className={cn(
+              "shrink-0 text-muted transition-transform duration-200",
+              open && "rotate-90",
+              !open && "opacity-0 group-hover:opacity-100",
+            )}
+          />
+        )}
+        <span className="min-w-0 flex-1" />
+        {running && block.startedAt !== undefined && <Elapsed start={block.startedAt} />}
+        {!running && done && duration >= 1000 && (
+          <span className="shrink-0 font-mono text-caption tabular-nums text-muted">
+            {fmtDuration(duration)}
+          </span>
+        )}
+        {block.meta && <span className="shrink-0 text-xs text-muted">{block.meta}</span>}
+      </div>
+      {/* Live pulse of the subagent this task spawned. */}
+      {activity && running && (
+        <div className="flex items-center gap-2 px-2 pb-0.5 text-xs" data-subagent-activity>
+          <span
+            aria-hidden
+            className="mb-1.5 ml-[6px] h-2 w-2 shrink-0 rounded-bl border-b border-l border-border"
+          />
+          <span aria-hidden className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent" />
+          <span className="min-w-0 flex-1 truncate font-mono text-muted">{activity}</span>
+        </div>
+      )}
+      {/* While running, the output tail is always visible — no click needed. */}
+      {running && block.partialOutput && <LiveTail text={block.partialOutput} />}
+      {detail && <Collapse open={open}>{detail}</Collapse>}
+    </div>
+  );
+}
+
+export function ToolGroup({
+  blocks,
+  activityFor,
+}: {
+  blocks: ToolCallBlock[];
+  activityFor?: (childSessionId: string) => string | undefined;
+}) {
+  // While a step runs the group stays open (the live tail must be visible);
+  // once everything settles it folds to the summary. The fold waits a grace
+  // period — within a turn the next command follows in seconds, and an
+  // open→shut→open flap between steps would be pure jank. A click overrides.
+  const active = blocks.some((b) => b.status === "running" || b.status === "pending");
+  const failed = blocks.filter((b) => b.status === "failed" || b.status === "warning").length;
+  const [autoOpen, setAutoOpen] = useState(active);
+  useEffect(() => {
+    if (active) {
+      setAutoOpen(true);
+      return;
+    }
+    const t = window.setTimeout(() => setAutoOpen(false), 2000);
+    return () => window.clearTimeout(t);
+  }, [active]);
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  const open = userOpen ?? autoOpen;
+  const rows = blocks.map((b, i) => (
+    <ToolRow
+      key={i}
+      block={b}
+      activity={b.childSessionId ? activityFor?.(b.childSessionId) : undefined}
+    />
+  ));
+  if (blocks.length === 1) return <div>{rows}</div>;
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setUserOpen(!open)}
+        className="group flex w-full items-center gap-2 rounded-input px-2 py-1 text-left text-ui-sm text-muted hover:bg-surface-2 hover:text-text"
+      >
+        {active ? (
+          <Loader2 size={13} className="shrink-0 animate-spin text-accent" />
+        ) : (
+          <ChevronRight
+            size={13}
+            className={cn("shrink-0 transition-transform duration-200", open && "rotate-90")}
+          />
+        )}
+        <span className="min-w-0 truncate">{summarizeGroup(blocks)}</span>
+        {failed > 0 && (
+          <span className="shrink-0 text-error">
+            · {failed} 项失败
+          </span>
+        )}
+      </button>
+      <Collapse open={open}>
+        <div className="pl-4">{rows}</div>
+      </Collapse>
+    </div>
+  );
+}

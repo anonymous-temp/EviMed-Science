@@ -1,0 +1,17 @@
+{
+  "apiVersion": 1,
+  "providers": [
+    {
+      "name": "EviMed",
+      "orgId": 1,
+      "folder": "EviMed",
+      "type": "file",
+      "disableDeletion": true,
+      "editable": false,
+      "updateIntervalSeconds": 30,
+      "options": {
+        "path": "/var/lib/grafana/dashboards"
+      }
+    }
+  ]
+}

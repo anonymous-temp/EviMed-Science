@@ -1,0 +1,4 @@
+interface:
+  display_name: "Time Series Forecasting"
+  short_description: "Design and validate scientific time-series forecasts"
+  default_prompt: "Use $time-series-forecasting to build and backtest a forecast for this longitudinal series."

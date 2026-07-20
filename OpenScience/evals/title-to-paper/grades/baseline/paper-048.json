@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-048",
+  "category": "methods-software",
+  "title": "YaHS: yet another Hi-C scaffolding tool.",
+  "pmcid": "PMC9848053",
+  "doi": "10.1093/bioinformatics/btac808",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 13949,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 105,
+    "supportedUniqueNumbers": 102,
+    "unsupportedNumberTokens": [
+      "10.1101",
+      "2022.06",
+      "9.495093"
+    ],
+    "supportedNumericClaimPrecision": 0.9714285714285714,
+    "verbatimEightGramRate": 0.015306122448979591,
+    "toolCalls": 14,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 4,
+    "majorUnsupportedClaims": [
+      "In the error-added simulated assembly, the relocation count for YaHS was incorrectly stated as 40; the reference indicates it was 42 (two more than the 40 of the error-free assembly)."
+    ],
+    "minorUnsupportedClaims": [
+      "Claim that a bioRxiv preprint exists with doi 10.1101/2022.06.09.495093 (not in the reference).",
+      "Error-correction threshold of 'one-tenth of the median coverage' is not supported by the reference.",
+      "Claim that YaHS is integrated into a 'production pipeline' and processes assemblies spanning multiple orders of magnitude is not in the reference.",
+      "Fabricated limitation that the evaluation lacks systematic characterization of high heterozygosity/extreme ploidy and that this was stated in the original publication."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "fail",
+    "rationale": "The generated text contains a major unsupported claim: the relocation count for YaHS in the error-added assembly is given as 40, but the reference states it increased by two from the error-free 40, so the correct value is 42. This misrepresents a quantitative result. Minor unsupported claims include a fabricated bioRxiv DOI, an unsupported error-correction threshold, and an unsupported limitation statement."
+  },
+  "overallVerdict": "fail"
+}

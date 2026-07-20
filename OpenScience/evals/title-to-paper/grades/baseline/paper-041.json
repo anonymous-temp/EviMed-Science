@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-041",
+  "category": "biomedical-ai",
+  "title": "Text Data Augmentation for Deep Learning.",
+  "pmcid": "PMC8287113",
+  "doi": "10.1186/s40537-021-00492-0",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 5774,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 46,
+    "supportedUniqueNumbers": 46,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.0,
+    "toolCalls": 9,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 4,
+    "majorUnsupportedClaims": [
+      "引用量为2105 (截至检索日) – 该数据非原文提供，参考文献中未包含引用量信息"
+    ],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "fail",
+    "rationale": "Generated text faithfully reproduces the survey’s organization, key findings, and reported numerical results (e.g., EDA gains, BLEU improvements, accuracy changes). The only major deviation is the addition of a citation count (“引用量: 2105 (截至检索日)”) that is not present in the reference, introducing an unsupported factual claim. Accordingly, the output is not fully faithful despite covering the scientific content accurately."
+  },
+  "overallVerdict": "fail"
+}

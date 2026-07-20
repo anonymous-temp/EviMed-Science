@@ -1,0 +1,4 @@
+interface:
+  display_name: "Single Cell Analysis"
+  short_description: "Analyze single-cell data with explicit QC provenance"
+  default_prompt: "Use $single-cell-analysis to design a traceable single-cell workflow."

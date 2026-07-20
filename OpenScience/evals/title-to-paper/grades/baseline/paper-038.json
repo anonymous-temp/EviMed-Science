@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-038",
+  "category": "genomics-omics",
+  "title": "The STRING database in 2023: protein-protein association networks and functional enrichment analyses for any sequenced genome of interest.",
+  "pmcid": "PMC9825434",
+  "doi": "10.1093/nar/gkac1000",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 4739,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 42,
+    "supportedUniqueNumbers": 31,
+    "unsupportedNumberTokens": [
+      "1.5",
+      "10000",
+      "12535",
+      "143591",
+      "21689",
+      "22349",
+      "243831",
+      "253626",
+      "401976",
+      "45981",
+      "70148"
+    ],
+    "supportedNumericClaimPrecision": 0.7380952380952381,
+    "verbatimEightGramRate": 0.005246166263115416,
+    "toolCalls": 8,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 4,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [
+      "Claims that scRNA‑seq data’s cell‑type specificity and dropout effects could still affect inference, as the reference does not mention dropout.",
+      "Assertion that using method‑level true positive rate for LT experiments limits discrimination among detection methods, which is not stated in the reference."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated summary faithfully reflects the reference’s design, data sources, methods, results, and core conclusions. All key numbers (12535 genomes, text‑mining pair counts, experimental percentages, confidence levels) are accurate. Only two minor unsupported claims appear in the discussion of limitations: mention of scRNA‑seq dropout effects and an unsubstantiated statement about LT discrimination. No major fabrications. Overall high fidelity."
+  },
+  "overallVerdict": "pass"
+}

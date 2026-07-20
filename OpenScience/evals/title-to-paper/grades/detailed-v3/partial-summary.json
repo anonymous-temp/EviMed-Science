@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "status": "stopped_by_user",
+  "requestedCases": 50,
+  "completedCases": 25,
+  "validlyGradedCases": 24,
+  "evaluatorErrorCases": 1,
+  "notEvaluatedCases": 25,
+  "strictPassCases": 5,
+  "strictFailCases": 19,
+  "strictPassRateAmongValid": 0.2083,
+  "usabilityPassCases": 21,
+  "usabilityPassRateAmongValid": 0.875,
+  "weightedFidelityMeanAmongValid": 0.9737,
+  "criticalFidelityMeanAmongValid": 0.9826,
+  "strictPassCaseIds": [
+    "paper-002",
+    "paper-007",
+    "paper-016",
+    "paper-019",
+    "paper-020"
+  ],
+  "evaluatorErrors": [
+    {
+      "caseId": "paper-014",
+      "reason": "The model returned a non-existent generated evidence locator for conclusion_direction. This case is excluded from pass/fail rates and must be regraded before reuse."
+    }
+  ],
+  "gateFailureCountsAmongValid": {
+    "adversarial_contradiction": 8,
+    "unsupported_claim": 6,
+    "adversarial_unsupported_claim": 5,
+    "critical_missing_fact": 3
+  },
+  "completedCaseRange": "paper-001 through paper-025",
+  "notEvaluatedCaseRange": "paper-026 through paper-050",
+  "interpretation": "This is a stopped interim diagnostic, not a 50-paper release claim. Strict failures include small unsupported additions and context errors even when overall usability remains high. No human adjudication has yet been completed for every model-identified issue."
+}

@@ -1,0 +1,29 @@
+{
+  "artifacts": [
+    {
+      "bytes": 877,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/research-grant-development/results.json",
+      "sha256": "67037896da814545180fc53e2d4d177fbed4d76627f6e32d6b2374ddaa2deb00"
+    },
+    {
+      "bytes": 1304,
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/research-grant-development/research-grant-development-report.md",
+      "sha256": "a5d810f01b376c42a1d504f57586f1a853d86f3625e0d9fdda929302d215f983"
+    }
+  ],
+  "finishedAt": "2026-07-19T19:31:43.094970Z",
+  "input": {
+    "path": null,
+    "sha256": null,
+    "smokeFixture": true
+  },
+  "next_actions": [
+    "Review the report boundaries before scientific interpretation."
+  ],
+  "schemaVersion": 1,
+  "skill": "research-grant-development",
+  "startedAt": "2026-07-19T19:31:43.094612Z",
+  "status": "success",
+  "summary": "Executed the bounded deterministic baseline for research-grant-development and wrote 2 verified artifacts.",
+  "warnings": []
+}

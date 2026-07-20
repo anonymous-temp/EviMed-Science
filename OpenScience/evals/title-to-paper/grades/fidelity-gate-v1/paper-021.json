@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-021",
+  "category": "case-report",
+  "title": "The SCARE 2023 guideline: updating consensus Surgical CAse REport (SCARE) guidelines.",
+  "pmcid": "PMC10389401",
+  "doi": "10.1097/js9.0000000000000373",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 3625,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 17,
+    "supportedUniqueNumbers": 17,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.0015831134564643799,
+    "toolCalls": 11,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text accurately summarizes the SCARE 2023 guideline update, faithfully reproducing the Delphi design (54 invited, 44 completed, 36 of 43 items reached 70% consensus at 7-9 rating). All method and result details are directly verified against the reference. The discussion of limitations (internal review, data confidentiality, missing Delphi round count, no reliability indices) reflects information from the article's own statements and does not fabricate claims. No unsupported effects, sample fabrication, or erroneous conclusions are present."
+  },
+  "modelEvidenceCharacters": 28666,
+  "modelEvidenceComplete": true,
+  "overallVerdict": "pass"
+}

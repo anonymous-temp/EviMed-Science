@@ -1,0 +1,681 @@
+{
+  "schemaVersion": 3,
+  "graderVersion": 5,
+  "model": "deepseek-v4-pro",
+  "caseId": "paper-007",
+  "category": "systematic-review-meta-analysis",
+  "title": "Global, regional, and national burden of 12 mental disorders in 204 countries and territories, 1990-2019: a systematic analysis for the Global Burden of Disease Study 2019.",
+  "pmcid": "PMC8776563",
+  "doi": "10.1016/s2215-0366(21)00395-3",
+  "selectedRunLabel": "baseline",
+  "referenceSha256": "2e18f6e1a59424b82db751fd7293018089afe2944065e5863d12d9e6e46bbeab",
+  "generatedSha256": "7b54692f46b7bdf364ee0720884c757016f7ee90d15dfcb99fd6f7b6f7f91792",
+  "promptSha256": "3ad3afc1b0f1c175b20d76e2ca7a661fdc06f5945c755553a7224691e9920519",
+  "cacheFingerprint": "0f7b91e885ec93d7705dbc16fd04da0c32f4ddd04351824734b9554783a15ae5",
+  "referenceCharacters": 57562,
+  "referenceBodyComplete": true,
+  "generatedCharacters": 7401,
+  "paperType": "systematic-review-meta-analysis",
+  "items": [
+    {
+      "id": "research_objective",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "To measure global, regional, and national prevalence, DALYs, YLDs, and YLLs for 12 mental disorders from 1990 to 2019.",
+      "generatedFact": "测量上述12种精神障碍在1990年至2019年间全球、区域及国家层面的患病率、DALYs、YLDs和YLLs。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Gov't\", \"research-article\", \"Systematic Review\", \"Journal Article\"], \"publicationDate\": \"2022-01-10\"} [ABSTRACT] SummaryBackgroundThe mental disorders included in the Global Burden of Diseases, Injuries, and Risk Factors Study (GBD) 2019 were depressive disorders, anxiety disorders, bipolar disorder, schizophrenia, autism spectrum disorders, conduct disorder, attention-deficit hyperactivity disorder, eating disorders, idiopathic developmental intellectual disability, and a residual category of other mental disorders."
+        ],
+        "quote": "Gov't\", \"research-article\", \"Systematic Review\", \"Journal Article\"], \"publicationDate\": \"2022-01-10\"} [ABSTRACT] SummaryBackgroundThe mental disorders included in the Global Burden of Diseases, Injuries, and Risk Factors Study (GBD) 2019 were depressive disorders, anxiety disorders, bipolar disorder, schizophrenia, autism spectrum disorders, conduct disorder, attention-deficit hyperactivity disorder, eating disorders, idiopathic developmental intellectual disability, and a residual category of other mental disorders."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+        ],
+        "quote": "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+      },
+      "explanation": "Both state identical objective and outcome metrics.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "study_design",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Systematic analysis using GBD 2019 framework for 12 disorders, 204 countries, sexes, age groups.",
+      "generatedFact": "基于 GBD 2019 框架，估算12种精神障碍在两性、23个年龄组、204个国家/地区的疾病负担。",
+      "sourceEvidence": {
+        "locator": "R0001",
+        "locators": [
+          "R0001"
+        ],
+        "quotes": [
+          "[METADATA] {\"title\": \"Global, regional, and national burden of 12 mental disorders in 204 countries and territories, 1990-2019: a systematic analysis for the Global Burden of Disease Study 2019.\", \"pmcid\": \"PMC8776563\", \"pmid\": \"35026139\", \"doi\": \"10.1016/s2215-0366(21)00395-3\", \"publicationTypes\": [\"Research Support, Non-U.S."
+        ],
+        "quote": "[METADATA] {\"title\": \"Global, regional, and national burden of 12 mental disorders in 204 countries and territories, 1990-2019: a systematic analysis for the Global Burden of Disease Study 2019.\", \"pmcid\": \"PMC8776563\", \"pmid\": \"35026139\", \"doi\": \"10.1016/s2215-0366(21)00395-3\", \"publicationTypes\": [\"Research Support, Non-U.S."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+        ],
+        "quote": "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+      },
+      "explanation": "Both describe a systematic burden estimation based on GBD 2019.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "population_or_data_source",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Systematic review of PsycINFO, Embase, PubMed, Global Health Data Exchange; surveys from 1980, probability sampling, general population.",
+      "generatedFact": "系统检索 PsycINFO、Embase、PubMed 及 GHDx，纳入自1980年起概率抽样、代表性人群的调查。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "We aimed to measure the global, regional, and national prevalence, disability-adjusted life-years (DALYS), years lived with disability (YLDs), and years of life lost (YLLs) for mental disorders from 1990 to 2019.MethodsIn this study, we assessed prevalence and burden estimates from GBD 2019 for 12 mental disorders, males and females, 23 age groups, 204 countries and territories, between 1990 and 2019. DALYs were estimated as the sum of YLDs and YLLs to premature mortality. We systematically reviewed PsycINFO, Embase, PubMed, and the Global Health Data Exchange to obtain data on prevalence, incidence, remission, duration, severity, and excess mortality for each mental disorder."
+        ],
+        "quote": "We aimed to measure the global, regional, and national prevalence, disability-adjusted life-years (DALYS), years lived with disability (YLDs), and years of life lost (YLLs) for mental disorders from 1990 to 2019.MethodsIn this study, we assessed prevalence and burden estimates from GBD 2019 for 12 mental disorders, males and females, 23 age groups, 204 countries and territories, between 1990 and 2019. DALYs were estimated as the sum of YLDs and YLLs to premature mortality. We systematically reviewed PsycINFO, Embase, PubMed, and the Global Health Data Exchange to obtain data on prevalence, incidence, remission, duration, severity, and excess mortality for each mental disorder."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+        ],
+        "quote": "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+      },
+      "explanation": "Identical databases and survey selection criteria.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "sample_size",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Included 29 incidence, 1,075 prevalence, 52 remission, 1,930 cause-of-death, and 149 severity/other data sources.",
+      "generatedFact": "合计纳入29项发病率、1,075项患病率、52项缓解率、1,930项死因及149项严重度等数据来源。",
+      "sourceEvidence": {
+        "locator": "R0040",
+        "locators": [
+          "R0040"
+        ],
+        "quotes": [
+          "Estimation of DALYs Overall, we included 29 incidence, 1075 prevalence, 52 remission, 1930 cause of death, and 149 severity or other types of data sources in the estimation of YLDs, YLLs, and DALYs for mental disorders. The number of data sources available by disorder and parameter is summarised in the appendix (p 11) . Further information on data sources has also been presented elsewhere. 19 , 20 , 21 , 22 , 23 , 24 , 25 DALYs were calculated as the sum of YLDs and YLLs. For mental disorders not recognised as causes of death, YLLs were not estimated and YLDs approximated DALYs. Age-standardised rates per 100 000 people were estimated using the GBD world population age standard."
+        ],
+        "quote": "Estimation of DALYs Overall, we included 29 incidence, 1075 prevalence, 52 remission, 1930 cause of death, and 149 severity or other types of data sources in the estimation of YLDs, YLLs, and DALYs for mental disorders. The number of data sources available by disorder and parameter is summarised in the appendix (p 11) . Further information on data sources has also been presented elsewhere. 19 , 20 , 21 , 22 , 23 , 24 , 25 DALYs were calculated as the sum of YLDs and YLLs. For mental disorders not recognised as causes of death, YLLs were not estimated and YLDs approximated DALYs. Age-standardised rates per 100 000 people were estimated using the GBD world population age standard."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "### DALY 估算 合计纳入 29 项发病率、1 075 项患病率、52 项缓解率、1 930 项死因及 149 项严重度等数据来源。DALYs = YLDs + YLLs。以 GBD 世界人口年龄标准计算年龄标化率。所有估计值均附 95% 不确定性区间（UI），通过后验分布 1,000 次抽取的第2.5和第97.5百分位数计算。 --- ## 结果 ### 患病率 2019年全球精神障碍估计患病人数为 970.1 million（95% UI 900.9–1 044.4），较1990年（654.8 million; 603.6–708.1）增长48.1%。1990至2019年间，各类精神障碍的年龄标化患病率均未出现显著增长。2019年全球年龄标化患病率为 12 262.0/10万（男性 11 727.3/10万，女性 12 760.0/10万）。 患病率最高的两类障碍为焦虑障碍（301.4 million; 年龄标化率 3 779.5/10万）和抑郁障碍（279.6 million; 年龄标化率 3 440.1/10万）。女性在抑郁障碍、焦虑障碍和进食障碍中的患病率高于男性；男性在 ADHD 和孤独症谱系障碍中更高。患病率最低的为精神分裂症（23.6 million; 287.4/10万）和进食障碍（13.6 million; 174.0/10万）。"
+        ],
+        "quote": "### DALY 估算 合计纳入 29 项发病率、1 075 项患病率、52 项缓解率、1 930 项死因及 149 项严重度等数据来源。DALYs = YLDs + YLLs。以 GBD 世界人口年龄标准计算年龄标化率。所有估计值均附 95% 不确定性区间（UI），通过后验分布 1,000 次抽取的第2.5和第97.5百分位数计算。 --- ## 结果 ### 患病率 2019年全球精神障碍估计患病人数为 970.1 million（95% UI 900.9–1 044.4），较1990年（654.8 million; 603.6–708.1）增长48.1%。1990至2019年间，各类精神障碍的年龄标化患病率均未出现显著增长。2019年全球年龄标化患病率为 12 262.0/10万（男性 11 727.3/10万，女性 12 760.0/10万）。 患病率最高的两类障碍为焦虑障碍（301.4 million; 年龄标化率 3 779.5/10万）和抑郁障碍（279.6 million; 年龄标化率 3 440.1/10万）。女性在抑郁障碍、焦虑障碍和进食障碍中的患病率高于男性；男性在 ADHD 和孤独症谱系障碍中更高。患病率最低的为精神分裂症（23.6 million; 287.4/10万）和进食障碍（13.6 million; 174.0/10万）。"
+      },
+      "explanation": "Exact match of data source counts.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "eligibility_or_selection",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Included surveys from Jan 1, 1980, using probability sampling of the general population; excluded non-probabilistic or subgroup samples.",
+      "generatedFact": "纳入自1980年1月起发表、采用概率抽样获取一般人群代表性样本的研究；排除非概率抽样或仅报告亚人群的研究。",
+      "sourceEvidence": {
+        "locator": "R0024",
+        "locators": [
+          "R0024"
+        ],
+        "quotes": [
+          "Included data sources were surveys reporting estimates of mental disorder prevalence, incidence, remission, or excess mortality. We included surveys published from Jan 1, 1980 that used probability sampling to capture a representative sample of the general population. Selection bias and non-response were considered as part of the assessment for eligibility for inclusion and weighted estimates were prioritised during data extraction. Surveys with recruitment strategies producing samples with a different risk profile for mental disorders compared with the general population, such as surveys that used non-probabilistic sampling or reported on population subgroups were excluded."
+        ],
+        "quote": "Included data sources were surveys reporting estimates of mental disorder prevalence, incidence, remission, or excess mortality. We included surveys published from Jan 1, 1980 that used probability sampling to capture a representative sample of the general population. Selection bias and non-response were considered as part of the assessment for eligibility for inclusion and weighted estimates were prioritised during data extraction. Surveys with recruitment strategies producing samples with a different risk profile for mental disorders compared with the general population, such as surveys that used non-probabilistic sampling or reported on population subgroups were excluded."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 总体框架 GBD 2019 估算了369种疾病与伤害的发病率、患病率、死亡率、YLDs、YLLs 和 DALYs，覆盖两性、23个年龄组、21个区域及204个国家/地区，时间自1990年起。本研究作为 GBD 合作网络的一部分，遵循 GATHER 报告规范开展分析。 ### 病例定义 纳入 GBD 2019 分析的12种精神障碍包括：抑郁障碍（重性抑郁障碍和恶劣心境）、焦虑障碍（全部亚型的合并估计）、双相障碍（全部亚型的合并估计）、精神分裂症、孤独症谱系障碍、品行障碍、ADHD、进食障碍（神经性厌食症和神经性贪食症）、特发性发育性智力残疾，以及\"其他精神障碍\"残差类别（主要为人格障碍的汇总组）。为确保可比性，病例定义主要遵循 DSM-IV-TR 或 ICD-10 标准。 ### YLD 估算 YLDs 通过将不同严重度水平的患病率估计值乘以对应的伤残权重计算得出。 **数据来源**：系统检索 PsycINFO、Embase 和 PubMed（无语言限制），并辅以灰色文献检索及专家咨询。同时审查 GHDx 归档数据源、多国大型调查数据目录及合作者推荐数据源。纳入自1980年1月起发表、采用概率抽样获取一般人群代表性样本且提供精神障碍患病率、发病率、缓解率或超额死亡率估计值的调查。排除非概率抽样或仅报告亚人群的研究。 **流行病学建模**：采用两步法进行分析。第一步，检出并校正研究报告间的估计偏倚；第二步，通过 Meta 回归对\"金标准\"及校正后估计进行建模。以网络 Meta 分析方法计算金标准估计与替代估计之间的合并比值作为偏倚校正因子。"
+        ],
+        "quote": "--- ## 方法 ### 总体框架 GBD 2019 估算了369种疾病与伤害的发病率、患病率、死亡率、YLDs、YLLs 和 DALYs，覆盖两性、23个年龄组、21个区域及204个国家/地区，时间自1990年起。本研究作为 GBD 合作网络的一部分，遵循 GATHER 报告规范开展分析。 ### 病例定义 纳入 GBD 2019 分析的12种精神障碍包括：抑郁障碍（重性抑郁障碍和恶劣心境）、焦虑障碍（全部亚型的合并估计）、双相障碍（全部亚型的合并估计）、精神分裂症、孤独症谱系障碍、品行障碍、ADHD、进食障碍（神经性厌食症和神经性贪食症）、特发性发育性智力残疾，以及\"其他精神障碍\"残差类别（主要为人格障碍的汇总组）。为确保可比性，病例定义主要遵循 DSM-IV-TR 或 ICD-10 标准。 ### YLD 估算 YLDs 通过将不同严重度水平的患病率估计值乘以对应的伤残权重计算得出。 **数据来源**：系统检索 PsycINFO、Embase 和 PubMed（无语言限制），并辅以灰色文献检索及专家咨询。同时审查 GHDx 归档数据源、多国大型调查数据目录及合作者推荐数据源。纳入自1980年1月起发表、采用概率抽样获取一般人群代表性样本且提供精神障碍患病率、发病率、缓解率或超额死亡率估计值的调查。排除非概率抽样或仅报告亚人群的研究。 **流行病学建模**：采用两步法进行分析。第一步，检出并校正研究报告间的估计偏倚；第二步，通过 Meta 回归对\"金标准\"及校正后估计进行建模。以网络 Meta 分析方法计算金标准估计与替代估计之间的合并比值作为偏倚校正因子。"
+      },
+      "explanation": "Both specify the same inclusion/exclusion criteria.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "intervention_or_exposure",
+      "importance": "critical",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No intervention or exposure studied; burden estimation only.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "comparator_or_reference",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No comparator or reference standard; this is a descriptive burden study.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "outcomes_or_endpoints",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Primary outcomes: prevalence, DALYs, YLDs, YLLs for mental disorders.",
+      "generatedFact": "主要结局：患病率、DALYs、YLDs、YLLs。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Gov't\", \"research-article\", \"Systematic Review\", \"Journal Article\"], \"publicationDate\": \"2022-01-10\"} [ABSTRACT] SummaryBackgroundThe mental disorders included in the Global Burden of Diseases, Injuries, and Risk Factors Study (GBD) 2019 were depressive disorders, anxiety disorders, bipolar disorder, schizophrenia, autism spectrum disorders, conduct disorder, attention-deficit hyperactivity disorder, eating disorders, idiopathic developmental intellectual disability, and a residual category of other mental disorders."
+        ],
+        "quote": "Gov't\", \"research-article\", \"Systematic Review\", \"Journal Article\"], \"publicationDate\": \"2022-01-10\"} [ABSTRACT] SummaryBackgroundThe mental disorders included in the Global Burden of Diseases, Injuries, and Risk Factors Study (GBD) 2019 were depressive disorders, anxiety disorders, bipolar disorder, schizophrenia, autism spectrum disorders, conduct disorder, attention-deficit hyperactivity disorder, eating disorders, idiopathic developmental intellectual disability, and a residual category of other mental disorders."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+        ],
+        "quote": "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+      },
+      "explanation": "Both state the same set of outcome metrics.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "follow_up_or_time_horizon",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Study period from 1990 to 2019, annually.",
+      "generatedFact": "研究时期为1990年至2019年。",
+      "sourceEvidence": {
+        "locator": "R0002",
+        "locators": [
+          "R0002"
+        ],
+        "quotes": [
+          "Gov't\", \"research-article\", \"Systematic Review\", \"Journal Article\"], \"publicationDate\": \"2022-01-10\"} [ABSTRACT] SummaryBackgroundThe mental disorders included in the Global Burden of Diseases, Injuries, and Risk Factors Study (GBD) 2019 were depressive disorders, anxiety disorders, bipolar disorder, schizophrenia, autism spectrum disorders, conduct disorder, attention-deficit hyperactivity disorder, eating disorders, idiopathic developmental intellectual disability, and a residual category of other mental disorders."
+        ],
+        "quote": "Gov't\", \"research-article\", \"Systematic Review\", \"Journal Article\"], \"publicationDate\": \"2022-01-10\"} [ABSTRACT] SummaryBackgroundThe mental disorders included in the Global Burden of Diseases, Injuries, and Risk Factors Study (GBD) 2019 were depressive disorders, anxiety disorders, bipolar disorder, schizophrenia, autism spectrum disorders, conduct disorder, attention-deficit hyperactivity disorder, eating disorders, idiopathic developmental intellectual disability, and a residual category of other mental disorders."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+        ],
+        "quote": "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+      },
+      "explanation": "Identical time horizon.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "data_preprocessing",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Bias adjustment using network meta-analysis to correct alternative estimates to gold-standard prior to modeling.",
+      "generatedFact": "以网络Meta分析方法计算金标准与替代估计的合并比值进行偏倚校正。",
+      "sourceEvidence": {
+        "locator": "R0028",
+        "locators": [
+          "R0028"
+        ],
+        "quotes": [
+          "Prevalence ratios between alternative estimates were especially useful for alternative estimate types with few gold-standard to alternative ratios available. Direct versus indirect effects were inspected for transitivity and indirect estimates excluded when these effects were markedly different. We did network meta-analyses of these ratios using meta-regression—Bayesian, regularised, trimmed to calculate pooled ratios between gold-standard estimates and alternative estimates. 10 These pooled ratios were used as an adjustment factor to correct alternative estimates before analysis. More detailed information about the bias correction process is presented elsewhere."
+        ],
+        "quote": "Prevalence ratios between alternative estimates were especially useful for alternative estimate types with few gold-standard to alternative ratios available. Direct versus indirect effects were inspected for transitivity and indirect estimates excluded when these effects were markedly different. We did network meta-analyses of these ratios using meta-regression—Bayesian, regularised, trimmed to calculate pooled ratios between gold-standard estimates and alternative estimates. 10 These pooled ratios were used as an adjustment factor to correct alternative estimates before analysis. More detailed information about the bias correction process is presented elsewhere."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 总体框架 GBD 2019 估算了369种疾病与伤害的发病率、患病率、死亡率、YLDs、YLLs 和 DALYs，覆盖两性、23个年龄组、21个区域及204个国家/地区，时间自1990年起。本研究作为 GBD 合作网络的一部分，遵循 GATHER 报告规范开展分析。 ### 病例定义 纳入 GBD 2019 分析的12种精神障碍包括：抑郁障碍（重性抑郁障碍和恶劣心境）、焦虑障碍（全部亚型的合并估计）、双相障碍（全部亚型的合并估计）、精神分裂症、孤独症谱系障碍、品行障碍、ADHD、进食障碍（神经性厌食症和神经性贪食症）、特发性发育性智力残疾，以及\"其他精神障碍\"残差类别（主要为人格障碍的汇总组）。为确保可比性，病例定义主要遵循 DSM-IV-TR 或 ICD-10 标准。 ### YLD 估算 YLDs 通过将不同严重度水平的患病率估计值乘以对应的伤残权重计算得出。 **数据来源**：系统检索 PsycINFO、Embase 和 PubMed（无语言限制），并辅以灰色文献检索及专家咨询。同时审查 GHDx 归档数据源、多国大型调查数据目录及合作者推荐数据源。纳入自1980年1月起发表、采用概率抽样获取一般人群代表性样本且提供精神障碍患病率、发病率、缓解率或超额死亡率估计值的调查。排除非概率抽样或仅报告亚人群的研究。 **流行病学建模**：采用两步法进行分析。第一步，检出并校正研究报告间的估计偏倚；第二步，通过 Meta 回归对\"金标准\"及校正后估计进行建模。以网络 Meta 分析方法计算金标准估计与替代估计之间的合并比值作为偏倚校正因子。"
+        ],
+        "quote": "--- ## 方法 ### 总体框架 GBD 2019 估算了369种疾病与伤害的发病率、患病率、死亡率、YLDs、YLLs 和 DALYs，覆盖两性、23个年龄组、21个区域及204个国家/地区，时间自1990年起。本研究作为 GBD 合作网络的一部分，遵循 GATHER 报告规范开展分析。 ### 病例定义 纳入 GBD 2019 分析的12种精神障碍包括：抑郁障碍（重性抑郁障碍和恶劣心境）、焦虑障碍（全部亚型的合并估计）、双相障碍（全部亚型的合并估计）、精神分裂症、孤独症谱系障碍、品行障碍、ADHD、进食障碍（神经性厌食症和神经性贪食症）、特发性发育性智力残疾，以及\"其他精神障碍\"残差类别（主要为人格障碍的汇总组）。为确保可比性，病例定义主要遵循 DSM-IV-TR 或 ICD-10 标准。 ### YLD 估算 YLDs 通过将不同严重度水平的患病率估计值乘以对应的伤残权重计算得出。 **数据来源**：系统检索 PsycINFO、Embase 和 PubMed（无语言限制），并辅以灰色文献检索及专家咨询。同时审查 GHDx 归档数据源、多国大型调查数据目录及合作者推荐数据源。纳入自1980年1月起发表、采用概率抽样获取一般人群代表性样本且提供精神障碍患病率、发病率、缓解率或超额死亡率估计值的调查。排除非概率抽样或仅报告亚人群的研究。 **流行病学建模**：采用两步法进行分析。第一步，检出并校正研究报告间的估计偏倚；第二步，通过 Meta 回归对\"金标准\"及校正后估计进行建模。以网络 Meta 分析方法计算金标准估计与替代估计之间的合并比值作为偏倚校正因子。"
+      },
+      "explanation": "Both describe bias correction via network meta-analysis.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "analysis_methods",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Bayesian meta-regression (DisMod-MR 2.1) for prevalence; Cause of Death Ensemble model (CODEm) for mortality.",
+      "generatedFact": "采用贝叶斯Meta回归（DisMod-MR 2.1）估算患病率，死因集合模型（CODEm）估算死亡率。",
+      "sourceEvidence": {
+        "locator": "R0004",
+        "locators": [
+          "R0004"
+        ],
+        "quotes": [
+          "These data informed a Bayesian meta-regression analysis to estimate prevalence by disorder, age, sex, year, and location. Prevalence was multiplied by corresponding disability weights to estimate YLDs. Cause-specific deaths were compiled from mortality surveillance databases. The Cause of Death Ensemble modelling strategy was used to estimate death rate by age, sex, year, and location. The death rates were multiplied by the years of life expected to be remaining at death based on a normative life expectancy to estimate YLLs."
+        ],
+        "quote": "These data informed a Bayesian meta-regression analysis to estimate prevalence by disorder, age, sex, year, and location. Prevalence was multiplied by corresponding disability weights to estimate YLDs. Cause-specific deaths were compiled from mortality surveillance databases. The Cause of Death Ensemble modelling strategy was used to estimate death rate by age, sex, year, and location. The death rates were multiplied by the years of life expected to be remaining at death based on a normative life expectancy to estimate YLLs."
+      },
+      "generatedEvidence": {
+        "locator": "G0003",
+        "locators": [
+          "G0003"
+        ],
+        "quotes": [
+          "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+        ],
+        "quote": "**方法** 基于 GBD 2019 框架，估算了12种精神障碍在两性、23个年龄组、204个国家/地区及21个区域中的疾病负担。DALYs 定义为 YLDs 与 YLLs 之和。系统检索 PsycINFO、Embase、PubMed 及全球健康数据交换平台（GHDx）获取患病率、发病率、缓解率、病程、严重度及超额死亡率数据，采用贝叶斯 Meta 回归（DisMod-MR 2.1）估算各障碍按年龄、性别、年份及地区分层的患病率，乘以伤残权重得出 YLDs。死因数据来自多源死亡监测数据库，通过死因集合模型（CODEm）估算死亡率，乘以标准化期望寿命的剩余生存年数计算 YLLs。仅神经性厌食症和神经性贪食症被认定为 GBD 2019 中精神障碍的特定死因。"
+      },
+      "explanation": "Identical main statistical synthesis methods.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "algorithm_or_model",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "DisMod-MR 2.1, a Bayesian meta-regression tool, was the core estimation model for prevalence.",
+      "generatedFact": "使用DisMod-MR 2.1（一种贝叶斯Meta回归工具）进行患病率建模。",
+      "sourceEvidence": {
+        "locator": "R0029",
+        "locators": [
+          "R0029"
+        ],
+        "quotes": [
+          "5 The gold-standard and adjusted estimates were modelled using DisMod-MR 2.1, a Bayesian meta-regression tool that pools data from different sources to produce internally consistent estimates of prevalence, incidence, remission, and excess mortality by age, sex, location, and year. 11 As part of this process, estimates were generated for locations where high-quality raw epidemiological data were unavailable by using the modelled output from surrounding locations. 11 As per the GBD protocol, an uncertain estimate is preferable to no estimate when data are sparse or not available, because no estimate would result in no health loss from that condition being recorded."
+        ],
+        "quote": "5 The gold-standard and adjusted estimates were modelled using DisMod-MR 2.1, a Bayesian meta-regression tool that pools data from different sources to produce internally consistent estimates of prevalence, incidence, remission, and excess mortality by age, sex, location, and year. 11 As part of this process, estimates were generated for locations where high-quality raw epidemiological data were unavailable by using the modelled output from surrounding locations. 11 As per the GBD protocol, an uncertain estimate is preferable to no estimate when data are sparse or not available, because no estimate would result in no health loss from that condition being recorded."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "校正后数据使用 DisMod-MR 2.1（一种贝叶斯 Meta 回归工具）建模，综合多源数据生成按年龄、性别、年份及地区分层的发病率、患病率、缓解率及超额死亡率内部一致性估计值。对于无原始流行病学数据的地区，通过周边地区建模输出来推断，并利用地区层面协变量预测患病率（抑郁障碍和焦虑障碍纳入战争/恐怖主义相关死亡率协变量、Gallup 负面体验指数及儿童性虐待/亲密伴侣暴力归因比例协变量）。 **严重度分布**：品行障碍、ADHD、孤独症谱系障碍、双相障碍和精神分裂症的严重度分布来自调查数据的 Meta 分析；抑郁障碍、焦虑障碍及其他精神障碍的严重度分布使用美国及澳大利亚个体层面调查数据。 ### 伤残权重 伤残权重来自孟加拉国、印度尼西亚、秘鲁、坦桑尼亚、美国、匈牙利、意大利、瑞典及荷兰的社区调查，以及一项英、西、中文公开网络调查。参与者对健康状态配对进行\"更健康\"判断，结果以0（完全健康）至1（死亡）标尺锚定。 ### 共病校正 通过模拟 40,000 个体人群，按地区、年龄、性别及年份估计不同疾病与伤害的共现概率，计算共病校正值对 YLDs 进行调整。 ### YLL 估算 基于 GBD 2019 死因数据库，以死因集合模型（CODEm）估算死因别死亡率。每个死亡在 GBD 中仅被分配至一个根本死因（按 ICD 分类），故仅神经性厌食症和神经性贪食症被认定为精神障碍的死因并可计算 YLLs。"
+        ],
+        "quote": "校正后数据使用 DisMod-MR 2.1（一种贝叶斯 Meta 回归工具）建模，综合多源数据生成按年龄、性别、年份及地区分层的发病率、患病率、缓解率及超额死亡率内部一致性估计值。对于无原始流行病学数据的地区，通过周边地区建模输出来推断，并利用地区层面协变量预测患病率（抑郁障碍和焦虑障碍纳入战争/恐怖主义相关死亡率协变量、Gallup 负面体验指数及儿童性虐待/亲密伴侣暴力归因比例协变量）。 **严重度分布**：品行障碍、ADHD、孤独症谱系障碍、双相障碍和精神分裂症的严重度分布来自调查数据的 Meta 分析；抑郁障碍、焦虑障碍及其他精神障碍的严重度分布使用美国及澳大利亚个体层面调查数据。 ### 伤残权重 伤残权重来自孟加拉国、印度尼西亚、秘鲁、坦桑尼亚、美国、匈牙利、意大利、瑞典及荷兰的社区调查，以及一项英、西、中文公开网络调查。参与者对健康状态配对进行\"更健康\"判断，结果以0（完全健康）至1（死亡）标尺锚定。 ### 共病校正 通过模拟 40,000 个体人群，按地区、年龄、性别及年份估计不同疾病与伤害的共现概率，计算共病校正值对 YLDs 进行调整。 ### YLL 估算 基于 GBD 2019 死因数据库，以死因集合模型（CODEm）估算死因别死亡率。每个死亡在 GBD 中仅被分配至一个根本死因（按 ICD 分类），故仅神经性厌食症和神经性贪食症被认定为精神障碍的死因并可计算 YLLs。"
+      },
+      "explanation": "Both identify the same algorithm/model.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "key_numerical_results",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "DALYs 80.8M (1990) to 125.3M (2019); proportion 3.1% to 4.9%; age-standardised rate 1581.2 to 1566.2/100k; YLDs 125.3M (14.6%); eating disorder YLLs 17,361.5.",
+      "generatedFact": "DALYs从80.8 million升至125.3 million; 比例3.1%→4.9%; 标化率1581.2→1566.2/10万; YLDs 125.3 million (14.6%); YLLs 17 361.5。",
+      "sourceEvidence": {
+        "locator": "R0005",
+        "locators": [
+          "R0005"
+        ],
+        "quotes": [
+          "Deaths and YLLs could be calculated only for anorexia nervosa and bulimia nervosa, since these were the only mental disorders identified as underlying causes of death in GBD 2019.FindingsBetween 1990 and 2019, the global number of DALYs due to mental disorders increased from 80·8 million (95% uncertainty interval [UI] 59·5–105·9) to 125·3 million (93·0–163·2), and the proportion of global DALYs attributed to mental disorders increased from 3·1% (95% UI 2·4–3·9) to 4·9% (3·9–6·1). Age-standardised DALY rates remained largely consistent between 1990 (1581·2 DALYs [1170·9–2061·4] per 100 000 people) and 2019 (1566·2 DALYs [1160·1–2042·8] per 100 000 people)."
+        ],
+        "quote": "Deaths and YLLs could be calculated only for anorexia nervosa and bulimia nervosa, since these were the only mental disorders identified as underlying causes of death in GBD 2019.FindingsBetween 1990 and 2019, the global number of DALYs due to mental disorders increased from 80·8 million (95% uncertainty interval [UI] 59·5–105·9) to 125·3 million (93·0–163·2), and the proportion of global DALYs attributed to mental disorders increased from 3·1% (95% UI 2·4–3·9) to 4·9% (3·9–6·1). Age-standardised DALY rates remained largely consistent between 1990 (1581·2 DALYs [1170·9–2061·4] per 100 000 people) and 2019 (1566·2 DALYs [1160·1–2042·8] per 100 000 people)."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**结果** 1990至2019年间，精神障碍的全球 DALYs 总数由 80.8 million（95% UI 59.5–105.9）升至 125.3 million（93.0–163.2），占全球 DALYs 比例由 3.1%（2.4–3.9）增至 4.9%（3.9–6.1）。年龄标化 DALY 率在这一期间基本持平（1990 年: 1 581.2/10万; 2019 年: 1 566.2/10万）。2019 年，YLDs 占精神障碍负担的绝大部分，共 125.3 million（占全球 YLDs 的 14.6%）。YLLs 仅在进食障碍中可估算（17 361.5 YLLs）。全球男性年龄标化 DALY 率为 1 426.5/10万，女性为 1 703.3/10万。DALY 率最高的地区为大洋洲、热带拉丁美洲及高收入北美地区。精神障碍为全球 DALYs 第七大原因（1990年为第13位），持续位居 YLDs 第二大原因。2019年全球精神障碍估计患病人数为 970.1 million，较1990年（654.8 million）增长48.1%。 **结论** 精神障碍仍为全球疾病负担十大首要原因之一，1990年以来未见全球性减轻。现有 YLL 估算未能充分体现精神障碍人群的早死损失。呼吁政府及全球卫生界协调推进有效预防与治疗方案的实施，并开展精神障碍与其他致死性结局间因果路径研究。"
+        ],
+        "quote": "**结果** 1990至2019年间，精神障碍的全球 DALYs 总数由 80.8 million（95% UI 59.5–105.9）升至 125.3 million（93.0–163.2），占全球 DALYs 比例由 3.1%（2.4–3.9）增至 4.9%（3.9–6.1）。年龄标化 DALY 率在这一期间基本持平（1990 年: 1 581.2/10万; 2019 年: 1 566.2/10万）。2019 年，YLDs 占精神障碍负担的绝大部分，共 125.3 million（占全球 YLDs 的 14.6%）。YLLs 仅在进食障碍中可估算（17 361.5 YLLs）。全球男性年龄标化 DALY 率为 1 426.5/10万，女性为 1 703.3/10万。DALY 率最高的地区为大洋洲、热带拉丁美洲及高收入北美地区。精神障碍为全球 DALYs 第七大原因（1990年为第13位），持续位居 YLDs 第二大原因。2019年全球精神障碍估计患病人数为 970.1 million，较1990年（654.8 million）增长48.1%。 **结论** 精神障碍仍为全球疾病负担十大首要原因之一，1990年以来未见全球性减轻。现有 YLL 估算未能充分体现精神障碍人群的早死损失。呼吁政府及全球卫生界协调推进有效预防与治疗方案的实施，并开展精神障碍与其他致死性结局间因果路径研究。"
+      },
+      "explanation": "All central estimates and units replicated exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "uncertainty_and_significance",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "95% uncertainty intervals (25th–975th percentiles) reported for all main estimates.",
+      "generatedFact": "所有主要估计值均附95%不确定性区间。",
+      "sourceEvidence": {
+        "locator": "R0005",
+        "locators": [
+          "R0005"
+        ],
+        "quotes": [
+          "Deaths and YLLs could be calculated only for anorexia nervosa and bulimia nervosa, since these were the only mental disorders identified as underlying causes of death in GBD 2019.FindingsBetween 1990 and 2019, the global number of DALYs due to mental disorders increased from 80·8 million (95% uncertainty interval [UI] 59·5–105·9) to 125·3 million (93·0–163·2), and the proportion of global DALYs attributed to mental disorders increased from 3·1% (95% UI 2·4–3·9) to 4·9% (3·9–6·1). Age-standardised DALY rates remained largely consistent between 1990 (1581·2 DALYs [1170·9–2061·4] per 100 000 people) and 2019 (1566·2 DALYs [1160·1–2042·8] per 100 000 people)."
+        ],
+        "quote": "Deaths and YLLs could be calculated only for anorexia nervosa and bulimia nervosa, since these were the only mental disorders identified as underlying causes of death in GBD 2019.FindingsBetween 1990 and 2019, the global number of DALYs due to mental disorders increased from 80·8 million (95% uncertainty interval [UI] 59·5–105·9) to 125·3 million (93·0–163·2), and the proportion of global DALYs attributed to mental disorders increased from 3·1% (95% UI 2·4–3·9) to 4·9% (3·9–6·1). Age-standardised DALY rates remained largely consistent between 1990 (1581·2 DALYs [1170·9–2061·4] per 100 000 people) and 2019 (1566·2 DALYs [1160·1–2042·8] per 100 000 people)."
+      },
+      "generatedEvidence": {
+        "locator": "G0004",
+        "locators": [
+          "G0004"
+        ],
+        "quotes": [
+          "**结果** 1990至2019年间，精神障碍的全球 DALYs 总数由 80.8 million（95% UI 59.5–105.9）升至 125.3 million（93.0–163.2），占全球 DALYs 比例由 3.1%（2.4–3.9）增至 4.9%（3.9–6.1）。年龄标化 DALY 率在这一期间基本持平（1990 年: 1 581.2/10万; 2019 年: 1 566.2/10万）。2019 年，YLDs 占精神障碍负担的绝大部分，共 125.3 million（占全球 YLDs 的 14.6%）。YLLs 仅在进食障碍中可估算（17 361.5 YLLs）。全球男性年龄标化 DALY 率为 1 426.5/10万，女性为 1 703.3/10万。DALY 率最高的地区为大洋洲、热带拉丁美洲及高收入北美地区。精神障碍为全球 DALYs 第七大原因（1990年为第13位），持续位居 YLDs 第二大原因。2019年全球精神障碍估计患病人数为 970.1 million，较1990年（654.8 million）增长48.1%。 **结论** 精神障碍仍为全球疾病负担十大首要原因之一，1990年以来未见全球性减轻。现有 YLL 估算未能充分体现精神障碍人群的早死损失。呼吁政府及全球卫生界协调推进有效预防与治疗方案的实施，并开展精神障碍与其他致死性结局间因果路径研究。"
+        ],
+        "quote": "**结果** 1990至2019年间，精神障碍的全球 DALYs 总数由 80.8 million（95% UI 59.5–105.9）升至 125.3 million（93.0–163.2），占全球 DALYs 比例由 3.1%（2.4–3.9）增至 4.9%（3.9–6.1）。年龄标化 DALY 率在这一期间基本持平（1990 年: 1 581.2/10万; 2019 年: 1 566.2/10万）。2019 年，YLDs 占精神障碍负担的绝大部分，共 125.3 million（占全球 YLDs 的 14.6%）。YLLs 仅在进食障碍中可估算（17 361.5 YLLs）。全球男性年龄标化 DALY 率为 1 426.5/10万，女性为 1 703.3/10万。DALY 率最高的地区为大洋洲、热带拉丁美洲及高收入北美地区。精神障碍为全球 DALYs 第七大原因（1990年为第13位），持续位居 YLDs 第二大原因。2019年全球精神障碍估计患病人数为 970.1 million，较1990年（654.8 million）增长48.1%。 **结论** 精神障碍仍为全球疾病负担十大首要原因之一，1990年以来未见全球性减轻。现有 YLL 估算未能充分体现精神障碍人群的早死损失。呼吁政府及全球卫生界协调推进有效预防与治疗方案的实施，并开展精神障碍与其他致死性结局间因果路径研究。"
+      },
+      "explanation": "Both consistently report 95% UIs for key figures.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "conclusion_direction",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Mental disorders remained top-ten leading cause, no global reduction since 1990; YLLs extremely low, not reflecting premature mortality; need coordinated prevention/treatment.",
+      "generatedFact": "精神障碍仍为全球十大首要原因，1990年以来未见全球性减轻；YLL未能充分体现早死；呼吁协调推进预防治疗与因果路径研究。",
+      "sourceEvidence": {
+        "locator": "R0007",
+        "locators": [
+          "R0007"
+        ],
+        "quotes": [
+          "Age-standardised DALY rates were highest in Australasia, Tropical Latin America, and high-income North America.InterpretationGBD 2019 showed that mental disorders remained among the top ten leading causes of burden worldwide, with no evidence of global reduction in the burden since 1990. The estimated YLLs for mental disorders were extremely low and do not reflect premature mortality in individuals with mental disorders. Research to establish causal pathways between mental disorders and other fatal health outcomes is recommended so that this may be addressed within the GBD study."
+        ],
+        "quote": "Age-standardised DALY rates were highest in Australasia, Tropical Latin America, and high-income North America.InterpretationGBD 2019 showed that mental disorders remained among the top ten leading causes of burden worldwide, with no evidence of global reduction in the burden since 1990. The estimated YLLs for mental disorders were extremely low and do not reflect premature mortality in individuals with mental disorders. Research to establish causal pathways between mental disorders and other fatal health outcomes is recommended so that this may be addressed within the GBD study."
+      },
+      "generatedEvidence": {
+        "locator": "G0005",
+        "locators": [
+          "G0005"
+        ],
+        "quotes": [
+          "--- ## 引言 精神障碍日益被公认为疾病负担的首要原因之一。《柳叶刀》全球精神卫生与可持续发展委员会强调，精神健康是一项基本人权，对所有国家的发展至关重要，并呼吁将精神卫生服务投资纳入全民健康覆盖并整合至全球卫生应对体系。为满足各国精神卫生需求并推动卫生系统变革，必须深入理解这些障碍对人群的影响规模，包括其在人群中的分布、造成的健康负担及其更广泛的健康后果。 GBD 2019 是一项大规模国际合作研究，采用伤残调整生命年（DALY）作为衡量人口当前健康水平与标准化期望寿命下完全健康状态之间差距的核心指标。GBD 2019 在前几版基础上整合了新数据和方法学改进，可对369种疾病与伤害的患病率及负担进行系统比较。1990至2019年间，传染性疾病、孕产妇及营养性疾病所致 DALYs 的下降被以精神障碍为主的非传染性疾病负担增长所抵消。 上一次对全球精神障碍负担的全面综述基于 GBD 2010 结果发表，将精神障碍与物质使用障碍的负担合并呈现。精神障碍与物质使用障碍为异质性较高的两组疾病，许多国家卫生系统对此二者分开组织服务，而在资源匮乏环境中则常被并入基本卫生服务包共同交付。本研究聚焦于精神障碍，可呈现较既往出版物更细致的负担分布分析。同时，自 GBD 2010 以来，负担估算方法和流行病学数据库已有诸多重要更新。 本研究旨在：便利各国政府、国际机构、研究者及临床医生获取并解读 GBD 2019 精神障碍估算结果；呈现并评估精神障碍负担估算方法；明确负担估算方法学改进的优先领域。"
+        ],
+        "quote": "--- ## 引言 精神障碍日益被公认为疾病负担的首要原因之一。《柳叶刀》全球精神卫生与可持续发展委员会强调，精神健康是一项基本人权，对所有国家的发展至关重要，并呼吁将精神卫生服务投资纳入全民健康覆盖并整合至全球卫生应对体系。为满足各国精神卫生需求并推动卫生系统变革，必须深入理解这些障碍对人群的影响规模，包括其在人群中的分布、造成的健康负担及其更广泛的健康后果。 GBD 2019 是一项大规模国际合作研究，采用伤残调整生命年（DALY）作为衡量人口当前健康水平与标准化期望寿命下完全健康状态之间差距的核心指标。GBD 2019 在前几版基础上整合了新数据和方法学改进，可对369种疾病与伤害的患病率及负担进行系统比较。1990至2019年间，传染性疾病、孕产妇及营养性疾病所致 DALYs 的下降被以精神障碍为主的非传染性疾病负担增长所抵消。 上一次对全球精神障碍负担的全面综述基于 GBD 2010 结果发表，将精神障碍与物质使用障碍的负担合并呈现。精神障碍与物质使用障碍为异质性较高的两组疾病，许多国家卫生系统对此二者分开组织服务，而在资源匮乏环境中则常被并入基本卫生服务包共同交付。本研究聚焦于精神障碍，可呈现较既往出版物更细致的负担分布分析。同时，自 GBD 2010 以来，负担估算方法和流行病学数据库已有诸多重要更新。 本研究旨在：便利各国政府、国际机构、研究者及临床医生获取并解读 GBD 2019 精神障碍估算结果；呈现并评估精神障碍负担估算方法；明确负担估算方法学改进的优先领域。"
+      },
+      "explanation": "Conclusion direction, magnitude, and implications match exactly.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "limitations_and_bias",
+      "importance": "major",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Identified limitations: sparse data, measurement bias, severity distribution generalizability, diagnostic version changes, incomplete disorder coverage, no substance/neurological disorders, underestimated premature mortality, GBD framework assumptions.",
+      "generatedFact": "列出了八项局限：数据稀缺、测量偏倚、严重度分布推广性受限、诊断分类更新、疾病覆盖不全、未纳入物质使用/神经障碍、早死负担低估、GBD框架假设。",
+      "sourceEvidence": {
+        "locator": "R0079",
+        "locators": [
+          "R0079"
+        ],
+        "quotes": [
+          "The burden estimation methodology for mental disorders used in this study had some key limitations and identified priority areas for improvement. First, despite the considerable amount of new epidemiological data incorporated since our previous GBD 2010 publication on the burden of mental disorders, 6 some estimates continued to rely on sparse datasets, and high-quality survey data remain scarce for many countries. On the basis of burden of disease analyses done since GBD 2010, we remain concerned about the quality of epidemiological data available for mental disorders."
+        ],
+        "quote": "The burden estimation methodology for mental disorders used in this study had some key limitations and identified priority areas for improvement. First, despite the considerable amount of new epidemiological data incorporated since our previous GBD 2010 publication on the burden of mental disorders, 6 some estimates continued to rely on sparse datasets, and high-quality survey data remain scarce for many countries. On the basis of burden of disease analyses done since GBD 2010, we remain concerned about the quality of epidemiological data available for mental disorders."
+      },
+      "generatedEvidence": {
+        "locator": "G0011",
+        "locators": [
+          "G0011"
+        ],
+        "quotes": [
+          "### YLLs 与死亡率 2019年进食障碍共造成 318.3 例死亡（95% UI 285.7–386.0），其中神经性厌食症占 268.7 例，神经性贪食症占 49.6 例。进食障碍是唯一可估算 YLLs 的精神障碍，共 17 361.5 YLLs（15 518.5–21 459.8）。 --- ## 讨论 ### 主要发现 2019年的精神障碍全球分布与负担格局与1990年相似。抑郁障碍和焦虑障碍仍为全球疾病负担的首要原因之一，其患病率和伤残权重相对高于许多其他疾病。精神分裂症所影响人群比例虽小于前两者，但其急性精神病态的伤残权重为 GBD 研究中所有健康状态的最高值。 精神障碍的年龄标化 DALY 率在1990至2019年间保持相对稳定，但绝对 DALYs 数量增长了55.1%，主要由人口增长驱动，且预计将持续增长。这凸显了卫生系统——尤其是中低收入国家的卫生系统——应对这一增长人群治疗与照护需求的紧迫性。尽管存在可减轻疾病负担的有效干预措施，全球范围内这些服务的可及性和资源投入仍严重不足。 COVID-19 大流行在2020年进一步恶化了诸多精神健康的不良决定因素。本研究结果作为大流行前基准数据，提示各国需在关注 COVID-19 影响的同时，全面重新评估其精神卫生服务体系。 ### 局限性 **原文明确陈述的局限性包括以下八个方面（直接引自原文第1656–1663行）：** 1. **数据稀缺性**：尽管自 GBD 2010 以来已纳入大量新流行病学数据，部分估计值仍依赖稀疏数据集，许多国家仍缺乏高质量调查数据。 2."
+        ],
+        "quote": "### YLLs 与死亡率 2019年进食障碍共造成 318.3 例死亡（95% UI 285.7–386.0），其中神经性厌食症占 268.7 例，神经性贪食症占 49.6 例。进食障碍是唯一可估算 YLLs 的精神障碍，共 17 361.5 YLLs（15 518.5–21 459.8）。 --- ## 讨论 ### 主要发现 2019年的精神障碍全球分布与负担格局与1990年相似。抑郁障碍和焦虑障碍仍为全球疾病负担的首要原因之一，其患病率和伤残权重相对高于许多其他疾病。精神分裂症所影响人群比例虽小于前两者，但其急性精神病态的伤残权重为 GBD 研究中所有健康状态的最高值。 精神障碍的年龄标化 DALY 率在1990至2019年间保持相对稳定，但绝对 DALYs 数量增长了55.1%，主要由人口增长驱动，且预计将持续增长。这凸显了卫生系统——尤其是中低收入国家的卫生系统——应对这一增长人群治疗与照护需求的紧迫性。尽管存在可减轻疾病负担的有效干预措施，全球范围内这些服务的可及性和资源投入仍严重不足。 COVID-19 大流行在2020年进一步恶化了诸多精神健康的不良决定因素。本研究结果作为大流行前基准数据，提示各国需在关注 COVID-19 影响的同时，全面重新评估其精神卫生服务体系。 ### 局限性 **原文明确陈述的局限性包括以下八个方面（直接引自原文第1656–1663行）：** 1. **数据稀缺性**：尽管自 GBD 2010 以来已纳入大量新流行病学数据，部分估计值仍依赖稀疏数据集，许多国家仍缺乏高质量调查数据。 2."
+      },
+      "explanation": "All major limitations are faithfully reproduced.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "safety_or_harms",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No harms or adverse events; burden study without intervention.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    },
+    {
+      "id": "search_sources_and_dates",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Systematic review of PsycINFO, Embase, PubMed, GHDx; surveys from January 1, 1980 onwards.",
+      "generatedFact": "系统检索 PsycINFO、Embase、PubMed 和 GHDx，纳入自1980年1月起发表的研究。",
+      "sourceEvidence": {
+        "locator": "R0003",
+        "locators": [
+          "R0003"
+        ],
+        "quotes": [
+          "We aimed to measure the global, regional, and national prevalence, disability-adjusted life-years (DALYS), years lived with disability (YLDs), and years of life lost (YLLs) for mental disorders from 1990 to 2019.MethodsIn this study, we assessed prevalence and burden estimates from GBD 2019 for 12 mental disorders, males and females, 23 age groups, 204 countries and territories, between 1990 and 2019. DALYs were estimated as the sum of YLDs and YLLs to premature mortality. We systematically reviewed PsycINFO, Embase, PubMed, and the Global Health Data Exchange to obtain data on prevalence, incidence, remission, duration, severity, and excess mortality for each mental disorder."
+        ],
+        "quote": "We aimed to measure the global, regional, and national prevalence, disability-adjusted life-years (DALYS), years lived with disability (YLDs), and years of life lost (YLLs) for mental disorders from 1990 to 2019.MethodsIn this study, we assessed prevalence and burden estimates from GBD 2019 for 12 mental disorders, males and females, 23 age groups, 204 countries and territories, between 1990 and 2019. DALYs were estimated as the sum of YLDs and YLLs to premature mortality. We systematically reviewed PsycINFO, Embase, PubMed, and the Global Health Data Exchange to obtain data on prevalence, incidence, remission, duration, severity, and excess mortality for each mental disorder."
+      },
+      "generatedEvidence": {
+        "locator": "G0006",
+        "locators": [
+          "G0006"
+        ],
+        "quotes": [
+          "--- ## 方法 ### 总体框架 GBD 2019 估算了369种疾病与伤害的发病率、患病率、死亡率、YLDs、YLLs 和 DALYs，覆盖两性、23个年龄组、21个区域及204个国家/地区，时间自1990年起。本研究作为 GBD 合作网络的一部分，遵循 GATHER 报告规范开展分析。 ### 病例定义 纳入 GBD 2019 分析的12种精神障碍包括：抑郁障碍（重性抑郁障碍和恶劣心境）、焦虑障碍（全部亚型的合并估计）、双相障碍（全部亚型的合并估计）、精神分裂症、孤独症谱系障碍、品行障碍、ADHD、进食障碍（神经性厌食症和神经性贪食症）、特发性发育性智力残疾，以及\"其他精神障碍\"残差类别（主要为人格障碍的汇总组）。为确保可比性，病例定义主要遵循 DSM-IV-TR 或 ICD-10 标准。 ### YLD 估算 YLDs 通过将不同严重度水平的患病率估计值乘以对应的伤残权重计算得出。 **数据来源**：系统检索 PsycINFO、Embase 和 PubMed（无语言限制），并辅以灰色文献检索及专家咨询。同时审查 GHDx 归档数据源、多国大型调查数据目录及合作者推荐数据源。纳入自1980年1月起发表、采用概率抽样获取一般人群代表性样本且提供精神障碍患病率、发病率、缓解率或超额死亡率估计值的调查。排除非概率抽样或仅报告亚人群的研究。 **流行病学建模**：采用两步法进行分析。第一步，检出并校正研究报告间的估计偏倚；第二步，通过 Meta 回归对\"金标准\"及校正后估计进行建模。以网络 Meta 分析方法计算金标准估计与替代估计之间的合并比值作为偏倚校正因子。"
+        ],
+        "quote": "--- ## 方法 ### 总体框架 GBD 2019 估算了369种疾病与伤害的发病率、患病率、死亡率、YLDs、YLLs 和 DALYs，覆盖两性、23个年龄组、21个区域及204个国家/地区，时间自1990年起。本研究作为 GBD 合作网络的一部分，遵循 GATHER 报告规范开展分析。 ### 病例定义 纳入 GBD 2019 分析的12种精神障碍包括：抑郁障碍（重性抑郁障碍和恶劣心境）、焦虑障碍（全部亚型的合并估计）、双相障碍（全部亚型的合并估计）、精神分裂症、孤独症谱系障碍、品行障碍、ADHD、进食障碍（神经性厌食症和神经性贪食症）、特发性发育性智力残疾，以及\"其他精神障碍\"残差类别（主要为人格障碍的汇总组）。为确保可比性，病例定义主要遵循 DSM-IV-TR 或 ICD-10 标准。 ### YLD 估算 YLDs 通过将不同严重度水平的患病率估计值乘以对应的伤残权重计算得出。 **数据来源**：系统检索 PsycINFO、Embase 和 PubMed（无语言限制），并辅以灰色文献检索及专家咨询。同时审查 GHDx 归档数据源、多国大型调查数据目录及合作者推荐数据源。纳入自1980年1月起发表、采用概率抽样获取一般人群代表性样本且提供精神障碍患病率、发病率、缓解率或超额死亡率估计值的调查。排除非概率抽样或仅报告亚人群的研究。 **流行病学建模**：采用两步法进行分析。第一步，检出并校正研究报告间的估计偏倚；第二步，通过 Meta 回归对\"金标准\"及校正后估计进行建模。以网络 Meta 分析方法计算金标准估计与替代估计之间的合并比值作为偏倚校正因子。"
+      },
+      "explanation": "Identical databases and start date.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "included_studies_and_participants",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "29 incidence, 1,075 prevalence, 52 remission, 1,930 cause-of-death, 149 severity/other data sources; no total participant count reported.",
+      "generatedFact": "29项发病率、1,075项患病率、52项缓解率、1,930项死因及149项严重度等数据来源；未提供总参与者人数。",
+      "sourceEvidence": {
+        "locator": "R0040",
+        "locators": [
+          "R0040"
+        ],
+        "quotes": [
+          "Estimation of DALYs Overall, we included 29 incidence, 1075 prevalence, 52 remission, 1930 cause of death, and 149 severity or other types of data sources in the estimation of YLDs, YLLs, and DALYs for mental disorders. The number of data sources available by disorder and parameter is summarised in the appendix (p 11) . Further information on data sources has also been presented elsewhere. 19 , 20 , 21 , 22 , 23 , 24 , 25 DALYs were calculated as the sum of YLDs and YLLs. For mental disorders not recognised as causes of death, YLLs were not estimated and YLDs approximated DALYs. Age-standardised rates per 100 000 people were estimated using the GBD world population age standard."
+        ],
+        "quote": "Estimation of DALYs Overall, we included 29 incidence, 1075 prevalence, 52 remission, 1930 cause of death, and 149 severity or other types of data sources in the estimation of YLDs, YLLs, and DALYs for mental disorders. The number of data sources available by disorder and parameter is summarised in the appendix (p 11) . Further information on data sources has also been presented elsewhere. 19 , 20 , 21 , 22 , 23 , 24 , 25 DALYs were calculated as the sum of YLDs and YLLs. For mental disorders not recognised as causes of death, YLLs were not estimated and YLDs approximated DALYs. Age-standardised rates per 100 000 people were estimated using the GBD world population age standard."
+      },
+      "generatedEvidence": {
+        "locator": "G0008",
+        "locators": [
+          "G0008"
+        ],
+        "quotes": [
+          "### DALY 估算 合计纳入 29 项发病率、1 075 项患病率、52 项缓解率、1 930 项死因及 149 项严重度等数据来源。DALYs = YLDs + YLLs。以 GBD 世界人口年龄标准计算年龄标化率。所有估计值均附 95% 不确定性区间（UI），通过后验分布 1,000 次抽取的第2.5和第97.5百分位数计算。 --- ## 结果 ### 患病率 2019年全球精神障碍估计患病人数为 970.1 million（95% UI 900.9–1 044.4），较1990年（654.8 million; 603.6–708.1）增长48.1%。1990至2019年间，各类精神障碍的年龄标化患病率均未出现显著增长。2019年全球年龄标化患病率为 12 262.0/10万（男性 11 727.3/10万，女性 12 760.0/10万）。 患病率最高的两类障碍为焦虑障碍（301.4 million; 年龄标化率 3 779.5/10万）和抑郁障碍（279.6 million; 年龄标化率 3 440.1/10万）。女性在抑郁障碍、焦虑障碍和进食障碍中的患病率高于男性；男性在 ADHD 和孤独症谱系障碍中更高。患病率最低的为精神分裂症（23.6 million; 287.4/10万）和进食障碍（13.6 million; 174.0/10万）。"
+        ],
+        "quote": "### DALY 估算 合计纳入 29 项发病率、1 075 项患病率、52 项缓解率、1 930 项死因及 149 项严重度等数据来源。DALYs = YLDs + YLLs。以 GBD 世界人口年龄标准计算年龄标化率。所有估计值均附 95% 不确定性区间（UI），通过后验分布 1,000 次抽取的第2.5和第97.5百分位数计算。 --- ## 结果 ### 患病率 2019年全球精神障碍估计患病人数为 970.1 million（95% UI 900.9–1 044.4），较1990年（654.8 million; 603.6–708.1）增长48.1%。1990至2019年间，各类精神障碍的年龄标化患病率均未出现显著增长。2019年全球年龄标化患病率为 12 262.0/10万（男性 11 727.3/10万，女性 12 760.0/10万）。 患病率最高的两类障碍为焦虑障碍（301.4 million; 年龄标化率 3 779.5/10万）和抑郁障碍（279.6 million; 年龄标化率 3 440.1/10万）。女性在抑郁障碍、焦虑障碍和进食障碍中的患病率高于男性；男性在 ADHD 和孤独症谱系障碍中更高。患病率最低的为精神分裂症（23.6 million; 287.4/10万）和进食障碍（13.6 million; 174.0/10万）。"
+      },
+      "explanation": "Both present the same data source counts and neither reports a total participant number.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "synthesis_and_heterogeneity",
+      "importance": "critical",
+      "status": "exact",
+      "issueKinds": [],
+      "referenceFact": "Bayesian meta-regression (DisMod-MR 2.1) pooled data from multiple sources; covariates included for major depression and anxiety; network meta-analysis for bias correction.",
+      "generatedFact": "使用DisMod-MR 2.1进行贝叶斯Meta回归，协变量用于抑郁和焦虑障碍，以网络Meta分析校正偏倚。",
+      "sourceEvidence": {
+        "locator": "R0029",
+        "locators": [
+          "R0029"
+        ],
+        "quotes": [
+          "5 The gold-standard and adjusted estimates were modelled using DisMod-MR 2.1, a Bayesian meta-regression tool that pools data from different sources to produce internally consistent estimates of prevalence, incidence, remission, and excess mortality by age, sex, location, and year. 11 As part of this process, estimates were generated for locations where high-quality raw epidemiological data were unavailable by using the modelled output from surrounding locations. 11 As per the GBD protocol, an uncertain estimate is preferable to no estimate when data are sparse or not available, because no estimate would result in no health loss from that condition being recorded."
+        ],
+        "quote": "5 The gold-standard and adjusted estimates were modelled using DisMod-MR 2.1, a Bayesian meta-regression tool that pools data from different sources to produce internally consistent estimates of prevalence, incidence, remission, and excess mortality by age, sex, location, and year. 11 As part of this process, estimates were generated for locations where high-quality raw epidemiological data were unavailable by using the modelled output from surrounding locations. 11 As per the GBD protocol, an uncertain estimate is preferable to no estimate when data are sparse or not available, because no estimate would result in no health loss from that condition being recorded."
+      },
+      "generatedEvidence": {
+        "locator": "G0007",
+        "locators": [
+          "G0007"
+        ],
+        "quotes": [
+          "校正后数据使用 DisMod-MR 2.1（一种贝叶斯 Meta 回归工具）建模，综合多源数据生成按年龄、性别、年份及地区分层的发病率、患病率、缓解率及超额死亡率内部一致性估计值。对于无原始流行病学数据的地区，通过周边地区建模输出来推断，并利用地区层面协变量预测患病率（抑郁障碍和焦虑障碍纳入战争/恐怖主义相关死亡率协变量、Gallup 负面体验指数及儿童性虐待/亲密伴侣暴力归因比例协变量）。 **严重度分布**：品行障碍、ADHD、孤独症谱系障碍、双相障碍和精神分裂症的严重度分布来自调查数据的 Meta 分析；抑郁障碍、焦虑障碍及其他精神障碍的严重度分布使用美国及澳大利亚个体层面调查数据。 ### 伤残权重 伤残权重来自孟加拉国、印度尼西亚、秘鲁、坦桑尼亚、美国、匈牙利、意大利、瑞典及荷兰的社区调查，以及一项英、西、中文公开网络调查。参与者对健康状态配对进行\"更健康\"判断，结果以0（完全健康）至1（死亡）标尺锚定。 ### 共病校正 通过模拟 40,000 个体人群，按地区、年龄、性别及年份估计不同疾病与伤害的共现概率，计算共病校正值对 YLDs 进行调整。 ### YLL 估算 基于 GBD 2019 死因数据库，以死因集合模型（CODEm）估算死因别死亡率。每个死亡在 GBD 中仅被分配至一个根本死因（按 ICD 分类），故仅神经性厌食症和神经性贪食症被认定为精神障碍的死因并可计算 YLLs。"
+        ],
+        "quote": "校正后数据使用 DisMod-MR 2.1（一种贝叶斯 Meta 回归工具）建模，综合多源数据生成按年龄、性别、年份及地区分层的发病率、患病率、缓解率及超额死亡率内部一致性估计值。对于无原始流行病学数据的地区，通过周边地区建模输出来推断，并利用地区层面协变量预测患病率（抑郁障碍和焦虑障碍纳入战争/恐怖主义相关死亡率协变量、Gallup 负面体验指数及儿童性虐待/亲密伴侣暴力归因比例协变量）。 **严重度分布**：品行障碍、ADHD、孤独症谱系障碍、双相障碍和精神分裂症的严重度分布来自调查数据的 Meta 分析；抑郁障碍、焦虑障碍及其他精神障碍的严重度分布使用美国及澳大利亚个体层面调查数据。 ### 伤残权重 伤残权重来自孟加拉国、印度尼西亚、秘鲁、坦桑尼亚、美国、匈牙利、意大利、瑞典及荷兰的社区调查，以及一项英、西、中文公开网络调查。参与者对健康状态配对进行\"更健康\"判断，结果以0（完全健康）至1（死亡）标尺锚定。 ### 共病校正 通过模拟 40,000 个体人群，按地区、年龄、性别及年份估计不同疾病与伤害的共现概率，计算共病校正值对 YLDs 进行调整。 ### YLL 估算 基于 GBD 2019 死因数据库，以死因集合模型（CODEm）估算死因别死亡率。每个死亡在 GBD 中仅被分配至一个根本死因（按 ICD 分类），故仅神经性厌食症和神经性贪食症被认定为精神障碍的死因并可计算 YLLs。"
+      },
+      "explanation": "Synthesis model and approach to heterogeneity (via covariates and bias correction) match.",
+      "sourceEvidenceValid": true,
+      "generatedEvidenceValid": true
+    },
+    {
+      "id": "risk_of_bias_or_certainty",
+      "importance": "major",
+      "status": "not_applicable",
+      "issueKinds": [],
+      "referenceFact": "",
+      "generatedFact": "",
+      "sourceEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "generatedEvidence": {
+        "locator": "",
+        "locators": [],
+        "quotes": [],
+        "quote": ""
+      },
+      "explanation": "No formal risk-of-bias tool or certainty assessment (e.g., GRADE) used; limitations discussed separately.",
+      "sourceEvidenceValid": false,
+      "generatedEvidenceValid": false
+    }
+  ],
+  "metrics": {
+    "applicableItems": 17,
+    "weightedFidelity": 1.0,
+    "criticalFidelity": 1.0,
+    "statusCounts": {
+      "exact": 17,
+      "not_applicable": 4
+    },
+    "criticalContradictions": [],
+    "criticalUnsupportedClaims": [],
+    "criticalMissingFacts": [],
+    "contradictionItems": [],
+    "unsupportedClaimItems": [],
+    "missingFactItems": [],
+    "invalidEvidenceItems": [],
+    "dimensionScores": {
+      "identity_design": 100.0,
+      "data_population": 100.0,
+      "intervention_comparator_outcomes": 100.0,
+      "methods_algorithm_process": 100.0,
+      "results_uncertainty": 100.0,
+      "conclusions_calibration": 100.0,
+      "type_specific_methods": 100.0
+    },
+    "gateFailures": [],
+    "usabilityGateFailures": [],
+    "usabilityVerdict": "pass",
+    "verdict": "pass",
+    "adversarialIssueCount": 0,
+    "adversarialUnsupportedClaimCount": 0,
+    "adversarialContradictionCount": 0,
+    "adversarialCriticalMissingFactCount": 0,
+    "adversarialInvalidEvidenceCount": 0
+  },
+  "adversarialAudit": {
+    "verdict": "clean",
+    "issues": [],
+    "rationale": "经过逐项核对，GENERATED中的研究目的、设计、数据源、样本量、分析方法、关键数值结果、结论和局限性等均与REFERENCE原文完全一致，所有声明都有准确出处，数字精确匹配，未发现未支持的声明、矛盾或重大遗漏。"
+  },
+  "overallAssessment": "The generated text is a precise Chinese-language summary of the GBD 2019 mental disorder burden study. All critical facts—objective, design, data sources, sample counts, core numerical results (DALYs, YLDs, YLLs, prevalence, uncertainty intervals), conclusions, and the eight limitations—mirror the reference exactly. No contradictions, unsupported claims, or omissions of material facts were identified. Elements not applicable (intervention, comparator, safety) are appropriately absent. The generated version is a faithful, high-fidelity re-expression of the source.",
+  "gradedAt": "2026-07-18T15:14:08Z"
+}

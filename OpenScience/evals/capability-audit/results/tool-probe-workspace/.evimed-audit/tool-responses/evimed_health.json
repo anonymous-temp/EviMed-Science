@@ -1,0 +1,229 @@
+{
+  "status": "success",
+  "summary": "EviMed Research MCP is ready.",
+  "data": {
+    "service": "evimed-research",
+    "version": "1.5.0",
+    "ready": true,
+    "adapters": [
+      {
+        "tool": "evimed_biomedical_source_search",
+        "configured": true,
+        "connector": "public",
+        "state": "closed",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_literature_search",
+        "configured": true,
+        "connector": "public",
+        "state": "closed",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_guideline_search",
+        "configured": true,
+        "connector": "public",
+        "state": "closed",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_clinical_trial_search",
+        "configured": true,
+        "connector": "public",
+        "state": "closed",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_drug_label_search",
+        "configured": true,
+        "connector": "public",
+        "state": "closed",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_adr_case_query",
+        "configured": true,
+        "connector": "public",
+        "state": "closed",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_adr_signal_analysis",
+        "configured": true,
+        "connector": "public",
+        "state": "closed",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_offlabel_evidence_packet",
+        "configured": true,
+        "connector": "public",
+        "state": "closed",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_comprehensive_drug_evaluation",
+        "configured": true,
+        "connector": "public",
+        "state": "closed",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_drug_selection_evaluation",
+        "configured": true,
+        "connector": "public",
+        "state": "closed",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_meta_analysis",
+        "configured": false,
+        "connector": "none",
+        "state": "unconfigured",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_mendelian_randomization",
+        "configured": false,
+        "connector": "none",
+        "state": "unconfigured",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_bibliometric_analysis",
+        "configured": false,
+        "connector": "none",
+        "state": "unconfigured",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_research_topic_selection",
+        "configured": false,
+        "connector": "none",
+        "state": "unconfigured",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      },
+      {
+        "tool": "evimed_peer_review",
+        "configured": false,
+        "connector": "none",
+        "state": "unconfigured",
+        "failures": 0,
+        "retryAfterSeconds": 0
+      }
+    ],
+    "dataSourceCatalog": {
+      "reviewedTotal": 123,
+      "connectedPublic": 64,
+      "skillGuidanceOnly": 13,
+      "notConnected": 46,
+      "connectionStateCounts": {
+        "adapter_credentials_required": 2,
+        "blocked_approval": 4,
+        "blocked_license": 18,
+        "blocked_no_api": 11,
+        "connected_public": 64,
+        "ready_credentials": 8,
+        "ready_private_adapter": 3,
+        "skill_guidance": 13
+      },
+      "productionConnectorRoute": "controlled_connector_routes",
+      "productionConnectorRoutes": [
+        "bundled_verified_dataset",
+        "server_allowlisted_gateway"
+      ],
+      "runtimeArbitraryEgress": false,
+      "activeConnectorIds": [
+        "1000-genomes-project",
+        "alphafold-db-predicted-protein-structures",
+        "archs4",
+        "arxiv",
+        "bindingdb",
+        "biorxiv",
+        "cbioportal",
+        "chebi",
+        "chembl",
+        "civic",
+        "clinicaltrials-gov",
+        "clinpgx-pharmgkb",
+        "clinvar",
+        "crossref",
+        "dailymed",
+        "dbsnp",
+        "dgidb",
+        "emdb-electron-microscopy-data-bank",
+        "ena",
+        "encode-encyclopedia-of-dna-elements",
+        "ensembl",
+        "europe-pmc",
+        "gdc-tcga",
+        "gnomad",
+        "gtex-genotype-tissue-expression",
+        "gwas-catalog-ebi",
+        "hpo",
+        "human-cell-atlas",
+        "human-protein-atlas-hpa",
+        "interpro",
+        "isrctn",
+        "iuphar-bps-guide-to-pharmacology",
+        "jaspar",
+        "medrxiv",
+        "mesh",
+        "metabolomics-workbench",
+        "monarch",
+        "mousemine-mouse-genome-informatics-intermine-based",
+        "mygene",
+        "myvariant",
+        "ncbi-gene",
+        "ncbi-geo",
+        "ncbi-protein",
+        "ncbi-taxonomy",
+        "open-targets",
+        "openalex",
+        "openfda",
+        "openneuro",
+        "pmc",
+        "pride",
+        "pubchem",
+        "pubmed",
+        "quickgo",
+        "rcsb-protein-data-bank-pdb",
+        "reactome",
+        "rummageo-geo-gene-set-enrichment-search",
+        "rxnorm",
+        "sider",
+        "sra",
+        "string",
+        "ucsc-genome-browser",
+        "uniprot",
+        "who-gho",
+        "wikipathways"
+      ]
+    },
+    "provenance": {
+      "tool": "evimed_health",
+      "arguments": {},
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scientific Data Engineering"
+  short_description: "Process large scientific datasets reproducibly"
+  default_prompt: "Use $scientific-data-engineering to design this scalable scientific data pipeline."

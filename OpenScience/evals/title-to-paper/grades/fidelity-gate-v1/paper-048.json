@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-048",
+  "category": "methods-software",
+  "title": "YaHS: yet another Hi-C scaffolding tool.",
+  "pmcid": "PMC9848053",
+  "doi": "10.1093/bioinformatics/btac808",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 6388,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 107,
+    "supportedUniqueNumbers": 104,
+    "unsupportedNumberTokens": [
+      "-18",
+      "-7",
+      "2.6"
+    ],
+    "supportedNumericClaimPrecision": 0.9719626168224299,
+    "verbatimEightGramRate": 0.0,
+    "toolCalls": 18,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text faithfully restates the original paper. All quantitative results, methodological details, and conclusions match the reference exactly. Limitations are correctly identified from the paper. No fabricated or unsupported claims are present."
+  },
+  "modelEvidenceCharacters": 18624,
+  "modelEvidenceComplete": true,
+  "overallVerdict": "pass"
+}

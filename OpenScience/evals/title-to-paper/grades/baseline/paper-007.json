@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-007",
+  "category": "systematic-review-meta-analysis",
+  "title": "Global, regional, and national burden of 12 mental disorders in 204 countries and territories, 1990-2019: a systematic analysis for the Global Burden of Disease Study 2019.",
+  "pmcid": "PMC8776563",
+  "doi": "10.1016/s2215-0366(21)00395-3",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 7401,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 107,
+    "supportedUniqueNumbers": 85,
+    "unsupportedNumberTokens": [
+      "100000",
+      "13600000",
+      "1656",
+      "1663",
+      "2.796e+08",
+      "23600000",
+      "237.8",
+      "261.5",
+      "3.014e+08",
+      "40000",
+      "426.5",
+      "44.4",
+      "440.1",
+      "56.4",
+      "566.2",
+      "581.2",
+      "703.3",
+      "75",
+      "779.5",
+      "869.5",
+      "930",
+      "97.5"
+    ],
+    "supportedNumericClaimPrecision": 0.794392523364486,
+    "verbatimEightGramRate": 0.005988023952095809,
+    "toolCalls": 18,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text is a faithful Chinese summary of the original article, accurately reproducing all key epidemiological estimates, methodological details, and limitations without any fabrication or omission."
+  },
+  "overallVerdict": "pass"
+}

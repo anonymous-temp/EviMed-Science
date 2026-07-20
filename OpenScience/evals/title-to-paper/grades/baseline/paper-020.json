@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-020",
+  "category": "diagnostic-prognostic",
+  "title": "Movie-watching outperforms rest for functional connectivity-based prediction of behavior.",
+  "pmcid": "PMC8204673",
+  "doi": "10.1016/j.neuroimage.2021.117963",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 17109,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 102,
+    "supportedUniqueNumbers": 98,
+    "unsupportedNumberTokens": [
+      "-5",
+      "74",
+      "86%",
+      "96%"
+    ],
+    "supportedNumericClaimPrecision": 0.9607843137254902,
+    "verbatimEightGramRate": 0.0059742647058823525,
+    "toolCalls": 8,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "Generated text accurately represents the study's design, sample, methods, and results. All quantitative values (sample size, effect sizes, p-values) match the reference. No fabricated claims. Minor phrasing choices do not affect fidelity."
+  },
+  "overallVerdict": "pass"
+}

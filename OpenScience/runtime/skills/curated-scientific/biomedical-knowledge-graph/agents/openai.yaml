@@ -1,0 +1,4 @@
+interface:
+  display_name: "Biomedical Knowledge Graph"
+  short_description: "Build provenance-preserving biomedical evidence graphs"
+  default_prompt: "Use $biomedical-knowledge-graph to construct a traceable evidence graph."

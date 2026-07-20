@@ -1,0 +1,43 @@
+{
+  "status": "success",
+  "summary": "Deduplicated 2 evidence records into 1 unique records.",
+  "data": {
+    "items": [
+      {
+        "id": "a",
+        "title": "Observed trial",
+        "doi": "10.1000/observed"
+      }
+    ],
+    "duplicates": [
+      {
+        "duplicateId": "b",
+        "canonicalId": "a",
+        "matchedBy": "doi"
+      }
+    ],
+    "provenance": {
+      "tool": "evimed_evidence_deduplicate",
+      "arguments": {
+        "items": [
+          {
+            "id": "a",
+            "title": "Observed trial",
+            "doi": "10.1000/observed"
+          },
+          {
+            "id": "b",
+            "title": "Observed trial duplicate",
+            "doi": "https://doi.org/10.1000/observed"
+          }
+        ]
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  }
+}

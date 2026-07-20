@@ -1,0 +1,368 @@
+#!/usr/bin/env python3
+"""Fail the release when capability counts exceed their machine evidence."""
+
+from __future__ import annotations
+
+import hashlib
+import importlib.util
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[1]
+RESULTS = HERE / "results"
+
+
+def read(name):
+    return json.loads((RESULTS / name).read_text(encoding="utf-8"))
+
+
+def require(condition, message):
+    if not condition:
+        raise SystemExit(message)
+
+
+def parsed_fresh(value, label, max_age_days=14):
+    try:
+        observed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        raise SystemExit("%s timestamp is invalid" % label)
+    now = datetime.now(timezone.utc)
+    require(observed <= now + timedelta(minutes=5), "%s timestamp is in the future" % label)
+    require(observed >= now - timedelta(days=max_age_days), "%s evidence is stale" % label)
+    return observed
+
+
+def load_module(name, module_file):
+    spec = importlib.util.spec_from_file_location(name, module_file)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_tools():
+    document = read("tool-probe-v3.json")
+    parsed_fresh(document.get("probedAt"), "tool audit")
+    require(document.get("schemaVersion") == 3, "tool audit schema is stale")
+    require(document.get("registered") == 22, "tool registry count is not 22")
+    require(document.get("executionCertified") == 22, "all 22 tools are not execution-certified")
+    require(document.get("operational") == 22, "tool operational count is not 22")
+    require(document.get("unverified") == 0 and document.get("errors") == 0, "tool audit contains unverified or errored tools")
+    results = document.get("results", [])
+    require(len(results) == 22, "tool audit does not contain 22 results")
+    server = load_module("evimed_release_tool_registry", REPO / "runtime" / "mcp" / "evimed-research" / "server.py")
+    execution_evidence = load_module(
+        "evimed_release_execution_evidence",
+        REPO / "runtime" / "mcp" / "evimed-research" / "execution_evidence.py",
+    )
+    declared = {item["name"] for item in server.list_tools()}
+    require({item.get("tool") for item in results} == declared, "tool evidence does not exactly match the live MCP registry")
+    certified = [item for item in results if item.get("operational") is True]
+    require(document.get("executionCertified") == len(certified), "tool execution-certified count is inflated")
+    for item in results:
+        require(item.get("operation") != "capabilities", "%s was certified by capabilities only" % item.get("tool"))
+        if item.get("tool") in {
+            "evimed_meta_analysis", "evimed_mendelian_randomization", "evimed_bibliometric_analysis",
+            "evimed_research_topic_selection", "evimed_peer_review", "evimed_drug_safety_analysis",
+        }:
+            require(item.get("probeType") == "completed_managed_job", "%s lacks a completed job receipt" % item.get("tool"))
+            require(item.get("operation") == "start_then_poll_to_terminal", "%s did not execute a managed task" % item.get("tool"))
+            require(isinstance(item.get("jobId"), str) and item.get("jobId"), "%s lacks a job id" % item.get("tool"))
+            parsed_fresh(item.get("executedAt"), "%s job" % item.get("tool"))
+            require(item.get("artifactCount", 0) > 0, "%s lacks artifacts" % item.get("tool"))
+            require(item.get("artifactCount") == len(item.get("artifacts", [])), "%s artifact count does not reconcile" % item.get("tool"))
+            require(all(receipt.get("bytes", 0) > 0 and len(receipt.get("sha256", "")) == 64 for receipt in item.get("artifacts", [])), "%s has invalid artifact receipts" % item.get("tool"))
+            workspace = (REPO / str(item.get("workspace", ""))).resolve()
+            require(workspace.is_relative_to(REPO) and workspace.is_dir(), "%s receipt workspace is unavailable" % item.get("tool"))
+            state_file = next(
+                workspace.glob("%s/.jobs/%s.json" % (
+                    {
+                        "evimed_meta_analysis": "meta-analysis-runs",
+                        "evimed_mendelian_randomization": "mendelian-randomization-runs",
+                        "evimed_bibliometric_analysis": "bibliometric-analysis-runs",
+                        "evimed_research_topic_selection": "research-topic-runs",
+                        "evimed_peer_review": "peer-review-runs",
+                        "evimed_drug_safety_analysis": "drug-safety-runs",
+                    }[item.get("tool")],
+                    item.get("jobId"),
+                )),
+                None,
+            )
+            require(state_file is not None and state_file.is_file() and not state_file.is_symlink(), "%s job state is unavailable" % item.get("tool"))
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+            require(state.get("status") in {"succeeded", "blocked"}, "%s job is not terminal" % item.get("tool"))
+            require(item.get("jobStatus") == state.get("status"), "%s job outcome is misstated" % item.get("tool"))
+            require(item.get("releaseStatus") == state.get("releaseStatus"), "%s release status is misstated" % item.get("tool"))
+            expected_ready = state.get("status") == "succeeded" and state.get("releaseStatus") in {None, "ready"}
+            require(item.get("publicationReady") is expected_ready, "%s publication readiness is misstated" % item.get("tool"))
+            require(item.get("status") == ("success" if expected_ready else "warning"), "%s audit status hides its release outcome" % item.get("tool"))
+            root_value = state.get("metaRoot") if item.get("tool") == "evimed_meta_analysis" else state.get("root")
+            adapter = REPO / "runtime" / "mcp" / "evimed-research" / ("meta_agent.py" if item.get("tool") == "evimed_meta_analysis" else "specialist_jobs.py")
+            expected_evidence = execution_evidence.execution_evidence(Path(str(root_value or "")), adapter)
+            require(state.get("executionEvidence") == expected_evidence, "%s job does not match current specialist source" % item.get("tool"))
+            require(item.get("executionEvidence") == expected_evidence, "%s audit omitted current specialist source evidence" % item.get("tool"))
+            for receipt in item["artifacts"]:
+                artifact = (workspace / str(receipt.get("path", ""))).resolve()
+                require(artifact.is_relative_to(workspace) and artifact.is_file() and not artifact.is_symlink(), "%s receipt artifact is unavailable" % item.get("tool"))
+                require(artifact.stat().st_size == receipt["bytes"] and file_sha256(artifact) == receipt["sha256"], "%s artifact receipt no longer matches disk" % item.get("tool"))
+        else:
+            require(item.get("probeType") == "executed_tool_call" and item.get("operation") == "task", "%s lacks a real task call" % item.get("tool"))
+            require(item.get("status") in {"success", "warning"}, "%s task call did not complete" % item.get("tool"))
+            require(isinstance(item.get("elapsedMs"), int) and item.get("elapsedMs") >= 0, "%s lacks execution timing" % item.get("tool"))
+            require(item.get("artifactError") is None, "%s has invalid task artifacts" % item.get("tool"))
+            response = item.get("responseReceipt", {})
+            response_file = (REPO / str(item.get("workspace", "")) / str(response.get("path", ""))).resolve()
+            require(response_file.is_relative_to(REPO) and response_file.is_file() and not response_file.is_symlink(), "%s lacks a retained task response" % item.get("tool"))
+            require(response_file.stat().st_size == response.get("bytes") and file_sha256(response_file) == response.get("sha256"), "%s retained task response no longer matches disk" % item.get("tool"))
+            assessment_types = {
+                "evimed_offlabel_evidence_packet": "off_label",
+                "evimed_comprehensive_drug_evaluation": "comprehensive_drug_evaluation",
+                "evimed_drug_selection_evaluation": "drug_selection",
+            }
+            if item.get("tool") in assessment_types:
+                require(
+                    item.get("assessmentType") == assessment_types[item["tool"]],
+                    "%s did not certify the deterministic assessment compiler" % item.get("tool"),
+                )
+                require(
+                    item.get("automaticDecision") is False and item.get("humanReviewRequired") is True,
+                    "%s lost its human decision boundary" % item.get("tool"),
+                )
+
+
+def verify_sources():
+    module_file = REPO / "runtime" / "mcp" / "evimed-research" / "source_catalog.py"
+    module = load_module("evimed_source_catalog_audit", module_file)
+    public_sources = load_module(
+        "evimed_source_registry_audit",
+        REPO / "runtime" / "mcp" / "evimed-research" / "public_sources.py",
+    )
+    registered = set(public_sources.BIOMEDICAL_SOURCE_IDS)
+    conditional = set(public_sources.CONDITIONAL_BIOMEDICAL_SOURCE_IDS)
+    summary = module.integration_summary()
+    states = summary.get("connectionStateCounts", {})
+    require(len(registered) == len(public_sources.BIOMEDICAL_SOURCE_IDS), "public connector registry contains duplicate ids")
+    require(len(conditional) == 8 and not registered.intersection(conditional), "conditional connector registry is invalid")
+    require(set(public_sources.QUERYABLE_BIOMEDICAL_SOURCE_IDS) == registered | conditional, "queryable connector registry drifted")
+    require(set(module.active_connector_ids()) == registered, "catalogued public connectors do not exactly match the live registry")
+    require(summary.get("reviewedTotal") == 123 and sum(states.values()) == 123, "reviewed data-source count drifted")
+    require(summary.get("connectedPublic") == len(registered) and states.get("connected_public") == len(registered), "connected data-source count is inflated")
+    require(summary.get("skillGuidanceOnly") == 13 and states.get("skill_guidance") == 13, "skill-guidance data-source count drifted")
+    require(summary.get("notConnected") == 123 - len(registered) - 13, "not-connected data-source count drifted")
+    require({key: states.get(key) for key in (
+        "blocked_approval", "blocked_license", "blocked_no_api", "ready_credentials",
+        "adapter_credentials_required", "ready_private_adapter", "catalog_only",
+    )} == {
+        "blocked_approval": 4,
+        "blocked_license": 18,
+        "blocked_no_api": 11,
+        "ready_credentials": 8,
+        "adapter_credentials_required": 2,
+        "ready_private_adapter": 3,
+        "catalog_only": None,
+    }, "blocked or conditional data-source counts drifted")
+    conditional_items = [item for item in module.sources() if item.get("connectionState") == "ready_credentials"]
+    require({item.get("id") for item in conditional_items} == conditional, "credential-ready catalog entries do not match implemented adapters")
+    require(all(item.get("connector") == item.get("id") for item in conditional_items), "credential-ready connector ids drifted")
+    require(all((item.get("validation") or {}).get("contractTests") == "pass" for item in conditional_items), "a credential-ready adapter lacks contract evidence")
+    require(all((item.get("validation") or {}).get("liveProbe") == "blocked_missing_operator_credential" for item in conditional_items), "a credential-ready source was falsely marked live")
+    require(summary.get("productionConnectorRoute") == "controlled_connector_routes", "public connectors do not use controlled production routes")
+    require(summary.get("productionConnectorRoutes") == ["bundled_verified_dataset", "server_allowlisted_gateway"], "public connector routes drifted")
+    require(summary.get("runtimeArbitraryEgress") is False, "public connectors incorrectly require arbitrary runtime egress")
+
+
+def verify_connectors():
+    public_sources = load_module("evimed_release_connector_registry", REPO / "runtime" / "mcp" / "evimed-research" / "public_sources.py")
+    registry = tuple(public_sources.BIOMEDICAL_SOURCE_IDS)
+    registered = set(registry)
+    expected = len(registered)
+    document = read("connector-probe-v3.json")
+    summary = document.get("summary", {})
+    parsed_fresh(document.get("probedAt"), "connector audit")
+    require(document.get("schemaVersion") == 3, "connector audit schema is stale")
+    require(summary.get("registrySha256") == hashlib.sha256("\0".join(registry).encode("utf-8")).hexdigest(), "connector evidence does not match the ordered live registry")
+    require(summary.get("registrySourceSha256") == file_sha256(REPO / "runtime" / "mcp" / "evimed-research" / "public_sources.py"), "connector evidence does not match the live registry source")
+    require(summary.get("registered") == expected, "connector evidence does not match the live registry count")
+    require(summary.get("queriesExecuted") == expected * 2, "connector audit did not execute two queries per connector")
+    require(summary.get("qualityPass") == expected and summary.get("qualityFail") == 0, "not all registered connectors passed the quality contract")
+    require(summary.get("productionRoute") == "controlled_connector_routes", "connector audit did not use controlled production routes")
+    require(summary.get("productionRoutes") == ["bundled_verified_dataset", "server_allowlisted_gateway"], "connector audit production routes drifted")
+    require(summary.get("productionGatewayUsed") is True and summary.get("directSourceRequests") is False, "connector audit used direct runtime requests")
+    require(summary.get("runtimeArbitraryEgress") is False, "connector audit incorrectly requires arbitrary runtime egress")
+    gateway = summary.get("gatewayEvidence", {})
+    require(gateway.get("handler") == "apps/server/src/publicSourceGateway.mjs", "connector audit did not exercise the production gateway handler")
+    bundled_sources = set(getattr(public_sources, "BUNDLED_DATASET_SOURCE_IDS", ()))
+    require(summary.get("bundledDatasetSources") == sorted(bundled_sources), "bundled dataset connector evidence drifted")
+    require(gateway.get("forwardedRequests", 0) >= (expected - len(bundled_sources)) * 2, "connector gateway forwarding evidence is incomplete")
+    require(gateway.get("allRequestsAllowlistedHttpsRead") is True, "connector gateway forwarded a disallowed request")
+    methods = gateway.get("methods", {})
+    require(set(methods).issubset({"GET", "POST"}) and sum(methods.values()) == gateway.get("forwardedRequests"), "connector gateway method evidence does not reconcile")
+    results = document.get("results", [])
+    require(len(results) == expected, "connector audit does not contain one result per registered connector")
+    require({item.get("source") for item in results} == registered, "connector evidence does not match the live registry")
+    bundled_receipts = summary.get("bundledDatasets", [])
+    require({item.get("source") for item in bundled_receipts} == bundled_sources, "bundled dataset receipts are incomplete")
+    for receipt in bundled_receipts:
+        dataset = (REPO / str(receipt.get("path", ""))).resolve()
+        license_file = (REPO / str(receipt.get("licensePath", ""))).resolve()
+        require(dataset.is_relative_to(REPO) and dataset.is_file() and not dataset.is_symlink(), "bundled dataset is unavailable")
+        require(dataset.stat().st_size == receipt.get("bytes") and file_sha256(dataset) == receipt.get("sha256"), "bundled dataset receipt does not match disk")
+        require(license_file.is_relative_to(REPO) and license_file.is_file() and not license_file.is_symlink(), "bundled dataset license receipt is unavailable")
+    for item in results:
+        require(item.get("status") == "quality_pass", "%s is not quality-certified" % item.get("source"))
+        require(len(item.get("cases", [])) == 2, "%s lacks dual-query evidence" % item.get("source"))
+        require(item.get("qualityChecks") and all(item["qualityChecks"].values()), "%s failed a connector quality check" % item.get("source"))
+        for case in item["cases"]:
+            expected_route = "bundled_verified_dataset" if item.get("source") in bundled_sources else "server_allowlisted_gateway"
+            require(case.get("executionRoute") == expected_route, "%s case bypassed its controlled production route" % item.get("source"))
+            require(case.get("pass") is True and case.get("checks") and all(case["checks"].values()), "%s case failed its response contract" % item.get("source"))
+
+
+def verify_skills():
+    document = read("skill-audit-v4.json")
+    summary = document.get("summary", {})
+    require(summary.get("schemaVersion") == 4, "skill audit schema is stale")
+    require(summary.get("incomingSkillsReviewed") == 149, "skill review count is not 149")
+    skill_root = REPO / "runtime" / "skills"
+
+    def enabled(root):
+        inventory_file = root / "inventory.json"
+        allowed = None
+        if inventory_file.is_file():
+            inventory = json.loads(inventory_file.read_text(encoding="utf-8"))
+            delivery = inventory.get("policy", {}).get("delivery", {})
+            require(delivery.get("contractVersion") == 1 and delivery.get("defaultEnabledTier") == "executable", "runtime skill inventory contract is invalid")
+            allowed = set(delivery.get("executable", {}))
+        return [
+            manifest.parent.relative_to(skill_root).as_posix()
+            for manifest in root.glob("*/SKILL.md")
+            if allowed is None or manifest.parent.name in allowed
+        ]
+
+    global_roots = (
+        skill_root / "core",
+        skill_root / "external" / "ai4s-skills",
+        skill_root / "curated-scientific",
+        skill_root / "office",
+    )
+    global_installed = sorted(package for root in global_roots for package in enabled(root))
+    specialist_installed = sorted(enabled(skill_root / "evimed"))
+    installed = sorted(global_installed + specialist_installed)
+    require(len(global_installed) == 57 and summary.get("freshWebGlobalSkillPackages") == 57, "clean Web global Skill count is not 57")
+    require(len(specialist_installed) == 9 and summary.get("freshWebSpecialistSkillPackages") == 9, "clean Web specialist Skill count is not 9")
+    require(len(installed) == 66 and summary.get("freshWebOpenCodeSkillPackages") == 66, "clean Web OpenCode Skill count is not 66")
+    require(summary.get("freshWebInstalledPackageIds") == installed, "skill audit does not match the clean runtime delivery contract")
+
+    execution = read("skill-execution-v1.json")
+    parsed_fresh(execution.get("finishedAt"), "Skill execution audit")
+    require(execution.get("schemaVersion") == 1, "Skill execution audit schema is stale")
+    curated_inventory_file = skill_root / "curated-scientific" / "inventory.json"
+    curated_engine_file = skill_root / "curated-scientific" / "_runtime" / "execute_skill.py"
+    curated_inventory = json.loads(curated_inventory_file.read_text(encoding="utf-8"))
+    curated_ids = set(curated_inventory["policy"]["delivery"]["executable"])
+    execution_rows = execution.get("skills", [])
+    certified_ids = {row.get("skill") for row in execution_rows if row.get("passed") is True}
+    certified_packages = sorted("curated-scientific/%s" % name for name in certified_ids)
+    require(execution.get("inventorySha256") == file_sha256(curated_inventory_file), "Skill execution evidence does not match the current inventory")
+    require(execution.get("runtimeEngineSha256") == file_sha256(curated_engine_file), "Skill execution evidence does not match the current runtime engine")
+    require(execution.get("environment", {}).get("matchesInventory") is True, "Skill execution environment does not match pinned dependencies")
+    require(execution.get("inventoryExecutable") == 38 and execution.get("executionCertified") == 38 and execution.get("failed") == 0, "all 38 curated Skills are not execution-certified")
+    require(len(execution_rows) == 38 and certified_ids == curated_ids, "Skill execution evidence does not exactly cover the curated inventory")
+    for row in execution_rows:
+        require(row.get("operation") == "smoke-task" and row.get("returnCode") == 0 and row.get("passed") is True, "%s lacks a completed task receipt" % row.get("skill"))
+        receipts = row.get("artifacts", [])
+        require(len(receipts) >= 2, "%s lacks retained artifacts" % row.get("skill"))
+        for receipt in receipts:
+            artifact = (REPO / str(receipt.get("path", ""))).resolve()
+            require(artifact.is_relative_to(REPO) and artifact.is_file() and not artifact.is_symlink(), "%s retained artifact is unavailable" % row.get("skill"))
+            require(artifact.stat().st_size == receipt.get("bytes") and file_sha256(artifact) == receipt.get("sha256"), "%s retained artifact receipt does not match disk" % row.get("skill"))
+
+    platform_execution = read("platform-skill-execution-v1.json")
+    parsed_fresh(platform_execution.get("finishedAt"), "platform Skill execution audit")
+    require(platform_execution.get("schemaVersion") == 1, "platform Skill execution audit schema is stale")
+    require(platform_execution.get("environment", {}).get("dependencyContract") == "selected audit runtime plus package-declared dependencies", "platform Skill execution dependency contract drifted")
+    expected_platform_packages = {
+        "core/domain-check", "core/hpc-slurm", "core/large-file", "core/modal-run",
+        "core/publication-figures", "core/remote-compute", "core/stats-integrity",
+        "core/traceability-review", "external/ai4s-skills/integrity-auditor",
+        "external/ai4s-skills/mindmap-render", "office/docx", "office/pdf", "office/pptx", "office/xlsx",
+    }
+    platform_rows = platform_execution.get("packages", [])
+    platform_certified = {row.get("package") for row in platform_rows if row.get("passed") is True}
+    require(
+        platform_execution.get("installedPackagesExamined") == 14
+        and platform_execution.get("executionCertified") == 14
+        and platform_execution.get("failed") == 0
+        and len(platform_rows) == 14
+        and platform_certified == expected_platform_packages,
+        "all 14 bounded platform Skills are not execution-certified",
+    )
+    for row in platform_rows:
+        package = row.get("package")
+        require(row.get("operation") == "task" and row.get("returnCode") == 0 and row.get("passed") is True, "%s lacks a completed platform task receipt" % package)
+        require(row.get("checks") and all(row["checks"].values()), "%s failed a platform task validation" % package)
+        manifest = skill_root / str(package) / "SKILL.md"
+        entrypoint = (REPO / str(row.get("entrypoint", ""))).resolve()
+        require(manifest.is_file() and file_sha256(manifest) == row.get("manifestSha256"), "%s manifest execution evidence drifted" % package)
+        require(entrypoint.is_relative_to(REPO) and entrypoint.is_file() and file_sha256(entrypoint) == row.get("entrypointSha256"), "%s entrypoint execution evidence drifted" % package)
+        receipts = row.get("artifacts", [])
+        require(len(receipts) >= 1, "%s lacks a retained task artifact" % package)
+        for receipt in receipts:
+            artifact = (REPO / str(receipt.get("path", ""))).resolve()
+            require(artifact.is_relative_to(REPO) and artifact.is_file() and not artifact.is_symlink(), "%s retained platform artifact is unavailable" % package)
+            require(artifact.stat().st_size == receipt.get("bytes") and file_sha256(artifact) == receipt.get("sha256"), "%s retained platform artifact receipt does not match disk" % package)
+
+    specialist_skill_tools = {
+        "evimed/adr-analysis": "evimed_drug_safety_analysis",
+        "evimed/bibliometric-analysis": "evimed_bibliometric_analysis",
+        "evimed/comprehensive-drug-evaluation": "evimed_comprehensive_drug_evaluation",
+        "evimed/drug-selection": "evimed_drug_selection_evaluation",
+        "evimed/mendelian-randomization": "evimed_mendelian_randomization",
+        "evimed/meta-analysis": "evimed_meta_analysis",
+        "evimed/off-label-analysis": "evimed_offlabel_evidence_packet",
+        "evimed/peer-review": "evimed_peer_review",
+        "evimed/research-topic-selection": "evimed_research_topic_selection",
+    }
+    tool_results = {row.get("tool"): row for row in read("tool-probe-v3.json").get("results", [])}
+    for package, tool in specialist_skill_tools.items():
+        evidence = tool_results.get(tool, {})
+        require(evidence.get("operational") is True and evidence.get("operation") in {"task", "start_then_poll_to_terminal"}, "%s lacks linked tool-task evidence" % package)
+    all_certified_packages = sorted(set(certified_packages) | expected_platform_packages | set(specialist_skill_tools))
+    require(summary.get("webExecutionCertifiedSkillPackages") == 61, "clean Web execution-certified Skill count is not 61")
+    require(summary.get("webExecutionCertifiedPackageIds") == all_certified_packages, "Skill audit does not match retained execution receipts")
+    require(summary.get("sourceCapabilitiesMapped") == 127, "source capability mapping count is not 127")
+    require(summary.get("sourcePackagesPublished") == 0, "mapped source capabilities were misreported as published packages")
+    items = document.get("items", [])
+    require(len(items) == 149, "skill audit does not contain 149 reviewed inputs")
+    require(sum(item.get("releaseStatus") == "capability_mapped" for item in items) == 127, "mapped skill row count is not 127")
+    require(summary.get("sourceCapabilitiesMappedToFreshRuntime") == sum(
+        item.get("releaseStatus") == "capability_mapped" and bool(item.get("runtimePackagesInstalledInWeb"))
+        for item in items
+    ), "fresh-runtime capability mapping count is inflated")
+    require(summary.get("sourceCapabilitiesBackedByExecutedRuntime") == sum(
+        item.get("releaseStatus") == "capability_mapped" and bool(item.get("runtimePackagesExecutionCertified"))
+        for item in items
+    ), "executed-runtime capability mapping count is inflated")
+    require(all(item.get("releaseStatus") != "published" for item in items), "a mapped source skill is still labeled published")
+
+
+def main():
+    verify_tools()
+    verify_sources()
+    verify_connectors()
+    verify_skills()
+    print("capability audit release gate passed")
+
+
+if __name__ == "__main__":
+    main()

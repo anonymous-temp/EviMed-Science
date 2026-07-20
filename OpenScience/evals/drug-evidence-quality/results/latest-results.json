@@ -1,0 +1,140 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-07-19T18:10:32.287894Z",
+  "status": "pass",
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "warnings": 4
+  },
+  "referenceCount": 6,
+  "checks": [
+    {
+      "id": "selection-item-coverage",
+      "status": "pass",
+      "message": "Every published candidate-domain score is represented.",
+      "details": {
+        "expectedItems": 15,
+        "missingItems": []
+      }
+    },
+    {
+      "id": "selection-arithmetic",
+      "status": "pass",
+      "message": "Published domain scores reproduce every reported total.",
+      "details": {
+        "computedTotals": {
+          "abrocitinib": 72.19,
+          "upadacitinib": 77.5,
+          "baricitinib": 67.16
+        },
+        "deltas": {
+          "abrocitinib": 0.0,
+          "upadacitinib": 0.0,
+          "baricitinib": 0.0
+        }
+      }
+    },
+    {
+      "id": "selection-reference-order",
+      "status": "pass",
+      "message": "The controlled replay reproduces the article's reported order.",
+      "details": {
+        "computedOrder": [
+          "upadacitinib",
+          "abrocitinib",
+          "baricitinib"
+        ],
+        "reportedOrder": [
+          "upadacitinib",
+          "abrocitinib",
+          "baricitinib"
+        ]
+      }
+    },
+    {
+      "id": "selection-live-context-guard",
+      "status": "pass",
+      "message": "The platform reproduces published arithmetic but withholds a live ranking when economic context is incomplete.",
+      "details": {
+        "withheldReasons": [
+          "Economics is not comparable without currency, price date, dosage basis, duration, jurisdiction, and perspective."
+        ]
+      }
+    },
+    {
+      "id": "reference-search-cutoff-validity",
+      "status": "warning",
+      "message": "The reference reports an invalid calendar cutoff; the platform must not copy it as a valid evidence date.",
+      "details": {
+        "reportedSearchCutoff": "2023-06-31"
+      }
+    },
+    {
+      "id": "reference-price-date",
+      "status": "warning",
+      "message": "The extracted reference does not report a reproducible price date, so its economic score is context-bound."
+    },
+    {
+      "id": "cross-publication-score-drift",
+      "status": "warning",
+      "message": "The same medicines scored under related published methods produce different totals; one article cannot be a universal gold score.",
+      "details": {
+        "scoreDeltas": {
+          "upadacitinib": 3.0,
+          "abrocitinib": 8.01
+        },
+        "comparisonReferenceId": "jak-selection-cross-publication"
+      }
+    },
+    {
+      "id": "comprehensive-domain-coverage",
+      "status": "pass",
+      "message": "The platform represents all six published comprehensive-evaluation dimensions and all mandatory core domains.",
+      "details": {
+        "mappedDomains": [
+          "accessibility",
+          "applicability",
+          "economics",
+          "effectiveness",
+          "innovation",
+          "safety"
+        ],
+        "unsupportedDomains": [],
+        "missingCoreDomains": []
+      }
+    },
+    {
+      "id": "off-label-method-coverage",
+      "status": "pass",
+      "message": "The off-label compiler covers the standard's label dimensions, evidence types, and named appraisal methods.",
+      "details": {
+        "missingLabelDimensions": [],
+        "missingEvidenceTypes": [],
+        "missingQualityTools": []
+      }
+    },
+    {
+      "id": "agent-integration-controls",
+      "status": "pass",
+      "message": "The Agent instructions route benchmark safeguards into runtime behavior.",
+      "details": {
+        "offLabelEvidenceRows": true,
+        "licensedGapPrompt": true,
+        "missingIsNotZero": true,
+        "optionalQuantitativeScoring": true
+      }
+    },
+    {
+      "id": "licensed-source-boundary",
+      "status": "warning",
+      "message": "Licensed evidence databases remain an explicit user-supplied or institution-supplied evidence gap.",
+      "details": {
+        "gaps": [
+          "Micromedex requires licensed access or a user-provided export."
+        ]
+      }
+    }
+  ],
+  "interpretation": "Passing means item-level compatibility and safety gates are reproducible. Warnings identify publication or access limitations and are not converted into zero scores."
+}

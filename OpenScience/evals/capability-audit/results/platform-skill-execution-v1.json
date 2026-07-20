@@ -1,0 +1,587 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-07-19T19:32:52.675489+00:00",
+  "finishedAt": "2026-07-19T19:33:08.000555+00:00",
+  "environment": {
+    "pythonExecutable": "/Library/Developer/CommandLineTools/usr/bin/python3",
+    "pythonVersion": "3.9.6",
+    "dependencyContract": "selected audit runtime plus package-declared dependencies"
+  },
+  "installedPackagesExamined": 14,
+  "executionCertified": 14,
+  "failed": 0,
+  "packages": [
+    {
+      "package": "office/docx",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/office/docx/scripts/create_docx.py",
+        "--input",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/docx/source.txt",
+        "--output",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/docx/report.docx"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "ooxmlMembers": true,
+        "expectedContent": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "25dcb7d9c18cd54e51f8adf707cd833bebb872d248f63a443a7840aa497f3b68",
+      "entrypoint": "runtime/skills/office/docx/scripts/create_docx.py",
+      "entrypointSha256": "dd82a2712e109b1825d644d3b373d8f008f2c8849299196e77edcdb4a222d300",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/docx/source.txt",
+          "bytes": 39,
+          "sha256": "a7bceb9136b16898228b9a8c7f8360d8068b79eca003217a2f5a34d534410824"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/docx/report.docx",
+          "bytes": 919,
+          "sha256": "2810685b953605e31bee7db04ba1ffd269ff800f56782e51c898482db5a769b9"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "office/pdf",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/office/pdf/scripts/create_pdf.py",
+        "--input",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/pdf/source.txt",
+        "--output",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/pdf/report.pdf"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "pdfHeader": true,
+        "pdfTrailer": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "1a7d1e2af556cb1095a572db1eda3aa18f76f6d01c6d1e629d1fba461dc3966a",
+      "entrypoint": "runtime/skills/office/pdf/scripts/create_pdf.py",
+      "entrypointSha256": "0fb61422051137e89607ca7e98eb8240329d1c84224ddb84359f3bfa394b3553",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/pdf/source.txt",
+          "bytes": 39,
+          "sha256": "a7bceb9136b16898228b9a8c7f8360d8068b79eca003217a2f5a34d534410824"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/pdf/report.pdf",
+          "bytes": 637,
+          "sha256": "e6326a2d158eeef85c363c73037f067180f529acff36b398ef164e6516baadf3"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "office/pptx",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/office/pptx/scripts/create_pptx.py",
+        "--title",
+        "EviMed evidence",
+        "--body-file",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/pptx/source.txt",
+        "--output",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/pptx/report.pptx"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "ooxmlMembers": true,
+        "expectedContent": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "7a78045eae98209bdb041dbc787520ca85f2c8754aa7539f3dbf441938719851",
+      "entrypoint": "runtime/skills/office/pptx/scripts/create_pptx.py",
+      "entrypointSha256": "2025a5217bf12f21a8c8e193d5c7c7b9782f43d71f7e3d819b33e8af36ed5683",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/pptx/source.txt",
+          "bytes": 39,
+          "sha256": "a7bceb9136b16898228b9a8c7f8360d8068b79eca003217a2f5a34d534410824"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/pptx/report.pptx",
+          "bytes": 4446,
+          "sha256": "791ee84dd4947c2c221211475ceea951bd61a098870e7786ed3752c43e748a38"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "office/xlsx",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/office/xlsx/scripts/create_xlsx.py",
+        "--input",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/xlsx/results.csv",
+        "--output",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/xlsx/report.xlsx",
+        "--sheet",
+        "Evidence"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "nonEmptyOutput": true,
+        "ooxmlMembers": true,
+        "expectedContent": true
+      },
+      "stdout": "",
+      "stderr": "",
+      "manifestSha256": "8ccc3ce981ae904a415585fd3c50e47a13e82c1b3cb2922035b4a03150f6274a",
+      "entrypoint": "runtime/skills/office/xlsx/scripts/create_xlsx.py",
+      "entrypointSha256": "6035b7d828d9efe7c5cd8eee9b473705db449fe2256841a88d98ea7de417107c",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/xlsx/results.csv",
+          "bytes": 32,
+          "sha256": "40e70e4e6587c62cc2efad296c778a2aa302ffd0d3fd2e7b60aad79b0072fb7f"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/xlsx/report.xlsx",
+          "bytes": 1592,
+          "sha256": "9f4e515e91af02027b707dd893ce47a0465ae39deada959e2fba66f6ea2f54a6"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/domain-check",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/core/domain-check/domain_check.py",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/domain-check/analysis.py"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "reviewContract": true,
+        "expectedFindingClass": true
+      },
+      "stdout": "```review\n{\"findings\": [{\"level\": \"error\", \"check\": \"domain\", \"tag\": \"physics · units\", \"title\": \"Dimensional mismatch: add/subtract of time and length\", \"evidence\": \"/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/domain-check/analysis.py:3  value = time_seconds + distance_meters\\n  left is a time quantity, right is a length quantity — the result has no consistent unit.\"}], \"note\": \"Domain-correctness gate — flags known dangerous patterns per discipline (units, CRS, coordinates). It checks for specific error classes only; absence of findings is not a guarantee the science is correct.\"}\n```\n",
+      "stderr": "",
+      "manifestSha256": "d711e369ed6a907fa61a7e5598371515aad921ebf429e89afe3bf42c5eea8272",
+      "entrypoint": "runtime/skills/core/domain-check/domain_check.py",
+      "entrypointSha256": "ab06ad5e4dd0bdf61058b81a5bf3c3058306d44320b4e45ea28af25bfc5ecb3e",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/domain-check/analysis.py",
+          "bytes": 76,
+          "sha256": "8e7d49966daf688b9f410e44187b372d7ee56d11ea9a8f06e33cdb00406359e3"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/domain-check/review.json",
+          "bytes": 738,
+          "sha256": "df8f759966e529acfc2c2d023669508485dd56db823cbbe0595f5316d546cbb9"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/stats-integrity",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/core/stats-integrity/stats_integrity_check.py",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/stats-integrity/analysis.py"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "reviewContract": true,
+        "expectedFindingClass": true
+      },
+      "stdout": "```review\n{\"findings\": [{\"level\": \"warn\", \"check\": \"integrity\", \"tag\": \"stats · seed\", \"title\": \"Randomised analysis with no fixed seed\", \"evidence\": \"/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/stats-integrity/analysis.py:2  values = np.random.normal(size=10)\\n  this uses randomness but sets no seed (np.random.seed / random_state= / set.seed) — the estimates won't reproduce run to run. Fix a seed so the result is reproducible.\"}], \"note\": \"Analysis-integrity gate — flags over-interpretation, unregistered analyses, and missing seeds. It checks these specific risks only; absence of findings does not certify the analysis is sound or the conclusions valid.\"}\n```\n",
+      "stderr": "",
+      "manifestSha256": "cf67dd8551b4d450aa5fa0747da0675e869c03ba644738f90668427ff70dafb2",
+      "entrypoint": "runtime/skills/core/stats-integrity/stats_integrity_check.py",
+      "entrypointSha256": "42537c57b945f75b30e1393381c5d1f30ce4d126fc85b905dd417d24021f75a7",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/stats-integrity/analysis.py",
+          "bytes": 54,
+          "sha256": "fe7d12ea7d2edaa0512c6a656036dcc819449d20faeed5cf502de74a78b01745"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/stats-integrity/review.json",
+          "bytes": 812,
+          "sha256": "e15e7ae351cee26327ba5c6330085df45796da3f746e6813c2bcdc4e4c8d95b6"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/large-file",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/core/large-file/large_file_probe.py",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/large-file/data.csv",
+        "--sample",
+        "1"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "validJsonPointer": true,
+        "boundedSample": true,
+        "correctSchema": true
+      },
+      "stdout": "{\"path\": \"/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/large-file/data.csv\", \"size\": \"32 B\", \"size_bytes\": 32, \"format\": \"table\", \"delimiter\": \",\", \"columns\": [{\"name\": \"drug\", \"dtype\": \"str\"}, {\"name\": \"count\", \"dtype\": \"int\"}], \"n_columns\": 2, \"approx_rows\": 2, \"sample_head\": [[\"aspirin\", \"3\"]], \"sample_tail\": [[\"warfarin\", \"2\"]], \"note\": \"Memory pointer — file introspected/sampled, not loaded. Work from this schema/sample; read specific ranges deterministically, never the whole file.\"}\n",
+      "stderr": "",
+      "manifestSha256": "d1ab239b5ed237ab4f3e9287d24ee14e881359cd412d876fc0f596eb7448ec74",
+      "entrypoint": "runtime/skills/core/large-file/large_file_probe.py",
+      "entrypointSha256": "806565f62a37405dec2d093be354efa107f65ed7f5306cc3a919d5b76870a8b3",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/large-file/data.csv",
+          "bytes": 32,
+          "sha256": "40e70e4e6587c62cc2efad296c778a2aa302ffd0d3fd2e7b60aad79b0072fb7f"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/large-file/pointer.json",
+          "bytes": 722,
+          "sha256": "5fd1c783fb120a91d3b5a68918eac4989f49950d575ea3e8192e6f21aa58486c"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/remote-compute",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/core/remote-compute/record_run.py",
+        "--surface",
+        "ssh",
+        "--command",
+        "python compute.py",
+        "--status",
+        "ok",
+        "--host",
+        "audit-fixture",
+        "--hardware",
+        "CPU audit fixture",
+        "--wall-ms",
+        "10",
+        "--code",
+        "compute.py",
+        "--output",
+        "results/result.json",
+        "--session-id",
+        "audit-session",
+        "--env-file",
+        "results/env.txt"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "provenanceCreated": true,
+        "singleTerminalReceipt": true,
+        "artifactHashesPresent": true
+      },
+      "stdout": "",
+      "stderr": "Recorded ssh run run_c6b939cb102fffde (ok) → .openscience/remote-runs.jsonl\n",
+      "manifestSha256": "37c2f33717711ee702772856d60b6023f9214779c7e1fa52cdde9715690e7a73",
+      "entrypoint": "runtime/skills/core/remote-compute/record_run.py",
+      "entrypointSha256": "4bb95a68509ed88fc8a97bc1120f10762537a5d508e25f50a55807aabed0aa75",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/remote-compute/compute.py",
+          "bytes": 26,
+          "sha256": "93562c9a6a7361bd7e2a6d6d64fa93deacc508ff5397c9c218f6fffe9e21b4dd"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/remote-compute/results/result.json",
+          "bytes": 29,
+          "sha256": "6d53679ec3e4bb57911c21e8abd249265713f3fdbb21f387ad29b34c9866e84c"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/remote-compute/.openscience/remote-runs.jsonl",
+          "bytes": 515,
+          "sha256": "ac387a2ee9ec839a0aee4bb03ba0404f34cdedc489a35df7041da0876cbea8b6"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/remote-compute/results/env.txt",
+          "bytes": 69,
+          "sha256": "48f66f4fc857b8ad292caa325444fabef1251e9b676e8ff96965f02f7078b3b7"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/modal-run",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/core/modal-run/record_run.py",
+        "--surface",
+        "modal",
+        "--command",
+        "python compute.py",
+        "--status",
+        "ok",
+        "--host",
+        "audit-fixture",
+        "--hardware",
+        "CPU audit fixture",
+        "--wall-ms",
+        "10",
+        "--code",
+        "compute.py",
+        "--output",
+        "results/result.json",
+        "--session-id",
+        "audit-session"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "provenanceCreated": true,
+        "singleTerminalReceipt": true,
+        "artifactHashesPresent": true
+      },
+      "stdout": "",
+      "stderr": "Recorded modal run run_80558de247ee3129 (ok) → .openscience/remote-runs.jsonl\n",
+      "manifestSha256": "c8c62ef03515e7e07f76d303661f1c583523c57554101050c092fdb72bdf1465",
+      "entrypoint": "runtime/skills/core/modal-run/record_run.py",
+      "entrypointSha256": "4bb95a68509ed88fc8a97bc1120f10762537a5d508e25f50a55807aabed0aa75",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/modal-run/compute.py",
+          "bytes": 26,
+          "sha256": "93562c9a6a7361bd7e2a6d6d64fa93deacc508ff5397c9c218f6fffe9e21b4dd"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/modal-run/results/result.json",
+          "bytes": 29,
+          "sha256": "6d53679ec3e4bb57911c21e8abd249265713f3fdbb21f387ad29b34c9866e84c"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/modal-run/.openscience/remote-runs.jsonl",
+          "bytes": 388,
+          "sha256": "542deff700a50a7c4265e8bc636a624197e45e58c2813993586dec4f842ef3c3"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/hpc-slurm",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/core/hpc-slurm/render_job.py",
+        "--job-name",
+        "evimed-audit",
+        "--command",
+        "python analysis.py",
+        "--output",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/hpc-slurm/analysis.sbatch",
+        "--time",
+        "00:10:00",
+        "--cpus-per-task",
+        "2",
+        "--module",
+        "python/3.11"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "batchArtifactCreated": true,
+        "strictShell": true,
+        "boundedRequestedResources": true,
+        "noCredentialHandling": true
+      },
+      "stdout": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/hpc-slurm/analysis.sbatch\n",
+      "stderr": "",
+      "manifestSha256": "d59d89727248ad92b927d76b468a27b250116058da7781d1c4133f30460d68e8",
+      "entrypoint": "runtime/skills/core/hpc-slurm/render_job.py",
+      "entrypointSha256": "65228dbe4f5b580c1dde6296de3dfd5b631b411db640df510127eb81fefb23c0",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/hpc-slurm/analysis.sbatch",
+          "bytes": 238,
+          "sha256": "5d98c2b08af334115a20b222498af424771e330a86edd9a2aa6fb4595805e457"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/publication-figures",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/core/publication-figures/render_csv_figure.py",
+        "--input",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/publication-figures/observations.csv",
+        "--output",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/publication-figures/observed-response.png",
+        "--x-label",
+        "Time (days)",
+        "--y-label",
+        "Response (%)",
+        "--title",
+        "Observed response"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "pngArtifactCreated": true,
+        "pngSignature": true,
+        "boundedInputRetained": true
+      },
+      "stdout": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/publication-figures/observed-response.png\n",
+      "stderr": "",
+      "manifestSha256": "7242314e504d1e316e45dccdc03d6e62754cde6c5822e9837a24adfc8ea46b0e",
+      "entrypoint": "runtime/skills/core/publication-figures/render_csv_figure.py",
+      "entrypointSha256": "8c7781d8e6d8ff0b031eefd4ef0dd15e537d5272b37344104e8f4ded12b3647b",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/publication-figures/observations.csv",
+          "bytes": 29,
+          "sha256": "442e7fe1a5096b83184d219927c0eeb77f877e0db608f015416ddd5c056444de"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/publication-figures/observed-response.png",
+          "bytes": 55650,
+          "sha256": "efc2f1e5f33918f02c02a6eaba107a196fe47c69928814a5e73e8b13959d657c"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "core/traceability-review",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/core/traceability-review/pdf_extract.py",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/pdf/report.pdf"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "pdfActuallyParsed": true,
+        "textActuallyExtracted": true,
+        "claimContractPresent": true
+      },
+      "stdout": "{\"backend\": \"pypdf\", \"pages\": 1, \"chars\": 40, \"citations\": {\"dois\": [], \"arxiv\": [], \"pmids\": []}, \"claims\": [], \"text\": \"EviMed evidence report\\nTraceable result\\n\"}\n",
+      "stderr": "",
+      "manifestSha256": "d3eb68ceafda8ddb63bc9874f1ef8f807ff3efb844342f39093445ef47cce055",
+      "entrypoint": "runtime/skills/core/traceability-review/pdf_extract.py",
+      "entrypointSha256": "4b4107464ce0bc0966399dc3241d44b5fe4f5bba0ba57010150ccceba74f182d",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/pdf/report.pdf",
+          "bytes": 637,
+          "sha256": "e6326a2d158eeef85c363c73037f067180f529acff36b398ef164e6516baadf3"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/traceability-review/extracted.json",
+          "bytes": 197,
+          "sha256": "2b7d9534daddc88c2f5836b6271ba4da73cd86bff03c0f0aef8852271a578c70"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "external/ai4s-skills/integrity-auditor",
+      "operation": "task",
+      "command": [
+        "bash",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/external/ai4s-skills/integrity-auditor/tests/smoketest.sh"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "positiveAndNegativeControlsExecuted": true,
+        "allForensicChecksPassed": true
+      },
+      "stdout": "== compile ==\n  ✓ compile channel_check.py\n  ✓ compile decimal_match.py\n  ✓ compile image_dup.py\n  ✓ compile image_dup_orb.py\n  ✓ compile magnitude_consistency.py\n  ✓ compile panel_split.py\n  ✓ compile xlsx_aggregate_consistency.py\n\n== --help ==\n  ✓ --help magnitude_consistency.py\n  ✓ --help decimal_match.py\n  ✓ --help image_dup.py\n  ✓ --help image_dup_orb.py\n  ✓ --help panel_split.py\n  ✓ --help channel_check.py\n  ✓ --help xlsx_aggregate_consistency.py\n\n== decimal_match positive control ==\n  ✓ decimal_match catches injected '.75' pattern\n\n== decimal_match negative control ==\n  ✓ decimal_match clean on random data (no false positives)\n\n== magnitude_consistency positive control ==\n  ✓ magnitude_consistency catches 1500 TWh-vs-GWh\n\n== magnitude_consistency negative control ==\n  ✓ magnitude_consistency silent when units agree\n\n== magnitude_consistency cross-family no-FP ==\n  ✓ magnitude_consistency: kV-vs-TWh cross-family is not flagged\n\n== xlsx_aggregate_consistency positive control ==\n  ✓ xlsx_aggregate_consistency: catches 0.4% systematic same-sign cross-file mismatch\n\n== xlsx_aggregate_consistency negative control ==\n  ✓ xlsx_aggregate_consistency: silent on identical files\n\n== magnitude_consistency concentration family ==\n  ✓ magnitude_consistency: mM vs µM concentration confusion flagged\n\n== summary ==\nPASS: 22    FAIL: 0\n",
+      "stderr": "",
+      "manifestSha256": "b6d8da9f1a5a7f1cbfedd7e729107a547417942b3c667a7ef5fef20041590d16",
+      "entrypoint": "runtime/skills/external/ai4s-skills/integrity-auditor/tests/smoketest.sh",
+      "entrypointSha256": "64638371b84cec4882be8140ee80f0a849ee39e0bfa4dfb5796f83805244296d",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/integrity-auditor/smoketest.log",
+          "bytes": 1391,
+          "sha256": "674d7696892b500de5b9e2e03f9426968f53e94ed452a4161d0529409411c7e2"
+        }
+      ],
+      "artifactErrors": []
+    },
+    {
+      "package": "external/ai4s-skills/mindmap-render",
+      "operation": "task",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/skills/external/ai4s-skills/mindmap-render/scripts/generate_mindmap.py",
+        "--md",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/mindmap-render/topic_matrix.md",
+        "--output-dir",
+        "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/mindmap-render/output",
+        "--title",
+        "evidence-synthesis",
+        "--theme",
+        "air",
+        "--scale",
+        "1"
+      ],
+      "returnCode": 0,
+      "passed": true,
+      "checks": {
+        "htmlArtifactCreated": true,
+        "pngArtifactCreated": true,
+        "pdfArtifactCreated": true
+      },
+      "stdout": "[HTML] /Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/mindmap-render/output/evidence-synthesis.html\n[PNG] /Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/mindmap-render/output/evidence-synthesis.png (1220x400)\n[PDF] /Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/mindmap-render/output/evidence-synthesis.pdf\n",
+      "stderr": "",
+      "manifestSha256": "4d6f0f22adfd19dd2aa3493c922988e21f23fceccf4a584a4fd248c8d90e5fab",
+      "entrypoint": "runtime/skills/external/ai4s-skills/mindmap-render/scripts/generate_mindmap.py",
+      "entrypointSha256": "3a3cf163281ae5b18a1034a5730e9ac3857749c707d270e25b9580d090cf9c53",
+      "artifacts": [
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/mindmap-render/topic_matrix.md",
+          "bytes": 79,
+          "sha256": "748c89d1abd7d65a4d86532c10e8a43b6b84d465d7760ab0ce92c06110bcf465"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/mindmap-render/output/evidence-synthesis.html",
+          "bytes": 37054,
+          "sha256": "6b3c8d59ef43982d409166c9b455bfc36d2e5ad2d3cf9e57ff362869692061a6"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/mindmap-render/output/evidence-synthesis.png",
+          "bytes": 146617,
+          "sha256": "0b59e0de8d818c12516c536686ebd6b945c30419c5bf045aea9c469cf83884ce"
+        },
+        {
+          "path": "evals/capability-audit/results/platform-skill-execution-v1-artifacts/20260719T193252Z-681cd26c/mindmap-render/output/evidence-synthesis.pdf",
+          "bytes": 21880,
+          "sha256": "d1cc154c20e83168ab17eaa9b98612a964f376aec8fc9e1a220e8f6621b342d3"
+        }
+      ],
+      "artifactErrors": []
+    }
+  ],
+  "claimBoundary": "This certifies one bounded deterministic task per listed first-party package. It does not certify every input shape, external remote availability, or feature-complete Office fidelity."
+}

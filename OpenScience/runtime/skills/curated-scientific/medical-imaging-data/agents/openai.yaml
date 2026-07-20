@@ -1,0 +1,4 @@
+interface:
+  display_name: "Medical Imaging Data"
+  short_description: "Handle medical imaging data with privacy safeguards"
+  default_prompt: "Use $medical-imaging-data to inspect this imaging dataset safely."

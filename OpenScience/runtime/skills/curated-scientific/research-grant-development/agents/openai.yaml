@@ -1,0 +1,4 @@
+interface:
+  display_name: "Research Grant Development"
+  short_description: "Develop evidence-grounded research grant proposals"
+  default_prompt: "Use $research-grant-development to turn this study concept into a fundable proposal."

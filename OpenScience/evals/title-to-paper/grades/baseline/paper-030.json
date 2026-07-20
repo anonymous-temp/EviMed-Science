@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-030",
+  "category": "public-health-epidemiology",
+  "title": "Cancer statistics, 2025.",
+  "pmcid": "PMC11745215",
+  "doi": "10.3322/caac.21871",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 14957,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 119,
+    "supportedUniqueNumbers": 118,
+    "unsupportedNumberTokens": [
+      "0.05"
+    ],
+    "supportedNumericClaimPrecision": 0.9915966386554622,
+    "verbatimEightGramRate": 0.024077868852459015,
+    "toolCalls": 17,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [
+      "The generated text states that contemporary survival data relied on an 'expanded 17-registry set', but the reference describes 18 registries (SEER 8 plus Alaska Native Tumor Registry and nine state registries)."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated summary accurately reflects all key statistics, trends, and methods from the reference. Only a trivial mismatch in the count of registries was noted, which does not affect the overall fidelity of the study design, population, methods, or conclusions."
+  },
+  "overallVerdict": "pass"
+}

@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-008",
+  "category": "systematic-review-meta-analysis",
+  "title": "Global prevalence and burden of depressive and anxiety disorders in 204 countries and territories in 2020 due to the COVID-19 pandemic.",
+  "pmcid": "PMC8500697",
+  "doi": "10.1016/s0140-6736(21)02143-7",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 7622,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 152,
+    "supportedUniqueNumbers": 120,
+    "unsupportedNumberTokens": [
+      "-19",
+      "-36",
+      "100000",
+      "11.5%",
+      "13.8%",
+      "21.5%",
+      "23%",
+      "25.2%",
+      "27.1%",
+      "28%",
+      "29.4%",
+      "30%",
+      "30.3%",
+      "3020",
+      "31.7%",
+      "32.4%",
+      "3233",
+      "3360",
+      "34.8%",
+      "35.1%",
+      "36.1%",
+      "37.2%",
+      "3738",
+      "3940",
+      "434",
+      "4480",
+      "513",
+      "62500000",
+      "62900000",
+      "6430",
+      "68700000",
+      "90600000"
+    ],
+    "supportedNumericClaimPrecision": 0.7894736842105263,
+    "verbatimEightGramRate": 0.0033775006495193557,
+    "toolCalls": 23,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [
+      "The generated text attributes the study to 'Guilherme Borges 等人' and presents this as the lead author. The actual publication lists the corresponding author as Damian Santomauro and the collaborative group as 'COVID-19 Mental Disorders Collaborators'; 'Guilherme Borges' does not appear anywhere in the author list or acknowledgments."
+    ],
+    "minorUnsupportedClaims": [
+      "The generated text provides a specific GitHub URL (https://github.com/ihmeuw/mental_disorders/tree/COVID-19_depressive_anxiety_disorders_lancet) that is not mentioned in the reference material; the reference only states that code is available online without giving that URL."
+    ],
+    "missingCriticalFacts": [],
+    "verdict": "fail",
+    "rationale": "The generated summary is otherwise highly faithful to the original article, accurately reproducing study design, population, methods, and all quantitative results. However, it introduces a fabricated author name ('Guilherme Borges') as the apparent lead, which is a major unsupported claim that misrepresents the study's authorship. This fabrication triggers a ‘fail’ verdict despite the overall high fidelity."
+  },
+  "overallVerdict": "fail"
+}

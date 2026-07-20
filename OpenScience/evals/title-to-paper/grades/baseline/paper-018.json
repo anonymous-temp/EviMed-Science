@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "caseId": "paper-018",
+  "category": "diagnostic-prognostic",
+  "title": "Developing a prediction model to estimate the true burden of respiratory syncytial virus (RSV) in hospitalised children in Western Australia.",
+  "pmcid": "PMC8748465",
+  "doi": "10.1038/s41598-021-04080-3",
+  "deterministic": {
+    "terminalSuccess": true,
+    "generatedCharacters": 7156,
+    "sourceIdentifierResolved": true,
+    "sectionCoverage": {
+      "abstract": true,
+      "introduction": true,
+      "methods": true,
+      "results": true,
+      "discussion": true
+    },
+    "sectionCoverageRate": 1.0,
+    "generatedUniqueNumbers": 109,
+    "supportedUniqueNumbers": 109,
+    "unsupportedNumberTokens": [],
+    "supportedNumericClaimPrecision": 1.0,
+    "verbatimEightGramRate": 0.004007480630510286,
+    "toolCalls": 9,
+    "usedEviMedResearchTool": true
+  },
+  "deliveryGate": {
+    "passed": true,
+    "failures": []
+  },
+  "modelGraderVersion": 2,
+  "model": {
+    "studyDesignScore": 5,
+    "populationSampleScore": 5,
+    "methodsScore": 5,
+    "resultsConclusionScore": 5,
+    "majorUnsupportedClaims": [],
+    "minorUnsupportedClaims": [],
+    "missingCriticalFacts": [],
+    "verdict": "pass",
+    "rationale": "The generated text closely follows the reference, accurately reproducing the study design (population-based retrospective cohort), sample sizes (321,825 hospitalisations, 37,784 tested), methodology (multivariable logistic regression, DAG-guided selection, cross-validated AUROC, calibration), and all key results (AUROC 0.87, predicted incidence 43.7/1000 child-years, under-ascertainment 30–57%). No fabricated or unsupported claims were identified; every factual statement can be traced back to the article's abstract, methods, results, or discussion. The limitations and conclusions are also faithfully reported."
+  },
+  "overallVerdict": "pass"
+}
