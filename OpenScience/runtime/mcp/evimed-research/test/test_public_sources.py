@@ -161,6 +161,52 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertEqual(result["sources"][0]["source"], "evimed-literature")
         self.assertEqual(request.call_args.kwargs["credential_profile"], "evimed-evidence")
 
+    def test_composite_evimed_literature_filters_candidates_by_every_required_concept(self):
+        payload = {
+            "code": 200,
+            "data": {
+                "total": 2,
+                "list": [
+                    {"id": "irrelevant", "title": "Metformin and preeclampsia prevention"},
+                    {
+                        "id": "relevant",
+                        "title": "Metformin for polycystic ovary syndrome",
+                        "abstract": "A randomized study in participants with PCOS.",
+                    },
+                ],
+            },
+        }
+        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+            result = sources._evimed_literature_records({
+                "query": "metformin polycystic ovary syndrome",
+                "requiredConcepts": ["metformin", "polycystic ovary syndrome"],
+                "limit": 3,
+            })
+        self.assertEqual([item["id"] for item in result["data"]["items"]], ["EVIMED-LITERATURE:relevant"])
+        self.assertEqual(request.call_args.kwargs["json_body"]["count"], 15)
+        self.assertTrue(any("Excluded 1" in warning for warning in result["warnings"]))
+
+    def test_relevance_filter_does_not_match_ascii_concepts_inside_other_words(self):
+        records, filtered = sources._filter_evimed_records(
+            [{"title": "Cardiovascular heart outcomes"}],
+            ["art"],
+        )
+        self.assertEqual(records, [])
+        self.assertEqual(filtered, 1)
+
+    def test_empty_evimed_us_label_result_falls_back_to_openfda(self):
+        empty = {"status": "warning", "data": {"items": []}, "sources": [], "warnings": []}
+        payload = {"results": [{
+            "set_id": "set-1",
+            "openfda": {"brand_name": ["Observed"], "generic_name": ["observed"]},
+        }]}
+        with mock.patch.object(sources, "_evimed_instruction_records", return_value=empty):
+            with mock.patch.object(sources, "_get_json", return_value=payload):
+                result = sources.labels({"drug": "observed", "jurisdiction": "US", "limit": 1})
+        self.assertEqual(result["data"]["items"][0]["id"], "set-1")
+        self.assertEqual(result["sources"][0]["source"], "openfda-label")
+        self.assertTrue(any("no records" in warning for warning in result["warnings"]))
+
     def test_composite_drug_workflows_keep_evimed_evidence_enabled_by_default(self):
         empty = {"status": "warning", "data": {"items": []}, "sources": [], "warnings": []}
         with mock.patch.object(sources, "labels", return_value=empty):
@@ -174,6 +220,10 @@ class PublicSourceConnectorTests(unittest.TestCase):
                             "jurisdiction": "China",
                         }, "comprehensive-drug-evaluation")
         self.assertEqual(literature.call_args.args[0]["databases"], ["internal", "pubmed"])
+        self.assertEqual(
+            literature.call_args.args[0]["requiredConcepts"],
+            ["观察药", "观察适应证"],
+        )
 
     def test_managed_gateway_reuses_the_active_runtime_token_without_direct_egress(self):
         class Headers:
