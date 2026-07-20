@@ -660,6 +660,8 @@ export function loadConfig(overrides = {}) {
     materialsProjectApiKey: materialsProjectSecret.value,
     materialsProjectApiKeySource: materialsProjectSecret.source,
     materialsProjectApiKeyError: materialsProjectSecret.error,
+    requireMaterialsProject:
+      overrides.requireMaterialsProject ?? boolEnv("OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT", true),
     publicSourceCredentials: Object.fromEntries(
       Object.entries(publicSourceCredentialSecrets).map(([profile, secret]) => [profile, secret.value]),
     ),
