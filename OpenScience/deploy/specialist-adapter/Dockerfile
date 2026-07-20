@@ -68,7 +68,7 @@ COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter ./evimed_sp
 RUN python -m compileall -q /adapter/evimed_specialist_adapter /agent \
     && test -f /agent/evimed_runner.py \
     && if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \
-         python -c 'from mr_agent.output.figures import format_summary_card; assert callable(format_summary_card)'; \
+         PYTHONPATH=/agent python -c 'from mr_agent.output.figures import format_summary_card; assert callable(format_summary_card)'; \
        fi
 
 VOLUME ["/data"]
