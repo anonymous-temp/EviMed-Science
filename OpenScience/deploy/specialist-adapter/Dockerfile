@@ -2,6 +2,9 @@ ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.10-slim-bookworm
 FROM ${PYTHON_BASE_IMAGE}
 
 ARG APP_VERSION=1.0.0
+ARG APT_MIRROR=http://deb.debian.org/debian
+ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
+ARG PIP_INDEX_URL=https://pypi.org/simple
 
 LABEL org.opencontainers.image.title="EviMed Specialist Adapter" \
       org.opencontainers.image.version="${APP_VERSION}"
@@ -18,6 +21,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LLM_REASONING_EFFORT=high
 
 RUN set -eux; \
+    sed -ri "s|https?://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g; s|https?://deb.debian.org/debian|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl fonts-noto-cjk; \
     rm -rf /var/lib/apt/lists/*
@@ -48,8 +52,8 @@ WORKDIR /adapter
 ARG AGENT_DIR
 COPY OpenScience/deploy/specialist-adapter/requirements.txt /tmp/adapter-requirements.txt
 COPY ${AGENT_DIR}/requirements.txt /tmp/agent-requirements.txt
-RUN pip install --no-cache-dir -r /tmp/agent-requirements.txt \
-    && pip install --no-cache-dir -r /tmp/adapter-requirements.txt \
+RUN pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r /tmp/agent-requirements.txt \
+    && pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r /tmp/adapter-requirements.txt \
     && rm -f /tmp/adapter-requirements.txt /tmp/agent-requirements.txt
 
 RUN if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \

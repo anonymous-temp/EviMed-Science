@@ -1,8 +1,10 @@
 ARG NODE_BASE_IMAGE=docker.m.daocloud.io/library/node:20-alpine
 FROM ${NODE_BASE_IMAGE} AS build
 
+ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.4.0 --activate
+RUN pnpm config set registry "${NPM_REGISTRY}"
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/desktop/package.json apps/desktop/package.json
@@ -24,6 +26,7 @@ ARG APP_VERSION=0.1.3
 ARG RELEASE_ID=untracked
 ARG SOURCE_REVISION=unknown
 ARG BUILD_CREATED=1970-01-01T00:00:00.000Z
+ARG APK_MIRROR=https://dl-cdn.alpinelinux.org/alpine
 
 LABEL org.opencontainers.image.title="EviMed Web"
 LABEL org.opencontainers.image.description="Hosted Web API and browser application for EviMed."
@@ -34,7 +37,8 @@ LABEL org.opencontainers.image.created="${BUILD_CREATED}"
 LABEL io.open-science.app.version="${APP_VERSION}"
 
 WORKDIR /app
-RUN apk add --no-cache aws-cli bash coreutils docker-cli tar
+RUN sed -ri "s|https?://[^/]+/alpine|${APK_MIRROR}|g" /etc/apk/repositories \
+  && apk add --no-cache aws-cli bash coreutils docker-cli tar
 ENV NODE_ENV=production
 ENV OPEN_SCIENCE_HOST=0.0.0.0
 ENV OPEN_SCIENCE_PORT=8787

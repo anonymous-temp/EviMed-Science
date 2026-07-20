@@ -15,6 +15,9 @@ ARG APP_VERSION=0.1.3
 ARG RELEASE_ID=untracked
 ARG SOURCE_REVISION=unknown
 ARG BUILD_CREATED=1970-01-01T00:00:00.000Z
+ARG APT_MIRROR=http://deb.debian.org/debian
+ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
+ARG PIP_INDEX_URL=https://pypi.org/simple
 
 LABEL org.opencontainers.image.title="EviMed OpenCode runtime"
 LABEL org.opencontainers.image.description="Server-managed OpenCode runtime image for hosted EviMed workspaces."
@@ -28,7 +31,8 @@ LABEL io.open-science.uv.version="${UV_VERSION}"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN apt-get update \
+RUN sed -ri "s|https?://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g; s|https?://deb.debian.org/debian|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
+  && apt-get update \
   && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
@@ -83,7 +87,7 @@ RUN set -eux; \
 ENV VIRTUAL_ENV=/opt/evimed/venv
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 RUN uv venv "${VIRTUAL_ENV}" --python /usr/bin/python3 \
-  && uv pip install --python "${VIRTUAL_ENV}/bin/python" --no-cache \
+  && uv pip install --python "${VIRTUAL_ENV}/bin/python" --index-url "${PIP_INDEX_URL}" --no-cache \
     ipykernel==6.29.5 \
     jupyterlab==4.4.3 \
     matplotlib==3.10.3 \
