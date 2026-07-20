@@ -129,10 +129,42 @@ def _gateway_settings():
             os.close(descriptor)
 
 
+def _direct_credential(credential_profile):
+    env_name = {
+        "evimed-evidence": "EVIMED_EVIDENCE_SEARCH_KEY_FILE",
+    }.get(credential_profile)
+    if not env_name:
+        return None
+    configured = os.environ.get(env_name, "").strip()
+    if not configured or not os.path.isabs(configured) or "\0" in configured:
+        return None
+    descriptor = None
+    try:
+        descriptor = os.open(configured, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size <= 0 or metadata.st_size > 8 * 1024:
+            raise ValueError("invalid credential file")
+        if metadata.st_mode & 0o077:
+            raise ValueError("credential file permissions are too broad")
+        value = os.read(descriptor, metadata.st_size + 1).decode("utf-8").strip()
+        if not value or len(value) > 8 * 1024 or any(character.isspace() for character in value):
+            raise ValueError("invalid credential value")
+        return value
+    except (OSError, UnicodeDecodeError, ValueError) as error:
+        raise PublicSourceError(
+            "public_source_managed_credential_invalid",
+            "The file-backed EviMed evidence credential is unavailable or unsafe.",
+        ) from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 def _open_remote(url, accepted, method="GET", json_body=None, timeout_seconds=None, credential_profile=None):
     gateway = _gateway_settings()
     if gateway is None:
-        if credential_profile:
+        direct_credential = _direct_credential(credential_profile) if credential_profile else None
+        if credential_profile and not direct_credential:
             raise PublicSourceError(
                 "public_source_managed_credential_required",
                 "This connector requires the EviMed server gateway to inject a managed credential.",
@@ -144,6 +176,7 @@ def _open_remote(url, accepted, method="GET", json_body=None, timeout_seconds=No
             headers={
                 "accept": ", ".join(accepted),
                 **({"content-type": "application/json"} if encoded_body is not None else {}),
+                **({"authorization": "Bearer %s" % direct_credential} if direct_credential else {}),
                 "user-agent": "EviMed-Research/1.2 (research connector)",
             },
             method=method,

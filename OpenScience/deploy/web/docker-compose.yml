@@ -614,6 +614,7 @@ services:
         APP_VERSION: ${EVIMED_DRUG_EVIDENCE_ADAPTER_VERSION:-1.0.0}
     environment:
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_EVIDENCE_SEARCH_KEY_FILE: /run/secrets/evimed-api-key
       EVIMED_PUBLIC_CONNECTORS_ENABLED: "true"
       EVIMED_PHARMACY_REFERENCE_DB: /data/pharmacy-reference.sqlite
     volumes:
@@ -621,6 +622,10 @@ services:
       - type: bind
         source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
         target: /run/secrets/evimed-workload-signing-key
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
+        target: /run/secrets/evimed-api-key
         read_only: true
     healthcheck:
       test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8026/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"]
