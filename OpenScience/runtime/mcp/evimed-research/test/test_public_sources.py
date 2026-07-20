@@ -224,6 +224,55 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 else:
                     os.environ["EVIMED_MODEL_CONFIG_FILE"] = old_config
 
+    def test_trusted_adapter_uses_owner_only_file_backed_evimed_credential(self):
+        class Headers:
+            @staticmethod
+            def get_content_type():
+                return "application/json"
+
+        class Response:
+            headers = Headers()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            @staticmethod
+            def read(_limit):
+                return b'{"code":200,"data":{}}'
+
+        with tempfile.TemporaryDirectory() as temporary:
+            credential = pathlib.Path(temporary) / "evimed-api-key"
+            credential.write_text("test-file-backed-evidence-key", encoding="utf-8")
+            credential.chmod(0o600)
+            with mock.patch.dict(
+                os.environ,
+                {"EVIMED_EVIDENCE_SEARCH_KEY_FILE": str(credential)},
+                clear=False,
+            ):
+                with mock.patch.object(sources._OPENER, "open", return_value=Response()) as opener:
+                    value = sources._get_json(
+                        "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/literature",
+                        method="POST",
+                        json_body={"query": "observed", "count": 1},
+                        credential_profile="evimed-evidence",
+                    )
+            self.assertEqual(value, {"code": 200, "data": {}})
+            request = opener.call_args.args[0]
+            self.assertEqual(request.full_url, "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/literature")
+            self.assertEqual(request.get_header("Authorization"), "Bearer test-file-backed-evidence-key")
+
+            credential.chmod(0o644)
+            with mock.patch.dict(
+                os.environ,
+                {"EVIMED_EVIDENCE_SEARCH_KEY_FILE": str(credential)},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(sources.PublicSourceError, "unavailable or unsafe"):
+                    sources._direct_credential("evimed-evidence")
+
     def test_ncbi_dispatch_preserves_database_identity_and_provenance(self):
         search = {"esearchresult": {"idlist": ["101"]}}
         summary = {"result": {"101": {"uid": "101", "caption": "BRCA1", "description": "Observed gene"}}}
