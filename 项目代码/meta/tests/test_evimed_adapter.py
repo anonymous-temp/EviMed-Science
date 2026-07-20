@@ -152,6 +152,55 @@ def test_managed_job_uses_fixed_cli_and_returns_only_workspace_relative_artifact
     assert all(not Path(item["path"]).is_absolute() for item in body["artifacts"])
 
 
+def test_release_blocked_exit_preserves_evidence_gap_artifacts(tmp_path, monkeypatch) -> None:
+    client, workspace = _fixture(tmp_path, monkeypatch)
+
+    class Worker:
+        pid = 12346
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(evimed_adapter.subprocess, "Popen", lambda command, **kwargs: Worker())
+    started = _post(client, {
+        "action": "start",
+        "topic": "Sparse evidence topic",
+        "maxPapers": 10,
+    })
+    job_id = started.json()["data"]["jobId"]
+    state_file = workspace / "meta-analysis-runs" / ".jobs" / f"{job_id}.json"
+
+    def blocked_run(command, **kwargs):
+        output_root = Path(command[command.index("--output-dir") + 1])
+        project = output_root / "evidence-gap-project"
+        (project / "manuscript").mkdir(parents=True)
+        (project / "package").mkdir(parents=True)
+        (project / "manuscript" / "draft.md").write_text("# Evidence gap\n", encoding="utf-8")
+        (project / "package" / "metaagent_export.zip").write_bytes(b"PK-gap")
+        (project / "package" / "release_decision.json").write_text(
+            json.dumps({
+                "status": "blocked",
+                "next_actions": ["Add eligible primary studies before publication."],
+            }),
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=2)
+
+    monkeypatch.setattr(evimed_adapter.subprocess, "run", blocked_run)
+    assert evimed_adapter.run_job(str(state_file)) == 0
+    state = json.loads(state_file.read_text(encoding="utf-8"))
+    assert state["status"] == "succeeded"
+    assert state["returnCode"] == 2
+    assert state["releaseStatus"] == "blocked"
+
+    terminal = _post(client, {"action": "status", "jobId": job_id}).json()
+    assert terminal["status"] == "warning"
+    assert terminal["data"]["jobStatus"] == "succeeded"
+    assert terminal["data"]["releaseStatus"] == "blocked"
+    assert terminal["artifacts"]
+    assert terminal["next_actions"] == ["Add eligible primary studies before publication."]
+
+
 def test_tenant_scope_and_symlink_boundaries_fail_closed(tmp_path, monkeypatch) -> None:
     client, workspace = _fixture(tmp_path, monkeypatch)
     other = _post(client, {"action": "capabilities"}, token=_token(project="project-2"))
