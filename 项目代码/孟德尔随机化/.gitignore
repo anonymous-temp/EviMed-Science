@@ -59,6 +59,10 @@ analysis-data/
 output/
 outputs/
 
+# The package below is application source, not generated analysis output.
+!mr_agent/output/
+!mr_agent/output/*.py
+
 # Temporary files
 *.tmp
 *.bak
