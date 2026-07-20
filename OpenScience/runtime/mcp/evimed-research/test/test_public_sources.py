@@ -12,9 +12,32 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import public_sources as sources
+import build_pharmacy_reference as pharmacy_builder
 
 
 class PublicSourceConnectorTests(unittest.TestCase):
+    def test_private_pharmacy_reference_builder_and_read_only_search(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            source_root = root / "sources"
+            source_root.mkdir()
+            (source_root / "sample.csv").write_text(
+                "药品,规则,备注\n阿司匹林,高风险剂量复核,仅供测试\n二甲双胍,肾功能监测,仅供测试\n",
+                encoding="utf-8",
+            )
+            database = root / "pharmacy.sqlite"
+            with mock.patch.object(pharmacy_builder, "DATASETS", {"high-risk-dose": "sample.csv"}):
+                receipt = pharmacy_builder.build(source_root, database)
+            self.assertEqual(receipt["datasets"], 1)
+            self.assertEqual(receipt["rows"], 2)
+            with mock.patch.dict(os.environ, {"EVIMED_PHARMACY_REFERENCE_DB": str(database)}):
+                self.assertTrue(sources.configured("evimed_pharmacy_reference_search"))
+                result = sources.pharmacy_reference({"query": "阿司匹林", "limit": 5})
+            self.assertEqual(result["status"], "warning")
+            self.assertEqual(result["data"]["items"][0]["fields"]["药品"], "阿司匹林")
+            self.assertEqual(result["sources"][0]["evidenceAccess"], "user_provided_other")
+            self.assertTrue(any("not proof" in warning for warning in result["warnings"]))
+
     def test_openfda_event_boolean_operator_is_encoded_exactly_once(self):
         query = sources._event_search({
             "drug": "aspirin",
@@ -121,21 +144,21 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertEqual(request.call_args.kwargs["json_body"]["query"], "观察药 观察品牌 观察厂家")
         self.assertTrue(any("current official label" in item for item in result["warnings"]))
 
-    def test_evimed_evidence_search_is_the_default_internal_literature_source(self):
+    def test_documented_evimed_endpoint_is_the_default_internal_literature_source(self):
         payload = {
             "code": 200,
             "data": {
-                "paper": [{
+                "total": 1,
+                "list": [{
                     "id": "paper-1", "title": "观察研究", "year": 2025,
                     "url": "https://pubmed.ncbi.nlm.nih.gov/12345678/",
                 }],
-                "guide": [], "clinicalTrials": [], "instructions": [],
             },
         }
         with mock.patch.object(sources, "_get_json", return_value=payload) as request:
             result = sources.literature({"query": "观察药 综合评价", "limit": 3})
-        self.assertEqual(result["data"]["items"][0]["id"], "EVIMED-PAPER:paper-1")
-        self.assertEqual(result["sources"][0]["source"], "evimed-evidence-paper")
+        self.assertEqual(result["data"]["items"][0]["id"], "EVIMED-LITERATURE:paper-1")
+        self.assertEqual(result["sources"][0]["source"], "evimed-literature")
         self.assertEqual(request.call_args.kwargs["credential_profile"], "evimed-evidence")
 
     def test_composite_drug_workflows_keep_evimed_evidence_enabled_by_default(self):

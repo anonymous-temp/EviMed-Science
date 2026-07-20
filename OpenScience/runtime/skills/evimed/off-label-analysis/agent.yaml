@@ -1,5 +1,5 @@
 id: off-label-analysis
-version: 2.2.0
+version: 2.2.1
 title: Off-label Use Analysis
 category: Evidence Synthesis
 description: Assist item-level label comparison and evidence-support scoring for a proposed use.
@@ -32,6 +32,7 @@ optionalTools:
   - evimed_guideline_search
   - evimed_clinical_trial_search
   - evimed_literature_search
+  - evimed_pharmacy_reference_search
 dataSources:
   - drug-labels
   - guidelines

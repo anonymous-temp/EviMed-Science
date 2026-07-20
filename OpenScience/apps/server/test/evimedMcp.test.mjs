@@ -286,6 +286,51 @@ test("host runtimes bind the managed local MetaAgent and model config without ex
 });
 
 
+test("host runtimes bind a bounded pharmacy reference while docker requires its HTTP adapter", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-pharmacy-"));
+  try {
+    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
+    const pharmacyReferenceDb = path.join(tmp, "pharmacy-reference.sqlite");
+    await writeFile(pharmacyReferenceDb, "bounded test database fixture");
+    await syncRuntimeEviMedMcp(
+      { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {}, pharmacyReferenceDb },
+      project,
+      { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir },
+    );
+    let config = JSON.parse(await readFile(path.join(xdgConfigDir, "opencode", "opencode.json"), "utf8"));
+    assert.equal(config.mcp["evimed-research"].environment.EVIMED_PHARMACY_REFERENCE_DB, pharmacyReferenceDb);
+
+    const dockerXdgConfigDir = path.join(project.runtimeDir, "docker-xdg-config");
+    await assert.rejects(
+      () => syncRuntimeEviMedMcp(
+        { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {}, pharmacyReferenceDb },
+        project,
+        { sandboxMode: "docker", xdgConfigDir: dockerXdgConfigDir, proxyWorkspaceDir: "/workspace" },
+      ),
+      (error) => error?.code === "runtime_pharmacy_reference_adapter_required",
+    );
+    await syncRuntimeEviMedMcp(
+      {
+        evimedMcpSourceDir: sourceDir,
+        evimedAdapterUrls: { pharmacyReferenceSearch: "https://pharmacy.internal/reference" },
+        evimedWorkloadSigningSecret: signingSecret,
+        pharmacyReferenceDb,
+      },
+      project,
+      { sandboxMode: "docker", xdgConfigDir: dockerXdgConfigDir, proxyWorkspaceDir: "/workspace" },
+    );
+    config = JSON.parse(await readFile(path.join(dockerXdgConfigDir, "opencode", "opencode.json"), "utf8"));
+    assert.equal(
+      config.mcp["evimed-research"].environment.EVIMED_PHARMACY_REFERENCE_SEARCH_URL,
+      "https://pharmacy.internal/reference",
+    );
+    assert.equal(config.mcp["evimed-research"].environment.EVIMED_PHARMACY_REFERENCE_DB, undefined);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+
 test("docker runtimes require the MetaAgent HTTP adapter instead of a host source path", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-meta-docker-"));
   try {
@@ -826,6 +871,8 @@ test("hosted deployment exposes only MCP source and non-secret adapter URL setti
     "EVIMED_LITERATURE_SEARCH_URL",
     "EVIMED_GUIDELINE_SEARCH_URL",
     "EVIMED_CLINICAL_TRIAL_SEARCH_URL",
+    "EVIMED_PATENT_SEARCH_URL",
+    "EVIMED_PHARMACY_REFERENCE_SEARCH_URL",
     "EVIMED_DRUG_LABEL_SEARCH_URL",
     "EVIMED_ADR_CASE_QUERY_URL",
     "EVIMED_ADR_SIGNAL_ANALYSIS_URL",

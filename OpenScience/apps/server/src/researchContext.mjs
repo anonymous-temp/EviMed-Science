@@ -303,7 +303,12 @@ function escapeContext(value) {
     .replaceAll("'", "&#39;");
 }
 
-export async function prepareResearchContext(project, session, config, { query = "", memories = [], memoryError = null } = {}) {
+export async function prepareResearchContext(
+  project,
+  session,
+  config,
+  { query = "", memories = [], memoryError = null, specialists = [] } = {},
+) {
   const knowledge = await syncKnowledgeBase(project, config);
   const knowledgeIndex = await indexKnowledgeBase(project, config, knowledge);
   const retrievedKnowledge = await retrieveKnowledge(project, config, knowledgeIndex, query);
@@ -334,6 +339,18 @@ export async function prepareResearchContext(project, session, config, { query =
     : memoryError
       ? `科研记忆服务暂时不可用（${memoryError}）；不要声称读取过科研记忆。`
       : "当前问题未检索到相关科研记忆；不要声称使用过科研记忆。";
+  const specialistInstruction = session.mode === "open-domain" && specialists.length > 0
+    ? [
+        "开放域科研问答已注册以下专项 Skill。问题与其中一个或多个范围实质匹配时，必须加载对应 Skill，并按其工具、证据边界和交付物执行；可按问题需要组合多个专项，但不得为展示能力而无关调用：",
+        ...specialists.map((item) => [
+          `<evimed-specialist id="${escapeContext(item.id)}" skill="${escapeContext(item.skill)}">`,
+          `${escapeContext(item.title)}：${escapeContext(item.description)}`,
+          `Required tools: ${escapeContext((item.requiredTools ?? []).join(", "))}`,
+          "</evimed-specialist>",
+        ].join("\n")),
+        "若没有专项实质匹配，保持开放域回答；工具未配置、任务失败或证据不足时保留真实状态，不得假装已执行。",
+      ].join("\n")
+    : "专项科研会话必须继续遵循已注册专项 Agent 的 SKILL.md、工具边界和交付物约束。";
 
   return {
     knowledge,
@@ -351,7 +368,8 @@ export async function prepareResearchContext(project, session, config, { query =
       knowledgeInstruction,
       "只能在当前工作区内读取 .evimed-knowledge/；若该目录或相关文件不存在，就按知识库为空处理，不得为寻找知识库扫描父目录、用户主目录或其他外部目录。",
       memoryInstruction,
-      "开放域问题保持自主科研能力；专项科研会话必须继续遵循已注册专项 Agent 的 SKILL.md、工具边界和交付物约束。",
+      "开放域问题保持自主科研能力。",
+      specialistInstruction,
       "不得仅凭题名或检索元数据推断研究设计、证据等级、效应量或因果结论；来源未提供摘要或全文时，只能陈述题名、元数据和检索相关性。",
       "需要开放获取论文原文时，优先用 evimed_open_access_full_text 将完整 XML 和 Markdown 写入当前工作区，再用 read 分段读取；不得为了读取本地工具输出而启动 task 子会话，也不得要求子会话大段逐字复述原文。",
       "当用户要求基于某一篇已发表论文题目重写、复现或评述正文时，必须先调用 citation-integrity skill，并只以题名、DOI/PMID/PMCID 完全匹配的已发表版本全文为事实底稿。配套论文、预印本、引文、检索页和第三方摘要可以作为线索，但其内容不得写成目标论文自身的方法或结果。",

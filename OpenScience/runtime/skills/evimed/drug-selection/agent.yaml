@@ -1,5 +1,5 @@
 id: drug-selection
-version: 2.1.0
+version: 2.1.1
 title: Drug Selection Evaluation
 category: Formulary Decision Support
 description: Compare candidate medicines across pharmaceutical properties, effectiveness, safety, economics, and other formulary attributes.
@@ -34,6 +34,7 @@ optionalTools:
   - evimed_guideline_search
   - evimed_clinical_trial_search
   - evimed_literature_search
+  - evimed_pharmacy_reference_search
 dataSources:
   - drug-labels
   - guidelines

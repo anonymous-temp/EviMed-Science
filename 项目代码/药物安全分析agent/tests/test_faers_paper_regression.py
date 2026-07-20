@@ -46,6 +46,13 @@ def test_frozen_fixture_is_small_deidentified_and_explicit_about_binding():
     for file_key, hash_key in (
         ("panels_file", "panels_sha256"),
         ("publication_anchors_file", "publication_anchors_sha256"),
+        ("multidrug_panels_file", "multidrug_panels_sha256"),
+        (
+            "multidrug_publication_anchors_file",
+            "multidrug_publication_anchors_sha256",
+        ),
+        ("analysis_coverage_matrix_file", "analysis_coverage_matrix_sha256"),
+        ("class_publication_anchors_file", "class_publication_anchors_sha256"),
     ):
         payload = (ROOT / manifest[file_key]).read_bytes()
         assert hashlib.sha256(payload).hexdigest() == manifest[hash_key]

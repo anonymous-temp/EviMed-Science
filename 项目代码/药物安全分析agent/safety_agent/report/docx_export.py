@@ -126,10 +126,20 @@ def _docx_overview(document, result: AnalysisResult) -> None:
     document.add_paragraph(f"FAERS 报告总数:{_int(result.overview.total_reports)} 份")
     document.add_paragraph(f"药品角色口径:{'、'.join(result.suspect_roles)}")
     document.add_paragraph(f"药名/角色绑定:{result.suspect_binding}")
+    if result.administration_routes:
+        document.add_paragraph(f"给药途径:{'、'.join(result.administration_routes)}")
     if result.study_date_from or result.study_date_to:
         document.add_paragraph(
             f"研究时间窗:{result.study_date_from or 'open'} 至 "
             f"{result.study_date_to or 'open'}"
+        )
+    if (result.background_date_from or result.background_date_to) and (
+        result.background_date_from != result.study_date_from
+        or result.background_date_to != result.study_date_to
+    ):
+        document.add_paragraph(
+            f"背景时间窗:{result.background_date_from or 'open'} 至 "
+            f"{result.background_date_to or 'open'}"
         )
     prior_label = "fitted" if result.gps_prior_fitted else "unfitted-starting-prior"
     prior_id = f" ({result.gps_prior_id})" if result.gps_prior_id else ""
@@ -147,7 +157,7 @@ def _docx_case_profile(document, result: AnalysisResult) -> None:
     document.add_heading("2. 病例概览(FAERS)", level=1)
     _docx_buckets(document, "年度趋势", overview.yearly)
     _docx_buckets(document, "性别分布", overview.sex)
-    _docx_buckets(document, "年龄段(近似)", overview.age_buckets)
+    _docx_buckets(document, "年龄段(已换算为年;十年代编码近似)", overview.age_buckets)
     _docx_buckets(document, "结局分布", overview.outcomes)
     _docx_buckets(document, "报告国别 top10", overview.countries)
     _docx_buckets(document, "合并用药 top10", overview.concomitant_drugs)

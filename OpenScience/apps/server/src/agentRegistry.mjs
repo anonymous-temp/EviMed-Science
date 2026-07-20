@@ -38,6 +38,8 @@ export const EVIMED_AGENT_TOOL_IDS = new Set([
   "evimed_literature_search",
   "evimed_guideline_search",
   "evimed_clinical_trial_search",
+  "evimed_patent_search",
+  "evimed_pharmacy_reference_search",
   "evimed_evidence_deduplicate",
   "evimed_drug_term_normalize",
   "evimed_adr_case_query",

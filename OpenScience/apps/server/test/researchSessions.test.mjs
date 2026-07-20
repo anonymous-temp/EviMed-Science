@@ -41,7 +41,7 @@ test("persists specialist identity derived from the current registry", async () 
     const response = await putBinding(base, "ses_adr", {
       mode: "specialist",
       agentId: "adr-analysis",
-      agentVersion: "1.2.1",
+      agentVersion: "1.2.2",
     });
     assert.equal(response.status, 200);
     const binding = (await response.json()).data;
@@ -57,7 +57,7 @@ test("persists specialist identity derived from the current registry", async () 
         sessionId: "ses_adr",
         mode: "specialist",
         agentId: "adr-analysis",
-        agentVersion: "1.2.1",
+        agentVersion: "1.2.2",
         runtimeAgent: "evimed-adr-analysis",
       },
     );
@@ -107,7 +107,7 @@ test("treats an exact binding PUT as idempotent but rejects every identity chang
     const originalResponse = await putBinding(base, "ses_immutable", {
       mode: "specialist",
       agentId: "adr-analysis",
-      agentVersion: "1.2.1",
+      agentVersion: "1.2.2",
     });
     assert.equal(originalResponse.status, 200);
     const original = (await originalResponse.json()).data;
@@ -115,7 +115,7 @@ test("treats an exact binding PUT as idempotent but rejects every identity chang
     const repeatedResponse = await putBinding(base, "ses_immutable", {
       mode: "specialist",
       agentId: "adr-analysis",
-      agentVersion: "1.2.1",
+      agentVersion: "1.2.2",
     });
     assert.equal(repeatedResponse.status, 200);
     const repeated = (await repeatedResponse.json()).data;
@@ -150,7 +150,7 @@ test("rejects unknown agents, stale versions, injected runtime identities, and i
     const cases = [
       ["ses_unknown", { mode: "specialist", agentId: "missing-agent", agentVersion: "1.0.0" }, 404, "agent_not_found"],
       ["ses_stale", { mode: "specialist", agentId: "adr-analysis", agentVersion: "0.9.0" }, 409, "agent_version_mismatch"],
-      ["ses_injected", { mode: "specialist", agentId: "adr-analysis", agentVersion: "1.2.1", runtimeAgent: "build" }, 400, "invalid_research_session"],
+      ["ses_injected", { mode: "specialist", agentId: "adr-analysis", agentVersion: "1.2.2", runtimeAgent: "build" }, 400, "invalid_research_session"],
       ["../escape", { mode: "open-domain" }, 400, "invalid_id"],
     ];
     for (const [sessionId, body, status, code] of cases) {
@@ -173,7 +173,7 @@ test("keeps identical OpenCode session ids isolated by selected project", async 
     response = await putBinding(base, "ses_shared", {
       mode: "specialist",
       agentId: "adr-analysis",
-      agentVersion: "1.2.1",
+      agentVersion: "1.2.2",
     });
     assert.equal(response.status, 200);
     response = await putBinding(base, "ses_shared", { mode: "open-domain" }, "second");

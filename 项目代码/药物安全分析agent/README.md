@@ -17,6 +17,7 @@ P6(OpenScience 开放域技能路由)**。
 │   ├── core/                  # 配置 / 日志 / 异常体系 / 内存+磁盘双级 TTL 缓存
 │   ├── openfda/               # openFDA live 数据层(httpx 异步;退避;双级缓存;label 查询)
 │   ├── faers/                 # 冻结逐报告快照(同一 drug 对象绑定药名+ROLE_COD)
+│   ├── drug_classes/          # 版本化类药定义 + 互斥比较/分层/起病时间引擎
 │   ├── normalize/             # 药品名/ADR 归一(规则优先,LLM 兜底仅留接口)
 │   ├── signals/               # 信号统计层(纯 numpy/pandas;ROR/PRR/χ²/IC/EBGM)
 │   ├── llm/                   # DeepSeek 异步客户端(flash/pro 双层;JSON 校验+修复重试)
@@ -65,6 +66,8 @@ cp .env.example .env          # 填 DEEPSEEK_API_KEY 后启用 LLM;JAVA_WS_URL/T
 | `GET /api/v1/adr/jobs/{id}/report` | text/markdown 报告;未完成 → 409 |
 | `GET /api/v1/adr/jobs/{id}/report.docx` / `.pdf` | 文件流(产物在 `jobs/<id>/` 下) |
 | `GET /api/v1/adr/signals?drug=&reaction=` | 轻量同步信号表 JSON(归一+2×2+指标,无概览/LLM);reaction 可逗号分隔多个 |
+| `GET /api/v1/adr/classes` | 列出版本化类药定义、ATC 与成员 |
+| `POST /api/v1/adr/classes/analyze` | body `{class_id,reactions?,role_codes?}`;冻结报告级 FAERS 上执行类药全流程;`?report=true` 返回 Markdown。PT 最多 20 项/每项 200 字符,受全局并发门限与 300s 超时保护 |
 
 错误统一为 `{code, msg}`:400 归一失败 / 404 无数据或未知 job / 409 job 未完成 /
 422 参数校验 / 429 openFDA 限流 / 502 openFDA 不可用;不透传堆栈与内部细节。
@@ -134,8 +137,11 @@ markdown = render_markdown(result)   # 或 export_docx / export_pdf
 404→`NoResults`;非法聚合(如 `count=occurcountry` 未加 `.exact`)识别为查询错误
 快速失败而非重试。可复现的报告级统计可配置 `FAERS_SNAPSHOT_PATH`:生产运行使用索引化
 SQLite 快照(流式导入时按 case version 去重),JSON 仅用于小型回归夹具。分析在同一
-drug 对象上同时匹配规范药名与 `ROLE_COD`;live openFDA
+drug 对象上同时匹配规范药名、`ROLE_COD` 与可选给药途径;目标药时间窗可与
+背景报告时间窗分离(用于上市后目标药+全历史背景的论文设计)。live openFDA
 聚合不具备此对象绑定能力,只作为明确标注的报告级近似。
+年龄分桶使用 ICH `patientonsetageunit`(800–805)将年/月/周/日/小时统一到年龄区间,
+并显式输出未报告性别、年龄和国家的桶。
 
 ### P3 信号统计
 ROR/PRR 及 95%CI、χ²(Yates 可选)、crude IC + BCPNN IC025、GPS
@@ -144,6 +150,22 @@ EBGM/EB05(DuMouchel 1999 双伽马混合先验);EBGM 按 `exp(E[log λ])` 计算
 MLE、多起点优化、拟合数据指纹与 prior ID;未注入 fitted prior 时报告明确标为探索性。
 ROR/PRR/IC 的零格仍自动 Haldane-Anscombe 并打标;R/openEBGM oracle 与论文冻结
 回归测试均为离线 CI。
+
+### 类药信号挖掘
+
+已内置 SGLT2 抑制剂、GLP-1RA 产品、PARP 抑制剂和 JAK 抑制剂四套
+可版本化定义;成员与 ATC 根据本地 `ATC_DDD_Index_merged.xlsx` 校验,
+品牌/通用名与排除的复方产品均显式记录。一次分析同时输出:
+
+- 整类 vs 全 FAERS、成员 vs 全 FAERS、成员 vs 其余同类药、整类 vs 治疗领域对照;
+- 共有/特有信号矩阵、SOC/SMQ/IME 映射覆盖率、单药/联合治疗分层;
+- 起病时间的中位数/IQR/缺失数,以及各成员获批后首年敏感性分析。
+
+类内成员与对照同时出现的报告从两组均排除并单独输出
+`overlap_excluded`,避免非互斥队列污染 ROR。SOC/SMQ/IME 内置表只是论文回归子集;
+生产完整编码需加载持版 MedDRA 和当期 EMA IME 清单,未映射项不会被猜测。
+零暴露成员、零事件边际和零对照边际不进入 Haldane 校正,而是明确标为未估计;
+SQLite v1/v2 仍可运行信号分析,但会明示降级跳过只有 v3 时间字段才能支持的 TTO。
 
 ### P4 分析链与报告
 - **六步管线**:归一 → 病例概览(总量/年度趋势/性别/年龄/结局/国别/合并用药/
@@ -163,6 +185,20 @@ ROR/PRR/IC 的零格仍自动 Haldane-Anscombe 并打标;R/openEBGM oracle 与�
   概览→输入归一→病例概览→信号表→重点 ADR 解读→说明书对照→循证证据→局限性声明
   →可追溯查询 URL/冻结快照 provenance 附录。报告输出数据源、同对象绑定语义、
   ROLE_COD、时间窗、统计版本、snapshot/prior ID,不再把 live suspect 查询称为 PS-only。
+
+### 论文回归基准
+
+- 离线基准位于 `tests/data/faers_regression/v1/`,现覆盖 semaglutide、osimertinib、
+  metformin、tafamidis、olaparib、cefiderocol 和 famciclovir。
+- 新增 17 个 PT 四格表面板,覆盖 ROR/CI、PRR/CI、χ²、IC/IC025、GPS EBGM/EB05、
+  信号判定、排序一致性与声明式漂移。`analysis_coverage_matrix.json` 强制每个
+  `AnalysisResult`/总览/信号字段都有论文或确定性契约测试负责。
+- 类药金标另覆盖 SGLT2i、GLP-1RA、PARPi 和 JAKi 四篇论文;
+  GLP-1RA 表 1 的成员 vs 其余同类药 ROR 逐项复现。论文摘要总数与表 1
+  汇总数不一致、零单元格未校正等问题被保留为质控差异,不会被强行抹平。
+- 论文值是已发表参考锚点,不是因果性金标准。原始季度库、MedDRA 版本、去重、
+  药品角色、给药途径或 EBGM 定义不同时,回归必须标记为方法不兼容或漂移,
+  不得用放大容差伪装精确复现。
 
 ## openFDA 连通性结论(2026-07-20 实测,macOS arm64,无代理)
 
@@ -201,7 +237,7 @@ ROR/PRR/IC 的零格仍自动 Haldane-Anscombe 并打标;R/openEBGM oracle 与�
   缺陷对照销号。代码回归不等同于生产实调用;只有注入真实 EviMed 证据凭据并产生
   新的终态任务回执后,才可声明该证据层和开放域药物安全链在目标环境已生效。
 - 已知限制:未配置 fitted GPS prior 时 EBGM/EB05 仅供探索;live openFDA 无法同对象
-  绑定目标药与 suspect role;年龄分桶不区分 patientonsetage 单位(近似,报告已声明);
+  绑定目标药、suspect role 与给药途径,合并用药角色也只能在冻结逐报告后端精确计算;
   EviMed 证据检索层需
   配置 `EVIMED_EVIDENCE_SEARCH_KEY_FILE` 或受管 `EVIMED_EVIDENCE_SEARCH_KEY` 才会启用;
   job 存内存,服务重启后历史 job 404(设计如此)。

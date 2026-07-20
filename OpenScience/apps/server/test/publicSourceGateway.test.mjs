@@ -266,6 +266,61 @@ test("EviMed evidence POST requests are fixed, read-only, and schema bounded", a
   }
 });
 
+test("EviMed evidence gateway registers every documented retrieval endpoint", async (t) => {
+  const observed = [];
+  const server = createServer(createPublicSourceGatewayHandler({
+    publicSourceCredentials: { evimedEvidence: "server-secret" },
+  }, runtimeManager(), {
+    fetchImpl: async (url, options) => {
+      observed.push({ url: String(url), body: JSON.parse(options.body) });
+      return new Response(JSON.stringify({ code: 200, data: { list: [] } }), {
+        headers: { "content-type": "application/json" },
+      });
+    },
+  }));
+  const base = await listen(server);
+  t.after(() => close(server));
+
+  const cases = [
+    ["instruction", { query: "阿司匹林", count: 200, source: ["nmpa", "fda"] }],
+    ["literature", { query: "乌帕替尼", count: 100, articleTypes: ["随机对照试验"], hasPdf: true, minImpactFactor: 1 }],
+    ["guide", { query: "高血压", count: 100, publishers: ["NCCN"], language: "zh" }],
+    ["guide-block", { query: "高血压", publisher: "中华医学会", startYear: 2020, endYear: 2026 }],
+    ["clinical-trial", { query: "aspirin", count: 100, registry: 2, source: "PubMed", minSampleSize: 0 }],
+    ["patent", { query: "pembrolizumab", count: 100 }],
+  ];
+  for (const [name, body] of cases) {
+    const response = await gatewayRequest(base, {
+      url: `https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/${name}`,
+      accept: ["application/json"],
+      method: "POST",
+      credentialProfile: "evimed-evidence",
+      body,
+    });
+    assert.equal(response.status, 200, name);
+  }
+  assert.equal(observed.length, cases.length);
+
+  const invalidInstruction = await gatewayRequest(base, {
+    url: "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/instruction",
+    accept: ["application/json"], method: "POST", credentialProfile: "evimed-evidence",
+    body: { query: "aspirin", source: ["unknown"] },
+  });
+  assert.equal(invalidInstruction.status, 400);
+  const crossEndpointInstruction = await gatewayRequest(base, {
+    url: "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/instruction",
+    accept: ["application/json"], method: "POST", credentialProfile: "evimed-evidence",
+    body: { query: "aspirin", source: "PubMed" },
+  });
+  assert.equal(crossEndpointInstruction.status, 400);
+  const crossEndpointTrial = await gatewayRequest(base, {
+    url: "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/clinical-trial",
+    accept: ["application/json"], method: "POST", credentialProfile: "evimed-evidence",
+    body: { query: "aspirin", source: ["nmpa"] },
+  });
+  assert.equal(crossEndpointTrial.status, 400);
+});
+
 test("credential profiles fail closed when missing, caller-supplied, or used on another host", async (t) => {
   let fetchCalls = 0;
   const server = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), {

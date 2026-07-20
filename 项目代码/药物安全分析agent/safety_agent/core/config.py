@@ -42,13 +42,19 @@ class Settings(BaseSettings):
     # Optional frozen, report-level FAERS snapshot. When configured, all
     # overview and signal counts use exact same-drug-object ROLE_COD binding.
     faers_snapshot_path: Path | None = None
+    faers_drug_aliases: str = ""
+    faers_suspect_roles: str = "PS"
+    faers_administration_routes: str = ""
     faers_study_date_from: date | None = None
     faers_study_date_to: date | None = None
+    faers_background_date_from: date | None = None
+    faers_background_date_to: date | None = None
     gps_prior_artifact_path: Path | None = None
 
     # Two-level response cache
     cache_dir: Path = Path(".cache/openfda")
     cache_ttl_hours: float = Field(default=24.0, ge=0.0)
+    cache_max_memory_entries: int = Field(default=2048, ge=1, le=100_000)
 
     # Java WebSocket backend (P5)
     java_ws_url: str = ""
@@ -95,6 +101,19 @@ class Settings(BaseSettings):
         return PROJECT_ROOT / self.gps_prior_artifact_path
 
     @property
+    def parsed_faers_drug_aliases(self) -> tuple[str, ...]:
+        return _csv_values(self.faers_drug_aliases)
+
+    @property
+    def parsed_faers_suspect_roles(self) -> frozenset[str]:
+        values = _csv_values(self.faers_suspect_roles)
+        return frozenset(value.upper() for value in values or ("PS",))
+
+    @property
+    def parsed_faers_administration_routes(self) -> tuple[str, ...]:
+        return _csv_values(self.faers_administration_routes)
+
+    @property
     def cache_ttl_seconds(self) -> float:
         return self.cache_ttl_hours * 3600.0
 
@@ -138,6 +157,10 @@ def _read_private_secret(path: Path, *, max_bytes: int = 4096) -> str:
     if not value or any(character.isspace() for character in value):
         raise ValueError("EviMed evidence API key file must contain one credential")
     return value
+
+
+def _csv_values(value: str) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(item.strip() for item in value.split(",") if item.strip()))
 
 
 @lru_cache

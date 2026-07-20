@@ -23,6 +23,12 @@ evidence set; absence from a small search is not proof of novelty.
    is not high priority merely because it sounds novel.
 4. Do not fabricate search counts, citations, data availability, sample sizes,
    effect assumptions, or publication probability.
+5. Use `evimed_pharmacy_reference_search` only when configured private
+   terminology or rule coverage materially informs feasibility, phenotype or
+   exposure definition, or data-readiness questions. Private rows are
+   institution-specific discovery context, not proof of novelty, prevalence,
+   clinical validity, or current guidance; verify material assumptions against
+   current authoritative sources.
 
 ## Deliverables
 

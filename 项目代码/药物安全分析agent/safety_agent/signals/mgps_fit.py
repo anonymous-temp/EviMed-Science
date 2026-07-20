@@ -51,6 +51,9 @@ def gps_scope_fingerprint(
     event_universe: str = "all_snapshot_reactions",
     zero_policy: str = "retain_complete_matrix",
     matrix_generation_version: str = "gps-matrix-v1",
+    routes: tuple[str, ...] = (),
+    background_date_from: str | None = None,
+    background_date_to: str | None = None,
 ) -> str:
     """Fingerprint every analysis-universe choice that changes a GPS fit."""
     payload = {
@@ -63,6 +66,14 @@ def gps_scope_fingerprint(
         "zero_policy": zero_policy,
         "matrix_generation_version": matrix_generation_version,
     }
+    # Preserve existing artifact identities for the historical default scope;
+    # only scope extensions that materially change the matrix add fields.
+    if routes:
+        payload["routes"] = sorted(set(routes))
+    if background_date_from is not None:
+        payload["background_date_from"] = background_date_from
+    if background_date_to is not None:
+        payload["background_date_to"] = background_date_to
     return hashlib.sha256(_canonical_json(payload)).hexdigest()
 
 

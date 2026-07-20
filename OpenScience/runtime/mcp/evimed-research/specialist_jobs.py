@@ -92,7 +92,11 @@ SPECS = {
         "marker": "safety_agent/analysis/pipeline.py",
         "directory": "drug-safety-runs",
         "required": ("drug",),
-        "inputs": ("drug", "reactions", "outputLanguage"),
+        "inputs": (
+            "drug", "reactions", "outputLanguage", "drugAliases", "suspectRoles",
+            "administrationRoutes", "studyDateFrom", "studyDateTo",
+            "backgroundDateFrom", "backgroundDateTo",
+        ),
     },
 }
 

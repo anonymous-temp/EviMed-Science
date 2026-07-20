@@ -14,6 +14,7 @@ here would turn into ``%2B`` and search for a literal ``+AND+`` token).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -32,6 +33,7 @@ FIELD_SERIOUSNESS_CONGENITAL_ANOMALY = "seriousnesscongenitalanomali"
 FIELD_SERIOUSNESS_OTHER = "seriousnessother"
 FIELD_PATIENT_SEX = "patient.patientsex"
 FIELD_PATIENT_AGE = "patient.patientonsetage"
+FIELD_PATIENT_AGE_UNIT = "patient.patientonsetageunit"
 FIELD_OCCUR_COUNTRY = "occurcountry"
 FIELD_PRIMARY_SOURCE_COUNTRY = "primarysourcecountry"
 
@@ -48,6 +50,7 @@ FIELD_DRUG_GENERIC = "patient.drug.openfda.generic_name"
 #: "PS-only" filter through openFDA is an approximation of raw-FAERS
 #: role_cod=PS (documented in the report limitations).
 FIELD_DRUG_CHARACTERIZATION = "patient.drug.drugcharacterization"
+FIELD_DRUG_ROUTE = "patient.drug.drugadministrationroute"
 
 #: Exact-match variants used by ``count`` queries.
 FIELD_DRUG_EXACT = FIELD_DRUG + ".exact"
@@ -109,6 +112,11 @@ def suspect_only_clause() -> str:
     return f"{FIELD_DRUG_CHARACTERIZATION}:1"
 
 
+def route_clause(route_code: str) -> str:
+    """ICH E2B route code on a drug entry (for example 048=oral)."""
+    return quoted_term(FIELD_DRUG_ROUTE, route_code)
+
+
 def reaction_clause(reaction_pt: str, *, exact: bool = False) -> str:
     """Reaction PT clause; ``exact`` uses the case-sensitive .exact field
     (pass the MedDRA-preferred casing, e.g. "Lactic acidosis")."""
@@ -155,6 +163,43 @@ def age_range_clause(age_min: int | None, age_max: int | None) -> str:
     if lo < 0 or hi < 0 or lo > hi:
         raise SafetyAgentError(f"invalid age range [{age_min}, {age_max}]")
     return f"{FIELD_PATIENT_AGE}:[{lo} TO {hi}]"
+
+
+def age_years_range_clause(age_min: int | None, age_max: int | None) -> str:
+    """Age range normalized across the ICH onset-age unit codes.
+
+    ``patientonsetage`` is not intrinsically measured in years.  The paired
+    ``patientonsetageunit`` field uses 800=decade, 801=year, 802=month,
+    803=week, 804=day and 805=hour.  Each unit-specific branch below maps a
+    non-overlapping whole-year interval back to the raw unit before the
+    branches are ORed.  Decade-coded ages are necessarily approximate and
+    are assigned by their decade's lower bound (for example, 7 -> 70 years).
+    """
+    if age_min is None and age_max is None:
+        raise SafetyAgentError("age range needs at least one bound")
+    lo = 0 if age_min is None else age_min
+    hi = 150 if age_max is None else age_max
+    if lo < 0 or hi < 0 or lo > hi:
+        raise SafetyAgentError(f"invalid age range [{age_min}, {age_max}]")
+
+    # Raw units per year.  The decade branch is handled as the reciprocal.
+    unit_factors = (("801", 1), ("802", 12), ("803", 52), ("804", 365), ("805", 8760))
+    branches: list[str] = []
+    decade_lo = math.ceil(lo / 10)
+    decade_hi = math.ceil((hi + 1) / 10) - 1
+    if decade_lo <= decade_hi:
+        branches.append(
+            f"({FIELD_PATIENT_AGE_UNIT}:800 AND "
+            f"{FIELD_PATIENT_AGE}:[{decade_lo} TO {decade_hi}])"
+        )
+    for unit, factor in unit_factors:
+        raw_lo = lo * factor
+        raw_hi = (hi + 1) * factor - 1
+        branches.append(
+            f"({FIELD_PATIENT_AGE_UNIT}:{unit} AND "
+            f"{FIELD_PATIENT_AGE}:[{raw_lo} TO {raw_hi}])"
+        )
+    return "(" + " OR ".join(branches) + ")"
 
 
 def serious_clause() -> str:

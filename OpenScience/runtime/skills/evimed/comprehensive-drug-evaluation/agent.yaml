@@ -1,5 +1,5 @@
 id: comprehensive-drug-evaluation
-version: 2.2.0
+version: 2.2.1
 title: Comprehensive Drug Evaluation
 category: Evidence Evaluation
 description: Synthesize labels, guidelines, trials, literature, HTA, effectiveness, safety, and economic evidence for a medicine and indication.
@@ -35,6 +35,8 @@ optionalTools:
   - evimed_guideline_search
   - evimed_clinical_trial_search
   - evimed_literature_search
+  - evimed_patent_search
+  - evimed_pharmacy_reference_search
   - evimed_evidence_deduplicate
 dataSources:
   - drug-labels

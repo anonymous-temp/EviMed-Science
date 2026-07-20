@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from safety_agent.analysis.models import Interpretation
+from safety_agent.analysis.overview import OverviewBuilder
 from safety_agent.analysis.pipeline import AnalysisPipeline
 from safety_agent.core.exceptions import (
     LLMUnavailable,
@@ -95,6 +96,29 @@ class MetforminNormalizationOpenFDA(StubOpenFDA):
         if search and "metformin" in search.casefold():
             return 10
         return await super().count_total(search)
+
+
+class ScopeRecordingOpenFDA(StubOpenFDA):
+    def __init__(self):
+        super().__init__()
+        self.searches: list[str | None] = []
+
+    async def count_total(self, search: str | None = None) -> int:
+        self.searches.append(search)
+        if search is None:
+            return 2000
+        drug = "medicinalproduct" in search
+        reaction = "reactionmeddrapt" in search
+        if drug and reaction:
+            return 10
+        if drug:
+            return 100
+        if reaction:
+            return 30
+        return 2000
+
+    async def count_terms(self, field: str, search: str | None = None, *, limit: int = 100):
+        return []
 
 
 class StubLLM:
@@ -203,6 +227,107 @@ async def test_frozen_snapshot_pipeline_uses_exact_same_object_role_binding():
     assert result.overview.total_reports == 1
     row = result.signals[0]
     assert (row.a, row.b, row.c, row.d, row.n) == (1, 0, 0, 1, 2)
+
+
+async def test_live_pipeline_applies_alias_route_target_and_background_scopes():
+    openfda = ScopeRecordingOpenFDA()
+    pipeline = _pipeline(
+        openfda,
+        drug_field="medicinalproduct",
+        drug_aliases=("Lipitor",),
+        drug_routes=("048",),
+        study_date_from="2015-01-01",
+        study_date_to="2020-12-31",
+        background_date_from="2004-01-01",
+        background_date_to="2020-12-31",
+        top_pt_count=0,
+    )
+
+    result = await pipeline.run("atorvastatin", ["myalgia"])
+
+    assert result.study_date_from == "2015-01-01"
+    assert result.study_date_to == "2020-12-31"
+    assert result.background_date_from == "2004-01-01"
+    assert result.background_date_to == "2020-12-31"
+    assert result.administration_routes == ["048"]
+    assert result.signals[0].n == 2000
+    drug_searches = [
+        search
+        for search in openfda.searches
+        if search and "medicinalproduct" in search and "drugcharacterization" in search
+    ]
+    assert any('medicinalproduct:"Lipitor"' in search for search in drug_searches)
+    assert all('drugadministrationroute:"048"' in search for search in drug_searches)
+    assert all("receivedate:[20150101 TO 20201231]" in search for search in drug_searches)
+    event_searches = [
+        search
+        for search in openfda.searches
+        if search and "reactionmeddrapt" in search and "medicinalproduct" not in search
+    ]
+    assert event_searches
+    assert all("receivedate:[20040101 TO 20201231]" in search for search in event_searches)
+
+
+async def test_live_concomitant_list_excludes_generic_and_brand_aliases():
+    class AliasTerms(StubOpenFDA):
+        async def count_terms(
+            self, field: str, search: str | None = None, *, limit: int = 100
+        ):
+            return [
+                CountTerm("TAFAMIDIS MEGLUMINE", 100),
+                CountTerm("VYNDAMAX", 90),
+                CountTerm("VYNDAQEL", 80),
+                CountTerm("FUROSEMIDE", 70),
+            ]
+
+    buckets = await OverviewBuilder(AliasTerms())._concomitant_drugs(
+        "search",
+        "tafamidis",
+        drug_aliases=("tafamidis meglumine", "Vyndaqel", "Vyndamax"),
+    )
+
+    assert [(bucket.term, bucket.count) for bucket in buckets] == [
+        ("FUROSEMIDE", 70)
+    ]
+
+
+async def test_live_concomitant_filter_does_not_expand_short_alias_substrings():
+    class ShortAliasTerms(StubOpenFDA):
+        async def count_terms(
+            self, field: str, search: str | None = None, *, limit: int = 100
+        ):
+            return [CountTerm("AT", 100), CountTerm("ATORVASTATIN", 90)]
+
+    buckets = await OverviewBuilder(ShortAliasTerms())._concomitant_drugs(
+        "search", "target", drug_aliases=("at",)
+    )
+
+    assert [(bucket.term, bucket.count) for bucket in buckets] == [
+        ("ATORVASTATIN", 90)
+    ]
+
+
+async def test_live_country_top_ten_keeps_an_explicit_missing_bucket():
+    class CountryTerms(StubOpenFDA):
+        async def count_total(self, search: str | None = None) -> int:
+            if search and "occurcountry:*" in search:
+                return 90
+            return await super().count_total(search)
+
+        async def count_terms(
+            self, field: str, search: str | None = None, *, limit: int = 100
+        ):
+            assert field == "occurcountry.exact"
+            assert limit == 10
+            return [CountTerm("US", 70), CountTerm("JP", 20)]
+
+    buckets = await OverviewBuilder(CountryTerms())._countries("search", 100)
+
+    assert [(bucket.term, bucket.count) for bucket in buckets] == [
+        ("US", 70),
+        ("JP", 20),
+        ("not reported", 10),
+    ]
 
 
 async def test_empty_drug_query_raises_normalization_error():

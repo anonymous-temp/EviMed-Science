@@ -333,6 +333,8 @@ export class AgentRunStore {
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
     this.monitorIntervalMs = options.monitorIntervalMs ?? 500;
     this.monitorMaxPolls = options.monitorMaxPolls ?? 3600;
+    this.onRunFinished = options.onRunFinished ?? (async () => {});
+    this.onRunFinishedError = options.onRunFinishedError ?? (async () => {});
     this.monitors = new Map();
     this.projects = new Map();
     this.dispatchOwners = new Set();
@@ -501,20 +503,30 @@ export class AgentRunStore {
       errorCode: sanitizeErrorCode(terminal.errorCode),
       artifacts: normalizeArtifacts(terminal.artifacts),
     };
-    const result = await withProjectStorageMutation(project, async () => {
+    const outcome = await withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const runs = foldEvents(events);
       const current = runs.get(runId);
       if (!current) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
-      if (current.status !== "running") return current;
+      if (current.status !== "running") return { run: current, transitioned: false };
       const finishedAt = this.now().toISOString();
       const durationMs = Math.max(0, Date.parse(finishedAt) - Date.parse(current.startedAt));
       const event = { event: "finished", id: runId, ...normalized, finishedAt, durationMs };
       const text = serializeNext(events, event, this.maxBytes);
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
-      return foldEvents([...events, event]).get(runId);
+      return { run: foldEvents([...events, event]).get(runId), transitioned: true };
     });
+    const result = outcome.run;
     if (result.status !== "running") this.dispatchOwners.delete(runId);
+    if (outcome.transitioned) {
+      try {
+        await this.onRunFinished(project, result);
+      } catch (error) {
+        try {
+          await this.onRunFinishedError(error, project, result);
+        } catch { /* terminal ledger state must remain authoritative */ }
+      }
+    }
     return result;
   }
 

@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "policy": "Every AnalysisResult, NormalizedReaction, CaseOverview and SignalRow field has one validation owner. Publication comparison is limited to cohort-sensitive cases, ROR/PRR direction, signal direction and rank/drift relationships. Exact confidence intervals, IC/EBGM implementations, overview values and non-statistical outputs remain deterministic contracts unless a paper-matched raw quarterly snapshot and identical estimator are available.",
+  "groups": [
+    {
+      "id": "normalization",
+      "coverage_type": "deterministic_contract",
+      "fields": ["drug_query", "drug_normalized", "drug_candidates", "language", "reactions.query", "reactions.normalized", "reactions.method", "reactions.confidence"],
+      "tests": ["tests/test_normalize_drugs.py", "tests/test_normalize_adr.py", "tests/test_pipeline.py"]
+    },
+    {
+      "id": "case_overview_contract",
+      "coverage_type": "deterministic_contract",
+      "fields": ["overview.total_reports", "overview.yearly", "overview.sex", "overview.age_buckets", "overview.outcomes", "overview.countries", "overview.indications"],
+      "limitation": "Selected papers provide overview context, but exact values depend on paper-specific quarterly files, deduplication and inclusion criteria; the project model is validated with independently expected report-level frozen fixtures.",
+      "tests": ["tests/test_faers_multidrug_regression.py", "tests/test_faers_frozen.py", "tests/test_pipeline.py"]
+    },
+    {
+      "id": "concomitant_drugs",
+      "coverage_type": "deterministic_contract",
+      "fields": ["overview.concomitant_drugs"],
+      "limitation": "None of the selected publications reports a reproducible top-concomitant table; exact C-role binding is validated on the frozen report-level backend.",
+      "tests": ["tests/test_faers_frozen.py", "tests/test_pipeline.py"]
+    },
+    {
+      "id": "publication_signal_relationships",
+      "coverage_type": "publication_direction_rank_and_drift",
+      "fields": ["signals.reaction", "signals.a", "signals.ror", "signals.prr", "signals.is_signal"],
+      "publication_anchors": ["tafamidis-li-2024", "olaparib-tian-2022", "cefiderocol-fang-2025", "famciclovir-fang-2024"],
+      "limitation": "Current openFDA aggregates are compared with published cases, ROR/PRR direction, signal direction and within-drug ROR rank/drift. They are not represented as exact paper reproduction.",
+      "tests": ["tests/test_faers_multidrug_regression.py"]
+    },
+    {
+      "id": "signal_estimator_contract",
+      "coverage_type": "deterministic_contract",
+      "fields": ["signals.source", "signals.b", "signals.c", "signals.d", "signals.n", "signals.haldane_anscombe_applied", "signals.ror_ci95_lower", "signals.ror_ci95_upper", "signals.prr_ci95_lower", "signals.prr_ci95_upper", "signals.chi2", "signals.ic", "signals.ic025", "signals.ebgm", "signals.eb05", "signals.expected_count", "signals.gps_prior_id"],
+      "limitation": "Published confidence intervals, BCPNN and GPS/EBGM values are not exact numerical oracles unless the raw cohort and estimator/prior are identical; known-answer and fitted-prior tests own these fields.",
+      "tests": ["tests/test_faers_multidrug_regression.py", "tests/test_signals_known_answers.py", "tests/test_signals_ebgm.py"]
+    },
+    {
+      "id": "evidence_and_interpretation",
+      "coverage_type": "deterministic_contract",
+      "fields": ["label_check", "evidence", "interpretation", "llm_status", "degradation_notes"],
+      "limitation": "Published FAERS tables cannot be a numerical oracle for label NLP, EviMed retrieval or LLM narrative; the deterministic statistics remain independent of these degradable layers.",
+      "tests": ["tests/test_label_check.py", "tests/test_evidence_evimed.py", "tests/test_llm_fallbacks.py", "tests/test_pipeline.py"]
+    },
+    {
+      "id": "scope_and_provenance",
+      "coverage_type": "deterministic_contract",
+      "fields": ["query_urls", "drug_field", "ps_only", "drug_field_used", "data_source", "suspect_binding", "suspect_roles", "administration_routes", "study_date_from", "study_date_to", "background_date_from", "background_date_to", "snapshot_id", "snapshot_source", "snapshot_sha256", "snapshot_extracted_at", "snapshot_deduplication", "statistics_version", "gps_prior_fitted", "gps_prior_id", "generated_at"],
+      "limitation": "Papers provide methodological context for roles, routes and date windows, but cannot validate this run's query URLs, snapshot identity/hash, generated time or runtime provenance; all fields in this group are owned by deterministic contract tests.",
+      "tests": ["tests/test_faers_frozen.py", "tests/test_pipeline.py", "tests/test_api.py", "tests/test_report.py"]
+    }
+  ]
+}

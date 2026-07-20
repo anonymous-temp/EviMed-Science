@@ -262,33 +262,30 @@ def test_service_loads_snapshot_bound_gps_prior_artifact(tmp_path):
         assert service.study_date_to.isoformat() == "2020-12-31"
 
 
-def test_service_rejects_frozen_scope_dates_without_snapshot(tmp_path):
-    settings = Settings(
-        deepseek_api_key=SecretStr(""), faers_study_date_from="2020-01-01"
-    )
-    with pytest.raises(ValueError, match="dates require"):
-        ServiceContext(
-            settings,
-            openfda=StubOpenFDA(),
-            llm=None,
-            evidence=EviMedEvidenceClient("", ""),
-            jobs_dir=tmp_path,
-        )
-
-
-def test_service_rejects_snapshot_dates_without_a_snapshot(tmp_path):
+def test_service_accepts_live_scope_controls_without_snapshot(tmp_path):
     settings = Settings(
         deepseek_api_key=SecretStr(""),
+        faers_drug_aliases="lipitor,atorvastatin calcium",
+        faers_suspect_roles="PS,SS",
+        faers_administration_routes="048",
         faers_study_date_from="2020-01-01",
+        faers_study_date_to="2020-12-31",
+        faers_background_date_from="2019-01-01",
+        faers_background_date_to="2021-12-31",
     )
-    with pytest.raises(ValueError, match="study dates require"):
-        ServiceContext(
-            settings,
-            openfda=StubOpenFDA(),
-            llm=None,
-            evidence=EviMedEvidenceClient("", ""),
-            jobs_dir=tmp_path,
-        )
+    service = ServiceContext(
+        settings,
+        openfda=StubOpenFDA(),
+        llm=None,
+        evidence=EviMedEvidenceClient("", ""),
+        jobs_dir=tmp_path,
+    )
+    with TestClient(create_app(service=service, enable_ws=False)):
+        assert service.drug_aliases == ("lipitor", "atorvastatin calcium")
+        assert service.suspect_roles == frozenset({"PS", "SS"})
+        assert service.drug_routes == ("048",)
+        assert service.study_date_from.isoformat() == "2020-01-01"
+        assert service.background_date_from.isoformat() == "2019-01-01"
 
 
 def test_analyze_wait_no_data_is_404(tmp_path):

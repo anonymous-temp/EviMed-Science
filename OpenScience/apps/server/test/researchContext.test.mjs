@@ -86,6 +86,24 @@ test("injects relevant Memos records as untrusted research context", async () =>
   });
 });
 
+test("injects the live specialist registry into open-domain routing without forcing unrelated calls", async () => {
+  await withProject(async (project) => {
+    const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, {
+      specialists: [{
+        id: "adr-analysis",
+        skill: "adr-analysis",
+        title: "Drug Safety Analysis",
+        description: "Analyze traceable pharmacovigilance evidence.",
+        requiredTools: ["evimed_drug_safety_analysis"],
+      }],
+    });
+    assert.match(prepared.system, /开放域科研问答已注册以下专项 Skill/);
+    assert.match(prepared.system, /<evimed-specialist id="adr-analysis" skill="adr-analysis">/);
+    assert.match(prepared.system, /evimed_drug_safety_analysis/);
+    assert.match(prepared.system, /不得为展示能力而无关调用/);
+  });
+});
+
 test("escapes knowledge and memory markup so untrusted records cannot close context blocks", async () => {
   await withProject(async (project) => {
     await writeFile(

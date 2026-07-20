@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "anchors": {
+    "sglt2i-zhou-2021": {
+      "source": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2021.766125/full",
+      "study_window": ["2013-01-01", "2021-06-30"],
+      "methods": ["ROR", "IC", "IC025"],
+      "comparison_status": "published_reference_requires_paper_matched_raw_quarters",
+      "required_capabilities": ["pooled_class_vs_all_faers", "member_vs_all_faers", "therapeutic_area_comparator", "monotherapy_polytherapy", "shared_unique_signals", "soc_smq_ime"],
+      "published": {"all_reports": 11822884, "class_reports": 57818, "ime_pairs": 22537, "monotherapy_reports": 54227, "monotherapy_ime_pairs": 21408, "soc_signals": [{"soc": "metabolism and nutrition disorders", "n": 9103, "ic025": 4.26}, {"soc": "renal and urinary disorders", "n": 3886, "ic025": 1.20}, {"soc": "infections and infestations", "n": 3457, "ic025": 0.85}]},
+      "common_pts": ["diabetic ketoacidosis", "ketoacidosis", "euglycaemic diabetic ketoacidosis", "fournier's gangrene", "gangrene", "diabetes mellitus inadequate control"]
+    },
+    "glp1ra-bhattacharyya-2024": {
+      "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11366408/",
+      "study_window": ["2005-04-01", "2024-03-31"],
+      "methods": ["ROR", "ROR 95% CI"],
+      "required_capabilities": ["member_vs_rest_of_class", "product_level_members", "minimum_report_exclusion"],
+      "abstract_total": 287201,
+      "quality_notes": ["The abstract reports 287,201 class AEs, while the reproducible Table 1 member totals sum to 239,201; numerical regression uses the member table.", "Zepbound mortality has a zero target-event cell. The publication reports ROR 0.00 without continuity correction; the production engine discloses and applies the prespecified Haldane-Anscombe correction."],
+      "members": [
+        {"id": "byetta", "total": 48898, "mortality": 1571, "serious": 12423, "published_mortality_ror": 2.20, "published_serious_ror": 1.11},
+        {"id": "victoza", "total": 30076, "mortality": 1016, "serious": 11166, "published_mortality_ror": 2.12, "published_serious_ror": 2.10},
+        {"id": "trulicity", "total": 65038, "mortality": 942, "serious": 12116, "published_mortality_ror": 0.72, "published_serious_ror": 0.66},
+        {"id": "saxenda", "total": 5496, "mortality": 62, "serious": 2221, "published_mortality_ror": 0.60, "published_serious_ror": 2.21},
+        {"id": "bydureon", "total": 29824, "mortality": 353, "serious": 4890, "published_mortality_ror": 0.61, "published_serious_ror": 0.59},
+        {"id": "ozempic", "total": 20587, "mortality": 252, "serious": 9031, "published_mortality_ror": 0.64, "published_serious_ror": 2.77},
+        {"id": "rybelsus", "total": 3310, "mortality": 66, "serious": 1417, "published_mortality_ror": 1.09, "published_serious_ror": 2.42},
+        {"id": "wegovy", "total": 4129, "mortality": 34, "serious": 1194, "published_mortality_ror": 0.44, "published_serious_ror": 1.30},
+        {"id": "mounjaro", "total": 30283, "mortality": 110, "serious": 2609, "published_mortality_ror": 0.17, "published_serious_ror": 0.27},
+        {"id": "zepbound", "total": 1560, "mortality": 0, "serious": 49, "published_mortality_ror": 0.00, "published_serious_ror": 0.10}
+      ]
+    },
+    "parpi-shu-2022": {
+      "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8990839/",
+      "study_window": ["2014-12-01", "2021-10-31"],
+      "methods": ["ROR", "ROR 95% CI", "MedDRA PT", "SMQ"],
+      "comparison_status": "published_directional_reference_requires_paper_matched_raw_quarters",
+      "required_capabilities": ["member_vs_all_faers", "shared_unique_signals", "soc_smq_ime"],
+      "published_pt_signals": [
+        {"member": "olaparib", "pt": "anaemia", "n": 473, "ror": 14.10, "ror_lower": 12.82},
+        {"member": "niraparib", "pt": "constipation", "n": 1316, "ror": 29.77, "ror_lower": 28.01},
+        {"member": "talazoparib", "pt": "anaemia", "n": 40, "ror": 20.82, "ror_lower": 14.87}
+      ]
+    },
+    "jaki-verden-2021": {
+      "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8280037/",
+      "study_window": ["2010-01-01", "2019-09-30"],
+      "methods": ["ROR", "ROR 95% CI", "EBGM", "EB05"],
+      "comparison_status": "published_directional_reference_requires_paper_matched_raw_quarters_and_estimator",
+      "required_capabilities": ["member_vs_all_faers", "approval_period_sensitivity", "time_to_onset", "soc_smq_ime"],
+      "published_pt_signals": [
+        {"member": "tofacitinib", "pt": "pulmonary thrombosis", "n": 34, "ror": 2.36, "ror_lower": 1.69, "ebgm": 2.01, "eb05": 1.53},
+        {"member": "ruxolitinib", "pt": "portal vein thrombosis", "n": 21, "ror": 4.16, "ror_lower": 2.70, "ebgm": 4.52, "eb05": 3.11},
+        {"member": "baricitinib", "pt": "deep vein thrombosis", "n": 21, "ror": 14.84, "ror_lower": 9.64, "ebgm": 9.49, "eb05": 5.91}
+      ],
+      "sensitivity_conclusion": "No tendency for increased reporting in the first marketing year and no noticeable deviation from overall results."
+    }
+  }
+}

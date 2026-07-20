@@ -111,8 +111,11 @@ class AnalysisResult(BaseModel):
         "report_contains_suspect_approximation", "same_drug_object", "target_name_only"
     ] = "report_contains_suspect_approximation"
     suspect_roles: list[str] = Field(default_factory=lambda: ["PS", "SS"])
+    administration_routes: list[str] = Field(default_factory=list)
     study_date_from: str | None = None
     study_date_to: str | None = None
+    background_date_from: str | None = None
+    background_date_to: str | None = None
     snapshot_id: str | None = None
     snapshot_source: str | None = None
     snapshot_sha256: str | None = None

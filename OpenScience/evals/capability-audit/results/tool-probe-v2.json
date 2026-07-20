@@ -1,10 +1,10 @@
 {
   "schemaVersion": 3,
-  "probedAt": "2026-07-19T20:09:13.869689Z",
-  "registered": 21,
-  "executionCertified": 21,
+  "probedAt": "2026-07-20T09:08:45.356429Z",
+  "registered": 24,
+  "executionCertified": 24,
   "unverified": 0,
-  "operational": 21,
+  "operational": 24,
   "errors": 0,
   "criteria": {
     "ordinaryTool": "A real task call must return success or warning and all declared artifacts must exist and be non-empty.",
@@ -21,12 +21,12 @@
       "errorCode": null,
       "elapsedMs": 1,
       "sourceCount": 0,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_health.json",
-        "bytes": 5835,
-        "sha256": "7e1781690cc359472c7a5b35911d84241528b7776c45f9d5bf605ecc6cb309ac"
+        "bytes": 6527,
+        "sha256": "b43cdd2525e962afa1a444f5c5e61788b94b5e9caac0e5a8353e84215ab50117"
       },
       "artifacts": [],
       "artifactError": null,
@@ -44,12 +44,12 @@
       "errorCode": null,
       "elapsedMs": 2,
       "sourceCount": 0,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_data_source_catalog.json",
-        "bytes": 65268,
-        "sha256": "c77d916df3fa27efd66f70d7453444280294a5a444fe32e9d7411ca4b5497721"
+        "bytes": 65297,
+        "sha256": "df662672e0fda439a360c2247479c846275825490e7728d42acf75d5a6098aac"
       },
       "artifacts": [],
       "artifactError": null,
@@ -65,14 +65,14 @@
       "operational": true,
       "summary": "Retrieved 2 traceable records from pubmed.",
       "errorCode": null,
-      "elapsedMs": 3577,
+      "elapsedMs": 1338,
       "sourceCount": 2,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_biomedical_source_search.json",
-        "bytes": 2527,
-        "sha256": "d1b031582db7776752c66a0c29ab6050b279e9c13772c97011b39b298a8d7bc2"
+        "bytes": 2556,
+        "sha256": "bc9599b61f88cb4515a8ea527125bb24f32860a216fd7443db61d4f051f69d52"
       },
       "artifacts": [],
       "artifactError": null,
@@ -88,21 +88,21 @@
       "operational": true,
       "summary": "Retrieved the complete open-access article into the managed workspace.",
       "errorCode": null,
-      "elapsedMs": 3064,
+      "elapsedMs": 3114,
       "sourceCount": 1,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_open_access_full_text.json",
-        "bytes": 1312,
-        "sha256": "27f6712bd94404b5bb91ea7a4cccf11483557021d10366a36e694deb808f2993"
+        "bytes": 1341,
+        "sha256": "09a8d621bc77655088f8599e49326dc04c943e58d8b57f2afe5a9f024a57d773"
       },
       "artifacts": [
         {
           "kind": "md",
           "path": ".evimed-sources/PMC8010506/fulltext.md",
           "bytes": 239804,
-          "sha256": "681a785650c73f947ec2fe73acba237a03f020a026db502ff7a54fcb0bbe63d9"
+          "sha256": "640489a4fa6369e07d6e08205805a4fa6f967194329d9c4611f1475ba5c30976"
         },
         {
           "kind": "xml",
@@ -126,12 +126,12 @@
       "errorCode": null,
       "elapsedMs": 0,
       "sourceCount": 0,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_term_normalize.json",
-        "bytes": 665,
-        "sha256": "aaa50e942667a49680b5e94457b29c51a6c10370d294875afa29bda717a79346"
+        "bytes": 694,
+        "sha256": "0ee76f14ced4bcc7646b5f22e3575755ac342f32e4ef9f8d21219ab1bf69e5cb"
       },
       "artifacts": [],
       "artifactError": null,
@@ -149,12 +149,12 @@
       "errorCode": null,
       "elapsedMs": 0,
       "sourceCount": 0,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_drug_term_normalize.json",
-        "bytes": 627,
-        "sha256": "963b0667986cf5288dd2b52d80d079e08be4f28e41c0c7540a483a1fe3cab4d2"
+        "bytes": 656,
+        "sha256": "a59d302ca5810a792ec2f5d57f4ffa34e5333a0e3fcf28d9546836807abc0eb0"
       },
       "artifacts": [],
       "artifactError": null,
@@ -172,12 +172,12 @@
       "errorCode": null,
       "elapsedMs": 0,
       "sourceCount": 0,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_evidence_deduplicate.json",
-        "bytes": 997,
-        "sha256": "1572618a8cd6f633b1cf1944f3d561bccc91b93e342c2e0698828dca9153a7cd"
+        "bytes": 1026,
+        "sha256": "0d2f082eda4f53387b55c6b61c325caa5ed96286d767e4ff413567601a3a82b8"
       },
       "artifacts": [],
       "artifactError": null,
@@ -193,14 +193,14 @@
       "operational": true,
       "summary": "Retrieved 2 traceable PubMed records.",
       "errorCode": null,
-      "elapsedMs": 3059,
+      "elapsedMs": 987,
       "sourceCount": 2,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_literature_search.json",
-        "bytes": 3337,
-        "sha256": "563022e9c02ccc10bed72c5234fbdeb828913dac4adbb251a370c00af81259fa"
+        "bytes": 3366,
+        "sha256": "9b7caf072dd2a92dfd0820ea84203a17a7fc4e32db310697308c6f4789dc2ea3"
       },
       "artifacts": [],
       "artifactError": null,
@@ -214,16 +214,16 @@
       "operation": "task",
       "status": "warning",
       "operational": true,
-      "summary": "Retrieved 2 traceable PubMed records.",
+      "summary": "Retrieved 2 traceable EviMed guideline candidates.",
       "errorCode": null,
-      "elapsedMs": 2834,
+      "elapsedMs": 1329,
       "sourceCount": 2,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_guideline_search.json",
-        "bytes": 3480,
-        "sha256": "906134e9f424ad8992e30b37d101b27bb97cc645de8e0c1558374bcf5b0b2234"
+        "bytes": 6001,
+        "sha256": "d84efeeb0793b7d456935f0bd03d9666f6a6e137a1a65100777d4058ede0c954"
       },
       "artifacts": [],
       "artifactError": null,
@@ -237,16 +237,62 @@
       "operation": "task",
       "status": "success",
       "operational": true,
-      "summary": "Retrieved 2 registered clinical trials.",
+      "summary": "Retrieved 2 traceable EviMed trial records.",
       "errorCode": null,
-      "elapsedMs": 1642,
+      "elapsedMs": 403,
       "sourceCount": 2,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_clinical_trial_search.json",
-        "bytes": 1926,
-        "sha256": "8bf86d88d3d937cf629956ac396256cce5f31eb89083a43ada10dec39949e1af"
+        "bytes": 4487,
+        "sha256": "8b3008431c326bf9d89c87ef1ad1ef6118c94ab49e663cefa79e48763fc5f7da"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "evimed_patent_search",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
+      "operational": true,
+      "summary": "Retrieved 2 traceable EviMed patent records.",
+      "errorCode": null,
+      "elapsedMs": 886,
+      "sourceCount": 2,
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/evimed_patent_search.json",
+        "bytes": 3866,
+        "sha256": "29fb0ae70d8d867cf6ecc232dd84f70f27ff54882eeb5a5a4ee0b6cca1670a4d"
+      },
+      "artifacts": [],
+      "artifactError": null,
+      "assessmentType": null,
+      "automaticDecision": null,
+      "humanReviewRequired": null
+    },
+    {
+      "tool": "evimed_pharmacy_reference_search",
+      "probeType": "executed_tool_call",
+      "operation": "task",
+      "status": "warning",
+      "operational": true,
+      "summary": "Retrieved 2 private pharmacy reference rows.",
+      "errorCode": null,
+      "elapsedMs": 9,
+      "sourceCount": 2,
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "responseReceipt": {
+        "kind": "json",
+        "path": ".evimed-audit/tool-responses/evimed_pharmacy_reference_search.json",
+        "bytes": 3417,
+        "sha256": "b17d8c71fb34acca606e2e3579e87f6c0e20f11f90ccca844dcd434b8da1c4c1"
       },
       "artifacts": [],
       "artifactError": null,
@@ -260,16 +306,16 @@
       "operation": "task",
       "status": "warning",
       "operational": true,
-      "summary": "Retrieved 1 FDA label records.",
+      "summary": "Retrieved 0 traceable EviMed label candidates.",
       "errorCode": null,
-      "elapsedMs": 2374,
-      "sourceCount": 1,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "elapsedMs": 1101,
+      "sourceCount": 0,
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_drug_label_search.json",
-        "bytes": 8039,
-        "sha256": "d55e266b83c94acd085217461cfabd39d0c6a16860413b4e5e40290f6e289544"
+        "bytes": 910,
+        "sha256": "9afa72d79e5fc41584e11d1f3e642c42a14b379fb9193eb8864af78c4ad8686c"
       },
       "artifacts": [],
       "artifactError": null,
@@ -285,14 +331,14 @@
       "operational": true,
       "summary": "Retrieved 2 de-identified FAERS reports.",
       "errorCode": null,
-      "elapsedMs": 2080,
+      "elapsedMs": 2032,
       "sourceCount": 2,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_adr_case_query.json",
-        "bytes": 2190,
-        "sha256": "d8fba36bb9b37a2c7c8fc19e0551e6f47d95859253a5ace0f0f279a8b599b980"
+        "bytes": 2219,
+        "sha256": "e428955adb2bb695d61ec6e93628e8c8622def8388ea0d0861f49a290584ced0"
       },
       "artifacts": [],
       "artifactError": null,
@@ -308,14 +354,14 @@
       "operational": true,
       "summary": "Calculated traceable FAERS disproportionality screening metrics.",
       "errorCode": null,
-      "elapsedMs": 9056,
+      "elapsedMs": 4773,
       "sourceCount": 4,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_adr_signal_analysis.json",
-        "bytes": 2255,
-        "sha256": "d29180448d473d1f9b146a337ae19d64f6b90475fce214e5312ab463a2c342fb"
+        "bytes": 2284,
+        "sha256": "2bd51fd4039db637180b3939e8f5d00da138e699af4a367393e6d004c9d512f9"
       },
       "artifacts": [],
       "artifactError": null,
@@ -333,12 +379,12 @@
       "errorCode": null,
       "elapsedMs": 0,
       "sourceCount": 1,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_offlabel_evidence_packet.json",
-        "bytes": 4001,
-        "sha256": "ad7edfc21fdbc6aecc70306daf53629612984331d5b06de20ac7248f33f8cd51"
+        "bytes": 4030,
+        "sha256": "6aa8ce1321d7ba564531e9211affd7aa98e8345cef4e6fbb88d37f865a02a8c4"
       },
       "artifacts": [],
       "artifactError": null,
@@ -356,12 +402,12 @@
       "errorCode": null,
       "elapsedMs": 0,
       "sourceCount": 1,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_comprehensive_drug_evaluation.json",
-        "bytes": 3953,
-        "sha256": "2b1742714700fc9cb3b524292b41f6c41891120933654a98db64eff90704fbc8"
+        "bytes": 3982,
+        "sha256": "4af9e8313bf4e7e0ff4f2d5cc6dd755b8244e2e6f6d55b5987b935ba0cd75d45"
       },
       "artifacts": [],
       "artifactError": null,
@@ -379,12 +425,12 @@
       "errorCode": null,
       "elapsedMs": 0,
       "sourceCount": 1,
-      "workspace": "evals/capability-audit/results/tool-probe-workspace",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_drug_selection_evaluation.json",
-        "bytes": 7756,
-        "sha256": "1ed516f6be267e2fbfb31ba5e0f5814567622337fe0e850d9ce62f1b2707ce8a"
+        "bytes": 7785,
+        "sha256": "0c9b144449ee717830e6ab5c3854e3986782c9a525a2abb3b2e4729470f0eb8c"
       },
       "artifacts": [],
       "artifactError": null,
@@ -456,17 +502,17 @@
       "status": "success",
       "operational": true,
       "summary": "A managed specialist task completed and produced verified non-empty artifacts.",
-      "jobId": "mr-20260720004347-77fc29c9bb1c",
+      "jobId": "mr-20260720164409-a44cade15a71",
       "jobStatus": "succeeded",
       "releaseStatus": null,
       "publicationReady": true,
-      "executedAt": "2026-07-19T17:05:58.232783Z",
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "executedAt": "2026-07-20T09:07:46.327106Z",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace/2026-07-19-1354",
       "executionEvidence": {
         "schemaVersion": 1,
-        "agentSourceSha256": "f46950906d40e3029aa3c537f420a055c5f9945d0b4e3760c7a3f9d3ca448505",
+        "agentSourceSha256": "75f9fb263351a49d55d8cb18990ecea05c2a90c8d1452dcbf904a6b1b306cda2",
         "agentSourceFiles": 37,
-        "adapterSha256": "4f3ac771a1826effc993c45955f0d7a3d02bf1780694ea433ee57d5c0fc35468",
+        "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
         "evidenceModuleSha256": "ac171b1d3d11c22063f46cefaaf28cd4bd9d876c0303e1a537ad1bb568a597e9",
         "model": "deepseek-v4-pro",
         "thinking": true,
@@ -475,132 +521,138 @@
       "artifacts": [
         {
           "kind": "csv",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/f_statistics.csv",
-          "bytes": 11134,
-          "sha256": "5158f3ec9c22e15d894651288885a8aa1b66e1018e0180fa21ec275315344ec6"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/f_statistics.csv",
+          "bytes": 13706,
+          "sha256": "e1e55dbf51488d80df70007c8eeb191d37a3444b700ced524817f664d5f1bde1"
         },
         {
           "kind": "pdf",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.pdf",
-          "bytes": 19632,
-          "sha256": "084d6d146d6f1c309ba7db121069f40d4cf39c5bb5787c5de767f6f9d03a2778"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/forest_plot.pdf",
+          "bytes": 17083,
+          "sha256": "b446567c6963c443d0392467ccca77cab8a914331815c1bd826005ecba857be3"
         },
         {
           "kind": "png",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.png",
-          "bytes": 575200,
-          "sha256": "5f86817c8a06da4857a6390dc6445c4da339fa05a59a3f3bc63d374e5f5951f6"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/forest_plot.png",
+          "bytes": 563641,
+          "sha256": "0d23bffbf4d226fcb2dfc7743f2a17b3386bc7a84e72bb45f78733c7562293d3"
         },
         {
           "kind": "pdf",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.pdf",
-          "bytes": 13516,
-          "sha256": "fa310485480191704336896ec0ebf1689a1ce91fda83107450eb43c3ca045887"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/funnel_plot.pdf",
+          "bytes": 11999,
+          "sha256": "2d6be0e005c8103a7e2cade96bb9dfecc449871d85b320908df352fdd087c5d0"
         },
         {
           "kind": "png",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.png",
-          "bytes": 154507,
-          "sha256": "a343c6dc525dcad16cab831829762c3c7f08381b686424748029c4e5ac321f35"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/funnel_plot.png",
+          "bytes": 165849,
+          "sha256": "cb4cfca009c2273c0409ba5a90cdd606bb061596ddd5c8dfbd273cd95e51c33b"
         },
         {
           "kind": "csv",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/heterogeneity.csv",
-          "bytes": 390,
-          "sha256": "9be962a167104c476dc510273e35c46ad40bc5416493f676688d7b9f4b2953c3"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/heterogeneity.csv",
+          "bytes": 555,
+          "sha256": "f752b87002b756b9fe8bb43e909233bb3ec8552d81014c6e7b1adaf144aeba3d"
         },
         {
           "kind": "pdf",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.pdf",
-          "bytes": 19217,
-          "sha256": "6560a7bbd7e9648c95ce5876d1bf28aae9ce9502d5212a1177a09f51392630da"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/loo_plot.pdf",
+          "bytes": 16320,
+          "sha256": "c5583ede6451053b9161ea48c3e4e8321376b693850de44b292a37c9a99e7487"
         },
         {
           "kind": "png",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.png",
-          "bytes": 582439,
-          "sha256": "d0e1e85b78de791a43db294ed9a8424894c6431ab26534c801de0e4d31b06d7b"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/loo_plot.png",
+          "bytes": 545869,
+          "sha256": "d0bcb9102bdfc79632ab6327aad117c8d050e38540949406dda89878c0b65480"
         },
         {
           "kind": "csv",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mr_results.csv",
-          "bytes": 1327,
-          "sha256": "396e11c8dcc9972c0209697b08a5a6aa2648225a3ea5a60fe524171475faa25d"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/mr_results.csv",
+          "bytes": 1684,
+          "sha256": "2e8b71ed3497117f7b8d8c1c7e2224070fe88181ae711bb182a175c90cb3a10c"
         },
         {
           "kind": "json",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mr_summary.json",
-          "bytes": 150,
-          "sha256": "dec675cfed6373e6b164849afb5c2fdae068705de17e1f8caac17b0d893ad744"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/mr_summary.json",
+          "bytes": 152,
+          "sha256": "a155ca8d717ee31150bd8992b52816836b7fad0963ac37b6bf0e2f42ffe22846"
         },
         {
           "kind": "csv",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mrpresso.csv",
-          "bytes": 88,
-          "sha256": "112ee9f8197579890f31c7ee8e6fc7d48571d6f504be11114ab1832e45b648f8"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/mrpresso.csv",
+          "bytes": 87,
+          "sha256": "edd6ad3078e0ad118a10c9c6e3bf5daeac3567924152d042c7328303b1a67f08"
         },
         {
           "kind": "csv",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/pleiotropy.csv",
-          "bytes": 250,
-          "sha256": "bff8334c6c36dc6274b00d1e137caf9ad40d87bc008fca508763e58280789d77"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/pleiotropy.csv",
+          "bytes": 318,
+          "sha256": "84cae473bc178f60766afe2f424d75462a7fef67ecb3a40bb3b65b34d6a9a43a"
         },
         {
           "kind": "pdf",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.pdf",
-          "bytes": 18746,
-          "sha256": "eec6e7f8851f78631cae02c0503f548cc3cd64067b6945d4381f85dc9338b98c"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/scatter_plot.pdf",
+          "bytes": 16188,
+          "sha256": "4703c1816c6d61655b94bf8c42f5432dcc3dd038d5fef93f4d5c4d92edac1c4f"
         },
         {
           "kind": "png",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.png",
-          "bytes": 284270,
-          "sha256": "3dd99eb8a57c41c78e4d1210d1dcb3ef49a723271f730a6e8139d0b1283267bc"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/scatter_plot.png",
+          "bytes": 293010,
+          "sha256": "a650211cc881b9dfdbddfac5327a132c58ce2929159730305f487f1b4a975800"
+        },
+        {
+          "kind": "csv",
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/analysis-data/1-ebi-a-GCST90029070-ukb-b-3983/steiger.csv",
+          "bytes": 353,
+          "sha256": "ed6e30bccee951742892bd479cac6efa396ea43008d4a63246f9bf4f2c24fbc0"
         },
         {
           "kind": "docx",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/mendelian-randomization-report.docx",
-          "bytes": 45660,
-          "sha256": "6fe539167e95a92c11d58e31e692021ba495c199f79c9f6eac375149356ea766"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/mendelian-randomization-report.docx",
+          "bytes": 46185,
+          "sha256": "dbf81290a49d62d3ade682ed2d3bd51503206595815cd96680e7271bd0da078d"
         },
         {
           "kind": "md",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/mendelian-randomization-report.md",
-          "bytes": 17706,
-          "sha256": "688170ba41c45c9d3fd30edfd08065fd199e3be482a6574e5fb658d91b9576a0"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/mendelian-randomization-report.md",
+          "bytes": 19041,
+          "sha256": "38c403967793b21b4d44fefeb1485d8b26fe8fec5973f8fcf1bfc320ffc458a5"
         },
         {
           "kind": "pdf",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/mendelian-randomization-report.pdf",
-          "bytes": 75715,
-          "sha256": "d21824fe25e229604518d7b55a96048380ab5dac71c2026b9fab9d87ce0ab6d5"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/mendelian-randomization-report.pdf",
+          "bytes": 66765,
+          "sha256": "7bbfa20c55860d24e9c89ae476b04e19386f7eed0b5007306f95c89bb4d86f2b"
         },
         {
           "kind": "txt",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/mendelian-randomization-report.txt",
-          "bytes": 19156,
-          "sha256": "33147c04a218135ab7b23ccb9442533cebcf717103424783f28a42708448c14d"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/mendelian-randomization-report.txt",
+          "bytes": 20491,
+          "sha256": "5dcf285e65aa2a4e952d2083c52c727c16f0175188b67f15f74f911e8d9df28e"
         },
         {
           "kind": "json",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/mendelian-randomization-run.json",
-          "bytes": 6127,
-          "sha256": "f24e265865f83ec91b2e8c2f70595b735d42e41094feedebc55d72043c83fae1"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/mendelian-randomization-run.json",
+          "bytes": 6297,
+          "sha256": "abff2fac3437c48069c2397555ecbd9fa7b0c01cfa19a1b5d0c9a64cecdfa463"
         },
         {
           "kind": "json",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/request.json",
-          "bytes": 134,
-          "sha256": "1cc4fbe4f55e604c343866c88e131b89f1c70ac94bc9546351768bee4d94052c"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/request.json",
+          "bytes": 138,
+          "sha256": "cb28b8e4fe24fb18210f18e92ac4d1e6e45ae5b38a43f6020a1e73c666545034"
         },
         {
           "kind": "json",
-          "path": "mendelian-randomization-runs/mr-20260720004347-77fc29c9bb1c/output/result.json",
-          "bytes": 1339,
-          "sha256": "6ae38f6591f68f6f1fae0cbbc3ad3ea0d89d93b18d602266bb98fe45abbb0855"
+          "path": "mendelian-randomization-runs/mr-20260720164409-a44cade15a71/output/result.json",
+          "bytes": 1450,
+          "sha256": "85db55d2a8c8e6b2b2d7d14c938ce6f6812f232e922d05c4bed14412aed28d90"
         }
       ],
-      "artifactCount": 21
+      "artifactCount": 22
     },
     {
       "tool": "evimed_bibliometric_analysis",
@@ -609,17 +661,17 @@
       "status": "success",
       "operational": true,
       "summary": "A managed specialist task completed and produced verified non-empty artifacts.",
-      "jobId": "bibliometric-20260720004347-de5bea76a6f7",
+      "jobId": "bibliometric-20260720164410-5caab5d46f95",
       "jobStatus": "succeeded",
       "releaseStatus": null,
       "publicationReady": true,
-      "executedAt": "2026-07-19T16:46:59.117243Z",
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "executedAt": "2026-07-20T08:47:02.058746Z",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace/2026-07-19-1354",
       "executionEvidence": {
         "schemaVersion": 1,
-        "agentSourceSha256": "44ad0d7bd42d7df89670c57900edcc834af360c3e72a64964cc5ef8338ebff0a",
+        "agentSourceSha256": "1bba88def8fe8ccf67fbc1e213bfc3ad16c466395d3908cc1bda554244125f8d",
         "agentSourceFiles": 56,
-        "adapterSha256": "4f3ac771a1826effc993c45955f0d7a3d02bf1780694ea433ee57d5c0fc35468",
+        "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
         "evidenceModuleSha256": "ac171b1d3d11c22063f46cefaaf28cd4bd9d876c0303e1a537ad1bb568a597e9",
         "model": "deepseek-v4-pro",
         "thinking": true,
@@ -628,234 +680,204 @@
       "artifacts": [
         {
           "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/data/author_collaboration.csv",
-          "bytes": 213,
-          "sha256": "3ed9a40b80500d05704db11c041cceb485960194bd2719c9fda71853bdc47536"
-        },
-        {
-          "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/data/author_network.json",
-          "bytes": 1286,
-          "sha256": "723fb8b65eeb52393db1922da377f3a704bfc140b1dc6dce0fdac6c54297e9b6"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/data/cleaned_records.csv",
+          "bytes": 11809,
+          "sha256": "360f1792861370190649b76eb1ce2859707782e761f068fc5e59f22dcc08e413"
         },
         {
           "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/data/cleaned_records.csv",
-          "bytes": 11898,
-          "sha256": "da4ca61c58ae3d61c5d00d5099d16fe0ebe841ec1392a6dd2d23fa60f606ad01"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/data/country_collaboration.csv",
+          "bytes": 71,
+          "sha256": "e7cc692d79b304e4f20e0affdb5b07199011cb612aa21781d6dd3a9f9fb83163"
+        },
+        {
+          "kind": "json",
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/data/country_network.json",
+          "bytes": 477,
+          "sha256": "63bee212f548838b02c9cee434ba1488f6cb23e7cfb7cd38cc55f2521330fe72"
         },
         {
           "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/data/country_collaboration.csv",
-          "bytes": 137,
-          "sha256": "966c0dfcffc97aeb57b1030bd52569bf229aab8998be6e4236f97905d64c5523"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/data/keyword_cooccurrence.csv",
+          "bytes": 3163,
+          "sha256": "62402e236d72896cd4a5bf024302f46beb191b2ddb8862228c53061c8539bda9"
         },
         {
           "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/data/country_network.json",
-          "bytes": 1089,
-          "sha256": "c0920a5e57432dcdb4291a077af796709eb96ba18e94a931921469b13026b302"
-        },
-        {
-          "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/data/keyword_cooccurrence.csv",
-          "bytes": 10132,
-          "sha256": "6b2d7cbd31bfde9bc92573f1e5dc598996490f843d195329969e07d6b034adf3"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/data/keyword_network.json",
+          "bytes": 11321,
+          "sha256": "3fadad76b6705c4948d983eef54b20b5d569ca6da4f46f8d1b5c904c69668373"
         },
         {
           "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/data/keyword_network.json",
-          "bytes": 28184,
-          "sha256": "e111fc407f4eb068a6001864c736d1df2a546b71082589647da9e451ede33e6e"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/data/raw_records.json",
+          "bytes": 110227,
+          "sha256": "8b9cf3b3c4e319ddda0b2e6228350f5d1055743823b414d2ce1738de6cfa98bd"
         },
         {
           "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/data/raw_records.json",
-          "bytes": 91719,
-          "sha256": "fa4194d45320ef0d254cd262e8206643f94b8a1c9d9a8e3a7e1697f4de1ae26f"
-        },
-        {
-          "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/data/search_metadata.json",
-          "bytes": 2311,
-          "sha256": "8f5fceb5be7a2ca26165477ef91e38762a05b2f0b19f5128123d3fdb74c4f6b3"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/data/search_metadata.json",
+          "bytes": 2708,
+          "sha256": "56ce6fd4a0f16e524e04436ebf13c9731009abe69073290fbc9fe69c3a5e3365"
         },
         {
           "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/annual_trend.png",
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/figures/annual_trend.png",
           "bytes": 31531,
           "sha256": "ebc3716b78dabd6d8c79883fc90b17006906089f46d6a2bc496a1c6de87c35bb"
         },
         {
           "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/author_network.png",
-          "bytes": 39343,
-          "sha256": "6ed7d60592a139718ea43441be85eb149f3d7f92aa033d8355d57d182c605111"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/figures/citation_overview.png",
+          "bytes": 53632,
+          "sha256": "966469bf716599808fe27e695823c610fa577dc3dfcd65b32ed7fc5310b13e39"
         },
         {
           "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/citation_overview.png",
-          "bytes": 50161,
-          "sha256": "9ceb27ba3bb4cde674643ff16207e2adae0d25bcef2aa051677ed06c28929138"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/figures/country_network.png",
+          "bytes": 24017,
+          "sha256": "de5f33ea1bf5d2ae3af2c3e16f288af43f4a9048cda1e70d6a96cea1281bd860"
         },
         {
           "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/country_network.png",
-          "bytes": 26147,
-          "sha256": "10b58d4038b758ee8e806df6c81b7fcf2bcd8da8395746398aed648f55956759"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/figures/keyword_network.png",
+          "bytes": 122096,
+          "sha256": "777602170102f2d2aa35b79f79a43e3e9d98502b653d9cc23976361718224fc2"
         },
         {
           "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/keyword_network.png",
-          "bytes": 220220,
-          "sha256": "06912bc67f47ab8f4901e69c17a221e5adb8b21f556d3a0fac67f5c05a7c833b"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/figures/keyword_wordcloud.png",
+          "bytes": 187646,
+          "sha256": "a03c49e57ccdfc5207af71b8bd0313f9c82451e42534020420126123a76240ba"
         },
         {
           "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/keyword_wordcloud.png",
-          "bytes": 200434,
-          "sha256": "a3abfb130ddc83edc2c660bd0149256a6e98b3cf777d9563488ae13c2ff0f022"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/figures/timeline_clusters.png",
+          "bytes": 17108,
+          "sha256": "6b614bca58bd051c09e596359f469b9bebadbee001e2584dae5f0c99da0c40a4"
         },
         {
           "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/timeline_clusters.png",
-          "bytes": 17044,
-          "sha256": "8f96ad2cfaa4c86d3c400dc889190fbebef5c457547caf8b3a62ed9355c96e0d"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/figures/top_authors.png",
+          "bytes": 17730,
+          "sha256": "b5c24af89f9762f97b55e2a2b9f7fea8a35ea36c12d9c0896c3801f05b91f8ea"
         },
         {
           "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/top_authors.png",
-          "bytes": 23409,
-          "sha256": "654e2e86b6987a3da8a9dfe8e02da8ac3a309fea5abefedd9795b28b1200be7a"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/figures/top_countries.png",
+          "bytes": 16096,
+          "sha256": "6d1fbdb68c1796d27930348054426325ff4429e4971055e12cc057e121d497c1"
         },
         {
           "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/top_countries.png",
-          "bytes": 19298,
-          "sha256": "2722d9955a586a8339ecb68c27b913096ed3329102dfb0b216c9ef83f29c5115"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/figures/top_institutions.png",
+          "bytes": 26803,
+          "sha256": "68805680dd5484d1d6d72fce85fdf8183404346cb3d41dc4fd021588ca41a0f2"
         },
         {
           "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/top_institutions.png",
-          "bytes": 31699,
-          "sha256": "fe8a355638b323f3b004cd82178ca8d5d6d8f26b6aac4c89dea17f5bbbc1477c"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/figures/top_journals.png",
+          "bytes": 28176,
+          "sha256": "b9f18b1c542be9f99a5b57c7f9a8cb27a99c5c0d3482afb57f4aabe375f115a2"
         },
         {
           "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/top_journals.png",
-          "bytes": 26218,
-          "sha256": "eaf52a3c8d09c07bde674f1930eb009fcd3a889233a4eca2c129710dd7f2f12b"
-        },
-        {
-          "kind": "png",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/figures/top_keywords.png",
-          "bytes": 40305,
-          "sha256": "2ad32b2fb9ed49994e812fee4eb670c9a1878b8c188e9d6ab0e5854683f98276"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/figures/top_keywords.png",
+          "bytes": 37646,
+          "sha256": "7f7aff4ac03d0a97feae930cb4490c93db8a12b8d2e97bc4304f8572b6791868"
         },
         {
           "kind": "md",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/report.md",
-          "bytes": 34604,
-          "sha256": "f1bfda7f5de8dcdd7ac4fbe9c701853cabee6d757953403a58bb5c46e1b707cf"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/report.md",
+          "bytes": 31721,
+          "sha256": "1ac7d268f8932ecf3b583fcdf8ec3a7f7899055718ec0562209670be34ceacb8"
         },
         {
           "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/request.json",
-          "bytes": 147,
-          "sha256": "3d59a291856c2b432907bac5cd8a9e8d4298947d28adeca0a078f286b676154d"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/request.json",
+          "bytes": 134,
+          "sha256": "b44ceca7fb23d27f47ae5aac3d151decc85882849aea7b4be182e2043877324f"
         },
         {
           "kind": "json",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/result.json",
-          "bytes": 126,
-          "sha256": "4708d1fade695bb54a4d3dcee42b526cc5bd4ff02f2b0d4e4a6f6fe315c6d621"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/result.json",
+          "bytes": 113,
+          "sha256": "f72771a7765333e4da8d4879988e20894586015fb3de56b01d763e75516d5d4e"
         },
         {
           "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/tables/cluster_summary.csv",
-          "bytes": 290,
-          "sha256": "fc79348437c5bb38018206c18c8d52e1de4666a3424ee5858b7a1764209b3a4c"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/tables/cluster_summary.csv",
+          "bytes": 295,
+          "sha256": "119479518adf92dc3a15dba73831f8c917bcc5669274f8a6e3b3bb396fb0e49d"
         },
         {
           "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/tables/pub_type_distribution.csv",
-          "bytes": 83,
-          "sha256": "ff14b7cfafce8462d2bdd3c15b3ba4d932a957d763c1428700ea39bef061d659"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/tables/pub_type_distribution.csv",
+          "bytes": 69,
+          "sha256": "b9437c3e185fa6fe8a9406fbeb1ffe9000c1c3290c16fbe864ff07e88c993e73"
         },
         {
           "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/tables/top_authors.csv",
-          "bytes": 389,
-          "sha256": "d9990651eb44b0fffade5d0afded463c06c3cbc11a3e59f171e00c451958c9d5"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/tables/top_authors.csv",
+          "bytes": 321,
+          "sha256": "cf8ddac32d9cf9f29f94687b8ea2dfe1aea31e238782aae83a6dcc154160b43c"
         },
         {
           "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/tables/top_countries.csv",
-          "bytes": 140,
-          "sha256": "c13486365911651cebdd7a0f190d70a98c266e23815599b431c1d294200e4830"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/tables/top_countries.csv",
+          "bytes": 148,
+          "sha256": "ce81e00bf33297dd5553a6fd85441537f75a19dcf78914eb9ed1568d4014ae44"
         },
         {
           "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/tables/top_institutions.csv",
-          "bytes": 931,
-          "sha256": "c1214a7b9804fe1fa25ed762d2881e065a0ca1afdd09b9da8c3a3cfbbdc04931"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/tables/top_institutions.csv",
+          "bytes": 677,
+          "sha256": "07a86ab9c6133bac589e03461052f195009abeaab9542bb1397f4835ea1ef0a4"
         },
         {
           "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/tables/top_journals.csv",
-          "bytes": 564,
-          "sha256": "3cf7f85642089ae0c07fd88f12c5d8d648078c1afe45411e4ad19b043c0da931"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/tables/top_journals.csv",
+          "bytes": 626,
+          "sha256": "c73646ee0ce132928e60d3789d428a67cf049e44c6475ee570e3c6a80512c590"
         },
         {
           "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/tables/top_keywords.csv",
-          "bytes": 745,
-          "sha256": "8919d8dcb3e552e5836cde26fccea17cdc0f53f2f9e7f0d999662a5944f50679"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/tables/top_keywords.csv",
+          "bytes": 603,
+          "sha256": "cead7da2165f8fb3962e0f2235c71c8f3eeb9b51b132ff6683976bf59b637bd9"
         },
         {
           "kind": "csv",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/tables/year_trend.csv",
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/tables/year_trend.csv",
           "bytes": 55,
           "sha256": "00f851b800eb08b3a8b0e9642762998c632701263c27c7a535fcd8962b1515c3"
         },
         {
           "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/vosviewer/author_map.txt",
-          "bytes": 221,
-          "sha256": "9d0295f44730445bbf2662aceea9c0942e538acc183ddd5cb145a5510ff8dde4"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/vosviewer/country_map.txt",
+          "bytes": 143,
+          "sha256": "be20b6f7d6d970e55123be6e7c472dd23fc851420f80fa19f451c79ddd9acf2a"
         },
         {
           "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/vosviewer/author_network.txt",
-          "bytes": 36,
-          "sha256": "c057ac98961e0c88d9cc72af9dc0e40c0d070bf224de0d6a71fd990fba109727"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/vosviewer/country_network.txt",
+          "bytes": 6,
+          "sha256": "a58602e7d3147ba3548b81ca49f638744472ae149cea378951bb9c202f4e5ceb"
         },
         {
           "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/vosviewer/country_map.txt",
-          "bytes": 211,
-          "sha256": "18e98915755a1881409159ac7f422eab7ec173a7aa28ce17cc51a8cefebdc919"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/vosviewer/keyword_map.txt",
+          "bytes": 776,
+          "sha256": "1df8a111f7cf22ed476efe4240b027b950bf341257bcfb2fb6baa6c608d5b9f1"
         },
         {
           "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/vosviewer/country_network.txt",
-          "bytes": 24,
-          "sha256": "4a4ac39a43b15ae49411a22aafdddcf4b0495e1c617a4c9d1d42cf23b41d0bde"
-        },
-        {
-          "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/vosviewer/keyword_map.txt",
-          "bytes": 1437,
-          "sha256": "2ea50358e0a468a9df419dea49ef94cbb533ed5290e1dd0f41632ede4898db07"
-        },
-        {
-          "kind": "txt",
-          "path": "bibliometric-analysis-runs/bibliometric-20260720004347-de5bea76a6f7/output/vosviewer/keyword_network.txt",
-          "bytes": 1490,
-          "sha256": "0dded12e737db7402762bf910b9c7c84ff098bef751af565e9817819123eed04"
+          "path": "bibliometric-analysis-runs/bibliometric-20260720164410-5caab5d46f95/output/vosviewer/keyword_network.txt",
+          "bytes": 563,
+          "sha256": "5ab2368b234b01e608997d49871196b671d8a82d7343b534ae3d84357f197288"
         }
       ],
-      "artifactCount": 38
+      "artifactCount": 33
     },
     {
       "tool": "evimed_research_topic_selection",
@@ -864,17 +886,17 @@
       "status": "success",
       "operational": true,
       "summary": "A managed specialist task completed and produced verified non-empty artifacts.",
-      "jobId": "topic-20260720005519-fea9240edd34",
+      "jobId": "topic-20260720164410-f343d3dc17c8",
       "jobStatus": "succeeded",
       "releaseStatus": null,
       "publicationReady": true,
-      "executedAt": "2026-07-19T17:10:34.899033Z",
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "executedAt": "2026-07-20T08:59:13.900871Z",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace/2026-07-19-1354",
       "executionEvidence": {
         "schemaVersion": 1,
-        "agentSourceSha256": "8ef80511020c905466d845314d9866df494c50012f2a4b88fa077b88056c2c52",
+        "agentSourceSha256": "9e52bb8b3a8fe397cc47eb956c3c0d17ff874d8a42e99f37f9511d244f96ca70",
         "agentSourceFiles": 34,
-        "adapterSha256": "4f3ac771a1826effc993c45955f0d7a3d02bf1780694ea433ee57d5c0fc35468",
+        "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
         "evidenceModuleSha256": "ac171b1d3d11c22063f46cefaaf28cd4bd9d876c0303e1a537ad1bb568a597e9",
         "model": "deepseek-v4-pro",
         "thinking": true,
@@ -883,45 +905,45 @@
       "artifacts": [
         {
           "kind": "json",
-          "path": "research-topic-runs/topic-20260720005519-fea9240edd34/output/evidence-records.json",
-          "bytes": 248267,
-          "sha256": "c64be4f27ef433776840314300b21e5438ef2171c53056aa0c860866f6c2b89f"
+          "path": "research-topic-runs/topic-20260720164410-f343d3dc17c8/output/evidence-records.json",
+          "bytes": 75892,
+          "sha256": "cef3937c3b1612cb54850659f496b19e319531f79d4a24499dd3bf178f763e67"
         },
         {
           "kind": "json",
-          "path": "research-topic-runs/topic-20260720005519-fea9240edd34/output/evidence-stats.json",
-          "bytes": 2104,
-          "sha256": "a9b8c8591b2b7a62e432ff678dfe2b85037831f426ed8f7d385f91d0d48ae6fc"
+          "path": "research-topic-runs/topic-20260720164410-f343d3dc17c8/output/evidence-stats.json",
+          "bytes": 1773,
+          "sha256": "e94e25945ab7dc59208b237543950bc6f97bd8fa2e168a65adf537d62ffcd40a"
         },
         {
           "kind": "json",
-          "path": "research-topic-runs/topic-20260720005519-fea9240edd34/output/module-outputs.json",
-          "bytes": 187270,
-          "sha256": "d25902a3c49cb227d28a8de0420c2679dd314e3561ddf4f71ddc289fe710fbc8"
+          "path": "research-topic-runs/topic-20260720164410-f343d3dc17c8/output/module-outputs.json",
+          "bytes": 62624,
+          "sha256": "180df34115a6f93ca39ba2805331c0dd540e916d0fc9f0f8bc1d2f691570d2c4"
         },
         {
           "kind": "json",
-          "path": "research-topic-runs/topic-20260720005519-fea9240edd34/output/request.json",
-          "bytes": 111,
-          "sha256": "1c267f0ee399de477ba076027ace1d4ca01f3080ef07450e0ac8bc0c4c1ec15e"
+          "path": "research-topic-runs/topic-20260720164410-f343d3dc17c8/output/request.json",
+          "bytes": 115,
+          "sha256": "9b88ee798e645179b78e462b8c1e6436a3f5b7f286ebe964387b81c96e7cfd6a"
         },
         {
           "kind": "md",
-          "path": "research-topic-runs/topic-20260720005519-fea9240edd34/output/research-topic-report.md",
-          "bytes": 49133,
-          "sha256": "fabc3eb48604a17a7c719120700b4135276e4390091f1a859252292eda591e64"
+          "path": "research-topic-runs/topic-20260720164410-f343d3dc17c8/output/research-topic-report.md",
+          "bytes": 38459,
+          "sha256": "b98930b9af9f54896c2d48a5796d6ac274e9aa79cfaaad590a02cff796e1865b"
         },
         {
           "kind": "json",
-          "path": "research-topic-runs/topic-20260720005519-fea9240edd34/output/research-topic-run.json",
-          "bytes": 249429,
-          "sha256": "66ae70f54d15cf3057156a2ec8b43f65ae2a5f5a05350a8d9ef0b94eea1047c3"
+          "path": "research-topic-runs/topic-20260720164410-f343d3dc17c8/output/research-topic-run.json",
+          "bytes": 106182,
+          "sha256": "726cc87c1a4973838bffd64697ff136986a3f01780151d9d01177ac33b8dcb4c"
         },
         {
           "kind": "json",
-          "path": "research-topic-runs/topic-20260720005519-fea9240edd34/output/result.json",
+          "path": "research-topic-runs/topic-20260720164410-f343d3dc17c8/output/result.json",
           "bytes": 302,
-          "sha256": "aae1a8e262cc35addb41612a2566d68c0d1b818a6928193aa5b30d79f79572da"
+          "sha256": "540d93d9b3bc8fcda3cb78c6aa7b1598668bf4423e42dbda220008ac314b513a"
         }
       ],
       "artifactCount": 7
@@ -933,17 +955,17 @@
       "status": "success",
       "operational": true,
       "summary": "A managed specialist task completed and produced verified non-empty artifacts.",
-      "jobId": "review-20260720004434-a90d258bcacc",
+      "jobId": "review-20260720164838-2e9b15123da2",
       "jobStatus": "succeeded",
       "releaseStatus": null,
       "publicationReady": true,
-      "executedAt": "2026-07-19T16:58:54.499842Z",
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "executedAt": "2026-07-20T09:00:35.258983Z",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace/2026-07-19-1354",
       "executionEvidence": {
         "schemaVersion": 1,
-        "agentSourceSha256": "57a0b172c8a6caf84a10e1ff29fd79256da467188ab71fd329ab92d3e1a72517",
+        "agentSourceSha256": "570bbba83bd82c4f6cda94a796ce586d730516e93ac7a496878aadfa80a05460",
         "agentSourceFiles": 78,
-        "adapterSha256": "4f3ac771a1826effc993c45955f0d7a3d02bf1780694ea433ee57d5c0fc35468",
+        "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
         "evidenceModuleSha256": "ac171b1d3d11c22063f46cefaaf28cd4bd9d876c0303e1a537ad1bb568a597e9",
         "model": "deepseek-v4-pro",
         "thinking": true,
@@ -952,30 +974,93 @@
       "artifacts": [
         {
           "kind": "md",
-          "path": "peer-review-runs/review-20260720004434-a90d258bcacc/output/peer-review-report.md",
-          "bytes": 28519,
-          "sha256": "bdd21bf5b397375516cda1ea2c4e82ecb5bd6b24d9d3c1f6e3e3358231f0c6db"
+          "path": "peer-review-runs/review-20260720164838-2e9b15123da2/output/peer-review-report.md",
+          "bytes": 26848,
+          "sha256": "f2ee3067d96e0736574a176bffb6bbba1e4256f6636d9540e232f58fc7572b7d"
         },
         {
           "kind": "json",
-          "path": "peer-review-runs/review-20260720004434-a90d258bcacc/output/peer-review-run.json",
-          "bytes": 123016,
-          "sha256": "ba216b648c4545aee5fd494c1373787f57ed8d81b15238c8f2ee0861e0a037a3"
+          "path": "peer-review-runs/review-20260720164838-2e9b15123da2/output/peer-review-run.json",
+          "bytes": 110968,
+          "sha256": "96c8c39032f61184cd658f80f697c49c8bf295ebd8861ba09739bcde1692355f"
         },
         {
           "kind": "json",
-          "path": "peer-review-runs/review-20260720004434-a90d258bcacc/output/request.json",
-          "bytes": 234,
-          "sha256": "3868e6599558c9b481b8620a7b833f796636f892a70f76171b2ca7e00028fea9"
+          "path": "peer-review-runs/review-20260720164838-2e9b15123da2/output/request.json",
+          "bytes": 238,
+          "sha256": "bc79542c46c12bacc201669bd5c83d64c0ed5a230ad2f715bda11eb9e1b796e8"
         },
         {
           "kind": "json",
-          "path": "peer-review-runs/review-20260720004434-a90d258bcacc/output/result.json",
-          "bytes": 193,
-          "sha256": "c9253d482348a0117c80af7fdfb93828c0d5fcf3369123cd7e558b1040bbd3bb"
+          "path": "peer-review-runs/review-20260720164838-2e9b15123da2/output/result.json",
+          "bytes": 212,
+          "sha256": "fd9d845c8c576ee180e5aa0fd149ea34d399e80f51c8564e4578286a6b5683a8"
         }
       ],
       "artifactCount": 4
+    },
+    {
+      "tool": "evimed_drug_safety_analysis",
+      "probeType": "completed_managed_job",
+      "operation": "start_then_poll_to_terminal",
+      "status": "success",
+      "operational": true,
+      "summary": "A managed specialist task completed and produced verified non-empty artifacts.",
+      "jobId": "safety-20260720164410-8c4a553470b6",
+      "jobStatus": "succeeded",
+      "releaseStatus": null,
+      "publicationReady": true,
+      "executedAt": "2026-07-20T08:44:45.408363Z",
+      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace/2026-07-19-1354",
+      "executionEvidence": {
+        "schemaVersion": 1,
+        "agentSourceSha256": "990e7e32bc8ae829496720a448e55b6b4de33fa514fcdb4506fd81d400aeb531",
+        "agentSourceFiles": 442,
+        "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
+        "evidenceModuleSha256": "ac171b1d3d11c22063f46cefaaf28cd4bd9d876c0303e1a537ad1bb568a597e9",
+        "model": "deepseek-v4-pro",
+        "thinking": true,
+        "reasoningEffort": "high"
+      },
+      "artifacts": [
+        {
+          "kind": "json",
+          "path": "drug-safety-runs/safety-20260720164410-8c4a553470b6/output/request.json",
+          "bytes": 118,
+          "sha256": "364c16246e64deef90294fa6950825c32b71a4e9cc399995d60663573f3cd872"
+        },
+        {
+          "kind": "json",
+          "path": "drug-safety-runs/safety-20260720164410-8c4a553470b6/output/result.json",
+          "bytes": 484,
+          "sha256": "9cfdf6c05e8956d2b3c3c15f1a24c9f422fc527a523117f15f2886c7e118e1f0"
+        },
+        {
+          "kind": "docx",
+          "path": "drug-safety-runs/safety-20260720164410-8c4a553470b6/output/safety-report.docx",
+          "bytes": 40707,
+          "sha256": "640ae1e72c1a352637221f43a78de6c7879ab04efaebefaba1ea4c73e301020e"
+        },
+        {
+          "kind": "md",
+          "path": "drug-safety-runs/safety-20260720164410-8c4a553470b6/output/safety-report.md",
+          "bytes": 9363,
+          "sha256": "e8b3bc517c3ef1fd058bb6229f57953b2cdc6c90dac19539daaea723913bc587"
+        },
+        {
+          "kind": "pdf",
+          "path": "drug-safety-runs/safety-20260720164410-8c4a553470b6/output/safety-report.pdf",
+          "bytes": 266442,
+          "sha256": "8c951c197ce48e928710fe26fd65639492256ca108d2e5b9fb283c9ade026811"
+        },
+        {
+          "kind": "csv",
+          "path": "drug-safety-runs/safety-20260720164410-8c4a553470b6/output/signals.csv",
+          "bytes": 1916,
+          "sha256": "ee82783b3e81f49e16718dc36b9eb10e79a3ac7951780ad06c4b6973a6868a49"
+        }
+      ],
+      "artifactCount": 6
     }
   ]
 }
