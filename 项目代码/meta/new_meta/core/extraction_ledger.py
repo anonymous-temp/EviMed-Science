@@ -447,8 +447,7 @@ def _result_data(
                     f"without {', '.join(missing)}; preserved as an ordinary aggregate result."
                 )
         else:
-            effect = comparative_effect_from_outcome(outcome, protocol)
-            return ComparativeEffectData(
+            comparative_data = ComparativeEffectData(
                 design=outcome.comparative_design,
                 treatment=str(outcome.treatment_arm),
                 comparator=str(outcome.reference_arm),
@@ -459,7 +458,19 @@ def _result_data(
                 paired_analysis=outcome.paired_analysis,
                 intracluster_correlation=outcome.intracluster_correlation,
                 mean_cluster_size=outcome.mean_cluster_size,
-            ), EffectEstimate(
+            )
+            try:
+                effect = comparative_effect_from_outcome(outcome, protocol)
+            except ValueError as exc:
+                if warnings is not None:
+                    warnings.append(
+                        f"{result_id} preserves comparative dependency metadata but has no "
+                        f"computable {str(protocol.effect_measure or '').upper() or 'effect'} "
+                        "estimate; the result is excluded from synthesis pending source data "
+                        f"({exc})."
+                    )
+                return comparative_data, None
+            return comparative_data, EffectEstimate(
                 measure=str(effect["measure"]),
                 estimate=float(effect["estimate"]),
                 standard_error=effect["standard_error"],

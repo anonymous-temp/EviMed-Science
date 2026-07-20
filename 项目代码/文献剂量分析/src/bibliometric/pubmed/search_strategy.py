@@ -9,6 +9,7 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Optional
 
 import requests
@@ -20,6 +21,22 @@ _ESEARCH_URL = f"{_EUTILS_BASE}/esearch.fcgi"
 _EFETCH_URL = f"{_EUTILS_BASE}/efetch.fcgi"
 _REQUEST_TIMEOUT = 30
 _last_request_time: float = 0.0
+
+
+def _pubmed_date_boundary(value: str, *, end: bool) -> str:
+    """Normalize a year or ISO date to PubMed's YYYY/MM/DD syntax."""
+    raw = str(value or "").strip()
+    match = re.fullmatch(r"(\d{4})(?:[-/](\d{2})[-/](\d{2}))?", raw)
+    if not match:
+        raise ValueError(f"invalid PubMed date boundary: {raw!r}")
+    year = int(match.group(1))
+    month = int(match.group(2)) if match.group(2) else (12 if end else 1)
+    day = int(match.group(3)) if match.group(3) else (31 if end else 1)
+    if end and match.group(2) is None and year == date.today().year:
+        boundary = date.today()
+    else:
+        boundary = date(year, month, day)
+    return boundary.strftime("%Y/%m/%d")
 
 
 # ── 常用医学术语 MeSH 本地缓存（跳过 API 调用，加快多概念检索速度）──
@@ -376,16 +393,8 @@ def build_search_strategy(
             # 添加日期过滤
             formal_query = llm_query
             if date_from or date_to:
-                from datetime import datetime as _dt
-                start = f"{date_from}/01/01" if date_from else "1900/01/01"
-                if date_to:
-                    now = _dt.now()
-                    if str(date_to) == str(now.year):
-                        end = now.strftime("%Y/%m/%d")
-                    else:
-                        end = f"{date_to}/12/31"
-                else:
-                    end = "3000/12/31"
+                start = _pubmed_date_boundary(date_from, end=False) if date_from else "1900/01/01"
+                end = _pubmed_date_boundary(date_to, end=True) if date_to else "3000/12/31"
                 formal_query += f' AND ("{start}"[Date - Publication] : "{end}"[Date - Publication])'
 
             return {
@@ -488,17 +497,8 @@ def _compile_query(
 
     # Date filter
     if date_from or date_to:
-        from datetime import datetime as _dt
-        start = f"{date_from}/01/01" if date_from else "1900/01/01"
-        if date_to:
-            # 如果 date_to 是当前年份，用实际当前日期而非 12/31
-            now = _dt.now()
-            if str(date_to) == str(now.year):
-                end = now.strftime("%Y/%m/%d")
-            else:
-                end = f"{date_to}/12/31"
-        else:
-            end = "3000/12/31"
+        start = _pubmed_date_boundary(date_from, end=False) if date_from else "1900/01/01"
+        end = _pubmed_date_boundary(date_to, end=True) if date_to else "3000/12/31"
         query += f' AND ("{start}"[Date - Publication] : "{end}"[Date - Publication])'
 
     return query

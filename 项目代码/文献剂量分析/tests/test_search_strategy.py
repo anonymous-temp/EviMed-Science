@@ -53,3 +53,30 @@ def test_natural_language_topic_keeps_two_clinical_concepts():
 def test_known_multiword_term_is_not_split_into_mandatory_tokens():
     concepts = search_strategy._split_query_into_concepts("heart failure treatment")
     assert concepts == ["treatment", "heart failure"]
+
+
+def test_full_iso_date_range_is_not_expanded_twice(monkeypatch):
+    monkeypatch.setattr(
+        search_strategy,
+        "lookup_mesh",
+        lambda term, **kwargs: (None, False),
+    )
+
+    strategy = search_strategy.build_search_strategy(
+        "GLP-1 receptor agonists obesity",
+        date_from="2023-01-01",
+        date_to="2024-06-30",
+    )
+
+    assert '"2023/01/01"[Date - Publication]' in strategy["formal_query"]
+    assert '"2024/06/30"[Date - Publication]' in strategy["formal_query"]
+    assert "2023-01-01/01/01" not in strategy["formal_query"]
+
+
+def test_invalid_date_boundary_fails_closed():
+    try:
+        search_strategy._pubmed_date_boundary("2024-13-40", end=True)
+    except ValueError as error:
+        assert "invalid" in str(error).lower() or "month" in str(error).lower()
+    else:
+        raise AssertionError("invalid PubMed date boundary was accepted")
