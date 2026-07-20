@@ -1310,6 +1310,39 @@ test("production readiness requires the server-held Materials Project key", asyn
   );
 });
 
+test("controlled production can declare Materials Project unavailable without faking a key", async () => {
+  await withApp(
+    async ({ base }) => {
+      const res = await fetch(`${base}/api/ready`);
+      assert.equal(res.status, 200);
+      const check = (await res.json()).data.checks.scienceConnectors;
+      assert.equal(check.ok, true);
+      assert.deepEqual(check, {
+        ok: true,
+        enabled: 6,
+        gateway: "server-managed",
+        materialsProjectEnabled: false,
+        materialsProjectRequired: false,
+        materialsProjectKeySource: "none",
+      });
+    },
+    {
+      production: true,
+      devAuth: false,
+      bootstrapUser: "alice",
+      bootstrapPassword: "correct horse battery staple",
+      publicUrl: "https://science.example.com",
+      runtimeMode: "mock",
+      allowMockRuntime: true,
+      ...productionReadinessReady,
+      materialsProjectApiKey: "",
+      materialsProjectApiKeySource: "none",
+      materialsProjectApiKeyError: null,
+      requireMaterialsProject: false,
+    },
+  );
+});
+
 test("readiness requires explicit production backup configuration", async () => {
   const baseConfig = {
     production: true,

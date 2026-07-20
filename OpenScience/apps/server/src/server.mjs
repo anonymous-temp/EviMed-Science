@@ -2195,17 +2195,25 @@ function readinessEviMedAdapters(config) {
 }
 
 function readinessScienceConnectors(config) {
-  if (config.materialsProjectApiKeyError) throw readinessFailure(config.materialsProjectApiKeyError);
+  if (config.materialsProjectApiKeyError && config.requireMaterialsProject) {
+    throw readinessFailure(config.materialsProjectApiKeyError);
+  }
   const key = String(config.materialsProjectApiKey ?? "");
-  if (config.production && (!key || key !== key.trim() || /[\r\n\0]/.test(key))) {
+  if (
+    config.production
+    && config.requireMaterialsProject
+    && (!key || key !== key.trim() || /[\r\n\0]/.test(key))
+  ) {
     throw readinessFailure("materials_project_api_key_missing");
   }
-  if (config.production && config.materialsProjectApiKeySource === "environment") {
+  if (config.production && key && config.materialsProjectApiKeySource === "environment") {
     throw readinessFailure("materials_project_api_key_environment_forbidden");
   }
   return {
-    enabled: 7,
+    enabled: key ? 7 : 6,
     gateway: "server-managed",
+    materialsProjectEnabled: Boolean(key),
+    materialsProjectRequired: Boolean(config.requireMaterialsProject),
     materialsProjectKeySource: key ? config.materialsProjectApiKeySource : "none",
   };
 }
