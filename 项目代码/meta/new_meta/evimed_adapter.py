@@ -516,7 +516,7 @@ def run_job(state_file: str) -> int:
         key=lambda entry: entry.stat().st_mtime_ns,
         reverse=True,
     )
-    if completed.returncode != 0 or not projects:
+    if completed.returncode not in {0, 2} or not projects:
         state.update({
             "status": "failed",
             "updatedAt": _now(),
@@ -540,7 +540,7 @@ def run_job(state_file: str) -> int:
         "status": "succeeded",
         "updatedAt": _now(),
         "finishedAt": _now(),
-        "returnCode": 0,
+        "returnCode": completed.returncode,
         "projectRelativePath": project.relative_to(workspace).as_posix(),
         "releaseStatus": str(release.get("status") or "unknown"),
         "nextActions": [str(item) for item in release.get("next_actions", []) if str(item).strip()][:20],
