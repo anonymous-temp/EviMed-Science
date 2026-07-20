@@ -277,6 +277,16 @@ def _validated_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError(f"{required} is required")
     if action == "status" and not str(arguments.get("jobId") or "").strip():
         raise ValueError("jobId is required")
+    if (
+        action == "start"
+        and _kind() == "bibliometric-analysis"
+        and "maxRecords" in arguments
+        and (
+            type(arguments["maxRecords"]) is not int
+            or not 20 <= arguments["maxRecords"] <= 5000
+        )
+    ):
+        raise ValueError("maxRecords must be an integer from 20 through 5000")
     if "waitSeconds" in arguments and (
         type(arguments["waitSeconds"]) is not int
         or not 0 <= arguments["waitSeconds"] <= 60

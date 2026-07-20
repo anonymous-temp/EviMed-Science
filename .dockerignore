@@ -25,6 +25,8 @@ grok-build-main
 **/node_modules
 **/output
 **/outputs
+!项目代码/孟德尔随机化/mr_agent/output
+!项目代码/孟德尔随机化/mr_agent/output/**
 **/target
 **/venv
 **/*.db

@@ -1,4 +1,4 @@
-ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.10-slim-bookworm
+ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim-bookworm
 FROM ${PYTHON_BASE_IMAGE}
 
 ARG APP_VERSION=1.0.0
@@ -66,7 +66,10 @@ COPY ${AGENT_DIR} /agent
 COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter ./evimed_specialist_adapter
 
 RUN python -m compileall -q /adapter/evimed_specialist_adapter /agent \
-    && test -f /agent/evimed_runner.py
+    && test -f /agent/evimed_runner.py \
+    && if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \
+         python -c 'from mr_agent.output.figures import format_summary_card; assert callable(format_summary_card)'; \
+       fi
 
 VOLUME ["/data"]
 EXPOSE 8025
