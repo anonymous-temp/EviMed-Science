@@ -165,6 +165,18 @@ def test_request_contract_rejects_unknown_fields(tmp_path, monkeypatch) -> None:
     assert ignored_job.status_code == 422
 
 
+def test_bibliometric_record_limit_is_rejected_before_queue(tmp_path, monkeypatch) -> None:
+    _, client, secret, workspace = _load_service(tmp_path, monkeypatch)
+    response = client.post(
+        "/api/v1/evimed/bibliometric-analysis",
+        json={"action": "start", "topic": "GLP-1 obesity", "maxRecords": 10},
+        headers={"Authorization": f"Bearer {_token(secret)}"},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "maxRecords must be an integer from 20 through 5000"
+    assert not (workspace / "bibliometric-analysis-runs").exists()
+
+
 def test_interrupted_worker_is_not_reported_as_running(tmp_path, monkeypatch) -> None:
     module, client, secret, workspace = _load_service(tmp_path, monkeypatch)
 
