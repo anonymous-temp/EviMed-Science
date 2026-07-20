@@ -1,0 +1,284 @@
+# TRIPOD-AI Checklist for AI-based Prediction Models
+# Reference: Collins GS, Dhiman P, Andaur Navarro CL, et al. Protocol for development of a reporting guideline (TRIPOD-AI) and risk of bias tool (PROBAST-AI) for diagnostic and prognostic prediction model studies based on artificial intelligence. BMJ Open 2021;11:e048008
+
+name: TRIPOD-AI
+version: "1.0"
+applicable_to:
+  - Prognostic Model
+  - Prediction Model
+  - AI
+  - Machine Learning
+description: "Reporting checklist for AI-based prediction model studies"
+
+items:
+  - item_id: TRIPOD_AI_1
+    item_number: "1"
+    category: Title
+    question: "Does the title identify the study as developing/validating a prediction model and specify AI methods?"
+    evaluation_criteria: "Title should identify as prediction model study and mention use of AI/machine learning."
+    evidence_location_hint: "title"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_2
+    item_number: "2"
+    category: Abstract
+    question: "Does abstract provide structured summary including model type and AI methods?"
+    evaluation_criteria: "Abstract should include objectives, data source, participants, outcome, predictors, sample size, model development/validation methods (specifying AI approach), model performance, and conclusions."
+    evidence_location_hint: "abstract"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_3a
+    item_number: "3a"
+    category: Introduction
+    question: "Is the medical context and rationale explained?"
+    evaluation_criteria: "Should explain the medical context and rationale for developing/validating the model."
+    evidence_location_hint: "introduction"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_3b
+    item_number: "3b"
+    category: Introduction
+    question: "Are existing prediction models and AI approaches described?"
+    evaluation_criteria: "Should specify objectives including whether developing a new model or validating an existing one, and describe existing AI prediction models."
+    evidence_location_hint: "introduction"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_4a
+    item_number: "4a"
+    category: Methods - Source Data
+    question: "Are data sources described including AI-specific considerations?"
+    evaluation_criteria: "Should describe data sources, collection methods, and any data augmentation or preprocessing for AI."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: TRIPOD_AI_4b
+    item_number: "4b"
+    category: Methods - Participants
+    question: "Are eligibility criteria and data splits described?"
+    evaluation_criteria: "Should specify eligibility criteria and how data were split (training/validation/test sets)."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: CRITICAL
+
+  - item_id: TRIPOD_AI_5a
+    item_number: "5a"
+    category: Methods - Outcome
+    question: "Is the outcome clearly defined?"
+    evaluation_criteria: "Should clearly define the outcome to be predicted, including how and when assessed."
+    evidence_location_hint: "methods.outcomes"
+    severity_if_missing: CRITICAL
+
+  - item_id: TRIPOD_AI_5b
+    item_number: "5b"
+    category: Methods - Outcome
+    question: "Are outcome labels and annotation methods described?"
+    evaluation_criteria: "Should report methods for determining outcome labels, including annotation processes and inter-rater reliability for AI models."
+    evidence_location_hint: "methods.outcomes"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_6a
+    item_number: "6a"
+    category: Methods - Predictors
+    question: "Are all predictors/features clearly defined?"
+    evaluation_criteria: "Should clearly define all candidate predictors including data types and sources."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: TRIPOD_AI_6b
+    item_number: "6b"
+    category: Methods - Predictors
+    question: "Are feature engineering and selection methods described?"
+    evaluation_criteria: "Should report feature extraction, engineering, and selection methods used for AI model."
+    evidence_location_hint: "methods.model_development"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_7a
+    item_number: "7a"
+    category: Methods - Sample Size
+    question: "Is the sample size explained?"
+    evaluation_criteria: "Should explain how sample size was determined, considering AI model complexity and data requirements."
+    evidence_location_hint: "methods.sample_size"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_7b
+    item_number: "7b"
+    category: Methods - Sample Size
+    question: "Are data split sizes reported?"
+    evaluation_criteria: "Should report number of participants and events in training, validation, and test sets."
+    evidence_location_hint: "methods.sample_size"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_8
+    item_number: "8"
+    category: Methods - Missing Data
+    question: "Is handling of missing data described?"
+    evaluation_criteria: "Should describe how missing data and outliers were handled."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_9
+    item_number: "9"
+    category: Methods - Data Preprocessing
+    question: "Are data preprocessing and augmentation methods described?"
+    evaluation_criteria: "Should describe all preprocessing steps (normalization, encoding, augmentation) and their sequence."
+    evidence_location_hint: "methods.model_development"
+    severity_if_missing: CRITICAL
+
+  - item_id: TRIPOD_AI_10a
+    item_number: "10a"
+    category: Methods - Model Development
+    question: "Is the AI model architecture fully specified?"
+    evaluation_criteria: "Should specify the AI/ML algorithm, architecture details, hyperparameters, and activation functions used."
+    evidence_location_hint: "methods.model_development"
+    severity_if_missing: CRITICAL
+
+  - item_id: TRIPOD_AI_10b
+    item_number: "10b"
+    category: Methods - Model Development
+    question: "Are training procedures described?"
+    evaluation_criteria: "Should describe training procedures including optimization algorithms, loss functions, batch size, learning rate, regularization, and stopping criteria."
+    evidence_location_hint: "methods.model_development"
+    severity_if_missing: CRITICAL
+
+  - item_id: TRIPOD_AI_10c
+    item_number: "10c"
+    category: Methods - Model Development
+    question: "Is hyperparameter tuning described?"
+    evaluation_criteria: "Should describe hyperparameter tuning methods and validation strategy used."
+    evidence_location_hint: "methods.model_development"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_10d
+    item_number: "10d"
+    category: Methods - Model Development
+    question: "Are methods for handling class imbalance described if applicable?"
+    evaluation_criteria: "If class imbalance present, should describe methods used (resampling, weighting, etc.)."
+    evidence_location_hint: "methods.model_development"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_11
+    item_number: "11"
+    category: Methods - Model Validation
+    question: "Is the validation approach clearly described?"
+    evaluation_criteria: "Should specify whether internal validation (cross-validation, bootstrap) or external validation, with clear description of methods."
+    evidence_location_hint: "methods.model_validation"
+    severity_if_missing: CRITICAL
+
+  - item_id: TRIPOD_AI_12
+    item_number: "12"
+    category: Methods - Performance Measures
+    question: "Are all performance measures specified?"
+    evaluation_criteria: "Should specify all measures used to assess model performance (discrimination, calibration, clinical utility) including AUC, sensitivity, specificity, calibration plots, decision curves."
+    evidence_location_hint: "methods.model_validation"
+    severity_if_missing: CRITICAL
+
+  - item_id: TRIPOD_AI_13
+    item_number: "13"
+    category: Methods - Model Explainability
+    question: "Are methods for model interpretability/explainability described?"
+    evaluation_criteria: "Should describe methods used to interpret or explain model predictions (feature importance, SHAP, attention maps, etc.)."
+    evidence_location_hint: "methods.model_development"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_14
+    item_number: "14"
+    category: Methods - Software and Code
+    question: "Are software, libraries, and code availability reported?"
+    evaluation_criteria: "Should specify software/libraries used with versions, and state whether code is publicly available."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_15a
+    item_number: "15a"
+    category: Results - Participants
+    question: "Are participant characteristics described for all datasets?"
+    evaluation_criteria: "Should provide participant flow and characteristics for training, validation, and test sets separately."
+    evidence_location_hint: "results.baseline"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_15b
+    item_number: "15b"
+    category: Results - Model Specification
+    question: "Are final model specifications reported?"
+    evaluation_criteria: "Should report final model architecture, selected features, and final hyperparameters."
+    evidence_location_hint: "results"
+    severity_if_missing: CRITICAL
+
+  - item_id: TRIPOD_AI_16
+    item_number: "16"
+    category: Results - Model Performance
+    question: "Is model performance reported with measures of uncertainty?"
+    evaluation_criteria: "Should report all performance metrics with confidence intervals for training, validation, and test sets."
+    evidence_location_hint: "results.outcomes"
+    severity_if_missing: CRITICAL
+
+  - item_id: TRIPOD_AI_17
+    item_number: "17"
+    category: Results - Model Calibration
+    question: "Are calibration results presented?"
+    evaluation_criteria: "Should present calibration assessment with calibration plots or statistics."
+    evidence_location_hint: "results.outcomes"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_18
+    item_number: "18"
+    category: Results - Model Explanation
+    question: "Are model explanations or interpretations provided?"
+    evaluation_criteria: "Should provide results of interpretability analyses (feature importance, example predictions with explanations)."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_19
+    item_number: "19"
+    category: Results - Comparison
+    question: "Is comparison with existing models or clinicians provided?"
+    evaluation_criteria: "Should compare performance with existing prediction models or clinical judgment if available."
+    evidence_location_hint: "results"
+    severity_if_missing: MINOR
+
+  - item_id: TRIPOD_AI_20
+    item_number: "20"
+    category: Discussion - Limitations
+    question: "Are limitations discussed including AI-specific concerns?"
+    evaluation_criteria: "Should discuss limitations including potential biases, generalizability concerns, and dataset limitations specific to AI models."
+    evidence_location_hint: "discussion.limitations"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_21
+    item_number: "21"
+    category: Discussion - Interpretation
+    question: "Is interpretation provided with clinical implications?"
+    evaluation_criteria: "Should interpret results in clinical context and discuss implications for practice."
+    evidence_location_hint: "discussion.interpretation"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_22
+    item_number: "22"
+    category: Discussion - Implications
+    question: "Are implications for future research discussed?"
+    evaluation_criteria: "Should discuss implications for future research and implementation."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MINOR
+
+  - item_id: TRIPOD_AI_23
+    item_number: "23"
+    category: Other - Data Availability
+    question: "Is data availability statement provided?"
+    evaluation_criteria: "Should state whether and how data can be accessed, with appropriate ethical considerations."
+    evidence_location_hint: "end_matter"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_24
+    item_number: "24"
+    category: Other - Code Availability
+    question: "Is code availability statement provided?"
+    evaluation_criteria: "Should state whether and where code is available (e.g., GitHub repository)."
+    evidence_location_hint: "end_matter"
+    severity_if_missing: MAJOR
+
+  - item_id: TRIPOD_AI_25
+    item_number: "25"
+    category: Other - Ethics
+    question: "Are ethical approvals and considerations reported?"
+    evaluation_criteria: "Should report ethics approvals and address ethical considerations specific to AI."
+    evidence_location_hint: "methods.ethics"
+    severity_if_missing: CRITICAL

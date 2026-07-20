@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "corpus_id": "prevalence_binomial_boundaries",
+  "description": "Exact aggregate-binomial behavior when every study reports zero events or all events.",
+  "oracle": {
+    "type": "clopper_pearson",
+    "alpha": 0.05
+  },
+  "cases": [
+    {
+      "case_id": "all_zero",
+      "studies": [{"study_id": "A", "events": 0, "total": 20}, {"study_id": "B", "events": 0, "total": 30}],
+      "expected": {"pooled_proportion": 0.0, "ci_lower": 0.0, "ci_upper": 0.07112173646419764}
+    },
+    {
+      "case_id": "all_event",
+      "studies": [{"study_id": "A", "events": 20, "total": 20}, {"study_id": "B", "events": 30, "total": 30}],
+      "expected": {"pooled_proportion": 1.0, "ci_lower": 0.9288782635358024, "ci_upper": 1.0}
+    }
+  ],
+  "tolerance": 1e-12
+}

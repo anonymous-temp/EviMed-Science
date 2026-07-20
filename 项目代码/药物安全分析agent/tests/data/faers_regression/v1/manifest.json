@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "dataset_id": "faers-paper-regression-2026-07-20-v1",
+  "frozen_at": "2026-07-20T00:00:00Z",
+  "count_unit": "openfda_latest_report_version",
+  "source": "openFDA drug/event.json live aggregate extraction",
+  "source_url": "https://api.fda.gov/drug/event.json",
+  "generator": {
+    "version": "openfda-count-panel-v1",
+    "implementation": "safety_agent.openfda.queries plus OpenFDAClient.count_total",
+    "drug_field": "patient.drug.medicinalproduct",
+    "event_field": "patient.reaction.reactionmeddrapt",
+    "role_filter": "patient.drug.drugcharacterization:1",
+    "date_field": "receivedate",
+    "query_formula": {
+      "joint": "drug AND role_filter AND event AND date_range",
+      "drug_total": "drug AND role_filter AND date_range",
+      "event_total": "event AND date_range",
+      "grand_total": "date_range"
+    },
+    "panel_inputs": "drug, reaction, date_from, and date_to in panels.json",
+    "meddra_profile": "openFDA reaction PT text as served on extraction date; API exposes no MedDRA version"
+  },
+  "quarterly_source_hashes": null,
+  "query_binding": "report_contains_target_and_suspect_approximation",
+  "role_semantics": "drugcharacterization=1 includes PS and SS and is not same-object-bound",
+  "purpose": "offline algorithm regression and publication drift detection",
+  "limitations": [
+    "These aggregate panels do not prove exact primary-suspect binding.",
+    "The live aggregate API does not expose quarterly source-file hashes or its MedDRA version; exact quarterly-file regression must use the indexed snapshot backend.",
+    "Exact same-drug-object semantics are tested separately with faers_report_binding.json.",
+    "Publication values are observational reference anchors, not clinical causality gold standards."
+  ],
+  "primary_sources": [
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC8763271/",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC12374422/",
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC12499714/"
+  ],
+  "panels_file": "panels.json",
+  "panels_sha256": "d7ce0772a2172adf210ecf46667947f956946c64f2ff9221c94e3407532804be",
+  "publication_anchors_file": "publication_anchors.json",
+  "publication_anchors_sha256": "182a2e0ed297c843e4cb7a8ed2731f3607b7f5d1e848361cb0c17ccca2da5124"
+}

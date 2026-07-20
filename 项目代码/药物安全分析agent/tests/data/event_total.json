@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "disclaimer": "Do not rely on openFDA to make decisions regarding medical care.",
+    "license": "https://open.fda.gov/license/",
+    "last_updated": "2024-06-30",
+    "results": { "skip": 0, "limit": 1, "total": 12345 }
+  },
+  "results": [
+    {
+      "safetyreportid": "10000001",
+      "receivedate": "20240115",
+      "serious": "1",
+      "occurcountry": "us",
+      "patient": {
+        "patientsex": "2",
+        "patientonsetage": "64",
+        "patientonsetageunit": "801",
+        "reaction": [{ "reactionmeddrapt": "Myalgia" }],
+        "drug": [{ "medicinalproduct": "ATORVASTATIN" }]
+      }
+    }
+  ]
+}

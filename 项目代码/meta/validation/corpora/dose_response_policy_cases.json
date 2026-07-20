@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "fixture_id": "dose_response_policy_cases_2026_07_17",
+  "description": "Fail-closed input cases for aggregate categorical dose-response synthesis.",
+  "cases": [
+    {"case_id": "dependent_categories_need_covariance", "expected": "reject"},
+    {"case_id": "dose_and_reference_must_differ", "expected": "reject"},
+    {"case_id": "mass_per_day_and_mass_per_kg_day_do_not_mix", "expected": "reject"},
+    {"case_id": "g_per_day_converts_to_mg_per_day", "expected": "accept"},
+    {"case_id": "each_study_needs_two_nonreference_categories", "expected": "reject"},
+    {"case_id": "observational_effects_must_be_adjusted", "expected": "reject"},
+    {"case_id": "observational_adjustment_sets_must_match", "expected": "reject"}
+  ]
+}

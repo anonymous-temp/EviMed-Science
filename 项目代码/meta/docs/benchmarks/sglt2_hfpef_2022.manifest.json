@@ -1,0 +1,100 @@
+{
+  "benchmark_id": "sglt2_hfpef_2022_vaduganathan_lancet",
+  "title": "SGLT2 inhibitors for HFmrEF/HFpEF: DELIVER and EMPEROR-Preserved",
+  "reference": {
+    "citation": "Vaduganathan M, Docherty KF, Claggett BL, et al. SGLT2 inhibitors in patients with heart failure: a comprehensive meta-analysis of five randomised controlled trials. Lancet. 2022;400(10354):757-767.",
+    "doi": "10.1016/S0140-6736(22)01429-5",
+    "pmid": "36041474",
+    "source_url": "https://pubmed.ncbi.nlm.nih.gov/36041474/"
+  },
+  "topic": "SGLT2 inhibitors compared with placebo for cardiovascular death or first hospitalization for heart failure in adults with heart failure with mildly reduced or preserved ejection fraction",
+  "expected_primary_result": {
+    "n_trials": 2,
+    "n_participants": 12251,
+    "effect_measure": "HR",
+    "fixed_effect": {
+      "effect": 0.80,
+      "ci_lower": 0.73,
+      "ci_upper": 0.87
+    },
+    "aggregate_events_intervention": 927,
+    "aggregate_total_intervention": 6128,
+    "aggregate_events_control": 1121,
+    "aggregate_total_control": 6123,
+    "notes": "Prespecified meta-analysis of DELIVER and EMPEROR-Preserved in LVEF >40%; primary endpoint was time to cardiovascular death or first hospitalization for heart failure."
+  },
+  "recall_thresholds": {
+    "search": 1.0,
+    "screening": 1.0,
+    "full_text": 1.0,
+    "publication_ready": 1.0
+  },
+  "expected_trials": [
+    {
+      "trial_id": "deliver",
+      "trial_name": "DELIVER",
+      "registration_id": "NCT03619213",
+      "aliases": [
+        "Dapagliflozin in Heart Failure with Mildly Reduced or Preserved Ejection Fraction",
+        "Dapagliflozin Evaluation to Improve the Lives of Patients With Preserved Ejection Fraction Heart Failure",
+        "DELIVER trial"
+      ],
+      "publication_pmids": [
+        "36027570"
+      ],
+      "publication_dois": [
+        "10.1056/NEJMoa2206286"
+      ],
+      "expected_events_intervention": 512,
+      "expected_total_intervention": 3131,
+      "expected_events_control": 610,
+      "expected_total_control": 3132,
+      "expected_primary_timepoint": "time to cardiovascular death or worsening heart failure",
+      "timepoint_kind": "time_to_event",
+      "notes": "NEJM DELIVER primary outcome was worsening heart failure or cardiovascular death; the prespecified Lancet meta-analysis harmonized this to cardiovascular death or first hospitalization for heart failure."
+    },
+    {
+      "trial_id": "emperor_preserved",
+      "trial_name": "EMPEROR-Preserved",
+      "registration_id": "NCT03057951",
+      "aliases": [
+        "Empagliflozin in Heart Failure with a Preserved Ejection Fraction",
+        "Empagliflozin Outcome Trial in Patients With Chronic Heart Failure With Preserved Ejection Fraction",
+        "EMPEROR Preserved"
+      ],
+      "publication_pmids": [
+        "34449189"
+      ],
+      "publication_dois": [
+        "10.1056/NEJMoa2107038"
+      ],
+      "expected_events_intervention": 415,
+      "expected_total_intervention": 2997,
+      "expected_events_control": 511,
+      "expected_total_control": 2991,
+      "expected_primary_timepoint": "time to cardiovascular death or hospitalization for heart failure",
+      "timepoint_kind": "time_to_event",
+      "notes": "NEJM EMPEROR-Preserved primary composite outcome was cardiovascular death or hospitalization for heart failure."
+    }
+  ],
+  "adjacent_nonbenchmark_records": [
+    {
+      "label": "DAPA-HF",
+      "pmid": "31535829",
+      "doi": "10.1056/NEJMoa1911303",
+      "reason": "Included in the five-trial all-HF Lancet meta-analysis but not in the two-trial HFmrEF/HFpEF prespecified benchmark subset."
+    },
+    {
+      "label": "EMPEROR-Reduced",
+      "pmid": "32865377",
+      "doi": "10.1056/NEJMoa2022190",
+      "reason": "Included in the five-trial all-HF Lancet meta-analysis but not in the HFmrEF/HFpEF subset."
+    },
+    {
+      "label": "SOLOIST-WHF",
+      "pmid": "33200892",
+      "doi": "10.1056/NEJMoa2030183",
+      "reason": "Included in the five-trial all-HF Lancet meta-analysis for worsening HF irrespective of EF, but not part of the DELIVER/EMPEROR-Preserved HFmrEF/HFpEF subset."
+    }
+  ]
+}

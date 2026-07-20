@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "corpus_id": "analytic_inverse_variance_fixed",
+  "description": "Closed-form inverse-variance fixed-effect reference with hand-computable weights.",
+  "oracle": {
+    "type": "closed_form",
+    "formula": "sum(yi / vi) / sum(1 / vi)"
+  },
+  "effects": [
+    {"study_id": "A", "yi": 0.4, "vi": 0.04},
+    {"study_id": "B", "yi": -0.2, "vi": 0.09}
+  ],
+  "expected": {
+    "estimate": 0.2153846153846154,
+    "standard_error": 0.16641005886756874,
+    "q": 2.769230769230769,
+    "tolerance": 1e-12
+  }
+}

@@ -1,0 +1,198 @@
+# Universal Research Value Assessment Rubric (URVAR)
+# Applies ONLY to research types without specialized checklists
+# Focuses on scientific contribution, innovation, and research value
+
+name: Universal Research Value Assessment Rubric
+version: "3.0"
+applicable_to:
+  - "*"  # Fallback for research types without specialized checklists
+description: |
+  Universal rubric for assessing research value and scientific contribution.
+  Used ONLY when no specialized checklist (CONSORT, PRISMA, STROBE, etc.) applies.
+
+  Focuses on high-level evaluation dimensions:
+  - Scientific innovation and novelty (4 items)
+  - Research contribution and impact (4 items)
+  - Clinical/practical significance (3 items)
+  - Methodological soundness - high level (3 items)
+  - Ethical integrity and transparency (3 items)
+  - Reproducibility and rigor (2 items)
+  - Presentation quality (2 items)
+
+  Total: 21 items assessing research value, not technical reporting details.
+
+items:
+  # Scientific Innovation and Novelty
+  - item_id: URVAR_INNOV_01
+    item_number: "I1"
+    category: Innovation
+    question: "Does the research address a novel or under-researched question?"
+    evaluation_criteria: "Should identify a clear knowledge gap or present a new research angle. Incremental studies should justify added value."
+    evidence_location_hint: "introduction"
+    severity_if_missing: CRITICAL
+
+  - item_id: URVAR_INNOV_02
+    item_number: "I2"
+    category: Innovation
+    question: "Does the study employ innovative methods, technologies, or analytical approaches?"
+    evaluation_criteria: "Novel methodology, new technology application, or creative analytical framework adds value beyond routine research."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: URVAR_INNOV_03
+    item_number: "I3"
+    category: Innovation
+    question: "Are the findings novel or do they challenge existing paradigms?"
+    evaluation_criteria: "Results should provide new insights, unexpected findings, or challenge conventional understanding."
+    evidence_location_hint: "results and discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: URVAR_INNOV_04
+    item_number: "I4"
+    category: Innovation
+    question: "Does the study integrate knowledge across disciplines or domains?"
+    evaluation_criteria: "Interdisciplinary or translational research that bridges fields adds unique value."
+    evidence_location_hint: "introduction and discussion"
+    severity_if_missing: MINOR
+
+  # Research Contribution and Impact
+  - item_id: URVAR_CONTRIB_01
+    item_number: "C1"
+    category: Contribution
+    question: "Does the research make a clear contribution to the existing knowledge base?"
+    evaluation_criteria: "Should explicitly state what new knowledge is added and how it advances the field."
+    evidence_location_hint: "discussion"
+    severity_if_missing: CRITICAL
+
+  - item_id: URVAR_CONTRIB_02
+    item_number: "C2"
+    category: Contribution
+    question: "Are the findings sufficiently robust to support the conclusions drawn?"
+    evaluation_criteria: "Sample size, effect sizes, and statistical power should be adequate for the claimed contributions."
+    evidence_location_hint: "results and discussion"
+    severity_if_missing: CRITICAL
+
+  - item_id: URVAR_CONTRIB_03
+    item_number: "C3"
+    category: Contribution
+    question: "Are results placed in appropriate context with existing literature?"
+    evaluation_criteria: "Should compare findings with prior studies, explain agreements/disagreements, and update current understanding."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: URVAR_CONTRIB_04
+    item_number: "C4"
+    category: Contribution
+    question: "Does the discussion identify clear directions for future research?"
+    evaluation_criteria: "Should propose specific next steps or unanswered questions based on current findings."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MINOR
+
+  # Clinical/Practical Significance
+  - item_id: URVAR_IMPACT_01
+    item_number: "P1"
+    category: Practical Impact
+    question: "Does the research have clear clinical, policy, or practical implications?"
+    evaluation_criteria: "Should articulate how findings could inform practice, policy, or real-world decision-making."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: URVAR_IMPACT_02
+    item_number: "P2"
+    category: Practical Impact
+    question: "Is the potential impact of findings discussed realistically (benefits AND limitations)?"
+    evaluation_criteria: "Should provide balanced discussion of how findings can be applied and what limitations exist for implementation."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: URVAR_IMPACT_03
+    item_number: "P3"
+    category: Practical Impact
+    question: "Is generalizability or external validity appropriately addressed?"
+    evaluation_criteria: "Should discuss to what populations, settings, or contexts the findings apply."
+    evidence_location_hint: "discussion.generalizability"
+    severity_if_missing: MAJOR
+
+  # Methodological Soundness - High Level
+  - item_id: URVAR_METHOD_01
+    item_number: "M1"
+    category: Methodology
+    question: "Is the overall research design appropriate for answering the research question?"
+    evaluation_criteria: "Study design (experimental, observational, qualitative, etc.) should logically align with the research objectives."
+    evidence_location_hint: "methods.study_design"
+    severity_if_missing: CRITICAL
+
+  - item_id: URVAR_METHOD_02
+    item_number: "M2"
+    category: Methodology
+    question: "Are key sources of bias acknowledged and addressed?"
+    evaluation_criteria: "Should identify major potential biases (selection, measurement, confounding) and discuss mitigation strategies."
+    evidence_location_hint: "methods and discussion.limitations"
+    severity_if_missing: MAJOR
+
+  - item_id: URVAR_METHOD_03
+    item_number: "M3"
+    category: Methodology
+    question: "Are study limitations honestly and comprehensively discussed?"
+    evaluation_criteria: "Should provide critical self-assessment of methodological weaknesses, data limitations, and alternative explanations."
+    evidence_location_hint: "discussion.limitations"
+    severity_if_missing: CRITICAL
+
+  # Ethical Integrity and Transparency
+  - item_id: URVAR_ETHICS_01
+    item_number: "E1"
+    category: Ethics
+    question: "Are ethical approvals and consent procedures appropriately described?"
+    evaluation_criteria: "Studies involving humans/animals must mention ethics committee approval; consent processes should be clear."
+    evidence_location_hint: "methods.ethics"
+    severity_if_missing: CRITICAL
+
+  - item_id: URVAR_ETHICS_02
+    item_number: "E2"
+    category: Ethics
+    question: "Are conflicts of interest and funding sources transparently disclosed?"
+    evaluation_criteria: "Must declare all funding sources and potential conflicts (financial and non-financial)."
+    evidence_location_hint: "end_matter"
+    severity_if_missing: CRITICAL
+
+  - item_id: URVAR_ETHICS_03
+    item_number: "E3"
+    category: Ethics
+    question: "Is there evidence of scientific integrity (no data fabrication, plagiarism, selective reporting)?"
+    evaluation_criteria: "Results should be internally consistent; discussion should not cherry-pick favorable findings."
+    evidence_location_hint: "throughout manuscript"
+    severity_if_missing: CRITICAL
+
+  # Reproducibility and Rigor
+  - item_id: URVAR_REPRO_01
+    item_number: "R1"
+    category: Reproducibility
+    question: "Is sufficient methodological detail provided for others to replicate the study?"
+    evaluation_criteria: "Methods should contain enough detail for independent replication (materials, procedures, analysis)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: URVAR_REPRO_02
+    item_number: "R2"
+    category: Reproducibility
+    question: "Is data/code sharing mentioned or are supplementary materials provided?"
+    evaluation_criteria: "Should indicate data availability, provide supplementary materials, or explain restrictions."
+    evidence_location_hint: "methods or end_matter"
+    severity_if_missing: MINOR
+
+  # Presentation Quality
+  - item_id: URVAR_PRESENT_01
+    item_number: "W1"
+    category: Presentation
+    question: "Is the manuscript well-organized with logical flow from question to conclusions?"
+    evaluation_criteria: "Introduction should motivate the question; methods should be coherent; results should address objectives; discussion should synthesize findings."
+    evidence_location_hint: "overall structure"
+    severity_if_missing: MAJOR
+
+  - item_id: URVAR_PRESENT_02
+    item_number: "W2"
+    category: Presentation
+    question: "Are figures, tables, and visualizations clear, informative, and properly labeled?"
+    evaluation_criteria: "All visual elements should be self-explanatory with clear titles, labels, legends, and appropriate statistical indicators."
+    evidence_location_hint: "tables and figures"
+    severity_if_missing: MINOR

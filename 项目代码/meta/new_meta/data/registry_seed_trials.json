@@ -1,0 +1,62 @@
+[
+  {
+    "nct_id": "NCT04244591",
+    "title": "Glucocorticoid Therapy for COVID-19 Critically Ill Patients With Severe Acute Respiratory Failure",
+    "aliases": [
+      "Steroids-SARI",
+      "Steroids SARI",
+      "Methylprednisolone in severe acute respiratory infection"
+    ],
+    "brief_summary": "Multi-center randomized controlled study evaluating glucocorticoid therapy in combination with standard care for COVID-19 patients with severe acute respiratory failure.",
+    "conditions": [
+      "COVID-19",
+      "Severe acute respiratory failure"
+    ],
+    "interventions": [
+      "Methylprednisolone therapy",
+      "Standard care"
+    ],
+    "study_status": "Completed",
+    "phase": "Phase 2/Phase 3",
+    "sponsor": "Peking Union Medical College Hospital",
+    "year": 2020,
+    "enrollment": 80,
+    "registry_source": "Smart Patients registry mirror",
+    "source_url": "https://www.smartpatients.com/trials/NCT04244591",
+    "source_urls": [
+      "https://clinicaltrials.gov/study/NCT04244591",
+      "https://covid-nma.com/living_data/infos_participants_pharmaco.php?i=167"
+    ],
+    "notes": "Public registry metadata seed only. Does not include outcome event counts."
+  },
+  {
+    "nct_id": "NCT04348305",
+    "title": "Hydrocortisone for COVID-19 and Severe Hypoxia",
+    "aliases": [
+      "COVID STEROID",
+      "Low-dose hydrocortisone in patients with COVID-19 and severe hypoxia"
+    ],
+    "brief_summary": "Trial assessing the benefits and harms of low-dose hydrocortisone in patients with COVID-19 and severe hypoxia.",
+    "conditions": [
+      "COVID-19",
+      "Severe hypoxia"
+    ],
+    "interventions": [
+      "Hydrocortisone",
+      "Placebo",
+      "Standard care"
+    ],
+    "study_status": "Completed",
+    "phase": "",
+    "sponsor": "",
+    "year": 2020,
+    "enrollment": null,
+    "registry_source": "Smart Patients registry mirror",
+    "source_url": "https://www.smartpatients.com/trials/NCT04348305",
+    "source_urls": [
+      "https://clinicaltrials.gov/study/NCT04348305",
+      "https://www.clinicaltrialsregister.eu/ctr-search/trial/2020-001395-15/results"
+    ],
+    "notes": "Public registry metadata seed only. Does not include outcome event counts."
+  }
+]

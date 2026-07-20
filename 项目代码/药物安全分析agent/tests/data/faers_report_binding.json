@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "snapshot_id": "synthetic-binding-v1",
+    "source": "synthetic regression fixture",
+    "extracted_at": "2026-07-20T00:00:00Z",
+    "deduplication": "latest_case_version"
+  },
+  "reports": [
+    {
+      "primary_id": "1001-v1",
+      "case_id": "1001",
+      "case_version": 1,
+      "received_date": "20200101",
+      "drugs": [
+        {"medicinal_product": "METFORMIN", "normalized_names": ["metformin"], "role_code": "PS"}
+      ],
+      "reactions": ["Lactic acidosis"]
+    },
+    {
+      "primary_id": "1001-v2",
+      "case_id": "1001",
+      "case_version": 2,
+      "received_date": "20200201",
+      "drugs": [
+        {"medicinal_product": "METFORMIN", "normalized_names": ["metformin"], "role_code": "C"},
+        {"medicinal_product": "DEPAKOTE", "normalized_names": ["valproate"], "role_code": "PS"}
+      ],
+      "reactions": ["Lactic acidosis"]
+    },
+    {
+      "primary_id": "1002",
+      "case_id": "1002",
+      "case_version": 1,
+      "received_date": "20200301",
+      "drugs": [
+        {"medicinal_product": "METFORMIN", "normalized_names": ["metformin"], "role_code": "PS", "indication": "Diabetes mellitus"},
+        {"medicinal_product": "ASPIRIN", "normalized_names": ["aspirin"], "role_code": "C"}
+      ],
+      "reactions": ["Nausea"],
+      "sex": "female",
+      "age_years": 63,
+      "outcomes": ["hospitalization"],
+      "country": "US"
+    },
+    {
+      "primary_id": "1003",
+      "case_id": "1003",
+      "case_version": 1,
+      "received_date": "20210101",
+      "drugs": [
+        {"medicinal_product": "DEPAKOTE", "normalized_names": ["valproate"], "role_code": "PS"}
+      ],
+      "reactions": ["Lactic acidosis"]
+    }
+  ]
+}

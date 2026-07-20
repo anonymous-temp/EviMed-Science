@@ -1,0 +1,201 @@
+# CONSORT 2010 Checklist for Randomized Controlled Trials
+# Reference: Schulz KF, Altman DG, Moher D, for the CONSORT Group. CONSORT 2010 Statement
+
+name: CONSORT 2010
+version: "1.0"
+applicable_to:
+  - RCT
+  - Cluster RCT
+description: "Reporting checklist for randomized controlled trials"
+
+items:
+  - item_id: CONSORT_1a
+    item_number: "1a"
+    category: Title and Abstract
+    question: "Is the manuscript identified as a randomized trial in the title?"
+    evaluation_criteria: "The title should explicitly mention 'randomized' or 'randomised' trial."
+    evidence_location_hint: "title"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_1b
+    item_number: "1b"
+    question: "Does the abstract provide a structured summary of trial design, methods, results, and conclusions?"
+    evaluation_criteria: "The abstract should be structured with subheadings for background, methods, results, and conclusions."
+    evidence_location_hint: "abstract"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_3a
+    item_number: "3a"
+    category: Methods - Participants
+    question: "Are the eligibility criteria for participants clearly stated?"
+    evaluation_criteria: "The manuscript should describe inclusion and exclusion criteria in detail."
+    evidence_location_hint: "methods.eligibility"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_3b
+    item_number: "3b"
+    question: "Are the settings and locations where the data were collected described?"
+    evaluation_criteria: "Should specify hospitals, clinics, or other sites; geographic location; dates of recruitment."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_4a
+    item_number: "4a"
+    category: Methods - Interventions
+    question: "Are the interventions for each group described with sufficient details to allow replication?"
+    evaluation_criteria: "Should include details like dose, timing, duration, mode of delivery for each intervention."
+    evidence_location_hint: "methods.interventions"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_6a
+    item_number: "6a"
+    category: Methods - Outcomes
+    question: "Are completely defined pre-specified primary and secondary outcome measures reported?"
+    evaluation_criteria: "Should clearly state what outcomes were measured, when, and how."
+    evidence_location_hint: "methods.outcomes"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_7a
+    item_number: "7a"
+    category: Methods - Sample Size
+    question: "How was the sample size determined?"
+    evaluation_criteria: "Should report the calculation method, assumptions (effect size, alpha, power), and justification."
+    evidence_location_hint: "methods.sample_size"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_8a
+    item_number: "8a"
+    category: Methods - Randomization
+    question: "Was the method used to generate the random allocation sequence described?"
+    evaluation_criteria: "Should specify the exact method (e.g., computer-generated random numbers, random number table)."
+    evidence_location_hint: "methods.randomization"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_8b
+    item_number: "8b"
+    question: "Was the type of randomization described (simple, restricted, stratified)?"
+    evaluation_criteria: "Should clarify whether simple, block, stratified randomization was used, including details like block sizes or stratification factors."
+    evidence_location_hint: "methods.randomization"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_9
+    item_number: "9"
+    question: "Was the mechanism used to implement the random allocation sequence (allocation concealment) described?"
+    evaluation_criteria: "Should describe how allocation sequence was concealed (e.g., central telephone, sequentially numbered sealed envelopes)."
+    evidence_location_hint: "methods.randomization"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_10
+    item_number: "10"
+    category: Methods - Blinding
+    question: "Was the mechanism of blinding described (who was blinded and how)?"
+    evaluation_criteria: "Should state who was blinded (participants, care providers, outcome assessors) and how blinding was achieved."
+    evidence_location_hint: "methods.blinding"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_11a
+    item_number: "11a"
+    category: Methods - Statistics
+    question: "Are the statistical methods used to compare groups for primary and secondary outcomes specified?"
+    evaluation_criteria: "Should clearly state the statistical tests or models used for each outcome."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_11b
+    item_number: "11b"
+    question: "Are methods for additional analyses (subgroup, adjusted) specified?"
+    evaluation_criteria: "If subgroup or adjusted analyses were performed, the methods should be pre-specified."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_12a
+    item_number: "12a"
+    category: Methods - Ethics
+    question: "Is ethical approval and consent to participate reported?"
+    evaluation_criteria: "Should mention ethics committee/IRB approval and informed consent process."
+    evidence_location_hint: "methods.ethics"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_13a
+    item_number: "13a"
+    category: Results - Participant Flow
+    question: "Is the number of participants screened, randomly assigned, receiving treatment, and analyzed for each group reported?"
+    evaluation_criteria: "Should provide a flow diagram or detailed text showing participant numbers at each stage."
+    evidence_location_hint: "results.participant_flow"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_13b
+    item_number: "13b"
+    question: "Are losses and exclusions after randomization reported with reasons?"
+    evaluation_criteria: "Should report number of withdrawals, losses to follow-up, and exclusions with reasons for each group."
+    evidence_location_hint: "results.participant_flow"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_15
+    item_number: "15"
+    category: Results - Baseline
+    question: "Is a baseline characteristics table provided for each group?"
+    evaluation_criteria: "Should show demographic and clinical characteristics at baseline for each randomized group."
+    evidence_location_hint: "results.baseline"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_17a
+    item_number: "17a"
+    category: Results - Outcomes
+    question: "Are the results for each primary and secondary outcome reported with effect size and precision (e.g., 95% CI)?"
+    evaluation_criteria: "Should report for each group the number analyzed, outcome results, effect size, and confidence intervals."
+    evidence_location_hint: "results.outcomes"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_17b
+    item_number: "17b"
+    question: "Are binary outcomes reported as absolute and relative effect sizes?"
+    evaluation_criteria: "For binary outcomes, should report both absolute numbers and relative measures (RR, OR) with CI."
+    evidence_location_hint: "results.outcomes"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_19
+    item_number: "19"
+    category: Results - Harms
+    question: "Are all important harms or unintended effects reported for each group?"
+    evaluation_criteria: "Should report adverse events, serious adverse events, and other harms systematically."
+    evidence_location_hint: "results.adverse_events"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_20
+    item_number: "20"
+    category: Discussion
+    question: "Are trial limitations addressed (sources of potential bias, imprecision)?"
+    evaluation_criteria: "Discussion should explicitly mention study limitations and potential sources of bias."
+    evidence_location_hint: "discussion.limitations"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_22
+    item_number: "22"
+    category: Discussion
+    question: "Is the interpretation consistent with results, balancing benefits and harms, and considering other relevant evidence?"
+    evaluation_criteria: "Discussion should not overstate findings and should consider external evidence."
+    evidence_location_hint: "discussion.interpretation"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_23
+    item_number: "23"
+    category: Other Information
+    question: "Is the trial registration number and name of registry reported?"
+    evaluation_criteria: "Should provide trial registration number (e.g., NCT number) and registry name."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_24
+    item_number: "24"
+    question: "Are sources of funding and other support reported?"
+    evaluation_criteria: "Should clearly state funding sources and role of funders."
+    evidence_location_hint: "methods or end_matter"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_25
+    item_number: "25"
+    question: "Is the protocol accessible (where can it be accessed)?"
+    evaluation_criteria: "Should indicate if full protocol is available and where (published, online repository)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR

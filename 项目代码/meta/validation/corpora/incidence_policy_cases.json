@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "tolerance": 1e-10,
+  "zero_count_case": {
+    "studies": [
+      {"study_id": "A", "events": 0, "person_time": 1000, "time_unit": "person_years"},
+      {"study_id": "B", "events": 0, "person_time": 2000, "time_unit": "person_years"}
+    ],
+    "expected": {
+      "pooled_rate": 0.0,
+      "ci_lower": 0.0
+    }
+  },
+  "mixed_time_unit_case": {
+    "studies": [
+      {"study_id": "A", "events": 2, "person_time": 100, "time_unit": "person_years"},
+      {"study_id": "B", "events": 2, "person_time": 100, "time_unit": "person_months"}
+    ],
+    "expected_error": "same canonical time unit"
+  }
+}

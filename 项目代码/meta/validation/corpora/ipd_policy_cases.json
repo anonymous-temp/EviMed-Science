@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "ipd_policy_cases_2026_07_17",
+  "description": "Fail-closed cases for participant-level parallel randomized synthesis.",
+  "cases": [
+    {
+      "case_id": "missing_required_outcome",
+      "expected": "reject",
+      "reason": "Required participant outcomes are complete-case inputs and are never silently deleted."
+    },
+    {
+      "case_id": "missing_model_covariate",
+      "expected": "reject",
+      "reason": "A requested model covariate must be present for every analyzed participant."
+    },
+    {
+      "case_id": "single_randomized_arm",
+      "expected": "reject",
+      "reason": "Every study must contain participants from both randomized arms."
+    },
+    {
+      "case_id": "non_parallel_design",
+      "expected": "reject",
+      "reason": "Cluster, crossover, observational, and other participant-level designs require separately validated models."
+    },
+    {
+      "case_id": "within_study_modifier_centering",
+      "expected": "accept",
+      "reason": "Treatment-covariate interactions use covariates centered within study to avoid conflating within-study and across-study associations."
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "corpus_id": "metafor_calibration_slope_reml",
+  "description": "Independent identity-scale calibration-slope REML with Knapp-Hartung inference from metafor 5.0-1.",
+  "oracle": {
+    "runtime": "R 4.6.0",
+    "package": "metafor",
+    "package_version": "5.0-1",
+    "function": "rma",
+    "measure": "GEN",
+    "scale": "original calibration slope",
+    "method": "REML",
+    "test": "knha",
+    "source_url": "https://wviechtb.github.io/metafor/reference/rma.uni.html",
+    "scale_reference_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6193210/"
+  },
+  "expected": {
+    "pooled_slope": 0.8969159078,
+    "standard_error": 0.0523114469,
+    "ci_lower": 0.7732189917,
+    "ci_upper": 1.0206128238,
+    "prediction_lower": 0.5979303021,
+    "prediction_upper": 1.1959015135,
+    "tau_squared": 0.0132508551,
+    "q": 20.1115766761,
+    "i_squared": 67.9409468507,
+    "tolerance": 0.0001,
+    "i_squared_tolerance": 0.01
+  },
+  "records": [
+    {"study_id": "V1", "calibration_slope": 0.72, "standard_error": 0.08},
+    {"study_id": "V2", "calibration_slope": 0.88, "standard_error": 0.07},
+    {"study_id": "V3", "calibration_slope": 0.95, "standard_error": 0.06},
+    {"study_id": "V4", "calibration_slope": 1.04, "standard_error": 0.09},
+    {"study_id": "V5", "calibration_slope": 0.81, "standard_error": 0.07},
+    {"study_id": "V6", "calibration_slope": 1.12, "standard_error": 0.10},
+    {"study_id": "V7", "calibration_slope": 0.67, "standard_error": 0.11},
+    {"study_id": "V8", "calibration_slope": 0.98, "standard_error": 0.08}
+  ]
+}

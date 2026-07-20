@@ -33,6 +33,17 @@ pharmacovigilance report, call `evimed_drug_safety_analysis` with
 reaction terms. Record its job id and poll with `waitSeconds=60` until terminal.
 The language model may explain the returned findings, but must not replace the
 specialist's case retrieval, statistics, evidence search, or report artifacts.
+Before interpreting a completed run, inspect `data_source`, `suspect_binding`,
+`suspect_roles`, `study_date_from`, `study_date_to`, `snapshot_id`,
+`gps_prior_fitted`, and `gps_prior_id`. Preserve these provenance fields in the
+answer whenever they affect reproducibility or the strength of a conclusion.
+An `openfda_live` result with
+`suspect_binding=report_contains_suspect_approximation` is a report-level
+approximation: never describe it as PS-only or as same-drug-object binding. A
+`frozen_faers` result is only reproducible within its declared snapshot,
+aliases, roles, date range, and deduplication rules. If `gps_prior_fitted` is
+false, describe EBGM/EB05 as exploratory output from an unfitted starting
+prior; never call it a paper-grade or full-matrix empirical-Bayes fit.
 
 When the declared safety, label, or literature adapters leave a material gap,
 use `evimed_data_source_catalog` to select a relevant active source and then

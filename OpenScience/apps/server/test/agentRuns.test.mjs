@@ -130,7 +130,7 @@ test("starts immutable open-domain and specialist run identities from research-s
     assert.equal((await bind(base, "ses_adr", {
       mode: "specialist",
       agentId: "adr-analysis",
-      agentVersion: "1.2.0",
+      agentVersion: "1.2.1",
     })).status, 200);
 
     const open = await startRun(base, "ses_open");
@@ -167,7 +167,7 @@ test("starts immutable open-domain and specialist run identities from research-s
       {
         sessionId: "ses_adr",
         agentId: "adr-analysis",
-        agentVersion: "1.2.0",
+        agentVersion: "1.2.1",
         runtimeAgent: "evimed-adr-analysis",
       },
     );
@@ -418,7 +418,7 @@ test("server monitor owns terminal state and records only existing structured ar
       sessionId: "ses_monitored",
       mode: "specialist",
       agentId: "adr-analysis",
-      agentVersion: "1.2.0",
+      agentVersion: "1.2.1",
       runtimeAgent: "evimed-adr-analysis",
     };
     let reads = 0;
@@ -426,7 +426,7 @@ test("server monitor owns terminal state and records only existing structured ar
       agentRegistry: {
         get: () => ({
           id: "adr-analysis",
-          version: "1.2.0",
+          version: "1.2.1",
           outputs: [{ path: "reports/real.md", required: true }],
           completionChecks: ["requiredOutputsExist"],
         }),

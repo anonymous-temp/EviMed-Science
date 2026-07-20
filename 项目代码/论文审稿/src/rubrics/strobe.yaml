@@ -1,0 +1,276 @@
+# STROBE Checklist for Observational Studies
+# Reference: von Elm E, Altman DG, Egger M, et al. The Strengthening the Reporting of Observational Studies in Epidemiology (STROBE) statement: guidelines for reporting observational studies. Lancet 2007;370:1453-7
+
+name: STROBE
+version: "1.0"
+applicable_to:
+  - Observational Study
+  - Cohort Study
+  - Case-Control Study
+  - Cross-Sectional Study
+description: "Reporting checklist for observational epidemiological studies"
+
+items:
+  - item_id: STROBE_1a
+    item_number: "1a"
+    category: Title and Abstract
+    question: "Does the title indicate the study design?"
+    evaluation_criteria: "Title should indicate the design (cohort, case-control, cross-sectional) used in the study."
+    evidence_location_hint: "title"
+    severity_if_missing: MINOR
+
+  - item_id: STROBE_1b
+    item_number: "1b"
+    category: Title and Abstract
+    question: "Does the abstract provide an informative and balanced summary?"
+    evaluation_criteria: "Abstract should include background, methods, results, and conclusions."
+    evidence_location_hint: "abstract"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_2
+    item_number: "2"
+    category: Introduction - Background
+    question: "Is the scientific background and rationale explained?"
+    evaluation_criteria: "Should explain why the study was done and what knowledge gap it addresses."
+    evidence_location_hint: "introduction"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_3
+    item_number: "3"
+    category: Introduction - Objectives
+    question: "Are specific objectives and hypotheses stated?"
+    evaluation_criteria: "Should clearly state objectives, including any prespecified hypotheses."
+    evidence_location_hint: "introduction"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_4
+    item_number: "4"
+    category: Methods - Study Design
+    question: "Is the study design presented early in the paper?"
+    evaluation_criteria: "Should clearly state the study design (cohort, case-control, cross-sectional) early in methods."
+    evidence_location_hint: "methods.study_design"
+    severity_if_missing: CRITICAL
+
+  - item_id: STROBE_5
+    item_number: "5"
+    category: Methods - Setting
+    question: "Are the setting, locations, and relevant dates described?"
+    evaluation_criteria: "Should describe setting, locations, recruitment periods, data collection periods, and follow-up."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_6a
+    item_number: "6a"
+    category: Methods - Participants
+    question: "Are eligibility criteria clearly described?"
+    evaluation_criteria: "Should give eligibility criteria and sources/methods of selection of participants."
+    evidence_location_hint: "methods.eligibility"
+    severity_if_missing: CRITICAL
+
+  - item_id: STROBE_6b
+    item_number: "6b"
+    category: Methods - Participants
+    question: "For matched studies, are matching criteria described?"
+    evaluation_criteria: "If case-control study with matching, should describe matching criteria and number of controls per case."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_7
+    item_number: "7"
+    category: Methods - Variables
+    question: "Are all variables clearly defined?"
+    evaluation_criteria: "Should clearly define all outcomes, exposures, predictors, confounders, and effect modifiers, with diagnostic criteria if applicable."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: STROBE_8
+    item_number: "8"
+    category: Methods - Data Sources
+    question: "Are data sources and measurement methods described?"
+    evaluation_criteria: "Should describe for each variable of interest the data sources and details of methods of assessment (measurement). If groups differ, describe differences."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_9
+    item_number: "9"
+    category: Methods - Bias
+    question: "Are efforts to address potential bias described?"
+    evaluation_criteria: "Should describe any efforts to address potential sources of bias."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_10
+    item_number: "10"
+    category: Methods - Study Size
+    question: "Is the study size justified?"
+    evaluation_criteria: "Should explain how the study size was arrived at (e.g., power calculation, practical considerations)."
+    evidence_location_hint: "methods.sample_size"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_11
+    item_number: "11"
+    category: Methods - Quantitative Variables
+    question: "Is handling of quantitative variables explained?"
+    evaluation_criteria: "Should explain how quantitative variables were handled in analyses (e.g., categorization, transformations)."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_12a
+    item_number: "12a"
+    category: Methods - Statistics
+    question: "Are all statistical methods described?"
+    evaluation_criteria: "Should describe all statistical methods including those used to control for confounding."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: CRITICAL
+
+  - item_id: STROBE_12b
+    item_number: "12b"
+    category: Methods - Statistics
+    question: "Are methods for subgroups and interactions described?"
+    evaluation_criteria: "Should describe methods for examining subgroups and interactions."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_12c
+    item_number: "12c"
+    category: Methods - Statistics
+    question: "Is handling of missing data explained?"
+    evaluation_criteria: "Should explain how missing data were addressed."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_12d
+    item_number: "12d"
+    category: Methods - Statistics
+    question: "For cohort studies, are loss to follow-up methods described?"
+    evaluation_criteria: "If cohort study, should describe how loss to follow-up was addressed."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_12e
+    item_number: "12e"
+    category: Methods - Statistics
+    question: "Are sensitivity analyses described?"
+    evaluation_criteria: "Should describe any sensitivity analyses performed."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MINOR
+
+  - item_id: STROBE_13a
+    item_number: "13a"
+    category: Results - Participants
+    question: "Are numbers of participants at each stage reported?"
+    evaluation_criteria: "Should report numbers of individuals at each stage (e.g., eligible, examined, analyzed) with reasons for non-participation."
+    evidence_location_hint: "results.participant_flow"
+    severity_if_missing: CRITICAL
+
+  - item_id: STROBE_13b
+    item_number: "13b"
+    category: Results - Participants
+    question: "Is a flow diagram provided?"
+    evaluation_criteria: "Should consider providing a flow diagram showing participant flow through the study."
+    evidence_location_hint: "results.participant_flow"
+    severity_if_missing: MINOR
+
+  - item_id: STROBE_14a
+    item_number: "14a"
+    category: Results - Descriptive Data
+    question: "Are characteristics of study participants reported?"
+    evaluation_criteria: "Should give characteristics of study participants and information on exposures and confounders."
+    evidence_location_hint: "results.baseline"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_14b
+    item_number: "14b"
+    category: Results - Descriptive Data
+    question: "Is the number of participants with missing data indicated?"
+    evaluation_criteria: "Should indicate number of participants with missing data for each variable of interest."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_14c
+    item_number: "14c"
+    category: Results - Descriptive Data
+    question: "For cohort studies, is follow-up time summarized?"
+    evaluation_criteria: "If cohort study, should summarize follow-up time (e.g., average, total person-years)."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_15
+    item_number: "15"
+    category: Results - Outcome Data
+    question: "Are numbers of outcome events or summary measures reported?"
+    evaluation_criteria: "Should report numbers of outcome events or summary measures over time for cohort studies."
+    evidence_location_hint: "results.outcomes"
+    severity_if_missing: CRITICAL
+
+  - item_id: STROBE_16a
+    item_number: "16a"
+    category: Results - Main Results
+    question: "Are unadjusted estimates reported?"
+    evaluation_criteria: "Should give unadjusted estimates and their precision (e.g., 95% CI)."
+    evidence_location_hint: "results.outcomes"
+    severity_if_missing: CRITICAL
+
+  - item_id: STROBE_16b
+    item_number: "16b"
+    category: Results - Main Results
+    question: "Are adjusted estimates reported with confounders indicated?"
+    evaluation_criteria: "Should report adjusted estimates with confounders adjusted for and why they were included."
+    evidence_location_hint: "results.outcomes"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_16c
+    item_number: "16c"
+    category: Results - Main Results
+    question: "Are categories for continuous variables reported if used?"
+    evaluation_criteria: "If continuous variables were categorized, should report category boundaries."
+    evidence_location_hint: "results"
+    severity_if_missing: MINOR
+
+  - item_id: STROBE_17
+    item_number: "17"
+    category: Results - Other Analyses
+    question: "Are other analyses reported?"
+    evaluation_criteria: "Should report other analyses (e.g., subgroups, interactions, sensitivity analyses)."
+    evidence_location_hint: "results"
+    severity_if_missing: MINOR
+
+  - item_id: STROBE_18
+    item_number: "18"
+    category: Discussion - Key Results
+    question: "Are key results summarized with reference to objectives?"
+    evaluation_criteria: "Should summarize key results with reference to study objectives."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_19
+    item_number: "19"
+    category: Discussion - Limitations
+    question: "Are study limitations discussed?"
+    evaluation_criteria: "Should discuss limitations including sources of potential bias or imprecision, and direction/magnitude of potential bias."
+    evidence_location_hint: "discussion.limitations"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_20
+    item_number: "20"
+    category: Discussion - Interpretation
+    question: "Is a cautious interpretation provided?"
+    evaluation_criteria: "Should give a cautious overall interpretation considering objectives, limitations, multiplicity of analyses, results from similar studies, and other relevant evidence."
+    evidence_location_hint: "discussion.interpretation"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_21
+    item_number: "21"
+    category: Discussion - Generalizability
+    question: "Is the generalizability discussed?"
+    evaluation_criteria: "Should discuss the generalizability (external validity) of the study results."
+    evidence_location_hint: "discussion.generalizability"
+    severity_if_missing: MAJOR
+
+  - item_id: STROBE_22
+    item_number: "22"
+    category: Other - Funding
+    question: "Are funding sources reported?"
+    evaluation_criteria: "Should give the source of funding and role of funders, if any."
+    evidence_location_hint: "end_matter"
+    severity_if_missing: MAJOR

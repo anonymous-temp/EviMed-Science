@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "fixture_id": "complex_rct_design_policy_cases_2026_07_17",
+  "description": "Fail-closed dependency cases for design-aware complex RCT synthesis.",
+  "cases": [
+    {
+      "case_id": "cluster_requires_adjusted_precision",
+      "design": "cluster_rct",
+      "input": {"precision_basis": "reported_effect"},
+      "expected": "reject"
+    },
+    {
+      "case_id": "cluster_design_effect_requires_icc_and_mean_size",
+      "design": "cluster_rct",
+      "input": {"precision_basis": "design_effect_adjusted", "intracluster_correlation": null},
+      "expected": "reject"
+    },
+    {
+      "case_id": "crossover_requires_paired_precision",
+      "design": "crossover_rct",
+      "input": {"precision_basis": "reported_paired_effect", "paired_analysis": false},
+      "expected": "reject"
+    },
+    {
+      "case_id": "multiarm_requires_covariance",
+      "design": "multi_arm_rct",
+      "input": {"dependent_contrasts": 2, "covariance_with": {}},
+      "expected": "reject"
+    },
+    {
+      "case_id": "mixed_estimands_not_poolable",
+      "design": "multi_arm_rct",
+      "input": {"estimand_ids": ["a-vs-control", "b-vs-control"]},
+      "expected": "reject"
+    }
+  ]
+}

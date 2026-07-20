@@ -1,0 +1,164 @@
+# COBIDAS MRI/fMRI Reporting Checklist
+# Committee on Best Practices in Data Analysis and Sharing (COBIDAS)
+# Reference: Nichols et al. (2017) Best Practices in Data Analysis and Sharing in Neuroimaging
+# Covers: task-fMRI, resting-state fMRI, structural MRI, diffusion MRI, PET, multimodal neuroimaging
+
+name: COBIDAS Neuroimaging Reporting
+version: "1.0"
+applicable_to:
+  - Neuroimaging Study
+  - fMRI Study
+  - MRI Study
+description: "Reporting checklist for MRI, fMRI, resting-state, diffusion, and PET neuroimaging studies based on COBIDAS best practices."
+
+items:
+  # Participants
+  - item_id: COBIDAS_SUBJ_01
+    item_number: "Sub1"
+    category: Participants
+    question: "Are participant demographics reported (age, sex, handedness, clinical diagnosis if applicable)?"
+    evaluation_criteria: "Should report mean age ± SD, sex ratio, handedness, and relevant clinical characteristics. For patient groups, diagnostic criteria and any matching to controls."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: MAJOR
+
+  - item_id: COBIDAS_SUBJ_02
+    item_number: "Sub2"
+    category: Participants
+    question: "Are inclusion/exclusion criteria stated, including MRI safety screening and contraindications?"
+    evaluation_criteria: "Should specify eligibility criteria including MRI contraindications (metallic implants, claustrophobia), neurological/psychiatric history exclusions, and MRI-specific screening."
+    evidence_location_hint: "methods.eligibility"
+    severity_if_missing: MAJOR
+
+  # Acquisition Parameters
+  - item_id: COBIDAS_ACQ_01
+    item_number: "A1"
+    category: Acquisition
+    question: "Are MRI scanner details reported (manufacturer, model, field strength, coil type)?"
+    evaluation_criteria: "Must specify scanner manufacturer (e.g., Siemens, GE, Philips), model, field strength (1.5T, 3T, 7T), and RF coil configuration."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: COBIDAS_ACQ_02
+    item_number: "A2"
+    category: Acquisition
+    question: "Are sequence parameters for all acquired scans reported (TR, TE, flip angle, voxel size, number of volumes/slices)?"
+    evaluation_criteria: "For each sequence: TR, TE, flip angle (FA), voxel size (in-plane and slice thickness), matrix size, field of view (FOV), number of volumes (fMRI) or slices. Slice order and acceleration factor (if GRAPPA/SENSE used) should also be stated."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: COBIDAS_ACQ_03
+    item_number: "A3"
+    category: Acquisition
+    question: "For fMRI studies, is the experimental paradigm described (task design, stimulus timing, behavioral responses collected)?"
+    evaluation_criteria: "Should describe task design (block/event-related), stimulus duration and ISI, behavioral measures recorded, and any practice runs. Stimulus delivery software should be named."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Preprocessing
+  - item_id: COBIDAS_PREP_01
+    item_number: "Pr1"
+    category: Preprocessing
+    question: "Is the preprocessing pipeline described with software names and versions?"
+    evaluation_criteria: "Should name all preprocessing software (e.g., FSL v6.0, SPM12, fMRIPrep v21.0, AFNI) with version numbers and relevant toolboxes."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: COBIDAS_PREP_02
+    item_number: "Pr2"
+    category: Preprocessing
+    question: "Are motion correction procedures described, including motion thresholds and excluded volumes/subjects?"
+    evaluation_criteria: "Should specify motion correction algorithm, framewise displacement (FD) or motion parameter thresholds for exclusion, number of volumes/subjects excluded, and scrubbing procedure if used."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COBIDAS_PREP_03
+    item_number: "Pr3"
+    category: Preprocessing
+    question: "Is spatial normalization described (template, registration method, final voxel size)?"
+    evaluation_criteria: "Should specify normalization template (e.g., MNI152, MNI305, study-specific), registration method, and resampled voxel size. For VBM, modulation and smoothing kernel size must be stated."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: COBIDAS_PREP_04
+    item_number: "Pr4"
+    category: Preprocessing
+    question: "Is spatial smoothing kernel size reported and justified?"
+    evaluation_criteria: "Should report FWHM kernel size in mm and justify the choice based on signal-to-noise, expected effect size, or matched filter theorem."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR
+
+  - item_id: COBIDAS_PREP_05
+    item_number: "Pr5"
+    category: Preprocessing
+    question: "For resting-state fMRI, are nuisance regression strategies described (head motion, physiological noise, global signal)?"
+    evaluation_criteria: "Should specify which nuisance regressors were removed (motion parameters and derivatives, WM/CSF signals, global signal if applicable) and whether bandpass filtering was applied."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Statistical Analysis
+  - item_id: COBIDAS_STAT_01
+    item_number: "St1"
+    category: Statistical Analysis
+    question: "Is the statistical model described at the first level (subject) and second level (group)?"
+    evaluation_criteria: "Should describe the GLM design matrix, regressors of interest, nuisance regressors, and HRF model at subject level. Group-level model (e.g., one-sample t-test, ANOVA, mixed effects) must also be described."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: CRITICAL
+
+  - item_id: COBIDAS_STAT_02
+    item_number: "St2"
+    category: Statistical Analysis
+    question: "Is the multiple comparisons correction approach fully described (method, threshold, cluster-forming threshold if applicable)?"
+    evaluation_criteria: "Must specify correction method (FWE, FDR, permutation, cluster-extent), statistical threshold (e.g., p<0.05 FWE-corrected, z>3.1 cluster-forming), and whether whole-brain or small-volume correction was used."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: CRITICAL
+
+  - item_id: COBIDAS_STAT_03
+    item_number: "St3"
+    category: Statistical Analysis
+    question: "Are ROI analyses pre-specified and justified, with corrections for the number of ROIs tested?"
+    evaluation_criteria: "ROIs should be defined a priori based on prior literature, with anatomical boundaries specified. Multiple ROI comparisons require correction. Post-hoc ROI selection based on whole-brain results is circular."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Results Reporting
+  - item_id: COBIDAS_RES_01
+    item_number: "R1"
+    category: Results
+    question: "Are brain activation coordinates reported in a standard space (MNI or Talairach) with peak t/z statistics and cluster size?"
+    evaluation_criteria: "Significant clusters should be reported in tables with MNI coordinates (x,y,z), anatomical label, peak statistic value, cluster extent (voxels or mm³), and p-value."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  - item_id: COBIDAS_RES_02
+    item_number: "R2"
+    category: Results
+    question: "Are effect sizes reported for primary contrasts?"
+    evaluation_criteria: "Should report Cohen's d, partial η², or equivalent effect size measure for primary contrasts, not just t or F statistics."
+    evidence_location_hint: "results"
+    severity_if_missing: MINOR
+
+  # Data Sharing
+  - item_id: COBIDAS_DATA_01
+    item_number: "Da1"
+    category: Data Sharing
+    question: "Are imaging data shared in a public repository (e.g., OpenNeuro, ABIDE, NIMH Data Archive)?"
+    evaluation_criteria: "Preprocessed or raw data in BIDS format should be deposited in an accessible repository. Accession number or DOI must be provided. Exceptions require justification (e.g., clinical data privacy)."
+    evidence_location_hint: "methods or end_matter"
+    severity_if_missing: MINOR
+
+  - item_id: COBIDAS_DATA_02
+    item_number: "Da2"
+    category: Data Sharing
+    question: "Are analysis scripts made available?"
+    evaluation_criteria: "Analysis code should be shared via GitHub, OSF, or similar platform to enable reproducibility."
+    evidence_location_hint: "methods or end_matter"
+    severity_if_missing: MINOR
+
+  # Ethics
+  - item_id: COBIDAS_ETHICS_01
+    item_number: "E1"
+    category: Ethics
+    question: "Is ethics committee approval and informed consent described?"
+    evaluation_criteria: "Must report IRB/ethics board approval with reference number, written informed consent procedure, and compensation provided to participants if any."
+    evidence_location_hint: "methods.ethics"
+    severity_if_missing: CRITICAL

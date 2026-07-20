@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "disclaimer": "Do not rely on openFDA to make decisions regarding medical care.",
+    "license": "https://open.fda.gov/license/",
+    "last_updated": "2024-06-30",
+    "results": { "skip": 0, "limit": 2, "total": 2 }
+  },
+  "results": [
+    {
+      "safetyreportid": "20000001",
+      "receivedate": "20240201",
+      "serious": "1",
+      "occurcountry": "us",
+      "patient": {
+        "patientsex": "1",
+        "patientonsetage": "58",
+        "patientonsetageunit": "801",
+        "reaction": [
+          { "reactionmeddrapt": "Myalgia" },
+          { "reactionmeddrapt": "Blood creatine phosphokinase increased" }
+        ],
+        "drug": [
+          { "medicinalproduct": "ATORVASTATIN CALCIUM" },
+          { "medicinalproduct": "ASPIRIN" }
+        ]
+      }
+    },
+    {
+      "safetyreportid": "20000002",
+      "receivedate": "20240203",
+      "serious": "2",
+      "occurcountry": "gb",
+      "patient": {
+        "patientsex": "2",
+        "reaction": [{ "reactionmeddrapt": "Myopathy" }],
+        "drug": [{ "medicinalproduct": "LIPITOR" }]
+      }
+    },
+    { "unexpected": "record without a report id is skipped" }
+  ]
+}

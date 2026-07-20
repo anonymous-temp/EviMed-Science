@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "disclaimer": "Do not rely on openFDA to make decisions regarding medical care.",
+    "license": "https://open.fda.gov/license/",
+    "last_updated": "2024-06-30",
+    "results": { "skip": 0, "limit": 2, "total": 500 }
+  },
+  "results": [
+    { "term": "MYALGIA", "count": 100 },
+    { "term": "RHABDOMYOLYSIS", "count": 50 },
+    { "term": "malformed-entry" }
+  ]
+}

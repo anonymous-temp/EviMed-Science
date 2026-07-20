@@ -1,0 +1,49 @@
+/* EviMed Science brand theme (dark) — terracotta primary (#d0764f) on warm graphite surfaces.
+   Only overrides :root variables; the Tailwind v4 token mapping lives in default.css. */
+:root {
+  /* Surfaces - warm graphite layers for comfortable long-form reading */
+  --background: oklch(0.235 0.01 60);
+  --foreground: oklch(0.9 0.008 75);
+
+  --card: oklch(0.27 0.011 60);
+  --card-foreground: oklch(0.9 0.008 75);
+
+  /* Popovers float above cards without becoming high-glare panels */
+  --popover: oklch(0.31 0.012 60);
+  --popover-foreground: oklch(0.92 0.008 75);
+
+  /* Primary - EviMed terracotta for dark surfaces (#d0764f) */
+  --primary: oklch(0.6577 0.125 43.57);
+  --primary-foreground: oklch(0.24 0.01 60);
+
+  /* Secondary - elevated surface for secondary buttons */
+  --secondary: oklch(0.325 0.012 60);
+  --secondary-foreground: oklch(0.88 0.008 75);
+
+  /* Muted - inline backgrounds for code, skeletons, metadata, and panels */
+  --muted: oklch(0.345 0.012 60);
+  --muted-foreground: oklch(0.72 0.01 75);
+
+  /* Accent - hover states with a little terracotta warmth */
+  --accent: oklch(0.38 0.02 50);
+  --accent-foreground: oklch(0.94 0.008 75);
+
+  /* Feedback - tuned brighter for dark surfaces */
+  --destructive: oklch(0.64 0.18 24);
+  --destructive-foreground: oklch(0.98 0.005 75);
+  --success: oklch(0.7 0.15 155);
+  --success-foreground: oklch(0.2 0.03 155);
+  --warning: oklch(0.78 0.14 75);
+  --warning-foreground: oklch(0.25 0.03 75);
+
+  /* Borders - --border for layout dividers, --input for form field borders */
+  --border: oklch(0.375 0.012 60);
+  --input: oklch(0.415 0.012 60);
+  --ring: oklch(0.6 0.11 44);
+
+  /* Sidebar - anchored but not near-black */
+  --sidebar: oklch(0.21 0.01 60);
+  --sidebar-foreground: oklch(0.76 0.01 75);
+  --sidebar-accent: oklch(0.31 0.016 55);
+  --sidebar-accent-foreground: oklch(0.9 0.008 75);
+}

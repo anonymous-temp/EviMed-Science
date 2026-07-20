@@ -108,7 +108,7 @@ test("official skills name every output declared by their manifest", async () =>
 test("official specialist packages preserve domain-specific evidence and release boundaries", async () => {
   const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot] });
   const expectedVersions = new Map([
-    ["adr-analysis", "1.2.0"],
+    ["adr-analysis", "1.2.1"],
     ["bibliometric-analysis", "1.0.1"],
     ["comprehensive-drug-evaluation", "2.2.0"],
     ["drug-selection", "2.1.0"],
@@ -130,6 +130,10 @@ test("official specialist packages preserve domain-specific evidence and release
   assert.match(skills["adr-analysis"], /do not\s+convert any disproportionality metric into incidence/i);
   assert.match(skills["adr-analysis"], /statistical signal proves causality/i);
   assert.match(skills["adr-analysis"], /evimed_drug_safety_analysis/i);
+  assert.match(skills["adr-analysis"], /suspect_binding/i);
+  assert.match(skills["adr-analysis"], /never describe it as PS-only/i);
+  assert.match(skills["adr-analysis"], /gps_prior_fitted/i);
+  assert.match(skills["adr-analysis"], /never call it a paper-grade/i);
   assert.match(skills["off-label-analysis"], /Bibliographic search results are metadata/i);
   assert.match(skills["off-label-analysis"], /Do not infer regulatory approval, legality/i);
   assert.match(skills["comprehensive-drug-evaluation"], /Never invent an HTA conclusion, price, budget impact/i);

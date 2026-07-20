@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "corpus_id": "mada_auditc_reitsma_reml",
+  "description": "AuditC bivariate Reitsma REML example published in the official mada package vignette.",
+  "oracle": {
+    "package": "mada",
+    "package_version": "0.5.12",
+    "function": "reitsma",
+    "method": "reml",
+    "continuity_correction": 0.5,
+    "correction_control": "all",
+    "documentation_snapshot": "2026-07-16",
+    "source_url": "https://rdrr.io/cran/mada/f/inst/doc/mada.pdf",
+    "package_source_url": "https://cran.r-project.org/src/contrib/mada_0.5.12.tar.gz"
+  },
+  "expected": {
+    "logit_sensitivity": 2.0997,
+    "se_logit_sensitivity": 0.3379,
+    "logit_false_positive_rate": -1.2637,
+    "se_logit_false_positive_rate": 0.1743,
+    "summary_sensitivity": 0.8909,
+    "sensitivity_ci_lower": 0.8081,
+    "sensitivity_ci_upper": 0.9410,
+    "summary_false_positive_rate": 0.2203,
+    "false_positive_rate_ci_lower": 0.1673,
+    "false_positive_rate_ci_upper": 0.2845,
+    "tau_sensitivity": 1.1746,
+    "tau_false_positive_rate": 0.6381,
+    "rho": 0.8543,
+    "log_likelihood": 31.5640,
+    "auc": 0.8867,
+    "tolerance": 0.001
+  },
+  "studies": [
+    {"study_id": "AuditC-01", "true_positive": 47, "false_negative": 9, "false_positive": 101, "true_negative": 738},
+    {"study_id": "AuditC-02", "true_positive": 126, "false_negative": 51, "false_positive": 272, "true_negative": 1543},
+    {"study_id": "AuditC-03", "true_positive": 19, "false_negative": 10, "false_positive": 12, "true_negative": 192},
+    {"study_id": "AuditC-04", "true_positive": 36, "false_negative": 3, "false_positive": 78, "true_negative": 276},
+    {"study_id": "AuditC-05", "true_positive": 130, "false_negative": 19, "false_positive": 211, "true_negative": 959},
+    {"study_id": "AuditC-06", "true_positive": 84, "false_negative": 2, "false_positive": 68, "true_negative": 89},
+    {"study_id": "AuditC-07", "true_positive": 68, "false_negative": 0, "false_positive": 112, "true_negative": 423},
+    {"study_id": "AuditC-08", "true_positive": 752, "false_negative": 0, "false_positive": 3226, "true_negative": 2977},
+    {"study_id": "AuditC-09", "true_positive": 59, "false_negative": 5, "false_positive": 55, "true_negative": 136},
+    {"study_id": "AuditC-10", "true_positive": 142, "false_negative": 50, "false_positive": 571, "true_negative": 2788},
+    {"study_id": "AuditC-11", "true_positive": 137, "false_negative": 24, "false_positive": 107, "true_negative": 358},
+    {"study_id": "AuditC-12", "true_positive": 57, "false_negative": 3, "false_positive": 103, "true_negative": 437},
+    {"study_id": "AuditC-13", "true_positive": 34, "false_negative": 1, "false_positive": 21, "true_negative": 56},
+    {"study_id": "AuditC-14", "true_positive": 152, "false_negative": 51, "false_positive": 88, "true_negative": 264}
+  ]
+}

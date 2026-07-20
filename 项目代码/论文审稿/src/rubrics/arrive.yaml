@@ -1,0 +1,170 @@
+# ARRIVE 2.0 Guidelines for Animal Research
+# Reference: Percie du Sert N, Hurst V, Ahluwalia A, et al. The ARRIVE guidelines 2.0: Updated guidelines for reporting animal research. PLoS Biol 2020;18(7):e3000410
+
+name: ARRIVE 2.0
+version: "2.0"
+applicable_to:
+  - Animal Study
+  - In Vivo Study
+description: "Reporting guidelines for in vivo experiments and animal research"
+
+items:
+  - item_id: ARRIVE_1
+    item_number: "1"
+    category: Study Design
+    question: "Are study design details provided?"
+    evaluation_criteria: "Should describe study design including objectives, number of experimental and control groups."
+    evidence_location_hint: "methods.study_design"
+    severity_if_missing: CRITICAL
+
+  - item_id: ARRIVE_2
+    item_number: "2"
+    category: Sample Size
+    question: "Is sample size calculation or justification provided?"
+    evaluation_criteria: "Should explain how sample size was determined including statistical methods or rationale."
+    evidence_location_hint: "methods.sample_size"
+    severity_if_missing: MAJOR
+
+  - item_id: ARRIVE_3
+    item_number: "3"
+    category: Inclusion and Exclusion
+    question: "Are inclusion and exclusion criteria stated?"
+    evaluation_criteria: "Should specify criteria used to include or exclude animals or data from analysis."
+    evidence_location_hint: "methods.eligibility"
+    severity_if_missing: MAJOR
+
+  - item_id: ARRIVE_4
+    item_number: "4"
+    category: Randomization
+    question: "Were animals randomized into experimental groups?"
+    evaluation_criteria: "Should state whether and how animals were allocated to groups (randomization method)."
+    evidence_location_hint: "methods.randomization"
+    severity_if_missing: MAJOR
+
+  - item_id: ARRIVE_5
+    item_number: "5"
+    category: Blinding
+    question: "Was blinding used during experiment and outcome assessment?"
+    evaluation_criteria: "Should state whether investigators were blinded to group allocation during experiments and assessment."
+    evidence_location_hint: "methods.blinding"
+    severity_if_missing: MAJOR
+
+  - item_id: ARRIVE_6
+    item_number: "6"
+    category: Outcome Measures
+    question: "Are outcome measures clearly defined?"
+    evaluation_criteria: "Should clearly define all primary and secondary outcomes including how and when assessed."
+    evidence_location_hint: "methods.outcomes"
+    severity_if_missing: CRITICAL
+
+  - item_id: ARRIVE_7
+    item_number: "7"
+    category: Statistical Methods
+    question: "Are statistical methods described?"
+    evaluation_criteria: "Should describe statistical methods for each analysis including software used."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: CRITICAL
+
+  - item_id: ARRIVE_8
+    item_number: "8"
+    category: Experimental Animals
+    question: "Are details about experimental animals provided?"
+    evaluation_criteria: "Should provide species, strain, sex, developmental stage, and weight or age."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: CRITICAL
+
+  - item_id: ARRIVE_9
+    item_number: "9"
+    category: Experimental Procedures
+    question: "Are experimental procedures described in sufficient detail?"
+    evaluation_criteria: "Should describe what, how, when, and where procedures were done with enough detail for replication."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: ARRIVE_10
+    item_number: "10"
+    category: Results - Baseline Data
+    question: "Are relevant baseline characteristics reported for each group?"
+    evaluation_criteria: "Should report baseline characteristics that could affect outcomes (age, weight, health status)."
+    evidence_location_hint: "results.baseline"
+    severity_if_missing: MAJOR
+
+  - item_id: ARRIVE_11
+    item_number: "11"
+    category: Results - Numbers Analyzed
+    question: "Are numbers of animals in each group analyzed for each outcome reported?"
+    evaluation_criteria: "Should state total number of animals and number analyzed for each experimental group and outcome."
+    evidence_location_hint: "results"
+    severity_if_missing: CRITICAL
+
+  - item_id: ARRIVE_12
+    item_number: "12"
+    category: Results - Outcomes and Estimation
+    question: "Are results for each outcome presented with measure of precision?"
+    evaluation_criteria: "Should present results with measures of central tendency and variability (mean±SD, median with IQR, etc.)."
+    evidence_location_hint: "results.outcomes"
+    severity_if_missing: CRITICAL
+
+  - item_id: ARRIVE_13
+    item_number: "13"
+    category: Results - Adverse Events
+    question: "Are adverse events or unintended effects reported?"
+    evaluation_criteria: "Should report any adverse events, harms, or unintended effects in each group."
+    evidence_location_hint: "results.adverse_events"
+    severity_if_missing: MAJOR
+
+  - item_id: ARRIVE_14
+    item_number: "14"
+    category: Interpretation
+    question: "Are interpretation and conclusions supported by results?"
+    evaluation_criteria: "Should provide interpretation consistent with results, study limitations, and generalizability."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: ARRIVE_15
+    item_number: "15"
+    category: Animal Models
+    question: "Are details about animal source and housing provided?"
+    evaluation_criteria: "Should provide information about where animals were obtained and how they were housed."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: ARRIVE_16
+    item_number: "16"
+    category: Animal Models
+    question: "Is information about animal husbandry and care provided?"
+    evaluation_criteria: "Should describe housing conditions (temperature, light cycle, access to food/water, enrichment)."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: ARRIVE_17
+    item_number: "17"
+    category: Ethics
+    question: "Is ethics statement provided?"
+    evaluation_criteria: "Should provide name of ethics committee that approved work and approval number."
+    evidence_location_hint: "methods.ethics"
+    severity_if_missing: CRITICAL
+
+  - item_id: ARRIVE_18
+    item_number: "18"
+    category: Protocol
+    question: "Is protocol registration or availability mentioned?"
+    evaluation_criteria: "Should state whether protocol was registered and where it can be accessed."
+    evidence_location_hint: "methods"
+    severity_if_missing: MINOR
+
+  - item_id: ARRIVE_19
+    item_number: "19"
+    category: Data Access
+    question: "Is data availability statement provided?"
+    evaluation_criteria: "Should describe where data supporting the findings can be found."
+    evidence_location_hint: "end_matter"
+    severity_if_missing: MINOR
+
+  - item_id: ARRIVE_20
+    item_number: "20"
+    category: Declaration of Interests
+    question: "Are potential conflicts of interest declared?"
+    evaluation_criteria: "Should declare any potential conflicts of interest including funding sources."
+    evidence_location_hint: "end_matter"
+    severity_if_missing: MAJOR

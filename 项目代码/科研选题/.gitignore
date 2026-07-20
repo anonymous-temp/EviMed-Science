@@ -1,0 +1,33 @@
+# Environment variables and deployment secrets
+.env
+.env.*
+!.env.example
+deploy.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 临时文件
+/tmp/
+*.log
+.DS_Store
+
+# 图表输出
+/tmp/research_topic_charts/

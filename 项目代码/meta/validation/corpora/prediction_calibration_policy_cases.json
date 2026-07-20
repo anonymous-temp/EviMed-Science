@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "corpus_id": "prediction_calibration_policy_cases",
+  "description": "Fail-closed input and interpretation cases for external-validation observed-to-expected ratio synthesis.",
+  "required_invariants": [
+    "one exact model identity and version",
+    "external validation estimates only",
+    "one outcome definition and time horizon",
+    "positive expected events for raw O:E reconstruction",
+    "zero observed events require a reported ratio with restorable precision",
+    "O:E is calibration-in-the-large and is not a calibration slope, calibration curve, or clinical-utility measure"
+  ],
+  "cases": [
+    {"case_id": "missing_expected_events", "expected_error": "observed/expected events"},
+    {"case_id": "zero_observed_without_precision", "expected_error": "zero observed events"},
+    {"case_id": "mixed_metric", "expected_error": "one performance metric"},
+    {"case_id": "mixed_model_version", "expected_error": "one model identity and version"},
+    {"case_id": "mixed_horizon", "expected_error": "one time horizon"}
+  ]
+}

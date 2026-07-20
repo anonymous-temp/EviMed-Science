@@ -1,0 +1,43 @@
+# Core LLM clients
+openai==2.30.0
+anthropic==0.89.0
+
+# Configuration and schemas
+pydantic>=2.6,<3
+pydantic-settings>=2,<3
+python-dotenv>=1,<2
+
+# Statistics and data handling
+numpy>=1.26,<2.1
+scipy>=1.12,<1.14
+pandas>=2.0,<2.3
+
+# Literature search and HTTP
+biopython>=1.81,<1.86
+requests>=2.31,<3
+urllib3>=1.26,<3
+aiohttp>=3.9,<4
+
+# PDF parsing and document handling
+pdfplumber>=0.11,<0.12
+python-docx>=1.1,<2
+reportlab>=4.0,<5
+
+# Plotting
+matplotlib>=3.8,<3.9
+
+# Web server
+fastapi>=0.110,<1
+uvicorn[standard]>=0.29,<1
+websockets>=12,<17
+python-multipart>=0.0.9,<1
+
+# External storage and MongoDB integration used by start.py
+oss2>=2.18,<3
+motor>=3.6,<4
+pymongo>=4.9,<5
+
+# Developer/test utilities used by repository tests and CLI progress bars
+pytest>=8,<10
+pytest-asyncio>=0.23,<1
+tqdm>=4.66,<5

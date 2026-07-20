@@ -1,0 +1,40 @@
+{
+  "_comment": "Topics deliberately OUTSIDE the two hand-tuned benchmark templates (COVID corticosteroids, SGLT2 HFpEF). They span pharmacology, supplements, and behavioral interventions, each with a real randomized-trial evidence base, so the pipeline must succeed without any topic-specific hardcoding or a forced known-source anchor. Run with: python scripts/generalization_baseline.py run --topics docs/benchmarks/generalization_topics.json",
+  "topics": [
+    {
+      "id": "txa_tbi_mortality",
+      "topic": "Tranexamic acid versus placebo for all-cause mortality in adults with acute traumatic brain injury: a systematic review and meta-analysis of randomized controlled trials",
+      "language": "en",
+      "domain": "pharmacology / emergency medicine",
+      "note": "Large RCT base (e.g. CRASH-3); tests acute-care mortality synthesis far from the COVID template."
+    },
+    {
+      "id": "probiotics_aad_prevention",
+      "topic": "Probiotics versus placebo or no probiotics for the prevention of antibiotic-associated diarrhea in adults: a systematic review and meta-analysis of randomized controlled trials",
+      "language": "en",
+      "domain": "gastroenterology / supplements",
+      "note": "Many small RCTs, dichotomous outcome; stresses screening and dedup at scale."
+    },
+    {
+      "id": "melatonin_insomnia_latency",
+      "topic": "Melatonin versus placebo for sleep onset latency in adults with primary insomnia: a systematic review and meta-analysis of randomized controlled trials",
+      "language": "en",
+      "domain": "sleep medicine / supplements",
+      "note": "Continuous outcome (minutes), MD/SMD path; different effect-measure machinery than OR."
+    },
+    {
+      "id": "vitd_resp_infection",
+      "topic": "Vitamin D supplementation versus placebo for the prevention of acute respiratory tract infections in adults: a systematic review and meta-analysis of randomized controlled trials",
+      "language": "en",
+      "domain": "nutrition / immunology",
+      "note": "Heterogeneous dosing and populations; should force random-effects and an honest heterogeneity discussion."
+    },
+    {
+      "id": "mbi_depression_chronic_pain",
+      "topic": "Mindfulness-based interventions versus usual care for depressive symptoms in adults with chronic pain: a systematic review and meta-analysis of randomized controlled trials",
+      "language": "en",
+      "domain": "behavioral / psychology",
+      "note": "Behavioral intervention, SMD on a rating scale; tests non-drug PICO extraction and writing."
+    }
+  ]
+}

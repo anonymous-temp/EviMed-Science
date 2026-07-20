@@ -1,5 +1,5 @@
 id: adr-analysis
-version: 1.2.0
+version: 1.2.1
 title: Drug Safety Analysis
 category: Pharmacovigilance
 description: Mine adverse-event signals, compare labels, and synthesize drug-safety evidence.

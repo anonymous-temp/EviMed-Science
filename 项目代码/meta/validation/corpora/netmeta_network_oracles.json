@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "netmeta_network_oracles_2026_07_17",
+  "description": "Independent netmeta 3.6-1 random-effects NMA oracles for design-by-treatment inconsistency and shared-control multi-arm covariance.",
+  "source_url": "https://cran.r-project.org/package=netmeta",
+  "reference_implementation": {
+    "software": "R netmeta",
+    "version": "3.6-1",
+    "call": "netmeta(..., common=FALSE, random=TRUE, method.tau='REML')"
+  },
+  "cases": [
+    {
+      "case_id": "inconsistent_three_design_triangle",
+      "treatments": ["A", "B", "C"],
+      "reference": "A",
+      "contrasts": [
+        {"study_id": "AB1", "treatment": "B", "comparator": "A", "yi": 0.02, "vi": 0.02},
+        {"study_id": "AB2", "treatment": "B", "comparator": "A", "yi": -0.03, "vi": 0.02},
+        {"study_id": "AB3", "treatment": "B", "comparator": "A", "yi": 0.01, "vi": 0.02},
+        {"study_id": "AC1", "treatment": "C", "comparator": "A", "yi": 0.01, "vi": 0.02},
+        {"study_id": "AC2", "treatment": "C", "comparator": "A", "yi": -0.02, "vi": 0.02},
+        {"study_id": "AC3", "treatment": "C", "comparator": "A", "yi": 0.03, "vi": 0.02},
+        {"study_id": "BC1", "treatment": "C", "comparator": "B", "yi": 1.2, "vi": 0.02},
+        {"study_id": "BC2", "treatment": "C", "comparator": "B", "yi": 1.1, "vi": 0.02},
+        {"study_id": "BC3", "treatment": "C", "comparator": "B", "yi": 1.3, "vi": 0.02}
+      ],
+      "expected": {
+        "tau_squared": 0.186673,
+        "a_vs_b": 0.3977778,
+        "a_vs_b_se": 0.2143066,
+        "a_vs_c": -0.4044444,
+        "a_vs_c_se": 0.2143066,
+        "q_inconsistency": 71.20222,
+        "df_inconsistency": 1,
+        "p_inconsistency": 3.224248e-17
+      }
+    },
+    {
+      "case_id": "shared_control_multiarm_binary_network",
+      "treatments": ["A", "B", "C"],
+      "reference": "A",
+      "contrasts": [
+        {"study_id": "M1", "contrast_id": "M1:B-A", "treatment": "B", "comparator": "A", "yi": -0.287682072451781, "vi": 0.0383333333333333, "covariance_with": {"M1:C-A": 0.015}},
+        {"study_id": "M1", "contrast_id": "M1:C-A", "treatment": "C", "comparator": "A", "yi": -0.6931471805599453, "vi": 0.055, "covariance_with": {"M1:B-A": 0.015}},
+        {"study_id": "S2", "treatment": "B", "comparator": "A", "yi": -0.1743533871447778, "vi": 0.0271428571428571},
+        {"study_id": "S3", "treatment": "C", "comparator": "A", "yi": -0.4054651081081644, "vi": 0.0373737373737374},
+        {"study_id": "S4", "treatment": "C", "comparator": "B", "yi": -0.2231435513142097, "vi": 0.03625},
+        {"study_id": "S5", "treatment": "B", "comparator": "A", "yi": -0.2231435513142097, "vi": 0.0241666666666667}
+      ],
+      "expected": {
+        "tau_squared": 5.721655e-12,
+        "a_vs_b": 0.2210093,
+        "a_vs_b_se": 0.09202186,
+        "a_vs_c": 0.4910336,
+        "a_vs_c_se": 0.1237156,
+        "q_inconsistency": 1.037154,
+        "df_inconsistency": 3,
+        "p_inconsistency": 0.7922628
+      }
+    }
+  ],
+  "tolerances": {
+    "effect": 1e-6,
+    "standard_error": 5e-6,
+    "tau_squared": 1e-6,
+    "q": 1e-5,
+    "p": 1e-7
+  }
+}

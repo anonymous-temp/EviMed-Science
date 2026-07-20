@@ -1,0 +1,11 @@
+{
+  "_comment": "Single unseen topic for a de-risk smoke run before the full batch.",
+  "topics": [
+    {
+      "id": "txa_tbi_mortality",
+      "topic": "Tranexamic acid versus placebo for all-cause mortality in adults with acute traumatic brain injury: a systematic review and meta-analysis of randomized controlled trials",
+      "language": "en",
+      "domain": "pharmacology / emergency medicine"
+    }
+  ]
+}

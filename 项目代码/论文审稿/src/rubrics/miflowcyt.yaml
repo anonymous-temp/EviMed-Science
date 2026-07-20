@@ -1,0 +1,148 @@
+# MIFlowCyt Reporting Checklist for Flow Cytometry Studies
+# MIFlowCyt: Minimum Information about a Flow Cytometry Experiment
+# Reference: Lee et al. (2008) MIFlowCyt: The Minimum Information about a Flow Cytometry Experiment
+# Covers: immunophenotyping, cell sorting, intracellular staining, phospho-flow, mass cytometry (CyTOF)
+
+name: MIFlowCyt Flow Cytometry Reporting
+version: "1.0"
+applicable_to:
+  - Flow Cytometry Study
+description: "Reporting checklist for flow cytometry and mass cytometry experiments based on MIFlowCyt minimum information standards."
+
+items:
+  # Experimental Overview
+  - item_id: FCM_OVR_01
+    item_number: "O1"
+    category: Experimental Overview
+    question: "Is the experimental purpose clearly stated, including the biological question and cell populations of interest?"
+    evaluation_criteria: "Should describe the rationale for flow cytometry use, the cell populations being studied, and markers chosen to address the biological question."
+    evidence_location_hint: "introduction and methods"
+    severity_if_missing: MAJOR
+
+  # Sample Characteristics
+  - item_id: FCM_SAMP_01
+    item_number: "S1"
+    category: Sample
+    question: "Is the sample source described (species, tissue/blood type, isolation method, clinical status)?"
+    evaluation_criteria: "Should specify organism, tissue source (peripheral blood, bone marrow, tumor, etc.), isolation method, and relevant clinical/biological status of donors."
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: CRITICAL
+
+  - item_id: FCM_SAMP_02
+    item_number: "S2"
+    category: Sample
+    question: "Is sample preparation described in sufficient detail (storage, freezing/thawing, viability assessment, processing time)?"
+    evaluation_criteria: "Should describe storage conditions (fresh vs. frozen), freeze-thaw protocol if applicable, viability dye used and threshold, and time from collection to staining."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Reagents
+  - item_id: FCM_REAG_01
+    item_number: "Rg1"
+    category: Reagents
+    question: "Are all antibodies listed with clone, conjugate/fluorochrome, vendor, catalog number, and concentration/dilution used?"
+    evaluation_criteria: "Full antibody panel must be provided in a table: target marker, clone name, fluorochrome, vendor, catalog number, and titer/concentration used. This is mandatory per MIFlowCyt."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: FCM_REAG_02
+    item_number: "Rg2"
+    category: Reagents
+    question: "Are staining buffers, fixation reagents, and viability dyes specified with vendor and concentration?"
+    evaluation_criteria: "Should list all staining reagents including blocking agents, staining buffer, fixation/permeabilization kits (with vendor and catalog), and viability dyes."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Instrument Settings
+  - item_id: FCM_INST_01
+    item_number: "I1"
+    category: Instrument
+    question: "Is the cytometer specified (manufacturer, model, laser lines, and detection channels used)?"
+    evaluation_criteria: "Must state instrument manufacturer, model name, laser wavelengths and power, and detector/filter configuration for all channels used in the experiment."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: FCM_INST_02
+    item_number: "I2"
+    category: Instrument
+    question: "Are instrument settings described (voltage/gain settings, threshold, and whether daily QC was performed)?"
+    evaluation_criteria: "Should describe how instrument settings were established and maintained (e.g., using beads for daily calibration, fixed voltage settings). PMT voltages or equivalent settings and threshold parameters should be specified or available."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Compensation and Controls
+  - item_id: FCM_CTRL_01
+    item_number: "C1"
+    category: Controls and Compensation
+    question: "Is compensation strategy described, including what was used for single-color controls (cells or beads)?"
+    evaluation_criteria: "Should state whether cell-based or bead-based (e.g., compensation beads) single-color controls were used, and whether compensation was performed before or after data acquisition."
+    evidence_location_hint: "methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: FCM_CTRL_02
+    item_number: "C2"
+    category: Controls and Compensation
+    question: "Are appropriate controls included: fluorescence-minus-one (FMO) or isotype controls for gating, and unstained/viability controls?"
+    evaluation_criteria: "FMO controls are preferred for accurate gating; isotype controls acceptable with justification. Unstained controls and live/dead discrimination controls must be included."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Gating Strategy
+  - item_id: FCM_GATE_01
+    item_number: "G1"
+    category: Gating Strategy
+    question: "Is the gating strategy described and illustrated, including the sequential gates used to identify each cell population?"
+    evaluation_criteria: "A gating hierarchy figure or supplementary figure must show all sequential gates from scatter plots through final population identification. Each gate boundary and the basis for placement must be described."
+    evidence_location_hint: "results and methods"
+    severity_if_missing: CRITICAL
+
+  - item_id: FCM_GATE_02
+    item_number: "G2"
+    category: Gating Strategy
+    question: "Is the minimum number of events acquired per sample stated, along with the number of events in the final gated population?"
+    evaluation_criteria: "Should report total events acquired and minimum events in the population of interest per sample. Typically ≥10,000 events in target population for reliable statistics."
+    evidence_location_hint: "methods and results"
+    severity_if_missing: MAJOR
+
+  # Data Analysis
+  - item_id: FCM_ANAL_01
+    item_number: "An1"
+    category: Data Analysis
+    question: "Is the analysis software specified with version number?"
+    evaluation_criteria: "Should name the flow cytometry analysis software (e.g., FlowJo v10.9, FCS Express v7, Cytobank) with version number."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  - item_id: FCM_ANAL_02
+    item_number: "An2"
+    category: Data Analysis
+    question: "For high-dimensional analysis (e.g., tSNE, UMAP, PhenoGraph, FlowSOM), are algorithm parameters and input features described?"
+    evaluation_criteria: "Should specify algorithm used, software/package, input markers, key parameters (e.g., perplexity for tSNE, n_neighbors for UMAP), and number of iterations. Clustering parameters and number of clusters must be stated."
+    evidence_location_hint: "methods"
+    severity_if_missing: MAJOR
+
+  # Statistical Reporting
+  - item_id: FCM_STAT_01
+    item_number: "St1"
+    category: Statistics
+    question: "Are the statistical tests used for comparing cell populations described and appropriate for the data distribution and experimental design?"
+    evaluation_criteria: "Should specify statistical tests, state whether data normality was checked, use appropriate tests (parametric vs. non-parametric), and report exact p-values or adjusted p-values for multiple comparisons."
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MAJOR
+
+  - item_id: FCM_STAT_02
+    item_number: "St2"
+    category: Statistics
+    question: "Are results reported with measures of variability (SD, SEM, or IQR) and the number of independent biological replicates?"
+    evaluation_criteria: "Should report mean ± SD or median with IQR, clearly state n (number of independent biological replicates, not technical), and distinguish between independent experiments."
+    evidence_location_hint: "results"
+    severity_if_missing: MAJOR
+
+  # Data Availability
+  - item_id: FCM_DATA_01
+    item_number: "Da1"
+    category: Data Availability
+    question: "Are raw FCS files deposited in a public repository (e.g., FlowRepository, ImmPort)?"
+    evaluation_criteria: "Raw FCS data files should be deposited with a repository accession number provided. FlowRepository (www.flowrepository.org) is the standard repository for flow cytometry data."
+    evidence_location_hint: "methods or end_matter"
+    severity_if_missing: MINOR

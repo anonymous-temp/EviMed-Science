@@ -1,0 +1,388 @@
+# Statistical Review Rule Sets
+# 针对不同研究类型的统计方法审查标准
+
+statistical_rule_sets:
+
+  RCT:
+    description: "Randomized Controlled Trial"
+    required:
+      - sample_size_calculation
+      - randomization_method
+      - ITT_analysis
+      - primary_endpoint_effect_size_CI
+      - multiple_comparison_control
+      - missing_data_handling
+    recommended:
+      - sensitivity_analysis_PP_vs_ITT
+      - subgroup_analysis_pre_specified
+      - interim_analysis_adjustment
+    not_applicable: []
+
+  NonInferiorityTrial:
+    description: "Non-inferiority or equivalence RCT"
+    required:
+      - non_inferiority_margin_defined
+      - CI_based_interpretation
+      - ITT_and_PP_both_reported
+      - margin_justification
+    recommended:
+      - assay_sensitivity_discussion
+    not_applicable:
+      - superiority_hypothesis_testing_logic
+
+  ObservationalStudy:
+    description: "Cohort / Case-control / Cross-sectional"
+    required:
+      - confounder_identification
+      - multivariable_model
+      - effect_size_CI
+      - missing_data_handling
+      - selection_bias_discussion
+    recommended:
+      - propensity_score_method
+      - sensitivity_analysis_unmeasured_confounding
+      - time_dependent_bias_control
+    not_applicable:
+      - randomization_method
+
+  MetaAnalysis:
+    description: "Systematic Review / Meta-analysis"
+    required:
+      - heterogeneity_I2_tau2
+      - model_choice_fixed_random_justification
+      - publication_bias_assessment
+      - sensitivity_analysis
+    recommended:
+      - subgroup_analysis
+      - meta_regression
+    not_applicable:
+      - sample_size_calculation
+
+  ITC_NMA:
+    description: "Indirect comparison / Network Meta-analysis"
+    required:
+      - transitivity_assumption_discussion
+      - common_comparator_present
+      - heterogeneity_assessment
+      - sensitivity_analysis
+    recommended:
+      - network_consistency_test
+      - model_choice_justification
+    not_applicable:
+      - randomization_method
+      - sample_size_calculation
+
+  SecondaryAnalysisStudy:
+    description: "Secondary analysis of existing trial/database"
+    required:
+      - original_data_source_description
+      - analysis_plan_pre_specified_or_posthoc_flag
+      - multiple_testing_risk_discussion
+    recommended:
+      - sensitivity_analysis
+    not_applicable:
+      - sample_size_calculation
+      - recruitment_procedure
+
+  PredictionModelStudy:
+    description: "Prediction / AI / ML model"
+    required:
+      - train_validation_split
+      - external_validation
+      - AUC_or_performance_metric_CI
+      - calibration_assessment
+      - overfitting_control
+    recommended:
+      - decision_curve_analysis
+      - feature_selection_description
+    not_applicable:
+      - hypothesis_testing_pvalue_focus
+
+  DiagnosticAccuracyStudy:
+    description: "Diagnostic test accuracy"
+    required:
+      - reference_standard
+      - sensitivity_specificity_CI
+      - ROC_AUC
+      - cutoff_determination
+    recommended:
+      - inter_rater_reliability
+    not_applicable:
+      - sample_size_superiority_logic
+
+  EconomicEvaluation:
+    description: "Health economics / HTA"
+    required:
+      - ICER_calculation
+      - cost_effect_source
+      - deterministic_sensitivity_analysis
+      - probabilistic_sensitivity_analysis
+    recommended:
+      - budget_impact_analysis
+    not_applicable:
+      - hypothesis_testing_pvalue_focus
+
+  DoseFindingTrial:
+    description: "Phase I/II dose escalation"
+    required:
+      - dose_escalation_design
+      - MTD_determination
+      - safety_statistical_logic
+    recommended:
+      - model_based_design_CRM_BOIM
+    not_applicable:
+      - efficacy_power_calculation
+
+  MethodologicalStudy:
+    description: "Statistical/methodological innovation"
+    required:
+      - theoretical_derivation
+      - simulation_study
+      - comparison_with_existing_methods
+    recommended:
+      - real_data_demonstration
+    not_applicable:
+      - effect_size_CI
+      - pvalue_testing
+
+  PharmacoepidemiologyStudy:
+    description: "Drug effect in real-world data"
+    required:
+      - exposure_window_definition
+      - immortal_time_bias_control
+      - propensity_score_method
+    recommended:
+      - dose_response_analysis
+    not_applicable:
+      - randomization_method
+
+  DatabaseMiningStudy:
+    description: "EHR/data-driven mining without causal design"
+    required:
+      - multiple_testing_control
+      - cross_validation
+      - data_bias_discussion
+    recommended:
+      - external_replication
+    not_applicable:
+      - causal_inference_assumptions
+
+  ImplementationScienceStudy:
+    description: "Implementation/real-world adoption research"
+    required:
+      - cluster_or_group_level_analysis
+      - adherence_measurement
+    recommended:
+      - mixed_effect_model
+    not_applicable:
+      - individual_randomization
+
+  HealthServicesResearch:
+    description: "Health system and utilization research"
+    required:
+      - complex_sampling_handling
+      - weighting_analysis
+    recommended:
+      - multilevel_model
+    not_applicable:
+      - clinical_endpoint_testing
+
+  InstrumentValidationStudy:
+    description: "Scale/tool development"
+    required:
+      - reliability_Cronbach_alpha
+      - validity_CFA_or_construct
+      - test_retest_reliability
+    recommended:
+      - cross_cultural_validation
+    not_applicable:
+      - clinical_effect_testing
+
+# 统计检查项的详细定义
+statistical_checks:
+
+  sample_size_calculation:
+    name: "Sample size calculation"
+    description: "Pre-specified sample size calculation with power analysis"
+    keywords: ["sample size", "power", "alpha", "beta", "effect size"]
+    severity_if_missing: "MAJOR"
+
+  randomization_method:
+    name: "Randomization method"
+    description: "Clear description of randomization sequence generation"
+    keywords: ["randomization", "random allocation", "random sequence"]
+    severity_if_missing: "CRITICAL"
+
+  ITT_analysis:
+    name: "Intention-to-treat analysis"
+    description: "ITT analysis performed and reported"
+    keywords: ["ITT", "intention-to-treat", "intention to treat"]
+    severity_if_missing: "MAJOR"
+
+  primary_endpoint_effect_size_CI:
+    name: "Primary endpoint with effect size and CI"
+    description: "Primary endpoint reported with effect size and confidence interval"
+    keywords: ["primary endpoint", "effect size", "confidence interval", "CI"]
+    severity_if_missing: "CRITICAL"
+
+  multiple_comparison_control:
+    name: "Multiple comparison control"
+    description: "Adjustment for multiple comparisons (e.g., Bonferroni, FDR)"
+    keywords: ["multiple comparison", "Bonferroni", "FDR", "adjustment"]
+    severity_if_missing: "MAJOR"
+
+  missing_data_handling:
+    name: "Missing data handling"
+    description: "Explicit description of how missing data was handled"
+    keywords: ["missing data", "imputation", "complete case"]
+    severity_if_missing: "MAJOR"
+
+  sensitivity_analysis_PP_vs_ITT:
+    name: "Sensitivity analysis: PP vs ITT"
+    description: "Per-protocol analysis as sensitivity to ITT"
+    keywords: ["per-protocol", "PP", "sensitivity"]
+    severity_if_missing: "MINOR"
+
+  subgroup_analysis_pre_specified:
+    name: "Pre-specified subgroup analysis"
+    description: "Subgroup analyses were pre-specified in protocol"
+    keywords: ["subgroup", "pre-specified", "protocol"]
+    severity_if_missing: "MINOR"
+
+  interim_analysis_adjustment:
+    name: "Interim analysis adjustment"
+    description: "Adjustment for interim analyses if performed"
+    keywords: ["interim analysis", "stopping rule", "alpha spending"]
+    severity_if_missing: "MAJOR"
+
+  non_inferiority_margin_defined:
+    name: "Non-inferiority margin defined"
+    description: "Non-inferiority margin clearly defined and justified"
+    keywords: ["non-inferiority margin", "equivalence margin"]
+    severity_if_missing: "CRITICAL"
+
+  CI_based_interpretation:
+    name: "CI-based interpretation"
+    description: "Interpretation based on confidence interval approach"
+    keywords: ["confidence interval", "CI"]
+    severity_if_missing: "MAJOR"
+
+  ITT_and_PP_both_reported:
+    name: "Both ITT and PP reported"
+    description: "Both ITT and per-protocol analyses reported"
+    keywords: ["ITT", "per-protocol", "PP"]
+    severity_if_missing: "MAJOR"
+
+  margin_justification:
+    name: "Margin justification"
+    description: "Clinical justification for non-inferiority margin"
+    keywords: ["margin", "justification", "clinical relevance"]
+    severity_if_missing: "MAJOR"
+
+  confounder_identification:
+    name: "Confounder identification"
+    description: "Potential confounders identified and addressed"
+    keywords: ["confounder", "confounding", "adjustment"]
+    severity_if_missing: "CRITICAL"
+
+  multivariable_model:
+    name: "Multivariable model"
+    description: "Multivariable regression model used"
+    keywords: ["multivariable", "multivariate", "regression"]
+    severity_if_missing: "MAJOR"
+
+  effect_size_CI:
+    name: "Effect size with CI"
+    description: "Effect sizes reported with confidence intervals"
+    keywords: ["effect size", "confidence interval", "CI"]
+    severity_if_missing: "MAJOR"
+
+  selection_bias_discussion:
+    name: "Selection bias discussion"
+    description: "Discussion of potential selection bias"
+    keywords: ["selection bias", "sampling bias"]
+    severity_if_missing: "MAJOR"
+
+  propensity_score_method:
+    name: "Propensity score method"
+    description: "Propensity score matching/weighting used"
+    keywords: ["propensity score", "PS matching", "IPTW"]
+    severity_if_missing: "MINOR"
+
+  heterogeneity_I2_tau2:
+    name: "Heterogeneity assessment (I², τ²)"
+    description: "Heterogeneity quantified using I² and/or τ²"
+    keywords: ["heterogeneity", "I2", "I-squared", "tau-squared"]
+    severity_if_missing: "CRITICAL"
+
+  model_choice_fixed_random_justification:
+    name: "Model choice justification"
+    description: "Justification for fixed vs random effects model"
+    keywords: ["fixed effect", "random effect", "model choice"]
+    severity_if_missing: "MAJOR"
+
+  publication_bias_assessment:
+    name: "Publication bias assessment"
+    description: "Assessment of publication bias (e.g., funnel plot, Egger test)"
+    keywords: ["publication bias", "funnel plot", "Egger"]
+    severity_if_missing: "MAJOR"
+
+  sensitivity_analysis:
+    name: "Sensitivity analysis"
+    description: "Sensitivity analyses performed"
+    keywords: ["sensitivity analysis", "robustness"]
+    severity_if_missing: "MAJOR"
+
+  train_validation_split:
+    name: "Train-validation split"
+    description: "Clear separation of training and validation datasets"
+    keywords: ["training", "validation", "test set", "split"]
+    severity_if_missing: "CRITICAL"
+
+  external_validation:
+    name: "External validation"
+    description: "Model validated on external dataset"
+    keywords: ["external validation", "independent cohort"]
+    severity_if_missing: "MAJOR"
+
+  AUC_or_performance_metric_CI:
+    name: "Performance metric with CI"
+    description: "AUC or other performance metrics with confidence intervals"
+    keywords: ["AUC", "AUROC", "performance", "confidence interval"]
+    severity_if_missing: "MAJOR"
+
+  calibration_assessment:
+    name: "Calibration assessment"
+    description: "Model calibration assessed (e.g., calibration plot, Hosmer-Lemeshow)"
+    keywords: ["calibration", "Hosmer-Lemeshow", "calibration plot"]
+    severity_if_missing: "MAJOR"
+
+  overfitting_control:
+    name: "Overfitting control"
+    description: "Measures to prevent overfitting (e.g., regularization, cross-validation)"
+    keywords: ["overfitting", "regularization", "cross-validation"]
+    severity_if_missing: "MAJOR"
+
+  reference_standard:
+    name: "Reference standard"
+    description: "Clear definition of reference standard (gold standard)"
+    keywords: ["reference standard", "gold standard"]
+    severity_if_missing: "CRITICAL"
+
+  sensitivity_specificity_CI:
+    name: "Sensitivity/specificity with CI"
+    description: "Sensitivity and specificity reported with confidence intervals"
+    keywords: ["sensitivity", "specificity", "confidence interval"]
+    severity_if_missing: "MAJOR"
+
+  ROC_AUC:
+    name: "ROC curve and AUC"
+    description: "ROC curve and AUC reported"
+    keywords: ["ROC", "AUC", "AUROC"]
+    severity_if_missing: "MAJOR"
+
+  cutoff_determination:
+    name: "Cutoff determination"
+    description: "Method for determining diagnostic cutoff described"
+    keywords: ["cutoff", "threshold", "Youden index"]
+    severity_if_missing: "MAJOR"

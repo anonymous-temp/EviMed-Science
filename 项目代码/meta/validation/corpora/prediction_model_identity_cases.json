@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "corpus_id": "prediction_model_identity_cases",
+  "description": "Fail-closed identity and applicability cases for prediction-model performance synthesis.",
+  "required_invariants": [
+    "one exact model identity and version",
+    "external validation estimates only",
+    "one performance metric",
+    "one outcome definition and time horizon",
+    "one independent estimate per validation study"
+  ],
+  "cases": [
+    {"case_id": "mixed_model_version", "expected_error": "one model identity and version"},
+    {"case_id": "apparent_performance", "expected_error": "external validation"},
+    {"case_id": "mixed_horizon", "expected_error": "one time horizon"},
+    {"case_id": "duplicate_validation", "expected_error": "one independent validation estimate"}
+  ]
+}
