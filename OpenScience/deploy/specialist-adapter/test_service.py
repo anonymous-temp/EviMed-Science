@@ -6,6 +6,7 @@ import hmac
 import importlib
 import json
 import sqlite3
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -105,7 +106,13 @@ def test_start_and_worker_publish_only_workspace_artifacts(tmp_path, monkeypatch
             return 0
 
     original_popen = module.subprocess.Popen
-    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: FakeProcess())
+    popen_calls = []
+
+    def fake_popen(command, *args, **kwargs):
+        popen_calls.append((command, kwargs))
+        return FakeProcess()
+
+    monkeypatch.setattr(module.subprocess, "Popen", fake_popen)
     response = client.post(
         "/api/v1/evimed/bibliometric-analysis",
         json={"action": "start", "topic": "antimicrobial stewardship", "maxRecords": 20},
@@ -116,10 +123,18 @@ def test_start_and_worker_publish_only_workspace_artifacts(tmp_path, monkeypatch
     body = response.json()
     assert body["status"] == "warning"
     job_id = body["data"]["jobId"]
+    assert popen_calls[0][0][1:4] == ["-m", "evimed_specialist_adapter.service", "--run-job"]
+    assert popen_calls[0][1]["cwd"] == str(Path(module.__file__).resolve().parents[1])
     state_path = workspace / "bibliometric-analysis-runs" / ".jobs" / f"{job_id}.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
     assert state["request"] == {"topic": "antimicrobial stewardship", "maxRecords": 20}
-    assert module.run_job(str(state_path)) == 0
+    completed = subprocess.run(
+        popen_calls[0][0],
+        cwd=popen_calls[0][1]["cwd"],
+        env=popen_calls[0][1]["env"],
+        check=False,
+    )
+    assert completed.returncode == 0
 
     finished = client.post(
         "/api/v1/evimed/bibliometric-analysis",

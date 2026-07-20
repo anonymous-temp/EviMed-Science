@@ -341,8 +341,8 @@ def _start(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     _atomic_json(state_path, state)
     try:
         worker = subprocess.Popen(
-            [sys.executable, str(Path(__file__).resolve()), "--run-job", str(state_path)],
-            cwd=str(root),
+            [sys.executable, "-m", "evimed_specialist_adapter.service", "--run-job", str(state_path)],
+            cwd=str(Path(__file__).resolve().parents[1]),
             env=dict(os.environ),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -393,7 +393,10 @@ def _managed_worker_alive(job_id: str, state_path: Path, state: dict[str, Any]) 
     except OSError:
         return False
     return (
-        str(Path(__file__).resolve()).encode() in command
+        (
+            str(Path(__file__).resolve()).encode() in command
+            or (b"-m" in command and b"evimed_specialist_adapter.service" in command)
+        )
         and b"--run-job" in command
         and str(state_path.resolve()).encode() in command
     )
