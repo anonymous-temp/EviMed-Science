@@ -538,6 +538,7 @@ test("monitoring compose pins components, keeps consoles local, and shares file-
   assert.match(compose, /prom\/alertmanager:\$\{OPEN_SCIENCE_ALERTMANAGER_VERSION:-v0\.33\.1\}/);
   assert.match(compose, /grafana\/grafana:\$\{OPEN_SCIENCE_GRAFANA_VERSION:-13\.1\.0\}/);
   assert.match(compose, /OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE:\s+\/run\/secrets\/operator_metrics_token/);
+  assert.match(compose, /prometheus_operator_metrics_token:\s*\n\s+file:.*prometheus-operator-metrics-token\.txt/);
   assert.match(compose, /GF_SECURITY_ADMIN_PASSWORD__FILE:\s+\/run\/secrets\/grafana_admin_password/);
   assert.match(compose, /--config\.file=\/run\/secrets\/alertmanager_config/);
   assert.match(compose, /127\.0\.0\.1:\$\{OPEN_SCIENCE_PROMETHEUS_PORT:-9090\}:9090/);
