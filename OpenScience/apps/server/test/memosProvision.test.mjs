@@ -56,20 +56,18 @@ test("Memos provisioning creates an administrator and reusable PAT without expos
       if (administratorCreated && body?.passwordCredentials?.username === "evimed-memory" && body?.passwordCredentials?.password === password) {
         res.end(JSON.stringify({ accessToken }));
       } else {
-        res.statusCode = 401;
+        res.statusCode = 400;
         res.end(JSON.stringify({ message: "invalid credentials" }));
       }
       return;
     }
     if (req.url === "/api/v1/users" && req.method === "POST") {
       assert.deepEqual(body, {
-        user: {
-          username: "evimed-memory",
-          password,
-          role: "ADMIN",
-          state: "NORMAL",
-          displayName: "EviMed Memory Integration",
-        },
+        username: "evimed-memory",
+        password,
+        role: "ADMIN",
+        state: "NORMAL",
+        displayName: "EviMed Memory Integration",
       });
       administratorCreated = true;
       res.end(JSON.stringify({ name: "users/evimed-memory" }));

@@ -86,7 +86,7 @@ async function signIn(password) {
   const result = await request("/api/v1/auth/signin", {
     method: "POST",
     body: { passwordCredentials: { username, password } },
-    accept: [401, 403],
+    accept: [400, 401, 403],
   });
   if (!result.response.ok) return null;
   const token = result.body?.accessToken;
@@ -102,13 +102,11 @@ async function ensureAdministrator(password) {
   await request("/api/v1/users", {
     method: "POST",
     body: {
-      user: {
-        username,
-        password,
-        role: "ADMIN",
-        state: "NORMAL",
-        displayName: "EviMed Memory Integration",
-      },
+      username,
+      password,
+      role: "ADMIN",
+      state: "NORMAL",
+      displayName: "EviMed Memory Integration",
     },
     accept: [409],
   });
