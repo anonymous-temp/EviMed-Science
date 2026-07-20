@@ -44,6 +44,11 @@ function runCommand(command, args, options = {}) {
   });
 }
 
+test("restore extraction does not require archived ownership privileges", async () => {
+  const source = await readFile(restoreScript, "utf8");
+  assert.match(source, /tar --no-same-owner -xzf/);
+});
+
 test("local auth secret tooling creates and validates an owner-only password file", async () => {
   const tmp = await realpath(await mkdtemp(path.join(os.tmpdir(), "open-science-local-auth-secret-")));
   const secretFile = path.join(tmp, "secrets", "bootstrap-password.txt");

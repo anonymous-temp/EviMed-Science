@@ -90,7 +90,9 @@ if [ -e "$target" ] && [ "${OPEN_SCIENCE_RESTORE_REPLACE:-}" != "true" ]; then
 fi
 
 mkdir -m 700 "$tmp"
-tar -xzf "$archive_for_restore" -C "$tmp"
+# Runtime-created files can legitimately carry different numeric owners. The
+# hardened backup container has no CAP_CHOWN, so restore as the current user.
+tar --no-same-owner -xzf "$archive_for_restore" -C "$tmp"
 
 if find "$tmp" -type l -print -quit | grep -q .; then
   echo "Refusing to restore archive that extracted symbolic links." >&2
