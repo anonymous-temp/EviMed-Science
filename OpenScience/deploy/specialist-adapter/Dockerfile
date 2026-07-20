@@ -5,6 +5,7 @@ ARG APP_VERSION=1.0.0
 ARG APT_MIRROR=http://deb.debian.org/debian
 ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG GITHUB_DOWNLOAD_PREFIX=
 
 LABEL org.opencontainers.image.title="EviMed Specialist Adapter" \
       org.opencontainers.image.version="${APP_VERSION}"
@@ -35,7 +36,7 @@ RUN set -eux; \
     fi; \
     if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \
       apt-get install -y --no-install-recommends \
-        build-essential git libcurl4-openssl-dev libfontconfig1-dev libssl-dev libxml2-dev \
+        build-essential git libcurl4-openssl-dev libfontconfig1-dev libssl-dev libuv1-dev libxml2-dev \
         r-base-core r-recommended r-cran-cowplot r-cran-data.table r-cran-dplyr \
         r-cran-ggplot2 r-cran-glmnet r-cran-httr r-cran-jsonlite r-cran-magrittr \
         r-cran-remotes r-cran-reshape2; \
@@ -57,7 +58,7 @@ RUN pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r /tmp/agent-requ
     && rm -f /tmp/adapter-requirements.txt /tmp/agent-requirements.txt
 
 RUN if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \
-      Rscript -e 'options(repos=c(CRAN="https://cloud.r-project.org")); remotes::install_github("MRCIEU/ieugwasr@cc35329751ebb3d69226d3a6a238dd0cb7709a25", upgrade="never", dependencies=TRUE); remotes::install_github("MRCIEU/TwoSampleMR@3d119f20d6fc164b0c7f710f5590fee9580f2c7b", upgrade="never", dependencies=TRUE); remotes::install_github("rondolab/MR-PRESSO@3e3c92d7eda6dce0d1d66077373ec0f7ff4f7e87", upgrade="never", dependencies=TRUE)' \
+      GITHUB_DOWNLOAD_PREFIX="${GITHUB_DOWNLOAD_PREFIX}" Rscript -e 'options(repos=c(CRAN="https://cloud.r-project.org")); prefix <- Sys.getenv("GITHUB_DOWNLOAD_PREFIX"); install <- function(repository, revision) remotes::install_url(paste0(prefix, "https://github.com/", repository, "/archive/", revision, ".tar.gz"), upgrade="never", dependencies=NA); install("MRCIEU/ieugwasr", "cc35329751ebb3d69226d3a6a238dd0cb7709a25"); install("MRCIEU/TwoSampleMR", "3d119f20d6fc164b0c7f710f5590fee9580f2c7b"); install("rondolab/MR-PRESSO", "3e3c92d7eda6dce0d1d66077373ec0f7ff4f7e87")' \
       && Rscript -e 'stopifnot(all(vapply(c("TwoSampleMR","ieugwasr","jsonlite","MRPRESSO"), requireNamespace, quietly=TRUE, FUN.VALUE=logical(1))))'; \
     fi
 
