@@ -335,6 +335,33 @@ class AdapterTests(unittest.TestCase):
         self.assertNotIn("data", result)
         self.assertNotIn("sources", result)
 
+    def test_adapter_timeout_covers_managed_status_wait_budget(self):
+        with mock.patch.dict(os.environ, {"EVIMED_ADAPTER_TIMEOUT_SECONDS": "15"}):
+            self.assertEqual(
+                self.server._adapter_timeout_seconds(
+                    {"action": "status", "jobId": "job", "waitSeconds": 60}
+                ),
+                65,
+            )
+            self.assertEqual(
+                self.server._adapter_timeout_seconds(
+                    {"action": "status", "jobId": "job", "waitSeconds": 5}
+                ),
+                15,
+            )
+            self.assertEqual(
+                self.server._adapter_timeout_seconds({"action": "start"}),
+                15,
+            )
+
+        with mock.patch.dict(os.environ, {"EVIMED_ADAPTER_TIMEOUT_SECONDS": "invalid"}):
+            self.assertEqual(
+                self.server._adapter_timeout_seconds(
+                    {"action": "status", "jobId": "job", "waitSeconds": 60}
+                ),
+                65,
+            )
+
     def test_unconfigured_adapter_fails_without_fabricated_evidence(self):
         os.environ.pop("EVIMED_LITERATURE_SEARCH_URL", None)
         os.environ["EVIMED_PUBLIC_CONNECTORS_ENABLED"] = "false"
