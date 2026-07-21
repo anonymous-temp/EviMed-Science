@@ -94,7 +94,7 @@ class ToolContractTests(unittest.TestCase):
             "evimed_drug_safety_analysis",
         }:
             wait_schema = by_name[name]["inputSchema"]["properties"]["waitSeconds"]
-            self.assertEqual(wait_schema, {"type": "integer", "minimum": 0, "maximum": 60})
+            self.assertEqual(wait_schema, {"type": "integer", "minimum": 0, "maximum": 45})
         self.assertEqual(
             set(by_name["evimed_biomedical_source_search"]["inputSchema"]["properties"]["source"]["enum"]),
             set(self.server.public_sources.QUERYABLE_BIOMEDICAL_SOURCE_IDS),
@@ -339,9 +339,9 @@ class AdapterTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"EVIMED_ADAPTER_TIMEOUT_SECONDS": "15"}):
             self.assertEqual(
                 self.server._adapter_timeout_seconds(
-                    {"action": "status", "jobId": "job", "waitSeconds": 60}
+                    {"action": "status", "jobId": "job", "waitSeconds": 45}
                 ),
-                65,
+                50,
             )
             self.assertEqual(
                 self.server._adapter_timeout_seconds(
@@ -357,10 +357,19 @@ class AdapterTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"EVIMED_ADAPTER_TIMEOUT_SECONDS": "invalid"}):
             self.assertEqual(
                 self.server._adapter_timeout_seconds(
-                    {"action": "status", "jobId": "job", "waitSeconds": 60}
+                    {"action": "status", "jobId": "job", "waitSeconds": 45}
                 ),
-                65,
+                50,
             )
+
+    def test_managed_status_rejects_waits_that_compete_with_mcp_deadline(self):
+        result = self.server.call_tool(
+            "evimed_drug_safety_analysis",
+            {"action": "status", "jobId": "safety-12345678", "waitSeconds": 60},
+        )
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error"]["code"], "invalid_input")
 
     def test_unconfigured_adapter_fails_without_fabricated_evidence(self):
         os.environ.pop("EVIMED_LITERATURE_SEARCH_URL", None)

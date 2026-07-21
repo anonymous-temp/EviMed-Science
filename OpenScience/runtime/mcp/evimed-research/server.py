@@ -63,7 +63,12 @@ EVIMED_SEARCH_LIMIT = {"type": "integer", "minimum": 1, "maximum": 100}
 LABEL_LIMIT = {"type": "integer", "minimum": 1, "maximum": 3}
 DATE = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
 YEAR = {"type": "integer", "minimum": 1900, "maximum": 2100}
-STATUS_WAIT_SECONDS = {"type": "integer", "minimum": 0, "maximum": 60}
+STATUS_WAIT_MAX_SECONDS = 45
+STATUS_WAIT_SECONDS = {
+    "type": "integer",
+    "minimum": 0,
+    "maximum": STATUS_WAIT_MAX_SECONDS,
+}
 
 ACTION = {"type": "string", "enum": ["requirements", "retrieve", "compile"]}
 EVIDENCE_IDS = {
@@ -1117,7 +1122,7 @@ def _adapter_timeout_seconds(arguments):
     wait_seconds = arguments.get("waitSeconds", 0)
     if type(wait_seconds) is not int or wait_seconds <= 0:
         return configured
-    return max(configured, min(wait_seconds + 5, 65))
+    return max(configured, min(wait_seconds + 5, STATUS_WAIT_MAX_SECONDS + 5))
 
 
 def _adapter_call(name, arguments):

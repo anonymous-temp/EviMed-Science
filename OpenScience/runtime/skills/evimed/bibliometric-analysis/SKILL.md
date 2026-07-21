@@ -15,7 +15,7 @@ It does not estimate clinical efficacy, treatment effects, or evidence certainty
 1. Clarify the scientific topic and optional year range. Prefer controlled
    biomedical concepts over a long natural-language conclusion.
 2. Call `evimed_bibliometric_analysis` with `action=capabilities`, then start the
-   managed job and poll its job id with `waitSeconds=60` until terminal.
+   managed job and poll its job id with `waitSeconds=45` until terminal.
 3. Preserve the exact query, retrieval date, database, record count, cleaning
    rules, and network construction settings. Report failed optional modules as
    failed; do not silently describe missing charts or networks as completed.

@@ -38,7 +38,7 @@ full text.
    stop and report the exact deployment precondition.
 2. Call it with `action=start`, the complete topic, language, and only the
    applicable optional inputs. Record the returned job id immediately.
-3. Poll with `action=status`, that job id, and `waitSeconds=60`. A queued or
+3. Poll with `action=status`, that job id, and `waitSeconds=45`. A queued or
    running response is not a completed review. Do not manufacture interim study counts,
    effects, GRADE ratings, figures, or conclusions.
 4. At the terminal response, preserve the exact `releaseStatus`, artifact paths,

@@ -30,7 +30,7 @@ substitute unverified figures from memory.
 For an open-domain request that asks for a drug-safety analysis or structured
 pharmacovigilance report, call `evimed_drug_safety_analysis` with
 `action=capabilities`, then start the managed job with the drug and optional
-reaction terms. Record its job id and poll with `waitSeconds=60` until terminal.
+reaction terms. Record its job id and poll with `waitSeconds=45` until terminal.
 When the user or protocol declares aliases, exact FAERS role codes,
 administration routes, a target study window, or a wider background window,
 pass them as `drugAliases`, `suspectRoles`, `administrationRoutes`,

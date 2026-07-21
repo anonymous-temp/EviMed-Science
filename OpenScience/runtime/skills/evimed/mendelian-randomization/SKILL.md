@@ -16,7 +16,7 @@ exposure and outcome, and distinguish forward from bidirectional analysis.
 1. Call `evimed_mendelian_randomization` with `action=capabilities`. If the R,
    OpenGWAS, model, or Python runtime is unavailable, report that exact blocker.
 2. Start the job with the normalized exposure, outcome, language, and direction.
-   Record the job id and poll it with `waitSeconds=60` until terminal.
+   Record the job id and poll it with `waitSeconds=45` until terminal.
 3. Do not invent SNPs, instrument counts, F statistics, effect estimates,
    heterogeneity, pleiotropy, Steiger direction, or sensitivity results. Those
    values must come from the deterministic MR engines and their files.
