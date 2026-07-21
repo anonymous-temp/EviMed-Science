@@ -178,6 +178,18 @@ class AnalysisPipeline:
                     confidence=result.confidence,
                 )
             )
+        normalized_reactions, duplicate_reaction_groups = _deduplicate_reactions(
+            normalized_reactions
+        )
+        if duplicate_reaction_groups:
+            details = "; ".join(
+                f"{normalized}: {', '.join(queries)}"
+                for normalized, queries in duplicate_reaction_groups.items()
+            )
+            notes.append(
+                "ADR 同义输入在 MedDRA PT 归一后已合并,"
+                f"每个 PT 仅保留一条统计记录: {details}"
+            )
         await self._emit("normalize", "finished", normalized=drug_norm.normalized)
 
         # 2) case overview (also proves data availability). When the
@@ -639,6 +651,26 @@ def _focus_reactions(signals: list[SignalRow], user_pts: list[str]) -> list[str]
     )
     focus.extend(r.reaction for r in ranked[:5])
     return focus
+
+
+def _deduplicate_reactions(
+    reactions: list[NormalizedReaction],
+) -> tuple[list[NormalizedReaction], dict[str, list[str]]]:
+    """Collapse aliases that resolve to the same normalized MedDRA PT."""
+    unique: list[NormalizedReaction] = []
+    by_key: dict[str, NormalizedReaction] = {}
+    duplicate_groups: dict[str, list[str]] = {}
+    for reaction in reactions:
+        key = " ".join((reaction.normalized or "").split()).casefold()
+        existing = by_key.get(key)
+        if existing is None:
+            by_key[key] = reaction
+            unique.append(reaction)
+            continue
+        normalized = existing.normalized or key
+        group = duplicate_groups.setdefault(normalized, [existing.query])
+        group.append(reaction.query)
+    return unique, duplicate_groups
 
 
 def _iso_date(value: date | str | None) -> str | None:

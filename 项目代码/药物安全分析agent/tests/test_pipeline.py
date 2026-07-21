@@ -186,6 +186,33 @@ async def test_full_run_numbers_match_known_panel():
     assert any(s == "interpret" and status == "finished" for s, status, _ in stages)
 
 
+async def test_alias_variants_collapse_after_meddra_normalization():
+    pipeline = _pipeline(StubOpenFDA(), top_pt_count=0)
+
+    result = await pipeline.run(
+        "Atorvastatin",
+        [
+            "胃肠道出血",
+            "gastrointestinal bleeding",
+            "gastrointestinal haemorrhage",
+            "GI hemorrhage",
+        ],
+    )
+
+    assert [reaction.normalized for reaction in result.reactions] == [
+        "gastrointestinal haemorrhage"
+    ]
+    user_signals = [row for row in result.signals if row.source == "user-specified"]
+    assert [row.reaction for row in user_signals] == [
+        "gastrointestinal haemorrhage"
+    ]
+    assert len(user_signals) == 1
+    assert any(
+        "MedDRA PT" in note and "gastrointestinal haemorrhage" in note
+        for note in result.degradation_notes
+    )
+
+
 async def test_no_data_raises_business_error():
     pipeline = _pipeline(EmptyOpenFDA())
     with pytest.raises(NoDataError, match="未检索到"):
