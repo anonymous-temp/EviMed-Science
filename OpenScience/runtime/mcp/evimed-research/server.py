@@ -1104,6 +1104,22 @@ def _public_adapter_call(name, arguments):
     )
 
 
+def _adapter_timeout_seconds(arguments):
+    try:
+        configured = min(
+            max(float(os.environ.get("EVIMED_ADAPTER_TIMEOUT_SECONDS", "15")), 1),
+            60,
+        )
+    except ValueError:
+        configured = 15
+    if arguments.get("action") != "status":
+        return configured
+    wait_seconds = arguments.get("waitSeconds", 0)
+    if type(wait_seconds) is not int or wait_seconds <= 0:
+        return configured
+    return max(configured, min(wait_seconds + 5, 65))
+
+
 def _adapter_call(name, arguments):
     env_name = ADAPTER_ENV[name]
     url = os.environ.get(env_name, "").strip()
@@ -1149,10 +1165,7 @@ def _adapter_call(name, arguments):
         "Authorization": "Bearer %s" % workload_token,
     }
     request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-    try:
-        timeout = min(max(float(os.environ.get("EVIMED_ADAPTER_TIMEOUT_SECONDS", "15")), 1), 60)
-    except ValueError:
-        timeout = 15
+    timeout = _adapter_timeout_seconds(arguments)
     try:
         with NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
             if response.headers.get_content_type() != "application/json":
