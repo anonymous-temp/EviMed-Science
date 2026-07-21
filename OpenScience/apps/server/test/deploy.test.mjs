@@ -396,6 +396,7 @@ test("OpenCode runtime Dockerfile pins and verifies tools, architectures, and li
   assert.match(dockerfile, /\/usr\/share\/licenses\/opencode\/LICENSE/);
   assert.match(dockerfile, /\/usr\/share\/licenses\/uv\/LICENSE-MIT/);
   assert.match(dockerfile, /python-is-python3/);
+  assert.match(dockerfile, /ripgrep/);
   assert.match(dockerfile, /r-base-core/);
   assert.match(dockerfile, /r-recommended/);
   assert.match(dockerfile, /ENV VIRTUAL_ENV=\/opt\/evimed\/venv/);
@@ -428,6 +429,16 @@ test("OpenCode runtime Dockerfile pins and verifies tools, architectures, and li
   );
   assert.match(launcher, /opencode serve --hostname 127\.0\.0\.1/);
   assert.match(launcher, /UNIX-LISTEN:\$\{socket\}/);
+});
+
+test("drug-safety specialist writes its response cache to a writable mount", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const start = compose.indexOf("\n  evimed-drug-safety-agent:\n");
+  const end = compose.indexOf("\n  evimed-drug-evidence-adapter:\n", start);
+  const service = compose.slice(start, end);
+
+  assert.match(service, /CACHE_DIR:\s+\/tmp\/openfda-cache/);
+  assert.match(service, /\/tmp:rw,nosuid,nodev,size=1g/);
 });
 
 test("web deployment env example documents required hosted settings", async () => {

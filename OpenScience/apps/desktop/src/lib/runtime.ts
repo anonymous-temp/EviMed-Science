@@ -1389,7 +1389,11 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // all operate where the session's files live. Sessions with no recorded
     // folder, or that already match the active folder, skip this.
     const dir = get().sessions.find((s) => s.id === id)?.directory;
-    if (dir && dir !== get().workspace) {
+    // Hosted OpenCode always reports its container mount as `/workspace`.
+    // That is not a user-selectable project folder; passing it back to the
+    // hosted command boundary is both meaningless and correctly rejected.
+    const isHostedRuntimeMount = hasWebApi && /^\/workspace\/?$/.test(dir ?? "");
+    if (dir && dir !== get().workspace && !isHostedRuntimeMount) {
       set({ switching: true });
       try {
         await setWorkspace(dir).catch(() => {});

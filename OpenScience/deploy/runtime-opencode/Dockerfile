@@ -46,6 +46,7 @@ RUN sed -ri "s|https?://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}
     python3-venv \
     r-base-core \
     r-recommended \
+    ripgrep \
     socat \
     tar \
   && rm -rf /var/lib/apt/lists/*
@@ -106,7 +107,7 @@ import importlib
 for package in ("ipykernel", "jupyterlab", "matplotlib", "numpy", "openpyxl", "pandas", "PIL", "playwright", "pypdf", "sklearn", "scipy", "statsmodels"):
     importlib.import_module(package)
 PY
-RUN test -x /usr/bin/chromium && python -m playwright --version
+RUN test -x /usr/bin/chromium && rg --version && python -m playwright --version
 RUN Rscript -e 'stopifnot(getRversion() >= "4.0.0", abs(mean(c(1, 2, 3)) - 2) < 1e-12)'
 
 COPY runtime/skills/curated-scientific /usr/local/share/evimed/skills/curated-scientific

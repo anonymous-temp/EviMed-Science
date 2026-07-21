@@ -44,6 +44,28 @@ def test_english_alias_resolves():
     assert result.method == "en-alias"
 
 
+@pytest.mark.parametrize(
+    "query,expected_pt",
+    [
+        ("gastrointestinal bleeding", "gastrointestinal haemorrhage"),
+        ("GI bleeding", "gastrointestinal haemorrhage"),
+        ("gastrointestinal hemorrhage", "gastrointestinal haemorrhage"),
+        ("hemorrhage", "haemorrhage"),
+        ("diarrhea", "diarrhoea"),
+        ("anemia", "anaemia"),
+        ("hematuria", "haematuria"),
+        ("dyspnea", "dyspnoea"),
+        ("peripheral edema", "peripheral oedema"),
+        ("hypoglycemia", "hypoglycaemia"),
+        ("hyperkalemia", "hyperkalaemia"),
+    ],
+)
+def test_common_english_variants_resolve_to_meddra_pt(query, expected_pt):
+    result = normalize_adr(query)
+    assert result.normalized == expected_pt
+    assert result.method == "en-alias"
+
+
 def test_whitespace_is_tolerated():
     result = normalize_adr("  肌痛  ")
     assert result.normalized == "myalgia"
