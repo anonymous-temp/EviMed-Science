@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   dispatchWebAgentRun: vi.fn(),
   fetchWebMe: vi.fn(),
   startRuntime: vi.fn(async () => "http://web.test/api/opencode/default"),
+  setWorkspace: vi.fn(async (path: string) => path),
   projectId: "default",
 }));
 
@@ -43,7 +44,7 @@ vi.mock("./tauri", () => ({
   getApprovalMode: async () => "approve",
   setApprovalMode: async () => {},
   newDatedWorkspace: async (name: string) => `/workspace/default/${name}`,
-  setWorkspace: async (path: string) => path,
+  setWorkspace: mocks.setWorkspace,
 }));
 
 vi.mock("./kernel", () => ({
@@ -192,6 +193,7 @@ beforeEach(() => {
   mocks.fetchWebMe.mockImplementation(async () => ({ project: { id: mocks.projectId, name: mocks.projectId } }));
   mocks.startRuntime.mockReset();
   mocks.startRuntime.mockImplementation(async () => `http://web.test/api/opencode/${mocks.projectId}`);
+  mocks.setWorkspace.mockClear();
   useRuntimeStore.setState({
     status: "offline",
     serverUrl: "http://127.0.0.1:4096",
@@ -423,6 +425,17 @@ describe("hosted web runtime bootstrap", () => {
       "recalculate with a narrower date range",
       expect.stringMatching(/^turn_/),
     );
+  });
+
+  it("does not treat the hosted runtime mount as a project workspace", async () => {
+    await useRuntimeStore.getState().bootstrap();
+    useRuntimeStore.setState({
+      sessions: [{ id: "ses_saved", title: "Saved", directory: "/workspace" }] as never[],
+    });
+
+    await useRuntimeStore.getState().openSession("ses_saved");
+
+    expect(mocks.setWorkspace).not.toHaveBeenCalled();
   });
 
   it("resets synchronously and ignores a stale specialty lookup after the route returns to open-domain", async () => {

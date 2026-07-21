@@ -573,6 +573,7 @@ services:
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-v4-pro
+      CACHE_DIR: /tmp/openfda-cache
       EVIMED_EVIDENCE_SEARCH_URL: ${EVIMED_EVIDENCE_SEARCH_URL:-https://www.evimed.com/api-evimed/medicine-api/ai-api}
       EVIMED_EVIDENCE_SEARCH_KEY_FILE: /run/secrets/evimed-api-key
     volumes:

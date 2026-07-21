@@ -167,6 +167,30 @@ ZH_TO_PT: dict[str, str] = {
 
 #: English aliases / colloquialisms -> lower-case MedDRA PT.
 EN_ALIAS_TO_PT: dict[str, str] = {
+    # Common American spellings and clinical synonyms for British-spelled
+    # MedDRA PTs. Keep these deterministic so upstream search layers can use
+    # ordinary English without relying on an LLM to repair terminology.
+    "bleeding": "haemorrhage",
+    "hemorrhage": "haemorrhage",
+    "gastrointestinal bleeding": "gastrointestinal haemorrhage",
+    "gi bleeding": "gastrointestinal haemorrhage",
+    "digestive tract bleeding": "gastrointestinal haemorrhage",
+    "gastrointestinal hemorrhage": "gastrointestinal haemorrhage",
+    "gi hemorrhage": "gastrointestinal haemorrhage",
+    "gi haemorrhage": "gastrointestinal haemorrhage",
+    "hematuria": "haematuria",
+    "anemia": "anaemia",
+    "aplastic anemia": "aplastic anaemia",
+    "dyspnea": "dyspnoea",
+    "diarrhea": "diarrhoea",
+    "edema": "oedema",
+    "peripheral edema": "peripheral oedema",
+    "hypoglycemia": "hypoglycaemia",
+    "hyperglycemia": "hyperglycaemia",
+    "hyperkalemia": "hyperkalaemia",
+    "hypokalemia": "hypokalaemia",
+    "hyponatremia": "hyponatraemia",
+    "hypomagnesemia": "hypomagnesaemia",
     "heart attack": "myocardial infarction",
     "mi": "myocardial infarction",
     "rhabdo": "rhabdomyolysis",
