@@ -17,7 +17,7 @@ evidence set; absence from a small search is not proof of novelty.
    available data, methods, and feasibility constraints. State only assumptions
    that do not materially change the direction.
 2. Call `evimed_research_topic_selection` with `action=capabilities`, start the
-   job, record the job id, and poll with `waitSeconds=60` until terminal.
+   job, record the job id, and poll with `waitSeconds=45` until terminal.
 3. Keep the evidence landscape, contradictions, candidate gaps, proposed study
    designs, feasibility, risks, and prioritization rationale distinct. A topic
    is not high priority merely because it sounds novel.
