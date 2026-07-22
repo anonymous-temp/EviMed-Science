@@ -321,33 +321,6 @@ function clientAddress(req, config) {
   return direct;
 }
 
-function agentRunMemoryContent(project, run) {
-  const specialist = run.mode === "specialist"
-    ? `${run.agentId}@${run.agentVersion}`
-    : "open-domain";
-  const artifacts = run.artifacts.length > 0
-    ? run.artifacts.map((artifact) => `  - ${artifact}`).join("\n")
-    : "  - none";
-  return [
-    "# EviMed agent run",
-    `- Run: ${run.id}`,
-    `- Project: ${project.id}`,
-    `- Session: ${run.sessionId}`,
-    `- Mode: ${run.mode}`,
-    `- Agent: ${specialist}`,
-    `- Model: ${run.model}`,
-    `- Status: ${run.status}`,
-    `- Started: ${run.startedAt}`,
-    `- Finished: ${run.finishedAt}`,
-    `- Duration ms: ${run.durationMs}`,
-    `- Error code: ${run.errorCode ?? "none"}`,
-    "- Artifacts:",
-    artifacts,
-    "",
-    "#evimed-agent-run",
-  ].join("\n");
-}
-
 export function createWebApiApp(overrides = {}) {
   const config = loadConfig(overrides);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs });
@@ -379,11 +352,10 @@ export function createWebApiApp(overrides = {}) {
         }
         return;
       }
-      await memosClient.create(project.userId, agentRunMemoryContent(project, run));
       let messages = [];
       try {
         messages = await runtimeManager.sessionMessages(project, run.sessionId, { wake: false });
-      } catch { /* the run summary remains durable even if runtime history is unavailable */ }
+      } catch { /* a structured run summary remains durable even if runtime history is unavailable */ }
       const memoryResult = await memoryIntelligence.recordRun(project, run, messages);
       securityAudit(config, "memory.agent_run.record", "completed", {
         userId: project.userId,
@@ -934,6 +906,7 @@ export function createWebApiApp(overrides = {}) {
           }
           await runtimeManager.stop(project);
           await audit({ config, user, project }, "project.delete", "completed", { target: project.id });
+          if (memosClient.configured) await memosClient.deleteProjectMemory(user.id, project.id);
           const data = await store.deleteProject(user, projectId);
           taskManager.purgeProject(project);
           sendJson(res, 200, { data });

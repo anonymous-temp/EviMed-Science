@@ -676,8 +676,11 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
     'checks.stateStore?.mode !== "postgres"',
     'checks.memory?.connected !== true',
     'checks.modelGateway?.model !== "deepseek-v4-pro"',
-    'run.runtimeAgent !== "evimed-peer-review"',
+    'run.runtimeAgent !== "evimed-adr-analysis"',
     'run.model !== "deepseek/deepseek-v4-pro"',
+    'agent.requiredInputs?.includes("drug")',
+    'run.artifacts?.includes(requiredPath)',
+    'memoryRecord.evidenceCount < 1',
     'language: "python"',
     'language: "r"',
   ]) assert.equal(script.includes(proof), true, `Hosted E2E is missing proof: ${proof}`);

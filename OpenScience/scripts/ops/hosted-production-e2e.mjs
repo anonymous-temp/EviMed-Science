@@ -62,7 +62,7 @@ async function authenticate(base) {
 }
 
 async function waitForRun(base, runId, headers) {
-  const deadline = Date.now() + Number(process.env.OPEN_SCIENCE_E2E_RUN_TIMEOUT_MS ?? 600_000);
+  const deadline = Date.now() + Number(process.env.OPEN_SCIENCE_E2E_RUN_TIMEOUT_MS ?? 1_800_000);
   while (Date.now() < deadline) {
     const listed = await jsonFetch(`${base}/api/agent-runs`, { headers });
     const run = listed.body?.data?.find((item) => item.id === runId);
@@ -70,6 +70,19 @@ async function waitForRun(base, runId, headers) {
     await new Promise((resolve) => setTimeout(resolve, 2_000));
   }
   throw failure("hosted_e2e_run_timeout", "The production agent run did not reach a terminal state.");
+}
+
+async function waitForMemoryRecord(base, headers, initialIds, marker) {
+  const deadline = Date.now() + Number(process.env.OPEN_SCIENCE_E2E_MEMORY_TIMEOUT_MS ?? 90_000);
+  while (Date.now() < deadline) {
+    const profile = await jsonFetch(`${base}/api/memory/profile`, { headers });
+    const record = profile.body?.data?.records?.find((item) =>
+      !initialIds.has(item.id) && JSON.stringify(item).includes(marker)
+    );
+    if (record) return record;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  throw failure("hosted_e2e_memory_extraction_missing", "The production conversation did not produce evidence-backed structured memory.");
 }
 
 function assertReady(ready) {
@@ -103,7 +116,10 @@ async function main() {
   const marker = randomBytes(12).toString("hex");
   const knowledgeMarker = `KB_${marker}`;
   const memoryMarker = `MEM_${marker}`;
+  const preferenceMarker = `PREF_${marker}`;
   const projectId = `e2e-${marker}`;
+  const initialProfile = await jsonFetch(`${base}/api/memory/profile`, { headers: auth });
+  const initialRecordIds = new Set((initialProfile.body?.data?.records ?? []).map((record) => record.id));
   let memoId = null;
   let projectCreated = false;
   let scoped = null;
@@ -143,9 +159,17 @@ async function main() {
       throw failure("hosted_e2e_runtime_url_invalid", "The hosted runtime URL is invalid.");
     }
     const agents = await jsonFetch(`${base}/api/agents`, { headers: scoped });
-    const agent = agents.body?.data?.find((item) => item.id === "peer-review");
-    if (!agent?.version || agent.runtimeAgent !== "evimed-peer-review") {
-      throw failure("hosted_e2e_specialist_missing", "The peer-review specialist is not registered.");
+    const agent = agents.body?.data?.find((item) => item.id === "adr-analysis");
+    if (!agent?.version || agent.runtimeAgent !== "evimed-adr-analysis") {
+      throw failure("hosted_e2e_specialist_missing", "The drug-safety specialist is not registered.");
+    }
+    if (!agent.requiredInputs?.includes("drug") || !agent.requiredTools?.includes("evimed_drug_safety_analysis")) {
+      throw failure("hosted_e2e_specialist_contract_invalid", "The drug-safety specialist input or tool contract is incomplete.");
+    }
+    for (const requiredPath of ["safety-report.md", "signals.csv"]) {
+      if (!agent.outputs?.some((output) => output.path === requiredPath && output.required === true)) {
+        throw failure("hosted_e2e_specialist_contract_invalid", `The specialist does not require ${requiredPath}.`);
+      }
     }
     const session = await jsonFetch(`${runtimeUrl}/session`, {
       method: "POST",
@@ -169,10 +193,14 @@ async function main() {
         sessionId,
         dispatchId: `dispatch-${marker}`,
         text: [
-          `Perform a concise platform evidence review for marker ${marker}.`,
+          "Analyze aspirin (drug=aspirin) with the registered drug-safety specialist.",
+          "Call evimed_drug_safety_analysis with action=capabilities, then action=start, then poll status with waitSeconds=45 until terminal.",
+          "Use the managed specialist data and artifacts; do not synthesize signal values or substitute model knowledge for FAERS statistics.",
+          "Write the required safety-report.md and signals.csv files. Preserve source scope, analysis period, suspect binding, counts, and signal metrics, and state spontaneous-reporting limitations.",
           `Use the automatically retrieved knowledge marker ${knowledgeMarker} and Memos memory marker ${memoryMarker}.`,
+          `请记住：我的长期回答偏好是先呈现证据确定性，再给建议；偏好校验码是 ${preferenceMarker}。`,
           `Use the write tool to create exactly ${artifactPath} as valid JSON with keys marker, knowledge, memory, agent, and model.`,
-          `The values must be exactly ${marker}, ${knowledgeMarker}, ${memoryMarker}, evimed-peer-review, and deepseek-v4-pro.`,
+          `The values must be exactly ${marker}, ${knowledgeMarker}, ${memoryMarker}, evimed-adr-analysis, and deepseek-v4-pro.`,
           "Do not invent or transform either evidence marker.",
         ].join("\n"),
       }),
@@ -181,12 +209,17 @@ async function main() {
     if (run?.status !== "succeeded") {
       throw failure("hosted_e2e_agent_run_failed", `The real specialist run ended as ${run?.status ?? "missing"} (${run?.errorCode ?? "no_error_code"}).`);
     }
-    if (run.mode !== "specialist" || run.runtimeAgent !== "evimed-peer-review" || run.model !== "deepseek/deepseek-v4-pro") {
+    if (run.mode !== "specialist" || run.runtimeAgent !== "evimed-adr-analysis" || run.model !== "deepseek/deepseek-v4-pro") {
       throw failure("hosted_e2e_provenance_invalid", "The agent-run ledger does not prove specialist DeepSeek routing.");
+    }
+    for (const requiredPath of ["safety-report.md", "signals.csv"]) {
+      if (!run.artifacts?.includes(requiredPath)) {
+        throw failure("hosted_e2e_specialist_output_untracked", `The run ledger does not track ${requiredPath}.`);
+      }
     }
     const messages = await jsonFetch(`${runtimeUrl}/session/${encodeURIComponent(sessionId)}/message`, { headers: scoped });
     const userMessage = messages.body?.find((message) => message?.info?.role === "user");
-    if (userMessage?.info?.agent !== "evimed-peer-review") {
+    if (userMessage?.info?.agent !== "evimed-adr-analysis") {
       throw failure("hosted_e2e_specialist_not_pinned", "OpenCode history does not show the pinned specialist agent.");
     }
     const artifact = await command(base, "read_artifact", { path: artifactPath }, scoped);
@@ -196,7 +229,35 @@ async function main() {
     }
     let evidence;
     try { evidence = JSON.parse(artifactText); } catch { throw failure("hosted_e2e_artifact_invalid", "The production artifact is not valid JSON."); }
-    assertExact(evidence, { marker, knowledge: knowledgeMarker, memory: memoryMarker, agent: "evimed-peer-review", model: "deepseek-v4-pro" });
+    assertExact(evidence, { marker, knowledge: knowledgeMarker, memory: memoryMarker, agent: "evimed-adr-analysis", model: "deepseek-v4-pro" });
+
+    const safetyReport = await command(base, "read_artifact", { path: "safety-report.md" }, scoped);
+    const reportText = safetyReport.body?.data?.data;
+    if (safetyReport.body?.data?.encoding !== "utf8" || typeof reportText !== "string" || reportText.length < 800) {
+      throw failure("hosted_e2e_safety_report_invalid", "The production safety report is missing or too small for a substantive result.");
+    }
+    const normalizedReport = reportText.toLowerCase();
+    if (!(normalizedReport.includes("aspirin") || reportText.includes("阿司匹林"))
+      || !(normalizedReport.includes("faers") || normalizedReport.includes("openfda"))
+      || !(reportText.includes("局限") || normalizedReport.includes("limitation"))) {
+      throw failure("hosted_e2e_safety_report_invalid", "The production safety report lacks drug, provenance, or limitation content.");
+    }
+    const signals = await command(base, "read_artifact", { path: "signals.csv" }, scoped);
+    const signalsText = signals.body?.data?.data;
+    if (signals.body?.data?.encoding !== "utf8" || typeof signalsText !== "string" || signalsText.split(/\r?\n/).filter(Boolean).length < 2) {
+      throw failure("hosted_e2e_signals_invalid", "The production signal table is missing or has no data rows.");
+    }
+    const signalHeader = signalsText.split(/\r?\n/, 1)[0].toLowerCase();
+    if (!signalHeader.includes(",") || !/(ror|prr|ebgm|\bic\b)/.test(signalHeader)) {
+      throw failure("hosted_e2e_signals_invalid", "The production signal table does not expose a disproportionality metric.");
+    }
+
+    const memoryRecord = await waitForMemoryRecord(base, scoped, initialRecordIds, preferenceMarker);
+    if (memoryRecord.scope !== "user" || memoryRecord.kind !== "preference" || memoryRecord.origin !== "explicit"
+      || memoryRecord.status !== "active" || memoryRecord.evidenceCount < 1
+      || !memoryRecord.evidence?.some((item) => item.quote?.includes(preferenceMarker))) {
+      throw failure("hosted_e2e_memory_evidence_invalid", "The structured preference memory lacks explicit user evidence or active status.");
+    }
 
     await command(base, "write_workspace_file", {
       path: "e2e/kernel.ipynb",
@@ -230,6 +291,27 @@ async function main() {
         method: "DELETE",
         headers: auth,
       }).catch(() => {});
+    }
+    if (scoped) {
+      const profile = await jsonFetch(`${base}/api/memory/profile`, { headers: scoped }).catch(() => null);
+      for (const record of profile?.body?.data?.records ?? []) {
+        if (initialRecordIds.has(record.id)) continue;
+        if (record.scopeId !== projectId && !JSON.stringify(record).includes(preferenceMarker)) continue;
+        await jsonFetch(`${base}/api/memory/records/${encodeURIComponent(record.id)}`, {
+          method: "DELETE",
+          headers: scoped,
+        }).catch(() => {});
+      }
+      for (const state of ["normal", "archived"]) {
+        const memos = await jsonFetch(`${base}/api/memory/memos?state=${state}`, { headers: auth }).catch(() => null);
+        for (const memo of memos?.body?.data ?? []) {
+          if (!memo.content?.split("\n").includes(`- Project: ${projectId}`)) continue;
+          await jsonFetch(`${base}/api/memory/memos/${encodeURIComponent(memo.id)}`, {
+            method: "DELETE",
+            headers: auth,
+          }).catch(() => {});
+        }
+      }
     }
     if (projectCreated) {
       await jsonFetch(`${base}/api/projects/${encodeURIComponent(projectId)}`, {
