@@ -166,6 +166,10 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(compose, /RELEASE_ID:\s+\$\{OPEN_SCIENCE_RELEASE_ID:\?set OPEN_SCIENCE_RELEASE_ID\}/);
   assert.match(compose, /SOURCE_REVISION:\s+\$\{OPEN_SCIENCE_SOURCE_REVISION:\?set OPEN_SCIENCE_SOURCE_REVISION\}/);
   assert.match(compose, /BUILD_CREATED:\s+\$\{OPEN_SCIENCE_BUILD_CREATED:\?set OPEN_SCIENCE_BUILD_CREATED\}/);
+  assert.match(
+    compose,
+    /APK_MIRROR:\s+\$\{OPEN_SCIENCE_APK_MIRROR:-https:\/\/dl-cdn\.alpinelinux\.org\/alpine\}/,
+  );
   assert.match(compose, /OPEN_SCIENCE_RELEASE_MANIFEST_FILE:\s+\/run\/open-science\/release-manifest\.json/);
   assert.match(compose, /OPEN_SCIENCE_AUTH_MODE:\s+\$\{OPEN_SCIENCE_AUTH_MODE:-local\}/);
   assert.match(webService, /127\.0\.0\.1:\$\{OPEN_SCIENCE_API_PORT:-8787\}:8787/);
@@ -453,6 +457,7 @@ test("web deployment env example documents required hosted settings", async () =
   assert.match(env, /OPEN_SCIENCE_SOURCE_REVISION=replace-with-the-40-character-source-revision/);
   assert.match(env, /OPEN_SCIENCE_BUILD_CREATED=replace-with-rfc3339-build-time/);
   assert.match(env, /OPEN_SCIENCE_WEB_CONTAINER_IMAGE=open-science-web:0\.1\.3/);
+  assert.match(env, /OPEN_SCIENCE_APK_MIRROR=https:\/\/dl-cdn\.alpinelinux\.org\/alpine/);
   assert.match(env, /OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE=\.\/release-manifest\.json/);
   assert.match(env, /OPEN_SCIENCE_DATA_VOLUME=open-science-data/);
   assert.match(env, /OPEN_SCIENCE_DOCKER_SOCKET_GID=replace-with-docker-socket-gid/);
