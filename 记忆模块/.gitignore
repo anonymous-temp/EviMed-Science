@@ -9,7 +9,7 @@ node_modules/
 # Build artifacts
 build/
 bin/
-memos
+/memos
 
 .DS_Store
 
