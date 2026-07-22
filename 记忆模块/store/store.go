@@ -16,6 +16,7 @@ type Store struct {
 
 	userCreateMu sync.Mutex
 	authConfigMu sync.Mutex
+	memoryRecordMu sync.Mutex
 
 	deploymentConfigMu sync.RWMutex
 	deploymentConfig   *deploymentConfiguration

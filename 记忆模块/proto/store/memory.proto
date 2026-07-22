@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package memos.store;
+
+option go_package = "gen/store";
+
+// MemoryRecordPayload contains bounded provenance and revision history for a
+// structured memory record. Searchable current state remains in relational
+// columns while this payload keeps the supporting audit trail.
+message MemoryRecordPayload {
+  repeated Evidence evidence = 1;
+  repeated Revision revisions = 2;
+
+  message Evidence {
+    string source_type = 1;
+    string source_ref = 2;
+    string quote = 3;
+    int64 observed_ts = 4;
+    double weight = 5;
+    string fingerprint = 6;
+  }
+
+  message Revision {
+    int32 version = 1;
+    string value = 2;
+    string summary = 3;
+    string status = 4;
+    int64 changed_ts = 5;
+    string reason = 6;
+  }
+}

@@ -174,6 +174,7 @@ export interface WebMemoryStatus {
   connected: boolean;
   code: string | null;
   account?: string | null;
+  structured?: boolean;
 }
 
 export interface WebResearchMemory {
@@ -184,6 +185,61 @@ export interface WebResearchMemory {
   tags: string[];
   createdAt: string | null;
   updatedAt: string | null;
+}
+
+export type WebStructuredMemoryKind =
+  | "profile"
+  | "preference"
+  | "behavior"
+  | "project_fact"
+  | "analysis"
+  | "decision"
+  | "correction"
+  | "follow_up"
+  | "run_summary";
+
+export interface WebStructuredMemory {
+  id: string;
+  scope: "user" | "project" | "session" | "organization";
+  scopeId: string;
+  kind: WebStructuredMemoryKind;
+  key: string;
+  value: string;
+  summary: string;
+  origin: "explicit" | "inferred" | "system" | "manual";
+  status: "active" | "pending" | "superseded" | "archived";
+  confidence: number;
+  importance: number;
+  sensitive: boolean;
+  evidenceCount: number;
+  version: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+  lastConfirmedAt: string | null;
+  expiresAt: string | null;
+  evidence: Array<{
+    sourceType: string;
+    sourceRef: string;
+    quote: string;
+    observedAt: string | null;
+    weight: number;
+    fingerprint: string;
+  }>;
+  revisions: Array<{
+    version: number;
+    value: string;
+    summary: string;
+    status: "active" | "pending" | "superseded" | "archived";
+    changedAt: string | null;
+    reason: string;
+  }>;
+}
+
+export interface WebMemoryProfile {
+  records: WebStructuredMemory[];
+  groups: Record<WebStructuredMemoryKind, WebStructuredMemory[]>;
+  activeCount: number;
+  pendingCount: number;
 }
 
 export type WebAgentRunStatus = "running" | "succeeded" | "failed" | "canceled";
@@ -580,6 +636,31 @@ export async function updateResearchMemory(
 export async function deleteResearchMemory(id: string): Promise<void> {
   if (!hasWebApi) throw new BackendUnavailableError("memory.delete");
   const res = await fetchWithWebAuth(apiUrl(`/memory/memos/${encodeURIComponent(id)}`), { method: "DELETE" });
+  await parseApiResponse<boolean>(res);
+}
+
+export async function fetchMemoryProfile(): Promise<WebMemoryProfile> {
+  if (!hasWebApi) throw new BackendUnavailableError("memory.profile");
+  const res = await fetchWithWebAuth(apiUrl("/memory/profile"));
+  return parseApiResponse<WebMemoryProfile>(res);
+}
+
+export async function updateStructuredMemory(
+  record: WebStructuredMemory,
+  update: Partial<Pick<WebStructuredMemory, "value" | "summary" | "status" | "importance" | "sensitive">>,
+): Promise<WebStructuredMemory> {
+  if (!hasWebApi) throw new BackendUnavailableError("memory.record.update");
+  const res = await fetchWithWebAuth(apiUrl(`/memory/records/${encodeURIComponent(record.id)}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...update, expectedVersion: record.version }),
+  });
+  return parseApiResponse<WebStructuredMemory>(res);
+}
+
+export async function deleteStructuredMemory(id: string): Promise<void> {
+  if (!hasWebApi) throw new BackendUnavailableError("memory.record.delete");
+  const res = await fetchWithWebAuth(apiUrl(`/memory/records/${encodeURIComponent(id)}`), { method: "DELETE" });
   await parseApiResponse<boolean>(res);
 }
 

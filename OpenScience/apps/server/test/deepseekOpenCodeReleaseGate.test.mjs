@@ -252,7 +252,7 @@ test("production receipt validation requires every capability and matching relea
   );
 });
 
-test("bounded release-gate processes escalate to KILL when a child ignores TERM", { timeout: 5_000 }, async (t) => {
+test("bounded release-gate processes escalate to KILL when a child ignores TERM", { timeout: 10_000 }, async (t) => {
   if (process.platform === "win32") return;
   const root = await mkdtemp(path.join(tmpdir(), "deepseek-stubborn-child-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -269,7 +269,9 @@ setInterval(() => {}, 1000);
     () => runBoundedProcess(process.execPath, [childFile, pidFile], {
       cwd: root,
       env: process.env,
-      timeoutMs: 100,
+      // Full-suite startup can be CPU-bound; leave enough time for the fixture
+      // to install its SIGTERM handler before exercising forced termination.
+      timeoutMs: 1_000,
       terminateGraceMs: 50,
       finalCloseWaitMs: 500,
     }),

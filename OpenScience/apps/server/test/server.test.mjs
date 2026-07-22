@@ -5143,10 +5143,10 @@ test("runtime idle timeout stops inactive project runtimes", async () => {
       const logs = await fetch(`${base}/api/logs/runtime?limit=20`);
       assert.equal(logs.status, 200);
       assert.ok((await logs.json()).data.some((row) =>
-        row.event === "idle_timeout" && row.kind === "mock" && row.idleTimeoutMs === 30,
+        row.event === "idle_timeout" && row.kind === "mock" && row.idleTimeoutMs === 500,
       ));
     },
-    { runtimeIdleTimeoutMs: 30 },
+    { runtimeIdleTimeoutMs: 500 },
   );
 });
 

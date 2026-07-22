@@ -126,7 +126,7 @@ describe("AgentsPage", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "科研工作流" })).toBeInTheDocument();
-    expect(screen.getByText("药品安全性分析")).toBeInTheDocument();
+    expect(await screen.findByText("药品安全性分析")).toBeInTheDocument();
     expect(screen.getByText("超说明书用药分析")).toBeInTheDocument();
     expect(screen.getByText("自动化 Meta 分析")).toBeInTheDocument();
     expect(screen.getByText("SA")).toBeInTheDocument();

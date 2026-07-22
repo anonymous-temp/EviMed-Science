@@ -53,6 +53,7 @@ const inputPaths = [
   "scripts/dev/patch-ai4s-integrity-auditor.py",
   "examples/climate-trends",
   "deploy/web/Dockerfile",
+  "deploy/memos/Dockerfile",
   "deploy/specialist-adapter",
   "deploy/runtime-opencode/Dockerfile",
   "deploy/runtime-opencode/open-science-opencode-serve.sh",

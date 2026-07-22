@@ -22,7 +22,13 @@ services:
     restart: unless-stopped
 
   evimed-memos:
-    image: neosmemo/memos:0.29.1
+    image: ${OPEN_SCIENCE_MEMOS_CONTAINER_IMAGE:-evimed-memos:0.31.1-evimed}
+    build:
+      context: ../../..
+      dockerfile: OpenScience/deploy/memos/Dockerfile
+      args:
+        VERSION: 0.31.1-evimed
+        COMMIT: ${OPEN_SCIENCE_SOURCE_REVISION:?set OPEN_SCIENCE_SOURCE_REVISION}
     environment:
       MEMOS_ADDR: 0.0.0.0
       MEMOS_PORT: 5230
@@ -109,6 +115,8 @@ services:
       OPEN_SCIENCE_MEMOS_URL: http://evimed-memos:5230
       OPEN_SCIENCE_MEMOS_ACCESS_TOKEN_FILE: /run/memos-integration/access-token
       OPEN_SCIENCE_REQUIRE_MEMOS: "true"
+      OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED: ${OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED:-true}
+      OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: ${OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-30000}
       OPEN_SCIENCE_OPERATOR_METRICS_TOKEN: ${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN:-}
       OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE: ${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE:-}
       OPEN_SCIENCE_BACKUP_MODE: ${OPEN_SCIENCE_BACKUP_MODE:-disabled}

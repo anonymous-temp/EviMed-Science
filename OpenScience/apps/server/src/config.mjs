@@ -730,6 +730,11 @@ export function loadConfig(overrides = {}) {
     memosContextMaxChars: Number(
       overrides.memosContextMaxChars ?? process.env.OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS ?? 20_000,
     ),
+    memoryExtractionEnabled:
+      overrides.memoryExtractionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED", true),
+    memoryExtractionTimeoutMs: Number(
+      overrides.memoryExtractionTimeoutMs ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS ?? 30_000,
+    ),
     requireMemos:
       overrides.requireMemos ?? boolEnv("OPEN_SCIENCE_REQUIRE_MEMOS", false),
     knowledgeChunkChars: Number(

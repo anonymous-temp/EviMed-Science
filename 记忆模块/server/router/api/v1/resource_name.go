@@ -17,6 +17,7 @@ const (
 	InstanceSettingNamePrefix  = "instance/settings/"
 	UserNamePrefix             = "users/"
 	MemoNamePrefix             = "memos/"
+	MemoryRecordNamePrefix     = "memoryRecords/"
 	MemoShareNamePrefix        = "shares/"
 	AttachmentNamePrefix       = "attachments/"
 	ReactionNamePrefix         = "reactions/"
@@ -43,6 +44,16 @@ func GetNameParentTokens(name string, tokenPrefixes ...string) ([]string, error)
 		tokens = append(tokens, parts[2*i+1])
 	}
 	return tokens, nil
+}
+
+// ExtractMemoryRecordUIDFromName returns the UID from a structured memory
+// resource name.
+func ExtractMemoryRecordUIDFromName(name string) (string, error) {
+	tokens, err := GetNameParentTokens(name, MemoryRecordNamePrefix)
+	if err != nil {
+		return "", err
+	}
+	return tokens[0], nil
 }
 
 func ExtractInstanceSettingKeyFromName(name string) (string, error) {

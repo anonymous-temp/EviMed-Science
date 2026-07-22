@@ -114,6 +114,9 @@ func deleteUserTargetsTx(ctx context.Context, tx *sql.Tx, userID int32, targets 
 	if err := deleteUserSettingsTx(ctx, tx, userID); err != nil {
 		return err
 	}
+	if err := deleteMemoryRecordsByCreatorTx(ctx, tx, userID); err != nil {
+		return err
+	}
 	if err := deleteMemoRelationsTx(ctx, tx, memoIDs); err != nil {
 		return err
 	}
@@ -432,6 +435,11 @@ func deleteUserIdentitiesTx(ctx context.Context, tx *sql.Tx, userID int32) error
 
 func deleteUserSettingsTx(ctx context.Context, tx *sql.Tx, userID int32) error {
 	_, err := tx.ExecContext(ctx, `DELETE FROM user_setting WHERE user_id = `+deleteUserPlaceholder(1), userID)
+	return err
+}
+
+func deleteMemoryRecordsByCreatorTx(ctx context.Context, tx *sql.Tx, userID int32) error {
+	_, err := tx.ExecContext(ctx, `DELETE FROM memory_record WHERE creator_id = `+deleteUserPlaceholder(1), userID)
 	return err
 }
 

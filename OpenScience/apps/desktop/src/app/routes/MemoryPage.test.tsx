@@ -5,10 +5,13 @@ import { MemoryPage } from "./MemoryPage";
 
 const api = vi.hoisted(() => ({
   fetchMemoryStatus: vi.fn(),
+  fetchMemoryProfile: vi.fn(),
   listResearchMemories: vi.fn(),
   createResearchMemory: vi.fn(),
   updateResearchMemory: vi.fn(),
   deleteResearchMemory: vi.fn(),
+  updateStructuredMemory: vi.fn(),
+  deleteStructuredMemory: vi.fn(),
   hasWebApi: true,
 }));
 
@@ -17,10 +20,13 @@ vi.mock("@/lib/apiClient", () => ({
     return api.hasWebApi;
   },
   fetchMemoryStatus: api.fetchMemoryStatus,
+  fetchMemoryProfile: api.fetchMemoryProfile,
   listResearchMemories: api.listResearchMemories,
   createResearchMemory: api.createResearchMemory,
   updateResearchMemory: api.updateResearchMemory,
   deleteResearchMemory: api.deleteResearchMemory,
+  updateStructuredMemory: api.updateStructuredMemory,
+  deleteStructuredMemory: api.deleteStructuredMemory,
 }));
 
 vi.mock("@/lib/toast", () => ({
@@ -43,6 +49,15 @@ describe("MemoryPage", () => {
     api.hasWebApi = true;
     api.fetchMemoryStatus.mockResolvedValue({ configured: true, connected: true, code: null, account: "evimed" });
     api.listResearchMemories.mockResolvedValue([existing]);
+    api.fetchMemoryProfile.mockResolvedValue({
+      records: [],
+      groups: {
+        profile: [], preference: [], behavior: [], project_fact: [], analysis: [],
+        decision: [], correction: [], follow_up: [], run_summary: [],
+      },
+      activeCount: 0,
+      pendingCount: 0,
+    });
     api.createResearchMemory.mockImplementation(async (content: string) => ({
       ...existing,
       id: "memo_2",
@@ -57,6 +72,7 @@ describe("MemoryPage", () => {
     render(<MemoryPage />);
     expect(await screen.findByText(/记忆服务已连接 · evimed/)).toBeInTheDocument();
     expect(await screen.findByText(/长期关注利妥昔单抗的感染风险/)).toBeInTheDocument();
+    expect(screen.getByText("EviMed 对你的持续理解")).toBeInTheDocument();
     expect(screen.getByText("#药物安全")).toBeInTheDocument();
 
     await userEvent.type(screen.getByRole("textbox", { name: "科研记忆内容" }), "新的项目纳入标准");

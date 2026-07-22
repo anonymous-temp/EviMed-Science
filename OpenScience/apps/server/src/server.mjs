@@ -21,6 +21,7 @@ import {
   PUBLIC_SOURCE_GATEWAY_PATH,
 } from "./publicSourceGateway.mjs";
 import { MemosClient } from "./memosClient.mjs";
+import { MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
@@ -354,6 +355,9 @@ export function createWebApiApp(overrides = {}) {
   const researchSessions = new ResearchSessionStore(agentRegistry, { stateStore: store });
   const oidcService = new OidcService(config, store);
   const memosClient = new MemosClient(config, { fetchImpl: overrides.memosFetch ?? globalThis.fetch });
+  const memoryIntelligence = new MemoryIntelligence(config, memosClient, {
+    fetchImpl: overrides.memoryExtractionFetch ?? globalThis.fetch,
+  });
   let agentRuns;
   const runtimeManager = new RuntimeManager(config, {
     agentRegistry,
@@ -376,11 +380,19 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
       await memosClient.create(project.userId, agentRunMemoryContent(project, run));
+      let messages = [];
+      try {
+        messages = await runtimeManager.sessionMessages(project, run.sessionId, { wake: false });
+      } catch { /* the run summary remains durable even if runtime history is unavailable */ }
+      const memoryResult = await memoryIntelligence.recordRun(project, run, messages);
       securityAudit(config, "memory.agent_run.record", "completed", {
         userId: project.userId,
         projectId: project.id,
         runId: run.id,
         runStatus: run.status,
+        extracted: memoryResult.extracted,
+        activated: memoryResult.activated,
+        extractionSource: memoryResult.source,
       }).catch(() => {});
     },
     onRunFinishedError: async (error, project, run) => {
@@ -641,6 +653,102 @@ export function createWebApiApp(overrides = {}) {
         }
       }
 
+      if (pathname === "/api/memory/records" && req.method === "GET") {
+        const ctx = await context(req, res);
+        const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+        const allowedScopes = new Set(["user", "project", "session", "organization"]);
+        const allowedKinds = new Set([
+          "profile", "preference", "behavior", "project_fact", "analysis",
+          "decision", "correction", "follow_up", "run_summary",
+        ]);
+        const allowedStatuses = new Set(["active", "pending", "superseded", "archived"]);
+        const readFilters = (name, allowed) => url.searchParams.getAll(name)
+          .flatMap((value) => value.split(","))
+          .map((value) => value.trim())
+          .filter((value) => allowed.has(value));
+        const records = await memosClient.listRecords(ctx.user.id, {
+          scopes: readFilters("scope", allowedScopes),
+          kinds: readFilters("kind", allowedKinds),
+          statuses: readFilters("status", allowedStatuses),
+          scopeId: url.searchParams.get("scopeId") ?? "",
+          query: url.searchParams.get("query") ?? "",
+          pageSize: Number(url.searchParams.get("pageSize") ?? 100),
+        });
+        sendJson(res, 200, { data: records });
+        return;
+      }
+
+      if (pathname === "/api/memory/profile" && req.method === "GET") {
+        const ctx = await context(req, res);
+        sendJson(res, 200, { data: await memosClient.profile(ctx.user.id, { projectId: ctx.project.id }) });
+        return;
+      }
+
+      if (pathname.startsWith("/api/memory/records/")) {
+        const rawRecordId = pathname.slice("/api/memory/records/".length);
+        if (!rawRecordId || rawRecordId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
+        const recordId = decodeRouteComponent(rawRecordId, "structured memory id");
+        const ctx = await context(req, res);
+        if (req.method === "PATCH") {
+          const body = assertObject(await readJson(req, config.maxJsonBytes), "structured memory update");
+          const allowed = new Set(["value", "summary", "status", "importance", "sensitive", "expectedVersion"]);
+          const unknown = Object.keys(body).filter((field) => !allowed.has(field));
+          if (unknown.length > 0) {
+            throw new HttpError(400, "memory_payload_invalid", `Unknown memory field(s): ${unknown.sort().join(", ")}.`);
+          }
+          const existing = await memosClient.getRecord(ctx.user.id, recordId);
+          const expectedVersion = Number(body.expectedVersion);
+          if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+            throw new HttpError(400, "memory_version_invalid", "expectedVersion must be a positive integer.");
+          }
+          if (expectedVersion !== existing.version) {
+            throw new HttpError(409, "memory_conflict", "Structured memory changed before this update was applied.");
+          }
+          const next = { ...existing };
+          if (Object.hasOwn(body, "value")) {
+            next.value = assertString(body.value, "value", { max: 100_000 }).trim();
+            if (!next.value) throw new HttpError(400, "memory_content_empty", "Structured memory value must not be empty.");
+          }
+          if (Object.hasOwn(body, "summary")) next.summary = assertString(body.summary, "summary", { max: 2_000 }).trim();
+          if (Object.hasOwn(body, "status")) {
+            if (!["active", "pending", "superseded", "archived"].includes(body.status)) {
+              throw new HttpError(400, "memory_status_invalid", "status is invalid.");
+            }
+            next.status = body.status;
+          }
+          if (Object.hasOwn(body, "importance")) {
+            const importance = Number(body.importance);
+            if (!Number.isFinite(importance) || importance < 0 || importance > 1) {
+              throw new HttpError(400, "memory_importance_invalid", "importance must be between zero and one.");
+            }
+            next.importance = importance;
+          }
+          if (Object.hasOwn(body, "sensitive")) {
+            if (typeof body.sensitive !== "boolean") {
+              throw new HttpError(400, "memory_sensitive_invalid", "sensitive must be a boolean.");
+            }
+            next.sensitive = body.sensitive;
+          }
+          const acceptedInference = existing.status === "pending" && next.status === "active";
+          next.origin = acceptedInference ? "explicit" : "manual";
+          next.confidence = acceptedInference ? 1 : next.confidence;
+          next.lastConfirmedAt = new Date().toISOString();
+          const updated = await memosClient.upsertRecord(ctx.user.id, next, null, {
+            expectedVersion,
+            reason: acceptedInference ? "user confirmed a pending memory" : "user updated structured memory",
+          });
+          await audit(ctx, "memory.record.update", "completed", { target: updated.id, version: updated.version });
+          sendJson(res, 200, { data: updated });
+          return;
+        }
+        if (req.method === "DELETE") {
+          await memosClient.deleteRecord(ctx.user.id, recordId);
+          await audit(ctx, "memory.record.delete", "completed", { target: recordId });
+          sendJson(res, 200, { data: true });
+          return;
+        }
+      }
+
       if (pathname === "/api/research-sessions" && req.method === "GET") {
         const ctx = await context(req, res);
         sendJson(res, 200, { data: await researchSessions.list(ctx.project) });
@@ -693,7 +801,10 @@ export function createWebApiApp(overrides = {}) {
             throw error;
           }
           try {
-            memories = await memosClient.relevant(ctx.user.id, text);
+            memories = await memosClient.relevant(ctx.user.id, text, {
+              projectId: ctx.project.id,
+              sessionId: session.sessionId,
+            });
           } catch (error) {
             memoryError = error instanceof HttpError ? error.code : "memory_unavailable";
             if (config.requireMemos) {
@@ -726,7 +837,15 @@ export function createWebApiApp(overrides = {}) {
       if (pathname === "/api/account/export" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
         const projects = await store.listProjects(user);
-        const entries = await collectUserArchiveEntries(user, projects, config);
+        if (config.requireMemos && !memosClient.configured) {
+          throw new HttpError(503, "memory_required_unavailable", "Required research memory is unavailable for account export.");
+        }
+        const memory = memosClient.configured ? await memosClient.exportUserMemory(user.id) : null;
+        const entries = appendMemoryArchiveEntry(
+          await collectUserArchiveEntries(user, projects, config),
+          memory,
+          config,
+        );
         await securityAudit(config, "account.export", "completed", { userId: user.id });
         await sendUserArchive(res, user, entries);
         return;
@@ -755,7 +874,13 @@ export function createWebApiApp(overrides = {}) {
           }
         }
         await Promise.all(projects.map((project) => runtimeManager.stop(project)));
-        await securityAudit(config, "account.delete", "completed", { userId: user.id });
+        if (config.requireMemos && !memosClient.configured) {
+          throw new HttpError(503, "memory_required_unavailable", "Required research memory is unavailable for account deletion.");
+        }
+        const memoryPurge = memosClient.configured
+          ? await memosClient.purgeUserMemory(user.id)
+          : { structured: 0, manual: 0 };
+        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryPurge });
         const data = await store.deleteUser(user);
         taskManager.purgeUser(user);
         clearSessionCookie(res, config.sessionCookieName);
@@ -1180,6 +1305,25 @@ async function collectUserArchiveEntries(user, projects = null, config = null) {
     metadata,
     ...filteredEntries,
   ];
+}
+
+function appendMemoryArchiveEntry(entries, memory, config = null) {
+  if (memory == null) return entries;
+  const data = Buffer.from(`${JSON.stringify({
+    ...memory,
+    exportedAt: new Date().toISOString(),
+  }, null, 2)}\n`, "utf8");
+  const entry = {
+    rel: "memory/memory.json",
+    type: "file",
+    data,
+    size: data.length,
+    mode: 0o600,
+    mtime: new Date(),
+  };
+  assertArchiveEntryLimit(entries.length + 1, config?.maxArchiveEntries, "account");
+  assertArchiveByteLimit(archiveEntryBytes(entries) + entry.size, config?.maxArchiveBytes, "account");
+  return [...entries, entry];
 }
 
 function assertArchiveEntryLimit(count, limit, scope) {
