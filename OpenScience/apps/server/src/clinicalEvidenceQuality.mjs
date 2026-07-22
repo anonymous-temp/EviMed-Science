@@ -13,6 +13,7 @@ const claimFields = Object.freeze([
 const accessLevels = new Set(["full_text", "official_page", "abstract", "structured_record"]);
 const claimIdPattern = /^CLM-[0-9]{3,6}$/;
 const operationalFailurePattern = /(?:Transport error|Runtime configuration bootstrap|网页访问失败|工具调用失败|public[_ -]source[_ -]gateway.*(?:failed|error))/i;
+const academicProcessPattern = /(?:clinical-evidence-synthesis|证据追溯契约|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单|本次检索.{0,24}(?:未纳入|无法)|无法通过本次检索|工具调用)/i;
 const articleTypeTitlePattern = /(?:综述|系统评价|meta\s*分析|meta-analysis|systematic review|review article)/i;
 
 function nonEmpty(value, minimum = 1) {
@@ -58,13 +59,19 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
 
   if (!nonEmpty(reportText, 1200)) issues.push("clinical-evidence-report.md must contain at least 1200 characters of academic analysis.");
   const title = typeof reportText === "string" ? reportText.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "" : "";
-  if (!title || title.length > 80) issues.push("The academic title must be present and no longer than 80 characters.");
+  if (!title || title.length > 40) issues.push("The academic title must be present and no longer than 40 characters.");
   if (articleTypeTitlePattern.test(title)) issues.push("The academic title must not contain an article-type label.");
   for (const section of [/(?:^|\n)##\s+(?:摘要|Abstract)/i, /(?:^|\n)##\s+.*(?:临床|证据|Evidence|Clinical)/i, /(?:^|\n)##\s+.*(?:局限|Limitations?)/i, /(?:^|\n)##\s+.*(?:结论|处置|Conclusion|Practical)/i]) {
     if (!section.test(reportText ?? "")) issues.push(`The academic report is missing a required section matching ${section}.`);
   }
   if (operationalFailurePattern.test(reportText ?? "")) {
     issues.push("The academic report contains operational failure prose that belongs only in the run receipt.");
+  }
+  if (academicProcessPattern.test(reportText ?? "")) {
+    issues.push("The academic report contains runtime or retrieval-process prose instead of scientific analysis.");
+  }
+  if (/\[claim:CLM-[0-9]{3,6}[^\]]+\]/.test(reportText ?? "")) {
+    issues.push("Each claim marker must contain exactly one claim ID.");
   }
   if (/https:\/\/www\.evimed\.com\/api-evimed\//i.test(reportText ?? "")) {
     issues.push("EviMed API endpoints cannot be used as public evidence citations.");
