@@ -144,6 +144,9 @@ test("starts immutable open-domain and specialist run identities from research-s
         agentId: open.body.data.agentId,
         agentVersion: open.body.data.agentVersion,
         runtimeAgent: open.body.data.runtimeAgent,
+        effectiveAgentId: open.body.data.effectiveAgentId,
+        effectiveAgentVersion: open.body.data.effectiveAgentVersion,
+        effectiveRuntimeAgent: open.body.data.effectiveRuntimeAgent,
         model: open.body.data.model,
         status: open.body.data.status,
       },
@@ -153,6 +156,9 @@ test("starts immutable open-domain and specialist run identities from research-s
         agentId: null,
         agentVersion: null,
         runtimeAgent: null,
+        effectiveAgentId: null,
+        effectiveAgentVersion: null,
+        effectiveRuntimeAgent: null,
         model: "deepseek/deepseek-v4-pro",
         status: "running",
       },
@@ -163,12 +169,18 @@ test("starts immutable open-domain and specialist run identities from research-s
         agentId: specialist.body.data.agentId,
         agentVersion: specialist.body.data.agentVersion,
         runtimeAgent: specialist.body.data.runtimeAgent,
+        effectiveAgentId: specialist.body.data.effectiveAgentId,
+        effectiveAgentVersion: specialist.body.data.effectiveAgentVersion,
+        effectiveRuntimeAgent: specialist.body.data.effectiveRuntimeAgent,
       },
       {
         sessionId: "ses_adr",
         agentId: "adr-analysis",
         agentVersion: "1.2.2",
         runtimeAgent: "evimed-adr-analysis",
+        effectiveAgentId: "adr-analysis",
+        effectiveAgentVersion: "1.2.2",
+        effectiveRuntimeAgent: "evimed-adr-analysis",
       },
     );
     assert.match(open.body.data.id, /^run_[a-f0-9]{32}$/);
@@ -190,6 +202,34 @@ test("starts immutable open-domain and specialist run identities from research-s
     assert.equal(ledger.includes("prompt"), false);
     assert.equal(ledger.includes("content"), false);
     assert.equal(ledger.includes("token"), false);
+  });
+});
+
+test("open-domain clinical evidence questions record and dispatch the selected specialist identity", async () => {
+  await withApp(async ({ base }) => {
+    assert.equal((await bind(base, "ses_routed_clinical", { mode: "open-domain" })).status, 200);
+    const result = await dispatchRun(
+      base,
+      "ses_routed_clinical",
+      "turn_routed_clinical",
+      "胸口发闷发紧，是心绞痛还是胃病？结合速效救心丸形成学术分析",
+    );
+    assert.equal(result.response.status, 202);
+    assert.deepEqual({
+      mode: result.body.data.mode,
+      agentId: result.body.data.agentId,
+      runtimeAgent: result.body.data.runtimeAgent,
+      effectiveAgentId: result.body.data.effectiveAgentId,
+      effectiveAgentVersion: result.body.data.effectiveAgentVersion,
+      effectiveRuntimeAgent: result.body.data.effectiveRuntimeAgent,
+    }, {
+      mode: "open-domain",
+      agentId: null,
+      runtimeAgent: null,
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    });
   });
 });
 
@@ -258,6 +298,7 @@ test("a specialist turn cannot succeed without every declared required output", 
         get: () => ({
           id: "meta-analysis",
           version: "1.0.0",
+          runtimeAgent: "evimed-meta-analysis",
           outputs: [
             { path: "meta-analysis-report.md", required: true },
             { path: "meta-analysis-run.json", required: true },
@@ -292,10 +333,77 @@ test("a specialist turn cannot succeed without every declared required output", 
   }
 });
 
+test("a routed clinical evidence turn cannot succeed with an untraceable report package", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-clinical-quality-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_clinical_quality",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_clinical_quality",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async () => ({ accepted: true }));
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# Too short\nUnsupported claim [claim:CLM-999]", "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-run.json"), JSON.stringify({ status: "succeeded" }), "utf8");
+    history = [{
+      info: { id: "msg_clinical_bad", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        { type: "tool", tool: "write", state: { status: "completed", input: { filePath: "clinical-evidence-report.md" } } },
+        { type: "text", text: "Completed." },
+      ],
+    }];
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.id, run.id);
+    assert.equal(finished.status, "failed");
+    assert.equal(finished.errorCode, "specialist_evidence_traceability_failed");
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("rejects browser-forged identity/model fields and unknown research sessions", async () => {
   await withApp(async ({ base }) => {
     await bind(base, "ses_open", { mode: "open-domain" });
-    for (const field of ["mode", "agentId", "agentVersion", "runtimeAgent", "model", "prompt", "tokens"]) {
+    for (const field of ["mode", "agentId", "agentVersion", "runtimeAgent", "effectiveAgentId", "effectiveRuntimeAgent", "model", "prompt", "tokens"]) {
       const attempt = await startRun(base, "ses_open", "default", { [field]: "forged" });
       assert.equal(attempt.response.status, 400, field);
       assert.equal(attempt.body.code, "invalid_agent_run", field);
@@ -432,6 +540,7 @@ test("server monitor owns terminal state and records only existing structured ar
         get: () => ({
           id: "adr-analysis",
           version: "1.2.2",
+          runtimeAgent: "evimed-adr-analysis",
           outputs: [{ path: "reports/real.md", required: true }],
           completionChecks: ["requiredOutputsExist"],
         }),
@@ -442,6 +551,7 @@ test("server monitor owns terminal state and records only existing structured ar
       readSessionHistory: async () => {
         reads += 1;
         if (reads === 1) return [];
+        await writeFile(path.join(project.workspaceDir, "reports", "real.md"), "updated this turn", "utf8");
         return [{
           info: { id: "msg_monitored", role: "assistant", time: { completed: Date.now() } },
           parts: [
@@ -523,7 +633,8 @@ test("a completed tool step cannot finish a busy multi-step run and artifacts ar
     sessionStatus = "idle";
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.id, started.id);
-    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.status, "failed");
+    assert.equal(finished.errorCode, "runtime_tool_error");
     assert.deepEqual(finished.artifacts, ["reports/final.md"]);
   } finally {
     await rm(root, { recursive: true, force: true });

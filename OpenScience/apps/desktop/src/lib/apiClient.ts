@@ -253,6 +253,9 @@ export interface WebAgentRun {
   agentId: string | null;
   agentVersion: string | null;
   runtimeAgent: string | null;
+  effectiveAgentId?: string | null;
+  effectiveAgentVersion?: string | null;
+  effectiveRuntimeAgent?: string | null;
   model: string;
   status: WebAgentRunStatus;
   createdAt: string;

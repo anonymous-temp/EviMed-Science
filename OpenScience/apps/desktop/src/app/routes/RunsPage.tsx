@@ -430,7 +430,7 @@ function HostedRunsView() {
           (!filter.status || run.status === filter.status) &&
           (!sinceTs || webRunTs(run) >= sinceTs) &&
           (!query ||
-            [run.id, run.sessionId, run.mode, run.agentId, run.model, ...run.artifacts]
+            [run.id, run.sessionId, run.mode, run.agentId, run.effectiveAgentId, run.model, ...run.artifacts]
               .filter(Boolean)
               .join(" ")
               .toLowerCase()
@@ -446,8 +446,9 @@ function HostedRunsView() {
   }, [runs]);
 
   const reproduce = (run: WebAgentRun) => {
+    const activeAgent = run.effectiveAgentId ?? run.agentId;
     setComposerDraft(
-      `复查科研运行 \`${run.id}\`（${run.mode === "specialist" ? run.agentId : "开放域科研"}）。` +
+      `复查科研运行 \`${run.id}\`（${activeAgent ? `${run.mode === "open-domain" ? "开放域路由 · " : ""}${activeAgent}` : "开放域科研"}）。` +
         `请读取该会话的原始消息、工具记录和产物，核对证据来源、失败项与可复现性；不要重新编造缺失数据。`,
     );
     navigate(`/live/${run.sessionId}`);
@@ -738,7 +739,9 @@ function WebRunRow({
           {run.id}
         </span>
         <span className="shrink-0 text-caption font-semibold uppercase tracking-wide text-accent">
-          {run.mode === "specialist" ? run.agentId : "开放域科研"}
+          {run.effectiveAgentId
+            ? `${run.mode === "open-domain" ? "开放域 · " : ""}${run.effectiveAgentId}`
+            : run.mode === "specialist" ? run.agentId : "开放域科研"}
         </span>
         {run.durationMs != null && (
           <span className="shrink-0 tabular-nums text-xs text-muted">{formatDuration(run.durationMs)}</span>
@@ -753,6 +756,9 @@ function WebRunRow({
           <div className="flex flex-wrap items-center gap-1.5">
             <Chip title="模型">{run.model}</Chip>
             {run.mode === "specialist" && run.agentId && <Chip title="专项科研 Agent">{run.agentId}</Chip>}
+            {run.mode === "open-domain" && run.effectiveAgentId && (
+              <Chip title="开放域自动路由专项">{run.effectiveAgentId}</Chip>
+            )}
             <Chip title="会话">{run.sessionId}</Chip>
           </div>
 

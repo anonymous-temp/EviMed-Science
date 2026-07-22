@@ -1689,6 +1689,7 @@ export function toolPresentation(
   tool: string,
   title: string | undefined,
   input?: Record<string, unknown>,
+  status?: ToolCallStatus,
 ): { verb?: string; title: string } {
   const command = str(input?.command);
   const filePath = str(input?.filePath) || str(input?.path);
@@ -1712,7 +1713,10 @@ export function toolPresentation(
     case "list":
       return { verb: "Listed", title: file || fallback };
     case "webfetch":
-      return { verb: "Fetched", title: str(input?.url) || fallback };
+      return {
+        verb: status === "failed" ? "Fetch failed" : status === "running" || status === "pending" ? "Fetching" : "Fetched",
+        title: str(input?.url) || fallback,
+      };
     default:
       return { title: fallback };
   }
@@ -1774,7 +1778,7 @@ export function foldEvent(
               ...str(event.input?.newString).split("\n").map((l) => `+ ${l}`),
             ].join("\n")
           : undefined);
-      const { verb, title } = toolPresentation(event.tool, event.title, event.input);
+      const { verb, title } = toolPresentation(event.tool, event.title, event.input, event.status);
       const block: ThreadBlock = {
         kind: "tool-call",
         title,
@@ -1919,7 +1923,8 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
               : "");
           const userShell = shellTurn && p.tool === "bash";
           if (userShell) blocks.push({ kind: "user", text: `! ${command}` });
-          const { verb, title } = toolPresentation(p.tool ?? "", p.state?.title, p.state?.input);
+          const { verb, title } = toolPresentation(p.tool ?? "", p.state?.title, p.state?.input, status);
+          const toolOutput = str(p.state?.output) || str(p.state?.error);
           blocks.push({
             kind: "tool-call",
             title,
@@ -1930,13 +1935,13 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
             ...(filePath ? { filePath: tidyToolTitle(filePath) } : {}),
             ...(content ? { content: capHead(content, DETAIL_MAX) } : {}),
             ...(diff ? { diff: capHead(diff, DETAIL_MAX) } : {}),
-            ...(p.state?.output?.trim()
-              ? { output: capTail(foldCarriageReturns(p.state.output), DETAIL_MAX).replace(/\s+$/, "") }
+            ...(toolOutput.trim()
+              ? { output: capTail(foldCarriageReturns(toolOutput), DETAIL_MAX).replace(/\s+$/, "") }
               : {}),
             ...(typeof p.state?.time?.start === "number" ? { startedAt: p.state.time.start } : {}),
             ...(typeof p.state?.time?.end === "number" ? { endedAt: p.state.time.end } : {}),
-            ...(userShell && p.state?.output?.trim()
-              ? { outputSummary: p.state.output.replace(/\s+$/, "") }
+            ...(userShell && toolOutput.trim()
+              ? { outputSummary: toolOutput.replace(/\s+$/, "") }
               : {}),
           });
           const artifact = deriveArtifact({

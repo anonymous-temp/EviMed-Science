@@ -2015,7 +2015,7 @@ export async function syncRuntimeModelProvider(
       bash: "allow",
       edit: "allow",
       write: "allow",
-      webfetch: "allow",
+      webfetch: plan.sandboxMode === "docker" ? "deny" : "allow",
     },
     provider: {
       ...(existing.provider ?? {}),

@@ -74,6 +74,7 @@ test("loads the final package contract and derives runtime identity", async () =
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_data_source_catalog"));
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_biomedical_source_search"));
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_open_access_full_text"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_official_page_fetch"));
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_patent_search"));
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_pharmacy_reference_search"));
     assert.ok(EVIMED_AGENT_DATA_SOURCES.has("faers"));
@@ -86,6 +87,7 @@ test("official skills name every output declared by their manifest", async () =>
   assert.deepEqual(registry.list().map((agent) => agent.id), [
     "adr-analysis",
     "bibliometric-analysis",
+    "clinical-evidence-synthesis",
     "comprehensive-drug-evaluation",
     "drug-selection",
     "mendelian-randomization",
@@ -112,6 +114,7 @@ test("official specialist packages preserve domain-specific evidence and release
   const expectedVersions = new Map([
     ["adr-analysis", "1.2.2"],
     ["bibliometric-analysis", "1.0.1"],
+    ["clinical-evidence-synthesis", "1.0.0"],
     ["comprehensive-drug-evaluation", "2.2.1"],
     ["drug-selection", "2.1.1"],
     ["mendelian-randomization", "1.0.1"],
@@ -123,7 +126,12 @@ test("official specialist packages preserve domain-specific evidence and release
   for (const agent of registry.list()) {
     assert.equal(agent.version, expectedVersions.get(agent.id));
     assert.ok(agent.requiredTools.length > 0);
-    assert.deepEqual(agent.completionChecks, ["requiredOutputsExist", "citationsResolvable"]);
+    assert.deepEqual(
+      agent.completionChecks,
+      agent.id === "clinical-evidence-synthesis"
+        ? ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"]
+        : ["requiredOutputsExist", "citationsResolvable"],
+    );
   }
 
   const skills = Object.fromEntries(

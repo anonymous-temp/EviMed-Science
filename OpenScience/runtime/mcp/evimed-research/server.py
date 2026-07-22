@@ -22,13 +22,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import public_sources
 import drug_assessment
 import open_access_fulltext
+import official_pages
 import meta_agent
 import specialist_jobs
 import source_catalog
 
 
 SERVER_NAME = "evimed-research"
-SERVER_VERSION = "1.5.0"
+SERVER_VERSION = "1.6.0"
 PROTOCOL_VERSION = "2024-11-05"
 MAX_FRAME_BYTES = 1024 * 1024
 
@@ -262,6 +263,14 @@ TOOL_DEFINITIONS = [
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50},
             },
             ("source", "query"),
+        ),
+    },
+    {
+        "name": "evimed_official_page_fetch",
+        "description": "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document through the managed gateway and preserve a content-hashed Markdown receipt in the workspace.",
+        "inputSchema": object_schema(
+            {"url": {"type": "string", "minLength": 1, "maxLength": 2048}},
+            ("url",),
         ),
     },
     {
@@ -1455,6 +1464,8 @@ def call_tool(name, arguments):
         if result["status"] == "success":
             result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
+    if name == "evimed_official_page_fetch":
+        return _normalize_tool_result(name, official_pages.fetch(arguments), arguments, _scope())
     if name in ("evimed_term_normalize", "evimed_drug_term_normalize"):
         data = _normalize_term(arguments["term"])
         if name == "evimed_term_normalize":

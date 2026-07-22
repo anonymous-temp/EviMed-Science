@@ -277,6 +277,7 @@ test("specialty agent catalog requires authentication and exposes only public me
     assert.deepEqual(body.data.map((agent) => agent.id), [
       "adr-analysis",
       "bibliometric-analysis",
+      "clinical-evidence-synthesis",
       "comprehensive-drug-evaluation",
       "drug-selection",
       "mendelian-randomization",

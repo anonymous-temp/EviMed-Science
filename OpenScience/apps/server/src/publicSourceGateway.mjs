@@ -57,7 +57,22 @@ const allowedHosts = new Set([
   "www.proteinatlas.org",
   "www.cbioportal.org",
   "www.ebi.ac.uk",
+  "www.cochrane.org",
+  "www.acc.org",
+  "professional.heart.org",
+  "cpr.heart.org",
+  "www.ccfdie.org",
+  "mpa.hunan.gov.cn",
   "waterservices.usgs.gov",
+]);
+
+const officialDocumentPaths = new Map([
+  ["www.cochrane.org", ["/evidence/", "/zh-hans/evidence/"]],
+  ["www.acc.org", ["/latest-in-cardiology/"]],
+  ["professional.heart.org", ["/en/science-news/"]],
+  ["cpr.heart.org", ["/en/resuscitation-science/"]],
+  ["www.ccfdie.org", ["/zryyxxw/"]],
+  ["mpa.hunan.gov.cn", ["/mpa/"]],
 ]);
 
 const credentialProfiles = new Map([
@@ -82,6 +97,7 @@ const allowedAcceptTypes = new Set([
   "text/json",
   "text/plain",
   "text/csv",
+  "text/html",
   "text/xml",
 ]);
 
@@ -257,6 +273,13 @@ function validatedRequest(value) {
     throw gatewayError(400, "public_source_gateway_credential_profile_invalid", "The credential profile is invalid.");
   }
   const hostname = url.hostname.toLowerCase();
+  const documentPrefixes = officialDocumentPaths.get(hostname);
+  if (documentPrefixes && !documentPrefixes.some((prefix) => url.pathname.startsWith(prefix))) {
+    throw gatewayError(403, "public_source_document_path_forbidden", "The official-document path is not approved.");
+  }
+  if (documentPrefixes && (method !== "GET" || value.accept.length !== 1 || value.accept[0] !== "text/html")) {
+    throw gatewayError(403, "public_source_document_request_forbidden", "Official-document sources permit only HTML GET requests.");
+  }
   if (profile && (hostname !== profile.host || !url.pathname.startsWith(profile.path))) {
     throw gatewayError(403, "public_source_gateway_credential_profile_forbidden", "The credential profile does not match this official endpoint.");
   }
@@ -525,7 +548,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
         await upstream.body?.cancel().catch(() => {});
         throw gatewayError(502, "public_source_gateway_response_invalid", "The official public source returned an unexpected content type.");
       }
-      const maxBytes = Math.max(1024, Number(config.publicSourceGatewayMaxResponseBytes) || 4 * 1024 * 1024);
+      const maxBytes = Math.max(1024, Number(config.publicSourceGatewayMaxResponseBytes) || 16 * 1024 * 1024);
       const declared = Number(upstream.headers.get("content-length") ?? 0);
       if (Number.isFinite(declared) && declared > maxBytes) {
         await upstream.body?.cancel().catch(() => {});

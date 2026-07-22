@@ -62,6 +62,9 @@ function run(id = "run_1") {
     mode: "open-domain",
     agentId: null,
     agentVersion: null,
+    effectiveAgentId: "clinical-evidence-synthesis",
+    effectiveAgentVersion: "1.0.0",
+    effectiveRuntimeAgent: "research",
     model: "deepseek/deepseek-v4-pro",
     status: "succeeded",
     errorCode: null,
@@ -109,6 +112,8 @@ test("memory extraction accepts only candidates backed by an exact source quote"
   assert.equal(result.extracted, 1);
   const conversation = [...store.records.values()].find((record) => record.kind === "run_summary");
   assert.equal(JSON.parse(conversation.value).question, text);
+  assert.equal(JSON.parse(conversation.value).effectiveAgentId, "clinical-evidence-synthesis");
+  assert.equal(JSON.parse(conversation.value).effectiveRuntimeAgent, "research");
   const preference = [...store.records.values()].find((record) => record.kind === "preference");
   assert.equal(preference.status, "active");
   assert.equal(preference.evidence[0].quote, text);

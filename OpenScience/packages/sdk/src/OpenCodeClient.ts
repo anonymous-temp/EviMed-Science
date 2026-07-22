@@ -737,6 +737,7 @@ export class OpenCodeClient implements AgentRuntime {
               title?: string;
               input?: Record<string, unknown>;
               output?: string;
+              error?: string;
               time?: { start?: number; end?: number };
               metadata?: { sessionId?: unknown; output?: unknown; diff?: unknown };
             };
@@ -752,7 +753,11 @@ export class OpenCodeClient implements AgentRuntime {
             status: mapToolStatus(tp.state?.status ?? "pending"),
             title: tp.state?.title,
             input: tp.state?.input,
-            output: typeof tp.state?.output === "string" ? tp.state.output : undefined,
+            output: typeof tp.state?.output === "string"
+              ? tp.state.output
+              : typeof tp.state?.error === "string"
+                ? tp.state.error
+                : undefined,
             // While running, bash accumulates its stdout tail here — the live
             // output the UI shows so a long command never looks hung.
             partialOutput: typeof meta?.output === "string" ? meta.output : undefined,

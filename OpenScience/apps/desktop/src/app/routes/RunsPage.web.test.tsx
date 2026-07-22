@@ -63,6 +63,9 @@ describe("RunsPage (hosted web)", () => {
         sessionId: "ses-2",
         mode: "open-domain",
         agentId: null,
+        effectiveAgentId: "clinical-evidence-synthesis",
+        effectiveAgentVersion: "1.0.0",
+        effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
         status: "failed",
         startedAt: new Date(Date.now() - 3_600_000).toISOString(),
         errorCode: "agent_timeout",
@@ -76,6 +79,7 @@ describe("RunsPage (hosted web)", () => {
     expect(await screen.findByText("run-1")).toBeInTheDocument();
     expect(screen.getByText("今天")).toBeInTheDocument();
     expect(screen.getByText("run-2")).toBeInTheDocument();
+    expect(screen.getByText("开放域 · clinical-evidence-synthesis")).toBeInTheDocument();
     // The newest row is expanded: meta chips, actions, and its artifact.
     expect(screen.getByText("deepseek-chat")).toBeInTheDocument();
     // The agent names both the row tag and the expanded detail chip.
