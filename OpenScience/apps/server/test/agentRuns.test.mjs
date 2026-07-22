@@ -228,7 +228,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "1.0.4",
+      effectiveAgentVersion: "1.0.5",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
   });
@@ -486,7 +486,7 @@ test("clinical evidence source artifacts must come from successful retrieval too
         `现有试验方法学质量较差 [claim:CLM-004](https://www.cochrane.org/evidence/CD004473_chinese-herbal-medicine-suxiao-jiuxin-wan-angina-pectoris)。证据存在偏倚、间接性、不精确性以及人群和司法辖区适用性限制。`,
         "",
         "## 实用处置结论",
-        "出现新发压迫性胸部不适时应立即呼叫急救并接受规范评估；不要因尝试速效救心丸或胃药而延误。",
+        "出现新发压迫性胸部不适时应立即呼叫急救并接受规范评估 [claim:CLM-001]；不得因服用速效救心丸而延误呼救或急诊评估 [claim:CLM-004]。",
       ].join("\n");
       const receipt = {
         question: "acute pressure-like chest discomfort",

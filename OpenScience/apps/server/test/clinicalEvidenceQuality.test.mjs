@@ -35,13 +35,14 @@ function validPackage() {
     "症状不能单独完成病因归类。[claim:CLM-001] 诊断需要规范评估。[claim:CLM-002]",
     "",
     "## 药物角色",
-    "药物讨论不能延误急诊评估。[claim:CLM-003] 证据范围应被明确限定。[claim:CLM-004]",
+    "速效救心丸不应延误急诊评估。[claim:CLM-003] 证据范围应被明确限定。[claim:CLM-004]",
     "",
     "## 科学局限",
-    "现有证据对个体诊断存在间接性，且不同地区急救路径存在差异。".repeat(8),
+    "现有证据对个体诊断存在间接性，且不同地区急救路径存在适用性差异。".repeat(8),
     "",
     "## 结论与实际处置",
-    "结论必须同时保留临床紧迫性、适用边界和不确定性。".repeat(30),
+    "速效救心丸不应延误急诊评估。[claim:CLM-003] "
+      + "结论必须同时保留临床紧迫性、适用边界和不确定性。".repeat(30),
   ].join("\n");
   return {
     reportText,
@@ -137,4 +138,42 @@ test("rejects explanatory objects where the run receipt requires path strings an
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /Every successful source artifact/);
   assert.match(result.issues.join("\n"), /quality checks must pass/);
+});
+
+test("rejects access-failure limitations, uncited practical actions, and response-based diagnosis", () => {
+  const input = validPackage();
+  input.reportText = input.reportText
+    .replace(/## 科学局限[\s\S]*?(?=\n## 结论与实际处置)/, "## 科学局限\n核心指南全文不可及。")
+    .replace(
+      /## 结论与实际处置[\s\S]*$/,
+      "## 结论与实际处置\n1. 不要自行驾车。\n2. 胃药缓解不能排除心脏病。[claim:CLM-001]",
+    );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /runtime or retrieval-process prose/);
+  assert.match(result.issues.join("\n"), /Every numbered practical-action item/);
+  assert.match(result.issues.join("\n"), /Medication response/);
+  assert.match(result.issues.join("\n"), /Scientific limitations/);
+});
+
+test("rejects a report number absent from every cited claim proposition and source passage", () => {
+  const input = validPackage();
+  input.reportText = input.reportText.replace(
+    "证据范围应被明确限定。[claim:CLM-004]",
+    "证据来自 1776 名受试者。[claim:CLM-004]",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /numeric fact 1776/);
+});
+
+test("rejects an unreferenced numeric fact outside the reference list", () => {
+  const input = validPackage();
+  input.reportText = input.reportText.replace(
+    "急性胸部压迫感需要优先排除时间敏感的心血管急症。",
+    "现有分析纳入 15 项研究。",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /numeric fact 15 has no evidence-matrix claim reference/);
 });

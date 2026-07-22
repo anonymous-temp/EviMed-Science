@@ -13,8 +13,9 @@ const claimFields = Object.freeze([
 const accessLevels = new Set(["full_text", "official_page", "abstract", "structured_record"]);
 const claimIdPattern = /^CLM-[0-9]{3,6}$/;
 const operationalFailurePattern = /(?:Transport error|Runtime configuration bootstrap|网页访问失败|工具调用失败|public[_ -]source[_ -]gateway.*(?:failed|error))/i;
-const academicProcessPattern = /(?:clinical-evidence-synthesis|证据追溯契约|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单|本次检索.{0,24}(?:未纳入|无法)|无法通过本次检索|工具调用)/i;
+const academicProcessPattern = /(?:clinical-evidence-synthesis|证据追溯契约|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单|本次检索.{0,24}(?:未纳入|无法)|无法通过本次检索|工具调用|不可及|无法获取|无法获得|未能获取|未能获得|全文不可得)/i;
 const articleTypeTitlePattern = /(?:综述|系统评价|meta\s*分析|meta-analysis|systematic review|review article)/i;
+const medicationResponseDiagnosisPattern = /(?:(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解).{0,80}(?:诊断|排除|区分|判断)|(?:诊断|排除|区分|判断).{0,80}(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解))/i;
 
 function nonEmpty(value, minimum = 1) {
   return typeof value === "string" && value.trim().length >= minimum;
@@ -41,6 +42,22 @@ function normalizedPassage(value) {
 
 function validSupportingPassage(value) {
   return normalizedPassage(value).replace(/\s+/g, "").length >= 12;
+}
+
+function numericTokens(value) {
+  return String(value ?? "")
+    .replace(/\]\(https?:\/\/[^)\s]+\)/gi, "]")
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\[claim:CLM-[0-9]{3,6}\]/g, "")
+    .match(/[0-9]+(?:\s*[–—-]\s*[0-9]+)?/g)
+    ?.map((token) => token.replace(/\s+/g, "").replace(/[–—]/g, "-")) ?? [];
+}
+
+function reportSection(reportText, headingPattern) {
+  const match = String(reportText ?? "").match(
+    new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${headingPattern})[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i"),
+  );
+  return match?.[1] ?? "";
 }
 
 function validSourceArtifactPath(value) {
@@ -84,6 +101,9 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
   }
   if (/https:\/\/www\.evimed\.com\/api-evimed\//i.test(reportText ?? "")) {
     issues.push("EviMed API endpoints cannot be used as public evidence citations.");
+  }
+  if (medicationResponseDiagnosisPattern.test(reportText ?? "")) {
+    issues.push("Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms.");
   }
 
   if (claims.length < 4) issues.push("The evidence matrix must contain at least four material claims.");
@@ -136,6 +156,57 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
   }
   for (const claimId of seen) {
     if (!reportSet.has(claimId)) issues.push(`Evidence matrix claim ${claimId} is not cited by the report.`);
+  }
+
+  const claimsById = new Map(claims.map((claim) => [claim?.claimId, claim]));
+  const reportBeforeReferences = String(reportText ?? "").split(/\n##\s+(?:参考来源|References?)[^\n]*\n/i)[0];
+  for (const rawLine of reportBeforeReferences.split("\n")) {
+    const line = rawLine.replace(/^\s*[0-9]+\.\s*/, "");
+    const reportNumbers = new Set(numericTokens(line).filter((token) => token !== "120"));
+    if (!reportNumbers.size) continue;
+    const referencedIds = [...rawLine.matchAll(/\[claim:(CLM-[0-9]{3,6})\]/g)].map((match) => match[1]);
+    if (!referencedIds.length) {
+      for (const token of reportNumbers) {
+        issues.push(`Report numeric fact ${token} has no evidence-matrix claim reference.`);
+      }
+      continue;
+    }
+    const supportedNumbers = new Set(referencedIds.flatMap((claimId) => {
+      const claim = claimsById.get(claimId);
+      return numericTokens([
+        claim?.claim,
+        claim?.supportQuote,
+        claim?.sourceTitle,
+        claim?.identifier,
+      ].join(" "));
+    }));
+    for (const token of reportNumbers) {
+      if (!supportedNumbers.has(token)) {
+        issues.push(`Report numeric fact ${token} is not present in the cited claim evidence.`);
+      }
+    }
+  }
+
+  const practical = reportSection(reportText, "实际处置|实用|怎么办|Practical");
+  const numberedItems = practical.split(/\n(?=\s*[0-9]+\.\s+)/).filter((item) => /^\s*[0-9]+\.\s+/.test(item));
+  if (numberedItems.some((item) => !/\[claim:CLM-[0-9]{3,6}\]/.test(item))) {
+    issues.push("Every numbered practical-action item must cite at least one evidence-matrix claim.");
+  }
+  if (/速效救心丸/.test(reportText ?? "")
+    && !/(?:速效救心丸.{0,120}(?:不应|不能|不得).{0,50}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估)|(?:不应|不能|不得).{0,50}(?:因|以|让)?.{0,30}速效救心丸.{0,60}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估))/s.test(practical)) {
+    issues.push("The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care.");
+  }
+
+  const limitations = reportSection(reportText, "局限|Limitations?");
+  const limitationDimensions = [
+    /偏倚|方法学质量|risk of bias/i,
+    /间接性|外推|人群偏移|indirectness/i,
+    /不精确|样本量|imprecision/i,
+    /适用性|管辖权|医疗体系|applicability/i,
+    /时效|证据年龄|未更新|outdated/i,
+  ];
+  if (limitationDimensions.filter((pattern) => pattern.test(limitations)).length < 2) {
+    issues.push("Scientific limitations must address at least two evidence-quality or applicability dimensions.");
   }
 
   if (!runReceipt || typeof runReceipt !== "object" || Array.isArray(runReceipt)) {
