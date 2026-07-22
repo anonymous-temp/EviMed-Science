@@ -97,6 +97,18 @@ test("rejects a support quote that is not present in the claimed source artifact
   assert.match(result.issues.join("\n"), /not found in its preserved source artifact/);
 });
 
+test("matches source quotes across typographic quote styles and accepts a complete short official field", () => {
+  const input = validPackage();
+  input.matrix.claims[0].supportQuote =
+    "These pathways allow safe exclusion ('rule out') of myocardial infarction within 1-2 hours.";
+  input.sourceArtifacts[".evimed-sources/a/page.md"] +=
+    "\nThese pathways allow safe exclusion (“rule out”) of myocardial infarction within 1–2 hours.";
+  input.matrix.claims[1].supportQuote = "最近的检索日期：2005年11月。";
+  input.sourceArtifacts[".evimed-sources/b/fulltext.md"] += "\n最近的检索日期：2005年11月。";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
 test("rejects runtime-process prose, overlong titles, and combined claim markers in the academic report", () => {
   const input = validPackage();
   input.reportText = input.reportText
