@@ -31,7 +31,16 @@ function sourceDomain(value) {
 }
 
 function normalizedPassage(value) {
-  return String(value ?? "").replace(/\s+/g, " ").trim();
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/[‘’“”"'＂＇]/g, "")
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function validSupportingPassage(value) {
+  return normalizedPassage(value).replace(/\s+/g, "").length >= 12;
 }
 
 function validSourceArtifactPath(value) {
@@ -97,7 +106,7 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
     if (!accessLevels.has(value.accessLevel)) {
       issues.push(`${label}.accessLevel must identify verified content access, not bibliographic metadata.`);
     }
-    if (!nonEmpty(value.supportQuote, 20)) issues.push(`${label}.supportQuote must contain a direct supporting passage.`);
+    if (!validSupportingPassage(value.supportQuote)) issues.push(`${label}.supportQuote must contain a direct supporting passage.`);
     if (!validSourceArtifactPath(value.artifactPath)) {
       issues.push(`${label}.artifactPath must be a safe .evimed-sources workspace path.`);
     } else if (!successfulArtifacts.has(value.artifactPath)) {
