@@ -680,6 +680,7 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
     'run.model !== "deepseek/deepseek-v4-pro"',
     'agent.requiredInputs?.includes("drug")',
     'run.artifacts?.includes(requiredPath)',
+    'item.kind === "preference"',
     'memoryRecord.evidenceCount < 1',
     'language: "python"',
     'language: "r"',

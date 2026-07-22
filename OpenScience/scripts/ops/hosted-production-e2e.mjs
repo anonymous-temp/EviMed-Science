@@ -77,7 +77,10 @@ async function waitForMemoryRecord(base, headers, initialIds, marker) {
   while (Date.now() < deadline) {
     const profile = await jsonFetch(`${base}/api/memory/profile`, { headers });
     const record = profile.body?.data?.records?.find((item) =>
-      !initialIds.has(item.id) && JSON.stringify(item).includes(marker)
+      !initialIds.has(item.id)
+      && item.scope === "user"
+      && item.kind === "preference"
+      && JSON.stringify(item).includes(marker)
     );
     if (record) return record;
     await new Promise((resolve) => setTimeout(resolve, 2_000));
