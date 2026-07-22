@@ -806,6 +806,11 @@ def _normalize_title(value):
     return " ".join(re.findall(r"[\w]+", value.casefold(), flags=re.UNICODE))
 
 
+def _usable_identifier(value):
+    normalized = value.strip().casefold()
+    return normalized not in {"", "-", "n/a", "na", "none", "null", "unknown", "not available"}
+
+
 def _deduplicate(items):
     unique = []
     duplicates = []
@@ -813,11 +818,11 @@ def _deduplicate(items):
     for position, item in enumerate(items):
         item_id = item.get("id") or "item-%d" % (position + 1)
         keys = []
-        if item.get("doi"):
+        if item.get("doi") and _usable_identifier(item["doi"]):
             keys.append(("doi", _normalize_doi(item["doi"])))
-        if item.get("pmid"):
+        if item.get("pmid") and _usable_identifier(item["pmid"]):
             keys.append(("pmid", item["pmid"].strip().casefold().removeprefix("pmid:")))
-        if item.get("url"):
+        if item.get("url") and _usable_identifier(item["url"]):
             keys.append(("url", _normalize_url(item["url"])))
         keys.append(("title", _normalize_title(item["title"])))
 

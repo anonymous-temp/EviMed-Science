@@ -84,12 +84,14 @@ test("public-source gateway permits bounded HTML only on approved official-docum
   const base = await listen(server);
   t.after(() => close(server));
 
-  const allowed = await gatewayRequest(base, {
-    url: "https://professional.heart.org/en/science-news/2024-aha-and-american-red-cross-guidelines-for-first-aid",
-    accept: ["text/html"],
-  });
-  assert.equal(allowed.status, 200);
-  assert.match(await allowed.text(), /Verified official content/);
+  for (const url of [
+    "https://professional.heart.org/en/science-news/2024-aha-and-american-red-cross-guidelines-for-first-aid",
+    "https://www.nhs.uk/symptoms/chest-pain/",
+  ]) {
+    const allowed = await gatewayRequest(base, { url, accept: ["text/html"] });
+    assert.equal(allowed.status, 200);
+    assert.match(await allowed.text(), /Verified official content/);
+  }
 
   const wrongPath = await gatewayRequest(base, {
     url: "https://professional.heart.org/unreviewed/path",
@@ -97,7 +99,7 @@ test("public-source gateway permits bounded HTML only on approved official-docum
   });
   assert.equal(wrongPath.status, 403);
   assert.equal((await wrongPath.json()).error.code, "public_source_document_path_forbidden");
-  assert.equal(fetchCalls, 1);
+  assert.equal(fetchCalls, 2);
 });
 
 test("public-source gateway permits only fixed read-only GraphQL operations", async (t) => {

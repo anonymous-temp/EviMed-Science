@@ -20,6 +20,7 @@ OFFICIAL_PATHS = {
     "www.acc.org": ("/latest-in-cardiology/",),
     "professional.heart.org": ("/en/science-news/",),
     "cpr.heart.org": ("/en/resuscitation-science/",),
+    "www.nhs.uk": ("/symptoms/chest-pain/",),
     "www.ccfdie.org": ("/zryyxxw/",),
     "mpa.hunan.gov.cn": ("/mpa/",),
 }
