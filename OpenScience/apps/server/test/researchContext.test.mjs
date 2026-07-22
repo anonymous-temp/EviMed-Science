@@ -82,7 +82,7 @@ test("injects relevant Memos records as untrusted research context", async () =>
     assert.match(prepared.system, /个人科研记忆/);
     assert.match(prepared.system, /非可信资料/);
     assert.match(prepared.system, /真实世界证据与随机对照试验/);
-    assert.match(prepared.system, /<evimed-memory index="1" id="memo_1">/);
+    assert.match(prepared.system, /<evimed-memory index="1" id="memo_1" type="manual" kind="note" scope="user">/);
   });
 });
 

@@ -31,6 +31,12 @@ type Driver interface {
 	UpdateMemo(ctx context.Context, update *UpdateMemo) error
 	DeleteMemo(ctx context.Context, delete *DeleteMemo) error
 
+	// MemoryRecord model related methods.
+	CreateMemoryRecord(ctx context.Context, create *MemoryRecord) (*MemoryRecord, error)
+	ListMemoryRecords(ctx context.Context, find *FindMemoryRecord) ([]*MemoryRecord, error)
+	UpdateMemoryRecord(ctx context.Context, update *UpdateMemoryRecord) error
+	DeleteMemoryRecords(ctx context.Context, delete *DeleteMemoryRecord) (int64, error)
+
 	// MemoRelation model related methods.
 	UpsertMemoRelation(ctx context.Context, create *MemoRelation) (*MemoRelation, error)
 	ListMemoRelations(ctx context.Context, find *FindMemoRelation) ([]*MemoRelation, error)

@@ -463,6 +463,48 @@ func (s *ConnectServiceHandler) BatchGetLinkMetadata(ctx context.Context, req *c
 	return connect.NewResponse(resp), nil
 }
 
+// MemoryService
+
+func (s *ConnectServiceHandler) UpsertMemoryRecord(ctx context.Context, req *connect.Request[v1pb.UpsertMemoryRecordRequest]) (*connect.Response[v1pb.MemoryRecord], error) {
+	resp, err := s.APIV1Service.UpsertMemoryRecord(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) GetMemoryRecord(ctx context.Context, req *connect.Request[v1pb.GetMemoryRecordRequest]) (*connect.Response[v1pb.MemoryRecord], error) {
+	resp, err := s.APIV1Service.GetMemoryRecord(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) ListMemoryRecords(ctx context.Context, req *connect.Request[v1pb.ListMemoryRecordsRequest]) (*connect.Response[v1pb.ListMemoryRecordsResponse], error) {
+	resp, err := s.APIV1Service.ListMemoryRecords(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) DeleteMemoryRecord(ctx context.Context, req *connect.Request[v1pb.DeleteMemoryRecordRequest]) (*connect.Response[emptypb.Empty], error) {
+	resp, err := s.APIV1Service.DeleteMemoryRecord(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) PurgeMemoryRecords(ctx context.Context, req *connect.Request[v1pb.PurgeMemoryRecordsRequest]) (*connect.Response[v1pb.PurgeMemoryRecordsResponse], error) {
+	resp, err := s.APIV1Service.PurgeMemoryRecords(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // AttachmentService
 
 func (s *ConnectServiceHandler) CreateAttachment(ctx context.Context, req *connect.Request[v1pb.CreateAttachmentRequest]) (*connect.Response[v1pb.Attachment], error) {

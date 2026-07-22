@@ -605,6 +605,184 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/v1/memoryRecords:
+        get:
+            tags:
+                - MemoryService
+            operationId: MemoryService_ListMemoryRecords
+            parameters:
+                - name: namespace
+                  in: query
+                  schema:
+                    type: string
+                - name: scopes
+                  in: query
+                  schema:
+                    type: array
+                    items:
+                        enum:
+                            - MEMORY_SCOPE_UNSPECIFIED
+                            - MEMORY_SCOPE_USER
+                            - MEMORY_SCOPE_PROJECT
+                            - MEMORY_SCOPE_SESSION
+                            - MEMORY_SCOPE_ORGANIZATION
+                        type: string
+                        format: enum
+                - name: kinds
+                  in: query
+                  schema:
+                    type: array
+                    items:
+                        enum:
+                            - MEMORY_KIND_UNSPECIFIED
+                            - MEMORY_KIND_PROFILE
+                            - MEMORY_KIND_PREFERENCE
+                            - MEMORY_KIND_BEHAVIOR
+                            - MEMORY_KIND_PROJECT_FACT
+                            - MEMORY_KIND_ANALYSIS
+                            - MEMORY_KIND_DECISION
+                            - MEMORY_KIND_CORRECTION
+                            - MEMORY_KIND_FOLLOW_UP
+                            - MEMORY_KIND_RUN_SUMMARY
+                        type: string
+                        format: enum
+                - name: statuses
+                  in: query
+                  schema:
+                    type: array
+                    items:
+                        enum:
+                            - MEMORY_STATUS_UNSPECIFIED
+                            - MEMORY_STATUS_ACTIVE
+                            - MEMORY_STATUS_PENDING
+                            - MEMORY_STATUS_SUPERSEDED
+                            - MEMORY_STATUS_ARCHIVED
+                        type: string
+                        format: enum
+                - name: scopeId
+                  in: query
+                  schema:
+                    type: string
+                - name: query
+                  in: query
+                  schema:
+                    type: string
+                - name: pageSize
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: pageToken
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMemoryRecordsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/memoryRecords/{memoryRecord}:
+        get:
+            tags:
+                - MemoryService
+            operationId: MemoryService_GetMemoryRecord
+            parameters:
+                - name: memoryRecord
+                  in: path
+                  description: The memoryRecord id.
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MemoryRecord'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - MemoryService
+            operationId: MemoryService_DeleteMemoryRecord
+            parameters:
+                - name: memoryRecord
+                  in: path
+                  description: The memoryRecord id.
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content: {}
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/memoryRecords:purge:
+        post:
+            tags:
+                - MemoryService
+            operationId: MemoryService_PurgeMemoryRecords
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PurgeMemoryRecordsRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PurgeMemoryRecordsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/v1/memoryRecords:upsert:
+        post:
+            tags:
+                - MemoryService
+            operationId: MemoryService_UpsertMemoryRecord
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertMemoryRecordRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MemoryRecord'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
     /api/v1/memos:
         get:
             tags:
@@ -3126,6 +3304,15 @@ components:
                     items:
                         $ref: '#/components/schemas/MemoShare'
                     description: The list of share links.
+        ListMemoryRecordsResponse:
+            type: object
+            properties:
+                memoryRecords:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MemoryRecord'
+                nextPageToken:
+                    type: string
         ListMemosResponse:
             type: object
             properties:
@@ -3385,6 +3572,163 @@ components:
                     type: string
                     description: The title extracted from the first H1 heading, if present.
             description: Computed properties of a memo.
+        MemoryEvidence:
+            required:
+                - sourceType
+                - sourceRef
+                - quote
+                - observedTime
+            type: object
+            properties:
+                sourceType:
+                    type: string
+                sourceRef:
+                    type: string
+                quote:
+                    type: string
+                observedTime:
+                    type: string
+                    format: date-time
+                weight:
+                    type: number
+                    format: double
+                fingerprint:
+                    readOnly: true
+                    type: string
+        MemoryRecord:
+            required:
+                - namespace
+                - scope
+                - kind
+                - key
+                - value
+                - origin
+                - status
+            type: object
+            properties:
+                name:
+                    type: string
+                namespace:
+                    type: string
+                scope:
+                    enum:
+                        - MEMORY_SCOPE_UNSPECIFIED
+                        - MEMORY_SCOPE_USER
+                        - MEMORY_SCOPE_PROJECT
+                        - MEMORY_SCOPE_SESSION
+                        - MEMORY_SCOPE_ORGANIZATION
+                    type: string
+                    format: enum
+                scopeId:
+                    type: string
+                kind:
+                    enum:
+                        - MEMORY_KIND_UNSPECIFIED
+                        - MEMORY_KIND_PROFILE
+                        - MEMORY_KIND_PREFERENCE
+                        - MEMORY_KIND_BEHAVIOR
+                        - MEMORY_KIND_PROJECT_FACT
+                        - MEMORY_KIND_ANALYSIS
+                        - MEMORY_KIND_DECISION
+                        - MEMORY_KIND_CORRECTION
+                        - MEMORY_KIND_FOLLOW_UP
+                        - MEMORY_KIND_RUN_SUMMARY
+                    type: string
+                    format: enum
+                key:
+                    type: string
+                value:
+                    type: string
+                summary:
+                    type: string
+                origin:
+                    enum:
+                        - MEMORY_ORIGIN_UNSPECIFIED
+                        - MEMORY_ORIGIN_EXPLICIT
+                        - MEMORY_ORIGIN_INFERRED
+                        - MEMORY_ORIGIN_SYSTEM
+                        - MEMORY_ORIGIN_MANUAL
+                    type: string
+                    format: enum
+                status:
+                    enum:
+                        - MEMORY_STATUS_UNSPECIFIED
+                        - MEMORY_STATUS_ACTIVE
+                        - MEMORY_STATUS_PENDING
+                        - MEMORY_STATUS_SUPERSEDED
+                        - MEMORY_STATUS_ARCHIVED
+                    type: string
+                    format: enum
+                confidence:
+                    type: number
+                    format: double
+                importance:
+                    type: number
+                    format: double
+                sensitive:
+                    type: boolean
+                evidenceCount:
+                    readOnly: true
+                    type: integer
+                    format: int32
+                version:
+                    readOnly: true
+                    type: integer
+                    format: int32
+                createTime:
+                    readOnly: true
+                    type: string
+                    format: date-time
+                updateTime:
+                    readOnly: true
+                    type: string
+                    format: date-time
+                lastConfirmedTime:
+                    type: string
+                    format: date-time
+                expireTime:
+                    type: string
+                    format: date-time
+                evidence:
+                    readOnly: true
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MemoryEvidence'
+                revisions:
+                    readOnly: true
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MemoryRevision'
+        MemoryRevision:
+            type: object
+            properties:
+                version:
+                    readOnly: true
+                    type: integer
+                    format: int32
+                value:
+                    readOnly: true
+                    type: string
+                summary:
+                    readOnly: true
+                    type: string
+                status:
+                    readOnly: true
+                    enum:
+                        - MEMORY_STATUS_UNSPECIFIED
+                        - MEMORY_STATUS_ACTIVE
+                        - MEMORY_STATUS_PENDING
+                        - MEMORY_STATUS_SUPERSEDED
+                        - MEMORY_STATUS_ARCHIVED
+                    type: string
+                    format: enum
+                changedTime:
+                    readOnly: true
+                    type: string
+                    format: date-time
+                reason:
+                    readOnly: true
+                    type: string
         MotionMedia:
             type: object
             properties:
@@ -3482,6 +3826,19 @@ components:
             description: |-
                 PersonalAccessToken represents a long-lived token for API/script access.
                  PATs are distinct from short-lived JWT access tokens used for session authentication.
+        PurgeMemoryRecordsRequest:
+            required:
+                - namespace
+            type: object
+            properties:
+                namespace:
+                    type: string
+        PurgeMemoryRecordsResponse:
+            type: object
+            properties:
+                deletedCount:
+                    type: integer
+                    format: int32
         Reaction:
             required:
                 - contentId
@@ -3742,6 +4099,20 @@ components:
                     allOf:
                         - $ref: '#/components/schemas/Reaction'
                     description: Required. The reaction to upsert.
+        UpsertMemoryRecordRequest:
+            required:
+                - memoryRecord
+            type: object
+            properties:
+                memoryRecord:
+                    $ref: '#/components/schemas/MemoryRecord'
+                evidence:
+                    $ref: '#/components/schemas/MemoryEvidence'
+                expectedVersion:
+                    type: integer
+                    format: int32
+                reason:
+                    type: string
         User:
             required:
                 - role
@@ -4053,5 +4424,9 @@ tags:
     - name: IdentityProviderService
     - name: InstanceService
     - name: MemoService
+    - name: MemoryService
+      description: |-
+        MemoryService stores structured, evidence-backed long-term memory. It is a
+         protected API intended for trusted application integrations.
     - name: ShortcutService
     - name: UserService

@@ -110,7 +110,8 @@ test("production compose requires PostgreSQL control-plane state and a healthy p
   const envExample = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
   assert.match(compose, /evimed-postgres:\n\s+image: postgres:16\.14-bookworm/);
   assert.match(compose, /POSTGRES_PASSWORD_FILE: \/run\/secrets\/postgres-password/);
-  assert.match(compose, /evimed-memos:\n\s+image: neosmemo\/memos:0\.29\.1/);
+  assert.match(compose, /evimed-memos:\n\s+image: \$\{OPEN_SCIENCE_MEMOS_CONTAINER_IMAGE:-evimed-memos:0\.31\.1-evimed\}/);
+  assert.match(compose, /dockerfile: OpenScience\/deploy\/memos\/Dockerfile/);
   assert.match(compose, /MEMOS_DRIVER: postgres/);
   assert.match(compose, /MEMOS_DSN_FILE: \/run\/secrets\/memos-dsn/);
   assert.match(compose, /evimed-memos-bootstrap:[\s\S]*scripts\/ops\/provision-memos\.mjs/);

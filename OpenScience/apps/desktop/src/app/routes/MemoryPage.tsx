@@ -3,6 +3,7 @@ import {
   Archive,
   ArchiveRestore,
   Brain,
+  Check,
   Loader2,
   Pencil,
   Pin,
@@ -16,12 +17,17 @@ import {
 import {
   createResearchMemory,
   deleteResearchMemory,
+  deleteStructuredMemory,
+  fetchMemoryProfile,
   fetchMemoryStatus,
   hasWebApi,
   listResearchMemories,
   updateResearchMemory,
+  updateStructuredMemory,
+  type WebMemoryProfile,
   type WebMemoryStatus,
   type WebResearchMemory,
+  type WebStructuredMemory,
 } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
@@ -41,6 +47,7 @@ const statusMessages: Record<string, string> = {
   memos_access_token_file_unavailable: "Memos 令牌文件不可用",
   memos_access_token_file_permissions: "Memos 令牌文件权限不安全",
   memory_auth_failed: "Memos 身份验证失败",
+  memory_schema_unavailable: "Memos 结构化记忆版本尚未部署",
   memory_timeout: "Memos 响应超时",
   memory_unavailable: "Memos 服务暂时不可用",
 };
@@ -61,9 +68,32 @@ function actionError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+const structuredKinds = [
+  "profile",
+  "preference",
+  "behavior",
+  "project_fact",
+  "analysis",
+  "decision",
+  "correction",
+  "follow_up",
+  "run_summary",
+] as const;
+
+function profileFromRecords(records: WebStructuredMemory[]): WebMemoryProfile {
+  const groups = Object.fromEntries(structuredKinds.map((kind) => [kind, records.filter((record) => record.kind === kind)])) as WebMemoryProfile["groups"];
+  return {
+    records,
+    groups,
+    activeCount: records.filter((record) => record.status === "active").length,
+    pendingCount: records.filter((record) => record.status === "pending").length,
+  };
+}
+
 export function MemoryPage() {
   const [status, setStatus] = useState<WebMemoryStatus | null>(null);
   const [items, setItems] = useState<WebResearchMemory[]>([]);
+  const [profile, setProfile] = useState<WebMemoryProfile | null>(null);
   const [state, setState] = useState<MemoryState>("normal");
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
@@ -73,6 +103,8 @@ export function MemoryPage() {
   const [editingContent, setEditingContent] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<WebResearchMemory | null>(null);
+  const [structuredBusyId, setStructuredBusyId] = useState<string | null>(null);
+  const [pendingStructuredDelete, setPendingStructuredDelete] = useState<WebStructuredMemory | null>(null);
 
   const load = useCallback(async (targetState: MemoryState) => {
     setLoading(true);
@@ -80,13 +112,25 @@ export function MemoryPage() {
       if (!hasWebApi) {
         setStatus({ configured: false, connected: false, code: "memory_url_missing" });
         setItems([]);
+        setProfile(null);
         return;
       }
       const nextStatus = await fetchMemoryStatus();
       setStatus(nextStatus);
-      setItems(nextStatus.connected ? await listResearchMemories(targetState) : []);
+      if (nextStatus.connected) {
+        const [nextItems, nextProfile] = await Promise.all([
+          listResearchMemories(targetState),
+          fetchMemoryProfile(),
+        ]);
+        setItems(nextItems);
+        setProfile(nextProfile);
+      } else {
+        setItems([]);
+        setProfile(null);
+      }
     } catch (error) {
       setItems([]);
+      setProfile(null);
       setStatus({ configured: true, connected: false, code: "memory_unavailable" });
       toast.error(`科研记忆加载失败：${actionError(error)}`);
     } finally {
@@ -170,6 +214,42 @@ export function MemoryPage() {
     }
   };
 
+  const mutateStructured = async (
+    record: WebStructuredMemory,
+    update: Partial<Pick<WebStructuredMemory, "value" | "summary" | "status" | "importance" | "sensitive">>,
+  ) => {
+    setStructuredBusyId(record.id);
+    try {
+      const updated = await updateStructuredMemory(record, update);
+      setProfile((current) => current
+        ? profileFromRecords(current.records.map((candidate) => candidate.id === updated.id ? updated : candidate))
+        : current);
+      toast.success(update.status === "active" ? "已确认这条记忆" : "结构化记忆已更新");
+    } catch (error) {
+      toast.error(`更新失败：${actionError(error)}`);
+    } finally {
+      setStructuredBusyId(null);
+    }
+  };
+
+  const removeStructured = async () => {
+    const record = pendingStructuredDelete;
+    setPendingStructuredDelete(null);
+    if (!record) return;
+    setStructuredBusyId(record.id);
+    try {
+      await deleteStructuredMemory(record.id);
+      setProfile((current) => current
+        ? profileFromRecords(current.records.filter((candidate) => candidate.id !== record.id))
+        : current);
+      toast.success("结构化记忆已删除");
+    } catch (error) {
+      toast.error(`删除失败：${actionError(error)}`);
+    } finally {
+      setStructuredBusyId(null);
+    }
+  };
+
   const connected = status?.connected === true;
   const statusText = connected
     ? `记忆服务已连接${status.account ? ` · ${status.account}` : ""}`
@@ -201,6 +281,15 @@ export function MemoryPage() {
           <MemorySkeleton />
         ) : connected ? (
           <>
+            {profile && (
+              <MemoryProfileOverview
+                profile={profile}
+                busyId={structuredBusyId}
+                onUpdate={(record, update) => void mutateStructured(record, update)}
+                onDelete={setPendingStructuredDelete}
+              />
+            )}
+
             <section className="mt-7 overflow-hidden rounded-card border border-border bg-surface shadow-card">
               <textarea
                 value={draft}
@@ -356,7 +445,145 @@ export function MemoryPage() {
           onCancel={() => setPendingDelete(null)}
         />
       )}
+      {pendingStructuredDelete && (
+        <ConfirmDialog
+          title="删除这条结构化记忆？"
+          body="删除后，用户画像和后续科研问答都不会再使用这条信息。"
+          confirmLabel="删除"
+          onConfirm={() => void removeStructured()}
+          onCancel={() => setPendingStructuredDelete(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function MemoryProfileOverview({
+  profile,
+  busyId,
+  onUpdate,
+  onDelete,
+}: {
+  profile: WebMemoryProfile;
+  busyId: string | null;
+  onUpdate: (
+    record: WebStructuredMemory,
+    update: Partial<Pick<WebStructuredMemory, "value" | "summary" | "status">>,
+  ) => void;
+  onDelete: (record: WebStructuredMemory) => void;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
+  const sections = [
+    { title: "用户画像", records: [...profile.groups.profile, ...profile.groups.behavior] },
+    { title: "偏好习惯", records: profile.groups.preference },
+    { title: "项目事实", records: [...profile.groups.project_fact, ...profile.groups.decision] },
+    { title: "分析要素", records: [...profile.groups.analysis, ...profile.groups.correction, ...profile.groups.follow_up] },
+  ];
+
+  return (
+    <section className="mt-7" aria-label="结构化用户记忆">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="font-serif text-title font-semibold text-text">EviMed 对你的持续理解</h2>
+          <p className="mt-1 text-ui-sm text-muted">{profile.activeCount} 条已生效 · {profile.pendingCount} 条待确认；每条都有来源证据与版本记录。</p>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+        {sections.map((section) => {
+          const records = section.records.filter((record) => ["active", "pending"].includes(record.status));
+          return (
+            <article key={section.title} className="rounded-card border border-border bg-surface p-4 shadow-card">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h3 className="text-body font-semibold text-text">{section.title}</h3>
+                <span className="text-caption text-muted">{records.length}</span>
+              </div>
+              {records.length === 0 ? (
+                <p className="text-ui-sm text-muted">尚无稳定记录</p>
+              ) : (
+                <div className="space-y-3">
+                  {records.slice(0, 5).map((record) => (
+                    <div key={record.id} className="rounded-input bg-surface-2 p-3">
+                      {editingId === record.id ? (
+                        <Textarea
+                          value={editingValue}
+                          onChange={(event) => setEditingValue(event.target.value)}
+                          aria-label="修正结构化记忆"
+                          className="min-h-24 bg-bg text-ui-sm"
+                        />
+                      ) : (
+                        <p className="text-ui-sm text-text">{record.summary || record.value}</p>
+                      )}
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-muted">
+                        <span>{record.evidenceCount} 条证据</span>
+                        <span>置信度 {Math.round(record.confidence * 100)}%</span>
+                        {record.sensitive && <span className="text-error">敏感</span>}
+                        {record.status === "pending" && <span className="text-accent">待确认</span>}
+                      </div>
+                      {(record.evidence.length > 0 || record.revisions.length > 0) && (
+                        <details className="mt-2 text-caption text-muted">
+                          <summary className="cursor-pointer select-none hover:text-text">
+                            查看依据与变更
+                          </summary>
+                          <div className="mt-2 space-y-2 border-l border-border pl-2">
+                            {record.evidence.slice(-3).reverse().map((evidence) => (
+                              <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
+                                <p className="text-text/80">“{evidence.quote}”</p>
+                                <p className="mt-0.5">{evidence.sourceType} · {formatTime(evidence.observedAt)}</p>
+                              </div>
+                            ))}
+                            {record.revisions.length > 0 && (
+                              <p>已有 {record.revisions.length} 次历史修订，当前为第 {record.version} 版。</p>
+                            )}
+                          </div>
+                        </details>
+                      )}
+                      <div className="mt-2 flex justify-end gap-1">
+                        {editingId === record.id ? (
+                          <>
+                            <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>取消</Button>
+                            <Button
+                              size="sm"
+                              disabled={!editingValue.trim() || busyId === record.id}
+                              onClick={() => {
+                                onUpdate(record, { value: editingValue.trim(), summary: editingValue.trim(), status: "active" });
+                                setEditingId(null);
+                              }}
+                            >
+                              保存修正
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busyId === record.id}
+                            onClick={() => {
+                              setEditingId(record.id);
+                              setEditingValue(record.summary || record.value);
+                            }}
+                          >
+                            <Pencil size={13} aria-hidden="true" /> 修正
+                          </Button>
+                        )}
+                        {record.status === "pending" && !record.sensitive && (
+                          <Button size="sm" variant="ghost" disabled={busyId === record.id} onClick={() => onUpdate(record, { status: "active" })}>
+                            <Check size={13} aria-hidden="true" /> 确认
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" disabled={busyId === record.id} onClick={() => onDelete(record)}>
+                          <Trash2 size={13} aria-hidden="true" /> 删除
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

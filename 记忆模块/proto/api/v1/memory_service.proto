@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package memos.api.v1;
+
+import "google/api/annotations.proto";
+import "google/api/client.proto";
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "gen/api/v1";
+
+// MemoryService stores structured, evidence-backed long-term memory. It is a
+// protected API intended for trusted application integrations.
+service MemoryService {
+  rpc UpsertMemoryRecord(UpsertMemoryRecordRequest) returns (MemoryRecord) {
+    option (google.api.http) = {
+      post: "/api/v1/memoryRecords:upsert"
+      body: "*"
+    };
+  }
+
+  rpc GetMemoryRecord(GetMemoryRecordRequest) returns (MemoryRecord) {
+    option (google.api.http) = {get: "/api/v1/{name=memoryRecords/*}"};
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc ListMemoryRecords(ListMemoryRecordsRequest) returns (ListMemoryRecordsResponse) {
+    option (google.api.http) = {get: "/api/v1/memoryRecords"};
+  }
+
+  rpc DeleteMemoryRecord(DeleteMemoryRecordRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {delete: "/api/v1/{name=memoryRecords/*}"};
+    option (google.api.method_signature) = "name";
+  }
+
+  rpc PurgeMemoryRecords(PurgeMemoryRecordsRequest) returns (PurgeMemoryRecordsResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/memoryRecords:purge"
+      body: "*"
+    };
+  }
+}
+
+enum MemoryScope {
+  MEMORY_SCOPE_UNSPECIFIED = 0;
+  MEMORY_SCOPE_USER = 1;
+  MEMORY_SCOPE_PROJECT = 2;
+  MEMORY_SCOPE_SESSION = 3;
+  MEMORY_SCOPE_ORGANIZATION = 4;
+}
+
+enum MemoryKind {
+  MEMORY_KIND_UNSPECIFIED = 0;
+  MEMORY_KIND_PROFILE = 1;
+  MEMORY_KIND_PREFERENCE = 2;
+  MEMORY_KIND_BEHAVIOR = 3;
+  MEMORY_KIND_PROJECT_FACT = 4;
+  MEMORY_KIND_ANALYSIS = 5;
+  MEMORY_KIND_DECISION = 6;
+  MEMORY_KIND_CORRECTION = 7;
+  MEMORY_KIND_FOLLOW_UP = 8;
+  MEMORY_KIND_RUN_SUMMARY = 9;
+}
+
+enum MemoryOrigin {
+  MEMORY_ORIGIN_UNSPECIFIED = 0;
+  MEMORY_ORIGIN_EXPLICIT = 1;
+  MEMORY_ORIGIN_INFERRED = 2;
+  MEMORY_ORIGIN_SYSTEM = 3;
+  MEMORY_ORIGIN_MANUAL = 4;
+}
+
+enum MemoryStatus {
+  MEMORY_STATUS_UNSPECIFIED = 0;
+  MEMORY_STATUS_ACTIVE = 1;
+  MEMORY_STATUS_PENDING = 2;
+  MEMORY_STATUS_SUPERSEDED = 3;
+  MEMORY_STATUS_ARCHIVED = 4;
+}
+
+message MemoryEvidence {
+  string source_type = 1 [(google.api.field_behavior) = REQUIRED];
+  string source_ref = 2 [(google.api.field_behavior) = REQUIRED];
+  string quote = 3 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.Timestamp observed_time = 4 [(google.api.field_behavior) = REQUIRED];
+  double weight = 5;
+  string fingerprint = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message MemoryRevision {
+  int32 version = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string value = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string summary = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  MemoryStatus status = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp changed_time = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string reason = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message MemoryRecord {
+  option (google.api.resource) = {
+    type: "memos.api.v1/MemoryRecord"
+    pattern: "memoryRecords/{memory_record}"
+    name_field: "name"
+    singular: "memory_record"
+    plural: "memory_records"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string namespace = 2 [(google.api.field_behavior) = REQUIRED];
+  MemoryScope scope = 3 [(google.api.field_behavior) = REQUIRED];
+  string scope_id = 4;
+  MemoryKind kind = 5 [(google.api.field_behavior) = REQUIRED];
+  string key = 6 [(google.api.field_behavior) = REQUIRED];
+  string value = 7 [(google.api.field_behavior) = REQUIRED];
+  string summary = 8;
+  MemoryOrigin origin = 9 [(google.api.field_behavior) = REQUIRED];
+  MemoryStatus status = 10 [(google.api.field_behavior) = REQUIRED];
+  double confidence = 11;
+  double importance = 12;
+  bool sensitive = 13;
+  int32 evidence_count = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int32 version = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp create_time = 16 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp update_time = 17 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp last_confirmed_time = 18;
+  google.protobuf.Timestamp expire_time = 19;
+  repeated MemoryEvidence evidence = 20 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated MemoryRevision revisions = 21 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message UpsertMemoryRecordRequest {
+  MemoryRecord memory_record = 1 [(google.api.field_behavior) = REQUIRED];
+  MemoryEvidence evidence = 2;
+  int32 expected_version = 3;
+  string reason = 4;
+}
+
+message GetMemoryRecordRequest {
+  string name = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message ListMemoryRecordsRequest {
+  string namespace = 1 [(google.api.field_behavior) = REQUIRED];
+  repeated MemoryScope scopes = 2;
+  repeated MemoryKind kinds = 3;
+  repeated MemoryStatus statuses = 4;
+  string scope_id = 5;
+  string query = 6;
+  int32 page_size = 7;
+  string page_token = 8;
+}
+
+message ListMemoryRecordsResponse {
+  repeated MemoryRecord memory_records = 1;
+  string next_page_token = 2;
+}
+
+message DeleteMemoryRecordRequest {
+  string name = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message PurgeMemoryRecordsRequest {
+  string namespace = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message PurgeMemoryRecordsResponse {
+  int32 deleted_count = 1;
+}

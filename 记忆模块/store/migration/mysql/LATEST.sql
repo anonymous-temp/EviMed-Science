@@ -123,3 +123,34 @@ CREATE TABLE `user_identity` (
 );
 
 CREATE INDEX `idx_user_identity_user_id` ON `user_identity`(`user_id`);
+
+-- memory_record
+CREATE TABLE `memory_record` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `uid` VARCHAR(36) NOT NULL,
+  `creator_id` INT NOT NULL,
+  `namespace` VARCHAR(128) NOT NULL,
+  `scope_type` VARCHAR(32) NOT NULL,
+  `scope_id` VARCHAR(255) NOT NULL DEFAULT '',
+  `kind` VARCHAR(32) NOT NULL,
+  `memory_key` VARCHAR(255) NOT NULL,
+  `value` LONGTEXT NOT NULL,
+  `summary` TEXT NOT NULL,
+  `origin` VARCHAR(32) NOT NULL,
+  `status` VARCHAR(32) NOT NULL,
+  `confidence` DOUBLE NOT NULL DEFAULT 0,
+  `importance` DOUBLE NOT NULL DEFAULT 0,
+  `sensitive` BOOLEAN NOT NULL DEFAULT FALSE,
+  `evidence_count` INT NOT NULL DEFAULT 0,
+  `version` INT NOT NULL DEFAULT 1,
+  `created_ts` BIGINT NOT NULL DEFAULT (UNIX_TIMESTAMP()),
+  `updated_ts` BIGINT NOT NULL DEFAULT (UNIX_TIMESTAMP()),
+  `last_confirmed_ts` BIGINT NULL,
+  `expires_ts` BIGINT NULL,
+  `payload` JSON NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_memory_record_uid` (`uid`),
+  UNIQUE KEY `uk_memory_record_canonical` (`creator_id`, `namespace`, `scope_type`, `scope_id`, `kind`, `memory_key`),
+  KEY `idx_memory_record_namespace_status` (`creator_id`, `namespace`, `status`, `updated_ts`),
+  KEY `idx_memory_record_scope` (`creator_id`, `namespace`, `scope_type`, `scope_id`, `kind`)
+);
