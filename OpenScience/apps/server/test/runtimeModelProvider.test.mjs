@@ -99,6 +99,18 @@ test("runtime bootstrap safely merges a managed DeepSeek provider without persis
   assert.doesNotMatch(JSON.stringify(saved), /must-never-be-written/);
 });
 
+test("docker-isolated runtimes cannot invoke the dead direct web fetch path", async (t) => {
+  const { rootDir, project, plan } = await fixture();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  const isolatedPlan = { ...plan, sandboxMode: "docker" };
+  await syncRuntimeModelProvider(config(), project, isolatedPlan, {
+    nowSeconds: 2_000,
+    jti: "runtime-token-isolated",
+  });
+  const saved = JSON.parse(await readFile(path.join(plan.xdgConfigDir, "opencode", "opencode.json"), "utf8"));
+  assert.equal(saved.permission.webfetch, "deny");
+});
+
 test("runtime bootstrap rejects a foreign reserved provider and rotates only marker-owned tokens", async (t) => {
   const { rootDir, project, plan } = await fixture();
   t.after(() => rm(rootDir, { recursive: true, force: true }));

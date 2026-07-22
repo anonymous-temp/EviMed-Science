@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -12,10 +13,14 @@ MODULE_FILE = ROOT / "open_access_fulltext.py"
 
 
 def load_module():
+    sys.path.insert(0, str(ROOT))
     spec = importlib.util.spec_from_file_location("evimed_open_access_fulltext_test", MODULE_FILE)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    try:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.pop(0)
 
 
 XML = b"""<?xml version="1.0" encoding="UTF-8"?>
@@ -86,6 +91,25 @@ class OpenAccessFullTextTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["error"]["code"], "full_text_not_available")
         self.assertFalse((self.workspace / ".evimed-sources").exists())
+
+    def test_request_uses_the_managed_public_source_gateway_transport(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+        response.headers.get.return_value = "12"
+        response.headers.get_content_type.return_value = "application/xml"
+        response.read.return_value = b"<article/>"
+        with mock.patch.object(self.module.public_sources, "_open_remote", return_value=response) as opened:
+            payload = self.module._request_bytes(
+                "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC1/fullTextXML",
+                "application/xml",
+            )
+        self.assertEqual(payload, b"<article/>")
+        opened.assert_called_once_with(
+            "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC1/fullTextXML",
+            ("application/xml",),
+            timeout_seconds=60,
+        )
 
     def test_workspace_symlink_is_rejected(self):
         target = pathlib.Path(self.temp.name) / "target"

@@ -69,6 +69,14 @@ describe("summarizeGroup", () => {
       ]),
     ).toBe("执行了 3 个命令，创建了 1 个文件");
   });
+
+  it("distinguishes successful, active, and failed page retrieval", () => {
+    expect(summarizeGroup([
+      tool({ verb: "Fetched", tool: "webfetch" }),
+      tool({ verb: "Fetching", tool: "webfetch", status: "running" }),
+      tool({ verb: "Fetch failed", tool: "webfetch", status: "failed" }),
+    ])).toBe("获取了 1 个页面，正在获取 1 个页面，1 个页面获取失败");
+  });
 });
 
 describe("ToolGroup", () => {

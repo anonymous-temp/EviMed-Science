@@ -33,6 +33,7 @@ const publicManifestFields = Object.freeze([
 export const EVIMED_AGENT_TOOL_IDS = new Set([
   "evimed_data_source_catalog",
   "evimed_biomedical_source_search",
+  "evimed_official_page_fetch",
   "evimed_open_access_full_text",
   "evimed_term_normalize",
   "evimed_literature_search",
@@ -76,6 +77,7 @@ export const EVIMED_AGENT_DATA_SOURCES = new Set([
 export const EVIMED_AGENT_COMPLETION_CHECKS = new Set([
   "requiredOutputsExist",
   "citationsResolvable",
+  "evidenceClaimsTraceable",
 ]);
 
 function registryError(message, code = "agent_package_invalid") {

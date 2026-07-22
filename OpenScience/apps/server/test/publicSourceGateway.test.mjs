@@ -71,6 +71,35 @@ test("public-source gateway authenticates the runtime and forwards bounded offic
   }
 });
 
+test("public-source gateway permits bounded HTML only on approved official-document paths", async (t) => {
+  let fetchCalls = 0;
+  const server = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), {
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      return new Response("<main><h1>Guideline</h1><p>Verified official content.</p></main>", {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    },
+  }));
+  const base = await listen(server);
+  t.after(() => close(server));
+
+  const allowed = await gatewayRequest(base, {
+    url: "https://professional.heart.org/en/science-news/2024-aha-and-american-red-cross-guidelines-for-first-aid",
+    accept: ["text/html"],
+  });
+  assert.equal(allowed.status, 200);
+  assert.match(await allowed.text(), /Verified official content/);
+
+  const wrongPath = await gatewayRequest(base, {
+    url: "https://professional.heart.org/unreviewed/path",
+    accept: ["text/html"],
+  });
+  assert.equal(wrongPath.status, 403);
+  assert.equal((await wrongPath.json()).error.code, "public_source_document_path_forbidden");
+  assert.equal(fetchCalls, 1);
+});
+
 test("public-source gateway permits only fixed read-only GraphQL operations", async (t) => {
   let observed;
   const server = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), {

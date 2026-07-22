@@ -32,7 +32,7 @@ await fs.writeFile(modelConfig, JSON.stringify({
 
 const handler = createPublicSourceGatewayHandler({
   publicSourceGatewayTimeoutMs: 60_000,
-  publicSourceGatewayMaxResponseBytes: 4 * 1024 * 1024,
+  publicSourceGatewayMaxResponseBytes: 16 * 1024 * 1024,
 }, {
   assertActiveModelGatewayToken(token) {
     if (token !== auditToken) throw new Error("inactive audit runtime");

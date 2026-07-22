@@ -79,6 +79,17 @@ describe("toolPresentation", () => {
     expect(toolPresentation("mcp_thing", "did something", {})).toEqual({ title: "did something" });
     expect(toolPresentation("mcp_thing", "", {})).toEqual({ title: "mcp_thing" });
   });
+
+  it("never labels a failed or in-flight web fetch as fetched", () => {
+    expect(toolPresentation("webfetch", "", { url: "https://example.org/paper" }, "running")).toEqual({
+      verb: "Fetching",
+      title: "https://example.org/paper",
+    });
+    expect(toolPresentation("webfetch", "", { url: "https://example.org/paper" }, "failed")).toEqual({
+      verb: "Fetch failed",
+      title: "https://example.org/paper",
+    });
+  });
 });
 
 describe("datedWorkspaceName", () => {
@@ -105,6 +116,24 @@ describe("foldEvent", () => {
     ]);
     expect(s.blocks).toHaveLength(1);
     expect(s.blocks[0]).toMatchObject({ kind: "tool-call", status: "success", title: "search (done)" });
+  });
+
+  it("surfaces the transport error and failed verb for a failed live web fetch", () => {
+    const s = foldAll([{
+      type: "tool.updated",
+      sessionId: S,
+      callId: "web-1",
+      tool: "webfetch",
+      status: "failed",
+      input: { url: "https://example.org/guideline" },
+      output: "Transport error (GET https://example.org/guideline)",
+    }]);
+    expect(s.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      status: "failed",
+      verb: "Fetch failed",
+      output: "Transport error (GET https://example.org/guideline)",
+    });
   });
 
   it("does not render interactive question/permission tools as thread rows", () => {
@@ -268,6 +297,28 @@ describe("historyToThread", () => {
     const t = historyToThread(msgs);
     expect(t.blocks.map((b) => b.kind)).toEqual(["user", "agent", "tool-call"]);
     expect(t.blocks[2]).toMatchObject({ kind: "tool-call", status: "success" });
+  });
+
+  it("restores failed web fetch history with its error instead of reporting success", () => {
+    const t = historyToThread([{
+      role: "assistant",
+      parts: [{
+        type: "tool",
+        tool: "webfetch",
+        state: {
+          status: "error",
+          title: "guideline",
+          input: { url: "https://example.org/guideline" },
+          error: "Transport error (GET https://example.org/guideline)",
+        },
+      }],
+    }]);
+    expect(t.blocks[0]).toMatchObject({
+      kind: "tool-call",
+      status: "failed",
+      verb: "Fetch failed",
+      output: "Transport error (GET https://example.org/guideline)",
+    });
   });
 
   it("renders a user-run '!' shell turn like the live path: '! cmd' + inline output", () => {

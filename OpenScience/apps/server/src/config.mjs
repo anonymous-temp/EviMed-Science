@@ -691,7 +691,7 @@ export function loadConfig(overrides = {}) {
     publicSourceGatewayMaxResponseBytes: Number(
       overrides.publicSourceGatewayMaxResponseBytes ??
       process.env.OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES ??
-      4 * 1024 * 1024,
+      16 * 1024 * 1024,
     ),
     modelGatewayTimeoutMs: Number(
       overrides.modelGatewayTimeoutMs ?? process.env.OPEN_SCIENCE_MODEL_GATEWAY_TIMEOUT_MS ?? 300_000,

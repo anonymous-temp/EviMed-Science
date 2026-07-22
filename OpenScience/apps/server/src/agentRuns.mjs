@@ -8,11 +8,18 @@ import {
   withProjectStorageMutation,
   writeFileAtomicNoFollow,
 } from "./security.mjs";
+import { validateClinicalEvidencePackage } from "./clinicalEvidenceQuality.mjs";
 
 const ledgerFileName = "runs.jsonl";
 const terminalStatuses = new Set(["succeeded", "failed", "canceled"]);
 const startFields = new Set(["sessionId"]);
-const dispatchFields = new Set(["sessionId", "dispatchId"]);
+const dispatchFields = new Set([
+  "sessionId",
+  "dispatchId",
+  "effectiveAgentId",
+  "effectiveAgentVersion",
+  "effectiveRuntimeAgent",
+]);
 const dispatchStatuses = new Set(["dispatching", "accepted", "unknown", "rejected"]);
 const defaultMaxRuns = 1000;
 const defaultMaxBytes = 1024 * 1024;
@@ -45,9 +52,25 @@ function normalizeStartInput(input) {
 function normalizeDispatchInput(input) {
   assertObject(input, "Agent run dispatch payload must be an object.");
   assertOnlyFields(input, dispatchFields);
+  const routeValues = [input.effectiveAgentId, input.effectiveAgentVersion, input.effectiveRuntimeAgent];
+  if (routeValues.some((value) => value != null) && !routeValues.every((value) => typeof value === "string" && value.trim())) {
+    throw invalid("Effective specialist identity must be supplied as one complete triple.");
+  }
+  if (input.effectiveAgentId != null && !/^[a-z0-9][a-z0-9-]{1,62}$/.test(input.effectiveAgentId)) {
+    throw invalid("Effective specialist id is invalid.");
+  }
+  if (input.effectiveAgentVersion != null && !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(input.effectiveAgentVersion)) {
+    throw invalid("Effective specialist version is invalid.");
+  }
+  if (input.effectiveRuntimeAgent != null && !/^evimed-[a-z0-9][a-z0-9-]{1,62}$/.test(input.effectiveRuntimeAgent)) {
+    throw invalid("Effective runtime agent is invalid.");
+  }
   return {
     sessionId: safeId(input.sessionId, "research session id"),
     dispatchId: safeId(input.dispatchId, "agent run dispatch id"),
+    effectiveAgentId: input.effectiveAgentId ?? null,
+    effectiveAgentVersion: input.effectiveAgentVersion ?? null,
+    effectiveRuntimeAgent: input.effectiveRuntimeAgent ?? null,
   };
 }
 
@@ -131,6 +154,18 @@ function foldEvents(events) {
         (specialist && ![event.agentId, event.agentVersion, event.runtimeAgent].every((item) => typeof item === "string" && item)) ||
         (!specialist && [event.agentId, event.agentVersion, event.runtimeAgent].some((item) => item !== null))
       ) throw corrupt("Agent run identity is invalid.");
+      const effectiveAgentId = event.effectiveAgentId ?? (specialist ? event.agentId : null);
+      const effectiveAgentVersion = event.effectiveAgentVersion ?? (specialist ? event.agentVersion : null);
+      const effectiveRuntimeAgent = event.effectiveRuntimeAgent ?? (specialist ? event.runtimeAgent : null);
+      const effectiveValues = [effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent];
+      if (effectiveValues.some((item) => item !== null) && !effectiveValues.every((item) => typeof item === "string" && item)) {
+        throw corrupt("Agent run effective identity is invalid.");
+      }
+      if (specialist && (
+        effectiveAgentId !== event.agentId
+        || effectiveAgentVersion !== event.agentVersion
+        || effectiveRuntimeAgent !== event.runtimeAgent
+      )) throw corrupt("Specialist run effective identity does not match its session binding.");
       if (typeof event.model !== "string" || !event.model) throw corrupt("Agent run model is invalid.");
       const startedAt = storedTimestamp(event.startedAt, "startedAt");
       const dispatchId = event.dispatchId == null ? null : safeStoredId(event.dispatchId, "dispatchId");
@@ -145,6 +180,9 @@ function foldEvents(events) {
         agentId: event.agentId,
         agentVersion: event.agentVersion,
         runtimeAgent: event.runtimeAgent,
+        effectiveAgentId,
+        effectiveAgentVersion,
+        effectiveRuntimeAgent,
         model: event.model,
         status: "running",
         createdAt: storedTimestamp(event.createdAt, "createdAt"),
@@ -243,14 +281,30 @@ function assistantFinished(message) {
   return Boolean(message?.info?.time?.completed ?? message?.completed ?? message?.info?.error);
 }
 
-function terminalFromMessage(message) {
-  const error = message?.info?.error;
-  const serialized = JSON.stringify(error ?? "").toLowerCase();
-  if (serialized.includes("abort") || serialized.includes("cancel")) {
-    return { status: "canceled", errorCode: "runtime_canceled" };
+function parsedToolResultStatus(part) {
+  const output = part?.state?.output;
+  if (typeof output !== "string" || !output.trim().startsWith("{")) return null;
+  try {
+    const value = JSON.parse(output);
+    return value && typeof value === "object" && typeof value.status === "string" ? value.status : null;
+  } catch {
+    return null;
   }
-  if (error || (message?.parts ?? []).some((part) => part?.state?.status === "error")) {
-    return { status: "failed", errorCode: "runtime_session_error" };
+}
+
+function terminalFromMessages(messages) {
+  for (const message of messages) {
+    const error = message?.info?.error;
+    const serialized = JSON.stringify(error ?? "").toLowerCase();
+    if (serialized.includes("abort") || serialized.includes("cancel")) {
+      return { status: "canceled", errorCode: "runtime_canceled" };
+    }
+    if (error) return { status: "failed", errorCode: "runtime_session_error" };
+    if ((message?.parts ?? []).some((part) => (
+      part?.type === "tool" && (part?.state?.status === "error" || parsedToolResultStatus(part) === "error")
+    ))) {
+      return { status: "failed", errorCode: "runtime_tool_error" };
+    }
   }
   return { status: "succeeded", errorCode: null };
 }
@@ -290,11 +344,37 @@ async function existingArtifacts(project, candidates) {
   return result;
 }
 
+async function readRequiredFile(project, relative) {
+  let opened;
+  try {
+    opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
+    if (!opened.stat.isFile() || opened.stat.size <= 0 || opened.stat.size > 8 * 1024 * 1024) return null;
+    return { text: await opened.handle.readFile("utf8"), stat: opened.stat };
+  } catch {
+    return null;
+  } finally {
+    await opened?.handle.close().catch(() => {});
+  }
+}
+
+function validExplicitCitations(text) {
+  const urls = [...String(text).matchAll(/https?:\/\/[^\s)\]}>"']+/g)].map((match) => match[0]);
+  return urls.every((value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && !url.username && !url.password && !url.hash
+        && !(url.hostname === "www.evimed.com" && url.pathname.startsWith("/api-evimed/"));
+    } catch {
+      return false;
+    }
+  });
+}
+
 async function requiredSpecialistArtifacts(project, run, agentRegistry) {
-  if (run.mode !== "specialist") return { artifacts: [], errorCode: null };
+  if (!run.effectiveAgentId) return { artifacts: [], errorCode: null };
   const registry = await agentRegistry;
-  const agent = registry?.get?.(run.agentId);
-  if (!agent || agent.version !== run.agentVersion) {
+  const agent = registry?.get?.(run.effectiveAgentId);
+  if (!agent || agent.version !== run.effectiveAgentVersion || agent.runtimeAgent !== run.effectiveRuntimeAgent) {
     return { artifacts: [], errorCode: "specialist_contract_unavailable" };
   }
   if (!agent.completionChecks.includes("requiredOutputsExist")) {
@@ -302,19 +382,61 @@ async function requiredSpecialistArtifacts(project, run, agentRegistry) {
   }
   const required = agent.outputs.filter((output) => output.required).map((output) => output.path);
   const artifacts = [];
+  const files = new Map();
   for (const relative of required) {
-    let opened;
-    try {
-      opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
-      if (!opened.stat.isFile() || opened.stat.size <= 0) {
-        return { artifacts, errorCode: "specialist_required_output_missing" };
-      }
-      artifacts.push(relative);
-    } catch {
+    const file = await readRequiredFile(project, relative);
+    if (!file) {
       return { artifacts, errorCode: "specialist_required_output_missing" };
-    } finally {
-      await opened?.handle.close().catch(() => {});
     }
+    if (file.stat.mtimeMs + 1_000 < Date.parse(run.startedAt)) {
+      return { artifacts, errorCode: "specialist_required_output_stale" };
+    }
+    files.set(relative, file.text);
+    artifacts.push(relative);
+  }
+  if (agent.completionChecks.includes("citationsResolvable")) {
+    const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
+    if (markdown.some((text) => !validExplicitCitations(text))) {
+      return { artifacts, errorCode: "specialist_citation_invalid" };
+    }
+  }
+  if (agent.completionChecks.includes("evidenceClaimsTraceable")) {
+    let matrix;
+    let runReceipt;
+    try {
+      matrix = JSON.parse(files.get("clinical-evidence-matrix.json") ?? "");
+      runReceipt = JSON.parse(files.get("clinical-evidence-run.json") ?? "");
+    } catch {
+      return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+    }
+    const sourceArtifacts = new Map();
+    const sourcePaths = runReceipt?.successfulSourceArtifacts;
+    if (!Array.isArray(sourcePaths) || sourcePaths.length > 32) {
+      return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+    }
+    for (const rawPath of sourcePaths) {
+      let relative;
+      try {
+        relative = normalizeWorkspaceRelativePath(rawPath, "source artifact path");
+      } catch {
+        return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+      }
+      if (relative !== rawPath || !relative.startsWith(".evimed-sources/")) {
+        return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+      }
+      const sourceFile = await readRequiredFile(project, relative);
+      if (!sourceFile || sourceFile.stat.mtimeMs + 1_000 < Date.parse(run.startedAt)) {
+        return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+      }
+      sourceArtifacts.set(relative, sourceFile.text);
+    }
+    const validation = validateClinicalEvidencePackage({
+      reportText: files.get("clinical-evidence-report.md") ?? "",
+      matrix,
+      runReceipt,
+      sourceArtifacts,
+    });
+    if (!validation.valid) return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
   }
   return { artifacts, errorCode: null };
 }
@@ -386,7 +508,13 @@ export class AgentRunStore {
     return (await this.reserveRun(project, session, { baselineCursor, dispatchId })).run;
   }
 
-  async reserveRun(project, session, { baselineCursor, dispatchId = null } = {}) {
+  async reserveRun(project, session, {
+    baselineCursor,
+    dispatchId = null,
+    effectiveAgentId = session.mode === "specialist" ? session.agentId : null,
+    effectiveAgentVersion = session.mode === "specialist" ? session.agentVersion : null,
+    effectiveRuntimeAgent = session.mode === "specialist" ? session.runtimeAgent : null,
+  } = {}) {
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const runs = foldEvents(events);
@@ -413,6 +541,9 @@ export class AgentRunStore {
         agentId: session.agentId,
         agentVersion: session.agentVersion,
         runtimeAgent: session.runtimeAgent,
+        effectiveAgentId,
+        effectiveAgentVersion,
+        effectiveRuntimeAgent,
         model: this.model,
         createdAt: now,
         startedAt: now,
@@ -441,7 +572,13 @@ export class AgentRunStore {
   }
 
   async dispatch(project, input, sendPrompt) {
-    const { sessionId, dispatchId } = normalizeDispatchInput(input);
+    const {
+      sessionId,
+      dispatchId,
+      effectiveAgentId,
+      effectiveAgentVersion,
+      effectiveRuntimeAgent,
+    } = normalizeDispatchInput(input);
     if (typeof sendPrompt !== "function") throw new TypeError("Agent run dispatch requires a prompt sender.");
     const existing = (await this.list(project)).find((run) => run.dispatchId === dispatchId);
     if (existing) return this.existingDispatch(project, existing);
@@ -449,7 +586,14 @@ export class AgentRunStore {
     if (!session) throw new HttpError(404, "research_session_not_found", "Research session not found.");
     await this.reconcileSession(project, sessionId);
     const baselineCursor = await this.captureBaseline(project, sessionId);
-    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId });
+    const selected = session.mode === "specialist"
+      ? {
+          effectiveAgentId: session.agentId,
+          effectiveAgentVersion: session.agentVersion,
+          effectiveRuntimeAgent: session.runtimeAgent,
+        }
+      : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent };
+    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, ...selected });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
@@ -580,7 +724,7 @@ export class AgentRunStore {
       return run;
     }
     if (sessionStatus !== "idle") return run;
-    const terminal = terminalFromMessage(assistants.at(-1));
+    const terminal = terminalFromMessages(assistants);
     let runtimeWorkspaceRoot;
     try {
       runtimeWorkspaceRoot = await this.runtimeWorkspaceRoot(project);
@@ -591,7 +735,7 @@ export class AgentRunStore {
       assistants.flatMap((message) => artifactCandidates(message, runtimeWorkspaceRoot)),
     )].slice(0, maxArtifacts).sort();
     let artifacts = await existingArtifacts(project, candidates);
-    if (terminal.status === "succeeded" && run.mode === "specialist") {
+    if (terminal.status === "succeeded" && run.effectiveAgentId) {
       let completion;
       try {
         completion = await requiredSpecialistArtifacts(project, run, this.agentRegistry);

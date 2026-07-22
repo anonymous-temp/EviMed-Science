@@ -8,10 +8,11 @@ import re
 import secrets
 import stat
 import urllib.parse
-import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
+
+import public_sources
 
 
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
@@ -27,12 +28,15 @@ class FullTextError(Exception):
 
 
 def _request_bytes(url: str, accept: str) -> bytes:
-    request = urllib.request.Request(
-        url,
-        headers={"Accept": accept, "User-Agent": USER_AGENT},
-    )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with public_sources._open_remote(url, (accept,), timeout_seconds=60) as response:
+            content_type = response.headers.get_content_type()
+            if content_type != accept:
+                raise FullTextError(
+                    "full_text_upstream_invalid",
+                    "Europe PMC returned unexpected content type %s." % content_type,
+                    True,
+                )
             length = response.headers.get("Content-Length")
             if length and int(length) > MAX_RESPONSE_BYTES:
                 raise FullTextError("full_text_too_large", "The open-access full text exceeds the managed size limit.")

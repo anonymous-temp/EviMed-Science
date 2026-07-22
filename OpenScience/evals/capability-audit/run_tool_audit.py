@@ -31,6 +31,9 @@ TASK_FIXTURES = {
     "evimed_biomedical_source_search": {
         "source": "pubmed", "query": "aspirin cardiovascular prevention randomized trial", "limit": 2,
     },
+    "evimed_official_page_fetch": {
+        "url": "https://professional.heart.org/en/science-news/2024-aha-and-american-red-cross-guidelines-for-first-aid",
+    },
     "evimed_open_access_full_text": {"identifier": "PMC8010506"},
     "evimed_term_normalize": {"term": "心肌梗死", "domain": "disease"},
     "evimed_drug_term_normalize": {"term": "acetaminophen"},

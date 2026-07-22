@@ -12,6 +12,7 @@ import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore } from "./agentRuns.mjs";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
+import { routeOpenDomainSpecialist } from "./specialistRouting.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
@@ -761,9 +762,17 @@ export function createWebApiApp(overrides = {}) {
             "DeepSeek V4 Pro is not configured on this EviMed server.",
           );
         }
+        const registry = await agentRegistry;
+        const boundSession = await researchSessions.get(ctx.project, body.sessionId);
+        const routedSpecialist = boundSession?.mode === "open-domain"
+          ? routeOpenDomainSpecialist(text, registry.list())
+          : null;
         const run = await agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
+          effectiveAgentId: routedSpecialist?.agentId ?? null,
+          effectiveAgentVersion: routedSpecialist?.agentVersion ?? null,
+          effectiveRuntimeAgent: routedSpecialist?.runtimeAgent ?? null,
         }, async (session) => {
           let memories = [];
           let memoryError = null;
@@ -793,12 +802,13 @@ export function createWebApiApp(overrides = {}) {
             query: text,
             memories,
             memoryError,
-            specialists: session.mode === "open-domain" ? (await agentRegistry).list() : [],
+            specialists: session.mode === "open-domain" ? registry.list() : [],
+            routedSpecialist,
           });
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text,
             system: prepared.system,
-            agent: session.runtimeAgent,
+            agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent,
             model: `deepseek/${config.deepseekModel}`,
           });
         });

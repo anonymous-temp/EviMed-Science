@@ -307,7 +307,7 @@ export async function prepareResearchContext(
   project,
   session,
   config,
-  { query = "", memories = [], memoryError = null, specialists = [] } = {},
+  { query = "", memories = [], memoryError = null, specialists = [], routedSpecialist = null } = {},
 ) {
   const knowledge = await syncKnowledgeBase(project, config);
   const knowledgeIndex = await indexKnowledgeBase(project, config, knowledge);
@@ -351,6 +351,12 @@ export async function prepareResearchContext(
         "若没有专项实质匹配，保持开放域回答；工具未配置、任务失败或证据不足时保留真实状态，不得假装已执行。",
       ].join("\n")
     : "专项科研会话必须继续遵循已注册专项 Agent 的 SKILL.md、工具边界和交付物约束。";
+  const routingInstruction = routedSpecialist
+    ? [
+        `平台已根据当前问题确定性路由到专项 Agent：${escapeContext(routedSpecialist.agentId)}（${escapeContext(routedSpecialist.runtimeAgent)}）。`,
+        "必须加载并完整执行该专项的 SKILL.md；只有满足其必需交付物和完成门禁时才能声称本轮成功。不得退回普通开放域回答来绕过专项契约。",
+      ].join("\n")
+    : "本轮未命中确定性专项路由；若后续发现任务与已注册专项实质匹配，仍应加载对应 Skill。";
 
   return {
     knowledge,
@@ -376,6 +382,8 @@ export async function prepareResearchContext(
       memoryInstruction,
       "开放域问题保持自主科研能力。",
       specialistInstruction,
+      routingInstruction,
+      "隔离运行时不得调用原生 webfetch。官方医学、指南、循证评价或监管网页必须通过 evimed_official_page_fetch 获取，并以落盘正文、抓取时间和内容哈希作为成功凭证；工具返回 error 时不得写成 Fetched 或当作已读取。",
       "不得仅凭题名或检索元数据推断研究设计、证据等级、效应量或因果结论；来源未提供摘要或全文时，只能陈述题名、元数据和检索相关性。",
       "需要开放获取论文原文时，优先用 evimed_open_access_full_text 将完整 XML 和 Markdown 写入当前工作区，再用 read 分段读取；不得为了读取本地工具输出而启动 task 子会话，也不得要求子会话大段逐字复述原文。",
       "当用户要求基于某一篇已发表论文题目重写、复现或评述正文时，必须先调用 citation-integrity skill，并只以题名、DOI/PMID/PMCID 完全匹配的已发表版本全文为事实底稿。配套论文、预印本、引文、检索页和第三方摘要可以作为线索，但其内容不得写成目标论文自身的方法或结果。",

@@ -62,6 +62,10 @@ export function summarizeGroup(blocks: ToolCallBlock[]): string {
         return "列出了文件";
       case "Fetched":
         return `获取了 ${n} 个页面`;
+      case "Fetching":
+        return `正在获取 ${n} 个页面`;
+      case "Fetch failed":
+        return `${n} 个页面获取失败`;
       default:
         return `执行了 ${n} 个步骤`;
     }

@@ -169,6 +169,7 @@ export interface HistoryPart {
     title?: string;
     input?: Record<string, unknown>;
     output?: string;
+    error?: string;
     /** Epoch ms the tool started/finished — persisted with the part. */
     time?: { start?: number; end?: number };
     /** Tool-specific extras (bash stdout tail, edit diff, task session link). */
@@ -267,6 +268,14 @@ export interface OpenCodeToolPart {
   type: "tool";
   callID: string;
   tool: string;
-  state: { status: "pending" | "running" | "completed" | "error"; title?: string };
+  state: {
+    status: "pending" | "running" | "completed" | "error";
+    title?: string;
+    input?: Record<string, unknown>;
+    output?: string;
+    error?: string;
+    metadata?: { diff?: string };
+    time?: { start?: number; end?: number };
+  };
 }
 export type OpenCodePart = OpenCodeTextPart | OpenCodeToolPart | { type: string };
