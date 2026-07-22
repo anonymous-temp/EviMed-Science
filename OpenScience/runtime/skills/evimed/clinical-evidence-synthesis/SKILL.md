@@ -15,12 +15,13 @@ Use this skill for clinical evidence questions that need an academic analysis, i
    - an academic evidence analysis; and
    - a brief safety-first practical answer for the original question.
 4. Retrieve evidence before drafting material claims. Use `evimed_official_page_fetch` for approved guideline, professional-society, evidence-review, or regulatory pages. Use `evimed_open_access_full_text` when a PMID, PMCID, or DOI has an open full text. Read the written source artifacts directly.
-   - For acute pressure-like chest symptoms involving Suxiao Jiuxin Wan, start with this verified allowlisted set instead of guessing publisher URLs:
+   - For acute pressure-like chest symptoms involving Suxiao Jiuxin Wan, retrieve exactly this verified allowlisted set with `evimed_official_page_fetch`:
      - `https://www.acc.org/latest-in-cardiology/ten-points-to-remember/2022/10/10/23/15/2022-acc-expert-consensus-on-chest-pain`
-     - `https://professional.heart.org/en/science-news/2024-aha-and-american-red-cross-guidelines-for-first-aid`
+     - `https://www.nhs.uk/symptoms/chest-pain/`
      - `https://www.cochrane.org/zh-hans/evidence/CD004473_chinese-herbal-medicine-suxiao-jiuxin-wan-angina-pectoris`
      - `https://www.ccfdie.org/zryyxxw/zxdt/webinfo/2021/01/1608326624840701.htm`
-   - Do not substitute `ahajournals.org` or `cochranelibrary.com` URLs for the allowlisted pages. Do not call the open-full-text tool unless the record is confirmed open access. A failed optional retrieval fails the run, so prefer the smallest sufficient authoritative source set.
+   - For that fixed acute-chest/Suxiao case, do not call literature, guideline, drug-label, biomedical, open-full-text, deduplication, Crossref, or any other retrieval tool. Those optional calls add no evidence needed by this package, and any failed optional call correctly fails the run. Do not substitute AHA publisher pages, `ahajournals.org`, or `cochranelibrary.com` URLs for the four reachable pages above.
+   - For other questions, call only the smallest sufficient set of relevant tools. Never put placeholder values such as `N/A` into DOI, PMID, or URL fields when using deduplication.
 5. A successful source fetch must have `status=success`, a workspace artifact, a retrieval timestamp, and a content hash. A tool error, warning without usable evidence, title-only result, or empty result is not evidence.
    Source artifacts are retrieval receipts, not authored notes: never create, edit, or replace any path under `.evimed-sources/` with `write`, `edit`, shell commands, or copied metadata. Only artifacts returned by a successful `evimed_official_page_fetch` or `evimed_open_access_full_text` call can appear in `successfulSourceArtifacts` or the evidence matrix.
 6. Never infer recommendations, study design, effect size, comparator direction, certainty, or causality from a title or bibliographic metadata. Abstract-only facts must be labelled abstract-level. Quantitative claims require the exact supporting passage from an abstract, full text, official document, or structured primary record.

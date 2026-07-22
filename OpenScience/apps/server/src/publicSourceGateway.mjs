@@ -61,6 +61,7 @@ const allowedHosts = new Set([
   "www.acc.org",
   "professional.heart.org",
   "cpr.heart.org",
+  "www.nhs.uk",
   "www.ccfdie.org",
   "mpa.hunan.gov.cn",
   "waterservices.usgs.gov",
@@ -71,6 +72,7 @@ const officialDocumentPaths = new Map([
   ["www.acc.org", ["/latest-in-cardiology/"]],
   ["professional.heart.org", ["/en/science-news/"]],
   ["cpr.heart.org", ["/en/resuscitation-science/"]],
+  ["www.nhs.uk", ["/symptoms/chest-pain/"]],
   ["www.ccfdie.org", ["/zryyxxw/"]],
   ["mpa.hunan.gov.cn", ["/mpa/"]],
 ]);

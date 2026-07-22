@@ -87,6 +87,24 @@ class OfficialPageTests(unittest.TestCase):
         self.assertEqual(result["error"]["code"], "official_page_url_forbidden")
         opened.assert_not_called()
 
+    def test_fetch_accepts_the_fixed_nhs_chest_pain_route(self):
+        html = b"""<!doctype html><html><head><title>Chest pain</title></head><body><main>
+        <h1>Chest pain</h1><p>Call emergency services for sudden pressure-like chest discomfort.</p>
+        <p>This official page explains urgent symptoms, emergency assessment, transport, and the limits
+        of symptom-based self-diagnosis when chest discomfort could represent a heart attack.</p>
+        </main></body></html>"""
+        url = "https://www.nhs.uk/symptoms/chest-pain/"
+        with mock.patch.object(
+            self.module.public_sources,
+            "_open_remote",
+            return_value=self.response(html),
+        ) as opened:
+            result = self.module.fetch({"url": url})
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["sources"][0]["url"], url)
+        opened.assert_called_once_with(url, ("text/html",), timeout_seconds=60)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -241,6 +241,22 @@ class ToolContractTests(unittest.TestCase):
             "scope": scope,
         })
 
+    def test_deduplicate_ignores_placeholder_identifiers(self):
+        result = self.server.call_tool("evimed_evidence_deduplicate", {
+            "items": [
+                {"id": "a", "title": "ACC chest pain", "pmid": "N/A"},
+                {"id": "b", "title": "Cochrane Suxiao", "pmid": "N/A"},
+                {"id": "c", "title": "Regulatory notice", "doi": "unknown"},
+                {"id": "d", "title": "ACC chest pain", "pmid": "none"},
+            ],
+        })
+
+        self.assert_contract(result)
+        self.assertEqual([item["id"] for item in result["data"]["items"]], ["a", "b", "c"])
+        self.assertEqual(result["data"]["duplicates"], [
+            {"duplicateId": "d", "canonicalId": "a", "matchedBy": "title"},
+        ])
+
     def test_invalid_input_returns_actionable_tool_error(self):
         result = self.server.call_tool("evimed_term_normalize", {"term": "", "extra": True})
         self.assert_contract(result)
