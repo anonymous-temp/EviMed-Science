@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 import {
   HttpError,
@@ -281,15 +282,64 @@ function assistantFinished(message) {
   return Boolean(message?.info?.time?.completed ?? message?.completed ?? message?.info?.error);
 }
 
-function parsedToolResultStatus(part) {
+function parsedToolResult(part) {
   const output = part?.state?.output;
   if (typeof output !== "string" || !output.trim().startsWith("{")) return null;
   try {
     const value = JSON.parse(output);
-    return value && typeof value === "object" && typeof value.status === "string" ? value.status : null;
+    return value && typeof value === "object" && !Array.isArray(value) ? value : null;
   } catch {
     return null;
   }
+}
+
+function parsedToolResultStatus(part) {
+  const value = parsedToolResult(part);
+  return typeof value?.status === "string" ? value.status : null;
+}
+
+const evidenceSourceToolSuffixes = Object.freeze([
+  "evimed_official_page_fetch",
+  "evimed_open_access_full_text",
+]);
+
+function evidenceSourceTool(tool) {
+  if (typeof tool !== "string") return false;
+  return evidenceSourceToolSuffixes.some((suffix) => tool === suffix || tool.endsWith(`_${suffix}`));
+}
+
+function successfulEvidenceSourceArtifacts(messages, runtimeWorkspaceRoot) {
+  const artifacts = new Map();
+  const runtimeRoot = path.resolve(runtimeWorkspaceRoot);
+  for (const message of messages) {
+    for (const part of message?.parts ?? []) {
+      if (part?.type !== "tool" || part?.state?.status !== "completed" || !evidenceSourceTool(part.tool)) continue;
+      const result = parsedToolResult(part);
+      const hashes = result?.data?.artifactSha256s;
+      if (
+        result?.status !== "success"
+        || !Array.isArray(result.artifacts)
+        || !hashes
+        || typeof hashes !== "object"
+        || Array.isArray(hashes)
+      ) continue;
+      for (const value of result.artifacts) {
+        if (typeof value !== "string") continue;
+        try {
+          const relative = path.isAbsolute(value)
+            ? path.relative(runtimeRoot, path.resolve(value)).replace(/\\/g, "/")
+            : value.replace(/\\/g, "/");
+          if (!relative || relative === ".." || relative.startsWith("../") || path.isAbsolute(relative)) continue;
+          const normalized = normalizeWorkspaceRelativePath(relative, "source artifact path");
+          const digest = hashes[value];
+          if (normalized.startsWith(".evimed-sources/") && /^[0-9a-f]{64}$/.test(digest ?? "")) {
+            artifacts.set(normalized, digest);
+          }
+        } catch { /* untrusted tool metadata is omitted */ }
+      }
+    }
+  }
+  return artifacts;
 }
 
 function terminalFromMessages(messages) {
@@ -370,7 +420,7 @@ function validExplicitCitations(text) {
   });
 }
 
-async function requiredSpecialistArtifacts(project, run, agentRegistry) {
+async function requiredSpecialistArtifacts(project, run, agentRegistry, sourceArtifactProvenance = new Map()) {
   if (!run.effectiveAgentId) return { artifacts: [], errorCode: null };
   const registry = await agentRegistry;
   const agent = registry?.get?.(run.effectiveAgentId);
@@ -424,9 +474,16 @@ async function requiredSpecialistArtifacts(project, run, agentRegistry) {
       if (relative !== rawPath || !relative.startsWith(".evimed-sources/")) {
         return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
       }
+      const expectedDigest = sourceArtifactProvenance.get(relative);
+      if (!expectedDigest) {
+        return { artifacts, errorCode: "specialist_evidence_provenance_failed" };
+      }
       const sourceFile = await readRequiredFile(project, relative);
       if (!sourceFile || sourceFile.stat.mtimeMs + 1_000 < Date.parse(run.startedAt)) {
         return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+      }
+      if (createHash("sha256").update(sourceFile.text, "utf8").digest("hex") !== expectedDigest) {
+        return { artifacts, errorCode: "specialist_evidence_integrity_failed" };
       }
       sourceArtifacts.set(relative, sourceFile.text);
     }
@@ -738,7 +795,13 @@ export class AgentRunStore {
     if (terminal.status === "succeeded" && run.effectiveAgentId) {
       let completion;
       try {
-        completion = await requiredSpecialistArtifacts(project, run, this.agentRegistry);
+        const sourceArtifactProvenance = successfulEvidenceSourceArtifacts(assistants, runtimeWorkspaceRoot);
+        completion = await requiredSpecialistArtifacts(
+          project,
+          run,
+          this.agentRegistry,
+          sourceArtifactProvenance,
+        );
       } catch {
         completion = { artifacts: [], errorCode: "specialist_contract_unavailable" };
       }

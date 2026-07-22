@@ -191,7 +191,8 @@ def fetch(arguments: dict) -> dict:
         workspace = _workspace()
         output_root = _safe_directory(workspace, Path(".evimed-sources") / "official-pages" / digest[:16])
         output_path = output_root / "page.md"
-        _atomic_write(output_path, markdown.encode("utf-8"))
+        markdown_payload = markdown.encode("utf-8")
+        _atomic_write(output_path, markdown_payload)
         relative = output_path.relative_to(workspace).as_posix()
         source = {
             "id": "official-page:" + digest[:16],
@@ -208,6 +209,7 @@ def fetch(arguments: dict) -> dict:
                 "url": url,
                 "sha256": digest,
                 "markdownPath": relative,
+                "artifactSha256s": {relative: hashlib.sha256(markdown_payload).hexdigest()},
                 "characters": len(content),
                 "excerpt": content[:4000],
             },

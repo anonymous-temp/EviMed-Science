@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
@@ -227,7 +228,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "1.0.0",
+      effectiveAgentVersion: "1.0.1",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
   });
@@ -397,6 +398,164 @@ test("a routed clinical evidence turn cannot succeed with an untraceable report 
     await store.closeProject(project, "canceled");
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("clinical evidence source artifacts must come from successful retrieval tools in the same turn", async () => {
+  for (const scenario of ["missing", "valid", "tampered"]) {
+    const root = await mkdtemp(path.join(tmpdir(), `os-agent-run-clinical-provenance-${scenario}-`));
+    try {
+      const project = {
+        id: "project-1",
+        userId: "user-1",
+        rootDir: root,
+        workspaceDir: path.join(root, "workspace"),
+        metaDir: path.join(root, ".openscience"),
+      };
+      await mkdir(project.workspaceDir, { recursive: true });
+      await mkdir(project.metaDir, { recursive: true });
+      const binding = {
+        sessionId: `ses_clinical_provenance_${scenario}`,
+        mode: "open-domain",
+        agentId: null,
+        agentVersion: null,
+        runtimeAgent: null,
+      };
+      let history = [];
+      const store = new AgentRunStore({ get: async () => binding }, {
+        agentRegistry: {
+          get: () => ({
+            id: "clinical-evidence-synthesis",
+            version: "1.0.0",
+            runtimeAgent: "evimed-clinical-evidence-synthesis",
+            outputs: [
+              { path: "clinical-evidence-report.md", required: true },
+              { path: "clinical-evidence-matrix.json", required: true },
+              { path: "clinical-evidence-run.json", required: true },
+            ],
+            completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
+          }),
+        },
+        model: "deepseek/deepseek-v4-pro",
+        monitorIntervalMs: 60_000,
+        monitorMaxPolls: 20,
+        readSessionHistory: async () => history,
+        readSessionStatus: async () => "idle",
+      });
+      const run = await store.dispatch(project, {
+        sessionId: binding.sessionId,
+        dispatchId: `turn_clinical_provenance_${scenario}`,
+        effectiveAgentId: "clinical-evidence-synthesis",
+        effectiveAgentVersion: "1.0.0",
+        effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+      }, async () => ({ accepted: true }));
+
+      const sourceA = ".evimed-sources/official-pages/source-a/page.md";
+      const sourceB = ".evimed-sources/official-pages/source-b/page.md";
+      const quotes = [
+        "Patients with acute pressure-like chest discomfort require prompt emergency evaluation for acute coronary syndrome.",
+        "Serial high-sensitivity cardiac troponin measurements support rapid diagnostic assessment in acute chest pain.",
+        "The evidence review included fifteen trials with a total of 1776 participants and found important study limitations.",
+        "The available trials were generally of poor methodological quality, which limits confidence in treatment effects.",
+      ];
+      const claims = quotes.map((supportQuote, index) => ({
+        claimId: `CLM-00${index + 1}`,
+        claim: `Material clinical proposition ${index + 1} supported by an inspected source passage.`,
+        sourceUrl: index < 2
+          ? "https://www.acc.org/latest-in-cardiology/ten-points-to-remember/2022/10/10/23/15/2022-acc-expert-consensus-on-chest-pain"
+          : "https://www.cochrane.org/evidence/CD004473_chinese-herbal-medicine-suxiao-jiuxin-wan-angina-pectoris",
+        sourceTitle: index < 2 ? "ACC acute chest pain pathway" : "Cochrane Suxiao Jiuxin Wan evidence review",
+        artifactPath: index < 2 ? sourceA : sourceB,
+        identifier: index < 2 ? "ACC-2022-ECDP" : "CD004473",
+        accessLevel: "official_page",
+        supportQuote,
+        applicability: "Directly informs the acute chest-pain evidence question.",
+        uncertainty: index < 2 ? "Jurisdiction and pathway implementation may vary." : "The included studies had important risk of bias.",
+      }));
+      const report = [
+        "# 突发压迫性胸闷与速效救心丸的临床判断",
+        "",
+        "## 摘要",
+        `急性压迫性胸部不适需要优先排查急性冠脉综合征 [claim:CLM-001](https://www.acc.org/latest-in-cardiology/ten-points-to-remember/2022/10/10/23/15/2022-acc-expert-consensus-on-chest-pain)。${"该判断基于时间敏感性和漏诊风险，不能仅凭症状自行归因为胃病。".repeat(8)}`,
+        "",
+        "## 临床证据分析",
+        `序贯高敏肌钙蛋白支持急诊快速评估 [claim:CLM-002](https://www.acc.org/latest-in-cardiology/ten-points-to-remember/2022/10/10/23/15/2022-acc-expert-consensus-on-chest-pain)。${"诊断路径仍需结合心电图、症状时间和临床风险，单次结果不足以覆盖所有情形。".repeat(8)}`,
+        `速效救心丸证据页纳入十五项试验和一千七百七十六名参与者 [claim:CLM-003](https://www.cochrane.org/evidence/CD004473_chinese-herbal-medicine-suxiao-jiuxin-wan-angina-pectoris)。${"药物讨论不能替代急救评估，也不能以症状缓解作为病因鉴别试验。".repeat(8)}`,
+        "",
+        "## 科学局限",
+        `现有试验方法学质量较差 [claim:CLM-004](https://www.cochrane.org/evidence/CD004473_chinese-herbal-medicine-suxiao-jiuxin-wan-angina-pectoris)。证据存在偏倚、间接性、不精确性以及人群和司法辖区适用性限制。`,
+        "",
+        "## 实用处置结论",
+        "出现新发压迫性胸部不适时应立即呼叫急救并接受规范评估；不要因尝试速效救心丸或胃药而延误。",
+      ].join("\n");
+      const receipt = {
+        question: "acute pressure-like chest discomfort",
+        title: "突发压迫性胸闷与速效救心丸的临床判断",
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        tools: ["evimed_official_page_fetch"],
+        successfulSourceArtifacts: [sourceA, sourceB],
+        failedSources: [],
+        qualityChecks: { claimsVerified: true, citationsResolved: true, contradictionsChecked: true },
+        status: "succeeded",
+      };
+      const sourceContents = new Map([
+        [sourceA, quotes.slice(0, 2).join("\n")],
+        [sourceB, quotes.slice(2).join("\n")],
+      ]);
+      await mkdir(path.join(project.workspaceDir, path.dirname(sourceA)), { recursive: true });
+      await mkdir(path.join(project.workspaceDir, path.dirname(sourceB)), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, sourceA), sourceContents.get(sourceA), "utf8");
+      await writeFile(path.join(project.workspaceDir, sourceB), sourceContents.get(sourceB), "utf8");
+      await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), report, "utf8");
+      await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims }), "utf8");
+      await writeFile(path.join(project.workspaceDir, "clinical-evidence-run.json"), JSON.stringify(receipt), "utf8");
+      if (scenario === "tampered") {
+        await writeFile(path.join(project.workspaceDir, sourceA), `${sourceContents.get(sourceA)}\nAuthored replacement.`, "utf8");
+      }
+
+      const retrievalParts = scenario !== "missing"
+        ? [sourceA, sourceB].map((source) => ({
+            type: "tool",
+            tool: "evimed-research_evimed_official_page_fetch",
+            state: {
+              status: "completed",
+              output: JSON.stringify({
+                status: "success",
+                artifacts: [source],
+                data: {
+                  artifactSha256s: {
+                    [source]: createHash("sha256").update(sourceContents.get(source), "utf8").digest("hex"),
+                  },
+                },
+              }),
+            },
+          }))
+        : [];
+      history = [{
+        info: { id: `msg_clinical_provenance_${scenario}`, role: "assistant", time: { completed: Date.now() } },
+        parts: [
+          ...retrievalParts,
+          ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+            type: "tool",
+            tool: "write",
+            state: { status: "completed", input: { filePath } },
+          })),
+          { type: "text", text: "Completed." },
+        ],
+      }];
+      const finished = await store.reconcileSession(project, binding.sessionId);
+      assert.equal(finished.id, run.id);
+      assert.equal(finished.status, scenario === "valid" ? "succeeded" : "failed");
+      assert.equal(finished.errorCode, {
+        missing: "specialist_evidence_provenance_failed",
+        valid: null,
+        tampered: "specialist_evidence_integrity_failed",
+      }[scenario]);
+      await store.closeProject(project, "canceled");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   }
 });
 

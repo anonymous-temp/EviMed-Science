@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import os
 import pathlib
 import sys
@@ -69,6 +70,10 @@ class OfficialPageTests(unittest.TestCase):
         self.assertRegex(result["data"]["sha256"], r"^[0-9a-f]{64}$")
         artifact = self.workspace / result["data"]["markdownPath"]
         self.assertTrue(artifact.is_file())
+        self.assertEqual(
+            result["data"]["artifactSha256s"][result["data"]["markdownPath"]],
+            hashlib.sha256(artifact.read_bytes()).hexdigest(),
+        )
         content = artifact.read_text(encoding="utf-8")
         self.assertIn("Call emergency medical services", content)
         self.assertNotIn("doNotInclude", content)

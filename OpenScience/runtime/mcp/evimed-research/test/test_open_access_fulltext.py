@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import os
 import pathlib
@@ -64,6 +65,14 @@ class OpenAccessFullTextTests(unittest.TestCase):
         xml = self.workspace / result["data"]["xmlPath"]
         self.assertTrue(markdown.is_file())
         self.assertTrue(xml.is_file())
+        self.assertEqual(
+            result["data"]["artifactSha256s"][result["data"]["markdownPath"]],
+            hashlib.sha256(markdown.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            result["data"]["artifactSha256s"][result["data"]["xmlPath"]],
+            hashlib.sha256(xml.read_bytes()).hexdigest(),
+        )
         text = markdown.read_text(encoding="utf-8")
         self.assertIn("## Methods", text)
         self.assertIn("100 participants", text)
