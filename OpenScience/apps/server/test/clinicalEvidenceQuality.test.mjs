@@ -96,3 +96,33 @@ test("rejects a support quote that is not present in the claimed source artifact
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /not found in its preserved source artifact/);
 });
+
+test("rejects runtime-process prose, overlong titles, and combined claim markers in the academic report", () => {
+  const input = validPackage();
+  input.reportText = input.reportText
+    .replace(/^# .+$/m, `# ${"过长的临床学术题目".repeat(6)}`)
+    .replace("[claim:CLM-001]", "[claim:CLM-001, CLM-002]")
+    + "\n本次依据 clinical-evidence-synthesis 契约完成白名单抓取和落盘核验。";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /no longer than 40/);
+  assert.match(result.issues.join("\n"), /runtime or retrieval-process prose/);
+  assert.match(result.issues.join("\n"), /exactly one claim ID/);
+});
+
+test("rejects explanatory objects where the run receipt requires path strings and boolean checks", () => {
+  const input = validPackage();
+  input.runReceipt.successfulSourceArtifacts = [
+    { path: ".evimed-sources/a/page.md" },
+    { path: ".evimed-sources/b/fulltext.md" },
+  ];
+  input.runReceipt.qualityChecks = {
+    claimTraceability: { status: "passed" },
+    contradictionAudit: { status: "passed" },
+    arithmeticAudit: { status: "passed" },
+  };
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /Every successful source artifact/);
+  assert.match(result.issues.join("\n"), /quality checks must pass/);
+});

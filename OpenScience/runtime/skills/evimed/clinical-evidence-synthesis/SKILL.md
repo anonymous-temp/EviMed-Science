@@ -10,7 +10,7 @@ Use this skill for clinical evidence questions that need an academic analysis, i
 ## Non-negotiable execution contract
 
 1. Start from the current user question. Do not read or reuse a prior report as a factual draft.
-2. Convert the question into a short academic title. Do not put article-type labels such as “review”, “systematic review”, or “meta-analysis” in the title unless the user explicitly requests that study design.
+2. Convert the question into a short academic title of at most 40 characters. Prefer a direct title such as `压迫性胸部不适与速效救心丸的处置边界`; do not append phrases such as “基于多源证据的分析”. Do not put article-type labels such as “review”, “systematic review”, or “meta-analysis” in the title unless the user explicitly requests that study design.
 3. Separate the deliverable into:
    - an academic evidence analysis; and
    - a brief safety-first practical answer for the original question.
@@ -33,18 +33,26 @@ Use this skill for clinical evidence questions that need an academic analysis, i
    - `artifactPath`: the workspace-relative `.evimed-sources/...` file containing the inspected source text;
    - `identifier`: DOI, PMID, PMCID, guideline identifier, or official-document content hash;
    - `accessLevel`: one of `full_text`, `official_page`, `abstract`, `structured_record`;
-   - `supportQuote`: a short source passage that directly supports the claim;
+   - `supportQuote`: a verbatim source passage of at least 20 characters that directly supports the complete claim; never join non-contiguous passages with an ellipsis;
    - `applicability`: why the source applies to the question;
    - `uncertainty`: source-specific uncertainty, or `none identified`.
-8. Cite claims in `clinical-evidence-report.md` using the exact marker `[claim:CLM-NNN]` beside a Markdown link. Every report claim ID must exist in the matrix. Do not cite EviMed API endpoints as public evidence URLs.
-9. Clinical urgency takes precedence over product discussion. For acute pressure-like chest symptoms, clearly state that symptoms alone cannot safely distinguish acute coronary syndrome from gastrointestinal disease, provide the emergency action threshold, and prevent a traditional medicine or symptom-relief medicine from delaying emergency evaluation. Do not invent individualized dosing.
-10. The “limitations” section must discuss scientific applicability, bias, indirectness, imprecision, access level, and population/jurisdiction limits. Put tool failures and operational details only in the run receipt; do not pad the academic report with process failures.
+8. Cite claims in `clinical-evidence-report.md` using the exact marker `[claim:CLM-NNN]` beside a Markdown link. Each marker contains exactly one ID; write `[claim:CLM-001] [claim:CLM-002]`, never `[claim:CLM-001, CLM-002]`. Every factual sentence must stay within the exact proposition of its cited matrix claim. If a sentence adds a number, timing threshold, indication, contraindication, recommendation, or causal interpretation, create a separate claim with its own direct quote. Never reuse a broad marker to cover new facts. Do not cite EviMed API endpoints as public evidence URLs.
+9. Clinical urgency takes precedence over product discussion. For acute pressure-like chest symptoms, clearly state that symptoms alone cannot safely distinguish acute coronary syndrome from gastrointestinal disease, provide the emergency action threshold, and prevent a traditional medicine or symptom-relief medicine from delaying emergency evaluation. Do not describe symptom response to Suxiao Jiuxin Wan as a diagnostic test. If a person already has a clinician-issued emergency plan, say to follow that plan while calling emergency services; do not invent individualized dosing or tell every patient categorically to start or stop a medicine.
+   A regulatory label revision proves that safety information required revision; it does not by itself prove a specific serious adverse reaction or refute an older trial review. Describe the regulator's action at its actual evidentiary scope.
+10. The “limitations” section must discuss scientific applicability, bias, indirectness, imprecision, access level, evidence age, and population/jurisdiction limits. Never mention runtime behavior, tools, allowlists, scraping, fetching, saved artifacts, inaccessible pages, failed searches, or the EviMed execution contract in the academic report. Put those operational details only in the run receipt.
 11. Run a final contradiction and arithmetic audit. Verify study identity, organization names, denominators, comparator direction, effect direction, units, years, and every URL against the preserved source artifacts.
+12. For the fixed acute-chest/Suxiao case, keep the academic report between roughly 2,500 and 5,000 Chinese characters and use only these sections: `摘要`, `临床问题`, `证据结果`, `综合判断`, `科学局限`, `安全优先的实际处置`, and `参考来源`. Do not add unsupported emergency details such as a 10-minute ECG target, aspirin, body position, medicine contraindications, or label indications unless the retrieved source contains a direct quote and the matrix has a dedicated claim.
+13. Write valid JSON directly with the `write` tool, then read the files back. Inside JSON string values, escape ASCII double quotes or use Chinese quotation marks. Do not call Bash, Python, a JSON parser, or any shell command to create, repair, or self-audit the three deliverables; a shell error fails the run.
 
 ## Required outputs
 
 - `clinical-evidence-report.md`: short title, abstract, clinical framing, evidence analysis, role of the named medicine, evidence-based conclusion, scientific limitations, and the separate practical answer.
 - `clinical-evidence-matrix.json`: the claim-level matrix described above. It must be valid JSON and contain at least four independently supported material claims from at least two authoritative source domains.
-- `clinical-evidence-run.json`: valid JSON containing `question`, `title`, `startedAt`, `completedAt`, `tools`, `successfulSourceArtifacts`, `failedSources`, `qualityChecks`, and `status`. `successfulSourceArtifacts` must list the inspected UTF-8 Markdown/text files under `.evimed-sources/` that contain every matrix support quote; do not list binary or XML files. `status` can be `succeeded` only when all required outputs and quality checks pass and no source used in the report failed retrieval.
+- `clinical-evidence-run.json`: valid JSON containing `question`, `title`, `startedAt`, `completedAt`, `tools`, `successfulSourceArtifacts`, `failedSources`, `qualityChecks`, and `status`. The schema is strict:
+  - `successfulSourceArtifacts` is an array of path strings only, for example `[".evimed-sources/official-pages/abc/page.md"]`. Never put objects, titles, URLs, hashes, or explanations in this array.
+  - `qualityChecks` is an object with at least three boolean values, for example `{"claimTraceability": true, "sourceQuoteMatch": true, "contradictionAudit": true, "arithmeticAudit": true}`. Never use nested `{status, detail}` objects here.
+  - `failedSources` is an array; use `[]` when all required retrievals succeeded.
+  - `status` is exactly `"succeeded"` only when all required outputs and boolean quality checks pass and no source used in the report failed retrieval.
+  - The inspected UTF-8 Markdown/text paths under `.evimed-sources/` must contain every matrix support quote; never list binary or XML files.
 
 If the evidence contract cannot be met, write an honest run receipt with `status=failed`, explain the missing evidence in the final answer, and do not present an academic report as completed.
