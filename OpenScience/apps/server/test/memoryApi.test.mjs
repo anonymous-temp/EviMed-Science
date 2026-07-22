@@ -146,7 +146,7 @@ function fakeMemosService() {
     return Response.json({ message: "unexpected fake route" }, { status: 500 });
   }
 
-  return { fetchImpl, requests, records };
+  return { fetchImpl, requests, memos, records };
 }
 
 function clientConfig() {
@@ -226,6 +226,93 @@ test("Memos adapter exports and purges every memory surface without crossing use
   assert.equal((await client.exportUserMemory("alpha")).records.length, 0);
   assert.equal((await client.exportUserMemory("beta")).records.length, 1);
   assert.equal((await client.list("beta")).length, 1);
+});
+
+test("Memos adapter removes project-scoped records and legacy run memos without deleting personal memory", async () => {
+  const fake = fakeMemosService();
+  const client = new MemosClient(clientConfig(), { fetchImpl: fake.fetchImpl });
+  await client.create("alpha", "personal note with - Project: study-one");
+  await client.create("alpha", "# EviMed agent run\n- Project: study-one\n#evimed-agent-run");
+  await client.create("alpha", "# EviMed agent run\n- Project: study-two\n#evimed-agent-run");
+  for (const [scope, scopeId, key] of [
+    ["project", "study-one", "run.one"],
+    ["project", "study-two", "run.two"],
+    ["user", "", "profile.role"],
+  ]) {
+    await client.upsertRecord("alpha", {
+      scope,
+      scopeId,
+      kind: scope === "user" ? "profile" : "run_summary",
+      key,
+      value: key,
+      summary: key,
+      origin: "system",
+      status: "active",
+      confidence: 1,
+      importance: 0.5,
+      sensitive: false,
+    });
+  }
+
+  assert.deepEqual(await client.deleteProjectMemory("alpha", "study-one"), { structured: 1, manual: 1 });
+  const exported = await client.exportUserMemory("alpha");
+  assert.deepEqual(exported.records.map((record) => record.key).sort(), ["profile.role", "run.two"]);
+  assert.equal(exported.manualMemos.length, 2);
+  assert.ok(exported.manualMemos.some((memo) => memo.content === "personal note with - Project: study-one"));
+  assert.ok(exported.manualMemos.some((memo) => memo.content.includes("- Project: study-two")));
+});
+
+test("deleting a SaaS project also deletes its project-scoped memory", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-project-memory-delete-"));
+  const fake = fakeMemosService();
+  const app = createWebApiApp({
+    dataDir,
+    port: 0,
+    runtimeMode: "mock",
+    devAuth: true,
+    ...clientConfig(),
+    memosFetch: fake.fetchImpl,
+  });
+  const address = await app.listen(0, "127.0.0.1");
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    const me = (await (await fetch(`${base}/api/me`)).json()).data;
+    const projectId = "project-memory-delete";
+    let response = await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: projectId, name: "Project memory deletion" }),
+    });
+    assert.equal(response.status, 200);
+    const client = new MemosClient(clientConfig(), { fetchImpl: fake.fetchImpl });
+    await client.upsertRecord(me.user.id, {
+      scope: "project",
+      scopeId: projectId,
+      kind: "run_summary",
+      key: "run.project-delete",
+      value: "project run",
+      summary: "project run",
+      origin: "system",
+      status: "active",
+      confidence: 1,
+      importance: 0.5,
+      sensitive: false,
+    });
+    await client.create(me.user.id, `# EviMed agent run\n- Project: ${projectId}\n#evimed-agent-run`);
+
+    response = await fetch(`${base}/api/projects/${projectId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: projectId }),
+    });
+    assert.equal(response.status, 200);
+    const exported = await client.exportUserMemory(me.user.id);
+    assert.equal(exported.records.length, 0);
+    assert.equal(exported.manualMemos.length, 0);
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
 });
 
 test("EviMed memory API supports the complete native dashboard lifecycle", async () => {

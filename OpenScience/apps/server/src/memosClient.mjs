@@ -457,6 +457,30 @@ export class MemosClient {
     return Math.max(0, Number(body?.deletedCount) || 0);
   }
 
+  async deleteProjectMemory(userId, projectId) {
+    this.#assertConfigured();
+    const scopeId = String(projectId ?? "").trim();
+    if (!scopeId) throw new HttpError(400, "memory_payload_invalid", "projectId is required.");
+    const records = await this.listAllRecords(userId, { scopes: ["project"], scopeId });
+    let structured = 0;
+    for (const record of records) {
+      await this.deleteRecord(userId, record.id);
+      structured += 1;
+    }
+
+    let manual = 0;
+    const projectLine = `- Project: ${scopeId}`;
+    for (const state of ["normal", "archived"]) {
+      const memos = await this.listAllMemos(userId, { state });
+      for (const memo of memos) {
+        if (!memo.tags.includes("evimed-agent-run") || !memo.content.split("\n").includes(projectLine)) continue;
+        await this.delete(userId, memo.id);
+        manual += 1;
+      }
+    }
+    return { structured, manual };
+  }
+
   async exportUserMemory(userId) {
     this.#assertConfigured();
     const [records, current, archived] = await Promise.all([
