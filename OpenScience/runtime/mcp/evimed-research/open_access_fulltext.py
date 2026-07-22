@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -250,7 +251,8 @@ def fetch(arguments: dict) -> dict:
         output_root = _safe_directory(workspace, relative_root)
         markdown_path = output_root / "fulltext.md"
         xml_path = output_root / "fulltext.xml"
-        _atomic_write(markdown_path, markdown.encode("utf-8"))
+        markdown_payload = markdown.encode("utf-8")
+        _atomic_write(markdown_path, markdown_payload)
         _atomic_write(xml_path, xml_payload)
         markdown_relative = markdown_path.relative_to(workspace).as_posix()
         xml_relative = xml_path.relative_to(workspace).as_posix()
@@ -268,6 +270,10 @@ def fetch(arguments: dict) -> dict:
                 **details,
                 "markdownPath": markdown_relative,
                 "xmlPath": xml_relative,
+                "artifactSha256s": {
+                    markdown_relative: hashlib.sha256(markdown_payload).hexdigest(),
+                    xml_relative: hashlib.sha256(xml_payload).hexdigest(),
+                },
                 "markdownCharacters": len(markdown),
                 "xmlBytes": len(xml_payload),
             },

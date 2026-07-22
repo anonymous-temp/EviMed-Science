@@ -267,7 +267,16 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "evimed_official_page_fetch",
-        "description": "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document through the managed gateway and preserve a content-hashed Markdown receipt in the workspace.",
+        "description": (
+            "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document "
+            "through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. "
+            "Allowed routes are: "
+            + ", ".join(
+                "https://%s%s" % (host, prefix)
+                for host, prefixes in official_pages.OFFICIAL_PATHS.items()
+                for prefix in prefixes
+            )
+        ),
         "inputSchema": object_schema(
             {"url": {"type": "string", "minLength": 1, "maxLength": 2048}},
             ("url",),
