@@ -168,13 +168,15 @@ Use these sections, adding a medicine-specific results subsection only when rele
 11. `安全优先的实际处置`
 12. `参考文献`
 
+Keep `参考文献` as the final level-two section. Never append the practical answer, an operational note, or another report section after the numbered reference list.
+
 The methods section must report databases/source classes, complete query concepts, search date, eligibility criteria, deduplication, screening counts, access levels, and appraisal dimensions. Describe this as a scholarly method, not as a runtime log.
 
 The results section must synthesize evidence by clinical question, not list sources one by one. Compare agreement, conflict, directness, and certainty. Tables are encouraged for evidence characteristics and decision boundaries.
 
 The discussion must explain what the evidence does and does not establish, distinguish acute undifferentiated symptoms from diagnosed chronic disease, and separate direct evidence from reasoned synthesis.
 
-The limitations section must address at least four of: risk of bias, indirectness, imprecision, evidence form, publication bias, recency, population transferability, jurisdiction, and health-system applicability. Do not write tool failures or access excuses into the academic report.
+The limitations section must address at least four of: risk of bias, indirectness, imprecision, evidence form, publication bias, recency, population transferability, jurisdiction, and health-system applicability. Describe evidence-form limitations as scientific constraints on interpretation; do not report which page, full text, tool, gateway, or file could not be retrieved, and do not write access excuses into the academic report.
 
 ## Acute chest-pressure safety boundary
 

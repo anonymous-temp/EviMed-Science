@@ -418,7 +418,7 @@ function terminalFromMessages(messages) {
 function clinicalEvidenceRepairPrompt(issues) {
   const bounded = issues
     .filter((issue) => typeof issue === "string" && issue.trim())
-    .slice(0, 20)
+    .slice(0, 40)
     .map((issue) => `- ${issue.slice(0, 300)}`)
     .join("\n");
   return [
@@ -427,6 +427,9 @@ function clinicalEvidenceRepairPrompt(issues) {
     "Only rewrite a file when an issue below names or requires it; preserve already valid evidence and source metadata.",
     "Every JSON deliverable must remain strict JSON. Inside JSON string values, use Chinese quotation marks instead of unescaped ASCII double quotes.",
     "Do not call any retrieval tool and do not modify any .evimed-sources artifact; the successful source artifacts from this run remain authoritative.",
+    "Treat repeated numeric-fact messages as one report-wide audit task: remove nonessential numbers or place each retained quantitative proposition on a line with the correct numbered citation and matching hidden matrix claim marker.",
+    "Keep scholarly limitations about bias, indirectness, precision, currency, and applicability, but remove retrieval diaries, access excuses, tool names, gateway names, and statements about which files or pages were unavailable.",
+    "The safety-first practical section must come before the reference list. Remove unsupported self-care details; every numbered step and bullet must have direct support, a numbered citation, and a matching hidden claim marker.",
     "Fix every issue below, read every required deliverable back, and repeat the skill's final literal checklist before finishing:",
     bounded,
   ].join("\n");

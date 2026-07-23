@@ -1,5 +1,5 @@
 id: clinical-evidence-synthesis
-version: 2.0.0
+version: 2.0.1
 title: Clinical Evidence Synthesis
 category: Clinical Evidence
 description: Transform an open-domain clinical question into a publication-grade deep evidence analysis with reproducible searches, verified citations, claim-level traceability, and a separate safety-first practical answer.
