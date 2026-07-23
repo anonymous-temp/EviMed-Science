@@ -46,7 +46,7 @@ import {
 } from "./apiClient";
 import { kernelReset } from "./kernel";
 import { moveScrollMemory } from "./scrollMemory";
-import { deriveArtifact } from "./artifacts";
+import { artifactWorkspaceKey, deriveArtifact } from "./artifacts";
 import { provenanceInputFromEvent, recordProvenance } from "./provenance";
 import { recordRun, runInputFromEvent } from "./runs";
 import { splitReview } from "./review";
@@ -783,9 +783,25 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   // All three write the CURRENT session's pane (DRAFT_KEY on a draft), keeping
   // the artifact inspector and the Files browser mutually exclusive.
   openArtifact: (artifact) =>
-    set((s) => ({
-      panes: { ...s.panes, [s.currentId ?? DRAFT_KEY]: { artifact, showFiles: false } },
-    })),
+    set((s) => {
+      const key = s.currentId ?? DRAFT_KEY;
+      let resolved = artifact;
+      // A report name mentioned in the final answer is a path-only artifact.
+      // Prefer the newest content snapshot reconstructed from this session's
+      // write/edit history so a later task cannot overwrite its preview.
+      if (artifact.content === undefined) {
+        const artifactKey = artifactWorkspaceKey(artifact.path);
+        const snapshot = [...(s.threads[key]?.blocks ?? [])]
+          .reverse()
+          .find((block): block is ArtifactBlock => (
+            block.kind === "artifact" &&
+            block.content !== undefined &&
+            artifactWorkspaceKey(block.path) === artifactKey
+          ));
+        if (snapshot) resolved = { ...artifact, content: snapshot.content };
+      }
+      return { panes: { ...s.panes, [key]: { artifact: resolved, showFiles: false } } };
+    }),
   closeArtifact: () =>
     set((s) => {
       const key = s.currentId ?? DRAFT_KEY;
@@ -1861,6 +1877,7 @@ function mapToolStatus(status?: string): ToolCallStatus {
 /** Convert loaded message history into thread blocks. */
 export function historyToThread(messages: HistoryMessage[], commands?: CommandInfo[]): FoldState {
   const blocks: ThreadBlock[] = [];
+  const artifactSnapshots = new Map<string, string>();
   // OpenCode stores a slash command's EXPANDED template as the user message,
   // with any typed arguments appended after it (no marker) — show the
   // "/name args" the user actually typed instead. Longest template first, so
@@ -1953,7 +1970,27 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
             input: p.state?.input,
             output: p.state?.output,
           });
-          if (artifact) blocks.push(artifact);
+          if (artifact) {
+            const artifactKey = artifactWorkspaceKey(artifact.path);
+            const input = p.state?.input ?? {};
+            if (status === "success" && typeof input.content === "string") {
+              artifactSnapshots.set(artifactKey, input.content);
+            } else if (status === "success" && EDIT_TOOLS.has(p.tool ?? "")) {
+              const previous = artifactSnapshots.get(artifactKey);
+              const oldText = typeof input.oldString === "string"
+                ? input.oldString
+                : typeof input.old_str === "string" ? input.old_str : undefined;
+              const newText = typeof input.newString === "string"
+                ? input.newString
+                : typeof input.new_str === "string" ? input.new_str : undefined;
+              if (previous !== undefined && oldText !== undefined && newText !== undefined) {
+                if (previous.includes(oldText)) artifactSnapshots.set(artifactKey, previous.replace(oldText, newText));
+                else artifactSnapshots.delete(artifactKey);
+              }
+            }
+            const snapshot = artifactSnapshots.get(artifactKey);
+            blocks.push(snapshot === undefined ? artifact : { ...artifact, content: snapshot });
+          }
         }
       }
       shellTurn = false;

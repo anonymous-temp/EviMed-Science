@@ -54,6 +54,18 @@ export async function downloadArtifact(path: string, root?: FileRoot, filename?:
   downloadUrl(webFileDownloadUrl(path, root), filename || filenameFromPath(path));
 }
 
+/** Download the immutable text captured in a historical tool event instead of
+ * a same-named workspace file that a later session may have replaced. */
+export function downloadInlineArtifact(content: string, filename: string): void {
+  if (typeof document === "undefined") return;
+  const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
+  try {
+    downloadUrl(url, filename || "download.txt");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 function filenameFromPath(value: string): string {
   const name = value.replace(/\\/g, "/").split("/").filter(Boolean).pop();
   return name || "download";

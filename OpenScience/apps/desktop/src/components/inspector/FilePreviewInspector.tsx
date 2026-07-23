@@ -5,6 +5,7 @@ import { previewKindForName, type PreviewKind } from "@/lib/artifacts";
 import {
   base64ToBytes,
   downloadArtifact,
+  downloadInlineArtifact,
   openArtifactExternally,
   previewUrl,
   probeLargeFile,
@@ -78,7 +79,8 @@ export function FilePreviewInspector({
   const runFileAction = async () => {
     try {
       if (hostedWeb) {
-        await downloadArtifact(data.path, data.root, data.filename);
+        if (data.content !== undefined) downloadInlineArtifact(data.content, data.filename);
+        else await downloadArtifact(data.path, data.root, data.filename);
       } else {
         await openArtifactExternally(data.path, data.root);
       }

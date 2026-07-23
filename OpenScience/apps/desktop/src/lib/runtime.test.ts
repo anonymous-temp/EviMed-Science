@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OpenCodeEvent, HistoryMessage } from "@ai4s/sdk";
+import type { ArtifactBlock } from "@ai4s/shared";
 import {
   datedWorkspaceName,
   foldCarriageReturns,
@@ -283,6 +284,38 @@ describe("subagent activity", () => {
 });
 
 describe("historyToThread", () => {
+  it("reconstructs immutable text artifacts across write and edit history", () => {
+    const t = historyToThread([{
+      role: "assistant",
+      parts: [
+        {
+          type: "tool",
+          tool: "write",
+          state: {
+            status: "completed",
+            input: { filePath: "/workspace/report.md", content: "# Original\n\nOld conclusion." },
+          },
+        },
+        {
+          type: "tool",
+          tool: "edit",
+          state: {
+            status: "completed",
+            input: {
+              filePath: "/workspace/report.md",
+              oldString: "Old conclusion.",
+              newString: "Final conclusion.",
+            },
+          },
+        },
+      ],
+    }]);
+    const artifacts = t.blocks.filter((block): block is ArtifactBlock => block.kind === "artifact");
+    expect(artifacts).toHaveLength(2);
+    expect(artifacts[0].content).toBe("# Original\n\nOld conclusion.");
+    expect(artifacts[1].content).toBe("# Original\n\nFinal conclusion.");
+  });
+
   it("converts user/assistant messages (text + tool parts) into blocks", () => {
     const msgs: HistoryMessage[] = [
       { role: "user", parts: [{ type: "text", text: "hi" }] },

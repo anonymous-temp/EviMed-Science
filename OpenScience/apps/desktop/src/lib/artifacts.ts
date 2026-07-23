@@ -188,6 +188,14 @@ export function fileInspectorFromBlock(
   };
 }
 
+/** Stable identity for the same artifact as seen inside the hosted runtime
+ * (`/workspace/...`) or by the workspace-relative SaaS file boundary. */
+export function artifactWorkspaceKey(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  if (normalized.startsWith("/workspace/")) return normalized.slice("/workspace/".length);
+  return normalized.replace(/^\.\//, "");
+}
+
 /** A minimal artifact block for a file referenced in prose (path only, no inline content). */
 export function refToArtifactBlock(path: string): ArtifactBlock {
   const filename = path.split(/[\\/]/).pop() || path;
