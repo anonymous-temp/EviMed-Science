@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-23 13:40 · Final production report QA exposed one remaining SaaS presentation leak: the bounded clinical-evidence repair instruction was persisted by OpenCode as a normal user message and reappeared in restored history. History hydration now recognizes the server-owned fail-closed sentinel and omits that internal recovery turn while preserving the real user question and corrected assistant/report artifacts; regression coverage locks the behavior.
+
 2026-07-23 13:13 · Cross-session browser QA showed why path normalization alone was insufficient: fixed-name deliverables can be overwritten by a later task in the same workspace, so an older conversation could preview the newer report. History hydration now reconstructs immutable text snapshots from each successful write plus ordered edit operations; opening a path-only result resolves to the newest snapshot in that session, and hosted downloads use that captured content instead of the mutable workspace file.
 
 2026-07-23 13:03 · Browser artifact acceptance found that OpenCode's managed-container path `/workspace/<file>` was passed unchanged to the hosted command boundary, which correctly rejects absolute paths and made report preview fail despite a valid artifact. Hosted inspectors now remove only the known `/workspace/` mount prefix before preview/download, while desktop paths remain unchanged; artifact routing has a regression assertion for the generated clinical report.

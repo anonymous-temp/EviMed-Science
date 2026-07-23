@@ -332,6 +332,28 @@ describe("historyToThread", () => {
     expect(t.blocks[2]).toMatchObject({ kind: "tool-call", status: "success" });
   });
 
+  it("hides server-side evidence repair prompts from restored user history", () => {
+    const t = historyToThread([
+      { role: "user", parts: [{ type: "text", text: "请分析急性胸痛。" }] },
+      {
+        role: "user",
+        parts: [{
+          type: "text",
+          text: [
+            "The server-side clinical evidence gate rejected the current package.",
+            "Revise the existing clinical-evidence-report.md in place.",
+          ].join("\n"),
+        }],
+      },
+      { role: "assistant", parts: [{ type: "text", text: "报告已修订。" }] },
+    ]);
+
+    expect(t.blocks).toEqual([
+      { kind: "user", text: "请分析急性胸痛。" },
+      { kind: "agent", markdown: "报告已修订。" },
+    ]);
+  });
+
   it("restores failed web fetch history with its error instead of reporting success", () => {
     const t = historyToThread([{
       role: "assistant",
