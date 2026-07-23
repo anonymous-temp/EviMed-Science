@@ -228,7 +228,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "1.0.8",
+      effectiveAgentVersion: "1.0.9",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
   });
@@ -489,7 +489,7 @@ test("clinical evidence source artifacts must come from successful retrieval too
         "出现新发压迫性胸部不适时应立即呼叫急救并接受规范评估 [claim:CLM-001]；不得因服用速效救心丸而延误呼救或急诊评估 [claim:CLM-004]。",
       ].join("\n");
       const receipt = {
-        question: "acute pressure-like chest discomfort",
+        question: "急性压迫性胸部不适与速效救心丸",
         title: "突发压迫性胸闷与速效救心丸的临床判断",
         startedAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
