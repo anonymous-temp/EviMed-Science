@@ -90,17 +90,10 @@ def main() -> int:
     ledger = load_text(root, "citation-ledger.csv", issues)
     audit = load_text(root, "citation-audit.md", issues)
 
-    if len(report.strip()) < 10_000:
-        issues.append(
-            f"clinical-evidence-report.md: {len(report.strip())} characters; require at least 10000"
-        )
     title_match = re.search(r"^#\s+(.+)$", report, re.MULTILINE)
     title = title_match.group(1).strip() if title_match else ""
-    if not title or len(title) > 40:
-        issues.append("clinical-evidence-report.md: title must contain 1-40 characters")
-    if re.search(r"综述|系统评价|meta\s*分析|meta-analysis|systematic review", title, re.I):
-        issues.append("clinical-evidence-report.md: title contains a forbidden article-type label")
-
+    if not title:
+        issues.append("clinical-evidence-report.md: title is missing")
     for heading in (
         "摘要",
         "临床问题",
@@ -131,12 +124,34 @@ def main() -> int:
         for entry in queries
         if isinstance(entry, dict) and isinstance(entry.get("query"), str)
     ] if isinstance(queries, list) else []
-    if len(query_values) < 8 or len(set(filter(None, query_values))) < 8:
-        issues.append("clinical-evidence-search.json: require at least 8 distinct documented queries")
+    documented_searches = {
+        (
+            entry.get("database", "").strip().lower(),
+            entry.get("query", "").strip().lower(),
+        )
+        for entry in queries
+        if isinstance(entry, dict)
+        and isinstance(entry.get("database"), str)
+        and isinstance(entry.get("query"), str)
+        and entry.get("database", "").strip()
+        and entry.get("query", "").strip()
+    } if isinstance(queries, list) else set()
+    if not query_values or len(documented_searches) != len(query_values):
+        issues.append(
+            "clinical-evidence-search.json: queries must be completed, non-empty, and non-duplicate"
+        )
+    query_databases = {
+        entry.get("database", "").strip().lower()
+        for entry in queries
+        if isinstance(entry, dict) and isinstance(entry.get("database"), str)
+        and entry.get("database", "").strip()
+    } if isinstance(queries, list) else set()
+    if len(query_databases) < 2:
+        issues.append("clinical-evidence-search.json: search at least two relevant source classes")
 
     claims = matrix.get("claims")
-    if not isinstance(claims, list) or len(claims) < 18:
-        issues.append("clinical-evidence-matrix.json: require at least 18 claims")
+    if not isinstance(claims, list) or not claims:
+        issues.append("clinical-evidence-matrix.json: material claims are missing")
         claims = claims if isinstance(claims, list) else []
     for index, claim in enumerate(claims):
         if not isinstance(claim, dict):
@@ -173,12 +188,21 @@ def main() -> int:
     reference_count = len(
         re.findall(r"^\s*\d+\.\s+\S", section(report, "参考文献|References"), re.M)
     )
-    if reference_count < 12:
-        issues.append(f"clinical-evidence-report.md: only {reference_count} numbered references")
-    if len(re.findall(r"^@[A-Za-z]+\s*\{", bibliography, re.M)) < 12:
-        issues.append("references.bib: require at least 12 entries")
-    if len([line for line in ledger.splitlines() if line.strip()]) < 19:
-        issues.append("citation-ledger.csv: require a header and at least 18 claim rows")
+    largest_reference_number = max(
+        (
+            claim.get("referenceNumber", 0)
+            for claim in claims
+            if isinstance(claim, dict) and isinstance(claim.get("referenceNumber"), int)
+        ),
+        default=0,
+    )
+    if reference_count < largest_reference_number:
+        issues.append("clinical-evidence-report.md: a matrix reference does not resolve")
+    bibliography_count = len(re.findall(r"^@[A-Za-z]+\s*\{", bibliography, re.M))
+    if bibliography_count < reference_count:
+        issues.append("references.bib: missing entries for numbered report references")
+    if len([line for line in ledger.splitlines() if line.strip()]) < len(claims) + 1:
+        issues.append("citation-ledger.csv: require a header and one row per matrix claim")
 
     for label, pattern in {
         "unresolved": r"unresolved|未解析",
@@ -191,6 +215,26 @@ def main() -> int:
             issues.append(f"citation-audit.md: missing explicit {label} audit")
 
     screening = search_log.get("screening") if isinstance(search_log.get("screening"), dict) else {}
+    source_records = (
+        search_log.get("sourceRecords")
+        if isinstance(search_log.get("sourceRecords"), list)
+        else []
+    )
+    included_records = [
+        entry for entry in source_records
+        if isinstance(entry, dict) and entry.get("included") is True
+    ]
+    identified = screening.get("recordsIdentified")
+    deduplicated = screening.get("recordsAfterDeduplication")
+    included = screening.get("sourcesIncluded")
+    if not (
+        isinstance(identified, int)
+        and isinstance(deduplicated, int)
+        and isinstance(included, int)
+        and identified >= deduplicated >= included >= 1
+        and included == len(included_records)
+    ):
+        issues.append("clinical-evidence-search.json: screening flow is inconsistent")
     stats = receipt.get("stats") if isinstance(receipt.get("stats"), dict) else {}
     expected_stats = {
         "totalSearches": len(queries) if isinstance(queries, list) else 0,

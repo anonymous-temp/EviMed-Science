@@ -21,16 +21,16 @@ Do not claim completion if any required skill fails to load.
 ## Academic scope
 
 1. Start from the current question. Do not reuse a prior report as a factual draft.
-2. Convert the question into a direct academic title of at most 40 Chinese characters.
+2. Convert the question into a concise, direct academic title and honor any title-length preference in the request.
 3. Do not put `综述`, `系统评价`, `meta分析`, `review`, or another article-type label in the title unless the user explicitly requests that design.
-4. Write a publication-grade evidence analysis, not an expanded chat answer. Target 10,000–18,000 Chinese characters before the references.
+4. Write a publication-grade evidence analysis, not an expanded chat answer. Let the question and usable evidence determine length; do not pad the report or repeat conclusions to meet a quota.
 5. Keep the safety-first practical answer separate and concise. Clinical urgency takes precedence over product discussion.
 
 ## Deep-research protocol
 
 ### Question decomposition
 
-Define at least four evidence domains before searching:
+Decompose the question into the evidence domains needed to answer it. Typical domains include:
 
 - symptom phenotype and differential diagnosis;
 - time-sensitive cardiovascular risk and triage;
@@ -40,29 +40,24 @@ Define at least four evidence domains before searching:
 
 ### Reproducible search
 
-Run at least eight distinct searches across at least two source classes. Use English and Chinese synonyms when relevant.
+Search iteratively across at least two relevant source classes. Use English and Chinese synonyms when relevant. Continue until every material section has usable evidence and further query variation is no longer changing the conclusion; do not stop because a numeric query target was reached.
 
 Record each completed search in `clinical-evidence-search.json` immediately after
-the search succeeds. Do not state a larger search count in prose than the JSON
-actually contains. Before drafting, verify that the log contains at least eight
-non-duplicate query strings; planned or failed searches do not count.
+the search succeeds. The JSON must exactly match successful search-tool calls
+from the current run. Planned, duplicate, or failed searches do not count.
 
-For an acute pressure-like chest symptom question, include targeted variants covering:
-
-- acute chest pain AND acute coronary syndrome AND guideline;
-- chest pressure AND high-sensitivity troponin AND diagnostic pathway;
-- chest pain AND electrocardiogram AND emergency evaluation;
-- gastroesophageal reflux AND non-cardiac chest pain AND differential diagnosis;
-- symptom characteristics AND acute coronary syndrome AND diagnostic accuracy;
-- sex or age differences in acute coronary syndrome presentation;
-- current Chinese or international chest-pain guidance;
-- the named medicine, indication, randomized trial, systematic evidence, safety, and regulatory revision.
+For an acute pressure-like chest symptom question, adapt the queries to examine
+urgent cardiovascular triage, diagnostic pathways, limits of symptom-based
+discrimination, relevant non-cardiac causes, population differences, current
+guidance, and any named medicine's indication, efficacy, safety, and regulatory
+scope. Combine or split concepts according to the results rather than following
+a fixed query list.
 
 Use `evimed_literature_search`, `evimed_guideline_search`, and selected audited sources from `evimed_data_source_catalog` or `evimed_biomedical_source_search`. Deduplicate candidate records with `evimed_evidence_deduplicate`.
 
 When calling `evimed_evidence_deduplicate`, omit absent identifier keys instead of sending empty `doi`, `pmid`, `pmcid`, or URL strings. If input validation fails, correct the full batch and obtain a successful deduplication result before continuing.
 
-Identify at least 30 records, retain at least 12 relevant sources after deduplication, and inspect at least 10 sources beyond title-only metadata. Prefer:
+Screen the returned records, deduplicate them, and inspect enough relevant sources to support every material conclusion and important counterpoint. Prefer:
 
 1. current guidelines and consensus statements;
 2. systematic evidence and high-quality diagnostic studies;
@@ -76,18 +71,19 @@ Do not inflate counts with duplicates, irrelevant records, editorials, or title-
 
 Use `evimed_official_page_fetch` for approved professional-society, guideline, evidence-review, public-health, or regulatory pages. Use `evimed_open_access_full_text` for key PMID, PMCID, or DOI records with accessible full text.
 
-Prefer a PMCID or a search record explicitly marked open access before calling the full-text tool. A closed-access result or unreachable official page belongs in `failedSources`; replace it with another relevant accessible source rather than repeatedly retrying a guessed URL. For the acute chest-pressure topic, the stable official pages below may be used when relevant:
+Prefer a PMCID or a search record explicitly marked open access before calling
+the full-text tool. For official pages, use stable URLs returned by the search
+or audited source catalog rather than guessed publisher paths. A closed-access
+result or unreachable official page belongs in `failedSources`; replace it with
+another relevant accessible source rather than repeatedly retrying it.
 
-- `https://www.acc.org/latest-in-cardiology/ten-points-to-remember/2022/10/10/23/15/2022-acc-expert-consensus-on-chest-pain`
-- `https://www.nhs.uk/symptoms/chest-pain/`
-
-At least eight **distinct documents** must be successfully preserved and inspected. Count one canonical readable artifact per document:
+Preserve and inspect the distinct documents actually used to support the report. Count one canonical readable artifact per document:
 
 - use the returned `fulltext.md` for a PMC document, not both its Markdown and companion XML;
 - use the returned `page.md` for an official page;
 - never count two formats, aliases, redirects, or duplicate records for the same document as separate sources.
 
-Before drafting, group the preserved paths by document identity and confirm that at least eight distinct canonical Markdown artifacts remain. If there are fewer than eight, continue searching for relevant PMCID/open-access records or approved official pages. A successful source artifact must contain source identity, retrieval time, content hash, and usable text.
+Before drafting, group the preserved paths by document identity and confirm that every material claim has an inspected canonical artifact. If an evidence domain remains unsupported, continue searching for relevant PMCID/open-access records or approved official pages. A successful source artifact must contain source identity, retrieval time, content hash, and usable text.
 
 Never create, edit, replace, or copy a file under `.evimed-sources/`. Only artifacts returned by successful retrieval tools are evidence artifacts.
 
@@ -108,7 +104,7 @@ For every included source, record:
 
 Separate findings for emergency triage from findings for chronic stable disease. Evidence that a medicine may help diagnosed stable angina does not establish a role in self-diagnosing undifferentiated acute chest pressure.
 
-## Citation and traceability contract
+## Citation and traceability integrity
 
 ### Reader-visible citations
 
@@ -126,7 +122,7 @@ Use standard numbered citations in order of first appearance:
 
 ### Evidence matrix
 
-Write `clinical-evidence-matrix.json` with a top-level `claims` array containing at least 18 atomic material claims. Every claim must contain:
+Write `clinical-evidence-matrix.json` with a top-level `claims` array containing the report's atomic material claims. Do not split prose into artificial micro-claims merely to increase the count. Every claim must contain:
 
 - `claimId`
 - `claim`
@@ -150,13 +146,13 @@ that only describes the symptom is not sufficient.
 
 Write:
 
-- `references.bib` with at least 12 deduplicated entries;
+- `references.bib` with one deduplicated entry for every numbered report reference;
 - `citation-ledger.csv` with one row per matrix claim;
 - `citation-audit.md` documenting unresolved identifiers, duplicates, corrections or retractions, metadata-only records, and claim-source mismatches.
 
-Name every audit category explicitly even when its count is zero. `Abstract-only`
-is not a synonym for `metadata-only`; document how metadata-only records were
-excluded from claim support.
+Record the checks actually performed and their findings, including unresolved
+identifiers, duplicates, corrections or retractions, metadata-only records, and
+claim-source mismatches. `Abstract-only` is not a synonym for `metadata-only`.
 
 Prefer DOI, then PMID/PMCID, then a stable official-document identifier. Verify author, title, venue, year, volume, issue, pages, DOI, PMID, and version against an authoritative record. Do not manufacture missing metadata.
 
@@ -168,7 +164,7 @@ For organizations or official documents, use the issuing organization as the aut
 
 ## Required report structure
 
-Use these sections, adding a medicine-specific results subsection only when relevant:
+Use a coherent academic structure containing these core sections. Merge adjacent analytical sections when that improves the argument, and add a medicine-specific subsection only when relevant:
 
 1. `摘要`
 2. `临床问题与分析框架`
@@ -191,7 +187,7 @@ The results section must synthesize evidence by clinical question, not list sour
 
 The discussion must explain what the evidence does and does not establish, distinguish acute undifferentiated symptoms from diagnosed chronic disease, and separate direct evidence from reasoned synthesis.
 
-The limitations section must address at least four of: risk of bias, indirectness, imprecision, evidence form, publication bias, recency, population transferability, jurisdiction, and health-system applicability. Describe evidence-form limitations as scientific constraints on interpretation; do not report which page, full text, tool, gateway, or file could not be retrieved, and do not write access excuses into the academic report.
+The limitations section must discuss only limitations that materially change interpretation, such as risk of bias, indirectness, imprecision, evidence form, publication bias, recency, population transferability, jurisdiction, or health-system applicability. Synthesize them into an argument rather than a checklist. Do not report tool, gateway, file, or page-retrieval failures in the academic report.
 
 ## Acute chest-pressure safety boundary
 
@@ -203,11 +199,7 @@ For new pressure-like chest discomfort:
 - localize the practical emergency number to China as `120`, while keeping the source proposition faithful;
 - do not add aspirin, dosing, contraindications, driving advice, body-position advice, or wait-and-see advice unless directly supported and appropriate to the question.
 
-When Suxiao Jiuxin Wan is named, explicitly state:
-
-`不得因服用速效救心丸而延误呼救或急诊评估。`
-
-Support that conclusion by combining the emergency-triage evidence with medicine evidence limited to its studied or regulated population. Do not convert chronic stable-angina efficacy evidence into an acute self-triage recommendation.
+When Suxiao Jiuxin Wan is named, state clearly that taking it must not delay emergency contact or acute evaluation. Support that conclusion by combining emergency-triage evidence with medicine evidence limited to its studied or regulated population. Do not convert chronic stable-angina efficacy evidence into an acute self-triage recommendation.
 
 ## Search log schema
 
@@ -256,7 +248,7 @@ Write strict JSON to `clinical-evidence-run.json` containing:
 - `tools`;
 - `successfulSourceArtifacts`: path strings only;
 - `failedSources`;
-- `qualityChecks`: at least `claimTraceability`, `sourceQuoteMatch`, `contradictionAudit`, `arithmeticAudit`, `citationAudit`, and `searchReproducibility`, all boolean;
+- `qualityChecks`: the checks actually performed, represented as boolean values; include claim traceability, source-quote matching, citation integrity, search reproducibility, and contradiction or arithmetic checks when applicable;
 - `status`: exactly `succeeded` only when all required files and checks pass.
 
 `successfulSourceArtifacts` must list exactly one canonical readable path per distinct document. Also write a `stats` object whose integer values exactly match `clinical-evidence-search.json`:
@@ -269,7 +261,7 @@ Write strict JSON to `clinical-evidence-run.json` containing:
 
 Use actual current ISO-8601 timestamps. `startedAt` must not predate the current run, `completedAt` must not be in the future, and `startedAt` must precede `completedAt`.
 
-Inside JSON strings, use Chinese quotation marks for quoted Chinese prose rather than unescaped ASCII double quotes.
+Escape quotation marks correctly inside JSON strings; do not alter the scientific wording merely to work around JSON syntax.
 
 ## Required outputs
 
@@ -283,9 +275,9 @@ Inside JSON strings, use Chinese quotation marks for quoted Chinese prose rather
 
 Read every output back before claiming success. Do not use `grep` or another unbounded line-oriented search on a generated report; long Markdown lines can exceed tool-output limits and invalidate an otherwise complete run. Use bounded `read` ranges and the platform's deterministic completion validator instead. Verify:
 
-- at least eight distinct searches across at least two source classes;
-- at least 30 identified records, 12 included sources, 10 inspected beyond metadata, and eight distinct preserved documents represented by canonical Markdown artifacts;
-- at least 18 atomic claims;
+- the search log exactly matches successful searches and covers at least two relevant source classes;
+- screening counts are internally consistent and every included source was inspected beyond title-only metadata;
+- the claim matrix contains every material factual conclusion without artificial claim splitting;
 - every numbered citation resolves to a complete reference;
 - every claim quote occurs in its source artifact;
 - all DOI/PMID/PMCID values and bibliographic metadata are accurate;
@@ -303,4 +295,4 @@ If it exits non-zero, fix every listed issue and run it again. Do not finish
 until it returns `"ok": true`. The server performs a stricter independent
 evidence and source-integrity gate after this preflight.
 
-If this contract cannot be met, write an honest failed run receipt and do not present the report as publication-grade.
+If these integrity requirements cannot be met, write an honest failed run receipt and do not present the report as publication-grade.

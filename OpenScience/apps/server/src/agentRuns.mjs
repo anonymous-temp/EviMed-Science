@@ -442,17 +442,17 @@ function clinicalEvidenceRepairPrompt(issues) {
     "The server-side clinical evidence gate rejected the current package.",
     "Revise the named files in the existing academic package in place: clinical-evidence-report.md, clinical-evidence-matrix.json, clinical-evidence-search.json, citation-ledger.csv, references.bib, citation-audit.md, or clinical-evidence-run.json.",
     "Only rewrite a file when an issue below names or requires it; preserve already valid evidence and source metadata.",
-    "Every JSON deliverable must remain strict JSON. Inside JSON string values, use Chinese quotation marks instead of unescaped ASCII double quotes.",
-    "Do not call any retrieval tool and do not modify any .evimed-sources artifact; the successful source artifacts from this run remain authoritative.",
+    "Every JSON deliverable must remain strict JSON. Escape embedded quotation marks correctly instead of changing scientific wording to work around JSON syntax.",
+    "Never create or modify a .evimed-sources artifact. If a material claim lacks usable support, retrieve an additional verified source with the approved evidence tools or remove the claim; never patch around missing evidence.",
     "Treat repeated numeric-fact messages as one report-wide audit task: remove nonessential numbers or place each retained quantitative proposition on a line with the correct numbered citation and matching hidden matrix claim marker.",
-    "The prose search count must equal clinical-evidence-search.json. Preserve at least eight distinct query objects; never invent searches that were not actually completed.",
-    "Expand scientific synthesis, comparison, clinical reasoning, evidence appraisal, and applicability analysis until the report itself contains at least 10000 characters; do not pad it with retrieval diaries, generic filler, or repeated conclusions.",
+    "The search log must exactly match successful evidence-search calls from this run. Never invent, duplicate, or omit completed searches.",
+    "Improve scientific synthesis, comparison, clinical reasoning, evidence appraisal, and applicability where the issues identify a substantive gap. Do not pad the report, repeat conclusions, or add claims merely to increase counts.",
     "Every evidence-matrix claim must appear in the report on a line with its exact numbered citation and hidden claim marker. Emergency-call support quotes must include both the call action and the qualifying symptom condition.",
-    "citation-audit.md must explicitly name unresolved, duplicate, correction/retraction, metadata-only, and claim-source mismatch checks even when a count is zero.",
-    "Keep scholarly limitations about bias, indirectness, precision, currency, and applicability, but remove retrieval diaries, access excuses, tool names, gateway names, and statements about which files or pages were unavailable.",
+    "citation-audit.md must record the citation checks actually performed and their findings, including unresolved identifiers, duplicates, corrections or retractions, metadata-only records, and claim-source mismatches.",
+    "Keep only limitations that materially affect interpretation, and synthesize them rather than writing a checklist. Remove retrieval diaries, access excuses, tool names, gateway names, and statements about which files or pages were unavailable.",
     "The safety-first practical section must come before the reference list. Remove unsupported self-care details; every numbered step and bullet must have direct support, a numbered citation, and a matching hidden claim marker.",
     "After fixing the files, run: python \"$XDG_CONFIG_HOME/opencode/skills/clinical-evidence-synthesis/scripts/preflight.py\" --workspace .",
-    "Fix every preflight issue, rerun it until it returns ok=true, read every required deliverable back, and repeat the skill's final literal checklist before finishing:",
+    "Fix every preflight issue, rerun it until it returns ok=true, and read every required deliverable back before finishing:",
     bounded,
   ].join("\n");
 }
@@ -570,7 +570,7 @@ async function requiredSpecialistArtifacts(
         artifacts,
         errorCode: "specialist_evidence_traceability_failed",
         qualityIssues: [
-          "clinical-evidence-matrix.json must contain strict valid JSON; replace unescaped ASCII quotes inside Chinese prose with Chinese quotation marks.",
+          "clinical-evidence-matrix.json must contain strict valid JSON; escape quotation marks correctly inside string values.",
         ],
       };
     }
