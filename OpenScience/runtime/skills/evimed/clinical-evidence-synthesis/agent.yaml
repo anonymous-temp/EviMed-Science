@@ -1,10 +1,14 @@
 id: clinical-evidence-synthesis
-version: 1.0.11
+version: 2.0.0
 title: Clinical Evidence Synthesis
 category: Clinical Evidence
-description: Transform an open-domain clinical question into a concise academic analysis with claim-level source traceability and a separate safety-first practical answer.
+description: Transform an open-domain clinical question into a publication-grade deep evidence analysis with reproducible searches, verified citations, claim-level traceability, and a separate safety-first practical answer.
 skill: clinical-evidence-synthesis
-estimatedMinutes: [10, 45]
+companionSkills:
+  - deep-research
+  - biomedical-database-search
+  - citation-integrity
+estimatedMinutes: [30, 120]
 starterPrompts:
   - Analyze acute chest pressure, the differential diagnosis, and the appropriate role of Suxiao Jiuxin Wan.
 requiredInputs:
@@ -18,15 +22,16 @@ optionalInputs:
   - jurisdiction
   - outputLanguage
 requiredTools:
-  - evimed_official_page_fetch
-optionalTools:
+  - evimed_data_source_catalog
   - evimed_literature_search
-  - evimed_biomedical_source_search
+  - evimed_official_page_fetch
   - evimed_open_access_full_text
+  - evimed_evidence_deduplicate
+optionalTools:
+  - evimed_biomedical_source_search
   - evimed_guideline_search
   - evimed_drug_label_search
   - evimed_pharmacy_reference_search
-  - evimed_evidence_deduplicate
 dataSources:
   - literature
   - guidelines
@@ -36,9 +41,18 @@ outputs:
     required: true
   - path: clinical-evidence-matrix.json
     required: true
+  - path: clinical-evidence-search.json
+    required: true
+  - path: citation-ledger.csv
+    required: true
+  - path: references.bib
+    required: true
+  - path: citation-audit.md
+    required: true
   - path: clinical-evidence-run.json
     required: true
 completionChecks:
   - requiredOutputsExist
   - citationsResolvable
   - evidenceClaimsTraceable
+  - skillsLoaded

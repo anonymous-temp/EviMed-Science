@@ -66,7 +66,11 @@ test("loads the final package contract and derives runtime identity", async () =
   await withPackageRoot(async (root) => {
     await writePackage(root, validManifest);
     const registry = await loadAgentRegistry({ packageDirs: [root] });
-    assert.deepEqual(registry.list(), [{ ...validManifest, runtimeAgent: "evimed-adr-analysis" }]);
+    assert.deepEqual(registry.list(), [{
+      ...validManifest,
+      companionSkills: [],
+      runtimeAgent: "evimed-adr-analysis",
+    }]);
     assert.equal(Object.hasOwn(registry.list()[0], "packageDir"), false);
     assert.equal(Object.hasOwn(registry.list()[0], "skillText"), false);
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_adr_signal_analysis"));
@@ -114,7 +118,7 @@ test("official specialist packages preserve domain-specific evidence and release
   const expectedVersions = new Map([
     ["adr-analysis", "1.2.2"],
     ["bibliometric-analysis", "1.0.1"],
-    ["clinical-evidence-synthesis", "1.0.11"],
+    ["clinical-evidence-synthesis", "2.0.0"],
     ["comprehensive-drug-evaluation", "2.2.1"],
     ["drug-selection", "2.1.1"],
     ["mendelian-randomization", "1.0.1"],
@@ -129,10 +133,28 @@ test("official specialist packages preserve domain-specific evidence and release
     assert.deepEqual(
       agent.completionChecks,
       agent.id === "clinical-evidence-synthesis"
-        ? ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"]
+        ? ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable", "skillsLoaded"]
         : ["requiredOutputsExist", "citationsResolvable"],
     );
   }
+  const clinicalEvidence = registry.get("clinical-evidence-synthesis");
+  assert.deepEqual(clinicalEvidence.companionSkills, [
+    "deep-research",
+    "biomedical-database-search",
+    "citation-integrity",
+  ]);
+  assert.deepEqual(
+    clinicalEvidence.outputs.filter((output) => output.required).map((output) => output.path),
+    [
+      "clinical-evidence-report.md",
+      "clinical-evidence-matrix.json",
+      "clinical-evidence-search.json",
+      "citation-ledger.csv",
+      "references.bib",
+      "citation-audit.md",
+      "clinical-evidence-run.json",
+    ],
+  );
 
   const skills = Object.fromEntries(
     registry.list().map((agent) => [agent.id, registry.getPackage(agent.id).skillText]),
@@ -191,6 +213,8 @@ test("rejects invalid versions, identifiers, estimates, and overlapping inputs",
     ["estimate order", { estimatedMinutes: [40, 20] }, /estimatedMinutes/i],
     ["input id", { requiredInputs: ["drug-name"] }, /input identifier/i],
     ["input overlap", { requiredInputs: ["drug"], optionalInputs: ["drug"] }, /requiredInputs.*optionalInputs/i],
+    ["companion skill id", { companionSkills: ["Deep_Research"] }, /invalid companion skill/i],
+    ["companion self reference", { companionSkills: ["adr-analysis"] }, /must not repeat/i],
   ];
   for (const [name, replacement, expected] of cases) {
     await t.test(name, async () => {

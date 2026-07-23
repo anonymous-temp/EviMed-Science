@@ -1,67 +1,256 @@
 ---
 name: clinical-evidence-synthesis
-description: Build a concise, source-faithful academic clinical analysis and a separate safety-first practical answer from an open-domain medical question.
+description: Produce a publication-grade, deeply researched clinical evidence analysis with reproducible searches, verified citations, claim-level traceability, and a separate safety-first practical answer.
 ---
 
 # Clinical Evidence Synthesis
 
-Use this skill for clinical evidence questions that need an academic analysis, including differential diagnosis, immediate management, and the role of a medicine. This workflow is not a substitute for emergency care.
+Use this skill for open-domain clinical questions that require an academic evidence analysis. It does not replace emergency care or individualized diagnosis.
 
-## Non-negotiable execution contract
+## Required skill stack
 
-1. Start from the current user question. Do not read or reuse a prior report as a factual draft.
-2. Convert the question into a short academic title of at most 40 characters. Prefer a direct title such as `压迫性胸部不适与速效救心丸的处置边界`; do not append phrases such as “基于多源证据的分析”. Do not put article-type labels such as “review”, “systematic review”, or “meta-analysis” in the title unless the user explicitly requests that study design.
-3. Separate the deliverable into:
-   - an academic evidence analysis; and
-   - a brief safety-first practical answer for the original question.
-4. Retrieve evidence before drafting material claims. Use `evimed_official_page_fetch` for approved guideline, professional-society, evidence-review, or regulatory pages. Use `evimed_open_access_full_text` when a PMID, PMCID, or DOI has an open full text. Read the written source artifacts directly.
-   - For acute pressure-like chest symptoms involving Suxiao Jiuxin Wan, retrieve exactly this verified allowlisted set with `evimed_official_page_fetch`:
-     - `https://www.acc.org/latest-in-cardiology/ten-points-to-remember/2022/10/10/23/15/2022-acc-expert-consensus-on-chest-pain`
-     - `https://www.nhs.uk/symptoms/chest-pain/`
-     - `https://www.cochrane.org/zh-hans/evidence/CD004473_chinese-herbal-medicine-suxiao-jiuxin-wan-angina-pectoris`
-     - `https://www.ccfdie.org/zryyxxw/zxdt/webinfo/2021/01/1608326624840701.htm`
-   - For that fixed acute-chest/Suxiao case, do not call literature, guideline, drug-label, biomedical, open-full-text, deduplication, Crossref, or any other retrieval tool. Those optional calls add no evidence needed by this package, and any failed optional call correctly fails the run. Do not substitute AHA publisher pages, `ahajournals.org`, or `cochranelibrary.com` URLs for the four reachable pages above.
-   - For the same acute pressure-like chest question without a named medicine, retrieve exactly the ACC and NHS pages above. Do not call literature, guideline, biomedical, drug-label, open-full-text, deduplication, or other optional retrieval tools, and do not add a case report or structured search result to the matrix. This two-source package is sufficient for the differential and immediate-action boundary.
-   - For other questions, call only the smallest sufficient set of relevant tools. Never put placeholder values such as `N/A` into DOI, PMID, or URL fields when using deduplication.
-5. A successful source fetch must have `status=success`, a workspace artifact, a retrieval timestamp, and a content hash. A tool error, warning without usable evidence, title-only result, or empty result is not evidence.
-   Source artifacts are retrieval receipts, not authored notes: never create, edit, or replace any path under `.evimed-sources/` with `write`, `edit`, shell commands, or copied metadata. Only artifacts returned by a successful `evimed_official_page_fetch` or `evimed_open_access_full_text` call can appear in `successfulSourceArtifacts` or the evidence matrix.
-6. Never infer recommendations, study design, effect size, comparator direction, certainty, or causality from a title or bibliographic metadata. Abstract-only facts must be labelled abstract-level. Quantitative claims require the exact supporting passage from an abstract, full text, official document, or structured primary record.
-7. Treat every material statement as a claim. Before writing the report, create `clinical-evidence-matrix.json` with a top-level `claims` array. Every claim must contain:
-   - `claimId`: unique stable string;
-   - `claim`: the exact factual proposition;
-   - `sourceUrl`: an HTTPS primary or authoritative source URL;
-   - `sourceTitle`: the verified source title;
-   - `artifactPath`: the workspace-relative `.evimed-sources/...` file containing the inspected source text;
-   - `identifier`: DOI, PMID, PMCID, guideline identifier, or official-document content hash;
-   - `accessLevel`: one of `full_text`, `official_page`, `abstract`, `structured_record`;
-   - `supportQuote`: a verbatim source passage that directly supports the complete claim; normally quote at least 20 characters, but a shorter complete official field such as a labelled review date is acceptable. Preserve the source's wording and punctuation; never join non-contiguous passages with an ellipsis;
-   - `applicability`: why the source applies to the question;
-   - `uncertainty`: source-specific uncertainty, or `none identified`.
-   Keep each matrix claim atomic. Every numeral in `claim` must also appear in its `supportQuote`, `sourceTitle`, or `identifier`; otherwise remove the numeral or create a separate claim with the exact direct passage. Do not combine an ECG proposition with a separate troponin timing proposition under one quote, and do not combine trial counts or participant counts with a conclusion quote that omits those counts.
-   An emergency-call claim must quote the actual call/emergency instruction, not only the adjacent symptom description. The NHS symptom bullet is not itself an emergency-action quote: keep that claim limited to symptom description, then use the separate `Call ... straight away` passage for the emergency action. Split `these symptoms need emergency help` from `these symptoms can feel like pressure` when the page presents them in separate passages. Do not mention `999` unless the direct quote contains `999`; localize the practical answer to China's `120` without adding `120` to a matrix claim whose source does not state it.
-   For either fixed acute-chest report, never write `999` or the number of ACC key points in the academic prose, including `科学局限`; describe these only as an NHS public page and an ACC summary page. The source URL may retain its original path in `参考来源`. Do not add advice to try stomach medicine, take an antacid, observe, or wait for symptoms to change.
-8. Cite claims in `clinical-evidence-report.md` using the exact marker `[claim:CLM-NNN]` beside a Markdown link. Each marker contains exactly one ID; write `[claim:CLM-001] [claim:CLM-002]`, never `[claim:CLM-001, CLM-002]`. Every factual sentence must stay within the exact proposition of its cited matrix claim. If a sentence adds a sample size, study count, date, deadline, timing threshold, indication, contraindication, recommendation, or causal interpretation, create a separate claim with its own direct quote. Never reuse a broad marker to cover new facts. Do not cite EviMed API endpoints as public evidence URLs.
-   Put the applicable claim marker on the same physical line as every factual numeral and every practical action. Headings must not contain claim markers; keep source years, document numbers, and identifiers out of headings when they are not necessary to name the scientific topic. Parenthetical outline labels are not evidence and should be avoided in prose.
-   Avoid stronger wording than the source. Do not change “similar” to “identical”, “seek urgent care” to “the only safe strategy”, “supports” to “proves”, or an evidence limitation to “directly refutes”. Qualify a synthesis as an inference when it combines more than one claim.
-9. Clinical urgency takes precedence over product discussion. For acute pressure-like chest symptoms, clearly state that symptoms alone cannot safely distinguish acute coronary syndrome from gastrointestinal disease, provide the emergency action threshold, and prevent a traditional medicine or symptom-relief medicine from delaying emergency evaluation. Do not describe symptom response to Suxiao Jiuxin Wan as a diagnostic test. Mention a clinician-issued emergency plan only when a retrieved source directly supports that instruction and the matrix contains a dedicated claim; otherwise omit it. Do not invent individualized dosing or tell every patient categorically to start or stop a medicine.
-   A regulatory label revision proves that safety information required revision; it does not by itself prove a specific serious adverse reaction or refute an older trial review. Describe the regulator's action at its actual evidentiary scope.
-   Only when the user names Suxiao Jiuxin Wan, write the explicit sentence `不得因服用速效救心丸而延误呼救或急诊评估。` Cite its supporting emergency-triage and medicine-scope claims. If the user does not name a medicine, do not introduce Suxiao Jiuxin Wan or any other medicine into the report. Do not make diagnostic claims from symptom response to any medicine, including Suxiao Jiuxin Wan, antacids, or nitroglycerin.
-10. The “limitations” section must discuss scientific applicability, bias, indirectness, imprecision, evidence form, evidence age, and population/jurisdiction limits. Describe an ACC key-points page objectively as summary-level evidence that does not expose full recommendation grading; write this as a property of the evidence, not as `本分析仅基于…`, `本文未检索…`, `未触及…`, or another account of what the agent did. Do not say the full text was inaccessible or unavailable. Never mention runtime behavior, tools, allowlists, scraping, fetching, saved artifacts, inaccessible pages, failed searches, or the EviMed execution contract in the academic report. Put those operational details only in the run receipt.
-11. Run a final contradiction and arithmetic audit. Verify study identity, organization names, denominators, comparator direction, effect direction, units, years, and every URL against the preserved source artifacts.
-12. For either fixed acute-chest case, keep the academic report between roughly 2,500 and 5,000 Chinese characters and use only these sections: `摘要`, `临床问题`, `证据结果`, `综合判断`, `科学局限`, `安全优先的实际处置`, and `参考来源`. Do not add unsupported emergency details such as a 10-minute ECG target, self-driving advice, waiting-location or body-position advice, aspirin, advice to try stomach medicine or wait for symptom change, antacid-response claims, nitroglycerin instructions, medicine contraindications, or label indications unless the retrieved source contains a direct quote and the matrix has a dedicated claim. Every practical step and every bullet in the practical section must contain at least one applicable claim marker on that same line; remove any action that lacks direct evidence. A practical instruction to call emergency services, seek non-emergency medical advice, obtain an ECG, or undergo troponin testing requires its own matrix claim whose quoted passage contains that action; a symptom-description quote or case report is not enough. Likewise, do not report exact publication/review dates, the number of key points, trial counts, participant counts, derived “years since” values, regulatory deadlines, or “no evidence exists” assertions without a dedicated claim and exact supporting passage. A source year or document identifier may remain in the reference list, but it is not itself a clinical conclusion. Do not call symptom patterns “completely identical” or describe any recommendation as the “only safe strategy”.
-   For the fixed medicine-free case, use only four practical bullets: immediate emergency contact supported by the symptom and emergency-call claims; no self-diagnosis supported by the self-diagnosis claim; ECG supported by its dedicated claim; and serial hs-cTn supported by its dedicated claims. For the Suxiao case, add only the required no-delay sentence and the bounded medicine-evidence statement supported by dedicated Cochrane/regulatory claims. Do not add any other practical action.
-13. Write strict valid JSON directly with the `write` tool, then read the files back. Inside every JSON string value, use Chinese quotation marks for quoted Chinese prose; never place an unescaped ASCII double quote inside a JSON string. If the server asks for a corrective turn, rewrite only the file named by the reported issue and preserve already valid claim, source, and receipt fields. Do not call Bash, Python, a JSON parser, or any shell command to create, repair, or self-audit the three deliverables; a shell error fails the run.
-14. After the final readback, perform this literal checklist before claiming success: every factual numeral before `参考来源` is on a line with its applicable claim marker; every practical bullet contains a claim marker; the medicine-free report contains no `速效救心丸`; neither fixed report contains `胃药`, `抗酸药`, `等待症状`, `观察症状`, `唯一安全`, `唯一可靠`, or `唯一正确`; and `科学局限` uses at least two explicit dimensions from `方法学质量/偏倚`, `间接性/外推`, `不精确/样本量`, `适用性/管辖权/医疗体系`, and `时效/证据年龄/未更新`. Remove exact source years, review dates, elapsed-year calculations, and foreign emergency numbers from prose and limitations. Rewrite the report until all items pass.
+Load these skills before retrieving evidence:
+
+1. `deep-research`
+2. `biomedical-database-search`
+3. `citation-integrity`
+4. `clinical-evidence-synthesis`
+
+Do not claim completion if any required skill fails to load.
+
+## Academic scope
+
+1. Start from the current question. Do not reuse a prior report as a factual draft.
+2. Convert the question into a direct academic title of at most 40 Chinese characters.
+3. Do not put `综述`, `系统评价`, `meta分析`, `review`, or another article-type label in the title unless the user explicitly requests that design.
+4. Write a publication-grade evidence analysis, not an expanded chat answer. Target 10,000–18,000 Chinese characters before the references.
+5. Keep the safety-first practical answer separate and concise. Clinical urgency takes precedence over product discussion.
+
+## Deep-research protocol
+
+### Question decomposition
+
+Define at least four evidence domains before searching:
+
+- symptom phenotype and differential diagnosis;
+- time-sensitive cardiovascular risk and triage;
+- diagnostic pathway, including ECG and serial high-sensitivity troponin;
+- non-cardiac mimics and limits of symptom-based discrimination;
+- treatment-specific efficacy, safety, indication, and regulatory scope when a medicine is named.
+
+### Reproducible search
+
+Run at least eight distinct searches across at least two source classes. Use English and Chinese synonyms when relevant.
+
+For an acute pressure-like chest symptom question, include targeted variants covering:
+
+- acute chest pain AND acute coronary syndrome AND guideline;
+- chest pressure AND high-sensitivity troponin AND diagnostic pathway;
+- chest pain AND electrocardiogram AND emergency evaluation;
+- gastroesophageal reflux AND non-cardiac chest pain AND differential diagnosis;
+- symptom characteristics AND acute coronary syndrome AND diagnostic accuracy;
+- sex or age differences in acute coronary syndrome presentation;
+- current Chinese or international chest-pain guidance;
+- the named medicine, indication, randomized trial, systematic evidence, safety, and regulatory revision.
+
+Use `evimed_literature_search`, `evimed_guideline_search`, and selected audited sources from `evimed_data_source_catalog` or `evimed_biomedical_source_search`. Deduplicate candidate records with `evimed_evidence_deduplicate`.
+
+Identify at least 30 records, retain at least 12 relevant sources after deduplication, and inspect at least 10 sources beyond title-only metadata. Prefer:
+
+1. current guidelines and consensus statements;
+2. systematic evidence and high-quality diagnostic studies;
+3. primary randomized or prospective studies;
+4. official regulatory documents;
+5. authoritative public triage guidance for the patient-facing action boundary.
+
+Do not inflate counts with duplicates, irrelevant records, editorials, or title-only results.
+
+### Full-text and source preservation
+
+Use `evimed_official_page_fetch` for approved professional-society, guideline, evidence-review, public-health, or regulatory pages. Use `evimed_open_access_full_text` for key PMID, PMCID, or DOI records with accessible full text.
+
+At least eight source artifacts must be successfully preserved and inspected. A successful source artifact must contain source identity, retrieval time, content hash, and usable text.
+
+Never create, edit, replace, or copy a file under `.evimed-sources/`. Only artifacts returned by successful retrieval tools are evidence artifacts.
+
+A title, bibliographic record, search snippet, or failed retrieval is not evidence for a clinical outcome, recommendation, effect estimate, study design, certainty rating, or causal statement.
+
+## Evidence appraisal
+
+For every included source, record:
+
+- source type and study design;
+- population, setting, intervention/comparator, and outcomes where applicable;
+- access level: `full_text`, `official_page`, `abstract`, or `structured_record`;
+- risk of bias or evidence-form limitations;
+- directness to the question;
+- precision and sample-size limitations;
+- recency and jurisdictional applicability;
+- whether the source directly supports, qualifies, or conflicts with another source.
+
+Separate findings for emergency triage from findings for chronic stable disease. Evidence that a medicine may help diagnosed stable angina does not establish a role in self-diagnosing undifferentiated acute chest pressure.
+
+## Citation and traceability contract
+
+### Reader-visible citations
+
+Use standard numbered citations in order of first appearance:
+
+`急性胸痛需要结构化风险评估。[1](https://example.org/source) <!-- claim:CLM-001 -->`
+
+- Readers must see `[1]`, `[2]`, and so on, not internal claim IDs.
+- Put each internal marker in an HTML comment: `<!-- claim:CLM-NNN -->`.
+- Put the numbered citation and hidden claim marker on the same physical line as the supported proposition.
+- Every factual numeral and every practical action needs a directly applicable citation and claim marker.
+- Never use a broad citation to cover a sample size, effect estimate, timing threshold, indication, contraindication, or recommendation absent from its source passage.
+
+### Evidence matrix
+
+Write `clinical-evidence-matrix.json` with a top-level `claims` array containing at least 18 atomic material claims. Every claim must contain:
+
+- `claimId`
+- `claim`
+- `referenceNumber`
+- `sourceUrl`
+- `sourceTitle`
+- `artifactPath`
+- `identifier`
+- `accessLevel`
+- `supportQuote`
+- `applicability`
+- `uncertainty`
+
+`referenceNumber` must resolve to the numbered reference list. `supportQuote` must be a contiguous verbatim passage present in the preserved source artifact. Every numeral in a claim must also appear in the quote, source title, or identifier.
+
+### Bibliography and audit
+
+Write:
+
+- `references.bib` with at least 12 deduplicated entries;
+- `citation-ledger.csv` with one row per matrix claim;
+- `citation-audit.md` documenting unresolved identifiers, duplicates, corrections or retractions, metadata-only records, and claim-source mismatches.
+
+Prefer DOI, then PMID/PMCID, then a stable official-document identifier. Verify author, title, venue, year, volume, issue, pages, DOI, PMID, and version against an authoritative record. Do not manufacture missing metadata.
+
+The report reference list must use a consistent Vancouver-style format:
+
+`1. Authors. Title. Journal. Year;volume(issue):pages. doi:... PMID:... URL:...`
+
+For organizations or official documents, use the issuing organization as the author and include publication/update date and stable URL when available.
+
+## Required report structure
+
+Use these sections, adding a medicine-specific results subsection only when relevant:
+
+1. `摘要`
+2. `临床问题与分析框架`
+3. `证据检索与评价方法`
+4. `证据结果`
+5. `病因鉴别与诊断推理`
+6. `急诊评估与风险分层`
+7. `药物证据与适用边界` when a medicine is named
+8. `讨论`
+9. `证据局限`
+10. `结论`
+11. `安全优先的实际处置`
+12. `参考文献`
+
+The methods section must report databases/source classes, complete query concepts, search date, eligibility criteria, deduplication, screening counts, access levels, and appraisal dimensions. Describe this as a scholarly method, not as a runtime log.
+
+The results section must synthesize evidence by clinical question, not list sources one by one. Compare agreement, conflict, directness, and certainty. Tables are encouraged for evidence characteristics and decision boundaries.
+
+The discussion must explain what the evidence does and does not establish, distinguish acute undifferentiated symptoms from diagnosed chronic disease, and separate direct evidence from reasoned synthesis.
+
+The limitations section must address at least four of: risk of bias, indirectness, imprecision, evidence form, publication bias, recency, population transferability, jurisdiction, and health-system applicability. Do not write tool failures or access excuses into the academic report.
+
+## Acute chest-pressure safety boundary
+
+For new pressure-like chest discomfort:
+
+- do not diagnose heart disease versus gastrointestinal disease from symptoms alone;
+- do not use response to Suxiao Jiuxin Wan, nitroglycerin, an antacid, or any other medicine as a diagnostic test;
+- support emergency contact, ECG, and serial high-sensitivity troponin actions with dedicated direct evidence;
+- localize the practical emergency number to China as `120`, while keeping the source proposition faithful;
+- do not add aspirin, dosing, contraindications, driving advice, body-position advice, or wait-and-see advice unless directly supported and appropriate to the question.
+
+When Suxiao Jiuxin Wan is named, explicitly state:
+
+`不得因服用速效救心丸而延误呼救或急诊评估。`
+
+Support that conclusion by combining the emergency-triage evidence with medicine evidence limited to its studied or regulated population. Do not convert chronic stable-angina efficacy evidence into an acute self-triage recommendation.
+
+## Search log schema
+
+Write strict JSON to `clinical-evidence-search.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "searchedAt": "ISO-8601 timestamp",
+  "databases": ["PubMed", "guideline source"],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "complete query",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 40,
+    "recordsAfterDeduplication": 24,
+    "sourcesIncluded": 14
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "AuthorYearKeyword",
+      "identifier": "PMID or DOI",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "diagnostic pathway"
+    }
+  ]
+}
+```
+
+Counts must reflect actual tool results and screening decisions.
+
+## Run receipt
+
+Write strict JSON to `clinical-evidence-run.json` containing:
+
+- `reportProfile`: exactly `academic_deep_research_v1`;
+- `question`, `title`, `startedAt`, and `completedAt`;
+- `tools`;
+- `successfulSourceArtifacts`: path strings only;
+- `failedSources`;
+- `qualityChecks`: at least `claimTraceability`, `sourceQuoteMatch`, `contradictionAudit`, `arithmeticAudit`, `citationAudit`, and `searchReproducibility`, all boolean;
+- `status`: exactly `succeeded` only when all required files and checks pass.
+
+Inside JSON strings, use Chinese quotation marks for quoted Chinese prose rather than unescaped ASCII double quotes.
 
 ## Required outputs
 
-- `clinical-evidence-report.md`: short title, abstract, clinical framing, evidence analysis, role of the named medicine, evidence-based conclusion, scientific limitations, and the separate practical answer.
-- `clinical-evidence-matrix.json`: the claim-level matrix described above. It must be valid JSON and contain at least four independently supported material claims from at least two authoritative source domains.
-- `clinical-evidence-run.json`: valid JSON containing `question`, `title`, `startedAt`, `completedAt`, `tools`, `successfulSourceArtifacts`, `failedSources`, `qualityChecks`, and `status`. The schema is strict:
-  - `successfulSourceArtifacts` is an array of path strings only, for example `[".evimed-sources/official-pages/abc/page.md"]`. Never put objects, titles, URLs, hashes, or explanations in this array.
-  - `qualityChecks` is an object with at least three boolean values, for example `{"claimTraceability": true, "sourceQuoteMatch": true, "contradictionAudit": true, "arithmeticAudit": true}`. Never use nested `{status, detail}` objects here.
-  - `failedSources` is an array; use `[]` when all required retrievals succeeded.
-  - `status` is exactly `"succeeded"` only when all required outputs and boolean quality checks pass and no source used in the report failed retrieval.
-  - The inspected UTF-8 Markdown/text paths under `.evimed-sources/` must contain every matrix support quote; never list binary or XML files.
+- `clinical-evidence-report.md`
+- `clinical-evidence-matrix.json`
+- `clinical-evidence-search.json`
+- `citation-ledger.csv`
+- `references.bib`
+- `citation-audit.md`
+- `clinical-evidence-run.json`
 
-If the evidence contract cannot be met, write an honest run receipt with `status=failed`, explain the missing evidence in the final answer, and do not present an academic report as completed.
+Read every output back before claiming success. Verify:
+
+- at least eight distinct searches across at least two source classes;
+- at least 30 identified records, 12 included sources, 10 inspected beyond metadata, and eight preserved source artifacts;
+- at least 18 atomic claims;
+- every numbered citation resolves to a complete reference;
+- every claim quote occurs in its source artifact;
+- all DOI/PMID/PMCID values and bibliographic metadata are accurate;
+- no visible `[claim:...]` marker remains;
+- no operational failure or tool-process prose appears in the academic report;
+- the practical answer is medically correct, source-supported, and does not encourage delay.
+
+If this contract cannot be met, write an honest failed run receipt and do not present the report as publication-grade.

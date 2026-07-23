@@ -21,6 +21,9 @@ const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(
 const unsupportedSelfCarePattern = /(?:(?:胃药|抗酸药).{0,40}(?:等待|观察|延误)|(?:等待|观察).{0,30}(?:症状|变化|缓解))/i;
 const exclusiveSafetyPattern = /(?:唯一.{0,24}(?:安全|可靠|正确|一致|策略|方法|途径)|(?:安全|可靠|正确).{0,24}唯一)/i;
 const suxiaoPattern = /(?:速效救心丸|Suxiao Jiuxin Wan)/i;
+const deepResearchProfile = "academic_deep_research_v1";
+const visibleClaimMarkerPattern = /\[claim:(CLM-[0-9]{3,6})\]/g;
+const hiddenClaimMarkerPattern = /<!--\s*claim:(CLM-[0-9]{3,6})\s*-->/g;
 
 function nonEmpty(value, minimum = 1) {
   return typeof value === "string" && value.trim().length >= minimum;
@@ -54,6 +57,8 @@ function numericTokens(value) {
     .replace(/\]\(https?:\/\/[^)\s]+\)/gi, "]")
     .replace(/https?:\/\/\S+/gi, "")
     .replace(/\[claim:CLM-[0-9]{3,6}\]/g, "")
+    .replace(/<!--\s*claim:CLM-[0-9]{3,6}\s*-->/g, "")
+    .replace(/\[(?:\d+(?:\s*[-,]\s*\d+)*)\]/g, "")
     .replace(/\b(?=[A-Za-z0-9-]*[0-9])[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*\b/g, "")
     .replace(/^[（(]\s*[1-9]\s*[)）]/, "")
     .replace(/((?:包括|分为|以及|与|和|、)|[：:；;，,]|\s)[（(]\s*[1-9]\s*[)）]/g, "$1")
@@ -64,6 +69,36 @@ function numericTokens(value) {
       .split("-")
       .map((part) => part.replace(/^0+(?=\d)/, ""))
       .join("-")) ?? [];
+}
+
+function reportClaimIds(value) {
+  const text = String(value ?? "");
+  return [
+    ...[...text.matchAll(visibleClaimMarkerPattern)].map((match) => match[1]),
+    ...[...text.matchAll(hiddenClaimMarkerPattern)].map((match) => match[1]),
+  ];
+}
+
+function hasClaimMarker(value) {
+  return reportClaimIds(value).length > 0;
+}
+
+function bibliographyEntryCount(value) {
+  return [...String(value ?? "").matchAll(/^@[A-Za-z]+\s*\{/gm)].length;
+}
+
+function numberedReferenceCount(reportText) {
+  const references = reportSection(reportText, "参考文献|参考来源|References?");
+  return references.split("\n").filter((line) => /^\s*\d+\.\s+\S/.test(line)).length;
+}
+
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function reportSection(reportText, headingPattern) {
@@ -80,7 +115,16 @@ function validSourceArtifactPath(value) {
     && !value.split("/").some((part) => part === "" || part === "." || part === "..");
 }
 
-export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt, sourceArtifacts = {} } = {}) {
+export function validateClinicalEvidencePackage({
+  reportText,
+  matrix,
+  runReceipt,
+  sourceArtifacts = {},
+  searchLogText = "",
+  referencesText = "",
+  citationLedgerText = "",
+  citationAuditText = "",
+} = {}) {
   const issues = [];
   const claimIds = [];
   const sourceDomains = new Set();
@@ -95,13 +139,33 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
   const artifactText = sourceArtifacts instanceof Map
     ? sourceArtifacts
     : new Map(Object.entries(sourceArtifacts && typeof sourceArtifacts === "object" ? sourceArtifacts : {}));
+  const deepResearch = runReceipt?.reportProfile === deepResearchProfile;
+  const reportReferenceCount = numberedReferenceCount(reportText);
 
-  if (!nonEmpty(reportText, 1200)) issues.push("clinical-evidence-report.md must contain at least 1200 characters of academic analysis.");
+  const minimumReportCharacters = deepResearch ? 10_000 : 1_200;
+  if (!nonEmpty(reportText, minimumReportCharacters)) {
+    issues.push(`clinical-evidence-report.md must contain at least ${minimumReportCharacters} characters of academic analysis.`);
+  }
   const title = typeof reportText === "string" ? reportText.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "" : "";
   if (!title || title.length > 40) issues.push("The academic title must be present and no longer than 40 characters.");
   if (articleTypeTitlePattern.test(title)) issues.push("The academic title must not contain an article-type label.");
   for (const section of [/(?:^|\n)##\s+(?:摘要|Abstract)/i, /(?:^|\n)##\s+.*(?:临床|证据|Evidence|Clinical)/i, /(?:^|\n)##\s+.*(?:局限|Limitations?)/i, /(?:^|\n)##\s+.*(?:结论|处置|Conclusion|Practical)/i]) {
     if (!section.test(reportText ?? "")) issues.push(`The academic report is missing a required section matching ${section}.`);
+  }
+  if (deepResearch) {
+    for (const section of [
+      /(?:^|\n)##\s+.*(?:检索|方法|Methods?)/i,
+      /(?:^|\n)##\s+.*(?:结果|Results?)/i,
+      /(?:^|\n)##\s+.*(?:讨论|Discussion)/i,
+    ]) {
+      if (!section.test(reportText ?? "")) {
+        issues.push(`The deep-research report is missing a required academic section matching ${section}.`);
+      }
+    }
+    if (visibleClaimMarkerPattern.test(reportText ?? "")) {
+      issues.push("Deep-research reports must hide internal claim IDs in HTML comments and show standard numbered citations to readers.");
+    }
+    visibleClaimMarkerPattern.lastIndex = 0;
   }
   if (operationalFailurePattern.test(reportText ?? "")) {
     issues.push("The academic report contains operational failure prose that belongs only in the run receipt.");
@@ -123,7 +187,10 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
     issues.push("The report must not turn a bounded recommendation into an unsupported exclusive safety claim.");
   }
 
-  if (claims.length < 4) issues.push("The evidence matrix must contain at least four material claims.");
+  const minimumClaims = deepResearch ? 18 : 4;
+  if (claims.length < minimumClaims) {
+    issues.push(`The evidence matrix must contain at least ${minimumClaims} material claims.`);
+  }
   const seen = new Set();
   for (const [index, value] of claims.entries()) {
     const label = `claims[${index}]`;
@@ -142,6 +209,16 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
     }
     if (!accessLevels.has(value.accessLevel)) {
       issues.push(`${label}.accessLevel must identify verified content access, not bibliographic metadata.`);
+    }
+    if (
+      deepResearch
+      && (
+        !Number.isInteger(value.referenceNumber)
+        || value.referenceNumber < 1
+        || value.referenceNumber > reportReferenceCount
+      )
+    ) {
+      issues.push(`${label}.referenceNumber must resolve to a numbered report reference.`);
     }
     if (!validSupportingPassage(value.supportQuote)) issues.push(`${label}.supportQuote must contain a direct supporting passage.`);
     if (emergencyCallClaimPattern.test(value.claim ?? "")
@@ -178,9 +255,12 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
       }
     }
   }
-  if (sourceDomains.size < 2) issues.push("Material claims must use at least two authoritative source domains.");
+  const minimumSourceDomains = deepResearch ? 4 : 2;
+  if (sourceDomains.size < minimumSourceDomains) {
+    issues.push(`Material claims must use at least ${minimumSourceDomains} authoritative source domains.`);
+  }
 
-  const reportClaims = [...String(reportText ?? "").matchAll(/\[claim:(CLM-[0-9]{3,6})\]/g)].map((match) => match[1]);
+  const reportClaims = reportClaimIds(reportText);
   const reportSet = new Set(reportClaims);
   for (const claimId of reportSet) {
     if (!seen.has(claimId)) issues.push(`Report claim reference ${claimId} does not resolve to the evidence matrix.`);
@@ -190,13 +270,13 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
   }
 
   const claimsById = new Map(claims.map((claim) => [claim?.claimId, claim]));
-  const reportBeforeReferences = String(reportText ?? "").split(/\n##\s+(?:参考来源|References?)[^\n]*\n/i)[0];
+  const reportBeforeReferences = String(reportText ?? "").split(/\n##\s+(?:参考文献|参考来源|References?)[^\n]*\n/i)[0];
   for (const rawLine of reportBeforeReferences.split("\n")) {
     if (/^\s*#{1,6}\s+/.test(rawLine)) continue;
     const line = rawLine.replace(/^\s*[0-9]+\.\s*/, "");
     const reportNumbers = new Set(numericTokens(line).filter((token) => token !== "120"));
     if (!reportNumbers.size) continue;
-    const referencedIds = [...rawLine.matchAll(/\[claim:(CLM-[0-9]{3,6})\]/g)].map((match) => match[1]);
+    const referencedIds = reportClaimIds(rawLine);
     if (!referencedIds.length) {
       for (const token of reportNumbers) {
         issues.push(`Report numeric fact ${token} has no evidence-matrix claim reference.`);
@@ -221,14 +301,14 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
 
   const practical = reportSection(reportText, "实际处置|实用|怎么办|Practical");
   const numberedItems = practical.split(/\n(?=\s*[0-9]+\.\s+)/).filter((item) => /^\s*[0-9]+\.\s+/.test(item));
-  if (numberedItems.some((item) => !/\[claim:CLM-[0-9]{3,6}\]/.test(item))) {
+  if (numberedItems.some((item) => !hasClaimMarker(item))) {
     issues.push("Every numbered practical-action item must cite at least one evidence-matrix claim.");
   }
   const practicalActionLines = practical
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => /^(?:(?:\*\*)?第[一二三四五六七八九十]+步|(?:\*\*)?[0-9]+[.、]|[-*+]\s+)/.test(line));
-  if (practicalActionLines.some((line) => !/\[claim:CLM-[0-9]{3,6}\]/.test(line))) {
+  if (practicalActionLines.some((line) => !hasClaimMarker(line))) {
     issues.push("Every practical-action step or bullet must cite at least one evidence-matrix claim.");
   }
   if (unsupportedSelfCarePattern.test(practical)) {
@@ -254,12 +334,103 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
     issues.push("Scientific limitations must address at least two evidence-quality or applicability dimensions.");
   }
 
+  if (deepResearch) {
+    const searchLog = parseJsonObject(searchLogText);
+    const queries = Array.isArray(searchLog?.queries) ? searchLog.queries : [];
+    const sourceRecords = Array.isArray(searchLog?.sourceRecords) ? searchLog.sourceRecords : [];
+    const normalizedQueries = new Set(
+      queries
+        .map((entry) => typeof entry?.query === "string" ? entry.query.trim().toLowerCase() : "")
+        .filter(Boolean),
+    );
+    const searchedDatabases = new Set(
+      queries
+        .map((entry) => typeof entry?.database === "string" ? entry.database.trim().toLowerCase() : "")
+        .filter(Boolean),
+    );
+    const includedRecords = sourceRecords.filter((entry) => entry?.included === true);
+    const inspectedRecords = includedRecords.filter((entry) => (
+      ["full_text", "abstract", "official_page", "structured_record"].includes(entry?.accessLevel)
+      && entry.accessLevel !== "bibliographic_only"
+    ));
+    const screening = searchLog?.screening;
+
+    if (searchLog?.schemaVersion !== 1) {
+      issues.push("clinical-evidence-search.json must use schemaVersion 1.");
+    }
+    if (queries.length < 8 || normalizedQueries.size < 8) {
+      issues.push("Deep research must preserve at least eight distinct documented search queries.");
+    }
+    if (searchedDatabases.size < 2) {
+      issues.push("Deep research must search at least two distinct evidence databases or source classes.");
+    }
+    if (
+      !screening
+      || !Number.isInteger(screening.recordsIdentified)
+      || screening.recordsIdentified < 30
+      || !Number.isInteger(screening.recordsAfterDeduplication)
+      || screening.recordsAfterDeduplication < 12
+      || screening.recordsAfterDeduplication > screening.recordsIdentified
+      || !Number.isInteger(screening.sourcesIncluded)
+      || screening.sourcesIncluded < 12
+      || screening.sourcesIncluded > screening.recordsAfterDeduplication
+    ) {
+      issues.push("The search log must preserve a coherent screening flow with at least 30 identified records and 12 included sources.");
+    }
+    if (includedRecords.length < 12 || inspectedRecords.length < 10) {
+      issues.push("The search inventory must include at least 12 sources, with at least 10 inspected beyond bibliographic metadata.");
+    }
+    if (reportReferenceCount < 12) {
+      issues.push("The academic report must contain at least 12 complete numbered references.");
+    }
+    if (bibliographyEntryCount(referencesText) < 12) {
+      issues.push("references.bib must contain at least 12 bibliography entries.");
+    }
+    const bibliographyIdentifiers = new Set(
+      [...String(referencesText).matchAll(/\b(?:doi|pmid|pmcid)\s*=\s*[{"]([^}"]+)/gi)]
+        .map((match) => match[1].trim().toLowerCase())
+        .filter(Boolean),
+    );
+    if (bibliographyIdentifiers.size < 10) {
+      issues.push("references.bib must preserve DOI, PMID, or PMCID identifiers for at least 10 unique sources.");
+    }
+    const ledgerLines = String(citationLedgerText).trim().split(/\r?\n/).filter(Boolean);
+    if (
+      ledgerLines.length < 19
+      || !/(?:claimId|claim_id).*(?:referenceNumber|reference_number).*(?:supportQuote|support_quote)/i.test(ledgerLines[0] ?? "")
+    ) {
+      issues.push("citation-ledger.csv must contain a traceability header and at least 18 claim rows.");
+    }
+    if (
+      !nonEmpty(citationAuditText, 800)
+      || !/(?:unresolved|未解析)/i.test(citationAuditText)
+      || !/(?:duplicate|重复)/i.test(citationAuditText)
+      || !/(?:retract|撤稿|更正|correction)/i.test(citationAuditText)
+      || !/(?:metadata|元数据)/i.test(citationAuditText)
+      || !/(?:claim mismatch|主张不匹配|引文不匹配)/i.test(citationAuditText)
+    ) {
+      issues.push("citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.");
+    }
+    const referenceSection = reportSection(reportText, "参考文献|参考来源|References?");
+    for (const [index, claim] of claims.entries()) {
+      if (nonEmpty(claim?.sourceUrl) && !referenceSection.includes(claim.sourceUrl)) {
+        issues.push(`claims[${index}].sourceUrl is absent from the numbered reference list.`);
+      }
+      const marker = `<!-- claim:${claim?.claimId} -->`;
+      const claimLine = String(reportText).split("\n").find((line) => line.includes(marker)) ?? "";
+      if (!claimLine.includes(`[${claim?.referenceNumber}]`)) {
+        issues.push(`claims[${index}] is not paired with its standard numbered in-text citation.`);
+      }
+    }
+  }
+
   if (!runReceipt || typeof runReceipt !== "object" || Array.isArray(runReceipt)) {
     issues.push("clinical-evidence-run.json must be an object.");
   } else {
     if (runReceipt.status !== "succeeded") issues.push("The clinical evidence run receipt is not succeeded.");
-    if (!Array.isArray(runReceipt.successfulSourceArtifacts) || runReceipt.successfulSourceArtifacts.length < 2) {
-      issues.push("The run receipt must name at least two successful source artifacts.");
+    const minimumSourceArtifacts = deepResearch ? 8 : 2;
+    if (!Array.isArray(runReceipt.successfulSourceArtifacts) || runReceipt.successfulSourceArtifacts.length < minimumSourceArtifacts) {
+      issues.push(`The run receipt must name at least ${minimumSourceArtifacts} successful source artifacts.`);
     } else if (runReceipt.successfulSourceArtifacts.some((value) => !validSourceArtifactPath(value))) {
       issues.push("Every successful source artifact must be a safe .evimed-sources workspace path.");
     }

@@ -228,7 +228,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "1.0.11",
+      effectiveAgentVersion: "2.0.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
   });
@@ -329,6 +329,84 @@ test("a specialist turn cannot succeed without every declared required output", 
     assert.equal(run.status, "failed");
     assert.equal(run.errorCode, "specialist_required_output_missing");
     assert.deepEqual(run.artifacts, []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a deep clinical evidence run fails closed unless every companion skill is actually loaded", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-required-skills-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_required_skills",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "2.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          skill: "clinical-evidence-synthesis",
+          companionSkills: ["deep-research", "biomedical-database-search", "citation-integrity"],
+          outputs: [{ path: "clinical-evidence-report.md", required: true }],
+          completionChecks: ["requiredOutputsExist", "skillsLoaded"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const dispatch = (dispatchId) => store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId,
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "2.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async () => ({ accepted: true }));
+
+    await dispatch("turn_required_skills_missing");
+    history = [{
+      info: { id: "msg_skills_missing", role: "assistant", time: { completed: Date.now() + 10 } },
+      parts: [{ type: "text", text: "Completed without loading the research skills." }],
+    }];
+    const missing = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(missing.status, "failed");
+    assert.equal(missing.errorCode, "specialist_required_skill_missing");
+
+    await dispatch("turn_required_skills_loaded");
+    history = [...history, {
+      info: { id: "msg_skills_loaded", role: "assistant", time: { completed: Date.now() + 10 } },
+      parts: [
+        "deep-research",
+        "biomedical-database-search",
+        "citation-integrity",
+        "clinical-evidence-synthesis",
+      ].map((name) => ({
+        type: "tool",
+        tool: "skill",
+        state: { status: "completed", input: { name } },
+      })),
+    }];
+    const loaded = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(loaded.status, "failed");
+    assert.equal(loaded.errorCode, "specialist_required_output_missing");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
