@@ -1874,6 +1874,14 @@ function mapToolStatus(status?: string): ToolCallStatus {
   }
 }
 
+const INTERNAL_RECOVERY_PROMPT_PREFIXES = [
+  "The server-side clinical evidence gate rejected the current package.",
+];
+
+function isInternalRecoveryPrompt(text: string): boolean {
+  return INTERNAL_RECOVERY_PROMPT_PREFIXES.some((prefix) => text.startsWith(prefix));
+}
+
 /** Convert loaded message history into thread blocks. */
 export function historyToThread(messages: HistoryMessage[], commands?: CommandInfo[]): FoldState {
   const blocks: ThreadBlock[] = [];
@@ -1909,6 +1917,11 @@ export function historyToThread(messages: HistoryMessage[], commands?: CommandIn
         .map((p) => p.text ?? "")
         .join("")
         .trim();
+      // Server-side specialist repair turns are implementation details sent
+      // back into the runtime, not user-authored conversation. OpenCode history
+      // carries no explicit origin marker for these turns, so keep the stable
+      // fail-closed sentinel out of the restored SaaS transcript.
+      if (isInternalRecoveryPrompt(text)) continue;
       const command = asTypedCommand(text);
       if (command) blocks.push({ kind: "user", text: command });
       else if (text) blocks.push({ kind: "user", text });
