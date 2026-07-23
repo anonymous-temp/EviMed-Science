@@ -773,7 +773,8 @@ export function createWebApiApp(overrides = {}) {
           effectiveAgentId: routedSpecialist?.agentId ?? null,
           effectiveAgentVersion: routedSpecialist?.agentVersion ?? null,
           effectiveRuntimeAgent: routedSpecialist?.runtimeAgent ?? null,
-        }, async (session) => {
+        }, async (session, _run, repairText = null) => {
+          const promptText = typeof repairText === "string" && repairText.trim() ? repairText : text;
           let memories = [];
           let memoryError = null;
           if (config.requireMemos && !memosClient.configured) {
@@ -806,7 +807,7 @@ export function createWebApiApp(overrides = {}) {
             routedSpecialist,
           });
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
-            text,
+            text: promptText,
             system: prepared.system,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent,
             model: `deepseek/${config.deepseekModel}`,

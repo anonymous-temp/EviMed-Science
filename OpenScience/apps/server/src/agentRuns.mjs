@@ -359,6 +359,21 @@ function terminalFromMessages(messages) {
   return { status: "succeeded", errorCode: null };
 }
 
+function clinicalEvidenceRepairPrompt(issues) {
+  const bounded = issues
+    .filter((issue) => typeof issue === "string" && issue.trim())
+    .slice(0, 20)
+    .map((issue) => `- ${issue.slice(0, 300)}`)
+    .join("\n");
+  return [
+    "The server-side clinical evidence gate rejected the current package.",
+    "Revise the existing clinical-evidence-report.md, clinical-evidence-matrix.json, and clinical-evidence-run.json in place.",
+    "Do not call any retrieval tool and do not modify any .evimed-sources artifact; the successful source artifacts from this run remain authoritative.",
+    "Fix every issue below, read all three deliverables back, and repeat the skill's final literal checklist before finishing:",
+    bounded,
+  ].join("\n");
+}
+
 function artifactCandidates(message, runtimeWorkspaceRoot) {
   const candidates = [];
   const runtimeRoot = path.resolve(runtimeWorkspaceRoot);
@@ -493,7 +508,13 @@ async function requiredSpecialistArtifacts(project, run, agentRegistry, sourceAr
       runReceipt,
       sourceArtifacts,
     });
-    if (!validation.valid) return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+    if (!validation.valid) {
+      return {
+        artifacts,
+        errorCode: "specialist_evidence_traceability_failed",
+        qualityIssues: validation.issues,
+      };
+    }
   }
   return { artifacts, errorCode: null };
 }
@@ -514,9 +535,15 @@ export class AgentRunStore {
     this.monitorMaxPolls = options.monitorMaxPolls ?? 3600;
     this.onRunFinished = options.onRunFinished ?? (async () => {});
     this.onRunFinishedError = options.onRunFinishedError ?? (async () => {});
+    this.maxClinicalRepairAttempts = options.maxClinicalRepairAttempts ?? 1;
+    if (!Number.isSafeInteger(this.maxClinicalRepairAttempts) || this.maxClinicalRepairAttempts < 0) {
+      throw new TypeError("AgentRunStore maxClinicalRepairAttempts must be a non-negative integer.");
+    }
     this.monitors = new Map();
     this.projects = new Map();
     this.dispatchOwners = new Set();
+    this.clinicalRepairAttempts = new Map();
+    this.clinicalRepairSenders = new Map();
     if (!this.model) throw new Error("AgentRunStore requires a configured model.");
   }
 
@@ -660,6 +687,7 @@ export class AgentRunStore {
         throw new HttpError(502, "runtime_prompt_rejected", "Runtime rejected the prompt before accepting it.");
       }
       const accepted = await this.markDispatch(project, record.id, "accepted");
+      this.clinicalRepairSenders.set(record.id, (repairText) => sendPrompt(session, record, repairText));
       this.scheduleMonitor(project, record.id);
       return accepted;
     } catch (error) {
@@ -718,7 +746,11 @@ export class AgentRunStore {
       return { run: foldEvents([...events, event]).get(runId), transitioned: true };
     });
     const result = outcome.run;
-    if (result.status !== "running") this.dispatchOwners.delete(runId);
+    if (result.status !== "running") {
+      this.dispatchOwners.delete(runId);
+      this.clinicalRepairAttempts.delete(runId);
+      this.clinicalRepairSenders.delete(runId);
+    }
     if (outcome.transitioned) {
       try {
         await this.onRunFinished(project, result);
@@ -807,8 +839,26 @@ export class AgentRunStore {
       }
       artifacts = [...new Set([...artifacts, ...completion.artifacts])].sort();
       if (completion.errorCode) {
-        terminal.status = "failed";
-        terminal.errorCode = completion.errorCode;
+        const repairSender = this.clinicalRepairSenders.get(run.id);
+        const repairAttempts = this.clinicalRepairAttempts.get(run.id) ?? 0;
+        const canRepair = run.effectiveAgentId === "clinical-evidence-synthesis"
+          && completion.errorCode === "specialist_evidence_traceability_failed"
+          && Array.isArray(completion.qualityIssues)
+          && completion.qualityIssues.length > 0
+          && repairAttempts < this.maxClinicalRepairAttempts
+          && typeof repairSender === "function";
+        if (canRepair) {
+          this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
+          try {
+            const repair = await repairSender(clinicalEvidenceRepairPrompt(completion.qualityIssues));
+            if (repair?.accepted !== false) return run;
+          } catch { /* a rejected repair remains a terminal, fail-closed outcome */ }
+          terminal.status = "failed";
+          terminal.errorCode = "specialist_evidence_repair_failed";
+        } else {
+          terminal.status = "failed";
+          terminal.errorCode = completion.errorCode;
+        }
       }
     }
     return this.finishInternal(project, run.id, { ...terminal, artifacts });
@@ -858,5 +908,7 @@ export class AgentRunStore {
     for (const project of this.projects.values()) await this.closeProject(project, "canceled");
     this.projects.clear();
     this.dispatchOwners.clear();
+    this.clinicalRepairAttempts.clear();
+    this.clinicalRepairSenders.clear();
   }
 }

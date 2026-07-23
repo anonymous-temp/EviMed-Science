@@ -228,7 +228,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "1.0.9",
+      effectiveAgentVersion: "1.0.10",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
   });
@@ -334,7 +334,7 @@ test("a specialist turn cannot succeed without every declared required output", 
   }
 });
 
-test("a routed clinical evidence turn cannot succeed with an untraceable report package", async () => {
+test("a routed clinical evidence turn gets one bounded repair before traceability failure", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-clinical-quality-"));
   try {
     const project = {
@@ -374,16 +374,25 @@ test("a routed clinical evidence turn cannot succeed with an untraceable report 
       readSessionHistory: async () => history,
       readSessionStatus: async () => "idle",
     });
+    store.scheduleMonitor = () => {};
+    const prompts = [];
     const run = await store.dispatch(project, {
       sessionId: binding.sessionId,
       dispatchId: "turn_clinical_quality",
       effectiveAgentId: "clinical-evidence-synthesis",
       effectiveAgentVersion: "1.0.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
-    }, async () => ({ accepted: true }));
+    }, async (_session, _run, repairText) => {
+      prompts.push(repairText ?? null);
+      return { accepted: true };
+    });
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# Too short\nUnsupported claim [claim:CLM-999]", "utf8");
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
-    await writeFile(path.join(project.workspaceDir, "clinical-evidence-run.json"), JSON.stringify({ status: "succeeded" }), "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-run.json"), JSON.stringify({
+      status: "succeeded",
+      successfulSourceArtifacts: [],
+      qualityChecks: { claimTraceability: true, contradictionAudit: true, arithmeticAudit: true },
+    }), "utf8");
     history = [{
       info: { id: "msg_clinical_bad", role: "assistant", time: { completed: Date.now() } },
       parts: [
@@ -391,6 +400,13 @@ test("a routed clinical evidence turn cannot succeed with an untraceable report 
         { type: "text", text: "Completed." },
       ],
     }];
+    const repairing = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(repairing.id, run.id);
+    assert.equal(repairing.status, "running");
+    assert.equal(prompts.length, 2);
+    assert.match(prompts[1], /server-side clinical evidence gate rejected/);
+    assert.match(prompts[1], /must contain at least 1200 characters/);
+    assert.match(prompts[1], /Do not call any retrieval tool/);
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.id, run.id);
     assert.equal(finished.status, "failed");

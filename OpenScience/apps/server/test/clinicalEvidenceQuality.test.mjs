@@ -259,7 +259,7 @@ test("rejects unsupported antacid or wait-and-see advice in the practical answer
 test("rejects an unrequested medicine and exclusive safety language", () => {
   const input = validPackage();
   input.runReceipt.question = "胸口突然发闷发紧，该先怎么办？";
-  input.reportText += "\n这是唯一安全且可靠的处置策略。";
+  input.reportText += "\n这是唯一正确的处置策略。";
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /medicine-free question/);
