@@ -81,10 +81,14 @@ export function LiveSessionPage() {
   const hostedWeb = hasWebApi && !isTauri;
 
   useEffect(() => {
-    if (sessionId) void openSession(sessionId);
-    else if (requestedAgentId) void startSpecialistDraft(requestedAgentId);
+    if (sessionId) {
+      // A direct page load can resolve the route before the hosted runtime has
+      // created its OpenCode client. Retry once the connection becomes ready;
+      // otherwise openSession returns early and the thread skeleton never ends.
+      if (connected) void openSession(sessionId);
+    } else if (requestedAgentId) void startSpecialistDraft(requestedAgentId);
     else startDraft(); // blank open-domain draft — no session created yet (#3)
-  }, [sessionId, requestedAgentId, openSession, startDraft, startSpecialistDraft]);
+  }, [sessionId, requestedAgentId, connected, openSession, startDraft, startSpecialistDraft]);
 
   // All three composer paths reflect a freshly-created session in the URL.
   const afterTurn = (id: string | null) => {

@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   startDraft: vi.fn(),
   startSpecialistDraft: vi.fn(async () => {}),
   sendPrompt: vi.fn(async () => null),
+  openSession: vi.fn(async () => {}),
+  status: "offline" as "offline" | "ready",
   draftResearchAgent: null as null | Record<string, unknown>,
   specialtySelectionPending: false,
 }));
@@ -29,7 +31,7 @@ vi.mock("@/lib/runtime", () => ({
   rootSessionOf: (_parents: Record<string, string>, sessionId: string) => sessionId,
   subagentActivity: () => null,
   useRuntimeStore: () => ({
-    status: "offline",
+    status: mocks.status,
     switching: false,
     sending: false,
     runningSessions: {},
@@ -50,7 +52,7 @@ vi.mock("@/lib/runtime", () => ({
     commands: [],
     connect: mocks.connect,
     bootstrap: mocks.bootstrap,
-    openSession: vi.fn(),
+    openSession: mocks.openSession,
     startDraft: mocks.startDraft,
     startSpecialistDraft: mocks.startSpecialistDraft,
     sendPrompt: mocks.sendPrompt,
@@ -118,8 +120,33 @@ describe("LiveSessionPage hosted web mode", () => {
     mocks.startDraft.mockClear();
     mocks.startSpecialistDraft.mockClear();
     mocks.sendPrompt.mockClear();
+    mocks.openSession.mockClear();
+    mocks.status = "offline";
     mocks.draftResearchAgent = null;
     mocks.specialtySelectionPending = false;
+  });
+
+  it("loads a direct session after the hosted runtime becomes ready", () => {
+    const view = render(
+      <MemoryRouter initialEntries={["/live/ses_existing"]}>
+        <Routes>
+          <Route path="/live/:sessionId" element={<LiveSessionPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(mocks.openSession).not.toHaveBeenCalled();
+
+    mocks.status = "ready";
+    view.rerender(
+      <MemoryRouter initialEntries={["/live/ses_existing"]}>
+        <Routes>
+          <Route path="/live/:sessionId" element={<LiveSessionPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(mocks.openSession).toHaveBeenCalledWith("ses_existing");
   });
 
   it("starts the server-managed runtime instead of exposing local opencode serve", async () => {
