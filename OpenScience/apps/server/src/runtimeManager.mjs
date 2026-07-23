@@ -962,6 +962,8 @@ function managedAgentMarker(skill, agent) {
 
 function generatedRuntimeAgent(manifest) {
   const description = `EviMed ${manifest.title}: ${manifest.description}`;
+  const skills = [...(manifest.companionSkills ?? []), manifest.skill];
+  const skillLines = skills.map((skill, index) => `${index + 1}. \`${skill}\``).join("\n");
   const tools = [...manifest.requiredTools, ...manifest.optionalTools];
   const toolLines = tools.map((tool) => `- \`${tool}\``).join("\n");
   const outputLines = manifest.outputs
@@ -976,7 +978,10 @@ permission:
   write: allow
 ---
 
-Load and follow the \`${manifest.skill}\` skill for every turn handled by this agent.
+Load and follow every required skill below, in order, for every turn handled by this agent:
+${skillLines}
+
+Do not claim completion if any required skill was not loaded successfully.
 
 Use only these declared EviMed research tools:
 ${toolLines}

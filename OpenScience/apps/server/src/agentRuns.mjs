@@ -342,6 +342,22 @@ function successfulEvidenceSourceArtifacts(messages, runtimeWorkspaceRoot) {
   return artifacts;
 }
 
+function successfullyLoadedSkills(messages) {
+  const loaded = new Set();
+  for (const message of messages) {
+    for (const part of message?.parts ?? []) {
+      if (
+        part?.type !== "tool"
+        || part?.tool !== "skill"
+        || part?.state?.status !== "completed"
+      ) continue;
+      const name = part?.state?.input?.name;
+      if (typeof name === "string" && name.trim()) loaded.add(name.trim());
+    }
+  }
+  return loaded;
+}
+
 function terminalFromMessages(messages) {
   for (const message of messages) {
     const error = message?.info?.error;
@@ -367,11 +383,11 @@ function clinicalEvidenceRepairPrompt(issues) {
     .join("\n");
   return [
     "The server-side clinical evidence gate rejected the current package.",
-    "Revise the existing clinical-evidence-report.md, clinical-evidence-matrix.json, and clinical-evidence-run.json in place.",
+    "Revise the named files in the existing academic package in place: clinical-evidence-report.md, clinical-evidence-matrix.json, clinical-evidence-search.json, citation-ledger.csv, references.bib, citation-audit.md, or clinical-evidence-run.json.",
     "Only rewrite a file when an issue below names or requires it; preserve already valid evidence and source metadata.",
     "Every JSON deliverable must remain strict JSON. Inside JSON string values, use Chinese quotation marks instead of unescaped ASCII double quotes.",
     "Do not call any retrieval tool and do not modify any .evimed-sources artifact; the successful source artifacts from this run remain authoritative.",
-    "Fix every issue below, read all three deliverables back, and repeat the skill's final literal checklist before finishing:",
+    "Fix every issue below, read every required deliverable back, and repeat the skill's final literal checklist before finishing:",
     bounded,
   ].join("\n");
 }
@@ -437,7 +453,13 @@ function validExplicitCitations(text) {
   });
 }
 
-async function requiredSpecialistArtifacts(project, run, agentRegistry, sourceArtifactProvenance = new Map()) {
+async function requiredSpecialistArtifacts(
+  project,
+  run,
+  agentRegistry,
+  sourceArtifactProvenance = new Map(),
+  assistantMessages = [],
+) {
   if (!run.effectiveAgentId) return { artifacts: [], errorCode: null };
   const registry = await agentRegistry;
   const agent = registry?.get?.(run.effectiveAgentId);
@@ -446,6 +468,13 @@ async function requiredSpecialistArtifacts(project, run, agentRegistry, sourceAr
   }
   if (!agent.completionChecks.includes("requiredOutputsExist")) {
     return { artifacts: [], errorCode: "specialist_completion_contract_missing" };
+  }
+  if (agent.completionChecks.includes("skillsLoaded")) {
+    const loadedSkills = successfullyLoadedSkills(assistantMessages);
+    const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
+    if (requiredSkills.some((skill) => !loadedSkills.has(skill))) {
+      return { artifacts: [], errorCode: "specialist_required_skill_missing" };
+    }
   }
   const required = agent.outputs.filter((output) => output.required).map((output) => output.path);
   const artifacts = [];
@@ -492,7 +521,7 @@ async function requiredSpecialistArtifacts(project, run, agentRegistry, sourceAr
     }
     const sourceArtifacts = new Map();
     const sourcePaths = runReceipt?.successfulSourceArtifacts;
-    if (!Array.isArray(sourcePaths) || sourcePaths.length > 32) {
+    if (!Array.isArray(sourcePaths) || sourcePaths.length > 48) {
       return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
     }
     for (const rawPath of sourcePaths) {
@@ -523,6 +552,10 @@ async function requiredSpecialistArtifacts(project, run, agentRegistry, sourceAr
       matrix,
       runReceipt,
       sourceArtifacts,
+      searchLogText: files.get("clinical-evidence-search.json") ?? "",
+      referencesText: files.get("references.bib") ?? "",
+      citationLedgerText: files.get("citation-ledger.csv") ?? "",
+      citationAuditText: files.get("citation-audit.md") ?? "",
     });
     if (!validation.valid) {
       return {
@@ -859,6 +892,7 @@ export class AgentRunStore {
           run,
           this.agentRegistry,
           sourceArtifactProvenance,
+          allAssistants,
         );
       } catch {
         completion = { artifacts: [], errorCode: "specialist_contract_unavailable" };

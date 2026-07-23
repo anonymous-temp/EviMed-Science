@@ -19,6 +19,7 @@ const publicManifestFields = Object.freeze([
   "category",
   "description",
   "skill",
+  "companionSkills",
   "estimatedMinutes",
   "starterPrompts",
   "requiredInputs",
@@ -29,6 +30,7 @@ const publicManifestFields = Object.freeze([
   "outputs",
   "completionChecks",
 ]);
+const optionalManifestFields = new Set(["companionSkills"]);
 
 export const EVIMED_AGENT_TOOL_IDS = new Set([
   "evimed_data_source_catalog",
@@ -78,6 +80,7 @@ export const EVIMED_AGENT_COMPLETION_CHECKS = new Set([
   "requiredOutputsExist",
   "citationsResolvable",
   "evidenceClaimsTraceable",
+  "skillsLoaded",
 ]);
 
 function registryError(message, code = "agent_package_invalid") {
@@ -188,7 +191,9 @@ function validateManifest(value, directoryName, allowedToolIds, allowedDataSourc
   if (unknownFields.length > 0) {
     throw registryError(`agent.yaml contains unknown field(s): ${unknownFields.sort().join(", ")}.`);
   }
-  const missingFields = publicManifestFields.filter((field) => !Object.hasOwn(manifest, field));
+  const missingFields = publicManifestFields.filter(
+    (field) => !optionalManifestFields.has(field) && !Object.hasOwn(manifest, field),
+  );
   if (missingFields.length > 0) {
     throw registryError(`agent.yaml is missing field(s): ${missingFields.join(", ")}.`);
   }
@@ -201,6 +206,19 @@ function validateManifest(value, directoryName, allowedToolIds, allowedDataSourc
   if (!idPattern.test(skill)) throw registryError(`Invalid skill id "${skill}".`);
   if (skill !== directoryName) {
     throw registryError(`Manifest skill "${skill}" must match package directory "${directoryName}".`);
+  }
+  const companionSkills = expectUniqueStringArray(
+    manifest.companionSkills ?? [],
+    "companionSkills",
+    { min: 0, max: 16 },
+  );
+  for (const companionSkill of companionSkills) {
+    if (!idPattern.test(companionSkill)) {
+      throw registryError(`Invalid companion skill id "${companionSkill}".`);
+    }
+    if (companionSkill === skill) {
+      throw registryError("companionSkills must not repeat the package skill.");
+    }
   }
   const requiredInputs = expectInputIdentifiers(manifest.requiredInputs, "requiredInputs");
   const optionalInputs = expectInputIdentifiers(manifest.optionalInputs, "optionalInputs");
@@ -230,6 +248,7 @@ function validateManifest(value, directoryName, allowedToolIds, allowedDataSourc
     category: expectString(manifest.category, "category", { max: 96 }),
     description: expectString(manifest.description, "description", { max: 512 }),
     skill,
+    companionSkills: Object.freeze(companionSkills),
     estimatedMinutes: Object.freeze(validateEstimate(manifest.estimatedMinutes)),
     starterPrompts: Object.freeze(expectUniqueStringArray(manifest.starterPrompts, "starterPrompts", { min: 1, max: 16 })),
     requiredInputs: Object.freeze(requiredInputs),
