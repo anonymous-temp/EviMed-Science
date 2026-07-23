@@ -14,8 +14,16 @@ describe("OnboardingGuide", () => {
     render(<OnboardingGuide />);
     expect(screen.getByText("第一次使用？三步开始")).toBeInTheDocument();
     expect(screen.getByText(/连接科研服务/)).toBeInTheDocument();
+    expect(screen.getByText(/自动准备科研运行环境/)).toBeInTheDocument();
+    expect(screen.queryByText(/本地运行环境/)).not.toBeInTheDocument();
     expect(screen.getByText(/选择工作流或直接提问/)).toBeInTheDocument();
     expect(screen.getByText(/查看产物与运行记录/)).toBeInTheDocument();
+  });
+
+  it("does not render for an account that already has sessions", () => {
+    render(<OnboardingGuide hasPriorSessions />);
+
+    expect(screen.queryByText("第一次使用？三步开始")).not.toBeInTheDocument();
   });
 
   it("dismisses on close and persists the dismissal", async () => {

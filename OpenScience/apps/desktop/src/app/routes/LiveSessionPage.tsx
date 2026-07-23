@@ -360,7 +360,7 @@ export function LiveSessionPage() {
             )}
             {connected && isEmpty && !sessionId && !specialtySelectionPending && (
               <>
-                <OnboardingGuide />
+                <OnboardingGuide hasPriorSessions={sessions.length > 0} />
                 <WorkflowStarters onPick={(p) => void onSend(p)} />
               </>
             )}
