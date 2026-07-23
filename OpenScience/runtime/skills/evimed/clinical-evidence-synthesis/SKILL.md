@@ -76,7 +76,13 @@ Prefer a PMCID or a search record explicitly marked open access before calling t
 - `https://www.acc.org/latest-in-cardiology/ten-points-to-remember/2022/10/10/23/15/2022-acc-expert-consensus-on-chest-pain`
 - `https://www.nhs.uk/symptoms/chest-pain/`
 
-At least eight source artifacts must be successfully preserved and inspected. A successful source artifact must contain source identity, retrieval time, content hash, and usable text.
+At least eight **distinct documents** must be successfully preserved and inspected. Count one canonical readable artifact per document:
+
+- use the returned `fulltext.md` for a PMC document, not both its Markdown and companion XML;
+- use the returned `page.md` for an official page;
+- never count two formats, aliases, redirects, or duplicate records for the same document as separate sources.
+
+Before drafting, group the preserved paths by document identity and confirm that at least eight distinct canonical Markdown artifacts remain. If there are fewer than eight, continue searching for relevant PMCID/open-access records or approved official pages. A successful source artifact must contain source identity, retrieval time, content hash, and usable text.
 
 Never create, edit, replace, or copy a file under `.evimed-sources/`. Only artifacts returned by successful retrieval tools are evidence artifacts.
 
@@ -236,6 +242,16 @@ Write strict JSON to `clinical-evidence-run.json` containing:
 - `qualityChecks`: at least `claimTraceability`, `sourceQuoteMatch`, `contradictionAudit`, `arithmeticAudit`, `citationAudit`, and `searchReproducibility`, all boolean;
 - `status`: exactly `succeeded` only when all required files and checks pass.
 
+`successfulSourceArtifacts` must list exactly one canonical readable path per distinct document. Also write a `stats` object whose integer values exactly match `clinical-evidence-search.json`:
+
+- `totalSearches`
+- `recordsIdentified`
+- `recordsAfterDeduplication`
+- `sourcesIncluded`
+- `distinctPreservedSources`
+
+Use actual current ISO-8601 timestamps. `startedAt` must not predate the current run, `completedAt` must not be in the future, and `startedAt` must precede `completedAt`.
+
 Inside JSON strings, use Chinese quotation marks for quoted Chinese prose rather than unescaped ASCII double quotes.
 
 ## Required outputs
@@ -248,10 +264,10 @@ Inside JSON strings, use Chinese quotation marks for quoted Chinese prose rather
 - `citation-audit.md`
 - `clinical-evidence-run.json`
 
-Read every output back before claiming success. Verify:
+Read every output back before claiming success. Do not use `grep` or another unbounded line-oriented search on a generated report; long Markdown lines can exceed tool-output limits and invalidate an otherwise complete run. Use bounded `read` ranges and the platform's deterministic completion validator instead. Verify:
 
 - at least eight distinct searches across at least two source classes;
-- at least 30 identified records, 12 included sources, 10 inspected beyond metadata, and eight preserved source artifacts;
+- at least 30 identified records, 12 included sources, 10 inspected beyond metadata, and eight distinct preserved documents represented by canonical Markdown artifacts;
 - at least 18 atomic claims;
 - every numbered citation resolves to a complete reference;
 - every claim quote occurs in its source artifact;

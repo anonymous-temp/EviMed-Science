@@ -13,7 +13,7 @@ const claimFields = Object.freeze([
 const accessLevels = new Set(["full_text", "official_page", "abstract", "structured_record"]);
 const claimIdPattern = /^CLM-[0-9]{3,6}$/;
 const operationalFailurePattern = /(?:Transport error|Runtime configuration bootstrap|网页访问失败|工具调用失败|public[_ -]source[_ -]gateway.*(?:failed|error))/i;
-const academicProcessPattern = /(?:clinical-evidence-synthesis|证据追溯契约|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单|本次检索.{0,24}(?:未纳入|无法)|无法通过本次检索|(?:本分析|本文).{0,60}(?:仅基于|未检索|未直接检索|未触及)|工具调用|不可及|无法获取|无法获得|未能获取|未能获得|全文不可得)/i;
+const academicProcessPattern = /(?:clinical-evidence-synthesis|\bevimed_[a-z_]+\b|EviMed.{0,24}(?:引擎|网关|工具)|证据追溯契约|相关记录已获取|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单|本次检索.{0,24}(?:未纳入|无法)|无法通过本次检索|(?:本分析|本文).{0,60}(?:仅基于|未检索|未直接检索|未触及)|工具调用|不可及|无法获取|无法获得|未能获取|未能获得|全文不可得)/i;
 const articleTypeTitlePattern = /(?:综述|系统评价|meta\s*分析|meta-analysis|systematic review|review article)/i;
 const medicationResponseDiagnosisPattern = /(?:(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解).{0,80}(?:诊断|排除|区分|判断)|(?:诊断|排除|区分|判断).{0,80}(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解))/i;
 const emergencyCallClaimPattern = /(?:(?:呼叫|拨打).{0,16}(?:急救|120|999)|(?:急救|120|999).{0,16}(?:呼叫|拨打))/i;
@@ -115,6 +115,16 @@ function validSourceArtifactPath(value) {
     && !value.split("/").some((part) => part === "" || part === "." || part === "..");
 }
 
+function sourceArtifactIdentity(value) {
+  if (!validSourceArtifactPath(value)) return null;
+  const parts = value.split("/");
+  const fileName = parts.at(-1)?.toLowerCase();
+  if (["fulltext.md", "fulltext.xml", "page.md", "page.html"].includes(fileName)) {
+    return parts.slice(0, -1).join("/");
+  }
+  return value;
+}
+
 export function validateClinicalEvidencePackage({
   reportText,
   matrix,
@@ -135,6 +145,9 @@ export function validateClinicalEvidencePackage({
     Array.isArray(runReceipt?.successfulSourceArtifacts)
       ? runReceipt.successfulSourceArtifacts.filter((value) => typeof value === "string")
       : [],
+  );
+  const distinctSuccessfulSources = new Set(
+    [...successfulArtifacts].map(sourceArtifactIdentity).filter(Boolean),
   );
   const artifactText = sourceArtifacts instanceof Map
     ? sourceArtifacts
@@ -380,6 +393,22 @@ export function validateClinicalEvidencePackage({
     if (includedRecords.length < 12 || inspectedRecords.length < 10) {
       issues.push("The search inventory must include at least 12 sources, with at least 10 inspected beyond bibliographic metadata.");
     }
+    const stats = runReceipt?.stats;
+    if (
+      !stats
+      || !Number.isInteger(stats.totalSearches)
+      || stats.totalSearches !== queries.length
+      || !Number.isInteger(stats.recordsIdentified)
+      || stats.recordsIdentified !== screening?.recordsIdentified
+      || !Number.isInteger(stats.recordsAfterDeduplication)
+      || stats.recordsAfterDeduplication !== screening?.recordsAfterDeduplication
+      || !Number.isInteger(stats.sourcesIncluded)
+      || stats.sourcesIncluded !== screening?.sourcesIncluded
+      || !Number.isInteger(stats.distinctPreservedSources)
+      || stats.distinctPreservedSources !== distinctSuccessfulSources.size
+    ) {
+      issues.push("The run-receipt statistics must exactly match the search log and distinct preserved-source count.");
+    }
     if (reportReferenceCount < 12) {
       issues.push("The academic report must contain at least 12 complete numbered references.");
     }
@@ -429,10 +458,18 @@ export function validateClinicalEvidencePackage({
   } else {
     if (runReceipt.status !== "succeeded") issues.push("The clinical evidence run receipt is not succeeded.");
     const minimumSourceArtifacts = deepResearch ? 8 : 2;
-    if (!Array.isArray(runReceipt.successfulSourceArtifacts) || runReceipt.successfulSourceArtifacts.length < minimumSourceArtifacts) {
-      issues.push(`The run receipt must name at least ${minimumSourceArtifacts} successful source artifacts.`);
-    } else if (runReceipt.successfulSourceArtifacts.some((value) => !validSourceArtifactPath(value))) {
-      issues.push("Every successful source artifact must be a safe .evimed-sources workspace path.");
+    if (!Array.isArray(runReceipt.successfulSourceArtifacts)) {
+      issues.push(`The run receipt must name at least ${minimumSourceArtifacts} distinct successful source artifacts.`);
+    } else {
+      if (runReceipt.successfulSourceArtifacts.some((value) => !validSourceArtifactPath(value))) {
+        issues.push("Every successful source artifact must be a safe .evimed-sources workspace path.");
+      }
+      if (distinctSuccessfulSources.size < minimumSourceArtifacts) {
+        issues.push(`The run receipt must name at least ${minimumSourceArtifacts} distinct successful source artifacts.`);
+      }
+    }
+    if (deepResearch && successfulArtifacts.size !== distinctSuccessfulSources.size) {
+      issues.push("Deep-research source counts must use one canonical text artifact per distinct document; companion XML and Markdown files cannot be counted twice.");
     }
     const checks = runReceipt.qualityChecks;
     if (!checks || typeof checks !== "object" || Array.isArray(checks) || Object.values(checks).length < 3 || Object.values(checks).some((value) => value !== true)) {

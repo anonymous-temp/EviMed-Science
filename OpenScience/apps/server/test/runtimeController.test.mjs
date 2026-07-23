@@ -164,7 +164,7 @@ if (args.includes("open-science.web.kernel=true")) {
   return;
 }
 
-const mount = args.find((arg) => arg.includes(",dst=/runtime"));
+const mount = args.find((arg) => arg.includes(",dst=/runtime-control"));
 if (!mount) process.exit(3);
 const fields = Object.fromEntries(mount.split(",").map((part) => {
   const index = part.indexOf("=");
@@ -173,7 +173,7 @@ const fields = Object.fromEntries(mount.split(",").map((part) => {
 const runtimeRoot = fields.type === "volume"
   ? path.join(volumeRoot, fields["volume-subpath"])
   : fields.src;
-const socketPath = path.join(runtimeRoot, "control", "opencode.sock");
+const socketPath = path.join(runtimeRoot, "opencode.sock");
 fs.mkdirSync(path.dirname(socketPath), { recursive: true });
 fs.rmSync(socketPath, { force: true });
 writeState(name, { pid: process.pid, state: "running", runtime: true, containerName: name, userId: owner });
