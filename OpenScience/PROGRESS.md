@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-23 12:49 · Production browser acceptance caught a direct-session recovery race: the route effect could call `openSession` before the hosted OpenCode client existed, return early, and leave the report on an endless skeleton without ever requesting message history. Direct session routes now wait for the managed runtime to become ready and then load history; a hosted-web regression test covers the offline-to-ready transition.
+
 2026-07-23 12:01 · Production browser acceptance found that the existing `cdss-access` account still saw the first-use guide because visibility depended only on browser-local dismissal state. The guide now stays hidden whenever the authenticated workspace already has sessions, retains local dismissal for genuinely new accounts, and uses SaaS-neutral runtime copy instead of claiming a local environment; 613 desktop tests, typecheck, lint with zero errors, and the hosted web build pass.
 
 2026-07-23 11:22 · The failed case's final matrix proved the earlier traceability code was a JSON parse failure, not a post-validation quality failure: an unescaped ASCII quote inside Chinese prose made the evidence matrix invalid, so no actionable issues were returned and no repair was sent. Clinical skill `1.0.11` now treats malformed matrix/receipt JSON as a bounded repairable defect, returns a file-specific instruction, and tells the corrective turn to preserve every file not named by the issue.
