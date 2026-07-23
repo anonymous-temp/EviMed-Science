@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-23 12:01 · Production browser acceptance found that the existing `cdss-access` account still saw the first-use guide because visibility depended only on browser-local dismissal state. The guide now stays hidden whenever the authenticated workspace already has sessions, retains local dismissal for genuinely new accounts, and uses SaaS-neutral runtime copy instead of claiming a local environment; 613 desktop tests, typecheck, lint with zero errors, and the hosted web build pass.
+
 2026-07-23 11:22 · The failed case's final matrix proved the earlier traceability code was a JSON parse failure, not a post-validation quality failure: an unescaped ASCII quote inside Chinese prose made the evidence matrix invalid, so no actionable issues were returned and no repair was sent. Clinical skill `1.0.11` now treats malformed matrix/receipt JSON as a bounded repairable defect, returns a file-specific instruction, and tells the corrective turn to preserve every file not named by the issue.
 
 2026-07-23 11:15 · Production `694cd5b5` passed release, readiness, adapter, memory, backup, monitoring, login, file, kernel, and runtime smoke gates. Its first acute-chest run exposed a monitor race: the bounded repair prompt was accepted, but the unchanged pre-repair assistant message was immediately revalidated and terminally failed before the repair completed. The monitor now records the rejected assistant as a repair baseline, waits for a new completed assistant response, and preserves original retrieval provenance across that corrective phase.

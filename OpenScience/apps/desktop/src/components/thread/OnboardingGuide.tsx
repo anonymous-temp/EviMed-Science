@@ -2,15 +2,15 @@ import { useState } from "react";
 import { Cable, MessagesSquare, PackageCheck, X } from "lucide-react";
 
 /** First-run three-step guide shown above the workflow starters on an empty
- *  draft. Purely informational — dismissal persists in localStorage and the
- *  bar never comes back. */
+ *  draft. Existing accounts with prior sessions never see it, while an
+ *  explicit dismissal is also persisted for a new account in this browser. */
 const DISMISS_KEY = "ai4s.onboarding.dismissed";
 
 const STEPS = [
   {
     icon: Cable,
     title: "连接科研服务",
-    description: "首次启动会自动初始化本地运行环境，可能需要几分钟。",
+    description: "首次使用会自动准备科研运行环境，可能需要几分钟。",
   },
   {
     icon: MessagesSquare,
@@ -32,9 +32,9 @@ function readDismissed(): boolean {
   }
 }
 
-export function OnboardingGuide() {
+export function OnboardingGuide({ hasPriorSessions = false }: { hasPriorSessions?: boolean }) {
   const [dismissed, setDismissed] = useState(readDismissed);
-  if (dismissed) return null;
+  if (dismissed || hasPriorSessions) return null;
 
   const dismiss = () => {
     setDismissed(true);
