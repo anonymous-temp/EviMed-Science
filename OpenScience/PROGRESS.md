@@ -1,5 +1,7 @@
 # Progress
 
+2026-07-23 13:03 · Browser artifact acceptance found that OpenCode's managed-container path `/workspace/<file>` was passed unchanged to the hosted command boundary, which correctly rejects absolute paths and made report preview fail despite a valid artifact. Hosted inspectors now remove only the known `/workspace/` mount prefix before preview/download, while desktop paths remain unchanged; artifact routing has a regression assertion for the generated clinical report.
+
 2026-07-23 12:49 · Production browser acceptance caught a direct-session recovery race: the route effect could call `openSession` before the hosted OpenCode client existed, return early, and leave the report on an endless skeleton without ever requesting message history. Direct session routes now wait for the managed runtime to become ready and then load history; a hosted-web regression test covers the offline-to-ready transition.
 
 2026-07-23 12:01 · Production browser acceptance found that the existing `cdss-access` account still saw the first-use guide because visibility depended only on browser-local dismissal state. The guide now stays hidden whenever the authenticated workspace already has sessions, retains local dismissal for genuinely new accounts, and uses SaaS-neutral runtime copy instead of claiming a local environment; 613 desktop tests, typecheck, lint with zero errors, and the hosted web build pass.

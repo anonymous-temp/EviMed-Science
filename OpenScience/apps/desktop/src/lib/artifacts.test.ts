@@ -236,6 +236,18 @@ describe("artifactBlockToInspector", () => {
       tool: "write",
     });
     expect(file.variant).toBe("file");
+
+    const hosted = fileInspectorFromBlock({
+      kind: "artifact",
+      path: "/workspace/clinical-evidence-report.md",
+      filename: "clinical-evidence-report.md",
+      artifact: "report",
+      tool: "write",
+    }, { hostedRuntime: true });
+    expect(hosted).toMatchObject({
+      variant: "file",
+      path: "clinical-evidence-report.md",
+    });
   });
 
   it("shows a placeholder for a binary artifact", () => {
