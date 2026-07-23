@@ -2,6 +2,7 @@ ARG NODE_BASE_IMAGE=docker.m.daocloud.io/library/node:20-alpine
 FROM ${NODE_BASE_IMAGE} AS build
 
 ARG NPM_REGISTRY=https://registry.npmjs.org
+ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.4.0 --activate
 RUN pnpm config set registry "${NPM_REGISTRY}"
