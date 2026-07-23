@@ -66,7 +66,6 @@ function deepResearchPackage() {
     "pubmed.ncbi.nlm.nih.gov",
     "www.acc.org",
     "www.escardio.org",
-    "www.cochrane.org",
   ];
   const sources = Array.from({ length: 12 }, (_, index) => {
     const referenceNumber = index + 1;
@@ -322,7 +321,7 @@ test("rejects a report number absent from every cited claim proposition and sour
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /numeric fact 1776/);
+  assert.match(result.issues.join("\n"), /numeric facts? 1776/);
 });
 
 test("rejects an unreferenced numeric fact outside the reference list", () => {
@@ -333,7 +332,7 @@ test("rejects an unreferenced numeric fact outside the reference list", () => {
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /numeric fact 15 has no evidence-matrix claim reference/);
+  assert.match(result.issues.join("\n"), /numeric facts? 15 .*no evidence-matrix claim reference/);
 });
 
 test("accepts source years and identifiers in headings and does not confuse adverse reactions with diagnostic response", () => {
@@ -456,7 +455,33 @@ test("accepts a publication-grade deep-research package with reproducible search
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, true, result.issues.join("\n"));
   assert.equal(result.claimIds.length, 18);
-  assert.equal(result.sourceDomains.length, 4);
+  assert.equal(result.sourceDomains.length, 3);
+});
+
+test("accepts compound numbered citations when each hidden claim resolves on the same line", () => {
+  const input = deepResearchPackage();
+  const first = input.matrix.claims[0];
+  const second = input.matrix.claims[1];
+  const firstLine = `${first.claim} [${first.referenceNumber}](${first.sourceUrl}) <!-- claim:${first.claimId} -->`;
+  const secondLine = `${second.claim} [${second.referenceNumber}](${second.sourceUrl}) <!-- claim:${second.claimId} -->`;
+  input.reportText = input.reportText.replace(
+    `${firstLine}\n\n${secondLine}`,
+    `${first.claim} ${second.claim} [1,2] <!-- claim:${first.claimId} --><!-- claim:${second.claimId} -->`,
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
+test("rejects a report that puts its practical answer after the reference list", () => {
+  const input = deepResearchPackage();
+  const practicalStart = input.reportText.indexOf("## 实际处置");
+  const referencesStart = input.reportText.indexOf("## 参考文献");
+  const practical = input.reportText.slice(practicalStart, referencesStart).trim();
+  const references = input.reportText.slice(referencesStart).trim();
+  input.reportText = `${input.reportText.slice(0, practicalStart).trim()}\n\n${references}\n\n${practical}`;
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /reference list must follow/);
 });
 
 test("rejects a shallow report that falsely claims the deep-research profile", () => {

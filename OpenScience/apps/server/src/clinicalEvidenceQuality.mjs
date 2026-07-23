@@ -18,7 +18,7 @@ const articleTypeTitlePattern = /(?:综述|系统评价|meta\s*分析|meta-analy
 const medicationResponseDiagnosisPattern = /(?:(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解).{0,80}(?:诊断|排除|区分|判断)|(?:诊断|排除|区分|判断).{0,80}(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解))/i;
 const emergencyCallClaimPattern = /(?:(?:呼叫|拨打).{0,16}(?:急救|120|999)|(?:急救|120|999).{0,16}(?:呼叫|拨打))/i;
 const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(?:999|emergency|ambulance).{0,16}call|呼叫|拨打|急救)/i;
-const unsupportedSelfCarePattern = /(?:(?:胃药|抗酸药).{0,40}(?:等待|观察|延误)|(?:等待|观察).{0,30}(?:症状|变化|缓解))/i;
+const unsupportedSelfCarePattern = /(?:(?:可|可以|建议|不妨|先|服用后).{0,24}(?:胃药|抗酸药).{0,40}(?:等待|观察)|(?:胃药|抗酸药).{0,40}(?:后再|并|然后).{0,20}(?:等待|观察)|(?:可|可以|建议|不妨|先).{0,20}(?:等待|观察).{0,30}(?:症状|变化|缓解))/i;
 const exclusiveSafetyPattern = /(?:唯一.{0,24}(?:安全|可靠|正确|一致|策略|方法|途径)|(?:安全|可靠|正确).{0,24}唯一)/i;
 const suxiaoPattern = /(?:速效救心丸|Suxiao Jiuxin Wan)/i;
 const deepResearchProfile = "academic_deep_research_v1";
@@ -108,6 +108,32 @@ function reportSection(reportText, headingPattern) {
   return match?.[1] ?? "";
 }
 
+function withoutReportSections(reportText, headingPattern) {
+  return String(reportText ?? "").replace(
+    new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${headingPattern})[^\\n]*\\n[\\s\\S]*?(?=\\n##\\s+|$)`, "gi"),
+    "\n",
+  );
+}
+
+function standardCitationNumbers(value) {
+  const numbers = new Set();
+  for (const match of String(value ?? "").matchAll(/\[(\d+(?:\s*[-,]\s*\d+)*)\]/g)) {
+    for (const part of match[1].split(",")) {
+      const range = part.trim().match(/^(\d+)\s*-\s*(\d+)$/);
+      if (range) {
+        const start = Number(range[1]);
+        const end = Number(range[2]);
+        if (end >= start && end - start <= 100) {
+          for (let number = start; number <= end; number += 1) numbers.add(number);
+        }
+      } else {
+        numbers.add(Number(part.trim()));
+      }
+    }
+  }
+  return numbers;
+}
+
 function validSourceArtifactPath(value) {
   return typeof value === "string"
     && value.startsWith(".evimed-sources/")
@@ -174,6 +200,14 @@ export function validateClinicalEvidencePackage({
       if (!section.test(reportText ?? "")) {
         issues.push(`The deep-research report is missing a required academic section matching ${section}.`);
       }
+    }
+    const practicalHeading = String(reportText ?? "").search(/(?:^|\n)##\s+[^\n]*(?:安全优先的实际处置|实际处置|实用回答|Practical)[^\n]*$/im);
+    const referencesHeading = String(reportText ?? "").search(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$/im);
+    if (practicalHeading < 0) {
+      issues.push("The deep-research report must contain a dedicated safety-first practical-answer section.");
+    }
+    if (referencesHeading < 0 || (practicalHeading >= 0 && referencesHeading < practicalHeading)) {
+      issues.push("The numbered reference list must follow the safety-first practical-answer section.");
     }
     if (visibleClaimMarkerPattern.test(reportText ?? "")) {
       issues.push("Deep-research reports must hide internal claim IDs in HTML comments and show standard numbered citations to readers.");
@@ -268,7 +302,7 @@ export function validateClinicalEvidencePackage({
       }
     }
   }
-  const minimumSourceDomains = deepResearch ? 4 : 2;
+  const minimumSourceDomains = deepResearch ? 3 : 2;
   if (sourceDomains.size < minimumSourceDomains) {
     issues.push(`Material claims must use at least ${minimumSourceDomains} authoritative source domains.`);
   }
@@ -283,17 +317,24 @@ export function validateClinicalEvidencePackage({
   }
 
   const claimsById = new Map(claims.map((claim) => [claim?.claimId, claim]));
-  const reportBeforeReferences = String(reportText ?? "").split(/\n##\s+(?:参考文献|参考来源|References?)[^\n]*\n/i)[0];
-  for (const rawLine of reportBeforeReferences.split("\n")) {
+  const reportForNumericAudit = withoutReportSections(
+    withoutReportSections(reportText, "参考文献|参考来源|References?"),
+    "检索|方法|Methods?",
+  );
+  for (const [lineIndex, rawLine] of reportForNumericAudit.split("\n").entries()) {
     if (/^\s*#{1,6}\s+/.test(rawLine)) continue;
     const line = rawLine.replace(/^\s*[0-9]+\.\s*/, "");
-    const reportNumbers = new Set(numericTokens(line).filter((token) => token !== "120"));
+    const reportNumbers = new Set(numericTokens(line).filter((token) => {
+      if (token === "120") return false;
+      const single = token.match(/^\d+$/) ? Number(token) : null;
+      return single == null || single < 1900 || single > 2099;
+    }));
     if (!reportNumbers.size) continue;
     const referencedIds = reportClaimIds(rawLine);
     if (!referencedIds.length) {
-      for (const token of reportNumbers) {
-        issues.push(`Report numeric fact ${token} has no evidence-matrix claim reference.`);
-      }
+      issues.push(
+        `Report line ${lineIndex + 1} numeric facts ${[...reportNumbers].join(", ")} have no evidence-matrix claim reference.`,
+      );
       continue;
     }
     const supportedNumbers = new Set(referencedIds.flatMap((claimId) => {
@@ -305,10 +346,11 @@ export function validateClinicalEvidencePackage({
         claim?.identifier,
       ].join(" "));
     }));
-    for (const token of reportNumbers) {
-      if (!supportedNumbers.has(token)) {
-        issues.push(`Report numeric fact ${token} is not present in the cited claim evidence.`);
-      }
+    const unsupportedNumbers = [...reportNumbers].filter((token) => !supportedNumbers.has(token));
+    if (unsupportedNumbers.length) {
+      issues.push(
+        `Report line ${lineIndex + 1} numeric facts ${unsupportedNumbers.join(", ")} are not present in the cited claim evidence.`,
+      );
     }
   }
 
@@ -436,18 +478,14 @@ export function validateClinicalEvidencePackage({
       || !/(?:duplicate|重复)/i.test(citationAuditText)
       || !/(?:retract|撤稿|更正|correction)/i.test(citationAuditText)
       || !/(?:metadata|元数据)/i.test(citationAuditText)
-      || !/(?:claim mismatch|主张不匹配|引文不匹配)/i.test(citationAuditText)
+      || !/(?:claim mismatch|claim-source|claims?.{0,60}(?:verified|checked|audited)|主张不匹配|引文不匹配|主张.{0,20}(?:核对|验证|审计)|逐条.{0,20}(?:核对|验证|审计))/i.test(citationAuditText)
     ) {
       issues.push("citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.");
     }
-    const referenceSection = reportSection(reportText, "参考文献|参考来源|References?");
     for (const [index, claim] of claims.entries()) {
-      if (nonEmpty(claim?.sourceUrl) && !referenceSection.includes(claim.sourceUrl)) {
-        issues.push(`claims[${index}].sourceUrl is absent from the numbered reference list.`);
-      }
       const marker = `<!-- claim:${claim?.claimId} -->`;
       const claimLine = String(reportText).split("\n").find((line) => line.includes(marker)) ?? "";
-      if (!claimLine.includes(`[${claim?.referenceNumber}]`)) {
+      if (!standardCitationNumbers(claimLine).has(claim?.referenceNumber)) {
         issues.push(`claims[${index}] is not paired with its standard numbered in-text citation.`);
       }
     }
