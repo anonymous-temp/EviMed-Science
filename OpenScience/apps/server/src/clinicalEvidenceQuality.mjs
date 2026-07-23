@@ -16,6 +16,8 @@ const operationalFailurePattern = /(?:Transport error|Runtime configuration boot
 const academicProcessPattern = /(?:clinical-evidence-synthesis|证据追溯契约|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单|本次检索.{0,24}(?:未纳入|无法)|无法通过本次检索|(?:本分析|本文).{0,60}(?:仅基于|未检索|未直接检索|未触及)|工具调用|不可及|无法获取|无法获得|未能获取|未能获得|全文不可得)/i;
 const articleTypeTitlePattern = /(?:综述|系统评价|meta\s*分析|meta-analysis|systematic review|review article)/i;
 const medicationResponseDiagnosisPattern = /(?:(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解).{0,80}(?:诊断|排除|区分|判断)|(?:诊断|排除|区分|判断).{0,80}(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解))/i;
+const emergencyCallClaimPattern = /(?:(?:呼叫|拨打).{0,16}(?:急救|120|999)|(?:急救|120|999).{0,16}(?:呼叫|拨打))/i;
+const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(?:999|emergency|ambulance).{0,16}call|呼叫|拨打|急救)/i;
 
 function nonEmpty(value, minimum = 1) {
   return typeof value === "string" && value.trim().length >= minimum;
@@ -136,6 +138,10 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
       issues.push(`${label}.accessLevel must identify verified content access, not bibliographic metadata.`);
     }
     if (!validSupportingPassage(value.supportQuote)) issues.push(`${label}.supportQuote must contain a direct supporting passage.`);
+    if (emergencyCallClaimPattern.test(value.claim ?? "")
+      && !emergencyCallSupportPattern.test(value.supportQuote ?? "")) {
+      issues.push(`${label}.emergency-call action is not present in its direct support.`);
+    }
     const directSupportNumbers = new Set(numericTokens([
       value.supportQuote,
       value.sourceTitle,
