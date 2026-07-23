@@ -202,6 +202,20 @@ test("rejects a numeric proposition not present in its direct support", () => {
   assert.match(result.issues.join("\n"), /claims\[0\]\.claim numeric fact 1776/);
 });
 
+test("rejects an emergency-call recommendation when the quote only describes symptoms", () => {
+  const input = validPackage();
+  input.matrix.claims[0].claim = "突发压迫性胸部不适应立即拨打 999 呼叫急救。";
+  input.matrix.claims[0].supportQuote = "the pain can feel like squeezing or pressure inside your chest";
+  input.matrix.claims[0].identifier = "NHS 999 guidance";
+  input.sourceArtifacts[".evimed-sources/a/page.md"] = input.matrix.claims
+    .filter((item) => item.artifactPath.endsWith("page.md"))
+    .map((item) => item.supportQuote)
+    .join("\n");
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /emergency-call action is not present in its direct support/);
+});
+
 test("rejects authored retrieval excuses and uncited Chinese practical steps or bullets", () => {
   const input = validPackage();
   input.reportText = input.reportText

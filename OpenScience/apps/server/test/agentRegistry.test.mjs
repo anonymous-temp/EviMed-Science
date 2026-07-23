@@ -114,7 +114,7 @@ test("official specialist packages preserve domain-specific evidence and release
   const expectedVersions = new Map([
     ["adr-analysis", "1.2.2"],
     ["bibliometric-analysis", "1.0.1"],
-    ["clinical-evidence-synthesis", "1.0.6"],
+    ["clinical-evidence-synthesis", "1.0.7"],
     ["comprehensive-drug-evaluation", "2.2.1"],
     ["drug-selection", "2.1.1"],
     ["mendelian-randomization", "1.0.1"],
