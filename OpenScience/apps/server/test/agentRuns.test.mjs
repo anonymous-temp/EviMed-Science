@@ -228,7 +228,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "1.0.10",
+      effectiveAgentVersion: "1.0.11",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
   });
@@ -376,16 +376,17 @@ test("a routed clinical evidence turn gets one bounded repair before traceabilit
     });
     store.scheduleMonitor = () => {};
     const prompts = [];
+    const sendPrompt = async (_session, _run, repairText) => {
+      prompts.push(repairText ?? null);
+      return { accepted: true };
+    };
     const run = await store.dispatch(project, {
       sessionId: binding.sessionId,
       dispatchId: "turn_clinical_quality",
       effectiveAgentId: "clinical-evidence-synthesis",
       effectiveAgentVersion: "1.0.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
-    }, async (_session, _run, repairText) => {
-      prompts.push(repairText ?? null);
-      return { accepted: true };
-    });
+    }, sendPrompt);
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# Too short\nUnsupported claim [claim:CLM-999]", "utf8");
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-run.json"), JSON.stringify({
@@ -420,6 +421,28 @@ test("a routed clinical evidence turn gets one bounded repair before traceabilit
     assert.equal(finished.id, run.id);
     assert.equal(finished.status, "failed");
     assert.equal(finished.errorCode, "specialist_evidence_traceability_failed");
+
+    const malformed = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_clinical_malformed_json",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, sendPrompt);
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), '{"claims":[{"claim":"unescaped "quote""}]}', "utf8");
+    history.push({
+      info: { id: "msg_clinical_malformed_json", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        { type: "tool", tool: "write", state: { status: "completed", input: { filePath: "clinical-evidence-matrix.json" } } },
+        { type: "text", text: "Completed with malformed JSON." },
+      ],
+    });
+    const malformedRepair = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(malformedRepair.id, malformed.id);
+    assert.equal(malformedRepair.status, "running");
+    assert.equal(prompts.length, 4);
+    assert.match(prompts[3], /clinical-evidence-matrix\.json must contain strict valid JSON/);
+    assert.match(prompts[3], /Chinese quotation marks/);
     await store.closeProject(project, "canceled");
   } finally {
     await rm(root, { recursive: true, force: true });

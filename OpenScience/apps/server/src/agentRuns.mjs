@@ -368,6 +368,8 @@ function clinicalEvidenceRepairPrompt(issues) {
   return [
     "The server-side clinical evidence gate rejected the current package.",
     "Revise the existing clinical-evidence-report.md, clinical-evidence-matrix.json, and clinical-evidence-run.json in place.",
+    "Only rewrite a file when an issue below names or requires it; preserve already valid evidence and source metadata.",
+    "Every JSON deliverable must remain strict JSON. Inside JSON string values, use Chinese quotation marks instead of unescaped ASCII double quotes.",
     "Do not call any retrieval tool and do not modify any .evimed-sources artifact; the successful source artifacts from this run remain authoritative.",
     "Fix every issue below, read all three deliverables back, and repeat the skill's final literal checklist before finishing:",
     bounded,
@@ -467,12 +469,26 @@ async function requiredSpecialistArtifacts(project, run, agentRegistry, sourceAr
   }
   if (agent.completionChecks.includes("evidenceClaimsTraceable")) {
     let matrix;
-    let runReceipt;
     try {
       matrix = JSON.parse(files.get("clinical-evidence-matrix.json") ?? "");
+    } catch {
+      return {
+        artifacts,
+        errorCode: "specialist_evidence_traceability_failed",
+        qualityIssues: [
+          "clinical-evidence-matrix.json must contain strict valid JSON; replace unescaped ASCII quotes inside Chinese prose with Chinese quotation marks.",
+        ],
+      };
+    }
+    let runReceipt;
+    try {
       runReceipt = JSON.parse(files.get("clinical-evidence-run.json") ?? "");
     } catch {
-      return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+      return {
+        artifacts,
+        errorCode: "specialist_evidence_traceability_failed",
+        qualityIssues: ["clinical-evidence-run.json must contain strict valid JSON."],
+      };
     }
     const sourceArtifacts = new Map();
     const sourcePaths = runReceipt?.successfulSourceArtifacts;
