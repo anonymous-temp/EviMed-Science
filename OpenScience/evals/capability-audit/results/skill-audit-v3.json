@@ -2,9 +2,9 @@
   "summary": {
     "schemaVersion": 4,
     "incomingSkillsReviewed": 149,
-    "freshWebOpenCodeSkillPackages": 66,
+    "freshWebOpenCodeSkillPackages": 67,
     "freshWebGlobalSkillPackages": 57,
-    "freshWebSpecialistSkillPackages": 9,
+    "freshWebSpecialistSkillPackages": 10,
     "freshWebInstalledPackageIds": [
       "core/domain-check",
       "core/hpc-slurm",
@@ -54,6 +54,7 @@
       "curated-scientific/time-series-forecasting",
       "evimed/adr-analysis",
       "evimed/bibliometric-analysis",
+      "evimed/clinical-evidence-synthesis",
       "evimed/comprehensive-drug-evaluation",
       "evimed/drug-selection",
       "evimed/mendelian-randomization",
@@ -127,7 +128,7 @@
         "skillPackages": 62
       }
     ],
-    "desktopRepositorySkillPackages": 70,
+    "desktopRepositorySkillPackages": 71,
     "webExecutionCertifiedSkillPackages": 61,
     "webExecutionCertifiedPackageIds": [
       "core/domain-check",
@@ -210,7 +211,7 @@
     "sourceCapabilitiesMappedToFreshRuntime": 122,
     "sourceCapabilitiesBackedByExecutedRuntime": 119,
     "sourcePackagesPublished": 0,
-    "note": "A clean Web runtime currently receives 57 global executable-tier Skills plus 9 EviMed specialist packages. Existing local runtimes may still show 62 packages created before the executable-tier delivery inventory was added; that observation is not the clean-deployment contract. Mapping one of 149 reviewed source capabilities does not install or publish that source package. Execution certification applies only to packages with retained task artifacts and matching dependency evidence."
+    "note": "A clean Web runtime currently receives 57 global executable-tier Skills plus 10 EviMed specialist packages. Existing local runtimes may still show 62 packages created before the executable-tier delivery inventory was added; that observation is not the clean-deployment contract. Mapping one of 149 reviewed source capabilities does not install or publish that source package. Execution certification applies only to packages with retained task artifacts and matching dependency evidence."
   },
   "items": [
     {

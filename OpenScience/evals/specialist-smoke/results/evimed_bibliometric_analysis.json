@@ -2,188 +2,190 @@
   "schemaVersion": 1,
   "tool": "evimed_bibliometric_analysis",
   "project": "default",
-  "jobId": "bibliometric-20260718122854-f7807408eae5",
+  "jobId": "bibliometric-20260722233739-3f4f02f35eee",
   "jobStatus": "succeeded",
-  "summary": "Bibliometric analysis job bibliometric-20260718122854-f7807408eae5 completed.",
+  "summary": "Bibliometric analysis job bibliometric-20260722233739-3f4f02f35eee completed.",
+  "releaseStatus": null,
+  "releaseDecision": null,
   "error": null,
   "artifacts": [
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/data/author_collaboration.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/data/author_collaboration.csv"
     },
     {
       "kind": "json",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/data/author_network.json"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/data/author_network.json"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/data/cleaned_records.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/data/cleaned_records.csv"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/data/country_collaboration.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/data/country_collaboration.csv"
     },
     {
       "kind": "json",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/data/country_network.json"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/data/country_network.json"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/data/institution_collaboration.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/data/institution_collaboration.csv"
     },
     {
       "kind": "json",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/data/institution_network.json"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/data/institution_network.json"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/data/keyword_cooccurrence.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/data/keyword_cooccurrence.csv"
     },
     {
       "kind": "json",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/data/keyword_network.json"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/data/keyword_network.json"
     },
     {
       "kind": "json",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/data/raw_records.json"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/data/raw_records.json"
     },
     {
       "kind": "json",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/data/search_metadata.json"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/data/search_metadata.json"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/annual_trend.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/annual_trend.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/author_network.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/author_network.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/citation_overview.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/citation_overview.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/country_network.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/country_network.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/institution_network.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/institution_network.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/keyword_network.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/keyword_network.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/keyword_wordcloud.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/keyword_wordcloud.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/timeline_clusters.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/timeline_clusters.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/top_authors.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/top_authors.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/top_countries.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/top_countries.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/top_institutions.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/top_institutions.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/top_journals.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/top_journals.png"
     },
     {
       "kind": "png",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/figures/top_keywords.png"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/figures/top_keywords.png"
     },
     {
       "kind": "md",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/report.md"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/report.md"
     },
     {
       "kind": "json",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/request.json"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/request.json"
     },
     {
       "kind": "json",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/result.json"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/result.json"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/tables/cluster_summary.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/tables/cluster_summary.csv"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/tables/frontier_topics.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/tables/frontier_topics.csv"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/tables/pub_type_distribution.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/tables/pub_type_distribution.csv"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/tables/top_authors.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/tables/top_authors.csv"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/tables/top_countries.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/tables/top_countries.csv"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/tables/top_institutions.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/tables/top_institutions.csv"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/tables/top_journals.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/tables/top_journals.csv"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/tables/top_keywords.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/tables/top_keywords.csv"
     },
     {
       "kind": "csv",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/tables/year_trend.csv"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/tables/year_trend.csv"
     },
     {
       "kind": "txt",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/vosviewer/author_map.txt"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/vosviewer/author_map.txt"
     },
     {
       "kind": "txt",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/vosviewer/author_network.txt"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/vosviewer/author_network.txt"
     },
     {
       "kind": "txt",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/vosviewer/country_map.txt"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/vosviewer/country_map.txt"
     },
     {
       "kind": "txt",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/vosviewer/country_network.txt"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/vosviewer/country_network.txt"
     },
     {
       "kind": "txt",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/vosviewer/institution_map.txt"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/vosviewer/institution_map.txt"
     },
     {
       "kind": "txt",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/vosviewer/institution_network.txt"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/vosviewer/institution_network.txt"
     },
     {
       "kind": "txt",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/vosviewer/keyword_map.txt"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/vosviewer/keyword_map.txt"
     },
     {
       "kind": "txt",
-      "path": "bibliometric-analysis-runs/bibliometric-20260718122854-f7807408eae5/output/vosviewer/keyword_network.txt"
+      "path": "bibliometric-analysis-runs/bibliometric-20260722233739-3f4f02f35eee/output/vosviewer/keyword_network.txt"
     }
   ],
-  "elapsedSeconds": 114.273,
-  "completedAt": "2026-07-18T04:30:48.591019Z"
+  "elapsedSeconds": 159.761,
+  "completedAt": "2026-07-22T15:40:19.644604Z"
 }

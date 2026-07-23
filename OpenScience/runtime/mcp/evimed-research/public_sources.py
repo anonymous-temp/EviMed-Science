@@ -1872,7 +1872,7 @@ def _bindingdb(query, limit):
 
 
 def _clinpgx(query, limit):
-    base = _base("EVIMED_CLINPGX_BASE_URL", "https://api.pharmgkb.org/v1/data")
+    base = _base("EVIMED_CLINPGX_BASE_URL", "https://api.clinpgx.org/v1/data")
     url = _url(base, "chemical", {"name": query})
     records = _list(_get_json(url).get("data"))
     items, sources = [], []

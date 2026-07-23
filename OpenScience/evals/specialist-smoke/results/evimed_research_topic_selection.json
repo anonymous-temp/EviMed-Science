@@ -2,42 +2,42 @@
   "schemaVersion": 1,
   "tool": "evimed_research_topic_selection",
   "project": "default",
-  "jobId": "topic-20260718211716-79e3c155aed6",
+  "jobId": "topic-20260722233739-70dee8588977",
   "jobStatus": "succeeded",
-  "summary": "Research topic selection job topic-20260718211716-79e3c155aed6 completed.",
+  "summary": "Research topic selection job topic-20260722233739-70dee8588977 completed.",
   "releaseStatus": null,
   "releaseDecision": null,
   "error": null,
   "artifacts": [
     {
       "kind": "json",
-      "path": "research-topic-runs/topic-20260718211716-79e3c155aed6/output/evidence-records.json"
+      "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/evidence-records.json"
     },
     {
       "kind": "json",
-      "path": "research-topic-runs/topic-20260718211716-79e3c155aed6/output/evidence-stats.json"
+      "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/evidence-stats.json"
     },
     {
       "kind": "json",
-      "path": "research-topic-runs/topic-20260718211716-79e3c155aed6/output/module-outputs.json"
+      "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/module-outputs.json"
     },
     {
       "kind": "json",
-      "path": "research-topic-runs/topic-20260718211716-79e3c155aed6/output/request.json"
+      "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/request.json"
     },
     {
       "kind": "md",
-      "path": "research-topic-runs/topic-20260718211716-79e3c155aed6/output/research-topic-report.md"
+      "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/research-topic-report.md"
     },
     {
       "kind": "json",
-      "path": "research-topic-runs/topic-20260718211716-79e3c155aed6/output/research-topic-run.json"
+      "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/research-topic-run.json"
     },
     {
       "kind": "json",
-      "path": "research-topic-runs/topic-20260718211716-79e3c155aed6/output/result.json"
+      "path": "research-topic-runs/topic-20260722233739-70dee8588977/output/result.json"
     }
   ],
-  "elapsedSeconds": 1003.462,
-  "completedAt": "2026-07-18T13:33:59.537793Z"
+  "elapsedSeconds": 833.492,
+  "completedAt": "2026-07-22T15:51:33.381486Z"
 }

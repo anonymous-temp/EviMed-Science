@@ -2,30 +2,98 @@
   "schemaVersion": 1,
   "tool": "evimed_mendelian_randomization",
   "project": "default",
-  "jobId": "mr-20260718161807-94e3e80ee14b",
+  "jobId": "mr-20260722233537-72683d3aec7f",
   "jobStatus": "succeeded",
-  "summary": "Mendelian randomization job mr-20260718161807-94e3e80ee14b completed.",
+  "summary": "Mendelian randomization job mr-20260722233537-72683d3aec7f completed.",
   "releaseStatus": null,
   "releaseDecision": null,
   "error": null,
   "artifacts": [
     {
+      "kind": "csv",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/f_statistics.csv"
+    },
+    {
+      "kind": "pdf",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.pdf"
+    },
+    {
+      "kind": "png",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.png"
+    },
+    {
+      "kind": "pdf",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.pdf"
+    },
+    {
+      "kind": "png",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.png"
+    },
+    {
+      "kind": "csv",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/heterogeneity.csv"
+    },
+    {
+      "kind": "pdf",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.pdf"
+    },
+    {
+      "kind": "png",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.png"
+    },
+    {
+      "kind": "csv",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mr_results.csv"
+    },
+    {
+      "kind": "json",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mr_summary.json"
+    },
+    {
+      "kind": "csv",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mrpresso.csv"
+    },
+    {
+      "kind": "csv",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/pleiotropy.csv"
+    },
+    {
+      "kind": "pdf",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.pdf"
+    },
+    {
+      "kind": "png",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.png"
+    },
+    {
+      "kind": "docx",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.docx"
+    },
+    {
       "kind": "md",
-      "path": "mendelian-randomization-runs/mr-20260718161807-94e3e80ee14b/output/mendelian-randomization-report.md"
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.md"
+    },
+    {
+      "kind": "pdf",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.pdf"
+    },
+    {
+      "kind": "txt",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.txt"
     },
     {
       "kind": "json",
-      "path": "mendelian-randomization-runs/mr-20260718161807-94e3e80ee14b/output/mendelian-randomization-run.json"
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-run.json"
     },
     {
       "kind": "json",
-      "path": "mendelian-randomization-runs/mr-20260718161807-94e3e80ee14b/output/request.json"
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/request.json"
     },
     {
       "kind": "json",
-      "path": "mendelian-randomization-runs/mr-20260718161807-94e3e80ee14b/output/result.json"
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/result.json"
     }
   ],
-  "elapsedSeconds": 1052.627,
-  "completedAt": "2026-07-18T08:35:40.516061Z"
+  "elapsedSeconds": 1639.245,
+  "completedAt": "2026-07-22T16:02:56.931568Z"
 }

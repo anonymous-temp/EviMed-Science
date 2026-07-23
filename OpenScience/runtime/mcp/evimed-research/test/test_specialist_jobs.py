@@ -108,6 +108,19 @@ class SpecialistJobContractTests(unittest.TestCase):
         (root / "evimed_runner.py").write_text("# changed runner\n", encoding="utf-8")
         self.assertNotEqual(state["executionEvidence"], self.jobs._execution_evidence(root))
 
+    def test_job_source_evidence_ignores_runtime_cache_mutations(self):
+        root = self.install_fake_specialist("evimed_drug_safety_analysis")
+        cache = root / ".cache" / "openfda"
+        cache.mkdir(parents=True)
+        cache_file = cache / "response.json"
+        cache_file.write_text('{"cached": 1}\n', encoding="utf-8")
+        before = self.jobs._execution_evidence(root)
+
+        cache_file.write_text('{"cached": 2}\n', encoding="utf-8")
+        (cache / "new-response.json").write_text('{"cached": 3}\n', encoding="utf-8")
+
+        self.assertEqual(before, self.jobs._execution_evidence(root))
+
     def test_project_environment_is_allowlisted_and_cannot_override_model_config(self):
         root = self.install_fake_specialist("evimed_mendelian_randomization")
         (root / ".env").write_text(

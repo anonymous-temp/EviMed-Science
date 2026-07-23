@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 EXCLUDED_DIRECTORIES = {
+    ".cache",
     ".git",
     ".mypy_cache",
     ".pytest_cache",

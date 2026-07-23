@@ -177,3 +177,68 @@ test("rejects an unreferenced numeric fact outside the reference list", () => {
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /numeric fact 15 has no evidence-matrix claim reference/);
 });
+
+test("accepts source years and identifiers in headings and does not confuse adverse reactions with diagnostic response", () => {
+  const input = validPackage();
+  input.reportText = input.reportText
+    .replace("## 药物角色", "## ACC 2022 与 Cochrane CD004473 的药物角色")
+    .replace(
+      "速效救心丸不应延误急诊评估。[claim:CLM-003]",
+      "监管机构基于药品不良反应评估修订了安全信息，不能据此判断胸痛病因。[claim:CLM-003]",
+    )
+    .replace(
+      "证据范围应被明确限定。[claim:CLM-004]",
+      "证据边界包括（1）适用人群与（2）照护场景。[claim:CLM-004]",
+    );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
+test("rejects a numeric proposition not present in its direct support", () => {
+  const input = validPackage();
+  input.matrix.claims[0].claim = "The source enrolled 1776 participants.";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /claims\[0\]\.claim numeric fact 1776/);
+});
+
+test("rejects authored retrieval excuses and uncited Chinese practical steps or bullets", () => {
+  const input = validPackage();
+  input.reportText = input.reportText
+    .replace(
+      "## 科学局限\n",
+      "## 科学局限\n本分析仅基于摘要页面，未触及完整文件。\n",
+    )
+    .replace(
+      /## 结论与实际处置[\s\S]*$/,
+      [
+        "## 结论与实际处置",
+        "**第一步：立即呼叫急救。** [claim:CLM-001]",
+        "**第二步：自行驾车前往医院。**",
+        "- 服用速效救心丸后继续观察。",
+        "不得因服用速效救心丸而延误呼救或急诊评估。[claim:CLM-003]",
+      ].join("\n"),
+    );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /runtime or retrieval-process prose/);
+  assert.match(result.issues.join("\n"), /Every practical-action step or bullet/);
+});
+
+test("matches ordinal suffixes and zero-padded dates in direct numeric support", () => {
+  const input = validPackage();
+  input.matrix.claims[0].claim = "Serial assessment should not rely only on the 99 percentile threshold.";
+  input.matrix.claims[0].supportQuote = "Serial measurements rather than use of the 99th percentile threshold are essential.";
+  input.matrix.claims[1].claim = "The page review date was 8 August 2023.";
+  input.matrix.claims[1].supportQuote = "Page last reviewed: 08 August 2023";
+  input.sourceArtifacts[".evimed-sources/a/page.md"] = input.matrix.claims
+    .filter((item) => item.artifactPath.endsWith("page.md"))
+    .map((item) => item.supportQuote)
+    .join("\n");
+  input.sourceArtifacts[".evimed-sources/b/fulltext.md"] = input.matrix.claims
+    .filter((item) => item.artifactPath.endsWith("fulltext.md"))
+    .map((item) => item.supportQuote)
+    .join("\n");
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
