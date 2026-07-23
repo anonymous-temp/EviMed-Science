@@ -228,7 +228,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.0.1",
+      effectiveAgentVersion: "2.0.2",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
   });
@@ -412,7 +412,7 @@ test("a deep clinical evidence run fails closed unless every companion skill is 
   }
 });
 
-test("a routed clinical evidence turn gets one bounded repair before traceability failure", async () => {
+test("a routed clinical evidence turn honors a configured bounded repair limit", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-clinical-quality-"));
   try {
     const project = {
@@ -451,6 +451,7 @@ test("a routed clinical evidence turn gets one bounded repair before traceabilit
       monitorMaxPolls: 20,
       readSessionHistory: async () => history,
       readSessionStatus: async () => "idle",
+      maxClinicalRepairAttempts: 1,
     });
     store.scheduleMonitor = () => {};
     const prompts = [];

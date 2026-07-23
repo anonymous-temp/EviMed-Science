@@ -60,14 +60,18 @@ function numericTokens(value) {
     .replace(/<!--\s*claim:CLM-[0-9]{3,6}\s*-->/g, "")
     .replace(/\[(?:\d+(?:\s*[-,]\s*\d+)*)\]/g, "")
     .replace(/\b(?=[A-Za-z0-9-]*[0-9])[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*\b/g, "")
-    .replace(/^[（(]\s*[1-9]\s*[)）]/, "")
-    .replace(/((?:包括|分为|以及|与|和|、)|[：:；;，,]|\s)[（(]\s*[1-9]\s*[)）]/g, "$1")
-    .match(/[0-9]+(?:\s*[–—-]\s*[0-9]+)?/g)
+    .replace(/[（(]\s*[1-9]\d?\s*[)）]/g, "")
+    .replace(/(?<=\d),(?=\d{3}(?:\D|$))/g, "")
+    .replace(/%(\s*[–—-]\s*)(?=\d)/g, "$1")
+    .match(/[0-9]+(?:\.[0-9]+)?(?:\s*[–—-]\s*[0-9]+(?:\.[0-9]+)?)?/g)
     ?.map((token) => token
       .replace(/\s+/g, "")
       .replace(/[–—]/g, "-")
       .split("-")
-      .map((part) => part.replace(/^0+(?=\d)/, ""))
+      .map((part) => part
+        .replace(/^0+(?=\d)/, "")
+        .replace(/(\.\d*?)0+$/, "$1")
+        .replace(/\.$/, ""))
       .join("-")) ?? [];
 }
 
@@ -156,6 +160,7 @@ export function validateClinicalEvidencePackage({
   matrix,
   runReceipt,
   sourceArtifacts = {},
+  executedSearchQueries = null,
   searchLogText = "",
   referencesText = "",
   citationLedgerText = "",
@@ -323,7 +328,9 @@ export function validateClinicalEvidencePackage({
   );
   for (const [lineIndex, rawLine] of reportForNumericAudit.split("\n").entries()) {
     if (/^\s*#{1,6}\s+/.test(rawLine)) continue;
-    const line = rawLine.replace(/^\s*[0-9]+\.\s*/, "");
+    const line = rawLine
+      .replace(/^\s*[0-9]+\.\s*/, "")
+      .replace(/^\s*\|\s*[0-9]+\s*\|/, "| |");
     const reportNumbers = new Set(numericTokens(line).filter((token) => {
       if (token === "120") return false;
       const single = token.match(/^\d+$/) ? Number(token) : null;
@@ -415,6 +422,20 @@ export function validateClinicalEvidencePackage({
     }
     if (queries.length < 8 || normalizedQueries.size < 8) {
       issues.push("Deep research must preserve at least eight distinct documented search queries.");
+    }
+    if (Array.isArray(executedSearchQueries)) {
+      const executed = new Set(
+        executedSearchQueries
+          .map((value) => typeof value === "string" ? value.trim().toLowerCase() : "")
+          .filter(Boolean),
+      );
+      if (executed.size < 8) {
+        issues.push("Deep research must execute at least eight distinct successful evidence searches.");
+      }
+      const undocumented = [...normalizedQueries].filter((query) => !executed.has(query));
+      if (undocumented.length) {
+        issues.push("Every documented search query must match a successful search-tool call from the same run.");
+      }
     }
     if (searchedDatabases.size < 2) {
       issues.push("Deep research must search at least two distinct evidence databases or source classes.");

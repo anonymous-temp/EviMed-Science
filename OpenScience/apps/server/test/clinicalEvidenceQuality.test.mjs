@@ -359,6 +359,35 @@ test("rejects a numeric proposition not present in its direct support", () => {
   assert.match(result.issues.join("\n"), /claims\[0\]\.claim numeric fact 1776/);
 });
 
+test("keeps decimal estimates and confidence intervals atomic during numeric traceability checks", () => {
+  const input = validPackage();
+  input.matrix.claims[0].claim = "Sensitivity was 99.3% (95% CI 98.5%-99.7%).";
+  input.matrix.claims[0].supportQuote = "Sensitivity was 99.3% (95% CI 98.5–99.7%).";
+  input.sourceArtifacts[".evimed-sources/a/page.md"] = input.matrix.claims
+    .filter((item) => item.artifactPath.endsWith("page.md"))
+    .map((item) => item.supportQuote)
+    .join("\n");
+  input.reportText = input.reportText.replace(
+    "症状不能单独完成病因归类。[claim:CLM-001]",
+    "Sensitivity was 99.3% (95% CI 98.5%-99.7%). [claim:CLM-001]",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
+test("does not treat table ordinals or parenthesized enumeration as clinical numeric facts", () => {
+  const input = validPackage();
+  input.reportText = input.reportText.replace(
+    "症状不能单独完成病因归类。[claim:CLM-001]",
+    [
+      "证据边界包括（1）适用人群、（2）照护场景与（3）结局定义。[claim:CLM-001]",
+      "| 1 | 立即完成结构化评估 | [claim:CLM-001] |",
+    ].join("\n"),
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
 test("rejects an emergency-call recommendation when the quote only describes symptoms", () => {
   const input = validPackage();
   input.matrix.claims[0].claim = "突发压迫性胸部不适应立即拨打 999 呼叫急救。";
@@ -456,6 +485,17 @@ test("accepts a publication-grade deep-research package with reproducible search
   assert.equal(result.valid, true, result.issues.join("\n"));
   assert.equal(result.claimIds.length, 18);
   assert.equal(result.sourceDomains.length, 3);
+});
+
+test("rejects documented deep-research queries that were not successfully executed in the same run", () => {
+  const input = deepResearchPackage();
+  input.executedSearchQueries = JSON.parse(input.searchLogText).queries
+    .slice(0, 7)
+    .map((entry) => entry.query);
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /execute at least eight distinct successful evidence searches/);
+  assert.match(result.issues.join("\n"), /must match a successful search-tool call/);
 });
 
 test("accepts compound numbered citations when each hidden claim resolves on the same line", () => {

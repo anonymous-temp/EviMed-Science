@@ -42,6 +42,11 @@ Define at least four evidence domains before searching:
 
 Run at least eight distinct searches across at least two source classes. Use English and Chinese synonyms when relevant.
 
+Record each completed search in `clinical-evidence-search.json` immediately after
+the search succeeds. Do not state a larger search count in prose than the JSON
+actually contains. Before drafting, verify that the log contains at least eight
+non-duplicate query strings; planned or failed searches do not count.
+
 For an acute pressure-like chest symptom question, include targeted variants covering:
 
 - acute chest pain AND acute coronary syndrome AND guideline;
@@ -114,6 +119,8 @@ Use standard numbered citations in order of first appearance:
 - Readers must see `[1]`, `[2]`, and so on, not internal claim IDs.
 - Put each internal marker in an HTML comment: `<!-- claim:CLM-NNN -->`.
 - Put the numbered citation and hidden claim marker on the same physical line as the supported proposition.
+- In the abstract, put every quantitative proposition on its own physical line
+  with the matching numbered citation and hidden claim marker.
 - Every factual numeral and every practical action needs a directly applicable citation and claim marker.
 - Never use a broad citation to cover a sample size, effect estimate, timing threshold, indication, contraindication, or recommendation absent from its source passage.
 
@@ -135,6 +142,10 @@ Write `clinical-evidence-matrix.json` with a top-level `claims` array containing
 
 `referenceNumber` must resolve to the numbered reference list. `supportQuote` must be a contiguous verbatim passage present in the preserved source artifact. Every numeral in a claim must also appear in the quote, source title, or identifier.
 
+For an emergency-call claim, the contiguous quote must itself contain both the
+action to call emergency services and the relevant symptom condition. A quote
+that only describes the symptom is not sufficient.
+
 ### Bibliography and audit
 
 Write:
@@ -142,6 +153,10 @@ Write:
 - `references.bib` with at least 12 deduplicated entries;
 - `citation-ledger.csv` with one row per matrix claim;
 - `citation-audit.md` documenting unresolved identifiers, duplicates, corrections or retractions, metadata-only records, and claim-source mismatches.
+
+Name every audit category explicitly even when its count is zero. `Abstract-only`
+is not a synonym for `metadata-only`; document how metadata-only records were
+excluded from claim support.
 
 Prefer DOI, then PMID/PMCID, then a stable official-document identifier. Verify author, title, venue, year, volume, issue, pages, DOI, PMID, and version against an authoritative record. Do not manufacture missing metadata.
 
@@ -277,5 +292,15 @@ Read every output back before claiming success. Do not use `grep` or another unb
 - no visible `[claim:...]` marker remains;
 - no operational failure or tool-process prose appears in the academic report;
 - the practical answer is medically correct, source-supported, and does not encourage delay.
+
+Then run the deterministic structural preflight from the loaded skill directory:
+
+```bash
+python "$XDG_CONFIG_HOME/opencode/skills/clinical-evidence-synthesis/scripts/preflight.py" --workspace .
+```
+
+If it exits non-zero, fix every listed issue and run it again. Do not finish
+until it returns `"ok": true`. The server performs a stricter independent
+evidence and source-integrity gate after this preflight.
 
 If this contract cannot be met, write an honest failed run receipt and do not present the report as publication-grade.

@@ -391,6 +391,23 @@ function successfulToolPart(part) {
     && parsedToolResultStatus(part) !== "error";
 }
 
+function successfulEvidenceSearchQueries(messages) {
+  const searchTools = [
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+  ];
+  return messages
+    .flatMap((message) => message?.parts ?? [])
+    .filter((part) => (
+      successfulToolPart(part)
+      && typeof part.tool === "string"
+      && searchTools.some((tool) => part.tool === tool || part.tool.endsWith(`_${tool}`))
+    ))
+    .map((part) => part?.state?.input?.query)
+    .filter((query) => typeof query === "string" && query.trim());
+}
+
 function terminalFromMessages(messages) {
   for (const message of messages) {
     const error = message?.info?.error;
@@ -428,9 +445,14 @@ function clinicalEvidenceRepairPrompt(issues) {
     "Every JSON deliverable must remain strict JSON. Inside JSON string values, use Chinese quotation marks instead of unescaped ASCII double quotes.",
     "Do not call any retrieval tool and do not modify any .evimed-sources artifact; the successful source artifacts from this run remain authoritative.",
     "Treat repeated numeric-fact messages as one report-wide audit task: remove nonessential numbers or place each retained quantitative proposition on a line with the correct numbered citation and matching hidden matrix claim marker.",
+    "The prose search count must equal clinical-evidence-search.json. Preserve at least eight distinct query objects; never invent searches that were not actually completed.",
+    "Expand scientific synthesis, comparison, clinical reasoning, evidence appraisal, and applicability analysis until the report itself contains at least 10000 characters; do not pad it with retrieval diaries, generic filler, or repeated conclusions.",
+    "Every evidence-matrix claim must appear in the report on a line with its exact numbered citation and hidden claim marker. Emergency-call support quotes must include both the call action and the qualifying symptom condition.",
+    "citation-audit.md must explicitly name unresolved, duplicate, correction/retraction, metadata-only, and claim-source mismatch checks even when a count is zero.",
     "Keep scholarly limitations about bias, indirectness, precision, currency, and applicability, but remove retrieval diaries, access excuses, tool names, gateway names, and statements about which files or pages were unavailable.",
     "The safety-first practical section must come before the reference list. Remove unsupported self-care details; every numbered step and bullet must have direct support, a numbered citation, and a matching hidden claim marker.",
-    "Fix every issue below, read every required deliverable back, and repeat the skill's final literal checklist before finishing:",
+    "After fixing the files, run: python \"$XDG_CONFIG_HOME/opencode/skills/clinical-evidence-synthesis/scripts/preflight.py\" --workspace .",
+    "Fix every preflight issue, rerun it until it returns ok=true, read every required deliverable back, and repeat the skill's final literal checklist before finishing:",
     bounded,
   ].join("\n");
 }
@@ -595,6 +617,7 @@ async function requiredSpecialistArtifacts(
       matrix,
       runReceipt,
       sourceArtifacts,
+      executedSearchQueries: successfulEvidenceSearchQueries(assistantMessages),
       searchLogText: files.get("clinical-evidence-search.json") ?? "",
       referencesText: files.get("references.bib") ?? "",
       citationLedgerText: files.get("citation-ledger.csv") ?? "",
@@ -627,7 +650,7 @@ export class AgentRunStore {
     this.monitorMaxPolls = options.monitorMaxPolls ?? 3600;
     this.onRunFinished = options.onRunFinished ?? (async () => {});
     this.onRunFinishedError = options.onRunFinishedError ?? (async () => {});
-    this.maxClinicalRepairAttempts = options.maxClinicalRepairAttempts ?? 1;
+    this.maxClinicalRepairAttempts = options.maxClinicalRepairAttempts ?? 2;
     if (!Number.isSafeInteger(this.maxClinicalRepairAttempts) || this.maxClinicalRepairAttempts < 0) {
       throw new TypeError("AgentRunStore maxClinicalRepairAttempts must be a non-negative integer.");
     }
