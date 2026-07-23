@@ -19,7 +19,7 @@ const medicationResponseDiagnosisPattern = /(?:(?:速效救心丸|胃药|抗酸�
 const emergencyCallClaimPattern = /(?:(?:呼叫|拨打).{0,16}(?:急救|120|999)|(?:急救|120|999).{0,16}(?:呼叫|拨打))/i;
 const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(?:999|emergency|ambulance).{0,16}call|呼叫|拨打|急救)/i;
 const unsupportedSelfCarePattern = /(?:(?:胃药|抗酸药).{0,40}(?:等待|观察|延误)|(?:等待|观察).{0,30}(?:症状|变化|缓解))/i;
-const exclusiveSafetyPattern = /(?:唯一.{0,24}(?:安全|可靠|一致|策略|方法|途径)|(?:安全|可靠).{0,24}唯一)/i;
+const exclusiveSafetyPattern = /(?:唯一.{0,24}(?:安全|可靠|正确|一致|策略|方法|途径)|(?:安全|可靠|正确).{0,24}唯一)/i;
 const suxiaoPattern = /(?:速效救心丸|Suxiao Jiuxin Wan)/i;
 
 function nonEmpty(value, minimum = 1) {
