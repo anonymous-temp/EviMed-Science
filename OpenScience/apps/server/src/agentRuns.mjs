@@ -302,6 +302,11 @@ const evidenceSourceToolSuffixes = Object.freeze([
   "evimed_official_page_fetch",
   "evimed_open_access_full_text",
 ]);
+const recoverableEvidenceSourceErrorCodes = new Set([
+  "full_text_not_available",
+  "full_text_upstream_unavailable",
+  "official_page_upstream_unavailable",
+]);
 
 function evidenceSourceTool(tool) {
   if (typeof tool !== "string") return false;
@@ -358,6 +363,34 @@ function successfullyLoadedSkills(messages) {
   return loaded;
 }
 
+function parsedToolErrorCode(part) {
+  const candidates = [part?.state?.error, parsedToolResult(part)];
+  for (const candidate of candidates) {
+    let value = candidate;
+    if (typeof value === "string" && value.trim().startsWith("{")) {
+      try {
+        value = JSON.parse(value);
+      } catch {
+        continue;
+      }
+    }
+    const code = value?.error?.code ?? value?.code;
+    if (typeof code === "string" && code.trim()) return code.trim();
+  }
+  return null;
+}
+
+function failedToolPart(part) {
+  return part?.type === "tool"
+    && (part?.state?.status === "error" || parsedToolResultStatus(part) === "error");
+}
+
+function successfulToolPart(part) {
+  return part?.type === "tool"
+    && part?.state?.status === "completed"
+    && parsedToolResultStatus(part) !== "error";
+}
+
 function terminalFromMessages(messages) {
   for (const message of messages) {
     const error = message?.info?.error;
@@ -366,11 +399,18 @@ function terminalFromMessages(messages) {
       return { status: "canceled", errorCode: "runtime_canceled" };
     }
     if (error) return { status: "failed", errorCode: "runtime_session_error" };
-    if ((message?.parts ?? []).some((part) => (
-      part?.type === "tool" && (part?.state?.status === "error" || parsedToolResultStatus(part) === "error")
-    ))) {
-      return { status: "failed", errorCode: "runtime_tool_error" };
-    }
+  }
+  const toolParts = messages.flatMap((message) => message?.parts ?? []).filter((part) => part?.type === "tool");
+  for (const [index, part] of toolParts.entries()) {
+    if (!failedToolPart(part)) continue;
+    const errorCode = parsedToolErrorCode(part);
+    if (evidenceSourceTool(part.tool) && recoverableEvidenceSourceErrorCodes.has(errorCode)) continue;
+    const correctedByLaterSuccess = typeof part.tool === "string"
+      && part.tool.includes("evimed_")
+      && toolParts.slice(index + 1).some((candidate) => (
+        candidate.tool === part.tool && successfulToolPart(candidate)
+      ));
+    if (!correctedByLaterSuccess) return { status: "failed", errorCode: "runtime_tool_error" };
   }
   return { status: "succeeded", errorCode: null };
 }

@@ -55,6 +55,8 @@ For an acute pressure-like chest symptom question, include targeted variants cov
 
 Use `evimed_literature_search`, `evimed_guideline_search`, and selected audited sources from `evimed_data_source_catalog` or `evimed_biomedical_source_search`. Deduplicate candidate records with `evimed_evidence_deduplicate`.
 
+When calling `evimed_evidence_deduplicate`, omit absent identifier keys instead of sending empty `doi`, `pmid`, `pmcid`, or URL strings. If input validation fails, correct the full batch and obtain a successful deduplication result before continuing.
+
 Identify at least 30 records, retain at least 12 relevant sources after deduplication, and inspect at least 10 sources beyond title-only metadata. Prefer:
 
 1. current guidelines and consensus statements;
@@ -68,6 +70,11 @@ Do not inflate counts with duplicates, irrelevant records, editorials, or title-
 ### Full-text and source preservation
 
 Use `evimed_official_page_fetch` for approved professional-society, guideline, evidence-review, public-health, or regulatory pages. Use `evimed_open_access_full_text` for key PMID, PMCID, or DOI records with accessible full text.
+
+Prefer a PMCID or a search record explicitly marked open access before calling the full-text tool. A closed-access result or unreachable official page belongs in `failedSources`; replace it with another relevant accessible source rather than repeatedly retrying a guessed URL. For the acute chest-pressure topic, the stable official pages below may be used when relevant:
+
+- `https://www.acc.org/latest-in-cardiology/ten-points-to-remember/2022/10/10/23/15/2022-acc-expert-consensus-on-chest-pain`
+- `https://www.nhs.uk/symptoms/chest-pain/`
 
 At least eight source artifacts must be successfully preserved and inspected. A successful source artifact must contain source identity, retrieval time, content hash, and usable text.
 

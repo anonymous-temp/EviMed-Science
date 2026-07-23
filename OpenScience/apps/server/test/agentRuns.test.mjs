@@ -926,6 +926,114 @@ test("a completed tool step cannot finish a busy multi-step run and artifacts ar
   }
 });
 
+test("deep research tolerates documented source misses but requires invalid EviMed calls to be corrected", async (t) => {
+  const scenarios = [
+    {
+      name: "unavailable open-access source",
+      expectedStatus: "succeeded",
+      expectedErrorCode: null,
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_open_access_full_text",
+          state: {
+            status: "error",
+            error: JSON.stringify({
+              status: "error",
+              error: { code: "full_text_not_available" },
+            }),
+          },
+        },
+      ],
+    },
+    {
+      name: "uncorrected invalid deduplication input",
+      expectedStatus: "failed",
+      expectedErrorCode: "runtime_tool_error",
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_evidence_deduplicate",
+          state: {
+            status: "error",
+            error: JSON.stringify({
+              status: "error",
+              error: { code: "invalid_input" },
+            }),
+          },
+        },
+      ],
+    },
+    {
+      name: "corrected invalid deduplication input",
+      expectedStatus: "succeeded",
+      expectedErrorCode: null,
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_evidence_deduplicate",
+          state: {
+            status: "error",
+            error: JSON.stringify({
+              status: "error",
+              error: { code: "invalid_input" },
+            }),
+          },
+        },
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_evidence_deduplicate",
+          state: {
+            status: "completed",
+            output: JSON.stringify({ status: "success", data: { records: [] } }),
+          },
+        },
+      ],
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    await t.test(scenario.name, async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-research-recovery-"));
+      try {
+        const project = {
+          id: "project-1",
+          userId: "user-1",
+          rootDir: root,
+          workspaceDir: path.join(root, "workspace"),
+          metaDir: path.join(root, ".openscience"),
+        };
+        await mkdir(project.workspaceDir, { recursive: true });
+        await mkdir(project.metaDir, { recursive: true });
+        const binding = {
+          sessionId: `ses_${scenario.name.replace(/\W+/g, "_")}`,
+          mode: "open-domain",
+          agentId: null,
+          agentVersion: null,
+          runtimeAgent: null,
+        };
+        let history = [];
+        const store = new AgentRunStore({ get: async () => binding }, {
+          model: "deepseek/deepseek-v4-pro",
+          readSessionHistory: async () => history,
+          readSessionStatus: async () => "idle",
+        });
+        store.scheduleMonitor = () => {};
+        await store.start(project, { sessionId: binding.sessionId });
+        history = [{
+          info: { id: "msg_research_recovery", role: "assistant", time: { completed: Date.now() + 10 } },
+          parts: [...scenario.parts, { type: "text", text: "Research completed." }],
+        }];
+        const result = await store.reconcileSession(project, binding.sessionId);
+        assert.equal(result.status, scenario.expectedStatus);
+        assert.equal(result.errorCode, scenario.expectedErrorCode);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
 test("one running run per session is enforced and workspace files cannot forge meta ledger", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-single-"));
   try {
