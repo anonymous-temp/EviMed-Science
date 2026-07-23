@@ -457,7 +457,7 @@ export function LiveSessionPage() {
         <RightPane onClose={activeArtifact ? closeArtifact : () => setShowFiles(false)}>
           {activeArtifact ? (
             <InspectorShell
-              inspector={fileInspectorFromBlock(activeArtifact)}
+              inspector={fileInspectorFromBlock(activeArtifact, { hostedRuntime: hostedWeb })}
               onClose={closeArtifact}
               onEvaluate={onEvaluate}
               controls={<MaximizePaneButton />}

@@ -168,12 +168,19 @@ export function previewKindForName(filename: string): PreviewKind {
 /** Build a previewable file-inspector from an artifact surfaced in the thread. */
 export function fileInspectorFromBlock(
   a: ArtifactBlock,
+  { hostedRuntime = false }: { hostedRuntime?: boolean } = {},
 ): FilePreviewInspector | NotebookFileInspector {
+  // OpenCode reports paths from inside the managed runtime container. The
+  // hosted command boundary deliberately accepts only workspace-relative
+  // paths, so remove only that known mount prefix before preview/download.
+  const path = hostedRuntime && a.path.startsWith("/workspace/")
+    ? a.path.slice("/workspace/".length)
+    : a.path;
   // Notebooks open in the runnable editor, not the raw-JSON preview.
-  if (extOf(a.filename) === "ipynb") return { variant: "notebook-file", path: a.path };
+  if (extOf(a.filename) === "ipynb") return { variant: "notebook-file", path };
   return {
     variant: "file",
-    path: a.path,
+    path,
     filename: a.filename,
     artifact: a.artifact,
     language: a.language ?? EXT_LANG[extOf(a.filename)],
