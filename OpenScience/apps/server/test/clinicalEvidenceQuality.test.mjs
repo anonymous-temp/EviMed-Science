@@ -48,6 +48,7 @@ function validPackage() {
     reportText,
     matrix: { schemaVersion: 1, claims },
     runReceipt: {
+      question: "胸部压迫感与速效救心丸应如何处置？",
       status: "succeeded",
       successfulSourceArtifacts: [".evimed-sources/a/page.md", ".evimed-sources/b/fulltext.md"],
       failedSources: [],
@@ -253,6 +254,26 @@ test("rejects unsupported antacid or wait-and-see advice in the practical answer
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /unsupported advice about antacids or waiting/);
+});
+
+test("rejects an unrequested medicine and exclusive safety language", () => {
+  const input = validPackage();
+  input.runReceipt.question = "胸口突然发闷发紧，该先怎么办？";
+  input.reportText += "\n这是唯一安全且可靠的处置策略。";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /medicine-free question/);
+  assert.match(result.issues.join("\n"), /exclusive safety claim/);
+});
+
+test("recognizes diagnostic-accuracy and jurisdiction language as limitation dimensions", () => {
+  const input = validPackage();
+  input.reportText = input.reportText.replace(
+    /## 科学局限[\s\S]*?(?=\n## 结论与实际处置)/,
+    "## 科学局限\n公共页面未报告症状鉴别的敏感度、特异度或似然比；医疗体系与管辖权差异也限制直接适用性。",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
 });
 
 test("matches ordinal suffixes and zero-padded dates in direct numeric support", () => {

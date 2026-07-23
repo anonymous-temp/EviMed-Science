@@ -19,6 +19,8 @@ const medicationResponseDiagnosisPattern = /(?:(?:速效救心丸|胃药|抗酸�
 const emergencyCallClaimPattern = /(?:(?:呼叫|拨打).{0,16}(?:急救|120|999)|(?:急救|120|999).{0,16}(?:呼叫|拨打))/i;
 const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(?:999|emergency|ambulance).{0,16}call|呼叫|拨打|急救)/i;
 const unsupportedSelfCarePattern = /(?:(?:胃药|抗酸药).{0,40}(?:等待|观察|延误)|(?:等待|观察).{0,30}(?:症状|变化|缓解))/i;
+const exclusiveSafetyPattern = /(?:唯一.{0,24}(?:安全|可靠|一致|策略|方法|途径)|(?:安全|可靠).{0,24}唯一)/i;
+const suxiaoPattern = /(?:速效救心丸|Suxiao Jiuxin Wan)/i;
 
 function nonEmpty(value, minimum = 1) {
   return typeof value === "string" && value.trim().length >= minimum;
@@ -116,6 +118,9 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
   const medicationResponseText = String(reportText ?? "").replace(/不良反应/g, "药品安全信息");
   if (medicationResponseDiagnosisPattern.test(medicationResponseText)) {
     issues.push("Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms.");
+  }
+  if (exclusiveSafetyPattern.test(reportText ?? "")) {
+    issues.push("The report must not turn a bounded recommendation into an unsupported exclusive safety claim.");
   }
 
   if (claims.length < 4) issues.push("The evidence matrix must contain at least four material claims.");
@@ -229,6 +234,9 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
   if (unsupportedSelfCarePattern.test(practical)) {
     issues.push("The practical answer must not add unsupported advice about antacids or waiting for symptom changes.");
   }
+  if (nonEmpty(runReceipt?.question) && !suxiaoPattern.test(runReceipt.question) && suxiaoPattern.test(reportText ?? "")) {
+    issues.push("A medicine-free question must not introduce Suxiao Jiuxin Wan into the report.");
+  }
   if (/速效救心丸/.test(reportText ?? "")
     && !/(?:速效救心丸.{0,120}(?:不应|不能|不得).{0,50}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估)|(?:不应|不能|不得).{0,50}(?:因|以|让)?.{0,30}速效救心丸.{0,60}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估))/s.test(practical)) {
     issues.push("The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care.");
@@ -236,7 +244,7 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
 
   const limitations = reportSection(reportText, "局限|Limitations?");
   const limitationDimensions = [
-    /偏倚|方法学质量|risk of bias/i,
+    /偏倚|方法学质量|敏感度|特异度|似然比|推荐等级|推荐强度|证据分级|risk of bias|evidence grad/i,
     /间接性|外推|人群偏移|indirectness/i,
     /不精确|样本量|imprecision/i,
     /适用性|管辖权|医疗体系|applicability/i,
