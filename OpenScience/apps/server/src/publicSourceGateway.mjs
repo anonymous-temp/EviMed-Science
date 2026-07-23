@@ -15,7 +15,7 @@ const allowedHosts = new Set([
   "api.omim.org",
   "api.opengwas.io",
   "api.platform.opentargets.org",
-  "api.pharmgkb.org",
+  "api.clinpgx.org",
   "api.semanticscholar.org",
   "api.unpaywall.org",
   "alphafold.ebi.ac.uk",

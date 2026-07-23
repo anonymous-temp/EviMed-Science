@@ -66,7 +66,7 @@ test("public-source gateway authenticates the runtime and forwards bounded offic
     accept: "application/json",
   });
   assert.equal(PUBLIC_SOURCE_ALLOWED_HOSTS.has("api.crossref.org"), true);
-  for (const host of ["api.materialsproject.org", "api.open-meteo.com", "fred.stlouisfed.org", "services.swpc.noaa.gov", "waterservices.usgs.gov"]) {
+  for (const host of ["api.clinpgx.org", "api.materialsproject.org", "api.open-meteo.com", "fred.stlouisfed.org", "services.swpc.noaa.gov", "waterservices.usgs.gov"]) {
     assert.equal(PUBLIC_SOURCE_ALLOWED_HOSTS.has(host), true);
   }
 });

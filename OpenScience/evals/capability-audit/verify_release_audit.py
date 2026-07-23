@@ -54,12 +54,12 @@ def verify_tools():
     document = read("tool-probe-v3.json")
     parsed_fresh(document.get("probedAt"), "tool audit")
     require(document.get("schemaVersion") == 3, "tool audit schema is stale")
-    require(document.get("registered") == 24, "tool registry count is not 24")
-    require(document.get("executionCertified") == 24, "all 24 tools are not execution-certified")
-    require(document.get("operational") == 24, "tool operational count is not 24")
+    require(document.get("registered") == 25, "tool registry count is not 25")
+    require(document.get("executionCertified") == 25, "all 25 tools are not execution-certified")
+    require(document.get("operational") == 25, "tool operational count is not 25")
     require(document.get("unverified") == 0 and document.get("errors") == 0, "tool audit contains unverified or errored tools")
     results = document.get("results", [])
-    require(len(results) == 24, "tool audit does not contain 24 results")
+    require(len(results) == 25, "tool audit does not contain 25 results")
     server = load_module("evimed_release_tool_registry", REPO / "runtime" / "mcp" / "evimed-research" / "server.py")
     execution_evidence = load_module(
         "evimed_release_execution_evidence",
@@ -259,8 +259,8 @@ def verify_skills():
     specialist_installed = sorted(enabled(skill_root / "evimed"))
     installed = sorted(global_installed + specialist_installed)
     require(len(global_installed) == 57 and summary.get("freshWebGlobalSkillPackages") == 57, "clean Web global Skill count is not 57")
-    require(len(specialist_installed) == 9 and summary.get("freshWebSpecialistSkillPackages") == 9, "clean Web specialist Skill count is not 9")
-    require(len(installed) == 66 and summary.get("freshWebOpenCodeSkillPackages") == 66, "clean Web OpenCode Skill count is not 66")
+    require(len(specialist_installed) == 10 and summary.get("freshWebSpecialistSkillPackages") == 10, "clean Web specialist Skill count is not 10")
+    require(len(installed) == 67 and summary.get("freshWebOpenCodeSkillPackages") == 67, "clean Web OpenCode Skill count is not 67")
     require(summary.get("freshWebInstalledPackageIds") == installed, "skill audit does not match the clean runtime delivery contract")
 
     execution = read("skill-execution-v1.json")

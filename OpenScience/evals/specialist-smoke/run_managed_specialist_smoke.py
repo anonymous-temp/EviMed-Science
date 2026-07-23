@@ -39,6 +39,11 @@ REQUESTS = {
         "maxRecords": 20,
         "outputLanguage": "zh",
     },
+    "evimed_drug_safety_analysis": {
+        "drug": "aspirin",
+        "reactions": ["gastrointestinal hemorrhage"],
+        "outputLanguage": "zh",
+    },
     "evimed_research_topic_selection": {
         "researchDirection": "precision dosing of antibiotics in critically ill adults",
         "outputLanguage": "zh",
@@ -75,12 +80,22 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tool", required=True, choices=sorted(REQUESTS))
     parser.add_argument("--project", default="default")
+    parser.add_argument("--job-id")
     parser.add_argument("--manuscript-source", type=Path)
+    parser.add_argument("--model-config", type=Path)
     parser.add_argument("--timeout-minutes", type=int, default=45)
     args = parser.parse_args()
 
     workspace, _ = load_runtime(args.project)
-    if args.tool == "evimed_peer_review":
+    if args.model_config:
+        model_config_input = args.model_config.expanduser()
+        if model_config_input.is_symlink():
+            raise RuntimeError("Model config must be a regular file.")
+        model_config = model_config_input.resolve(strict=True)
+        if not model_config.is_file():
+            raise RuntimeError("Model config must be a regular file.")
+        os.environ["EVIMED_MODEL_CONFIG_FILE"] = str(model_config)
+    if args.tool == "evimed_peer_review" and not args.job_id:
         if not args.manuscript_source or not args.manuscript_source.is_file():
             raise RuntimeError("Peer review requires --manuscript-source.")
         shutil.copyfile(args.manuscript_source, workspace / "specialist-smoke-input.md")
@@ -88,19 +103,22 @@ def main() -> int:
     sys.path.insert(0, str(MCP_ROOT))
     import server  # pylint: disable=import-outside-toplevel
 
-    request = {"action": "start", **REQUESTS[args.tool]}
     started_at = time.monotonic()
-    started = server.call_tool(args.tool, request)
-    job_id = started.get("data", {}).get("jobId")
+    if args.job_id:
+        job_id = args.job_id
+    else:
+        request = {"action": "start", **REQUESTS[args.tool]}
+        started = server.call_tool(args.tool, request)
+        job_id = started.get("data", {}).get("jobId")
     if not job_id:
-        raise RuntimeError("Specialist did not return a job id: %s" % started.get("summary", "unknown"))
+        raise RuntimeError("Specialist did not return a job id.")
 
     deadline = started_at + args.timeout_minutes * 60
     terminal = None
     while time.monotonic() < deadline:
         terminal = server.call_tool(args.tool, {"action": "status", "jobId": job_id})
         job_status = terminal.get("data", {}).get("jobStatus")
-        if job_status in {"succeeded", "failed", "canceled"}:
+        if job_status in {"succeeded", "blocked", "failed", "canceled"}:
             break
         time.sleep(3)
     else:

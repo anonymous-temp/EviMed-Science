@@ -16,6 +16,15 @@ import build_pharmacy_reference as pharmacy_builder
 
 
 class PublicSourceConnectorTests(unittest.TestCase):
+    def test_clinpgx_uses_the_current_official_api_domain(self):
+        payload = {"data": [{"id": "PA451906", "name": "warfarin", "types": ["Drug"]}]}
+        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+            result = sources._clinpgx("warfarin", 2)
+
+        self.assertTrue(request.call_args.args[0].startswith("https://api.clinpgx.org/v1/data/chemical?"))
+        self.assertEqual(result["data"]["items"][0]["id"], "PA451906")
+        self.assertEqual(result["sources"][0]["source"], "clinpgx-pharmgkb")
+
     def test_private_pharmacy_reference_builder_and_read_only_search(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)

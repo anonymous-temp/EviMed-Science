@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "tool": "evimed_drug_safety_analysis",
+  "project": "default",
+  "jobId": "safety-20260722233537-b98a8b22cb28",
+  "jobStatus": "succeeded",
+  "summary": "Drug safety analysis job safety-20260722233537-b98a8b22cb28 completed.",
+  "releaseStatus": null,
+  "releaseDecision": null,
+  "error": null,
+  "artifacts": [
+    {
+      "kind": "json",
+      "path": "drug-safety-runs/safety-20260722233537-b98a8b22cb28/output/request.json"
+    },
+    {
+      "kind": "json",
+      "path": "drug-safety-runs/safety-20260722233537-b98a8b22cb28/output/result.json"
+    },
+    {
+      "kind": "docx",
+      "path": "drug-safety-runs/safety-20260722233537-b98a8b22cb28/output/safety-report.docx"
+    },
+    {
+      "kind": "md",
+      "path": "drug-safety-runs/safety-20260722233537-b98a8b22cb28/output/safety-report.md"
+    },
+    {
+      "kind": "pdf",
+      "path": "drug-safety-runs/safety-20260722233537-b98a8b22cb28/output/safety-report.pdf"
+    },
+    {
+      "kind": "csv",
+      "path": "drug-safety-runs/safety-20260722233537-b98a8b22cb28/output/signals.csv"
+    }
+  ],
+  "elapsedSeconds": 75.388,
+  "completedAt": "2026-07-22T15:36:53.080183Z"
+}

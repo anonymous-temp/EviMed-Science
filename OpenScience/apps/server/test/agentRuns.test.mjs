@@ -228,7 +228,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "1.0.5",
+      effectiveAgentVersion: "1.0.6",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
   });
@@ -460,7 +460,7 @@ test("clinical evidence source artifacts must come from successful retrieval too
       ];
       const claims = quotes.map((supportQuote, index) => ({
         claimId: `CLM-00${index + 1}`,
-        claim: `Material clinical proposition ${index + 1} supported by an inspected source passage.`,
+        claim: supportQuote,
         sourceUrl: index < 2
           ? "https://www.acc.org/latest-in-cardiology/ten-points-to-remember/2022/10/10/23/15/2022-acc-expert-consensus-on-chest-pain"
           : "https://www.cochrane.org/evidence/CD004473_chinese-herbal-medicine-suxiao-jiuxin-wan-angina-pectoris",
