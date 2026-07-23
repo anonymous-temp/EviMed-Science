@@ -407,6 +407,15 @@ test("a routed clinical evidence turn gets one bounded repair before traceabilit
     assert.match(prompts[1], /server-side clinical evidence gate rejected/);
     assert.match(prompts[1], /must contain at least 1200 characters/);
     assert.match(prompts[1], /Do not call any retrieval tool/);
+    const stillRepairing = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(stillRepairing.status, "running");
+    history.push({
+      info: { id: "msg_clinical_repair_bad", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        { type: "tool", tool: "write", state: { status: "completed", input: { filePath: "clinical-evidence-report.md" } } },
+        { type: "text", text: "Repair completed." },
+      ],
+    });
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.id, run.id);
     assert.equal(finished.status, "failed");
