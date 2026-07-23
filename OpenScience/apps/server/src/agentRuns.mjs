@@ -543,6 +543,7 @@ export class AgentRunStore {
     this.projects = new Map();
     this.dispatchOwners = new Set();
     this.clinicalRepairAttempts = new Map();
+    this.clinicalRepairBaselineCursors = new Map();
     this.clinicalRepairSenders = new Map();
     if (!this.model) throw new Error("AgentRunStore requires a configured model.");
   }
@@ -749,6 +750,7 @@ export class AgentRunStore {
     if (result.status !== "running") {
       this.dispatchOwners.delete(runId);
       this.clinicalRepairAttempts.delete(runId);
+      this.clinicalRepairBaselineCursors.delete(runId);
       this.clinicalRepairSenders.delete(runId);
     }
     if (outcome.transitioned) {
@@ -802,8 +804,16 @@ export class AgentRunStore {
       ? -1
       : history.findIndex((message) => messageId(message) === baselineCursor);
     if (baselineCursor != null && baselineIndex < 0) return run;
-    const assistants = history
+    const allAssistants = history
       .slice(baselineIndex + 1)
+      .filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
+    const repairBaselineCursor = this.clinicalRepairBaselineCursors.get(run.id) ?? null;
+    const repairBaselineIndex = repairBaselineCursor == null
+      ? baselineIndex
+      : history.findIndex((message) => messageId(message) === repairBaselineCursor);
+    if (repairBaselineCursor != null && repairBaselineIndex < 0) return run;
+    const assistants = history
+      .slice(repairBaselineIndex + 1)
       .filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
     if (assistants.length === 0) return run;
     let sessionStatus;
@@ -821,13 +831,13 @@ export class AgentRunStore {
       runtimeWorkspaceRoot = project.workspaceDir;
     }
     const candidates = [...new Set(
-      assistants.flatMap((message) => artifactCandidates(message, runtimeWorkspaceRoot)),
+      allAssistants.flatMap((message) => artifactCandidates(message, runtimeWorkspaceRoot)),
     )].slice(0, maxArtifacts).sort();
     let artifacts = await existingArtifacts(project, candidates);
     if (terminal.status === "succeeded" && run.effectiveAgentId) {
       let completion;
       try {
-        const sourceArtifactProvenance = successfulEvidenceSourceArtifacts(assistants, runtimeWorkspaceRoot);
+        const sourceArtifactProvenance = successfulEvidenceSourceArtifacts(allAssistants, runtimeWorkspaceRoot);
         completion = await requiredSpecialistArtifacts(
           project,
           run,
@@ -849,6 +859,7 @@ export class AgentRunStore {
           && typeof repairSender === "function";
         if (canRepair) {
           this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
+          this.clinicalRepairBaselineCursors.set(run.id, messageId(assistants.at(-1)));
           try {
             const repair = await repairSender(clinicalEvidenceRepairPrompt(completion.qualityIssues));
             if (repair?.accepted !== false) return run;
@@ -909,6 +920,7 @@ export class AgentRunStore {
     this.projects.clear();
     this.dispatchOwners.clear();
     this.clinicalRepairAttempts.clear();
+    this.clinicalRepairBaselineCursors.clear();
     this.clinicalRepairSenders.clear();
   }
 }
