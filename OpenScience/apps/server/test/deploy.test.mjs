@@ -63,6 +63,17 @@ test("web Dockerfile embeds immutable OCI release metadata", async () => {
   assert.match(dockerfile, /COPY --from=build \/server \.\/apps\/server/);
 });
 
+test("web Dockerfile applies the configured npm registry before Corepack downloads pnpm", async () => {
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
+  const registryArg = dockerfile.indexOf("ARG NPM_REGISTRY=");
+  const corepackRegistry = dockerfile.indexOf("ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}");
+  const corepackPrepare = dockerfile.indexOf("corepack prepare pnpm@9.4.0 --activate");
+
+  assert.ok(registryArg >= 0);
+  assert.ok(corepackRegistry > registryArg);
+  assert.ok(corepackPrepare > corepackRegistry);
+});
+
 test("web image packages the isolated backup scheduler runtime", async () => {
   const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
   assert.match(dockerfile, /apk add --no-cache aws-cli bash coreutils docker-cli tar/);
