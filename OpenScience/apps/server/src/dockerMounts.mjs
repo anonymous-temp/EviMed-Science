@@ -60,6 +60,6 @@ export function dockerWorkspaceMount(config, project) {
   return projectMount(config, project.workspaceDir, "/workspace");
 }
 
-export function dockerRuntimeMount(config, runtimeRoot) {
-  return projectMount(config, runtimeRoot, "/runtime");
+export function dockerRuntimeMount(config, runtimeRoot, destination = "/runtime") {
+  return projectMount(config, runtimeRoot, destination);
 }

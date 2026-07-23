@@ -228,7 +228,7 @@ if (args[0] === "info") {
 if (args[0] === "rm") process.exit(0);
 if (args[0] !== "run") process.exit(2);
 
-const mount = args.find((arg) => arg.includes(",dst=/runtime"));
+const mount = args.find((arg) => arg.includes(",dst=/runtime-control"));
 if (!mount) process.exit(3);
 const fields = Object.fromEntries(mount.split(",").map((part) => {
   const index = part.indexOf("=");
@@ -237,7 +237,7 @@ const fields = Object.fromEntries(mount.split(",").map((part) => {
 const runtimeRoot = fields.type === "volume"
   ? path.join(process.env.FAKE_VOLUME_ROOT, fields["volume-subpath"])
   : fields.src;
-const socketPath = path.join(runtimeRoot, "control", "opencode.sock");
+const socketPath = path.join(runtimeRoot, "opencode.sock");
 fs.mkdirSync(path.dirname(socketPath), { recursive: true });
 fs.rmSync(socketPath, { force: true });
 
@@ -347,7 +347,7 @@ test("buildOpenCodeLaunchPlan shares only project volume subpaths over a Unix so
   );
 
   assert.equal(plan.runtimeUrl, "http://opencode.runtime");
-  assert.equal(plan.socketPath, "/data/users/alice/projects/paper1/runtime/container-runtime/control/opencode.sock");
+  assert.equal(plan.socketPath, "/data/.runtime-sockets/810502d24441cfd45914a2ac/opencode.sock");
   assert.equal(plan.args.includes("--publish"), false);
   assert.ok(
     plan.args.includes(
@@ -359,7 +359,12 @@ test("buildOpenCodeLaunchPlan shares only project volume subpaths over a Unix so
       "type=volume,src=open-science-data,dst=/runtime,volume-subpath=users/alice/projects/paper1/runtime/container-runtime",
     ),
   );
-  assert.ok(plan.args.includes("OPEN_SCIENCE_RUNTIME_SOCKET=/runtime/control/opencode.sock"));
+  assert.ok(
+    plan.args.includes(
+      "type=volume,src=open-science-data,dst=/runtime-control,volume-subpath=.runtime-sockets/810502d24441cfd45914a2ac",
+    ),
+  );
+  assert.ok(plan.args.includes("OPEN_SCIENCE_RUNTIME_SOCKET=/runtime-control/opencode.sock"));
   assert.equal(plan.args.at(-1), "open-science-opencode-serve");
 });
 
@@ -385,6 +390,42 @@ test("buildOpenCodeLaunchPlan rejects unsafe volume names and paths outside the 
     () => buildOpenCodeLaunchPlan(base, project, 4096, "pw-test"),
     (error) => error?.code === "runtime_data_path_outside_volume",
   );
+});
+
+test("Unix runtime sockets use a bounded hashed path for long tenant and project identifiers", () => {
+  const userId = "u".repeat(64);
+  const projectId = "p".repeat(64);
+  const dataDir = "/data";
+  const rootDir = path.join(dataDir, "users", userId, "projects", projectId);
+  const plan = buildOpenCodeLaunchPlan(
+    {
+      dataDir,
+      runtimeSandboxMode: "docker",
+      runtimeContainerBin: "docker",
+      runtimeContainerImage: "open-science-opencode:test",
+      runtimeDataVolume: "open-science-data",
+      runtimeTransport: "unix",
+      runtimeNetworkMode: "none",
+      runtimeCpuLimit: "1",
+      runtimeMemoryLimit: "1g",
+      runtimePidsLimit: 64,
+      allowRuntimeHostNetwork: false,
+    },
+    {
+      id: projectId,
+      userId,
+      rootDir,
+      workspaceDir: path.join(rootDir, "workspace"),
+      runtimeDir: path.join(rootDir, "runtime"),
+    },
+    4096,
+    "pw-test",
+  );
+
+  assert.ok(Buffer.byteLength(plan.socketPath) < 108);
+  assert.match(plan.socketPath, /^\/data\/\.runtime-sockets\/[a-f0-9]{24}\/opencode\.sock$/);
+  assert.equal(plan.socketPath.includes(userId), false);
+  assert.equal(plan.socketPath.includes(projectId), false);
 });
 
 test("named-volume subpaths require Docker Engine 26 or newer", async () => {
@@ -562,7 +603,7 @@ test("RuntimeManager starts and stops a volume-backed Docker runtime over a Unix
     const runtime = await manager.start(runtimeProject);
     assert.equal(runtime.kind, "opencode");
     assert.equal(runtime.url, "http://opencode.runtime");
-    assert.equal(runtime.socketPath, path.join(runtimeProject.runtimeDir, "container-runtime/control/opencode.sock"));
+    assert.match(runtime.socketPath, /[/\\]\.runtime-sockets[/\\][a-f0-9]{24}[/\\]opencode\.sock$/);
     const response = await requestRuntime(runtime, `${runtime.url}/config`);
     assert.equal(response.status, 200);
     assert.deepEqual(await new Response(response.body).json(), { ready: true });
@@ -582,7 +623,7 @@ test("RuntimeManager refuses a symlinked project runtime socket", async () => {
   const dataDir = path.join(tmp, "data");
   const projectRoot = path.join(dataDir, "users", "alice", "projects", "paper1");
   const runtimeDir = path.join(projectRoot, "runtime");
-  const socketPath = path.join(runtimeDir, "container-runtime/control/opencode.sock");
+  const socketPath = path.join(dataDir, ".runtime-sockets", "810502d24441cfd45914a2ac", "opencode.sock");
   const socketTarget = path.join(tmp, "outside.sock");
   await Promise.all([
     mkdir(path.join(projectRoot, "workspace"), { recursive: true }),

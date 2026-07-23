@@ -2610,7 +2610,17 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
     }
     const runtimeRoot = path.join(project.runtimeDir, "container-runtime");
     const xdgConfigDir = path.join(runtimeRoot, "xdg-config");
-    const controlDir = path.join(runtimeRoot, "control");
+    const isolatedControlMount = transport === "unix" && Boolean(config.runtimeDataVolume);
+    const controlDir = isolatedControlMount
+      ? path.join(
+          config.dataDir,
+          ".runtime-sockets",
+          createHash("sha256")
+            .update(`${project.userId}\0${project.id}`, "utf8")
+            .digest("hex")
+            .slice(0, 24),
+        )
+      : (transport === "unix" ? path.join(runtimeRoot, "control") : null);
     const socketPath = transport === "unix" ? path.join(controlDir, "opencode.sock") : null;
     const containerName = runtimeContainerName(project);
     return {
@@ -2641,6 +2651,12 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
         dockerWorkspaceMount(config, project),
         "--mount",
         dockerRuntimeMount(config, runtimeRoot),
+        ...(isolatedControlMount
+          ? [
+              "--mount",
+              dockerRuntimeMount(config, controlDir, "/runtime-control"),
+            ]
+          : []),
         "--workdir",
         "/workspace",
         "--env",
@@ -2660,7 +2676,7 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
               "--env",
               `OPEN_SCIENCE_RUNTIME_PORT=${port}`,
               "--env",
-              "OPEN_SCIENCE_RUNTIME_SOCKET=/runtime/control/opencode.sock",
+              `OPEN_SCIENCE_RUNTIME_SOCKET=${isolatedControlMount ? "/runtime-control" : "/runtime/control"}/opencode.sock`,
               config.runtimeContainerImage,
               "open-science-opencode-serve",
             ]
@@ -2679,10 +2695,11 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
       proxyWorkspaceDir: "/workspace",
       runtimeUrl: transport === "unix" ? "http://opencode.runtime" : `http://127.0.0.1:${port}`,
       socketPath,
+      socketTrustRoot: isolatedControlMount ? config.dataDir : project.rootDir,
       xdgConfigDir,
       runtimeDirs: [
         runtimeRoot,
-        controlDir,
+        ...(transport === "unix" ? [controlDir] : []),
         xdgConfigDir,
         path.join(runtimeRoot, "xdg-data"),
         path.join(runtimeRoot, "xdg-cache"),
@@ -3020,7 +3037,7 @@ export class RuntimeManager {
     await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));
     let socketStat = null;
     if (plan.socketPath) {
-      await assertNoSymlinkPath(project.rootDir, path.dirname(plan.socketPath));
+      await assertNoSymlinkPath(plan.socketTrustRoot ?? project.rootDir, path.dirname(plan.socketPath));
       socketStat = await fs.lstat(plan.socketPath).catch((error) => {
         if (error?.code === "ENOENT") return null;
         throw error;

@@ -200,6 +200,13 @@ function deepResearchPackage() {
       status: "succeeded",
       successfulSourceArtifacts: sources.map((source) => source.artifactPath),
       failedSources: [],
+      stats: {
+        totalSearches: 8,
+        recordsIdentified: 42,
+        recordsAfterDeduplication: 24,
+        sourcesIncluded: 12,
+        distinctPreservedSources: 12,
+      },
       qualityChecks: {
         claimTraceability: true,
         contradictionAudit: true,
@@ -476,5 +483,24 @@ test("rejects a shallow report that falsely claims the deep-research profile", (
   assert.match(issues, /at least 12 complete numbered references/);
   assert.match(issues, /at least 12 bibliography entries/);
   assert.match(issues, /at least 18 claim rows/);
-  assert.match(issues, /at least 8 successful source artifacts/);
+  assert.match(issues, /at least 8 distinct successful source artifacts/);
+});
+
+test("does not count companion Markdown and XML files as distinct preserved sources", () => {
+  const input = deepResearchPackage();
+  const duplicated = input.runReceipt.successfulSourceArtifacts.slice(0, 4).flatMap((path) => {
+    const root = path.replace(/\/content\.md$/, "");
+    return [`${root}/fulltext.md`, `${root}/fulltext.xml`];
+  });
+  input.runReceipt.successfulSourceArtifacts = duplicated;
+  input.runReceipt.stats.distinctPreservedSources = 4;
+  input.sourceArtifacts = Object.fromEntries(duplicated.map((path, index) => [
+    path,
+    `Distinct source passage ${index + 1} with enough supporting text.`,
+  ]));
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  const issues = result.issues.join("\n");
+  assert.match(issues, /at least 8 distinct successful source artifacts/);
+  assert.match(issues, /companion XML and Markdown files cannot be counted twice/);
 });
