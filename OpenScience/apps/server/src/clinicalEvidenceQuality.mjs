@@ -18,6 +18,7 @@ const articleTypeTitlePattern = /(?:综述|系统评价|meta\s*分析|meta-analy
 const medicationResponseDiagnosisPattern = /(?:(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解).{0,80}(?:诊断|排除|区分|判断)|(?:诊断|排除|区分|判断).{0,80}(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解))/i;
 const emergencyCallClaimPattern = /(?:(?:呼叫|拨打).{0,16}(?:急救|120|999)|(?:急救|120|999).{0,16}(?:呼叫|拨打))/i;
 const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(?:999|emergency|ambulance).{0,16}call|呼叫|拨打|急救)/i;
+const unsupportedSelfCarePattern = /(?:(?:胃药|抗酸药).{0,40}(?:等待|观察|延误)|(?:等待|观察).{0,30}(?:症状|变化|缓解))/i;
 
 function nonEmpty(value, minimum = 1) {
   return typeof value === "string" && value.trim().length >= minimum;
@@ -224,6 +225,9 @@ export function validateClinicalEvidencePackage({ reportText, matrix, runReceipt
     .filter((line) => /^(?:(?:\*\*)?第[一二三四五六七八九十]+步|(?:\*\*)?[0-9]+[.、]|[-*+]\s+)/.test(line));
   if (practicalActionLines.some((line) => !/\[claim:CLM-[0-9]{3,6}\]/.test(line))) {
     issues.push("Every practical-action step or bullet must cite at least one evidence-matrix claim.");
+  }
+  if (unsupportedSelfCarePattern.test(practical)) {
+    issues.push("The practical answer must not add unsupported advice about antacids or waiting for symptom changes.");
   }
   if (/速效救心丸/.test(reportText ?? "")
     && !/(?:速效救心丸.{0,120}(?:不应|不能|不得).{0,50}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估)|(?:不应|不能|不得).{0,50}(?:因|以|让)?.{0,30}速效救心丸.{0,60}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估))/s.test(practical)) {

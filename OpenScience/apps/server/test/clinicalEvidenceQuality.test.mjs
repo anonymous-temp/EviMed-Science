@@ -239,6 +239,22 @@ test("rejects authored retrieval excuses and uncited Chinese practical steps or 
   assert.match(result.issues.join("\n"), /Every practical-action step or bullet/);
 });
 
+test("rejects unsupported antacid or wait-and-see advice in the practical answer", () => {
+  const input = validPackage();
+  input.reportText = input.reportText.replace(
+    /## 结论与实际处置[\s\S]*$/,
+    [
+      "## 结论与实际处置",
+      "速效救心丸不应延误急诊评估。[claim:CLM-003]",
+      "不要尝试抗酸药并等待症状变化。[claim:CLM-003] "
+        + "结论必须同时保留临床紧迫性、适用边界和不确定性。".repeat(30),
+    ].join("\n"),
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /unsupported advice about antacids or waiting/);
+});
+
 test("matches ordinal suffixes and zero-padded dates in direct numeric support", () => {
   const input = validPackage();
   input.matrix.claims[0].claim = "Serial assessment should not rely only on the 99 percentile threshold.";
