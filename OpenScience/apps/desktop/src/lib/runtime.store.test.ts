@@ -741,6 +741,29 @@ describe("per-session right pane", () => {
     expect(useRuntimeStore.getState().panes["ses_1"]?.showFiles).toBe(false);
   });
 
+  it("opens a path-only result with the immutable snapshot from that session", () => {
+    useRuntimeStore.setState({
+      currentId: "ses_1",
+      threads: {
+        ses_1: {
+          blocks: [{
+            ...artifact("/workspace/report.md"),
+            content: "# Historical report",
+          }],
+          index: {},
+          loaded: true,
+        },
+      },
+    });
+
+    useRuntimeStore.getState().openArtifact(artifact("report.md"));
+
+    expect(useRuntimeStore.getState().panes.ses_1?.artifact).toMatchObject({
+      path: "report.md",
+      content: "# Historical report",
+    });
+  });
+
   it("grafts the draft's pane onto the session created by the first message", async () => {
     useRuntimeStore.getState().openArtifact(artifact("notes.md"));
     expect(useRuntimeStore.getState().panes[DRAFT_KEY]?.artifact?.path).toBe("notes.md");

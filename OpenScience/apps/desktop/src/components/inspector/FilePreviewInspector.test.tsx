@@ -8,6 +8,7 @@ import { FilePreviewInspector, PreviewError } from "./FilePreviewInspector";
 // readArtifact — this mock only feeds the binary-file test.
 const probeLargeFile = vi.fn();
 const downloadArtifact = vi.fn();
+const downloadInlineArtifact = vi.fn();
 const openArtifactExternally = vi.fn();
 vi.mock("@/lib/apiClient", async (importOriginal) => {
   const mod = await importOriginal<typeof import("@/lib/apiClient")>();
@@ -32,6 +33,7 @@ vi.mock("@/lib/artifactFile", async (importOriginal) => {
     previewUrl: vi.fn(async () => null),
     probeLargeFile: (...args: unknown[]) => probeLargeFile(...args),
     downloadArtifact: (...args: unknown[]) => downloadArtifact(...args),
+    downloadInlineArtifact: (...args: unknown[]) => downloadInlineArtifact(...args),
     openArtifactExternally: (...args: unknown[]) => openArtifactExternally(...args),
   };
 });
@@ -73,14 +75,14 @@ describe("FilePreviewInspector — markdown", () => {
   });
 
   it("uses browser download instead of the desktop open action in hosted web", async () => {
-    downloadArtifact.mockResolvedValueOnce(undefined);
     render(<FilePreviewInspector data={md} onClose={() => {}} />);
     expect(await screen.findByRole("heading", { name: "Findings" })).toBeInTheDocument();
 
     expect(screen.queryByRole("button", { name: /用本地应用打开/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "下载文件" }));
 
-    expect(downloadArtifact).toHaveBeenCalledWith("notes/report.md", undefined, "report.md");
+    expect(downloadInlineArtifact).toHaveBeenCalledWith(md.content, "report.md");
+    expect(downloadArtifact).not.toHaveBeenCalled();
     expect(openArtifactExternally).not.toHaveBeenCalled();
   });
 });
