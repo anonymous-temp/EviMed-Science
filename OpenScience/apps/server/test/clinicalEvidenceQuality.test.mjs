@@ -126,7 +126,7 @@ function deepResearchPackage() {
     "现有证据形成了方向一致但层级不同的知识结构。指南提供决策路径和风险控制原则，诊断研究说明检查策略的性能边界，系统证据汇总干预研究的总体可信度，官方资料则界定公共处置和药品使用的规范语境。综合时应优先保留这些来源之间的一致核心，并对来源目的不同造成的表述差异进行解释。",
     "临床推理还应区分群体证据和个体决策。群体层面的关联不能直接确定个体病因，诊断阈值也依赖检测平台、症状时间和医疗环境。因而，规范报告应把确定性结论写得清楚，把条件性结论写出适用前提，把推断性内容标明不确定来源。这种表达方式能同时提高科学严谨性与临床可执行性。",
     "在药物问题上，证据边界尤为重要。某种药物在特定人群中的研究结果，不能自动外推为院前排除急症的工具，也不能用症状是否缓解反推病因。药物价值、用药安全与急诊分流属于不同的决策问题，需要分别由相应证据支持。",
-    "为确保篇幅反映真实学术分析而非模板扩写，本节围绕证据层级、因果边界、诊断不确定性、外部适用性、临床后果和沟通方式展开论证。".repeat(120),
+    "篇幅由临床问题与可用证据决定，不通过重复段落或拆分微小主张制造表面深度。",
     claimLines.slice(15, 18).join("\n\n"),
     "",
     "## 局限与不确定性",
@@ -267,15 +267,13 @@ test("matches source quotes across typographic quote styles and accepts a comple
   assert.equal(result.valid, true, result.issues.join("\n"));
 });
 
-test("rejects runtime-process prose, overlong titles, and combined claim markers in the academic report", () => {
+test("rejects runtime-process prose and combined claim markers in the academic report", () => {
   const input = validPackage();
   input.reportText = input.reportText
-    .replace(/^# .+$/m, `# ${"过长的临床学术题目".repeat(6)}`)
     .replace("[claim:CLM-001]", "[claim:CLM-001, CLM-002]")
     + "\n本次依据 clinical-evidence-synthesis 契约完成白名单抓取和落盘核验。";
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /no longer than 40/);
   assert.match(result.issues.join("\n"), /runtime or retrieval-process prose/);
   assert.match(result.issues.join("\n"), /exactly one claim ID/);
 });
@@ -310,7 +308,6 @@ test("rejects access-failure limitations, uncited practical actions, and respons
   assert.match(result.issues.join("\n"), /runtime or retrieval-process prose/);
   assert.match(result.issues.join("\n"), /Every numbered practical-action item/);
   assert.match(result.issues.join("\n"), /Medication response/);
-  assert.match(result.issues.join("\n"), /Scientific limitations/);
 });
 
 test("rejects a report number absent from every cited claim proposition and source passage", () => {
@@ -479,7 +476,7 @@ test("matches ordinal suffixes and zero-padded dates in direct numeric support",
   assert.equal(result.valid, true, result.issues.join("\n"));
 });
 
-test("accepts a publication-grade deep-research package with reproducible searches and citation artifacts", () => {
+test("accepts a traceable deep-research package without editorial count quotas", () => {
   const input = deepResearchPackage();
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, true, result.issues.join("\n"));
@@ -494,8 +491,16 @@ test("rejects documented deep-research queries that were not successfully execut
     .map((entry) => entry.query);
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /execute at least eight distinct successful evidence searches/);
-  assert.match(result.issues.join("\n"), /must match a successful search-tool call/);
+  assert.match(result.issues.join("\n"), /must exactly match successful evidence-search calls/);
+});
+
+test("allows the same query text to be run against different source classes", () => {
+  const input = deepResearchPackage();
+  const search = JSON.parse(input.searchLogText);
+  search.queries[1].query = search.queries[0].query;
+  input.searchLogText = JSON.stringify(search);
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
 });
 
 test("accepts compound numbered citations when each hidden claim resolves on the same line", () => {
@@ -524,7 +529,7 @@ test("rejects a report that puts its practical answer after the reference list",
   assert.match(result.issues.join("\n"), /reference list must follow/);
 });
 
-test("rejects a shallow report that falsely claims the deep-research profile", () => {
+test("rejects an internally inconsistent package that falsely claims the deep-research profile", () => {
   const input = deepResearchPackage();
   input.reportText = validPackage().reportText;
   input.matrix.claims = input.matrix.claims.slice(0, 4);
@@ -541,14 +546,11 @@ test("rejects a shallow report that falsely claims the deep-research profile", (
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
   const issues = result.issues.join("\n");
-  assert.match(issues, /at least 10000 characters/);
-  assert.match(issues, /at least 18 material claims/);
-  assert.match(issues, /at least eight distinct documented search queries/);
-  assert.match(issues, /at least 30 identified records and 12 included sources/);
-  assert.match(issues, /at least 12 complete numbered references/);
-  assert.match(issues, /at least 12 bibliography entries/);
-  assert.match(issues, /at least 18 claim rows/);
-  assert.match(issues, /at least 8 distinct successful source artifacts/);
+  assert.match(issues, /at least two distinct evidence databases or source classes/);
+  assert.match(issues, /internally consistent screening flow/);
+  assert.match(issues, /reference list must follow/);
+  assert.match(issues, /one row per evidence-matrix claim/);
+  assert.match(issues, /citation-audit.md must document/);
 });
 
 test("does not count companion Markdown and XML files as distinct preserved sources", () => {
@@ -566,6 +568,5 @@ test("does not count companion Markdown and XML files as distinct preserved sour
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
   const issues = result.issues.join("\n");
-  assert.match(issues, /at least 8 distinct successful source artifacts/);
   assert.match(issues, /companion XML and Markdown files cannot be counted twice/);
 });

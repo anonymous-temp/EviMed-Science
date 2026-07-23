@@ -228,7 +228,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.0.2",
+      effectiveAgentVersion: "2.1.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
   });
@@ -485,8 +485,9 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
     assert.equal(repairing.status, "running");
     assert.equal(prompts.length, 2);
     assert.match(prompts[1], /server-side clinical evidence gate rejected/);
-    assert.match(prompts[1], /must contain at least 1200 characters/);
-    assert.match(prompts[1], /Do not call any retrieval tool/);
+    assert.match(prompts[1], /evidence matrix must contain the report's material claims/i);
+    assert.match(prompts[1], /retrieve an additional verified source/i);
+    assert.doesNotMatch(prompts[1], /at least (?:8|12|18|30)|10000/);
     const stillRepairing = await store.reconcileSession(project, binding.sessionId);
     assert.equal(stillRepairing.status, "running");
     history.push({
@@ -521,7 +522,7 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
     assert.equal(malformedRepair.status, "running");
     assert.equal(prompts.length, 4);
     assert.match(prompts[3], /clinical-evidence-matrix\.json must contain strict valid JSON/);
-    assert.match(prompts[3], /Chinese quotation marks/);
+    assert.match(prompts[3], /escape quotation marks correctly/i);
     await store.closeProject(project, "canceled");
   } finally {
     await rm(root, { recursive: true, force: true });
