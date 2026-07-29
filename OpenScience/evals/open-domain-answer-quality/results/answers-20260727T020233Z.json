@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-07-27T02:02:33Z",
+  "mode": "live",
+  "baseUrl": "http://127.0.0.1:8798",
+  "answers": [
+    {
+      "id": "suxiao-case-1",
+      "tier": "synthesis",
+      "question": "胸口突然发闷发紧、像被压着一样，是心绞痛还是胃病？该先怎么办？请关联速效救心丸。",
+      "answer": "",
+      "run": {
+        "runId": "run_d5c34387e63cb0e02c6b4ed33afc80d7",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 42667,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": null,
+        "qualityNotices": [],
+        "sessionId": "ses_05eb0d493ffebjpGOQA1t7NmNh",
+        "toolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 0,
+        "reportArtifactChars": 0
+      },
+      "error": "run status: succeeded"
+    },
+    {
+      "id": "suxiao-case-2",
+      "tier": "synthesis",
+      "question": "需要分别分析未分化急性胸部压迫感的处置与速效救心丸在特定研究或监管语境中的证据边界，不得用服药反应判断病因或延误急救。",
+      "answer": "",
+      "run": {
+        "runId": "run_ddd9756625cb26e8f1b71a4fff1bc617",
+        "status": "failed",
+        "dispatchStatus": "accepted",
+        "durationMs": 87776,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": "specialist_required_skill_missing",
+        "qualityNotices": [],
+        "sessionId": "ses_05eb0d48fffemeB3Bj7pPKIrRh",
+        "toolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 0,
+        "reportArtifactChars": 0
+      },
+      "error": "run status: failed"
+    }
+  ]
+}

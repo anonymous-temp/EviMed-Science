@@ -306,7 +306,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "evimed_drug_term_normalize",
-        "description": "Normalize a drug name and return known deterministic synonyms.",
+        "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms.",
         "inputSchema": object_schema({"term": STRING}, ("term",)),
     },
     {
@@ -1481,14 +1481,42 @@ def call_tool(name, arguments):
     if name == "evimed_official_page_fetch":
         return _normalize_tool_result(name, official_pages.fetch(arguments), arguments, _scope())
     if name in ("evimed_term_normalize", "evimed_drug_term_normalize"):
+        normalized_key = " ".join(arguments["term"].strip().split()).casefold()
+        rxnorm = None
+        if name == "evimed_drug_term_normalize" and public_sources.enabled():
+            try:
+                rxnorm = public_sources.rxnorm_resolve(arguments["term"])
+            except public_sources.PublicSourceError:
+                rxnorm = None
+        if rxnorm is not None:
+            data = _data_with_provenance(
+                {
+                    "input": arguments["term"].strip(),
+                    "preferred": rxnorm["preferred"],
+                    "synonyms": rxnorm["synonyms"],
+                    "domain": "drug",
+                    "vocabulary": "rxnorm",
+                    "rxcui": rxnorm["rxcui"],
+                },
+                name,
+                arguments,
+                _scope(),
+            )
+            return success("Normalized the supplied term against the RxNorm vocabulary.", data=data)
         data = _normalize_term(arguments["term"])
         if name == "evimed_term_normalize":
             data["domain"] = arguments.get("domain", "general")
         else:
             data["domain"] = "drug"
-        return success(
-            "Normalized the supplied term.",
-            data=_data_with_provenance(data, name, arguments, _scope()),
+            data["vocabulary"] = "curated-local" if normalized_key in TERM_VOCABULARY else "unresolved"
+        data = _data_with_provenance(data, name, arguments, _scope())
+        if normalized_key in TERM_VOCABULARY:
+            return success("Normalized the supplied term against the curated vocabulary.", data=data)
+        return warning(
+            "No curated normalization exists for this term; returned the input unchanged.",
+            ["The returned preferred term and synonyms are the unmodified input, not an authoritative normalization."],
+            ["Verify the term against an authoritative terminology (for example UMLS, RxNorm, or MeSH) before relying on it."],
+            data=data,
         )
     if name == "evimed_evidence_deduplicate":
         data = _deduplicate(arguments["items"])

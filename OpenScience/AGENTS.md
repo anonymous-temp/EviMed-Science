@@ -36,7 +36,11 @@ local workspace + SQLite + JSONL provenance.
   `src/lib/` (stores, runtime, hooks). There is no `src/features/` — it was removed.
 - `packages/` — `ui` (placeholder README only — real primitives live in
   `apps/desktop/src/components/ui/`), `shared`, `sdk` (the `OpenCodeClient` wrapper).
-- `runtime/` — `manager`, `opencode-profile`, `mcp`, `skills`.
+- `runtime/` — `manager`, `opencode-profile` (planned placeholder; the real
+  profile/agents/MCP config is generated per runtime by
+  `apps/server/src/runtimeManager.mjs` and `apps/desktop/src-tauri/src/opencode_config.rs`),
+  `mcp`, `skills` (`skills/evimed/` holds the specialist agent packages plus the
+  default `open-domain-answer` agent that handles unrouted open-domain questions).
 - `docs/` — product and technical specs.
 - `examples/bci-trends/` — the built-in demo project.
 - `scripts/` — release and dev scripts.

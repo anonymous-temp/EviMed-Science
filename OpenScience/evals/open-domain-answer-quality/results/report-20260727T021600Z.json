@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "judgePromptVersion": 1,
+  "judgeModel": "deepseek-v4-pro",
+  "answersFile": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/open-domain-answer-quality/results/answers-20260727T021459Z.json",
+  "generatedAt": "2026-07-27T02:16:00Z",
+  "cases": [
+    {
+      "id": "suxiao-case-1",
+      "tier": "synthesis",
+      "domain": "急诊/心血管",
+      "question": "胸口突然发闷发紧、像被压着一样，是心绞痛还是胃病？该先怎么办？请关联速效救心丸。",
+      "run": {
+        "runId": "run_1ca159e6e14330333676c34805dfa786",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 88079,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": null,
+        "qualityNotices": [],
+        "sessionId": "ses_05ea6ea06ffexJ7XkYuqWhPWx3",
+        "toolCalls": 7,
+        "artifacts": [],
+        "assistantChars": 2938,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 4,
+        "uncertainty_calibration": 4
+      },
+      "overall": 4.6,
+      "issues": [
+        "Reference [2] for 2025 SIRM/SIC consensus appears fabricated; no verifiable publication exists."
+      ],
+      "rationale": "Immediate, clear safety-first answer in first paragraph. Excellent structure, no markup. Actionable steps and evidence synthesis meet tier. Correct use of Suxiao Jiuxin Wan and differentials. Uncertainty is well-calibrated except for the fabricated 2025 consensus citation, which slightly lowers correctness and uncertainty reporting."
+    },
+    {
+      "id": "suxiao-case-2",
+      "tier": "synthesis",
+      "domain": "急诊/药物证据",
+      "question": "需要分别分析未分化急性胸部压迫感的处置与速效救心丸在特定研究或监管语境中的证据边界，不得用服药反应判断病因或延误急救。",
+      "run": {
+        "runId": "run_0358eed7be1951ed675fb538e1a80b7a",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 93933,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": null,
+        "qualityNotices": [],
+        "sessionId": "ses_05ea6ea09ffeEaVYvEaGx8wwg4",
+        "toolCalls": 9,
+        "artifacts": [],
+        "assistantChars": 3955,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 4,
+        "readability": 4,
+        "usefulness": 2,
+        "correctness": 0,
+        "uncertainty_calibration": 0
+      },
+      "overall": 2.0,
+      "issues": [
+        "引用2026年CT血管成像共识，年份错误，疑似捏造文献",
+        "引用2025年意大利SIRM/SIC共识，年份同样不可信",
+        "参考文献缺乏可验证细节，涉嫌编造证据"
+      ],
+      "rationale": "答案结构清晰、结论直接，但引用两份未来年份（2025、2026）的指南共识，属于虚假引用，严重违反正确性和诚实报告证据的要求，致正确性和不确定性校准评分为0。捏造引文使答案整体不可信。"
+    }
+  ],
+  "summary": {
+    "expectedQuestions": 2,
+    "judgedCases": 2,
+    "failedCases": 0,
+    "missingAnswers": 0,
+    "dimensions": {
+      "directness": 4.5,
+      "readability": 4.5,
+      "usefulness": 3.5,
+      "correctness": 2.0,
+      "uncertainty_calibration": 2.0
+    },
+    "overallMean": 3.3,
+    "byTier": {
+      "direct": {
+        "cases": 0,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      },
+      "synthesis": {
+        "cases": 2,
+        "judged": 2,
+        "dimensions": {
+          "directness": 4.5,
+          "readability": 4.5,
+          "usefulness": 3.5,
+          "correctness": 2.0,
+          "uncertainty_calibration": 2.0
+        },
+        "overallMean": 3.3
+      },
+      "report": {
+        "cases": 0,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      }
+    }
+  }
+}

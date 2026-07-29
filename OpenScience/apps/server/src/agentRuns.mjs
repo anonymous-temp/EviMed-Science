@@ -25,6 +25,8 @@ const dispatchStatuses = new Set(["dispatching", "accepted", "unknown", "rejecte
 const defaultMaxRuns = 1000;
 const defaultMaxBytes = 1024 * 1024;
 const maxArtifacts = 64;
+const maxQualityNotices = 40;
+const maxQualityNoticeLength = 300;
 
 function invalid(message) {
   return new HttpError(400, "invalid_agent_run", message);
@@ -80,6 +82,18 @@ function sanitizeErrorCode(value) {
   if (typeof value !== "string") throw invalid("errorCode must be a string.");
   const normalized = value.trim().toLowerCase();
   return /^[a-z][a-z0-9_.-]{0,63}$/.test(normalized) ? normalized : "runtime_error";
+}
+
+function normalizeVerification(value) {
+  return value === "unverified" ? "unverified" : null;
+}
+
+function normalizeQualityNotices(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => typeof item === "string" && item.trim())
+    .slice(0, maxQualityNotices)
+    .map((item) => item.slice(0, maxQualityNoticeLength));
 }
 
 function normalizeArtifacts(value) {
@@ -192,6 +206,8 @@ function foldEvents(events) {
         durationMs: null,
         errorCode: null,
         artifacts: [],
+        verification: null,
+        qualityNotices: [],
       }));
       continue;
     }
@@ -222,6 +238,10 @@ function foldEvents(events) {
         durationMs: event.durationMs,
         errorCode,
         artifacts,
+        verification: event.verification === "unverified" ? "unverified" : null,
+        qualityNotices: Array.isArray(event.qualityNotices)
+          ? event.qualityNotices.filter((item) => typeof item === "string").slice(0, maxQualityNotices)
+          : [],
       }));
       continue;
     }
@@ -446,10 +466,10 @@ function clinicalEvidenceRepairPrompt(issues) {
     "Never create or modify a .evimed-sources artifact. If a material claim lacks usable support, retrieve an additional verified source with the approved evidence tools or remove the claim; never patch around missing evidence.",
     "Treat repeated numeric-fact messages as one report-wide audit task: remove nonessential numbers or place each retained quantitative proposition on a line with the correct numbered citation and matching hidden matrix claim marker.",
     "The search log must exactly match successful evidence-search calls from this run. Never invent, duplicate, or omit completed searches.",
-    "Improve scientific synthesis, comparison, clinical reasoning, evidence appraisal, and applicability where the issues identify a substantive gap. Do not pad the report, repeat conclusions, or add claims merely to increase counts.",
+    "Improve scientific synthesis, comparison, clinical reasoning, evidence appraisal, and applicability where the issues identify a substantive gap. A weighed cross-source conclusion (a synthesized claim backed by at least two supporting sources) is preferable to a chain of single-source restatements, and the report must state its bottom line early in readable prose. Do not pad the report, repeat conclusions, or add claims merely to increase counts.",
     "Every evidence-matrix claim must appear in the report on a line with its exact numbered citation and hidden claim marker. Emergency-call support quotes must include both the call action and the qualifying symptom condition.",
     "citation-audit.md must record the citation checks actually performed and their findings, including unresolved identifiers, duplicates, corrections or retractions, metadata-only records, and claim-source mismatches.",
-    "Keep only limitations that materially affect interpretation, and synthesize them rather than writing a checklist. Remove retrieval diaries, access excuses, tool names, gateway names, and statements about which files or pages were unavailable.",
+    "Keep only limitations that materially affect interpretation, and synthesize them rather than writing a checklist. Remove tool names, gateway names, and first-person retrieval diaries from the analysis; a material limit on evidence accessibility (for example, a guideline whose full text is not openly available) belongs in the Limitations section, stated as a property of the evidence base rather than a narration of the retrieval run.",
     "The safety-first practical section must come before the reference list. Remove unsupported self-care details; every numbered step and bullet must have direct support, a numbered citation, and a matching hidden claim marker.",
     "After fixing the files, run: python \"$XDG_CONFIG_HOME/opencode/skills/clinical-evidence-synthesis/scripts/preflight.py\" --workspace .",
     "Fix every preflight issue, rerun it until it returns ok=true, and read every required deliverable back before finishing:",
@@ -505,6 +525,14 @@ async function readRequiredFile(project, relative) {
   }
 }
 
+function citedHttpUrls(text) {
+  // Exclude and strip trailing ASCII and CJK/full-width punctuation so a URL
+  // written in Chinese prose (…example-a。) matches the same URL recorded inside
+  // JSON quotes in the snapshot.
+  return [...String(text).matchAll(/https?:\/\/[^\s)\]}>"'，。；、）】》「」『』！？…]+/g)]
+    .map((match) => match[0].replace(/[.,;，。；、）】》「」『』！？…]+$/, ""));
+}
+
 function validExplicitCitations(text) {
   const urls = [...String(text).matchAll(/https?:\/\/[^\s)\]}>"']+/g)].map((match) => match[0]);
   return urls.every((value) => {
@@ -516,6 +544,14 @@ function validExplicitCitations(text) {
       return false;
     }
   });
+}
+
+function assistantProse(messages) {
+  return messages
+    .flatMap((message) => message?.parts ?? [])
+    .filter((part) => part?.type === "text" && typeof part?.text === "string")
+    .map((part) => part.text)
+    .join("\n");
 }
 
 async function requiredSpecialistArtifacts(
@@ -532,7 +568,41 @@ async function requiredSpecialistArtifacts(
     return { artifacts: [], errorCode: "specialist_contract_unavailable" };
   }
   if (!agent.completionChecks.includes("requiredOutputsExist")) {
-    return { artifacts: [], errorCode: "specialist_completion_contract_missing" };
+    // Answer-mode contract: the deliverable is the assistant reply itself, not
+    // workspace files. The floor is proportional — required skills must have
+    // actually been loaded, and any explicit citation URL in the reply prose
+    // must be well-formed (HTTPS, no credentials, no internal API endpoints).
+    // A direct answer with zero citations is legitimate and passes. A missing
+    // skill load is a process gap, not an integrity violation: deliver the
+    // reply marked "unverified" instead of discarding a sound answer.
+    if (agent.completionChecks.includes("skillsLoaded")) {
+      const loadedSkills = successfullyLoadedSkills(assistantMessages);
+      const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
+      if (requiredSkills.some((skill) => !loadedSkills.has(skill))) {
+        return {
+          artifacts: [],
+          errorCode: "specialist_required_skill_missing",
+          qualityDegradable: true,
+          qualityIssues: [
+            `The ${agent.skill} skill was not loaded in this turn; the reply was delivered without managed-persona verification.`,
+          ],
+        };
+      }
+    }
+    if (agent.completionChecks.includes("citationsResolvable")) {
+      const prose = assistantProse(assistantMessages);
+      if (!validExplicitCitations(prose)) {
+        return {
+          artifacts: [],
+          errorCode: "specialist_citation_invalid",
+          qualityDegradable: true,
+          qualityIssues: [
+            "The reply cites a malformed or non-public URL (citations must be credential-free HTTPS public sources, never internal API routes); delivered unverified.",
+          ],
+        };
+      }
+    }
+    return { artifacts: [], errorCode: null };
   }
   if (agent.completionChecks.includes("skillsLoaded")) {
     const loadedSkills = successfullyLoadedSkills(assistantMessages);
@@ -559,6 +629,35 @@ async function requiredSpecialistArtifacts(
     const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
     if (markdown.some((text) => !validExplicitCitations(text))) {
       return { artifacts, errorCode: "specialist_citation_invalid" };
+    }
+  }
+  // Generalized "sources recorded" check (the reusable part of clinical
+  // traceability) for agents that freeze a retrieval snapshot: every URL the
+  // report cites must appear in evidence-snapshot.json, so a report cannot cite
+  // a source that was never recorded in the frozen evidence set.
+  if (agent.completionChecks.includes("citedSourcesRecorded")) {
+    const snapshotEntry = [...files].find(([relative]) => relative.endsWith("evidence-snapshot.json"));
+    if (!snapshotEntry) {
+      return { artifacts, errorCode: "specialist_evidence_snapshot_missing" };
+    }
+    let snapshot;
+    try {
+      snapshot = JSON.parse(snapshotEntry[1]);
+    } catch {
+      return { artifacts, errorCode: "specialist_evidence_snapshot_invalid" };
+    }
+    if (!snapshot || typeof snapshot !== "object") {
+      return { artifacts, errorCode: "specialist_evidence_snapshot_invalid" };
+    }
+    const recordedUrls = new Set(citedHttpUrls(snapshotEntry[1]));
+    if (!recordedUrls.size) {
+      return { artifacts, errorCode: "specialist_evidence_snapshot_empty" };
+    }
+    const citedUrls = [...files]
+      .filter(([relative]) => relative.endsWith(".md"))
+      .flatMap(([, text]) => citedHttpUrls(text));
+    if (citedUrls.some((url) => !recordedUrls.has(url))) {
+      return { artifacts, errorCode: "specialist_cited_source_unrecorded" };
     }
   }
   if (agent.completionChecks.includes("evidenceClaimsTraceable")) {
@@ -628,6 +727,11 @@ async function requiredSpecialistArtifacts(
         artifacts,
         errorCode: "specialist_evidence_traceability_failed",
         qualityIssues: validation.issues,
+        // Degradable only when every remaining issue is a process-documentation
+        // or presentation gap — never when an integrity or structural issue
+        // (fabricated quote, unsupported number, missing section, no claims,
+        // internal-API citation, un-persisted source) remains.
+        qualityDegradable: validation.blockingIssues.length === 0,
       };
     }
   }
@@ -847,6 +951,8 @@ export class AgentRunStore {
       status: terminal.status,
       errorCode: sanitizeErrorCode(terminal.errorCode),
       artifacts: normalizeArtifacts(terminal.artifacts),
+      verification: normalizeVerification(terminal.verification),
+      qualityNotices: normalizeQualityNotices(terminal.qualityNotices),
     };
     const outcome = await withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
@@ -982,9 +1088,20 @@ export class AgentRunStore {
           } catch { /* a rejected repair remains a terminal, fail-closed outcome */ }
           terminal.status = "failed";
           terminal.errorCode = "specialist_evidence_repair_failed";
+          terminal.qualityNotices = completion.qualityIssues;
+        } else if (completion.qualityDegradable) {
+          // Repairs are exhausted or unavailable and only process-documentation
+          // or presentation gaps remain (no integrity or structural violation).
+          // Deliver the package marked "unverified" with the reasons attached
+          // instead of discarding the whole run.
+          terminal.status = "succeeded";
+          terminal.errorCode = null;
+          terminal.verification = "unverified";
+          terminal.qualityNotices = completion.qualityIssues;
         } else {
           terminal.status = "failed";
           terminal.errorCode = completion.errorCode;
+          if (Array.isArray(completion.qualityIssues)) terminal.qualityNotices = completion.qualityIssues;
         }
       }
     }

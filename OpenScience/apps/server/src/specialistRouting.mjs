@@ -1,3 +1,26 @@
+import { readFileSync } from "node:fs";
+
+// The default open-domain handler. It is not a routable specialist: unrouted
+// open-domain dispatches fall back to it in server.mjs, and it must be
+// excluded from router/classifier candidate lists and specialist catalogs.
+export const OPEN_DOMAIN_ANSWER_AGENT_ID = "open-domain-answer";
+
+// High-risk medicines that must route an open-domain evidence question to the
+// clinical gate are data-driven from the same pharmacist-owned rules file that
+// holds the medicine-specific safety checks, so a plain "速效救心丸疗效分析"
+// still reaches clinical-evidence-synthesis without hardcoding the drug here.
+function loadClinicalRoutingPattern() {
+  const parsed = JSON.parse(readFileSync(new URL("./clinical-safety-rules.json", import.meta.url), "utf8"));
+  const entities = Array.isArray(parsed?.routingEntities)
+    ? parsed.routingEntities.filter((entity) => typeof entity === "string" && entity.trim())
+    : [];
+  if (!entities.length) return null;
+  const escaped = entities.map((entity) => entity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`(?:${escaped.join("|")})`, "i");
+}
+
+const clinicalRoutingMedicinePattern = loadClinicalRoutingPattern();
+
 const routeRules = Object.freeze([
   ["adr-analysis", /(?:药物警戒|药品安全性分析|药物安全性分析|不良反应信号|\bfaers\b|pharmacovigilance)/i],
   ["bibliometric-analysis", /(?:文献计量|科学计量|citespace|vosviewer|bibliometric)/i],
@@ -9,8 +32,12 @@ const routeRules = Object.freeze([
   ["research-topic-selection", /(?:科研选题|研究选题|选题设计|research topic selection)/i],
 ]);
 
-const clinicalSubject = /(?:胸痛|胸口|心绞痛|急性冠脉|冠心病|胃食管|速效救心丸|患者|症状|诊断|治疗|用药|药物|临床|疾病)/i;
-const evidenceIntent = /(?:学术|科研|证据|分析|报告|研究|指南|文献|题目|clinical evidence|evidence synthesis)/i;
+const clinicalSubject = /(?:胸痛|胸口|心绞痛|急性冠脉|冠心病|胃食管|患者|症状|诊断|治疗|用药|药物|临床|疾病)/i;
+// The heavy clinical report pipeline only engages on an EXPLICIT report /
+// deep-synthesis request. Plain clinical questions ("X 药疗效怎么样",
+// "分析下 X 的机制") stay on the open-domain answer line, whose skill carries
+// the same safety framing without the 12-section academic package.
+const explicitReportIntent = /(?:证据报告|证据综合|循证.{0,6}报告|综合.{0,6}证据.{0,4}报告|出一份|写一份|撰写|生成.{0,12}(?:报告|综述)|整理.{0,12}(?:报告|综述)|深度(?:研究|调研|报告)|systematic review|evidence report|evidence synthesis|clinical evidence report)/i;
 const positiveMetaIntent = /(?:(?:开展|进行|执行|完成|做|conduct|run).{0,24}(?:meta\s*分析|荟萃分析|系统评价|systematic review|meta-analysis)|(?:meta\s*分析|荟萃分析|systematic review|meta-analysis).{0,24}(?:开展|进行|执行|完成|研究|分析))/i;
 const negatedMetaIntent = /(?:不要|不得|无需|不需要|避免|别|禁止|not|without).{0,48}(?:meta\s*分析|荟萃分析|系统评价|systematic review|meta-analysis)/i;
 
@@ -33,7 +60,9 @@ export function routeOpenDomainSpecialist(query, agents) {
   if (positiveMetaIntent.test(query) && !negatedMetaIntent.test(query)) {
     return selection(byId.get("meta-analysis"), "matched:meta-analysis");
   }
-  if (clinicalSubject.test(query) && evidenceIntent.test(query)) {
+  const clinicalSubjectMatch = clinicalSubject.test(query)
+    || (clinicalRoutingMedicinePattern != null && clinicalRoutingMedicinePattern.test(query));
+  if (clinicalSubjectMatch && explicitReportIntent.test(query)) {
     return selection(byId.get("clinical-evidence-synthesis"), "matched:clinical-evidence-synthesis");
   }
   return null;

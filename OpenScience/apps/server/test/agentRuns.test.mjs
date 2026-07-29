@@ -7,6 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
 import { AgentRunStore } from "../src/agentRuns.mjs";
+import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
 async function withApp(fn, overrides = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-agent-runs-"));
@@ -157,9 +158,11 @@ test("starts immutable open-domain and specialist run identities from research-s
         agentId: null,
         agentVersion: null,
         runtimeAgent: null,
-        effectiveAgentId: null,
-        effectiveAgentVersion: null,
-        effectiveRuntimeAgent: null,
+        // Unrouted open-domain turns run on the managed default answer agent
+        // (persona + proportional quality floor), not the bare coding agent.
+        effectiveAgentId: "open-domain-answer",
+        effectiveAgentVersion: "1.0.0",
+        effectiveRuntimeAgent: "evimed-open-domain-answer",
         model: "deepseek/deepseek-v4-pro",
         status: "running",
       },
@@ -213,7 +216,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       base,
       "ses_routed_clinical",
       "turn_routed_clinical",
-      "胸口发闷发紧，是心绞痛还是胃病？结合速效救心丸形成学术分析",
+      "胸口发闷发紧，是心绞痛还是胃病？请结合速效救心丸生成一份证据报告",
     );
     assert.equal(result.response.status, 202);
     assert.deepEqual({
@@ -231,6 +234,61 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       effectiveAgentVersion: "2.1.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
+
+    // The same chest-pain question WITHOUT an explicit report request stays on
+    // the default answer agent instead of being dragged into the report line.
+    assert.equal((await bind(base, "ses_unrouted_clinical", { mode: "open-domain" })).status, 200);
+    const plain = await dispatchRun(
+      base,
+      "ses_unrouted_clinical",
+      "turn_unrouted_clinical",
+      "胸口发闷发紧，是心绞痛还是胃病？结合速效救心丸形成学术分析",
+    );
+    assert.equal(plain.response.status, 202);
+    assert.equal(plain.body.data.effectiveAgentId, "open-domain-answer");
+    assert.equal(plain.body.data.effectiveRuntimeAgent, "evimed-open-domain-answer");
+  });
+});
+
+test("LLM routing augments but never overrides the deterministic router", async () => {
+  const calls = [];
+  const specialistClassifierFetch = async (_url, _init) => {
+    calls.push(1);
+    return {
+      ok: true,
+      headers: { get: () => null },
+      text: async () => JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({ agentId: "meta-analysis", confidence: 0.95 }) } }],
+      }),
+    };
+  };
+  await withApp(async ({ base }) => {
+    await bind(base, "ses_llm_a", { mode: "open-domain" });
+    await bind(base, "ses_llm_b", { mode: "open-domain" });
+    // A deterministic regex match must not consult the LLM at all.
+    const deterministic = await dispatchRun(
+      base,
+      "ses_llm_a",
+      "turn_llm_a",
+      "分析奥希替尼的 FAERS 药物警戒信号",
+    );
+    assert.equal(deterministic.body.data.effectiveAgentId, "adr-analysis");
+    assert.equal(calls.length, 0);
+    // A query the regex does not match falls through to the LLM classifier.
+    const classified = await dispatchRun(
+      base,
+      "ses_llm_b",
+      "turn_llm_b",
+      "帮我把这个研究方向整理成一个可执行的分析计划",
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(classified.body.data.effectiveAgentId, "meta-analysis");
+    assert.equal(classified.body.data.effectiveRuntimeAgent, "evimed-meta-analysis");
+  }, {
+    llmRoutingEnabled: true,
+    deepseekProviderEnabled: true,
+    deepseekApiKey: "sk-test",
+    specialistClassifierFetch,
   });
 });
 
@@ -412,6 +470,136 @@ test("a deep clinical evidence run fails closed unless every companion skill is 
   }
 });
 
+async function withAnswerModeRun(fn) {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-answer-mode-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_answer_mode",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "open-domain-answer",
+          version: "1.0.0",
+          runtimeAgent: "evimed-open-domain-answer",
+          skill: "open-domain-answer",
+          companionSkills: [],
+          outputs: [],
+          completionChecks: ["skillsLoaded", "citationsResolvable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const dispatch = (dispatchId) => store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId,
+      effectiveAgentId: "open-domain-answer",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-open-domain-answer",
+    }, async () => ({ accepted: true }));
+    const appendHistory = (parts) => {
+      history = [...history, {
+        info: { id: `msg_answer_${Math.random().toString(16).slice(2, 10)}`, role: "assistant", time: { completed: Date.now() + 10 } },
+        parts,
+      }];
+    };
+    const skillLoadedPart = {
+      type: "tool",
+      tool: "skill",
+      state: { status: "completed", input: { name: "open-domain-answer" } },
+    };
+    await fn({ project, binding, dispatch, appendHistory, skillLoadedPart, store });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+test("an answer-mode turn succeeds with zero citations once its skill is loaded", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await dispatch("turn_answer_zero_citation");
+    appendHistory([
+      skillLoadedPart,
+      { type: "text", text: "二甲双胍主要通过抑制肝糖输出、改善外周胰岛素敏感性发挥作用。" },
+    ]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded");
+    assert.equal(run.errorCode, null);
+  });
+});
+
+test("an answer-mode turn delivers unverified (not failed) when its answer skill was never loaded", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, store }) => {
+    await dispatch("turn_answer_skill_missing");
+    appendHistory([{ type: "text", text: "直接回答，没有加载任何 skill。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    // A missing skill load is a process gap: the answer is delivered marked
+    // unverified instead of discarding a sound reply.
+    assert.equal(run.status, "succeeded");
+    assert.equal(run.errorCode, null);
+    assert.equal(run.verification, "unverified");
+    assert.match(run.qualityNotices.join("\n"), /open-domain-answer skill was not loaded/);
+  });
+});
+
+test("an answer-mode turn delivers unverified (not failed) on malformed or internal citation URLs", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await dispatch("turn_answer_bad_citation");
+    appendHistory([
+      skillLoadedPart,
+      { type: "text", text: "有证据支持该结论 [1]。\n\n参考文献\n1. http://insecure.example.org/paper" },
+    ]);
+    const insecure = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(insecure.status, "succeeded");
+    assert.equal(insecure.errorCode, null);
+    assert.equal(insecure.verification, "unverified");
+    assert.match(insecure.qualityNotices.join("\n"), /malformed or non-public URL/);
+
+    await dispatch("turn_answer_internal_citation");
+    appendHistory([
+      skillLoadedPart,
+      { type: "text", text: "内部证据 [1]。\n\n参考文献\n1. https://www.evimed.com/api-evimed/medicine-api/ai-api/search" },
+    ]);
+    const internal = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(internal.status, "succeeded");
+    assert.equal(internal.verification, "unverified");
+  });
+});
+
+test("an answer-mode turn succeeds with well-formed HTTPS citations", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await dispatch("turn_answer_good_citation");
+    appendHistory([
+      skillLoadedPart,
+      {
+        type: "text",
+        text: "GLP-1 受体激动剂在合并心血管疾病的 2 型糖尿病患者中可降低主要心血管事件风险 [1]。\n\n参考文献\n1. Marso SP, et al. N Engl J Med. https://pubmed.ncbi.nlm.nih.gov/27295427/",
+      },
+    ]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded");
+    assert.equal(run.errorCode, null);
+  });
+});
+
 test("a routed clinical evidence turn honors a configured bounded repair limit", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-clinical-quality-"));
   try {
@@ -501,6 +689,11 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
     assert.equal(finished.id, run.id);
     assert.equal(finished.status, "failed");
     assert.equal(finished.errorCode, "specialist_evidence_traceability_failed");
+    // A structural/blocking failure stays failed, but the gate reasons are now
+    // attached so the user sees why instead of an opaque failure.
+    assert.equal(finished.verification, null);
+    assert.ok(finished.qualityNotices.length > 0);
+    assert.match(finished.qualityNotices.join("\n"), /evidence matrix must contain the report's material claims/i);
 
     const malformed = await store.dispatch(project, {
       sessionId: binding.sessionId,
@@ -1464,4 +1657,213 @@ test("hosted dispatch survives a lost browser response and an idempotent repeat 
     const history = await historyResponse.json();
     assert.equal(history.filter((message) => message?.info?.role === "user").length, 1);
   });
+});
+
+test("requires an evidence agent's cited sources to all be recorded in its snapshot", async () => {
+  for (const scenario of ["recorded", "unrecorded"]) {
+    const root = await mkdtemp(path.join(tmpdir(), `os-agent-run-snapshot-${scenario}-`));
+    try {
+      const project = {
+        id: "project-1",
+        userId: "user-1",
+        rootDir: root,
+        workspaceDir: path.join(root, "workspace"),
+        metaDir: path.join(root, ".openscience"),
+      };
+      await mkdir(project.workspaceDir, { recursive: true });
+      await mkdir(project.metaDir, { recursive: true });
+      const binding = {
+        sessionId: `ses_snapshot_${scenario}`,
+        mode: "open-domain",
+        agentId: null,
+        agentVersion: null,
+        runtimeAgent: null,
+      };
+      let history = [];
+      const store = new AgentRunStore({ get: async () => binding }, {
+        agentRegistry: {
+          get: () => ({
+            id: "comprehensive-drug-evaluation",
+            version: "1.0.0",
+            runtimeAgent: "evimed-comprehensive-drug-evaluation",
+            outputs: [
+              { path: "comprehensive-evaluation-report.md", required: true },
+              { path: "evidence-snapshot.json", required: true },
+            ],
+            completionChecks: ["requiredOutputsExist", "citationsResolvable", "citedSourcesRecorded"],
+          }),
+        },
+        model: "deepseek/deepseek-v4-pro",
+        monitorIntervalMs: 60_000,
+        monitorMaxPolls: 20,
+        readSessionHistory: async () => history,
+        readSessionStatus: async () => "idle",
+      });
+      store.scheduleMonitor = () => {};
+      const run = await store.dispatch(project, {
+        sessionId: binding.sessionId,
+        dispatchId: `turn_snapshot_${scenario}`,
+        effectiveAgentId: "comprehensive-drug-evaluation",
+        effectiveAgentVersion: "1.0.0",
+        effectiveRuntimeAgent: "evimed-comprehensive-drug-evaluation",
+      }, async () => ({ accepted: true }));
+
+      const citedUrl = "https://www.nmpa.gov.cn/label/example-a";
+      const recordedUrl = scenario === "recorded" ? citedUrl : "https://www.nmpa.gov.cn/label/example-b";
+      await writeFile(
+        path.join(project.workspaceDir, "comprehensive-evaluation-report.md"),
+        // Bare URL in Chinese prose with a trailing full-width period, so the
+        // check must strip 。 to match the URL recorded in the snapshot JSON.
+        `# 综合评价\n\n标签证据参见 ${citedUrl}。`,
+        "utf8",
+      );
+      await writeFile(
+        path.join(project.workspaceDir, "evidence-snapshot.json"),
+        JSON.stringify({ sources: [{ url: recordedUrl, identifier: "NMPA-A" }] }),
+        "utf8",
+      );
+      history = [{
+        info: { id: `msg_snapshot_${scenario}`, role: "assistant", time: { completed: Date.now() } },
+        parts: [
+          ...["comprehensive-evaluation-report.md", "evidence-snapshot.json"].map((filePath) => ({
+            type: "tool",
+            tool: "write",
+            state: { status: "completed", input: { filePath } },
+          })),
+          { type: "text", text: "Completed." },
+        ],
+      }];
+      const finished = await store.reconcileSession(project, binding.sessionId);
+      assert.equal(finished.id, run.id);
+      assert.equal(finished.status, scenario === "recorded" ? "succeeded" : "failed");
+      assert.equal(finished.errorCode, scenario === "recorded" ? null : "specialist_cited_source_unrecorded");
+      await store.closeProject(project, "canceled");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("delivers a quality-only clinical failure as an unverified package instead of discarding the run", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-clinical-degrade-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_clinical_degrade",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    const pkg = deepResearchPackage();
+    // Break ONLY the degradable citation-audit documentation-completeness check.
+    pkg.citationAuditText = pkg.citationAuditText.replace(
+      "Correction and retraction checks: no correction or retraction notice was identified for the included records.\n\n",
+      "",
+    );
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+            { path: "clinical-evidence-search.json", required: true },
+            { path: "references.bib", required: true },
+            { path: "citation-ledger.csv", required: true },
+            { path: "citation-audit.md", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+      // No repair budget: go straight to the terminal delivery decision.
+      maxClinicalRepairAttempts: 0,
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_clinical_degrade",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async () => ({ accepted: true }));
+
+    const deliverables = new Map([
+      ["clinical-evidence-report.md", pkg.reportText],
+      ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
+      ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
+      ["clinical-evidence-search.json", pkg.searchLogText],
+      ["references.bib", pkg.referencesText],
+      ["citation-ledger.csv", pkg.citationLedgerText],
+      ["citation-audit.md", pkg.citationAuditText],
+    ]);
+    for (const [relative, content] of deliverables) {
+      await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
+    }
+    for (const [artifactPath, content] of Object.entries(pkg.sourceArtifacts)) {
+      await mkdir(path.join(project.workspaceDir, path.dirname(artifactPath)), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, artifactPath), content, "utf8");
+    }
+
+    const retrievalParts = Object.entries(pkg.sourceArtifacts).map(([artifactPath, content]) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_open_access_full_text",
+      state: {
+        status: "completed",
+        output: JSON.stringify({
+          status: "success",
+          artifacts: [artifactPath],
+          data: { artifactSha256s: { [artifactPath]: createHash("sha256").update(content, "utf8").digest("hex") } },
+        }),
+      },
+    }));
+    const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_literature_search",
+      state: { status: "completed", input: { query: entry.query } },
+    }));
+    history = [{
+      info: { id: "msg_clinical_degrade", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...retrievalParts,
+        ...searchParts,
+        ...[...deliverables.keys()].map((filePath) => ({
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath } },
+        })),
+        { type: "text", text: "Completed." },
+      ],
+    }];
+
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.id, run.id);
+    // Only a process-documentation gap remained: deliver, do not discard.
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.errorCode, null);
+    assert.equal(finished.verification, "unverified");
+    assert.ok(finished.qualityNotices.length > 0);
+    assert.match(finished.qualityNotices.join("\n"), /citation-audit\.md must document/);
+    assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

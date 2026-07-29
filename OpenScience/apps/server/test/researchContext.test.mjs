@@ -62,7 +62,8 @@ test("builds a hidden system context without changing the user's prompt", async 
     assert.match(prepared.system, /自主判断回答深度/);
     assert.match(prepared.system, /\.evimed-knowledge/);
     assert.match(prepared.system, /不得为寻找知识库扫描父目录/);
-    assert.match(prepared.system, /不得仅凭题名或检索元数据推断研究设计/);
+    assert.match(prepared.system, /不得把检索题录包装成已读摘要或全文/);
+    assert.match(prepared.system, /先给结论与可执行建议/);
     assert.match(prepared.system, /不得称为黑框警告/);
   });
 });

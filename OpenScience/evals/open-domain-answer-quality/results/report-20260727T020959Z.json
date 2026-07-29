@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "judgePromptVersion": 1,
+  "judgeModel": "deepseek-v4-pro",
+  "answersFile": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/open-domain-answer-quality/results/answers-20260727T020851Z.json",
+  "generatedAt": "2026-07-27T02:09:59Z",
+  "cases": [
+    {
+      "id": "suxiao-case-1",
+      "tier": "synthesis",
+      "domain": "急诊/心血管",
+      "question": "胸口突然发闷发紧、像被压着一样，是心绞痛还是胃病？该先怎么办？请关联速效救心丸。",
+      "run": {
+        "runId": "run_be85125c52a6944b17ce4b1982edd029",
+        "status": "failed",
+        "dispatchStatus": "accepted",
+        "durationMs": 96106,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": "specialist_citation_invalid",
+        "qualityNotices": [],
+        "sessionId": "ses_05eac9a9effe6kKMsakUKe0z3C",
+        "toolCalls": 8,
+        "artifacts": [],
+        "assistantChars": 2654,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 5,
+        "uncertainty_calibration": 5
+      },
+      "overall": 5.0,
+      "issues": [],
+      "rationale": "The answer immediately gives a clear, actionable conclusion and fully addresses all expectations: it calls for calling 120, restricts 速效救心丸 to pre‑diagnosed use, warns against using symptom resolution to infer cause, and presents a well‑structured, citation‑backed synthesis with honest limitations (weak Cochrane evidence, low GRADE). No markup leaks or fabricated data."
+    },
+    {
+      "id": "suxiao-case-2",
+      "tier": "synthesis",
+      "domain": "急诊/药物证据",
+      "question": "需要分别分析未分化急性胸部压迫感的处置与速效救心丸在特定研究或监管语境中的证据边界，不得用服药反应判断病因或延误急救。",
+      "run": {
+        "runId": "run_157144637272ec368aec6dde0788132d",
+        "status": "failed",
+        "dispatchStatus": "accepted",
+        "durationMs": 89422,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": "specialist_citation_invalid",
+        "qualityNotices": [],
+        "sessionId": "ses_05eac9aa3ffeZSpOufGUERYFCL",
+        "toolCalls": 7,
+        "artifacts": [],
+        "assistantChars": 4217,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 4,
+        "uncertainty_calibration": 5
+      },
+      "overall": 4.8,
+      "issues": [
+        "引用尚未发布的2026年专家共识，年份错误或内容编造",
+        "多数参考文献链接为内部API通用地址，无法直接查阅原文，引用不严谨"
+      ],
+      "rationale": "答案结论前置、结构清晰，明确区分了未分化胸痛处置路径与速效救心丸证据边界，强调安全禁忌并附不确定性说明。但引用的2026年共识年份错误，构成编造嫌疑；多处文献链接为通用内部地址，可验证性差。其余部分临床正确性尚可。"
+    }
+  ],
+  "summary": {
+    "expectedQuestions": 2,
+    "judgedCases": 2,
+    "failedCases": 0,
+    "missingAnswers": 0,
+    "dimensions": {
+      "directness": 5.0,
+      "readability": 5.0,
+      "usefulness": 5.0,
+      "correctness": 4.5,
+      "uncertainty_calibration": 5.0
+    },
+    "overallMean": 4.9,
+    "byTier": {
+      "direct": {
+        "cases": 0,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      },
+      "synthesis": {
+        "cases": 2,
+        "judged": 2,
+        "dimensions": {
+          "directness": 5.0,
+          "readability": 5.0,
+          "usefulness": 5.0,
+          "correctness": 4.5,
+          "uncertainty_calibration": 5.0
+        },
+        "overallMean": 4.9
+      },
+      "report": {
+        "cases": 0,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      }
+    }
+  }
+}

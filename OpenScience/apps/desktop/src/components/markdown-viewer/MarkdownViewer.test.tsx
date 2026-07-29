@@ -66,3 +66,19 @@ describe("MarkdownViewer code blocks", () => {
     expect(code).not.toHaveClass("hljs");
   });
 });
+
+describe("MarkdownViewer line breaks", () => {
+  it("renders a single newline as a line break (chat prose convention)", () => {
+    const { container } = render(<MarkdownViewer>{"第一行\n第二行"}</MarkdownViewer>);
+    expect(container.querySelector("p br")).toBeInTheDocument();
+    expect(container.querySelectorAll("p")).toHaveLength(1);
+  });
+
+  it("keeps blank lines as paragraph breaks", () => {
+    const { container } = render(<MarkdownViewer>{"第一段\n\n第二段"}</MarkdownViewer>);
+    const ps = container.querySelectorAll("p");
+    expect(ps).toHaveLength(2);
+    expect(ps[0]).toHaveTextContent("第一段");
+    expect(ps[1]).toHaveTextContent("第二段");
+  });
+});

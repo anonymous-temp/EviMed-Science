@@ -33,6 +33,26 @@ describe("BlockList", () => {
   });
 });
 
+describe("agent prose sanitizing", () => {
+  it("strips leaked claim markers and raw comments but keeps citation refs", () => {
+    const { container } = render(
+      <BlockList
+        blocks={[
+          {
+            kind: "agent",
+            markdown: "文献 [1] 支持该结论。[claim:CLM-006]\n<!-- claim:CLM-001 -->\n后续分析完成。",
+          },
+        ]}
+      />,
+    );
+    const text = container.textContent ?? "";
+    expect(text).toContain("[1]");
+    expect(text).toContain("后续分析完成。");
+    expect(text).not.toContain("claim");
+    expect(text).not.toContain("CLM");
+  });
+});
+
 describe("status-line tones and resend", () => {
   it("offers a resend button on a failed turn and replays its triggering text", async () => {
     const onRetry = vi.fn();

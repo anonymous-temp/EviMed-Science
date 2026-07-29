@@ -12,7 +12,8 @@ import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore } from "./agentRuns.mjs";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
-import { routeOpenDomainSpecialist } from "./specialistRouting.mjs";
+import { OPEN_DOMAIN_ANSWER_AGENT_ID, routeOpenDomainSpecialist } from "./specialistRouting.mjs";
+import { SpecialistClassifier } from "./specialistClassifier.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
@@ -332,6 +333,9 @@ export function createWebApiApp(overrides = {}) {
   const memoryIntelligence = new MemoryIntelligence(config, memosClient, {
     fetchImpl: overrides.memoryExtractionFetch ?? globalThis.fetch,
   });
+  const specialistClassifier = new SpecialistClassifier(config, {
+    fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
+  });
   let agentRuns;
   const runtimeManager = new RuntimeManager(config, {
     agentRegistry,
@@ -553,7 +557,10 @@ export function createWebApiApp(overrides = {}) {
 
       if (pathname === "/api/agents" && req.method === "GET") {
         await store.ensureUser(req, res);
-        sendJson(res, 200, { data: (await agentRegistry).list() });
+        // The default open-domain answer handler is not a user-selectable specialist.
+        sendJson(res, 200, {
+          data: (await agentRegistry).list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID),
+        });
         return;
       }
 
@@ -764,15 +771,33 @@ export function createWebApiApp(overrides = {}) {
         }
         const registry = await agentRegistry;
         const boundSession = await researchSessions.get(ctx.project, body.sessionId);
-        const routedSpecialist = boundSession?.mode === "open-domain"
-          ? routeOpenDomainSpecialist(text, registry.list())
+        // The default open-domain answer agent is the fallback handler, never
+        // a routable specialist: exclude it from router/classifier candidates.
+        const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
+        // Deterministic router first (safety floor); the optional LLM classifier
+        // only fills in when the regex rules find no match, and can never
+        // override a deterministic clinical/specialty route.
+        let routedSpecialist = boundSession?.mode === "open-domain"
+          ? routeOpenDomainSpecialist(text, routableAgents)
           : null;
+        if (boundSession?.mode === "open-domain" && !routedSpecialist) {
+          routedSpecialist = await specialistClassifier.classify(text, routableAgents);
+        }
+        // Unrouted open-domain questions still run on a managed EviMed agent
+        // (persona + proportional quality floor) instead of the bare coding
+        // agent the runtime ships with.
+        const answerAgent = boundSession?.mode === "open-domain" && !routedSpecialist
+          ? registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID)
+          : null;
+        const effectiveAgent = routedSpecialist ?? (answerAgent
+          ? { agentId: answerAgent.id, agentVersion: answerAgent.version, runtimeAgent: answerAgent.runtimeAgent }
+          : null);
         const run = await agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
-          effectiveAgentId: routedSpecialist?.agentId ?? null,
-          effectiveAgentVersion: routedSpecialist?.agentVersion ?? null,
-          effectiveRuntimeAgent: routedSpecialist?.runtimeAgent ?? null,
+          effectiveAgentId: effectiveAgent?.agentId ?? null,
+          effectiveAgentVersion: effectiveAgent?.agentVersion ?? null,
+          effectiveRuntimeAgent: effectiveAgent?.runtimeAgent ?? null,
         }, async (session, _run, repairText = null) => {
           const promptText = typeof repairText === "string" && repairText.trim() ? repairText : text;
           let memories = [];
@@ -803,13 +828,13 @@ export function createWebApiApp(overrides = {}) {
             query: text,
             memories,
             memoryError,
-            specialists: session.mode === "open-domain" ? registry.list() : [],
+            specialists: session.mode === "open-domain" ? routableAgents : [],
             routedSpecialist,
           });
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text: promptText,
             system: prepared.system,
-            agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent,
+            agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
             model: `deepseek/${config.deepseekModel}`,
           });
         });

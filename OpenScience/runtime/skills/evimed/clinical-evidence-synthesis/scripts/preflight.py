@@ -23,6 +23,56 @@ REQUIRED_CLAIM_FIELDS = (
     "uncertainty",
 )
 
+# Cross-source "synthesized" claims trade the single-source verbatim bond for
+# at least two independently verified supporting sources plus a confidence
+# label; see clinicalEvidenceQuality.mjs for the authoritative gate.
+SYNTHESIZED_BASE_FIELDS = ("claimId", "claim", "applicability", "uncertainty")
+SYNTHESIZED_SOURCE_FIELDS = ("sourceUrl", "sourceTitle", "artifactPath", "accessLevel", "supportQuote")
+CONFIDENCE_LEVELS = ("high", "moderate", "low")
+
+
+def check_claim(index: int, claim: dict, issues: list[str]) -> None:
+    if claim.get("claimType", "direct") == "synthesized":
+        for field in SYNTHESIZED_BASE_FIELDS:
+            if not isinstance(claim.get(field), str) or not claim[field].strip():
+                issues.append(f"clinical-evidence-matrix.json: claims[{index}].{field} is empty")
+        if claim.get("confidence") not in CONFIDENCE_LEVELS:
+            issues.append(f"clinical-evidence-matrix.json: claims[{index}].confidence is invalid")
+        sources = claim.get("supportingSources")
+        if not isinstance(sources, list) or len(sources) < 2:
+            issues.append(f"clinical-evidence-matrix.json: claims[{index}].supportingSources needs two sources")
+            sources = sources if isinstance(sources, list) else []
+        for source_index, source in enumerate(sources):
+            if not isinstance(source, dict):
+                issues.append(
+                    f"clinical-evidence-matrix.json: claims[{index}].supportingSources[{source_index}] must be an object"
+                )
+                continue
+            for field in SYNTHESIZED_SOURCE_FIELDS:
+                if not isinstance(source.get(field), str) or not source[field].strip():
+                    issues.append(
+                        f"clinical-evidence-matrix.json: claims[{index}].supportingSources[{source_index}].{field} is empty"
+                    )
+        reference_numbers = claim.get("referenceNumbers")
+        reference_number = claim.get("referenceNumber")
+        if (
+            not isinstance(reference_numbers, list)
+            or len(reference_numbers) < 2
+            or any(not isinstance(entry, int) or entry < 1 for entry in reference_numbers)
+        ):
+            issues.append(f"clinical-evidence-matrix.json: claims[{index}].referenceNumbers is invalid")
+        elif reference_number not in reference_numbers:
+            issues.append(
+                f"clinical-evidence-matrix.json: claims[{index}].referenceNumber must be one of its referenceNumbers"
+            )
+        return
+    if claim.get("claimType", "direct") != "direct":
+        issues.append(f'clinical-evidence-matrix.json: claims[{index}].claimType must be "direct" or "synthesized"')
+        return
+    for field in REQUIRED_CLAIM_FIELDS:
+        if not isinstance(claim.get(field), str) or not claim[field].strip():
+            issues.append(f"clinical-evidence-matrix.json: claims[{index}].{field} is empty")
+
 
 def load_text(root: Path, name: str, issues: list[str]) -> str:
     path = root / name
@@ -157,9 +207,7 @@ def main() -> int:
         if not isinstance(claim, dict):
             issues.append(f"clinical-evidence-matrix.json: claims[{index}] must be an object")
             continue
-        for field in REQUIRED_CLAIM_FIELDS:
-            if not isinstance(claim.get(field), str) or not claim[field].strip():
-                issues.append(f"clinical-evidence-matrix.json: claims[{index}].{field} is empty")
+        check_claim(index, claim, issues)
         claim_id = claim.get("claimId")
         reference_number = claim.get("referenceNumber")
         if not isinstance(reference_number, int) or reference_number < 1:

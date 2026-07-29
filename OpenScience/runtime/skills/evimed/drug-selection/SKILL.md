@@ -51,6 +51,6 @@ Write:
 - `drug-selection-report.md`: decision scope, policy/rubric, retrieval coverage, domain findings, contradictions, sensitivity, limitations, and committee-ready options.
 - `selection-scorecard.csv`: one row per candidate-domain pair with status, source IDs, rationale, score fields, rule version, and missing-data state.
 - `decision-summary.json`: the exact compiler result, ranking or withholding reasons, audit hash, and human-review flag.
-- `evidence-snapshot.json`: deduplicated source inventory, queries, scope, retrieval timestamps, and observed evidence fields.
+- `evidence-snapshot.json`: deduplicated source inventory, queries, scope, retrieval timestamps, and observed evidence fields. Every source URL cited in the report must appear here; never cite a source that is not recorded in the frozen snapshot.
 
 Resolve every material citation. Completion means the assisted scorecard is reproducible and its gaps are explicit, not that an external approval workflow has finished.

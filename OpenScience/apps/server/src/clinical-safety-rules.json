@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "description": "Drug- and scenario-specific clinical safety rules for the clinical-evidence-synthesis quality gate. Kept as data so pharmacists can review, add, or retire medicine/scenario rules without changing server code. Each pattern is a JavaScript regular-expression source. Generic, non-drug-specific safety rules (emergency-call support, exclusive-safety language) stay in clinicalEvidenceQuality.mjs. Supported kinds: report_forbidden (forbid a pattern in the whole report, after optional substitutions), practical_forbidden (forbid a pattern in the safety-first practical section), entity_requires_question_mention (an entity may appear in the report only if the user's question mentions it), practical_required_when_report_matches (when triggerPattern appears anywhere in the report, pattern must appear in the practical section).",
+  "routingEntities": ["速效救心丸", "Suxiao Jiuxin Wan"],
+  "routingEntitiesNote": "High-risk medicines whose plain mention (with an evidence/analysis intent) routes an open-domain question to clinical-evidence-synthesis, so these safety rules are actually applied. specialistRouting.mjs reads this list; add a medicine here to bring its questions under the clinical gate.",
+  "rules": [
+    {
+      "id": "medication-response-not-diagnostic",
+      "kind": "report_forbidden",
+      "reportSubstitutions": [{ "find": "不良反应", "replace": "药品安全信息", "flags": "g" }],
+      "pattern": "(?:(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解).{0,80}(?:诊断|排除|区分|判断)|(?:诊断|排除|区分|判断).{0,80}(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解))",
+      "flags": "i",
+      "message": "Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms."
+    },
+    {
+      "id": "unsupported-self-care",
+      "kind": "practical_forbidden",
+      "pattern": "(?:(?:可|可以|建议|不妨|先|服用后).{0,24}(?:胃药|抗酸药).{0,40}(?:等待|观察)|(?:胃药|抗酸药).{0,40}(?:后再|并|然后).{0,20}(?:等待|观察)|(?:可|可以|建议|不妨|先).{0,20}(?:等待|观察).{0,30}(?:症状|变化|缓解))",
+      "flags": "i",
+      "message": "The practical answer must not add unsupported advice about antacids or waiting for symptom changes."
+    },
+    {
+      "id": "medicine-absent-from-question",
+      "kind": "entity_requires_question_mention",
+      "pattern": "(?:速效救心丸|Suxiao Jiuxin Wan)",
+      "flags": "i",
+      "message": "A medicine-free question must not introduce Suxiao Jiuxin Wan into the report."
+    },
+    {
+      "id": "suxiao-must-not-delay-emergency",
+      "kind": "practical_required_when_report_matches",
+      "triggerPattern": "速效救心丸",
+      "triggerFlags": "",
+      "pattern": "(?:速效救心丸.{0,120}(?:不应|不能|不得).{0,50}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估)|(?:不应|不能|不得).{0,50}(?:因|以|让)?.{0,30}速效救心丸.{0,60}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估))",
+      "flags": "s",
+      "message": "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care."
+    }
+  ]
+}

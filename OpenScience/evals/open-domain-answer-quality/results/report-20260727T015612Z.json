@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "judgePromptVersion": 1,
+  "judgeModel": "deepseek-v4-pro",
+  "answersFile": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/open-domain-answer-quality/results/answers-20260727T015527Z.json",
+  "generatedAt": "2026-07-27T01:56:12Z",
+  "cases": [
+    {
+      "id": "suxiao-case-1",
+      "tier": "synthesis",
+      "domain": "急诊/心血管",
+      "question": "胸口突然发闷发紧、像被压着一样，是心绞痛还是胃病？该先怎么办？请关联速效救心丸。",
+      "run": {
+        "runId": "run_d5c34387e63cb0e02c6b4ed33afc80d7",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 42667,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": null,
+        "qualityNotices": [],
+        "sessionId": "ses_05eb8b024ffev3hfMtQDZ9mOAG",
+        "toolCalls": 1,
+        "artifacts": [],
+        "assistantChars": 1570,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 4,
+        "uncertainty_calibration": 5
+      },
+      "overall": 4.8,
+      "issues": [
+        "未明确提醒“即使服药后症状缓解也不能排除急性心梗等危险病因”，可能误导读者根据缓解情况反推病因，不符合预期要求"
+      ],
+      "rationale": "答案直接给出紧急状态识别与行动建议，结构清晰，引用规范。临床鉴别表和行动顺序实用，证据层级说明诚实。唯一缺陷是未明确告知患者缓解亦不排除危险病因，可能削弱安全框架，故正确性扣1分。"
+    },
+    {
+      "id": "suxiao-case-2",
+      "tier": "synthesis",
+      "domain": "急诊/药物证据",
+      "question": "需要分别分析未分化急性胸部压迫感的处置与速效救心丸在特定研究或监管语境中的证据边界，不得用服药反应判断病因或延误急救。",
+      "run": {
+        "runId": "run_ddd9756625cb26e8f1b71a4fff1bc617",
+        "status": "failed",
+        "dispatchStatus": "accepted",
+        "durationMs": 87776,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": "specialist_required_skill_missing",
+        "qualityNotices": [],
+        "sessionId": "ses_05eb8b01fffe4OmhgrnL0FDs5v",
+        "toolCalls": 9,
+        "artifacts": [],
+        "assistantChars": 5114,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 4,
+        "uncertainty_calibration": 5
+      },
+      "overall": 4.8,
+      "issues": [
+        "引用了2026年的《CT血管成像在急性胸痛临床应用专家共识》，年份错误或为虚假引用，降低可信度"
+      ],
+      "rationale": "答案结构清晰，直接给出处置原则与证据边界，可操作性高，证据层级与不确定性交代充分。但所引[6]为2026年文献，与当前时间矛盾，存在引用失实缺陷。"
+    }
+  ],
+  "summary": {
+    "expectedQuestions": 2,
+    "judgedCases": 2,
+    "failedCases": 0,
+    "missingAnswers": 0,
+    "dimensions": {
+      "directness": 5.0,
+      "readability": 5.0,
+      "usefulness": 5.0,
+      "correctness": 4.0,
+      "uncertainty_calibration": 5.0
+    },
+    "overallMean": 4.8,
+    "byTier": {
+      "direct": {
+        "cases": 0,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      },
+      "synthesis": {
+        "cases": 2,
+        "judged": 2,
+        "dimensions": {
+          "directness": 5.0,
+          "readability": 5.0,
+          "usefulness": 5.0,
+          "correctness": 4.0,
+          "uncertainty_calibration": 5.0
+        },
+        "overallMean": 4.8
+      },
+      "report": {
+        "cases": 0,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      }
+    }
+  }
+}

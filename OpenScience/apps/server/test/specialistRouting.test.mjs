@@ -23,23 +23,46 @@ test("open-domain research questions deterministically route to every registered
     ["评估某药超说明书用于儿童感染的证据", "off-label-analysis"],
     ["请对我上传的临床试验论文做同行评审", "peer-review"],
     ["为 ICU 抗菌药精准给药设计科研选题", "research-topic-selection"],
-    ["胸口突然发闷发紧，是心绞痛还是胃病？结合速效救心丸形成学术分析", "clinical-evidence-synthesis"],
+    ["胸口突然发闷发紧，是心绞痛还是胃病？请结合速效救心丸生成一份证据报告", "clinical-evidence-synthesis"],
   ]);
   for (const [query, expected] of cases) {
     assert.equal(routeOpenDomainSpecialist(query, agents)?.agentId, expected, query);
   }
 });
 
-test("article-type words under negation do not hijack a clinical evidence question", async () => {
+test("the heavy clinical report pipeline only engages on explicit report intent", async () => {
   const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
-  const route = routeOpenDomainSpecialist(
-    "分析急性胸痛和速效救心丸，题目里不要写综述、系统评价或 meta 分析",
-    agents,
+  // Explicit report / deep-synthesis requests route to the clinical gate —
+  // including for high-risk medicines carried by routingEntities.
+  assert.equal(
+    routeOpenDomainSpecialist("请评估速效救心丸的临床证据并出一份报告", agents)?.agentId,
+    "clinical-evidence-synthesis",
   );
-  assert.equal(route?.agentId, "clinical-evidence-synthesis");
+  assert.equal(
+    routeOpenDomainSpecialist("Suxiao Jiuxin Wan evidence report", agents)?.agentId,
+    "clinical-evidence-synthesis",
+  );
+  assert.equal(
+    routeOpenDomainSpecialist("冠心病二级预防的循证用药报告", agents)?.agentId,
+    "clinical-evidence-synthesis",
+  );
+});
+
+test("plain clinical questions stay on the open-domain answer line", async () => {
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+  // No explicit report intent: analysis/efficacy questions — including ones
+  // about high-risk medicines — are answered directly by the open-domain
+  // answer agent, whose skill carries the same safety framing. The heavy
+  // clinical gate is reserved for explicit report requests.
+  assert.equal(routeOpenDomainSpecialist("速效救心丸疗效证据分析", agents), null);
+  assert.equal(routeOpenDomainSpecialist("分析急性胸痛的鉴别诊断思路", agents), null);
+  assert.equal(routeOpenDomainSpecialist("二甲双胍的临床疗效研究进展如何", agents), null);
 });
 
 test("generic conversation stays in the open-domain agent", async () => {
   const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
   assert.equal(routeOpenDomainSpecialist("帮我把这一句话润色得更自然", agents), null);
+  // A bare medicine mention without an evidence/analysis intent is not a
+  // research request and stays open-domain, exactly as before this change.
+  assert.equal(routeOpenDomainSpecialist("速效救心丸一次吃几粒", agents), null);
 });

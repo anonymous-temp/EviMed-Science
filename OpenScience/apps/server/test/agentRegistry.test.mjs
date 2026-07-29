@@ -97,6 +97,7 @@ test("official skills name every output declared by their manifest", async () =>
     "mendelian-randomization",
     "meta-analysis",
     "off-label-analysis",
+    "open-domain-answer",
     "peer-review",
     "research-topic-selection",
   ]);
@@ -124,18 +125,25 @@ test("official specialist packages preserve domain-specific evidence and release
     ["mendelian-randomization", "1.0.1"],
     ["meta-analysis", "1.0.0"],
     ["off-label-analysis", "2.2.1"],
+    ["open-domain-answer", "1.0.0"],
     ["peer-review", "1.0.1"],
     ["research-topic-selection", "1.0.2"],
   ]);
+  const evidenceSnapshotAgents = new Set(["comprehensive-drug-evaluation", "drug-selection", "off-label-analysis"]);
   for (const agent of registry.list()) {
     assert.equal(agent.version, expectedVersions.get(agent.id));
     assert.ok(agent.requiredTools.length > 0);
-    assert.deepEqual(
-      agent.completionChecks,
-      agent.id === "clinical-evidence-synthesis"
-        ? ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable", "skillsLoaded"]
-        : ["requiredOutputsExist", "citationsResolvable"],
-    );
+    let expectedChecks = ["requiredOutputsExist", "citationsResolvable"];
+    if (agent.id === "clinical-evidence-synthesis") {
+      expectedChecks = ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable", "skillsLoaded"];
+    } else if (agent.id === "open-domain-answer") {
+      // Answer-mode contract: the reply is the deliverable, so the floor is
+      // skill loading + citation hygiene instead of file outputs.
+      expectedChecks = ["skillsLoaded", "citationsResolvable"];
+    } else if (evidenceSnapshotAgents.has(agent.id)) {
+      expectedChecks = ["requiredOutputsExist", "citationsResolvable", "citedSourcesRecorded"];
+    }
+    assert.deepEqual(agent.completionChecks, expectedChecks);
   }
   const clinicalEvidence = registry.get("clinical-evidence-synthesis");
   assert.deepEqual(clinicalEvidence.companionSkills, [
@@ -203,6 +211,41 @@ test("rejects duplicate package ids across roots", async () => {
     await rm(first, { recursive: true, force: true });
     await rm(second, { recursive: true, force: true });
   }
+});
+
+test("accepts an answer-mode package with zero file outputs", async () => {
+  await withPackageRoot(async (root) => {
+    await writePackage(root, {
+      ...validManifest,
+      id: "open-domain-answer",
+      skill: "open-domain-answer",
+      outputs: [],
+      completionChecks: ["skillsLoaded", "citationsResolvable"],
+    });
+    const registry = await loadAgentRegistry({ packageDirs: [root] });
+    const agent = registry.get("open-domain-answer");
+    assert.deepEqual(agent.outputs, []);
+    assert.deepEqual(agent.completionChecks, ["skillsLoaded", "citationsResolvable"]);
+  });
+});
+
+test("rejects a requiredOutputsExist contract without any required output", async () => {
+  await withPackageRoot(async (root) => {
+    await writePackage(root, {
+      ...validManifest,
+      outputs: [{ path: "reports/optional-notes.md", required: false }],
+      completionChecks: ["requiredOutputsExist"],
+    });
+    await assert.rejects(loadAgentRegistry({ packageDirs: [root] }), /no required output/i);
+  });
+  await withPackageRoot(async (root) => {
+    await writePackage(root, {
+      ...validManifest,
+      outputs: [],
+      completionChecks: ["requiredOutputsExist"],
+    });
+    await assert.rejects(loadAgentRegistry({ packageDirs: [root] }), /outputs must contain between 1 and 64 entries/i);
+  });
 });
 
 test("rejects invalid versions, identifiers, estimates, and overlapping inputs", async (t) => {

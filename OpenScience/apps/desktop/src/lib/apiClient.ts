@@ -264,6 +264,11 @@ export interface WebAgentRun {
   durationMs: number | null;
   errorCode: string | null;
   artifacts: string[];
+  // "unverified" when a clinical package finished with only process-documentation
+  // or presentation gaps and was delivered rather than discarded; null otherwise.
+  verification?: "unverified" | null;
+  // Human-readable gate reasons attached to a failed or unverified run.
+  qualityNotices?: string[];
 }
 
 

@@ -969,6 +969,9 @@ function generatedRuntimeAgent(manifest) {
   const outputLines = manifest.outputs
     .map((output) => `- \`${output.path}\` (${output.required ? "required" : "optional"})`)
     .join("\n");
+  const outputContract = manifest.outputs.length > 0
+    ? `Write package outputs only to these declared workspace-relative paths:\n${outputLines}\n\nDo not call undeclared EviMed tools or write package outputs outside the declared paths.`
+    : "This package delivers its answer directly in the assistant reply. Do not write package output files, and do not call undeclared EviMed tools.";
   return `---
 description: ${JSON.stringify(description)}
 mode: primary
@@ -986,10 +989,7 @@ Do not claim completion if any required skill was not loaded successfully.
 Use only these declared EviMed research tools:
 ${toolLines}
 
-Write package outputs only to these declared workspace-relative paths:
-${outputLines}
-
-Do not call undeclared EviMed tools or write package outputs outside the declared paths.
+${outputContract}
 
 ${managedAgentMarker(manifest.skill, manifest.runtimeAgent)}
 `;
@@ -1756,6 +1756,16 @@ function evimedMcpEnvironment(config, project, plan) {
     environment.EVIMED_PUBLIC_SOURCE_GATEWAY_URL = publicSourceGatewayUrl;
     environment.EVIMED_MODEL_CONFIG_FILE = modelConfigRuntimePath(plan);
   }
+  // Keyless-public Unpaywall tier: when the operator configured an email, the
+  // runtime MCP may query Unpaywall anonymously (email param) even without a
+  // managed gateway credential.
+  const unpaywallEmail = String(config.publicSourceCredentials?.unpaywall ?? "").trim();
+  if (unpaywallEmail) {
+    if (/[\r\n\0]/.test(unpaywallEmail)) {
+      throw runtimeMcpError("runtime_unpaywall_email_invalid", "The Unpaywall email must not contain control characters.");
+    }
+    environment.EVIMED_UNPAYWALL_EMAIL = unpaywallEmail;
+  }
   const configured = config.evimedAdapterUrls ?? {};
   const pharmacyReferenceDb = String(config.pharmacyReferenceDb ?? "").trim();
   if (pharmacyReferenceDb) {
@@ -2212,6 +2222,7 @@ function assertReservedMcpOwnership(existing, targetExists, config, project, pla
     "OPEN_SCIENCE_PROJECT_ID",
     "OPEN_SCIENCE_WORKSPACE_DIR",
     "EVIMED_PUBLIC_SOURCE_GATEWAY_URL",
+    "EVIMED_UNPAYWALL_EMAIL",
     "EVIMED_WORKLOAD_TOKEN_FILE",
     "EVIMED_META_AGENT_ROOT",
     "EVIMED_META_AGENT_PYTHON",

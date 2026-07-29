@@ -8,6 +8,7 @@ import type {
   UserMessageBlock,
 } from "@ai4s/shared";
 import { cn } from "@/lib/cn";
+import { sanitizeAssistantText } from "@/lib/sanitizeAssistantText";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { extractArtifactRefs, refToArtifactBlock } from "@/lib/artifacts";
 import { resolveArtifactPath } from "@/lib/artifactFile";
@@ -54,7 +55,8 @@ export function AgentMessage({
   }, [mentionedKey]);
   return (
     <div>
-      <MarkdownViewer>{markdown}</MarkdownViewer>
+      {/* Leaked internal tokens (claim markers, raw comments) never reach the reader. */}
+      <MarkdownViewer>{sanitizeAssistantText(markdown)}</MarkdownViewer>
       {refs.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
           {refs.map((path) => (
