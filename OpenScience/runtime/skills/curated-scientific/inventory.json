@@ -841,7 +841,7 @@
       "security": "SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/statistical-power",
-      "digest": "sha256:0c09244b9f449a0db8d80ef650c83d345da829e2ab864383757cab0af94eb84a",
+      "digest": "sha256:28a393ebc231769ae85e91284bb086679382f00a5996f1942b0f485c0531cec9",
       "fills": "Reproducible sample-size, MDE, and simulation-based power analysis"
     },
     {
