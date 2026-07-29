@@ -10,6 +10,15 @@ grok-build-main/
 项目代码/scientific-agent-skills-main/
 /药学基础数据/
 
+# Archived Java services (frozen 2026-07-24). The hosted SaaS under OpenScience/
+# is the production rewrite of these capabilities; the Java tree is kept on disk
+# for reference only and is no longer part of the active repository or any build.
+项目代码/循证药品综合评价/
+项目代码/循证药品综合评价agent/
+项目代码/药品遴选/
+项目代码/超说明书用药/
+项目代码/安全性分析/
+
 # Local secrets and runtime data
 .env
 .env.*
