@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "status": "blocked",
+  "ready_for_submission": false,
+  "requires_review": true,
+  "summary": "Generated article failed one or more required evidence or statistical quality gates.",
+  "next_actions": [
+    "Resolve the blocking issues and rerun article generation.",
+    "Keep the current draft only as a diagnostic artifact."
+  ],
+  "artifacts": [
+    {
+      "kind": "review_package",
+      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace/meta-analysis-runs/meta-20260722233537-91040dcc219c/output/20260722_233541_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip"
+    }
+  ],
+  "blocker_codes": [
+    "manuscript_validation",
+    "project_submission_quality_gate",
+    "manuscript_language",
+    "abstract_polish",
+    "publication_tone",
+    "clinical_interpretation",
+    "evidence_readiness",
+    "declarations",
+    "risk_of_bias_completeness"
+  ],
+  "warning_codes": [
+    "llm_reliability",
+    "benchmark"
+  ],
+  "failed_gates": [
+    {
+      "id": "manuscript_validation",
+      "label": "Hard manuscript validation",
+      "status": "fail",
+      "passed": false,
+      "detail": "passed=False; blocking=1; warnings=3; fixed=1; info=0; total=5.",
+      "label_localized": "稿件硬校验"
+    },
+    {
+      "id": "project_submission_quality_gate",
+      "label": "Project-level submission quality gate",
+      "status": "fail",
+      "passed": false,
+      "detail": "status=fail; failed=3; warnings=1; failed_checks=citation_contract, claim_map_authoring, real_llm_pdf_web_smoke.",
+      "label_localized": "项目级投稿质量闸"
+    },
+    {
+      "id": "manuscript_language",
+      "label": "Requested output language",
+      "status": "fail",
+      "passed": false,
+      "detail": "expected=zh; detected=mixed.",
+      "label_localized": "输出语言"
+    },
+    {
+      "id": "abstract_polish",
+      "label": "Abstract polish",
+      "status": "fail",
+      "passed": false,
+      "detail": "abstract_present=False; word_count=0; present_labels=0/8; forbidden_phrases=0; failed_issues=1.",
+      "label_localized": "摘要质量"
+    },
+    {
+      "id": "publication_tone",
+      "label": "Publication tone",
+      "status": "fail",
+      "passed": false,
+      "detail": "scanned_words=288; forbidden_phrases=1; failed_issues=1.",
+      "label_localized": "投稿语气"
+    },
+    {
+      "id": "clinical_interpretation",
+      "label": "Clinical interpretation depth",
+      "status": "fail",
+      "passed": false,
+      "detail": "covered_domains=0/7; minimum=5; result_context=False; discussion_paragraphs=0/24; process_framing=0; redundant_domains=0; missing_domains=result_context,absolute_risk_translation,endpoint_meaning,benefit_harm_safety,applicability_subgroups,implementation_followup,certainty_limitations; failed_issues=1.",
+      "label_localized": "Clinical interpretation depth"
+    },
+    {
+      "id": "evidence_readiness",
+      "label": "Evidence readiness",
+      "status": "fail",
+      "passed": false,
+      "detail": "Status=blocked; blockers=1; warnings=1; submission-relevant warnings=0.",
+      "label_localized": "证据就绪性"
+    },
+    {
+      "id": "declarations",
+      "label": "Declarations",
+      "status": "fail",
+      "passed": false,
+      "detail": "Ethics, data/code availability, funding, and competing-interest statements are present.",
+      "label_localized": "声明"
+    },
+    {
+      "id": "risk_of_bias_completeness",
+      "label": "Primary-study risk-of-bias completeness",
+      "status": "fail",
+      "passed": false,
+      "detail": "primary_studies=2; formal_rob=0; missing_formal_rob=0; synthetic_rob=0; incomplete_rob=2; failed_issues=2. Every primary-analysis contributing study needs a formal risk-of-bias assessment.",
+      "label_localized": "主要研究偏倚风险完整性"
+    }
+  ],
+  "warning_gates": [
+    {
+      "id": "llm_reliability",
+      "label": "LLM output reliability",
+      "status": "warn",
+      "passed": true,
+      "detail": "calls=61; retryable_output_issues=1; near_truncation_events=1; failed_issues=0.",
+      "label_localized": "LLM输出可靠性"
+    },
+    {
+      "id": "benchmark",
+      "label": "Published benchmark comparison",
+      "status": "warn",
+      "passed": true,
+      "detail": "No benchmark attached.",
+      "label_localized": "已发表基准对照"
+    }
+  ]
+}

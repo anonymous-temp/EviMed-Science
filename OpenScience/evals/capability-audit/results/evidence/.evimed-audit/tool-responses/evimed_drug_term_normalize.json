@@ -1,0 +1,26 @@
+{
+  "status": "success",
+  "summary": "Normalized the supplied term.",
+  "data": {
+    "input": "acetaminophen",
+    "preferred": "paracetamol",
+    "synonyms": [
+      "acetaminophen",
+      "paracetamol",
+      "对乙酰氨基酚"
+    ],
+    "domain": "drug",
+    "provenance": {
+      "tool": "evimed_drug_term_normalize",
+      "arguments": {
+        "term": "acetaminophen"
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+      }
+    }
+  }
+}

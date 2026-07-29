@@ -1,0 +1,29 @@
+{
+  "nodes": [
+    {
+      "id": "India",
+      "weight": 2,
+      "cluster": -1,
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 1.0,
+      "weighted_degree": 1
+    },
+    {
+      "id": "Japan",
+      "weight": 7,
+      "cluster": -1,
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 1.0,
+      "weighted_degree": 1
+    }
+  ],
+  "edges": [
+    {
+      "source": "India",
+      "target": "Japan",
+      "weight": 1
+    }
+  ]
+}

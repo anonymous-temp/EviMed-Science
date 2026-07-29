@@ -1,0 +1,80 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 traceable EviMed patent records.",
+  "data": {
+    "items": [
+      {
+        "id": "EVIMED-PATENT:USUS2018/029915",
+        "title": "BIOMARKERS FOR CANCER THERAPEUTICS",
+        "url": "https://d.wanfangdata.com.cn/patent/ChhQYXRlbnROZXdTMjAyNDEwMTIxNTQ1MDUSD1VTVVMyMDE4LzAyOTkxNRoId3UydXZ2dnQ%3D",
+        "patentNumber": "USUS2018/029915",
+        "patentType": "Patent",
+        "abstract": "Biomarkers useful for identifying a variety of cancers that are responsive to treatment with a combination therapy comprising pembrolizumab, a pembrolizumab variant or an antigen-binding fragment thereof and talimogene laherparepvec are provided. Methods of treating cancers that are resistant to monotherapy with pembrolizumab, a pembrolizumab variant or an antigen-binding fragment thereof are provided. Methods of treating a cancer in a subject having a tumor with a low CD8+ density, a low or negative interferon gamma signature, and/or a low or negative PD-L1 status are also provided.",
+        "patentee": "MERCK SHARP & DOHME CORP.",
+        "designers": [
+          "gansert, jennifer lorraine",
+          "anderson, abraham antonio",
+          "gorski, kevin"
+        ],
+        "applicationDate": "2018-04-27 00:00:00",
+        "announcementDate": "2018-04-27 00:00:00",
+        "source": "WO",
+        "claims": "39"
+      },
+      {
+        "id": "EVIMED-PATENT:USUS2022/019487",
+        "title": "BIOMARKERS FOR IDENTIFYING AND TREATING CANCER PATIENTS",
+        "url": "https://d.wanfangdata.com.cn/patent/ChhQYXRlbnROZXdTMjAyNDEwMTIxNTQ1MDUSD1VTVVMyMDIyLzAxOTQ4NxoIZmNxcHZ4c3o%3D",
+        "patentNumber": "USUS2022/019487",
+        "patentType": "Patent",
+        "abstract": "Methods and materials for identifying mammals having cancer as being likely to respond to treatment with a checkpoint inhibitor are provided herein. For example, materials and methods for using immune profiling with particular biomarkers on circulating patient immune cells to predict patient response to checkpoint inhibitors (e.g., pembrolizumab) are provided herein.",
+        "patentee": "MAYO FOUNDATION FOR MEDICAL EDUCATION AND RESEARCH",
+        "designers": [
+          "bornschlegl, svetlana",
+          "dietz, allan b.",
+          "gustafson, michael p."
+        ],
+        "applicationDate": "2022-03-09 00:00:00",
+        "announcementDate": "2022-03-09 00:00:00",
+        "source": "WO",
+        "claims": "1"
+      }
+    ],
+    "total": 3,
+    "provenance": {
+      "tool": "evimed_patent_search",
+      "arguments": {
+        "query": "pembrolizumab biomarker",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "EVIMED-PATENT:USUS2018/029915",
+      "url": "https://d.wanfangdata.com.cn/patent/ChhQYXRlbnROZXdTMjAyNDEwMTIxNTQ1MDUSD1VTVVMyMDE4LzAyOTkxNRoId3UydXZ2dnQ%3D",
+      "source": "evimed-patent",
+      "retrievedAt": "2026-07-22T16:03:38.338960Z",
+      "title": "BIOMARKERS FOR CANCER THERAPEUTICS"
+    },
+    {
+      "id": "EVIMED-PATENT:USUS2022/019487",
+      "url": "https://d.wanfangdata.com.cn/patent/ChhQYXRlbnROZXdTMjAyNDEwMTIxNTQ1MDUSD1VTVVMyMDIyLzAxOTQ4NxoIZmNxcHZ4c3o%3D",
+      "source": "evimed-patent",
+      "retrievedAt": "2026-07-22T16:03:38.339007Z",
+      "title": "BIOMARKERS FOR IDENTIFYING AND TREATING CANCER PATIENTS"
+    }
+  ],
+  "warnings": [
+    "Patent records describe claims and filings, not clinical efficacy, safety, approval, or freedom to operate."
+  ],
+  "next_actions": [
+    "Review the complete patent family and obtain qualified legal analysis before making an IP decision."
+  ]
+}

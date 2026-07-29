@@ -1,0 +1,67 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 traceable EviMed guideline candidates.",
+  "data": {
+    "items": [
+      {
+        "id": "EVIMED-GUIDE:0",
+        "title": "2020 International Society of Hypertension global hypertension practice guidelines.",
+        "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide",
+        "year": "2020",
+        "publisher": "International Society of Hypertension (ISH)",
+        "summary": "This guideline provides comprehensive recommendations for the management of hypertension in adults aged 18 years and older, developed by the International Society of Hypertension (ISH) to reduce the global burden of raised blood pressure. It outlines the definition of hypertension, methods for blood pressure measurement and diagnosis, diagnostic tests, cardiovascular risk factors, and hypertension-related organ damage. The document emphasizes the importance of distinguishing between optimal and essential standards of care, particularly in low-resource settings, where clinical evidence may be limited. It addresses lifestyle modifications, pharmacological treatments, adherence to antihypertensive therapy, and the management of comorbidities and specific circumstances such as resistant hypertension, secondary hypertension, pregnancy-related hypertension, and hypertensive emergencies. Additionally, it highlights the need for global harmonization of guidelines and the role of public health initiatives in improving awareness, treatment, and control of hypertension worldwide.",
+        "language": "英文",
+        "publicationDate": "2020-06-01"
+      },
+      {
+        "id": "EVIMED-GUIDE:1",
+        "title": "Variation in hypertension clinical practice guidelines: a global comparison.",
+        "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide",
+        "year": "2021",
+        "publisher": "BMC medicine",
+        "summary": "BACKGROUND\nHypertension is the largest single contributor to the global burden of disease, affecting an estimated 1.39 billion people worldwide. Clinical practice guidelines (CPGs) can aid in the effective management of this common condition, however, inconsistencies exist between CPGs, and the extent of this is unknown. Understanding the differences in CPG recommendations across income settings may provide an important means of understanding some of the global variations in clinical outcomes related to hypertension.\nAIMS\nThis study aims to analyse the variation between hypertension CPGs globally. It aims to assess the variation in three areas: diagnostic threshold and staging, treatment and target blood pressure (BP) recommendations in hypertension.\nMETHODS\nA search was conducted on the MEDLINE repository to identify national and international hypertension CPGs from 2010 to May 2020. An additional country-specific grey-literature search was conducted for all countries and territories of the world as identified by the World Bank. Data describing the diagnosis, staging, treatment and target blood pressure were extracted from CPGs, and variations between CPGs for these domains were analysed.\nRESULTS\nForty-eight CPGs from across all World Bank income settings were selected for analysis. Ninety-six per cent of guidelines defined hypertension as a clinic-based BP of ≥140/90 mmHg, and 87% of guidelines recommended a target BP of < 140/90 mmHg. In the pharmacological treatment of hypertension, eight different first-step, 17 different second-step and six different third-step drug recommendations were observed. Low-income countries preferentially recommended diuretics (63%) in the first-step treatment, whilst high-income countries offered more choice between antihypertensive classes. Forty-four per cent of guidelines, of which 71% were from higher-income contexts recommended initiating treatment with dual-drug therapy at BP 160/100 mmHg or higher.\nCONCLUSION\nThis study found that CPGs remained largely consistent in the definition, staging and target BP recommendations for hypertension. Extensive variation was observed in treatment recommendations, particularly for second-line therapy. Variation existed between income settings; low-income countries prescribed cheaper drugs, offered less clinician choice in medications and initiated dual therapy at later stages than higher-income countries. Future research exploring the underlying drivers of this variation may improve outcomes for hypertensive patients across clinical contexts.",
+        "language": "英文",
+        "publicationDate": "2021-05-12"
+      }
+    ],
+    "total": 2,
+    "keywords": null,
+    "enrichedQuery": null,
+    "requestedJurisdiction": null,
+    "provenance": {
+      "tool": "evimed_guideline_search",
+      "arguments": {
+        "query": "hypertension clinical practice guideline",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "EVIMED-GUIDE:0",
+      "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide",
+      "source": "evimed-guideline",
+      "retrievedAt": "2026-07-22T16:03:32.749378Z",
+      "title": "2020 International Society of Hypertension global hypertension practice guidelines."
+    },
+    {
+      "id": "EVIMED-GUIDE:1",
+      "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide",
+      "source": "evimed-guideline",
+      "retrievedAt": "2026-07-22T16:03:32.749421Z",
+      "title": "Variation in hypertension clinical practice guidelines: a global comparison."
+    }
+  ],
+  "warnings": [
+    "Verify the guideline version, issuing body, jurisdiction, and original recommendation context before use."
+  ],
+  "next_actions": [
+    "Open the original guideline and verify the relevant recommendation text and version."
+  ]
+}

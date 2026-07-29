@@ -1,0 +1,154 @@
+source,target,weight,source_freq,target_freq
+Saiseikai Kumamoto Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Kumamoto University Hospital,Osaka International Cancer Institute,2,2,2
+Osaka International Cancer Institute,Wakayama Medical University,2,2,2
+Osaka Habikino Medical Center,Osaka International Cancer Institute,2,2,2
+Graduate School of Medicine,Osaka International Cancer Institute,2,2,2
+Kurashiki Central Hospital,Osaka International Cancer Institute,2,2,2
+Itami City Hospital,Osaka International Cancer Institute,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Osaka International Cancer Institute,2,3,2
+Kumamoto Rosai Hospital,Osaka International Cancer Institute,2,2,2
+Hyogo Medical University,Osaka International Cancer Institute,2,2,2
+Osaka City General Hospital,Wakayama Medical University,2,2,2
+Osaka International Cancer Institute,Saiseikai Utsunomiya Hospital,2,2,2
+Osaka Habikino Medical Center,Wakayama Medical University,2,2,2
+Graduate School of Medicine,Wakayama Medical University,2,2,2
+Kurashiki Central Hospital,Wakayama Medical University,2,2,2
+Itami City Hospital,Wakayama Medical University,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Wakayama Medical University,2,3,2
+Kumamoto Rosai Hospital,Wakayama Medical University,2,2,2
+Kumamoto Chuo Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Hyogo Medical University,Kumamoto Chuo Hospital,2,2,2
+Kumamoto Chuo Hospital,Kumamoto University Hospital,2,2,2
+Kumamoto Chuo Hospital,Kumamoto Rosai Hospital,2,2,2
+Graduate School of Medicine,Osaka City General Hospital,2,2,2
+Kurashiki Central Hospital,Osaka City General Hospital,2,2,2
+Itami City Hospital,Osaka City General Hospital,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Osaka City General Hospital,2,3,2
+Kumamoto Rosai Hospital,Osaka City General Hospital,2,2,2
+Kumamoto University Hospital,Osaka City General Hospital,2,2,2
+Hyogo Medical University,Osaka City General Hospital,2,2,2
+Osaka City General Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Kumamoto Chuo Hospital,Osaka International Cancer Institute,2,2,2
+Kumamoto Chuo Hospital,Wakayama Medical University,2,2,2
+Kumamoto Chuo Hospital,Osaka Habikino Medical Center,2,2,2
+Graduate School of Medicine,Kumamoto Chuo Hospital,2,2,2
+Kumamoto Chuo Hospital,Kurashiki Central Hospital,2,2,2
+Itami City Hospital,Kumamoto Chuo Hospital,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Kumamoto Chuo Hospital,2,3,2
+Kumamoto University Hospital,Wakayama Medical University,2,2,2
+Hyogo Medical University,Wakayama Medical University,2,2,2
+Saiseikai Utsunomiya Hospital,Wakayama Medical University,2,2,2
+Kumamoto University Hospital,Kurashiki Central Hospital,2,2,2
+Kurashiki Central Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Itami City Hospital,2,3,2
+Itami City Hospital,Kumamoto Rosai Hospital,2,2,2
+Itami City Hospital,Kumamoto University Hospital,2,2,2
+Hyogo Medical University,Itami City Hospital,2,2,2
+Itami City Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Kumamoto Rosai Hospital,2,3,2
+Hyogo Prefectural Amagasaki General Medical Center,Kumamoto University Hospital,2,3,2
+Hyogo Medical University,Hyogo Prefectural Amagasaki General Medical Center,2,2,3
+Hyogo Prefectural Amagasaki General Medical Center,Saiseikai Utsunomiya Hospital,2,3,2
+Kumamoto Rosai Hospital,Kumamoto University Hospital,2,2,2
+Hyogo Medical University,Kumamoto Rosai Hospital,2,2,2
+Kumamoto Rosai Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Hyogo Medical University,Kumamoto University Hospital,2,2,2
+Kumamoto University Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Hyogo Medical University,Kurashiki Central Hospital,2,2,2
+Kumamoto Rosai Hospital,Kurashiki Central Hospital,2,2,2
+Graduate School of Medicine,Osaka Habikino Medical Center,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Kurashiki Central Hospital,2,3,2
+Kurashiki Central Hospital,Osaka Habikino Medical Center,2,2,2
+Itami City Hospital,Osaka Habikino Medical Center,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Osaka Habikino Medical Center,2,3,2
+Kumamoto Rosai Hospital,Osaka Habikino Medical Center,2,2,2
+Kumamoto University Hospital,Osaka Habikino Medical Center,2,2,2
+Hyogo Medical University,Osaka Habikino Medical Center,2,2,2
+Osaka Habikino Medical Center,Saiseikai Utsunomiya Hospital,2,2,2
+Graduate School of Medicine,Kurashiki Central Hospital,2,2,2
+Graduate School of Medicine,Itami City Hospital,2,2,2
+Graduate School of Medicine,Hyogo Prefectural Amagasaki General Medical Center,2,2,3
+Graduate School of Medicine,Kumamoto Rosai Hospital,2,2,2
+Graduate School of Medicine,Kumamoto University Hospital,2,2,2
+Graduate School of Medicine,Hyogo Medical University,2,2,2
+Graduate School of Medicine,Saiseikai Utsunomiya Hospital,2,2,2
+Itami City Hospital,Kurashiki Central Hospital,2,2,2
+Osaka City General Hospital,Osaka Habikino Medical Center,2,2,2
+Osaka City General Hospital,Osaka International Cancer Institute,2,2,2
+Kobe City Medical Center General Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Tohoku University Graduate School of Medicine,2,3,2
+Kumamoto Chuo Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Osaka International Cancer Institute,Tohoku University Graduate School of Medicine,2,2,2
+Tohoku University Graduate School of Medicine,Wakayama Medical University,2,2,2
+Osaka Habikino Medical Center,Tohoku University Graduate School of Medicine,2,2,2
+Graduate School of Medicine,Tohoku University Graduate School of Medicine,2,2,2
+Kurashiki Central Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Itami City Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Kumamoto Rosai Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Kumamoto Chuo Hospital,Osaka City General Hospital,2,2,2
+Kumamoto University Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Hyogo Medical University,Tohoku University Graduate School of Medicine,2,2,2
+Saiseikai Utsunomiya Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Aichi Cancer Center Hospital,Kobe City Medical Center General Hospital,2,2,2
+Kobe City Medical Center General Hospital,Kumamoto Regional Medical Center,2,2,2
+Kobe City Medical Center General Hospital,Osaka City General Hospital,2,2,2
+Kobe City Medical Center General Hospital,Kumamoto Chuo Hospital,2,2,2
+Osaka City General Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Kumamoto Regional Medical Center,Tohoku University Graduate School of Medicine,2,2,2
+Aichi Cancer Center Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Kobe City Medical Center General Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Aichi Cancer Center Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Kumamoto Regional Medical Center,Saiseikai Kumamoto Hospital,2,2,2
+Osaka City General Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Kumamoto Chuo Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Osaka International Cancer Institute,Saiseikai Kumamoto Hospital,2,2,2
+Saiseikai Kumamoto Hospital,Wakayama Medical University,2,2,2
+Osaka Habikino Medical Center,Saiseikai Kumamoto Hospital,2,2,2
+Graduate School of Medicine,Saiseikai Kumamoto Hospital,2,2,2
+Kurashiki Central Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Itami City Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Saiseikai Kumamoto Hospital,2,3,2
+Kumamoto Rosai Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Kumamoto University Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Hyogo Medical University,Saiseikai Kumamoto Hospital,2,2,2
+Saiseikai Kumamoto Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Kobe City Medical Center General Hospital,Osaka International Cancer Institute,2,2,2
+Kobe City Medical Center General Hospital,Wakayama Medical University,2,2,2
+Kobe City Medical Center General Hospital,Osaka Habikino Medical Center,2,2,2
+Aichi Cancer Center Hospital,Kumamoto Rosai Hospital,2,2,2
+Aichi Cancer Center Hospital,Hyogo Medical University,2,2,2
+Aichi Cancer Center Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Kumamoto Regional Medical Center,Osaka City General Hospital,2,2,2
+Kumamoto Chuo Hospital,Kumamoto Regional Medical Center,2,2,2
+Kumamoto Regional Medical Center,Osaka International Cancer Institute,2,2,2
+Kumamoto Regional Medical Center,Wakayama Medical University,2,2,2
+Kumamoto Regional Medical Center,Osaka Habikino Medical Center,2,2,2
+Graduate School of Medicine,Kumamoto Regional Medical Center,2,2,2
+Kumamoto Regional Medical Center,Kurashiki Central Hospital,2,2,2
+Itami City Hospital,Kumamoto Regional Medical Center,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Kumamoto Regional Medical Center,2,3,2
+Kumamoto Regional Medical Center,Kumamoto Rosai Hospital,2,2,2
+Kumamoto Regional Medical Center,Kumamoto University Hospital,2,2,2
+Hyogo Medical University,Kumamoto Regional Medical Center,2,2,2
+Kumamoto Regional Medical Center,Saiseikai Utsunomiya Hospital,2,2,2
+Aichi Cancer Center Hospital,Kumamoto University Hospital,2,2,2
+Aichi Cancer Center Hospital,Hyogo Prefectural Amagasaki General Medical Center,2,2,3
+Graduate School of Medicine,Kobe City Medical Center General Hospital,2,2,2
+Aichi Cancer Center Hospital,Itami City Hospital,2,2,2
+Kobe City Medical Center General Hospital,Kurashiki Central Hospital,2,2,2
+Itami City Hospital,Kobe City Medical Center General Hospital,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Kobe City Medical Center General Hospital,2,3,2
+Kobe City Medical Center General Hospital,Kumamoto Rosai Hospital,2,2,2
+Kobe City Medical Center General Hospital,Kumamoto University Hospital,2,2,2
+Hyogo Medical University,Kobe City Medical Center General Hospital,2,2,2
+Kobe City Medical Center General Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Aichi Cancer Center Hospital,Kumamoto Regional Medical Center,2,2,2
+Aichi Cancer Center Hospital,Osaka City General Hospital,2,2,2
+Aichi Cancer Center Hospital,Kumamoto Chuo Hospital,2,2,2
+Aichi Cancer Center Hospital,Osaka International Cancer Institute,2,2,2
+Aichi Cancer Center Hospital,Wakayama Medical University,2,2,2
+Aichi Cancer Center Hospital,Osaka Habikino Medical Center,2,2,2
+Aichi Cancer Center Hospital,Graduate School of Medicine,2,2,2
+Aichi Cancer Center Hospital,Kurashiki Central Hospital,2,2,2
+Hyogo Medical University,Saiseikai Utsunomiya Hospital,2,2,2

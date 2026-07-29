@@ -1,0 +1,253 @@
+{
+  "status": "warning",
+  "summary": "Compiled a traceable formulary evidence assessment with a reproducible conditional ranking.",
+  "data": {
+    "assessmentType": "drug_selection",
+    "domainAssessments": [
+      {
+        "candidate": "metformin",
+        "domain": "effectiveness",
+        "status": "favorable",
+        "evidenceIds": [
+          "audit-comparison-1"
+        ],
+        "rationale": "The bounded release fixture exercises reproducible institutional scoring.",
+        "score": 8,
+        "scaleMin": 0,
+        "scaleMax": 10,
+        "direction": "higher_is_better",
+        "weight": 1,
+        "scoreOrigin": "institutional_rubric",
+        "ruleVersion": "release-audit-v1"
+      },
+      {
+        "candidate": "metformin",
+        "domain": "safety",
+        "status": "favorable",
+        "evidenceIds": [
+          "audit-comparison-1"
+        ],
+        "rationale": "The bounded release fixture exercises reproducible institutional scoring.",
+        "score": 7,
+        "scaleMin": 0,
+        "scaleMax": 10,
+        "direction": "higher_is_better",
+        "weight": 1,
+        "scoreOrigin": "institutional_rubric",
+        "ruleVersion": "release-audit-v1"
+      },
+      {
+        "candidate": "glipizide",
+        "domain": "effectiveness",
+        "status": "favorable",
+        "evidenceIds": [
+          "audit-comparison-1"
+        ],
+        "rationale": "The bounded release fixture exercises reproducible institutional scoring.",
+        "score": 6,
+        "scaleMin": 0,
+        "scaleMax": 10,
+        "direction": "higher_is_better",
+        "weight": 1,
+        "scoreOrigin": "institutional_rubric",
+        "ruleVersion": "release-audit-v1"
+      },
+      {
+        "candidate": "glipizide",
+        "domain": "safety",
+        "status": "favorable",
+        "evidenceIds": [
+          "audit-comparison-1"
+        ],
+        "rationale": "The bounded release fixture exercises reproducible institutional scoring.",
+        "score": 5,
+        "scaleMin": 0,
+        "scaleMax": 10,
+        "direction": "higher_is_better",
+        "weight": 1,
+        "scoreOrigin": "institutional_rubric",
+        "ruleVersion": "release-audit-v1"
+      }
+    ],
+    "selectionDomains": [
+      "effectiveness",
+      "safety"
+    ],
+    "ranking": {
+      "ranking": [
+        {
+          "candidate": "metformin",
+          "normalizedScore": 0.75
+        },
+        {
+          "candidate": "glipizide",
+          "normalizedScore": 0.55
+        }
+      ],
+      "method": "weighted_min_max_normalization",
+      "topCandidate": "metformin",
+      "topCandidates": [
+        "metformin"
+      ],
+      "topRankStableUnderLeaveOneDomainOut": true,
+      "leaveOneDomainOutSensitivity": [
+        {
+          "excludedDomain": "effectiveness",
+          "topCandidate": "metformin",
+          "topCandidates": [
+            "metformin"
+          ],
+          "ranking": [
+            {
+              "candidate": "metformin",
+              "normalizedScore": 0.7
+            },
+            {
+              "candidate": "glipizide",
+              "normalizedScore": 0.5
+            }
+          ]
+        },
+        {
+          "excludedDomain": "safety",
+          "topCandidate": "metformin",
+          "topCandidates": [
+            "metformin"
+          ],
+          "ranking": [
+            {
+              "candidate": "metformin",
+              "normalizedScore": 0.8
+            },
+            {
+              "candidate": "glipizide",
+              "normalizedScore": 0.6
+            }
+          ]
+        }
+      ]
+    },
+    "rankingWithheldReasons": [],
+    "economicContext": null,
+    "audit": {
+      "compiler": "evimed-drug-assessment",
+      "compilerVersion": "1.4.0",
+      "inputSha256": "fa1c3a9851b4f9d7a2aaa7ce5fdb7395f5fd7a89a6893051529dd4889fe39b5a",
+      "automaticDecision": false,
+      "humanReviewRequired": true
+    },
+    "provenance": {
+      "tool": "evimed_drug_selection_evaluation",
+      "arguments": {
+        "action": "compile",
+        "candidateDrugs": [
+          "metformin",
+          "glipizide"
+        ],
+        "indication": "type 2 diabetes",
+        "selectionDomains": [
+          "effectiveness",
+          "safety"
+        ],
+        "sourceInventory": [
+          {
+            "id": "audit-comparison-1",
+            "title": "Audited comparative fixture",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/1/",
+            "source": "release-audit-fixture",
+            "retrievedAt": "2026-07-20T00:00:00Z"
+          }
+        ],
+        "domainAssessments": [
+          {
+            "candidate": "metformin",
+            "domain": "effectiveness",
+            "status": "favorable",
+            "evidenceIds": [
+              "audit-comparison-1"
+            ],
+            "rationale": "The bounded release fixture exercises reproducible institutional scoring.",
+            "score": 8,
+            "scaleMin": 0,
+            "scaleMax": 10,
+            "direction": "higher_is_better",
+            "weight": 1,
+            "scoreOrigin": "institutional_rubric",
+            "ruleVersion": "release-audit-v1"
+          },
+          {
+            "candidate": "metformin",
+            "domain": "safety",
+            "status": "favorable",
+            "evidenceIds": [
+              "audit-comparison-1"
+            ],
+            "rationale": "The bounded release fixture exercises reproducible institutional scoring.",
+            "score": 7,
+            "scaleMin": 0,
+            "scaleMax": 10,
+            "direction": "higher_is_better",
+            "weight": 1,
+            "scoreOrigin": "institutional_rubric",
+            "ruleVersion": "release-audit-v1"
+          },
+          {
+            "candidate": "glipizide",
+            "domain": "effectiveness",
+            "status": "favorable",
+            "evidenceIds": [
+              "audit-comparison-1"
+            ],
+            "rationale": "The bounded release fixture exercises reproducible institutional scoring.",
+            "score": 6,
+            "scaleMin": 0,
+            "scaleMax": 10,
+            "direction": "higher_is_better",
+            "weight": 1,
+            "scoreOrigin": "institutional_rubric",
+            "ruleVersion": "release-audit-v1"
+          },
+          {
+            "candidate": "glipizide",
+            "domain": "safety",
+            "status": "favorable",
+            "evidenceIds": [
+              "audit-comparison-1"
+            ],
+            "rationale": "The bounded release fixture exercises reproducible institutional scoring.",
+            "score": 5,
+            "scaleMin": 0,
+            "scaleMax": 10,
+            "direction": "higher_is_better",
+            "weight": 1,
+            "scoreOrigin": "institutional_rubric",
+            "ruleVersion": "release-audit-v1"
+          }
+        ]
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "audit-comparison-1",
+      "title": "Audited comparative fixture",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/1/",
+      "source": "release-audit-fixture",
+      "retrievedAt": "2026-07-20T00:00:00Z"
+    }
+  ],
+  "warnings": [
+    "Evidence coverage counts and language-model judgments are not formulary scores.",
+    "The compiler does not make a procurement, formulary, reimbursement, or patient-level treatment decision."
+  ],
+  "next_actions": [
+    "Resolve all missing or non-comparable domains and review sensitivity before using the assisted score.",
+    "Keep the supplied rubric, item-level evidence, and calculation trace with the result."
+  ]
+}

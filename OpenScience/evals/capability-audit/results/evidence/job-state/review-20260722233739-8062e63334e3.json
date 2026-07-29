@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "tool": "evimed_peer_review",
+  "jobId": "review-20260722233739-8062e63334e3",
+  "status": "succeeded",
+  "request": {
+    "manuscript": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace/specialist-smoke-input.md",
+    "articleType": "original-research",
+    "outputLanguage": "zh"
+  },
+  "createdAt": "2026-07-22T15:37:39.897489Z",
+  "updatedAt": "2026-07-22T15:49:17.032266Z",
+  "root": "/Users/wangzeyuan/Desktop/EviMedScience/项目代码/论文审稿",
+  "python": "/Users/wangzeyuan/Desktop/EviMedScience/项目代码/论文审稿/.venv/bin/python",
+  "executionEvidence": {
+    "schemaVersion": 1,
+    "agentSourceSha256": "570bbba83bd82c4f6cda94a796ce586d730516e93ac7a496878aadfa80a05460",
+    "agentSourceFiles": 78,
+    "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
+    "evidenceModuleSha256": "4fea59024d5c7c3a9d6c7b40ba9bb4f58a6887d01292c91f9b4abbbdd8c0209f",
+    "model": "deepseek-v4-pro",
+    "thinking": true,
+    "reasoningEffort": "high"
+  },
+  "workspace": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace",
+  "outputRoot": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace/peer-review-runs/review-20260722233739-8062e63334e3/output",
+  "artifacts": [
+    {
+      "kind": "md",
+      "path": "peer-review-runs/review-20260722233739-8062e63334e3/output/peer-review-report.md"
+    },
+    {
+      "kind": "json",
+      "path": "peer-review-runs/review-20260722233739-8062e63334e3/output/peer-review-run.json"
+    },
+    {
+      "kind": "json",
+      "path": "peer-review-runs/review-20260722233739-8062e63334e3/output/request.json"
+    },
+    {
+      "kind": "json",
+      "path": "peer-review-runs/review-20260722233739-8062e63334e3/output/result.json"
+    }
+  ],
+  "workerPid": 93219,
+  "startedAt": "2026-07-22T15:37:40.282316Z",
+  "finishedAt": "2026-07-22T15:49:17.032279Z",
+  "returnCode": 0
+}

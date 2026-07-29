@@ -1,0 +1,99 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 traceable PubMed records.",
+  "data": {
+    "items": [
+      {
+        "id": "PMID:30158069",
+        "pmid": "30158069",
+        "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
+        "journal": "Lancet (London, England)",
+        "publicationDate": "2018 Sep 22",
+        "authors": [
+          "Gaziano JM",
+          "Brotons C",
+          "Coppolecchia R",
+          "Cricelli C",
+          "Darius H",
+          "Gorelick PB",
+          "Howard G",
+          "Pearson TA",
+          "Rothwell PM",
+          "Ruilope LM",
+          "Tendera M",
+          "Tognoni G",
+          "ARRIVE Executive Committee"
+        ],
+        "doi": "10.1016/S0140-6736(18)31924-X",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/30158069/"
+      },
+      {
+        "id": "PMID:40902613",
+        "pmid": "40902613",
+        "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis.",
+        "journal": "Lancet (London, England)",
+        "publicationDate": "2025 Sep 13",
+        "authors": [
+          "Valgimigli M",
+          "Choi KH",
+          "Giacoppo D",
+          "Gragnano F",
+          "Kimura T",
+          "Watanabe H",
+          "Kim HS",
+          "Kang J",
+          "Park KW",
+          "Pettersen AÅ",
+          "Woodward M",
+          "Bhatt DL",
+          "Calabrò P",
+          "Angiolillo DJ",
+          "Mehran R",
+          "Song YB",
+          "Hahn JY"
+        ],
+        "doi": "10.1016/S0140-6736(25)01562-4",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/40902613/"
+      }
+    ],
+    "provenance": {
+      "tool": "evimed_literature_search",
+      "arguments": {
+        "query": "aspirin cardiovascular prevention randomized trial",
+        "limit": 2,
+        "databases": [
+          "pubmed",
+          "crossref"
+        ]
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "PMID:30158069",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30158069/",
+      "source": "pubmed",
+      "retrievedAt": "2026-07-22T16:03:28.780748Z",
+      "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial."
+    },
+    {
+      "id": "PMID:40902613",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/40902613/",
+      "source": "pubmed",
+      "retrievedAt": "2026-07-22T16:03:28.780796Z",
+      "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis."
+    }
+  ],
+  "warnings": [
+    "Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality."
+  ],
+  "next_actions": [
+    "Retrieve and review the abstract or full text before classifying study design or summarizing findings."
+  ]
+}

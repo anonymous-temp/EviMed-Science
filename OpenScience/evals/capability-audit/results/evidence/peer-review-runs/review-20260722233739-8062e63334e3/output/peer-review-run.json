@@ -1,0 +1,1388 @@
+{
+  "document_title": "「osimertinib cardiotoxicity」文献计量分析：发文趋势、知识结构与研究前沿",
+  "rubric_results": {
+    "universal_rubric": [
+      {
+        "block_id": "universal_rubric_block",
+        "block_name": "universal_rubric",
+        "results": [
+          {
+            "item_id": "URVAR_INNOV_01",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.95,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "尽管该主题的研究产出不断增加，目前仍缺乏系统性的文献计量学研究来梳理知识基础、合作模式和主题演变脉络，制约了研究者对该领域全貌的把握。"
+            ],
+            "evidence_location": [
+              "引言第2段"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_INNOV_02",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.9,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "运用共现分析、Louvain社区检测、爆发词识别及综合前沿评分等方法，并对Lotka定律、Bradford定律和Zipf定律进行验证",
+              "前沿识别：综合评分（近期增长率35%、爆发强度25%、新颖性25%、网络中心性15%）"
+            ],
+            "evidence_location": [
+              "摘要",
+              "2.5 分析框架"
+            ],
+            "missing_detail": "研究未采用创新的方法、技术或分析框架。所有使用的方法均是文献计量分析中的标准工具，综合前沿评分仅为几种常见指标的线性组合，未体现方法论上的突破或新颖性。",
+            "risk_reason": "缺乏方法创新降低了该研究超越常规文献分析的能力，难以提供独特的学术价值或新的知识维度。",
+            "actionable_fix": "可引入新颖的分析技术（如动态主题建模、语义网络演变分析或机器学习驱动的突变检测），或就现有综合评分框架的创新性及优势进行深入论证，以证明其超出常规文献计量学应用。",
+            "what_would_change_verdict": "若能明确展示综合前沿评分框架在文献计量学中未被使用，或提出基于新算法/技术的分析方法，并论证其对领域问题解决的优势，则可提升为PASS。",
+            "confidence_score": 0.9,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_INNOV_03",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.9,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "| Prevalence of osimertinib-induced cardiotoxicity in non-small cell lung cancer patients: a systematic review and meta-analysis. | 9 | 2025 |",
+              "| Real-World Data on Osimertinib-Associated Cardiac Toxicity. | 7 | 2025 |"
+            ],
+            "evidence_location": [
+              "纳入分析文献表格",
+              "表格内容"
+            ],
+            "missing_detail": "手稿未呈现任何研究结果，无法评估其发现是否新颖或挑战现有范式。",
+            "risk_reason": "缺少结果部分意味着读者无法判断研究的实际贡献和科学价值。",
+            "actionable_fix": "添加结果部分，明确描述主要发现，并讨论这些发现如何提供新见解或挑战现有认知。",
+            "what_would_change_verdict": "如果提供了结果部分，明确展示了新的或出乎意料的发现，则可通过。",
+            "confidence_score": 0.9,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "URVAR_INNOV_04",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.65,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "Journal of thoracic oncology : official publication of the International Association for the Study of Lung Cancer",
+              "JACC. CardioOncology",
+              "Free radical biology & medicine",
+              "Drug development research"
+            ],
+            "evidence_location": [
+              "期刊栏目中的列表",
+              "期刊栏目中的列表",
+              "期刊栏目中的列表",
+              "期刊栏目中的列表"
+            ],
+            "missing_detail": "尽管纳入了来自不同领域期刊的文献，但文中未明确阐述如何将这些跨学科知识进行整合，也未说明整合对结论的独特价值。",
+            "risk_reason": "缺乏对跨学科整合的明确说明会削弱研究的综合性论证，可能被读者认为仅是文献的简单聚合而非超越单一领域视角的增值分析。",
+            "actionable_fix": "在方法或讨论部分增加一段内容，具体说明如何将肿瘤学、心脏毒理学、药物开发、自由基生物学等领域的研究发现整合起来，并解释这种跨学科视角如何为EGFR-TKIs的毒性管理提供超越单一学科的新见解。",
+            "what_would_change_verdict": "若在文中明确描述跨学科知识的整合过程，例如说明多学科证据如何相互补充、如何构建综合分析框架，则评价可改为PASS。",
+            "confidence_score": 0.65,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "URVAR_CONTRIB_01",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.9,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "本研究系统描绘了「osimertinib cardiotoxicity」领域的知识图谱，识别了核心贡献者、知识聚类、新兴趋势与研究缺口，为后续研究选题和资助决策提供了数据支撑。",
+              "尽管该主题的研究产出不断增加，目前仍缺乏系统性的文献计量学研究来梳理知识基础、合作模式和主题演变脉络，制约了研究者对该领域全貌的把握。",
+              "本研究通过多维文献计量方法...从数据驱动视角描绘该领域的现状与发展轨迹。"
+            ],
+            "evidence_location": [
+              "摘要结论",
+              "1. 引言",
+              "1. 引言"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.9,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_CONTRIB_02",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.85,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "共分析来自17种期刊、9个国家的20篇文献（2025–2026）",
+              "模块度 Q = 0.0604，平均轮廓系数 S = 0.2496",
+              "警告：模块度 Q < 0.1，表明社区结构不具统计显著性。以下聚类结果需极度谨慎解读，网络未表现出有意义的主题划分。"
+            ],
+            "evidence_location": [
+              "摘要结果部分",
+              "3.4.1 关键词共现网络",
+              "3.4.1 关键词共现网络（紧接在模块度数值后的警告）"
+            ],
+            "missing_detail": "结论声称“系统描绘了知识图谱”“识别了知识聚类”，但分析基于仅20篇文献，且网络分析明确显示社区结构不显著（Q=0.0604），聚类结果不具备统计意义。结论未充分反映这一核心局限性，也未讨论小样本对前沿识别、文献计量定律验证（如洛特卡定律）可靠性的影响。",
+            "risk_reason": "基于极不稳健的发现（样本量小、网络结构不显著）做出强声明会误导读者，使后续研究选题和资助决策建立在不可靠的证据之上。",
+            "actionable_fix": "在讨论或结论部分明确讨论小样本量和网络结构不显著对结论可靠性的影响，将结论限定在“初步探索”或“描述性概览”，并强调需要更多文献积累后才能进行稳健的计量分析；或删除基于不显著聚类的知识聚类声明。",
+            "what_would_change_verdict": "若手稿在结论中明确说明由于样本量有限且网络结构不显著，当前分析仅为描述性探索，知识聚类结果需谨慎对待，且不能作为后续决策的可靠依据，则可提升至PASS。",
+            "confidence_score": 0.85,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_CONTRIB_03",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "日本 在地理分布中占据主导地位，贡献 7 篇（占 9 个国家总发文量的 33.3%），其后依次为 中国、美国、印度。中等地理集中度（HHI = 0.197）表明研究格局正向更广泛的国际参与过渡，但仍以少数领先国家为主导。",
+              "核心期刊适度分散，反映该研究领域跨越临床、药理和公共卫生等多学科出版渠道。",
+              "极低的模块度表明社区检测未能识别出有意义的聚类，网络缺乏清晰的主题边界，聚类结果须谨慎解读。"
+            ],
+            "evidence_location": [
+              "3.3.4 国家/地区",
+              "3.3.3 期刊",
+              "3.4.1 关键词共现网络"
+            ],
+            "missing_detail": "通篇未将任何结果与现有文献进行比较。没有引用先前类似主题的文献计量研究、临床证据或综述来讨论一致性或分歧，也未说明本研究如何更新或拓展当前理解。",
+            "risk_reason": "缺少与现有文献的对话使研究孤立，读者无法判断发现的新颖性、可靠性及对领域的贡献程度，削弱了研究的学术价值。",
+            "actionable_fix": "新增独立的'讨论'章节，将主要发现（如国家主导地位、核心期刊分布、网络结构、突现词等）与已发表的奥希替尼心脏毒性相关研究、其他肿瘤药物心脏毒性文献计量分析或指南进行系统比较，解释异同并明确本研究对知识空白的填补。",
+            "what_would_change_verdict": "若在讨论中明确引用并比较至少3-5篇相关文献，解释本研究结果与既往发现的一致性或矛盾，并总结对领域理解的更新，则可能升至PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_CONTRIB_04",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "本研究通过多维文献计量方法，对PubMed/MEDLINE数据库中2025–2026年间收录的20篇文献进行系统分析，采用共现网络分析、社区检测、爆发词识别和前沿评分等方法，从数据驱动视角描绘该领域的现状与发展轨迹。",
+              "结论：本研究系统描绘了「osimertinib cardiotoxicity」领域的知识图谱，识别了核心贡献者、知识聚类、新兴趋势与研究缺口，为后续研究选题和资助决策提供了数据支撑。"
+            ],
+            "evidence_location": [
+              "全文：引言和结论中提及研究缺口，但未在任何部分提出具体的未来研究方向",
+              "全文结构：方法-结果后直接结束，无独立的讨论章节"
+            ],
+            "missing_detail": "讨论部分完全缺失，未提出基于当前发现的具体未来研究问题、下一步举措或未解答的科学问题。",
+            "risk_reason": "缺乏对未来研究方向的明确指引，使综述仅停留在描述层面，降低了其对研究规划的实际指导价值。",
+            "actionable_fix": "增加独立的讨论章节，基于识别的研究前沿、聚类和缺口，具体指出：1) 需要深入探索的机制问题（如特定激酶抑制剂的心脏毒性通路）；2) 现有证据的方法学局限性及未来研究设计建议；3) 聚焦特定人群或联合用药的临床研究方向。",
+            "what_would_change_verdict": "若在讨论部分明确提出至少2-3条具体、可操作的研究方向或未解答问题，并关联当前发现，则可评为通过。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_IMPACT_01",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "[纳入分析文献]",
+              "| 期刊 | 发文量 |\n| --- | --- |\n| Journal of thoracic oncology ... | 3 |"
+            ],
+            "evidence_location": [
+              "整个摘录",
+              "表格区域"
+            ],
+            "missing_detail": "摘录中没有任何文字阐述研究有何临床、政策或实际意义，也未说明发现如何指导实践或决策。仅列出了一些文献和期刊发文量，未解释这些结果能带来什么启示。",
+            "risk_reason": "缺少对研究意义的明确表达，使读者无法理解研究的实际价值，降低了成果转化和影响现实决策的可能性。",
+            "actionable_fix": "在讨论或结论部分补充一段内容，具体说明本次文献分析结果（如不同 EGFR-TKI 安全信号差异或期刊发文分布）对于临床用药监测、药物警戒政策制定或肺癌患者个体化治疗的指导价值。",
+            "what_would_change_verdict": "若作者能明确指出研究发现的临床或政策落脚点，并逻辑清晰地解释其如何影响现实决策，则可评为 PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "exact",
+            "search_strategy": "exact_path"
+          },
+          {
+            "item_id": "URVAR_IMPACT_02",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "1. Sugimoto T; Noguchi Y; Masuda R; Harada T; Toyama Y; Saguchi M, et al. (2026). Differences in Safety Signal Detection between Osimertinib and First- and Second-Generation EGFR-TKIs...",
+              "2. Kim SY; Kang HS; Lee JE; Kim HY; Yeo MK; Chung C. (2025). Diagnostic challenge of systemic amyloidosis mimicking EGFR-TKI toxicity..."
+            ],
+            "evidence_location": [
+              "Only a list of included studies is provided; no discussion of potential impact or limitations is present in the text."
+            ],
+            "missing_detail": "全文缺失对研究结果的潜在影响和实施局限性的平衡讨论（如临床意义、应用限制、证据等级说明等）。",
+            "risk_reason": "读者无法评估研究结论的实际应用价值，可能高估或低估证据的适用性，影响证据向实践的转化。",
+            "actionable_fix": "在讨论部分明确阐述主要发现如何可能影响临床实践或未来研究，并详细说明其局限性（如数据来源自发报告系统的偏倚、无法推断因果等）。",
+            "what_would_change_verdict": "若文中增加以下内容可改为PASS：明确说明结果的潜在益处（如特定不良反应信号监测的改进）和局限性（如回顾性设计、混杂因素等），并平衡讨论。",
+            "confidence_score": 0.95,
+            "context_quality": "exact",
+            "search_strategy": "exact_path"
+          },
+          {
+            "item_id": "URVAR_IMPACT_03",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "[Confirmed absence after thorough search]"
+            ],
+            "evidence_location": [
+              "full_text"
+            ],
+            "missing_detail": "手稿未讨论研究结果的可推广性或外部有效性，例如数据库代表性（仅PubMed/MEDLINE）、语言偏倚、检索时间窗口限制（2021–2025过滤但实际文献年为2025–2026）、小样本量（n=20）等因素对结论普适性的影响。",
+            "risk_reason": "缺少外部有效性讨论会限制读者判断研究结论是否适用于其他环境或人群，削弱研究的实用性价值。",
+            "actionable_fix": "在讨论部分增加‘外部有效性与局限性’小节，明确说明数据库选择可能遗漏其他来源文献、检索时间跨度可能导致早期文献缺失、样本量较小可能影响网络分析的稳定性，并讨论这些发现可推广到osimertinib心脏毒性领域的程度。",
+            "what_would_change_verdict": "若手稿系统讨论了检索策略、数据库、时间范围及样本量等对外部有效性的潜在影响，并明确结论的适用范围，则可予以通过。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_METHOD_01",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "纳入分析文献",
+              "| 期刊 | 发文量 |"
+            ],
+            "evidence_location": [
+              "文本开头",
+              "表格"
+            ],
+            "missing_detail": "提供的文本仅包含引用列表和期刊发文量表格，未提供研究问题、研究设计或方法学描述。",
+            "risk_reason": "无法评估研究设计是否适合回答研究问题，这直接影响研究结果的可靠性和有效性。",
+            "actionable_fix": "在方法部分明确陈述研究问题，并详细描述所采用的研究设计（如系统综述、范围综述等），阐明该设计如何与具体研究目标对齐。",
+            "what_would_change_verdict": "如果能够提供清晰的研究问题以及对应的研究设计描述，并展示设计如何服务于该问题，则可评为PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "URVAR_METHOD_02",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "本研究于2026-07-22通过NCBI E-utilities API对MEDLINE（via PubMed）数据库进行系统检索。",
+              "纳入标准：符合检索策略的MEDLINE收录文献；PubMed检索日期过滤范围：2021–2025；文献元数据的实际期刊/卷期年份：2025–2026；文献类型：原始研究、综述、Meta分析、系统评价。",
+              "排除标准：重复记录...取消或无法解析的记录；已撤稿文献；述评、评论、信件、勘误等非研究性文献。"
+            ],
+            "evidence_location": [
+              "2.1 数据来源与检索策略",
+              "2.2 纳入与排除标准"
+            ],
+            "missing_detail": "全文未提及任何潜在偏倚来源（如数据库选择偏倚、检索词不全面导致的选择偏倚、发表偏倚、语言偏倚、时间范围限制等）及其缓解策略。",
+            "risk_reason": "缺乏对偏倚的识别和讨论会使研究结果的可靠性存疑，读者无法判断研究是否系统性地忽略了某些类型的研究，从而影响结论的效度和可复现性。",
+            "actionable_fix": "在讨论部分增加独立小节，明确列出本研究的主要偏倚来源（例如：仅检索PubMed可能遗漏其他数据库中的重要文献；检索词仅使用标题/摘要字段可能遗漏主题词未涵盖的相关研究；日期过滤为2021–2025可能导致遗漏2021年前的重要基础研究；未纳入非英文文献可能引入语言偏倚），并说明如何通过补充检索、敏感性分析或局限性解释来缓解这些偏倚。",
+            "what_would_change_verdict": "如果手稿在讨论中系统识别了上述偏倚并讨论了缓解措施，则可将该条目评估为PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_METHOD_03",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "1. Sugimoto T; Noguchi Y; Masuda R; Harada T; Toyama Y; Saguchi M, et al. (2026). Differences in Safety Signal Detection between Osimertinib and First- and Second-Generation EGFR-TKIs: A Pharmacovigilance Study Using a Spontaneous Reporting System. Oncology. PMID: 40996941. https://doi.org/10.1159/000548593.",
+              "2. Kim SY; Kang HS; Lee JE; Kim HY; Yeo MK; Chung C. (2025). Diagnostic challenge of systemic amyloidosis mimicking EGFR-TKI toxicity"
+            ],
+            "evidence_location": [
+              "提供的全文摘录"
+            ],
+            "missing_detail": "在提供的文本中完全没有出现对研究局限性的讨论，没有提及方法学弱点、数据局限性或替代解释。",
+            "risk_reason": "缺少局限性讨论会使读者无法批判性评估研究结果的可靠性和有效性，可能误导临床实践或未来研究。",
+            "actionable_fix": "在讨论部分增加一个专门小节，诚实地讨论方法学局限性（如数据来源、样本量、偏倚风险）、数据局限性（如缺失值、混杂因素）和替代解释，并引用前人的类似发现或矛盾结果。",
+            "what_would_change_verdict": "如果手稿中补充了对上述任何类型局限性的实质性讨论，可升级为通过或部分通过。",
+            "confidence_score": 0.95,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "URVAR_ETHICS_01",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 1.0,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "本研究对MEDLINE (via PubMed)数据库中收录的「osimertinib cardiotoxicity」相关文献进行文献计量分析。"
+            ],
+            "evidence_location": [
+              "摘要"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 1.0,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_ETHICS_02",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "前三位国家（Japan, China, United States）占总产出的67%，反映出地理集中的研究格局。",
+              "研究时段内（2025–2026）共检索到 20 篇文献，发文高峰年份为 2025（19 篇，图1）。"
+            ],
+            "evidence_location": [
+              "Section 3.4.4",
+              "Section 3.2"
+            ],
+            "missing_detail": "手稿全文未包含任何关于作者利益冲突的声明，也未提及研究的资金来源或资助信息。",
+            "risk_reason": "不透明的利益冲突和资金来源可能隐藏潜在偏见，削弱研究的可信度与学术诚信。",
+            "actionable_fix": "在文末添加“利益冲突声明”和“资金来源/致谢”部分，明确披露每位作者可能的财务或非财务利益冲突，并列出支持本研究的基金或机构名称及项目号。",
+            "what_would_change_verdict": "若稿件补充了完整的利益冲突声明和明确的资金来源描述，则该项评估可变为PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_ETHICS_03",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "国家合作网络包含 2 个国家，共 1 条合作连接（密度 = 1.0000，1/1 对可能组合）。",
+              "网络密度较高，表明国际合作广泛，大多数参与国存在直接共同署名关系。"
+            ],
+            "evidence_location": [
+              "Section 3.4.4 国际合作",
+              "Section 3.4.4 国际合作"
+            ],
+            "missing_detail": "国家合作网络分析结果与表5中9个国家的事实严重矛盾：网络仅包含2个国家，但描述却称“国际合作广泛”。这种内部不一致损害了研究的科学诚信。",
+            "risk_reason": "数据自相矛盾（2个国家 vs 9个国家）且选择性夸大国际合作水平，可能误导读者对国际合作格局的理解，动摇全文结论的可信度。",
+            "actionable_fix": "重新构建国家合作网络，确保包含全部9个国家并正确计算共现边数；修正相关陈述以如实反映实际合作稀疏的状况。",
+            "what_would_change_verdict": "若修正后的网络分析结果与国家/地区分布一致，且讨论中客观描述国际合作水平，则可评定为PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_REPRO_01",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.95,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "检索策略采用医学主题词（MeSH）和自由词（标题/摘要字段）组合，各概念块以布尔AND算符连接...完整检索式：...",
+              "共现分析：关键词、作者、机构、国家共现矩阵（最小频次阈值筛选）；网络分析：NetworkX构建图谱，Louvain社区检测...；爆发词检测：Kleinberg自动机爆发检测算法；前沿识别：综合评分（近期增长率35%、爆发强度25%、新颖性25%、网络中心性15%）..."
+            ],
+            "evidence_location": [
+              "2.1 数据来源与检索策略",
+              "2.5 分析框架"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_REPRO_02",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "本研究于2026-07-22通过NCBI E-utilities API对MEDLINE（via PubMed）数据库进行系统检索。",
+              "共分析来自17种期刊、9个国家的20篇文献（2025–2026）"
+            ],
+            "evidence_location": [
+              "2.1 数据来源与检索策略",
+              "摘要"
+            ],
+            "missing_detail": "手稿未提及数据可用性声明、代码共享或补充材料，也未说明任何访问限制。",
+            "risk_reason": "没有数据可用性声明，读者无法验证或重现分析，损害研究透明度和可复现性。",
+            "actionable_fix": "在方法或结论部分添加数据可用性声明，例如说明分析的数据集可向作者索取，或作为补充材料提供纳入文献的完整列表及衍生的网络数据，或解释无法公开共享的原因。",
+            "what_would_change_verdict": "若补充明确的数据可用性声明、提供补充材料或说明共享限制，则可评为通过。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_PRESENT_01",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "## Discussion",
+              "[「osimertinib cardiotoxicity」文献计量分析：发文趋势、知识结构与研究前沿]"
+            ],
+            "evidence_location": [
+              "手稿末尾，'## Discussion' 标题之后",
+              "同一位置，仅出现重复标题，无实际讨论内容"
+            ],
+            "missing_detail": "手稿在 '## Discussion' 标题之后没有提供任何讨论内容，整节缺失，导致研究从结果直接跳到结尾，未对发现进行综合、解释或与现有文献联系。",
+            "risk_reason": "缺少讨论部分破坏了从问题到结论的逻辑流程，使读者无法理解研究的意义、局限性和对领域的贡献，降低了手稿的完整性和影响力。",
+            "actionable_fix": "根据标准结构补充讨论部分，至少应包括：(1) 关键发现总结，(2) 与已有证据的比较，(3) 研究局限性，(4) 对临床或研究的意义，(5) 未来方向。确保讨论与前文的引言目标和结果数据紧密衔接。",
+            "what_would_change_verdict": "若手稿在 '## Discussion' 下增加实质性讨论内容，对结果进行综合和解释，并与引言中的研究问题呼应，则可评定为 PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_PRESENT_02",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.9,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "图1. 年度发文趋势分析",
+              "表2. 高产作者发文量Top10",
+              "表6. 桥接关键词（介数中心性）"
+            ],
+            "evidence_location": [
+              "Section 3.2 发文趋势, after Figure 1 placeholder",
+              "Section 3.3.1 高产作者, Table 2",
+              "Section 3.4.1 关键词共现网络, Table 6"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.9,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          }
+        ],
+        "execution_time_seconds": 377.0472209453583,
+        "error_log": []
+      }
+    ]
+  },
+  "meta_review": {
+    "fatal_issues": [
+      {
+        "issue_type": "unreproducible_search",
+        "title": "检索策略完全不可复现（致命缺陷1）",
+        "description": "方法部分（2.1）声称通过NCBI E-utilities API检索，但未提供任何实质性的检索式（布尔逻辑组合、MeSH词、字段限制等），仅模糊提及过滤范围2021-2025。这使其他研究者完全无法重复该研究，严重违背可复现性原则。建议补充完整的检索策略，包括具体的查询字符串、数据库访问日期、所有限制条件，并上传为补充材料。",
+        "severity": "fatal",
+        "source_rubrics": [
+          "cognitive_review"
+        ],
+        "source_items": [
+          "fatal_flaw_detail_1"
+        ],
+        "evidence_quotes": [
+          "方法部分仅写到“通过NCBI E-utilities API对M”，便中断，未提供任何检索式细节。"
+        ],
+        "confidence": 0.95,
+        "standard_reference": "ICMJE 推荐：方法应详细到足以让他人重复；通用可复现性规范。",
+        "location_in_paper": "方法部分 2.1"
+      },
+      {
+        "issue_type": "overgeneralization",
+        "title": "基于极其有限样本的过度推广（致命缺陷2）",
+        "description": "研究仅纳入20篇文献（源自单一数据库PubMed/MEDLINE），却声称“系统描绘了知识图谱”“识别了研究前沿”，并断言可为“决策提供数据支撑”。如此微小的样本量（尤其是网络分析显示社区结构不显著，Q=0.0604）无法支持任何可靠的计量结论，属于严重过度推广。建议将结论严格限定为“初步描述性分析”，明确样本量的限制，并讨论大样本才能进行的计量推断的不可行性。",
+        "severity": "fatal",
+        "source_rubrics": [
+          "cognitive_review"
+        ],
+        "source_items": [
+          "fatal_flaw_detail_2"
+        ],
+        "evidence_quotes": [
+          "结论部分“系统描绘了...知识图谱”",
+          "网络分析结果：Q=0.0604，社区结构不显著。",
+          "摘要：共分析20篇文献。"
+        ],
+        "confidence": 0.95,
+        "standard_reference": "文献计量学通用准则：样本量必须满足统计功效和网络稳定性要求；小样本下禁止推断性声明。",
+        "location_in_paper": "讨论/结论部分"
+      }
+    ],
+    "major_issues": [
+      {
+        "issue_type": "missing_discussion_section",
+        "title": "讨论章节完全缺失",
+        "description": "文章在‘## Discussion’标题之后没有任何内容，整节缺失。讨论是学术论文的关键部分，用于解释结果、比较文献、阐述局限性和意义。缺失讨论使得研究无法形成完整的论证链条。建议补充完整的讨论章节，至少包括关键发现总结、与已有证据的比较、研究局限性、临床/研究意义及未来方向。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_PRESENT_01"
+        ],
+        "evidence_quotes": [
+          "原文中## Discussion之后为空。"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "ICMJE 推荐结构：讨论章节应解释结果、联系文献、探讨局限。",
+        "location_in_paper": "讨论部分"
+      },
+      {
+        "issue_type": "unsupported_conclusion",
+        "title": "结论基于不显著的聚类结果",
+        "description": "研究声称“识别出2个研究聚类”，但网络分析显示模块度Q=0.0604，表明社区结构极弱或不显著。基于此宣称“知识聚类”是对统计结果的错误解读，损害科学严谨性。建议删除“知识聚类”相关声明，或在结果中明确说明聚类结果不显著，并讨论其对结论可靠性的影响。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_CONTRIB_02"
+        ],
+        "evidence_quotes": [
+          "结论：识别出2个研究聚类。",
+          "网络分析：Q=0.0604。"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "网络分析标准：模块度Q<0.3通常指示不显著的社区结构。",
+        "location_in_paper": "结论部分"
+      },
+      {
+        "issue_type": "no_comparison_with_literature",
+        "title": "未将发现与现有文献进行比较",
+        "description": "全文未引用任何先前类似主题的文献计量研究、临床证据或综述来讨论一致性或分歧，导致研究意义不明。建议补充讨论小节，将主要发现（如国家主导地位、期刊分布、网络结构等）与已发表文献进行系统比较，解释异同，明确本研究的新颖性。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_CONTRIB_03"
+        ],
+        "evidence_quotes": [
+          "原文无任何与先前文献对比的陈述。"
+        ],
+        "confidence": 0.85,
+        "standard_reference": "IMRaD结构：讨论应联系已有知识。",
+        "location_in_paper": "讨论部分"
+      },
+      {
+        "issue_type": "missing_future_directions",
+        "title": "未提出具体的未来研究方向",
+        "description": "研究未基于结果提出任何未来研究问题或下一步举措，削弱了文章的启发价值。建议在讨论章末明确提出至少2-3个具体研究方向，如需要深入探索的机制问题、方法学改进建议或聚焦特定人群的临床研究方向。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_CONTRIB_04"
+        ],
+        "evidence_quotes": [
+          "原文无任何未来研究建议。"
+        ],
+        "confidence": 0.85,
+        "standard_reference": "IMRaD：讨论应展望未来。",
+        "location_in_paper": "讨论部分"
+      },
+      {
+        "issue_type": "no_practical_implications",
+        "title": "未阐述研究的临床/政策实际意义",
+        "description": "尽管分析了文献特征，文章未解释这些结果能带来何种实践启示，如对临床用药监测、药物警戒政策或患者管理的影响。建议在讨论中明确说明，本分析如何可能指导临床决策或卫生政策（例如，基于文献趋势建议强化心脏毒性监测指南）。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_IMPACT_01"
+        ],
+        "evidence_quotes": [
+          "原文无任何关于实践影响的陈述。"
+        ],
+        "confidence": 0.85,
+        "standard_reference": "学术论文应讨论结果的转化意义。",
+        "location_in_paper": "讨论部分"
+      },
+      {
+        "issue_type": "unbalanced_discussion",
+        "title": "未平衡讨论研究影响与局限性",
+        "description": "若讨论存在，未呈现对研究发现潜在应用和内在局限的平衡分析。建议在补充讨论时，既要阐述可能的实践影响，也要诚实地讨论方法学、数据源等方面的限制。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_IMPACT_02"
+        ],
+        "evidence_quotes": [
+          "当前手稿无讨论内容。"
+        ],
+        "confidence": 0.8,
+        "standard_reference": "学术论文应提供公正的讨论。",
+        "location_in_paper": "讨论部分"
+      },
+      {
+        "issue_type": "limited_generalizability_discussion",
+        "title": "未讨论研究发现的可推广性",
+        "description": "文章未讨论单数据库（仅PubMed）、小样本量（n=20）、检索时间窗口限制等因素对结果普适性的影响。建议增加“外部有效性”小节，明确说明这些发现可推广到osimertinib研究领域的程度及限制。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_IMPACT_03"
+        ],
+        "evidence_quotes": [
+          "原文无任何关于可推广性的讨论。"
+        ],
+        "confidence": 0.85,
+        "standard_reference": "通用：研究应讨论外部有效性。",
+        "location_in_paper": "讨论部分"
+      },
+      {
+        "issue_type": "missing_bias_discussion",
+        "title": "未提及潜在偏倚来源及缓解措施",
+        "description": "全文未讨论数据库选择偏倚、检索词不全面、发表偏倚、语言偏倚等常见偏倚。建议在讨论部分增加“偏倚与局限性”小节，列出潜在偏倚并说明如何通过补充检索或敏感性分析来缓解。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_METHOD_02"
+        ],
+        "evidence_quotes": [
+          "原文无任何偏倚相关文字。"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "文献计量研究应报告并讨论偏倚。",
+        "location_in_paper": "方法或讨论部分"
+      },
+      {
+        "issue_type": "missing_limitations",
+        "title": "研究局限性未讨论",
+        "description": "文章完全没有提及方法学弱点、数据局限性或替代解释。建议在讨论或结论部分明确列出本研究的至少3-5个关键局限性（如样本量、单数据库、检索限制等），并讨论它们对结论可靠性的影响。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_METHOD_03"
+        ],
+        "evidence_quotes": [
+          "原文无局限性章节。"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "ICMJE 推荐：所有研究均需报告局限性。",
+        "location_in_paper": "讨论部分"
+      },
+      {
+        "issue_type": "internal_inconsistency",
+        "title": "国家合作网络分析与表格严重矛盾",
+        "description": "正文声称“国际合作广泛”，但网络分析仅包含2个国家，而表5列出9个国家，内部不一致。这损害了研究的科学诚信。建议修正陈述以如实反映合作稀疏的状况，或重新构建网络并验证。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_ETHICS_03"
+        ],
+        "evidence_quotes": [
+          "网络分析：仅包含2个国家。",
+          "表5：列出9个国家。"
+        ],
+        "confidence": 0.95,
+        "standard_reference": "数据报告必须内部一致。",
+        "location_in_paper": "结果部分"
+      },
+      {
+        "issue_type": "no_data_sharing",
+        "title": "未提供数据可用性声明",
+        "description": "文章未提及数据共享方式、代码或补充材料，降低了透明度和可重复性。建议在文末添加数据可用性声明，说明纳入文献列表、衍生数据是否可公开获取，并提供数据库链接或DOI。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_REPRO_02"
+        ],
+        "evidence_quotes": [
+          "原文未找到数据可用性声明。"
+        ],
+        "confidence": 0.85,
+        "standard_reference": "开放科学要求：数据应可获取。",
+        "location_in_paper": "文末"
+      },
+      {
+        "issue_type": "missing_coi_statement",
+        "title": "作者利益冲突声明缺失",
+        "description": "全文未包含任何关于作者利益冲突的声明。这不符合学术出版伦理。建议根据ICMJE指南，在文末添加利益冲突声明，明确每位作者可能的财务或非财务冲突。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "adapted from URVAR_ETHICS_02"
+        ],
+        "evidence_quotes": [
+          "原文末未见COI声明。"
+        ],
+        "confidence": 0.95,
+        "standard_reference": "ICMJE 伦理要求：必须披露利益冲突。",
+        "location_in_paper": "文末"
+      }
+    ],
+    "minor_issues": [
+      {
+        "issue_type": "insufficient_interdisciplinary_integration",
+        "title": "跨学科整合阐述不足",
+        "description": "虽然纳入不同领域的文献，但文中未明确说明如何整合这些视角，也未论证其独特价值。建议在方法或讨论中增加一段，具体阐释如何将肿瘤学、心脏毒理学等领域的发现整合起来，并突出这种跨学科融合的增值点。",
+        "severity": "minor",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_INNOV_04"
+        ],
+        "evidence_quotes": [
+          "方法部分未描述整合框架。"
+        ],
+        "confidence": 0.8,
+        "standard_reference": "跨学科研究应阐明整合逻辑。",
+        "location_in_paper": "方法或讨论部分"
+      },
+      {
+        "issue_type": "methodological_lack_of_innovation",
+        "title": "方法缺乏创新性",
+        "description": "所用方法均为文献计量学标准工具（共现分析、Louvain检测、爆发词识别），综合前沿评分仅为常见指标的线性组合，未体现方法论突破。建议引入新颖的分析技术（如动态主题建模、机器学习驱动检测）或充分论证现有组合的创新性。",
+        "severity": "minor",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_INNOV_02"
+        ],
+        "evidence_quotes": [
+          "方法部分：共现分析、Louvain、爆发词识别等。"
+        ],
+        "confidence": 0.8,
+        "standard_reference": "研究创新度评价标准。",
+        "location_in_paper": "方法部分"
+      }
+    ],
+    "key_strengths": [
+      "选题具有临床相关性，聚焦奥希替尼心脏毒性这一重要安全问题",
+      "尝试运用文献计量学方法揭示研究趋势",
+      "意识到并提及了Lotka等三大经典定律的验证"
+    ],
+    "overall_assessment": "本文为一项关于奥希替尼心脏毒性的文献计量分析，选题有潜在价值。然而，方法学存在致命缺陷：检索策略不可复现，分析仅基于20篇文献且单数据库，无法支撑任何推广性结论。同时，讨论章节完全缺失，缺少必需的利益冲突与数据共享声明，内部数据存在矛盾。这些缺陷使其无法达到发表标准。",
+    "recommendation": "reject",
+    "confidence": 0.9,
+    "applied_rubrics": [
+      "universal_rubric"
+    ],
+    "rejected_rubrics": [],
+    "hallucination_rejected": [
+      {
+        "original_claim": "URVAR_INNOV_03：手稿未呈现任何研究结果",
+        "rejection_reason": "原文摘要明确报告了“共分析来自17种期刊、9个国家的20篇文献（2025–2026）”，并给出了核心结果数据。故“未呈现任何结果”不成立。"
+      },
+      {
+        "original_claim": "URVAR_METHOD_01：未提供研究问题、研究设计或方法学描述",
+        "rejection_reason": "原文摘要及方法部分提供了研究方法描述，包括“采用NCBI E-utilities API系统检索...运用共现分析、Louvain社区检测、爆发词识别及综合前沿评分等方法，并对Lotka定律、Bradford定律和Zipf定律进行验证”。方法学描述虽不完整，但并非完全缺失。"
+      },
+      {
+        "original_claim": "URVAR_ETHICS_02：未提及研究的资金来源或资助信息",
+        "rejection_reason": "代码检测已确认文章末尾存在 Funding 部分，包含资助声明。因此该批评在资金来源方面不成立。（利益冲突声明确实缺失，已在 verified_issues 中单独指出。）"
+      }
+    ]
+  },
+  "narrative_report": {
+    "title": "「osimertinib cardiotoxicity」文献计量分析：发文趋势、知识结构与研究前沿",
+    "outline": "本研究采用文献计量学方法，通过检索MEDLINE/PubMed数据库，对2021年至2025年间有关奥希替尼心脏毒性的文献进行了分析。研究使用NCBI E-utilities API获取数据，运用共现分析、Louvain社区检测及爆发词识别等手段，纳入20篇文献，识别了发文国家、高产作者及研究主题聚类，并试图验证Lotka定律、Bradford定律和Zipf定律。结果显示日本发文量最多，聚类结构较弱，并列出若干化合物作为研究前沿。全文未附讨论章节。",
+    "overall_evaluation": "奥希替尼作为第三代EGFR酪氨酸激酶抑制剂，其心脏毒性是肿瘤心脏病学领域日益受到关注的临床安全问题，对该主题进行系统的文献计量分析具有潜在价值，能够为研究者了解该领域的研究规模、合作网络和主题演化提供参考。本文尝试采用共现分析、社区检测和爆发词识别等文献计量学工具，对PubMed收录的20篇相关文献进行了描述，识别出日本为发文最多的国家、Matsumoto Hirotaka为高产作者，并报告了两个知识聚类和若干前沿化学实体。然而，本研究在方法学严谨性、结果解读的准确性以及报告完整性方面存在若干严重缺陷。致命问题包括检索策略不可复现、基于极小样本量的过度推断，以及讨论章节完全缺失，这些缺陷使得研究结论无法得到数据支持，也严重削弱了其作为文献计量学工作的可信度与实用价值。另一方面，研究在选题上的临床相关性值得肯定，但若不经实质性修订，仍远未达到可发表的标准。总体上，本文提供了一个非常初步的描述性轮廓，但仍有若干方面有待完善，亟需从方法、结果解读和报告规范三个维度进行彻底重构。",
+    "key_strengths_narrative": "",
+    "critical_issues_narrative": "1、方法部分声称“通过NCBI E-utilities API系统检索（检索过滤范围：2021–2025）”，但未提供任何实质性的检索策略，包括布尔逻辑组合、自由词与受控词表、字段限制等关键要素。例如，既未说明是否使用了MeSH词（如“Osimertinib”、“Cardiotoxicity”），也未给出自由词同义词列表，仅凭“检索过滤范围”一词完全无法让其他研究者复现该工作，严重违背了ICMJE推荐的方法应详尽至可被重复的准则。建议作者补充完整的可复现检索策略，并作为补充材料上传。具体而言，应至少包含：（1）具体数据库及接口（MEDLINE via PubMed, NCBI E-utilities）；（2）检索执行的准确日期（而非仅过滤范围）；（3）完整的检索式，示范如下：(\"Osimertinib\"[Mesh] OR Osimertinib[tiab] OR AZD9291[tiab] OR TAGRISSO[tiab]) AND (\"Cardiotoxicity\"[Mesh] OR cardiotoxic*[tiab] OR \"cardiac toxicity\"[tiab] OR \"drug-induced cardiomyopathy\"[tiab] OR \"QT prolongation\"[tiab] OR \"left ventricular dysfunction\"[tiab] OR \"heart failure\"[tiab] OR arrhythmi*[tiab]) AND (\"2021/01/01\"[Date - Publication] : \"2025/12/31\"[Date - Publication])；（4）所有使用的过滤条件，如物种（人类）、文献类型（排除综述或纳入综述的标准）及语言限制。此外，作者应说明检索过程中是否对API返回结果进行了去重或手工筛选，以及为弥补单数据库局限是否计划补充检索Embase、Web of Science等数据库。只有如此，才能让读者评估检索的查全率和偏倚风险，使方法部分达到学术出版的基本要求。\n\n2、研究仅纳入20篇文献，却多次使用“系统描绘了知识图谱”“识别了核心贡献者、知识聚类、新兴趋势与研究缺口”“为后续研究选题和资助决策提供了数据支撑”等推断性断言，这构成了严重的过度推广。文献计量学的核心价值在于从较大规模文献集合中发现稳定的宏观模式，而任何有意义的网络聚类、趋势识别和定律验证都要求样本量足以保证统计稳健性。本研究中，网络模块度Q=0.0604表明社区结构几乎与随机网络无异，以如此微弱的信号宣称“识别出2个研究聚类”是对统计结果的错误解读；同样，在20篇文献的小样本基础上验证Lotka、Bradford、Zipf定律，其参数估计必然极度不稳定且外推性为零，不应作为正式结论呈现。建议作者将全文的结论性语言全面降级为试探性的初步描述，例如将“系统描绘了知识图谱”修改为“对极有限样本的初步探索性分析”，并明确声明“当前样本量尚不足以识别稳定的研究聚类或进行定律验证，因此本文结果不应被推广为该领域的整体图景”。同时，在讨论的局限性部分，必须量化讨论样本量不足对各类计量结果的具体影响，例如说明网络分析中孤立节点比例、节点度分布的幂律检验是否达到显著水平等，帮助读者建立对结果不确定性的准确认知。\n\n3、文章在“## Discussion”标题之后没有任何内容，整节空白，这是极端罕见的报告缺陷，彻底破坏了论文的学术论证结构。根据IMRaD标准，讨论是连接结果与知识背景、阐明研究意义并审慎解释局限性的核心环节，缺失该部分意味着研究无法完成从数据到洞见的逻辑闭环。作者必须立即补充一个完整的讨论章节，并达到学术期刊的基本规格。我们建议讨论至少包含以下五个子部分，每部分均需基于现有数据展开实质论述而非空泛重述：（1）主要发现总结——用一段话凝练本研究的描述性结果，例如国家分布、期刊集中度和作者生产率，避免引入新发现。（2）与现有文献的比较——将本研究结果与先前肿瘤心脏病学或奥希替尼相关文献计量研究（若不存在，则与相近主题的计量工作对比）进行比较，讨论日本研究与全球分布的异同，并引用具体文献支持比较。例如：“本研究所显示的日本学者占主导地位，与同期在肺癌靶向药领域文献计量研究中的日本高产出模式一致[引用]，可能反映了该国在奥希替尼临床研究和自发报告中的活跃角色。”（3）研究局限性——这是强制性小节，必须逐一讨论本研究的关键限制，包括但不限于样本量极小、单数据库覆盖、检索策略可能不全面、无独立筛选者、爆发词阈值设定未经验证、网络分析统计功效不足等，并就每项局限解释其对结论可靠性的具体影响。（4）临床与政策意义——即使数据有限，仍可谨慎讨论本研究对临床实践的提示，例如强调心脏毒性监测在奥希替尼用药过程中的必要性，以及基于国家分布结果建议加强药物警戒国际合作等。（5）未来研究方向——必须基于现有分析缺口提出至少三项可操作的建议，例如补充多数据库检索以绘制完整图景、开展前瞻性队列评估不同剂量方案的心脏风险、或整合单细胞组学数据探索分子机制等。\n\n4、结果部分明确报告了Louvain社区检测的模块度Q=0.0604，该值远低于通常认为存在有意义社区结构的阈值0.3，然而作者仍然在结论中宣称“识别出2个研究聚类”或“知识聚类”。这种表述严重歪曲了统计分析的实际含义，违反了科学研究中应忠实呈现数据证据的基本原则。按照网络分析的标准实践，当Q值极低时，任何被算法强制划分的聚类均不具备实质性解释价值，可能只是随机噪声的产物。作者必须立即纠正全文中的所有相关表述，将“聚类”或“知识聚类”替换为符合统计事实的措辞，例如“网络分析未揭示显著的社区结构（Q=0.0604），经算法输出仅见极弱的两个分组，提示目前该领域研究主题尚未形成可分辨的子领域，可能与纳入文献数量过少、主题高度同质有关”。此外，在结果部分，建议补充一个可视化网络图并标注各节点的社区划分，同时在图注中清晰标注Q值并解释其不显著的含义。若作者试图保留某种主题分组的描述，则需要采用替代方法（如基于关键词频率的定性主题归类）并明确声明这不是由网络分析衍生出的统计学聚类。任何对聚类的解读都必须与数值证据的强度相匹配，保持科学上的诚实。\n\n5、全文未引用任何关于奥希替尼或肿瘤心脏病学的先期文献计量研究，也未将本研究识别出的国家分布、期刊偏好或主题焦点与已发表的证据进行系统比较。这使得研究结果完全悬浮在学术空白之中，读者无法判断本研究的新颖性、一致性或可能存在的偏差。学术讨论的规范性要求作者必须将其主要发现置于已有知识架构中进行解释，否则无法体现研究贡献。因此，建议在补充的讨论中专门设置“与现有文献的比较”小节，并将每条可比较的发现与外部证据勾连。例如，若检索发现已有文献计量工作分析过EGFR TKI的整体研究方向，作者应引用该文献并说明本研究的特异性发现（如日本的主导地位）是否与更广泛的TKI文献计量学趋势一致。示范写法：“与Zhang等人关于非小细胞肺癌靶向治疗的文献计量研究相比，本研究中日本机构的高产出与其观察到东亚国家在肺癌临床研究中的主导地位相符，但本研究所揭示的具体机构如…尚未被先前报道，提示存在高度专业化的研究群体[引用]。”如果确实没有直接相关的文献计量学文献，作者则应明确声明这一点，并转而与相关临床综述或社论中的专家判断进行比较，至少说明现有知识格局与本研究所描绘的差异。这一比较过程有助于确认文献计量学分析是否捕捉到了领域特征，而非单纯反映数据库索引偏好。\n\n6、本文在结果描述后完全没有提出任何未来研究方向的建议，使得研究停留在对已有文献的静态描述上，未能为后续工作提供指引，这降低了论文对科研社群的启发性价值。根据学术惯例，讨论部分应基于研究发现和局限性展望下一步的关键科学问题。作者须在新增的讨论章末明确提出至少2–3个具体、可操作的研究假说或实验设计方案，而不能仅仅笼统地写“需要更多研究”。例如：（1）鉴于心脏毒性监测的相关高频关键词出现，可建议开展一项多中心前瞻性队列研究，以高剂量奥希替尼治疗的晚期肺腺癌患者为对象，主要终点为左室射血分数下降≥10%的年累积发生率，同时采集治疗前、治疗3个月和12个月的血浆生物标志物（如高敏肌钙蛋白I、NT-proBNP），以建立早期预测模型。（2）针对目前文献中动物模型与人群数据的差距，可建议利用人诱导多能干细胞来源的心肌细胞模型，比较奥希替尼及其代谢物对搏动频率、收缩力和电生理的不同影响，并设置临床相关浓度梯度，明确剂量-效应关系。（3）方法学层面，可建议整合MEDLINE、Embase、Web of Science三大数据库，使用更全面的检索策略，开展更新的文献计量学分析，并引入动态主题模型追踪概念演化，弥补本次分析样本量不足的致命缺陷。每条建议应详细说明目标人群、主要研究终点和推荐的实验模型，使读者能够直接转化为研究方案的雏形。\n\n7、尽管文章分析了文献数量和国家分布等特征，但在讨论中完全未阐述这些结果可能为临床实践或公共卫生政策带来的任何启示，使得研究的转化价值几乎为零。文献计量学工作虽不直接产生临床证据，但可以通过揭示研究密集区、空白区及主导机构，间接为临床决策和资源分配提供参考。作者必须在补充的讨论中专设“临床与政策意义”小节，并基于有限的数据进行审慎的引申。例如，根据日本发文量占绝对优势的结果，可以讨论日本在奥希替尼上市后的药物警戒实践可能更为成熟，其诊疗指南中关于心脏监测的推荐可能更具体，其他国家可以借鉴其经验。同时，分析出的核心主题如QTc延长和心力衰竭，提示临床医生在处方奥希替尼时应常规进行基线心电图和超声心动图评估，并定期随访，这可以作为讨论向实践转化的一个范例。再如，若研究发现某一国家或机构集中产出了大部分安全信号，可建议监管机构优先审查来自该地区的真实世界数据，以加速风险管理计划的完善。作者需注意避免过度推断，必须明确区分“文献研究发现”与“临床推荐”，所有转化性陈述都应以“假设生成”为前缀，例如“这些文献特征提出一个值得验证的假设，即......”。这样的讨论才既能展示研究应用潜力，又不至于误导读者。\n\n8、当前论文完全没有体现对研究影响的讨论，更未就潜在应用与实际局限进行辩证分析，这不符合学术论文应提供平衡视角的原则。一份严谨的讨论应当既诚实地讨论方法学和数据上的局限，也应尝试在局限范围内阐述可能的积极影响。建议在补充的讨论中，将“研究影响与局限性”作为一个综合性的小节进行撰写，而非割裂为两部分。具体而言，可以这样组织：首先，尽管存在样本量小等限制，本工作仍初步勾勒了奥希替尼心脏毒性研究的现有轮廓，能够为初入该领域的研究者快速定位活跃国家和热点术语提供线索；其次，该研究揭示了当前文献分布的极不均衡，可能刺激更多国际多中心合作和高质量论文的产出，这是其积极的潜在影响。紧接着，作者必须系统列举至少五项关键局限性，包括但不限于：（1）单数据库且检索式未经独立验证所导致的潜在文献遗漏偏倚，可能低估了来自中国、韩国等EMBASE或本国数据库索引更为密集的亚洲国家的贡献；（2）20篇的样本量严重限制了所有计量学指标的稳定性，尤其是网络分析和定律验证的结果极易受单篇文献增减的波动；（3）缺乏独立数据提取和筛选降低了结果的可靠性，可能存在作者主观偏向；（4）爆发词检测算法的参数设定未报告，其灵敏度和特异度未知；（5）未分析基金资助信息，限制了研究资助影响的讨论。每项局限性后，应紧跟着说明即使在这些限制下，哪些观察仍可能保持稳健，以平衡负面影响。这种写法能公正地呈现研究的价值与边界。\n\n9、文章未对研究发现的外推性或可推广性进行任何讨论，读者无法判断基于这20篇PubMed文献所得出的结论有多大程度上能够代表整个奥希替尼心脏毒性研究的全貌。数据库选择偏倚、语言偏倚、文献类型偏倚以及检索时间窗口受限等因素均可能严重影响结果的外部效度。作者必须在新增的讨论章节中纳入一个“外部效度与可推广性”段落，系统分析这些威胁。例如，明确指出：“鉴于本研究仅检索了PubMed且使用了英语为主的检索词，所识别的国家分布（如日本占7/20）可能部分反映了PubMed的索引偏好而非实际研究产出，因为非英语文献及未被PubMed收录的地区期刊可能被系统性排除；因此，日本的主导地位不应被简单解释为全球研究产出的真实占比。”还应讨论，时间跨度为2021-2025年的出版物，实际上纳入文献的卷期年份为2025-2026，这一差异暗示检索策略可能存在严重的时间窗口错配，导致大量2021-2024年发表的文献被遗漏，因此任何关于‘发文高峰为2025年’的陈述几乎肯定是伪像，不能推广至实际的研究增长趋势。作者需明确提出，在扩大数据库和完善检索后，方可对外推性作保守估计，并建议将当前结论仅视为一种方法学的试演，其外部适用性亟需后续研究验证。\n\n10、全文没有提及文献计量分析中常见的偏倚来源及其可能的影响，这违反了任何系统化文献分析均须评估偏倚的学术报告惯例。尽管文献计量学并非传统的系统综述，但其分析结果同样受到选择偏倚、索引偏倚和测量偏倚的威胁，忽略这些偏倚将严重削弱研究的效度。建议作者在方法或讨论部分增设“偏倚来源及缓解措施”小节，至少应讨论以下四种偏倚：（1）数据库偏倚——仅使用PubMed，可能低估毒理学和药学领域的重要贡献，建议使用多数据库敏感性分析来评估影响；（2）检索词偏倚——如果未包含所有可能的心脏毒性相关术语（如“torsades de pointes”、“conduction disorder”），可能导致主题聚类不完整，建议展示词频分析以证明术语覆盖面；（3）发表偏倚——阳性或警示性心脏毒性报告可能比阴性结果更容易发表，从而使安全信号文献比例被人为放大，建议讨论可能的影响并尝试对比临床试验注册平台数据；（4）分析师偏倚——缺乏双人独立筛选和数据提取，可能引入主观性，建议描述手动筛选步骤并报告至少部分双编码一致性百分比。对于每种偏倚，作者应说明在本研究中可能的表现及其对结果方向的潜在影响（例如，高估日本产出、低估全球多样性），并提出未来如何通过更严格的设计来缓解。\n\n11、文章完全没有提及任何研究局限性，这严重违反了ICMJE推荐所有研究报告均需包含局限性声明的伦理规范，也让读者无法评判结论的可靠性。作者必须在论文的适当位置（最好是讨论末尾的专门小节）明确列出本研究的至少五条关键局限性，并逐一讨论它们对研究推断的具体威胁。示范清单及讨论要点：（1）样本量极小（n=20）——致使聚类分析、定律验证及爆发词检测均不能提供稳定的群体估计，任何排名和百分比的偶然性极大，因此本文不应用于指导政策或资助决策。（2）单数据库检索——遗漏了Embase、Scopus、Web of Science以及非英文数据库中的潜在论文，可能扭曲国家与机构的排名，低估某些国家的贡献，尤其需要考虑中国学者中文发表的大量奥希替尼安全性研究被忽略的情况。（3）检索时间窗口模糊——方法中过滤2021-2025，但实际纳入文献为2025-2026，说明检索实施存在重大方法学漏洞，大量2021-2024年文献未被捕获，导致时间趋势彻底不可靠。（4）缺乏立筛选和提取——所有数据可能由一名作者完成，无法保证客观性和准确性，建议在修订时至少报告双人一致性。（5）未分析文献的资助来源和利益冲突信息——限制了从科学社会学角度解读驱动力的可能性。局限性的讨论不应是免责声明，而应是帮助读者精确理解证据等级的诚恳检验。\n\n12、正文中出现严重矛盾：在讨论国际合作时，声称“国际合作广泛”，而网络分析实际仅包含2个国家，表5却又列出了9个国家，数据之间完全不一致，损害了研究的科学可信度。这种错误必须立即纠正。作者首先应核查原始数据，确认网络分析是否因设置节点阈值而排除了大量国家，如果是方法选择导致的，则必须在方法中说明过滤标准（如只包括合作次数≥某阈值的国家），并在结果中如实报告原始国家数量和纳入网络分析的数量，同时修改“国际合作广泛”这一不实陈述，例如改为“9个国家中仅2个出现在跨国合作网络中，合作非常稀疏”。若网络分析确实反映真实的合作分布，则应在正文中明确标注：“尽管有9个国家发表文献，但国际合作网络仅包含美国与日本两个节点，表明当前研究仍以国内合作为主，跨国联动极其有限。”同时，表5应与网络匹配，添加注脚解释为何其他国家未出现在网络中。此外，建议重新运行网络分析，使用更低或不设阈值，展示所有9个国家的全景图，并在正文中基于该图重新评价合作情况。数据内部一致是学术出版的基本要求，作者必须一丝不苟地核对并修正所有类似矛盾。\n\n13、论文完全缺失数据可用性声明，未能告知读者纳入分析的20篇文献列表、分析代码及衍生数据是否可公开获取，这违反了开放科学原则和多数期刊的作者指南。为使研究工作透明、可复现，作者必须在文章末尾补充一份数据可用性声明。声明应包含以下信息：（1）文献检索结果及最终纳入的20篇文献的完整出版信息（作者、标题、期刊、卷期、页码、PMID）是否作为补充材料提供，建议以表格形式上传。（2）数据分析过程中生成的网络文件、聚类结果、爆发词列表等中间数据是否可在公共存储库获取，推荐将其保存于Figshare、Zenodo或Open Science Framework，并提供一个DOI甚至私密审稿期链接。（3）分析所用的R或Python代码是否准备好了可执行的脚本并附有注释，应上传至同一个存储库，方便审稿人和读者验证结果。（4）如果作者因任何原因不愿公开，也必须说明限制条件，例如“涉及商业秘密”或“第三方的版权材料”，但此类理由很难被接受，因为文献计量学数据通常来自已发表论文，版权归出版商所有，但文献列表本身不受版权保护。一个标准的声明示例如下：“本研究的纳入文献列表可参见附表S1；所有衍生数据集和分析代码已存入Figshare，DOI: [待分配]，审稿人可通过下述私密链接访问：[链接]。”这一补充将显著提升论文的透明度和可信度。\n\n14、作者利益冲突声明完全没有，这不符合国际医学期刊编辑委员会（ICMJE）的强制性伦理要求，容易让读者产生对研究客观性的疑虑。无论作者认为是否存在利益冲突，都必须明确披露。每位作者均应报告任何可能被判定为与研究相关的财务或非财务利益，例如在过去36个月内是否从制药企业（尤其是生产奥希替尼的阿斯利康）或其竞争对手获得了研究经费、个人报酬、咨询费或拥有其股票；是否有亲属受雇于相关企业等。即使没有，也应明确声明“所有作者均宣称不存在利益冲突”。对于本项目，考虑到题目直接涉及特定商业药品“Osimertinib”，利益冲突声明尤为敏感和关键。作者还应在方法或致谢部分注明本研究是否接受任何特定的基金资助，并说明资助者在研究设计、数据收集分析及发表决策中的角色。建议增加一节“利益冲突”，示范写法：“XXX曾接受阿斯利康的会议差旅资助；其余作者声明无利益冲突。本研究未接受任何直接的外部资金支持。”或“无利益冲突”的简洁声明。同时，确认论文中致谢部分不应隐藏未申明的利益冲突。这一要求不仅关乎伦理，更直接影响到稿件能否进入同行评议的下一个环节，恳请作者务必严肃对待并及时补全。",
+    "minor_suggestions_narrative": "",
+    "recommendation_narrative": "基于上述多项致命和主要缺陷，本文需要进行重大修订，几乎达到重写的程度，方可重新评估。核心必须解决的问题包括：（1）提供完整且可复现的检索策略，至少补充示范检索式、检索日期和多数据库验证思路；（2）将所有结论性语言全面降级为初步描述，并删除基于20篇文献的过度推广和定律验证声明；（3）补充完整的讨论章节，系统涵盖主要发现、与文献的比较、局限性、临床意义和未来方向等子部分，确保每个空白的论证段落被填补；（4）纠正网络聚类解读，如实反映模块度不显著的事实；（5）修正国家合作网络的矛盾陈述并补充数据可用性及利益冲突声明。唯有这些核心的方法学和报告完整性缺陷得到妥善解决，该研究才能从一份不可靠的草稿转变为对奥希替尼心脏毒性文献计量学具有微弱但诚实描述价值的稿件，有可能被较低层次的专科期刊或作为短篇报告考虑，但当前形态无论如何不可发表。",
+    "recommendation": "reject",
+    "generated_at": "2026-07-22T23:49:16.821815",
+    "technical_appendix": {
+      "rubric_results": {
+        "universal_rubric": [
+          {
+            "block_id": "universal_rubric_block",
+            "block_name": "universal_rubric",
+            "results": [
+              {
+                "item_id": "URVAR_INNOV_01",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.95,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "尽管该主题的研究产出不断增加，目前仍缺乏系统性的文献计量学研究来梳理知识基础、合作模式和主题演变脉络，制约了研究者对该领域全貌的把握。"
+                ],
+                "evidence_location": [
+                  "引言第2段"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_INNOV_02",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.9,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "运用共现分析、Louvain社区检测、爆发词识别及综合前沿评分等方法，并对Lotka定律、Bradford定律和Zipf定律进行验证",
+                  "前沿识别：综合评分（近期增长率35%、爆发强度25%、新颖性25%、网络中心性15%）"
+                ],
+                "evidence_location": [
+                  "摘要",
+                  "2.5 分析框架"
+                ],
+                "missing_detail": "研究未采用创新的方法、技术或分析框架。所有使用的方法均是文献计量分析中的标准工具，综合前沿评分仅为几种常见指标的线性组合，未体现方法论上的突破或新颖性。",
+                "risk_reason": "缺乏方法创新降低了该研究超越常规文献分析的能力，难以提供独特的学术价值或新的知识维度。",
+                "actionable_fix": "可引入新颖的分析技术（如动态主题建模、语义网络演变分析或机器学习驱动的突变检测），或就现有综合评分框架的创新性及优势进行深入论证，以证明其超出常规文献计量学应用。",
+                "what_would_change_verdict": "若能明确展示综合前沿评分框架在文献计量学中未被使用，或提出基于新算法/技术的分析方法，并论证其对领域问题解决的优势，则可提升为PASS。",
+                "confidence_score": 0.9,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_INNOV_03",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.9,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "| Prevalence of osimertinib-induced cardiotoxicity in non-small cell lung cancer patients: a systematic review and meta-analysis. | 9 | 2025 |",
+                  "| Real-World Data on Osimertinib-Associated Cardiac Toxicity. | 7 | 2025 |"
+                ],
+                "evidence_location": [
+                  "纳入分析文献表格",
+                  "表格内容"
+                ],
+                "missing_detail": "手稿未呈现任何研究结果，无法评估其发现是否新颖或挑战现有范式。",
+                "risk_reason": "缺少结果部分意味着读者无法判断研究的实际贡献和科学价值。",
+                "actionable_fix": "添加结果部分，明确描述主要发现，并讨论这些发现如何提供新见解或挑战现有认知。",
+                "what_would_change_verdict": "如果提供了结果部分，明确展示了新的或出乎意料的发现，则可通过。",
+                "confidence_score": 0.9,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "URVAR_INNOV_04",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.65,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "Journal of thoracic oncology : official publication of the International Association for the Study of Lung Cancer",
+                  "JACC. CardioOncology",
+                  "Free radical biology & medicine",
+                  "Drug development research"
+                ],
+                "evidence_location": [
+                  "期刊栏目中的列表",
+                  "期刊栏目中的列表",
+                  "期刊栏目中的列表",
+                  "期刊栏目中的列表"
+                ],
+                "missing_detail": "尽管纳入了来自不同领域期刊的文献，但文中未明确阐述如何将这些跨学科知识进行整合，也未说明整合对结论的独特价值。",
+                "risk_reason": "缺乏对跨学科整合的明确说明会削弱研究的综合性论证，可能被读者认为仅是文献的简单聚合而非超越单一领域视角的增值分析。",
+                "actionable_fix": "在方法或讨论部分增加一段内容，具体说明如何将肿瘤学、心脏毒理学、药物开发、自由基生物学等领域的研究发现整合起来，并解释这种跨学科视角如何为EGFR-TKIs的毒性管理提供超越单一学科的新见解。",
+                "what_would_change_verdict": "若在文中明确描述跨学科知识的整合过程，例如说明多学科证据如何相互补充、如何构建综合分析框架，则评价可改为PASS。",
+                "confidence_score": 0.65,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "URVAR_CONTRIB_01",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.9,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "本研究系统描绘了「osimertinib cardiotoxicity」领域的知识图谱，识别了核心贡献者、知识聚类、新兴趋势与研究缺口，为后续研究选题和资助决策提供了数据支撑。",
+                  "尽管该主题的研究产出不断增加，目前仍缺乏系统性的文献计量学研究来梳理知识基础、合作模式和主题演变脉络，制约了研究者对该领域全貌的把握。",
+                  "本研究通过多维文献计量方法...从数据驱动视角描绘该领域的现状与发展轨迹。"
+                ],
+                "evidence_location": [
+                  "摘要结论",
+                  "1. 引言",
+                  "1. 引言"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.9,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_CONTRIB_02",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.85,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "共分析来自17种期刊、9个国家的20篇文献（2025–2026）",
+                  "模块度 Q = 0.0604，平均轮廓系数 S = 0.2496",
+                  "警告：模块度 Q < 0.1，表明社区结构不具统计显著性。以下聚类结果需极度谨慎解读，网络未表现出有意义的主题划分。"
+                ],
+                "evidence_location": [
+                  "摘要结果部分",
+                  "3.4.1 关键词共现网络",
+                  "3.4.1 关键词共现网络（紧接在模块度数值后的警告）"
+                ],
+                "missing_detail": "结论声称“系统描绘了知识图谱”“识别了知识聚类”，但分析基于仅20篇文献，且网络分析明确显示社区结构不显著（Q=0.0604），聚类结果不具备统计意义。结论未充分反映这一核心局限性，也未讨论小样本对前沿识别、文献计量定律验证（如洛特卡定律）可靠性的影响。",
+                "risk_reason": "基于极不稳健的发现（样本量小、网络结构不显著）做出强声明会误导读者，使后续研究选题和资助决策建立在不可靠的证据之上。",
+                "actionable_fix": "在讨论或结论部分明确讨论小样本量和网络结构不显著对结论可靠性的影响，将结论限定在“初步探索”或“描述性概览”，并强调需要更多文献积累后才能进行稳健的计量分析；或删除基于不显著聚类的知识聚类声明。",
+                "what_would_change_verdict": "若手稿在结论中明确说明由于样本量有限且网络结构不显著，当前分析仅为描述性探索，知识聚类结果需谨慎对待，且不能作为后续决策的可靠依据，则可提升至PASS。",
+                "confidence_score": 0.85,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_CONTRIB_03",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "日本 在地理分布中占据主导地位，贡献 7 篇（占 9 个国家总发文量的 33.3%），其后依次为 中国、美国、印度。中等地理集中度（HHI = 0.197）表明研究格局正向更广泛的国际参与过渡，但仍以少数领先国家为主导。",
+                  "核心期刊适度分散，反映该研究领域跨越临床、药理和公共卫生等多学科出版渠道。",
+                  "极低的模块度表明社区检测未能识别出有意义的聚类，网络缺乏清晰的主题边界，聚类结果须谨慎解读。"
+                ],
+                "evidence_location": [
+                  "3.3.4 国家/地区",
+                  "3.3.3 期刊",
+                  "3.4.1 关键词共现网络"
+                ],
+                "missing_detail": "通篇未将任何结果与现有文献进行比较。没有引用先前类似主题的文献计量研究、临床证据或综述来讨论一致性或分歧，也未说明本研究如何更新或拓展当前理解。",
+                "risk_reason": "缺少与现有文献的对话使研究孤立，读者无法判断发现的新颖性、可靠性及对领域的贡献程度，削弱了研究的学术价值。",
+                "actionable_fix": "新增独立的'讨论'章节，将主要发现（如国家主导地位、核心期刊分布、网络结构、突现词等）与已发表的奥希替尼心脏毒性相关研究、其他肿瘤药物心脏毒性文献计量分析或指南进行系统比较，解释异同并明确本研究对知识空白的填补。",
+                "what_would_change_verdict": "若在讨论中明确引用并比较至少3-5篇相关文献，解释本研究结果与既往发现的一致性或矛盾，并总结对领域理解的更新，则可能升至PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_CONTRIB_04",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "本研究通过多维文献计量方法，对PubMed/MEDLINE数据库中2025–2026年间收录的20篇文献进行系统分析，采用共现网络分析、社区检测、爆发词识别和前沿评分等方法，从数据驱动视角描绘该领域的现状与发展轨迹。",
+                  "结论：本研究系统描绘了「osimertinib cardiotoxicity」领域的知识图谱，识别了核心贡献者、知识聚类、新兴趋势与研究缺口，为后续研究选题和资助决策提供了数据支撑。"
+                ],
+                "evidence_location": [
+                  "全文：引言和结论中提及研究缺口，但未在任何部分提出具体的未来研究方向",
+                  "全文结构：方法-结果后直接结束，无独立的讨论章节"
+                ],
+                "missing_detail": "讨论部分完全缺失，未提出基于当前发现的具体未来研究问题、下一步举措或未解答的科学问题。",
+                "risk_reason": "缺乏对未来研究方向的明确指引，使综述仅停留在描述层面，降低了其对研究规划的实际指导价值。",
+                "actionable_fix": "增加独立的讨论章节，基于识别的研究前沿、聚类和缺口，具体指出：1) 需要深入探索的机制问题（如特定激酶抑制剂的心脏毒性通路）；2) 现有证据的方法学局限性及未来研究设计建议；3) 聚焦特定人群或联合用药的临床研究方向。",
+                "what_would_change_verdict": "若在讨论部分明确提出至少2-3条具体、可操作的研究方向或未解答问题，并关联当前发现，则可评为通过。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_IMPACT_01",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "[纳入分析文献]",
+                  "| 期刊 | 发文量 |\n| --- | --- |\n| Journal of thoracic oncology ... | 3 |"
+                ],
+                "evidence_location": [
+                  "整个摘录",
+                  "表格区域"
+                ],
+                "missing_detail": "摘录中没有任何文字阐述研究有何临床、政策或实际意义，也未说明发现如何指导实践或决策。仅列出了一些文献和期刊发文量，未解释这些结果能带来什么启示。",
+                "risk_reason": "缺少对研究意义的明确表达，使读者无法理解研究的实际价值，降低了成果转化和影响现实决策的可能性。",
+                "actionable_fix": "在讨论或结论部分补充一段内容，具体说明本次文献分析结果（如不同 EGFR-TKI 安全信号差异或期刊发文分布）对于临床用药监测、药物警戒政策制定或肺癌患者个体化治疗的指导价值。",
+                "what_would_change_verdict": "若作者能明确指出研究发现的临床或政策落脚点，并逻辑清晰地解释其如何影响现实决策，则可评为 PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "exact",
+                "search_strategy": "exact_path"
+              },
+              {
+                "item_id": "URVAR_IMPACT_02",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "1. Sugimoto T; Noguchi Y; Masuda R; Harada T; Toyama Y; Saguchi M, et al. (2026). Differences in Safety Signal Detection between Osimertinib and First- and Second-Generation EGFR-TKIs...",
+                  "2. Kim SY; Kang HS; Lee JE; Kim HY; Yeo MK; Chung C. (2025). Diagnostic challenge of systemic amyloidosis mimicking EGFR-TKI toxicity..."
+                ],
+                "evidence_location": [
+                  "Only a list of included studies is provided; no discussion of potential impact or limitations is present in the text."
+                ],
+                "missing_detail": "全文缺失对研究结果的潜在影响和实施局限性的平衡讨论（如临床意义、应用限制、证据等级说明等）。",
+                "risk_reason": "读者无法评估研究结论的实际应用价值，可能高估或低估证据的适用性，影响证据向实践的转化。",
+                "actionable_fix": "在讨论部分明确阐述主要发现如何可能影响临床实践或未来研究，并详细说明其局限性（如数据来源自发报告系统的偏倚、无法推断因果等）。",
+                "what_would_change_verdict": "若文中增加以下内容可改为PASS：明确说明结果的潜在益处（如特定不良反应信号监测的改进）和局限性（如回顾性设计、混杂因素等），并平衡讨论。",
+                "confidence_score": 0.95,
+                "context_quality": "exact",
+                "search_strategy": "exact_path"
+              },
+              {
+                "item_id": "URVAR_IMPACT_03",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "[Confirmed absence after thorough search]"
+                ],
+                "evidence_location": [
+                  "full_text"
+                ],
+                "missing_detail": "手稿未讨论研究结果的可推广性或外部有效性，例如数据库代表性（仅PubMed/MEDLINE）、语言偏倚、检索时间窗口限制（2021–2025过滤但实际文献年为2025–2026）、小样本量（n=20）等因素对结论普适性的影响。",
+                "risk_reason": "缺少外部有效性讨论会限制读者判断研究结论是否适用于其他环境或人群，削弱研究的实用性价值。",
+                "actionable_fix": "在讨论部分增加‘外部有效性与局限性’小节，明确说明数据库选择可能遗漏其他来源文献、检索时间跨度可能导致早期文献缺失、样本量较小可能影响网络分析的稳定性，并讨论这些发现可推广到osimertinib心脏毒性领域的程度。",
+                "what_would_change_verdict": "若手稿系统讨论了检索策略、数据库、时间范围及样本量等对外部有效性的潜在影响，并明确结论的适用范围，则可予以通过。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_METHOD_01",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "纳入分析文献",
+                  "| 期刊 | 发文量 |"
+                ],
+                "evidence_location": [
+                  "文本开头",
+                  "表格"
+                ],
+                "missing_detail": "提供的文本仅包含引用列表和期刊发文量表格，未提供研究问题、研究设计或方法学描述。",
+                "risk_reason": "无法评估研究设计是否适合回答研究问题，这直接影响研究结果的可靠性和有效性。",
+                "actionable_fix": "在方法部分明确陈述研究问题，并详细描述所采用的研究设计（如系统综述、范围综述等），阐明该设计如何与具体研究目标对齐。",
+                "what_would_change_verdict": "如果能够提供清晰的研究问题以及对应的研究设计描述，并展示设计如何服务于该问题，则可评为PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "URVAR_METHOD_02",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "本研究于2026-07-22通过NCBI E-utilities API对MEDLINE（via PubMed）数据库进行系统检索。",
+                  "纳入标准：符合检索策略的MEDLINE收录文献；PubMed检索日期过滤范围：2021–2025；文献元数据的实际期刊/卷期年份：2025–2026；文献类型：原始研究、综述、Meta分析、系统评价。",
+                  "排除标准：重复记录...取消或无法解析的记录；已撤稿文献；述评、评论、信件、勘误等非研究性文献。"
+                ],
+                "evidence_location": [
+                  "2.1 数据来源与检索策略",
+                  "2.2 纳入与排除标准"
+                ],
+                "missing_detail": "全文未提及任何潜在偏倚来源（如数据库选择偏倚、检索词不全面导致的选择偏倚、发表偏倚、语言偏倚、时间范围限制等）及其缓解策略。",
+                "risk_reason": "缺乏对偏倚的识别和讨论会使研究结果的可靠性存疑，读者无法判断研究是否系统性地忽略了某些类型的研究，从而影响结论的效度和可复现性。",
+                "actionable_fix": "在讨论部分增加独立小节，明确列出本研究的主要偏倚来源（例如：仅检索PubMed可能遗漏其他数据库中的重要文献；检索词仅使用标题/摘要字段可能遗漏主题词未涵盖的相关研究；日期过滤为2021–2025可能导致遗漏2021年前的重要基础研究；未纳入非英文文献可能引入语言偏倚），并说明如何通过补充检索、敏感性分析或局限性解释来缓解这些偏倚。",
+                "what_would_change_verdict": "如果手稿在讨论中系统识别了上述偏倚并讨论了缓解措施，则可将该条目评估为PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_METHOD_03",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "1. Sugimoto T; Noguchi Y; Masuda R; Harada T; Toyama Y; Saguchi M, et al. (2026). Differences in Safety Signal Detection between Osimertinib and First- and Second-Generation EGFR-TKIs: A Pharmacovigilance Study Using a Spontaneous Reporting System. Oncology. PMID: 40996941. https://doi.org/10.1159/000548593.",
+                  "2. Kim SY; Kang HS; Lee JE; Kim HY; Yeo MK; Chung C. (2025). Diagnostic challenge of systemic amyloidosis mimicking EGFR-TKI toxicity"
+                ],
+                "evidence_location": [
+                  "提供的全文摘录"
+                ],
+                "missing_detail": "在提供的文本中完全没有出现对研究局限性的讨论，没有提及方法学弱点、数据局限性或替代解释。",
+                "risk_reason": "缺少局限性讨论会使读者无法批判性评估研究结果的可靠性和有效性，可能误导临床实践或未来研究。",
+                "actionable_fix": "在讨论部分增加一个专门小节，诚实地讨论方法学局限性（如数据来源、样本量、偏倚风险）、数据局限性（如缺失值、混杂因素）和替代解释，并引用前人的类似发现或矛盾结果。",
+                "what_would_change_verdict": "如果手稿中补充了对上述任何类型局限性的实质性讨论，可升级为通过或部分通过。",
+                "confidence_score": 0.95,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "URVAR_ETHICS_01",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 1.0,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "本研究对MEDLINE (via PubMed)数据库中收录的「osimertinib cardiotoxicity」相关文献进行文献计量分析。"
+                ],
+                "evidence_location": [
+                  "摘要"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 1.0,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_ETHICS_02",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "前三位国家（Japan, China, United States）占总产出的67%，反映出地理集中的研究格局。",
+                  "研究时段内（2025–2026）共检索到 20 篇文献，发文高峰年份为 2025（19 篇，图1）。"
+                ],
+                "evidence_location": [
+                  "Section 3.4.4",
+                  "Section 3.2"
+                ],
+                "missing_detail": "手稿全文未包含任何关于作者利益冲突的声明，也未提及研究的资金来源或资助信息。",
+                "risk_reason": "不透明的利益冲突和资金来源可能隐藏潜在偏见，削弱研究的可信度与学术诚信。",
+                "actionable_fix": "在文末添加“利益冲突声明”和“资金来源/致谢”部分，明确披露每位作者可能的财务或非财务利益冲突，并列出支持本研究的基金或机构名称及项目号。",
+                "what_would_change_verdict": "若稿件补充了完整的利益冲突声明和明确的资金来源描述，则该项评估可变为PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_ETHICS_03",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "国家合作网络包含 2 个国家，共 1 条合作连接（密度 = 1.0000，1/1 对可能组合）。",
+                  "网络密度较高，表明国际合作广泛，大多数参与国存在直接共同署名关系。"
+                ],
+                "evidence_location": [
+                  "Section 3.4.4 国际合作",
+                  "Section 3.4.4 国际合作"
+                ],
+                "missing_detail": "国家合作网络分析结果与表5中9个国家的事实严重矛盾：网络仅包含2个国家，但描述却称“国际合作广泛”。这种内部不一致损害了研究的科学诚信。",
+                "risk_reason": "数据自相矛盾（2个国家 vs 9个国家）且选择性夸大国际合作水平，可能误导读者对国际合作格局的理解，动摇全文结论的可信度。",
+                "actionable_fix": "重新构建国家合作网络，确保包含全部9个国家并正确计算共现边数；修正相关陈述以如实反映实际合作稀疏的状况。",
+                "what_would_change_verdict": "若修正后的网络分析结果与国家/地区分布一致，且讨论中客观描述国际合作水平，则可评定为PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_REPRO_01",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.95,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "检索策略采用医学主题词（MeSH）和自由词（标题/摘要字段）组合，各概念块以布尔AND算符连接...完整检索式：...",
+                  "共现分析：关键词、作者、机构、国家共现矩阵（最小频次阈值筛选）；网络分析：NetworkX构建图谱，Louvain社区检测...；爆发词检测：Kleinberg自动机爆发检测算法；前沿识别：综合评分（近期增长率35%、爆发强度25%、新颖性25%、网络中心性15%）..."
+                ],
+                "evidence_location": [
+                  "2.1 数据来源与检索策略",
+                  "2.5 分析框架"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_REPRO_02",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "本研究于2026-07-22通过NCBI E-utilities API对MEDLINE（via PubMed）数据库进行系统检索。",
+                  "共分析来自17种期刊、9个国家的20篇文献（2025–2026）"
+                ],
+                "evidence_location": [
+                  "2.1 数据来源与检索策略",
+                  "摘要"
+                ],
+                "missing_detail": "手稿未提及数据可用性声明、代码共享或补充材料，也未说明任何访问限制。",
+                "risk_reason": "没有数据可用性声明，读者无法验证或重现分析，损害研究透明度和可复现性。",
+                "actionable_fix": "在方法或结论部分添加数据可用性声明，例如说明分析的数据集可向作者索取，或作为补充材料提供纳入文献的完整列表及衍生的网络数据，或解释无法公开共享的原因。",
+                "what_would_change_verdict": "若补充明确的数据可用性声明、提供补充材料或说明共享限制，则可评为通过。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_PRESENT_01",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "## Discussion",
+                  "[「osimertinib cardiotoxicity」文献计量分析：发文趋势、知识结构与研究前沿]"
+                ],
+                "evidence_location": [
+                  "手稿末尾，'## Discussion' 标题之后",
+                  "同一位置，仅出现重复标题，无实际讨论内容"
+                ],
+                "missing_detail": "手稿在 '## Discussion' 标题之后没有提供任何讨论内容，整节缺失，导致研究从结果直接跳到结尾，未对发现进行综合、解释或与现有文献联系。",
+                "risk_reason": "缺少讨论部分破坏了从问题到结论的逻辑流程，使读者无法理解研究的意义、局限性和对领域的贡献，降低了手稿的完整性和影响力。",
+                "actionable_fix": "根据标准结构补充讨论部分，至少应包括：(1) 关键发现总结，(2) 与已有证据的比较，(3) 研究局限性，(4) 对临床或研究的意义，(5) 未来方向。确保讨论与前文的引言目标和结果数据紧密衔接。",
+                "what_would_change_verdict": "若手稿在 '## Discussion' 下增加实质性讨论内容，对结果进行综合和解释，并与引言中的研究问题呼应，则可评定为 PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_PRESENT_02",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.9,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "图1. 年度发文趋势分析",
+                  "表2. 高产作者发文量Top10",
+                  "表6. 桥接关键词（介数中心性）"
+                ],
+                "evidence_location": [
+                  "Section 3.2 发文趋势, after Figure 1 placeholder",
+                  "Section 3.3.1 高产作者, Table 2",
+                  "Section 3.4.1 关键词共现网络, Table 6"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.9,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              }
+            ],
+            "execution_time_seconds": 377.0472209453583,
+            "error_log": []
+          }
+        ]
+      }
+    }
+  },
+  "rubrics_used": [
+    "universal_rubric"
+  ],
+  "processing_time": 696.1650779247284
+}

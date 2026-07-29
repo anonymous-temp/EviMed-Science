@@ -1,0 +1,41 @@
+{
+  "query": "osimertinib cardiotoxicity",
+  "date_from": "2021",
+  "date_to": "2025",
+  "max_records": 20,
+  "total_found": 20,
+  "total_fetched": 20,
+  "search_strategy": {
+    "formal_query": "(\"Osimertinib\"[MeSH Terms] OR \"osimertinib\"[Title/Abstract] OR \"Tagrisso\"[Title/Abstract] OR \"AZD9291\"[Title/Abstract]) AND (\"cardiotoxicity\"[Title/Abstract]) AND (\"2021/01/01\"[Date - Publication] : \"2025/12/31\"[Date - Publication])",
+    "concepts": [
+      {
+        "label": "osimertinib",
+        "free_terms": [
+          "osimertinib",
+          "Tagrisso",
+          "AZD9291"
+        ],
+        "mesh_descriptor": "Osimertinib",
+        "mesh_ui": "D000077264",
+        "entry_terms_used": [
+          "Tagrisso",
+          "AZD9291"
+        ],
+        "mesh_lookup_failed": false
+      },
+      {
+        "label": "cardiotoxicity",
+        "free_terms": [
+          "cardiotoxicity"
+        ],
+        "mesh_descriptor": null,
+        "mesh_ui": null,
+        "entry_terms_used": [],
+        "mesh_lookup_failed": true
+      }
+    ],
+    "strategy_text": "**Concept 1: osimertinib**\n- MeSH descriptor: Osimertinib (D000077264)\n- Entry terms: Tagrisso, AZD9291\n- Free-text terms: \"osimertinib\", \"Tagrisso\", \"AZD9291\"\n\n**Concept 2: cardiotoxicity**\n- MeSH descriptor: lookup failed (API/network error; free-text search used)\n- Free-text terms: \"cardiotoxicity\"\n\n**Boolean combination:** Concept blocks combined with AND\n**Date filter:** 2021 to 2025\n\n**Full search string:**\n\n`(\"Osimertinib\"[MeSH Terms] OR \"osimertinib\"[Title/Abstract] OR \"Tagrisso\"[Title/Abstract] OR \"AZD9291\"[Title/Abstract]) AND (\"cardiotoxicity\"[Title/Abstract]) AND (\"2021/01/01\"[Date - Publication] : \"2025/12/31\"[Date - Publication])`",
+    "user_query": "osimertinib cardiotoxicity"
+  },
+  "after_dedup": 20
+}

@@ -1,0 +1,124 @@
+[
+  {
+    "exposure_id": "ieu-b-110",
+    "outcome_id": "ebi-a-GCST005195",
+    "exposure_name": "LDL cholesterol",
+    "outcome_name": "coronary heart disease",
+    "exposure_source_type": "opengwas",
+    "outcome_source_type": "opengwas",
+    "mr_results": [
+      {
+        "method": "MR Egger",
+        "nsnp": 144,
+        "beta": 0.502639424028751,
+        "se": 0.0846605801171054,
+        "pval": 2.12475638516307e-08,
+        "or_value": 1.65307869325193,
+        "ci_lower": 1.40032546835537,
+        "ci_upper": 1.95145287851755
+      },
+      {
+        "method": "Weighted median",
+        "nsnp": 144,
+        "beta": 0.304653449018861,
+        "se": 0.0273384648626679,
+        "pval": 7.68017047393057e-29,
+        "or_value": 1.35615494473468,
+        "ci_lower": 1.28540013359546,
+        "ci_upper": 1.43080445229448
+      },
+      {
+        "method": "Inverse variance weighted",
+        "nsnp": 144,
+        "beta": 0.438073637593331,
+        "se": 0.0659050114706891,
+        "pval": 2.9903376029772097e-11,
+        "or_value": 1.54971902079697,
+        "ci_lower": 1.36192591927101,
+        "ci_upper": 1.76340651825279
+      },
+      {
+        "method": "Simple mode",
+        "nsnp": 144,
+        "beta": 0.541243598546921,
+        "se": 0.118083412037576,
+        "pval": 9.88027913775928e-06,
+        "or_value": 1.71814221330976,
+        "ci_lower": 1.36315260762227,
+        "ci_upper": 2.16557753596357
+      },
+      {
+        "method": "Weighted mode",
+        "nsnp": 144,
+        "beta": 0.364849935713256,
+        "se": 0.0303621187596019,
+        "pval": 1.9718726935262302e-23,
+        "or_value": 1.4402978546609,
+        "ci_lower": 1.35708658220048,
+        "ci_upper": 1.52861131879819
+      }
+    ],
+    "heterogeneity": [
+      {
+        "method": "MR Egger",
+        "q": 2109.09948428501,
+        "q_df": 142,
+        "q_pval": 0.0
+      },
+      {
+        "method": "Inverse variance weighted",
+        "q": 2130.91574235104,
+        "q_df": 143,
+        "q_pval": 0.0
+      }
+    ],
+    "pleiotropy": {
+      "egger_intercept": -0.0043933753131941,
+      "se": 0.003625037760385,
+      "pval": 0.227543141223285
+    },
+    "n_instruments": 144,
+    "f_statistic_mean": 242.0913,
+    "pval_threshold": 5e-08,
+    "plots": {
+      "scatter_plot_pdf": "analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.pdf",
+      "scatter_plot_png": "analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.png",
+      "forest_plot_pdf": "analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.pdf",
+      "forest_plot_png": "analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.png",
+      "funnel_plot_pdf": "analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.pdf",
+      "funnel_plot_png": "analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.png",
+      "loo_plot_pdf": "analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.pdf",
+      "loo_plot_png": "analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.png"
+    },
+    "raw_data_path": "analysis-data/1-ieu-b-110-ebi-a-GCST005195",
+    "interpretation": "### 1. 主要发现\n逆方差加权（IVW）分析结果显示，基因预测的低密度脂蛋白胆固醇（LDL cholesterol）水平与冠心病（coronary heart disease）发病风险之间存在显著的正向关联（beta=0.4381, OR=1.550, 95% CI: 1.362–1.763, p=2.99×10⁻¹¹）。这一结果提示，LDL胆固醇暴露对冠心病结局具有潜在的因果效应，其效应方向与既往观察性研究的流行病学证据一致。值得注意的是，效应估计值跨越多重敏感性分析方法均保持稳定：加权中位数法得出的OR为1.356（95% CI: 1.285–1.431, p=7.68×10⁻²⁹），MR-Egger法OR为1.653（95% CI: 1.400–1.951, p=2.12×10⁻⁸），加权模式法OR为1.440（95% CI: 1.357–1.529, p=1.97×10⁻²³），简单模式法OR为1.718（95% CI: 1.363–2.166, p=9.88×10⁻⁶）。所有方法估计方向与IVW一致，且均达到统计学显著性，这增强了因果推断的可靠性。\n\n### 2. 异质性与多效性评估\n然而，工具变量间存在显著的异质性，IVW分析的Cochran Q统计量为2130.92（df=143, p<0.001），MR-Egger分析的Q统计量为2109.10（df=142, p<0.001）。这一程度的异质性可能源于多个生物学途径或违规多效性变异的存在。尽管如此，MR-Egger回归截距项估计接近零值（intercept=-0.0044, SE=0.0036, p=0.2275），未观察到显著的方向性水平多效性，表明遗传变异可能并不通过独立于暴露以外的通路系统性地影响结局。与此一致，加权中位数法和加权模式法对违规多效性的稳健性也为主要分析结论提供了支持。\n\n### 3. 工具变量强度\n本分析纳入144个与LDL胆固醇显著关联的单核苷酸多态性（SNP）作为工具变量，其平均F统计量为242.09，远超常规阈值10，强烈拒绝弱工具变量假设。因此，由弱工具偏倚导致虚假因果关联的可能性较低。\n\n### 4. 结论\n综合来看，本孟德尔随机化研究提示LDL胆固醇水平升高对冠心病发病风险存在显著的促发效应，效应估计在多种敏感性分析中保持稳健，且无明显方向性多效性证据。该结果为LDL胆固醇作为冠心病干预靶点提供了源自遗传因果推断层面的进一步支撑，但仍需未来研究探索其在多样本及不同遗传背景中的一致性。",
+    "steiger_correct": null,
+    "steiger_pval": null,
+    "presso_global_pval": null,
+    "presso_n_outliers": 23,
+    "radial_pval": null,
+    "conmix_pval": null,
+    "sample_overlap_warning": false,
+    "sample_size_exposure": 440546,
+    "sample_size_outcome": 547261,
+    "exposure_metadata": {
+      "gwas_id": "ieu-b-110",
+      "trait": "LDL cholesterol",
+      "year": 2020,
+      "consortium": "UK Biobank",
+      "sample_size": 440546,
+      "nsnp": 12321875,
+      "population": "European"
+    },
+    "outcome_metadata": {
+      "gwas_id": "ebi-a-GCST005195",
+      "trait": "Coronary artery disease",
+      "year": 2017,
+      "consortium": "NA",
+      "sample_size": 547261,
+      "nsnp": 7934254,
+      "population": "NA"
+    },
+    "timestamp": "2026-07-22T23:45:53.030112"
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "status": "succeeded",
+  "taskId": "TASK_20260722_233741_d49e77ad",
+  "report": "research-topic-report.md",
+  "evidenceCount": 24,
+  "artifacts": [
+    "research-topic-report.md",
+    "research-topic-run.json",
+    "evidence-records.json",
+    "evidence-stats.json",
+    "module-outputs.json"
+  ]
+}
