@@ -1,0 +1,69 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 1 FDA label records.",
+  "data": {
+    "items": [
+      {
+        "id": "0098dec4-f0e5-45d5-8aa4-5d0faf9ab142",
+        "title": "ZITUVIMET",
+        "effectiveTime": "20250609",
+        "brandNames": [
+          "ZITUVIMET"
+        ],
+        "genericNames": [
+          "SITAGLIPTIN AND METFORMIN HYDROCHLORIDE"
+        ],
+        "indicationsAndUsage": [
+          "1 INDICATIONS AND USAGE ZITUVIMET is a combination of sitagliptin, a dipeptidyl peptidase-4 (DPP-4) inhibitor, and metformin hydrochloride (HCl), a biguanide, indicated as an adjunct to diet and exercise to improve glycemic control in adults with type 2 diabetes mellitus. ( 1 ) Limitations of Use: ZITUVIMET is not recommended in patients with type 1 diabetes mellitus. ( 1 ) ZITUVIMET has not been studied in patients with a history of pancreatitis. ( 1 ) ZITUVIMET is indicated as an adjunct to diet and exercise to improve glycemic control in adults with type 2 diabetes mellitus. Limitations of Use ZITUVIMET is not recommended in patients with type 1 diabetes mellitus. ZITUVIMET has not been studied in patients with a history of pancreatitis. It is unknown whether patients with a history of pancreatitis are at increased risk for the development of pancreatitis while using ZITUVIMET. [see Warnings and Precautions ( 5.2 )]."
+        ],
+        "dosageAndAdministration": [
+          "2 DOSAGE AND ADMINISTRATION Take ZITUVIMET orally twice daily with meals. ( 2.1 ) Individualize the dosage of ZITUVIMET on the basis of the patient's current regimen, effectiveness, and tolerability. ( 2.1 ) The maximum recommended daily dose is 100 mg of sitagliptin and 2,000 mg of metformin HCl. ( 2.1 ) The recommended starting dose in patients not currently treated with metformin is 50 mg sitagliptin and 500 mg metformin HCl twice daily, with gradual dose escalation recommended to reduce gastrointestinal side effects associated with metformin. ( 2.1 ) The starting dose in patients already treated with metformin should provide sitagliptin dosed as 50 mg twice daily (100 mg total daily dose) and the dose of metformin already being taken. For patients taking metformin HCl 850 mg twice daily, the recommended starting dose of ZITUVIMET is 50 mg sitagliptin and 1,000 mg metformin HCl twice daily. ( 2.1 ) Prior to initiation, assess renal function with estimated glomerular filtration rate (eGFR) ( 2.2 ) ○ Do not use in patients with eGFR below 30 mL/min/1.73 m 2 ○ ZITUVIMET is not recommended in patients with eGFR between 30 and less than 45 mL/min/1.73 m 2 . ZITUVIMET may need to be discontinued at time of, or prior to, iodinated contrast imaging procedures. ( 2.3 ) 2.1 Recommended Dosage Take ZITUVIMET orally twice daily with meals. Individualize the dosage of ZITUVIMET on the basis of the patient's current regimen, effectiveness, and tolerability. The maximum recommended daily"
+        ],
+        "contraindications": [
+          "4 CONTRAINDICATIONS Severe renal impairment: (eGFR below 30 mL/min/1.73 m 2 ) ( 4) Metabolic acidosis, including diabetic ketoacidosis. ( 4 ) History of a serious hypersensitivity reaction to ZITUVIMET, sitagliptin, or metformin, such as anaphylaxis or angioedema. (4) ZITUVIMET is contraindicated in patients with: Severe renal impairment (eGFR below 30 mL/min/1.73 m 2 ) [see Warnings and Precautions ( 5.1 )]. Acute or chronic metabolic acidosis, including diabetic ketoacidosis. History of a serious hypersensitivity reaction to sitagliptin, metformin, or any of the excipients in ZITUVIMET. Serious hypersensitivity reactions including anaphylaxis or angioedema have been reported. [see Warnings and Precautions ( 5.7 ) and Adverse Reactions ( 6.2 )]."
+        ],
+        "boxedWarnings": [
+          "WARNING: LACTIC ACIDOSIS WARNING: LACTIC ACIDOSIS See full prescribing information for complete boxed warning . Postmarketing cases of metformin-associated lactic acidosis have resulted in death, hypothermia, hypotension, and resistant bradyarrhythmias. Symptoms included malaise, myalgias, respiratory distress, somnolence, and abdominal pain. Laboratory abnormalities included elevated blood lactate levels, anion gap acidosis, increased lactate/pyruvate ratio, and metformin plasma levels generally >5 mcg/mL. ( 5.1 ) Risk factors include renal impairment, concomitant use of certain drugs, age ≥65 years old, radiological studies with contrast, surgery and other procedures, hypoxic states, excessive alcohol intake, and hepatic impairment. Steps to reduce the risk of and manage metformin-associated lactic acidosis in these high-risk groups are provided in the Full Prescribing Information. ( 5.1 ) If lactic acidosis is suspected, discontinue ZITUVIMET and institute general supportive measures in a hospital setting. Prompt hemodialysis is recommended. ( 5.1 ) Postmarketing cases of metformin-associated lactic acidosis have resulted in death, hypothermia, hypotension, and resistant bradyarrhythmias. The onset of metformin-associated lactic acidosis is often subtle, accompanied only by nonspecific symptoms such as malaise, myalgias, respiratory distress, somnolence, and abdominal pain. Metformin-associated lactic acidosis was characterized by elevated blood lactate levels (>5 mmol/Lit"
+        ],
+        "warningsAndCautions": [
+          "5 WARNINGS AND PRECAUTIONS Lactic Acidosis: See boxed warning . ( 5.1 ) Pancreatitis: There have been postmarketing reports of acute pancreatitis, including fatal and non-fatal hemorrhagic or necrotizing pancreatitis. If pancreatitis is suspected, promptly discontinue ZITUVIMET. ( 5.2 ) Heart Failure : Has been observed with two other members of the DPP-4 inhibitor class. Consider risks and benefits of ZITUVIMET in patients who have known risk factors for heart failure. Monitor patients for signs and symptoms. ( 5.3 ) Acute Renal Failure: Has been reported postmarketing, sometimes requiring dialysis. Before initiating ZITUVIMET and at least annually thereafter, assess renal function. ( 5.4 ) Vitamin B 12 Deficiency: Metformin may lower vitamin B 12 levels. Measure hematologic parameters annually and vitamin B 12 at 2 to 3 year intervals and manage any abnormalities. ( 5.5 ) Hypoglycemia with Concomitant Use with Insulin or Insulin Secretagogues: Increased risk of hypoglycemia when used in combination with insulin and/or an insulin secretagogue. A lower dose of insulin or insulin secretagogue may be required. ( 5.6 ) Hypersensitivity Reactions: There have been postmarketing reports of serious allergic and hypersensitivity reactions in patients treated with sitagliptin such as anaphylaxis, angioedema, and exfoliative skin conditions including Stevens-Johnson syndrome. Promptly stop ZITUVIMET, assess for other potential causes, institute appropriate monitoring and treatment. ( 5"
+        ],
+        "warnings": [],
+        "contentTruncated": true,
+        "jurisdiction": "United States (FDA)"
+      }
+    ],
+    "requestedJurisdiction": "US",
+    "labelJurisdiction": "United States (FDA)",
+    "provenance": {
+      "tool": "evimed_drug_label_search",
+      "arguments": {
+        "drug": "metformin",
+        "jurisdiction": "US",
+        "limit": 1
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "0098dec4-f0e5-45d5-8aa4-5d0faf9ab142",
+      "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=0098dec4-f0e5-45d5-8aa4-5d0faf9ab142",
+      "source": "openfda-label",
+      "retrievedAt": "2026-07-22T16:03:44.982154Z",
+      "title": "ZITUVIMET"
+    }
+  ],
+  "warnings": [
+    "EviMed label search returned no records for the requested jurisdiction.",
+    "No exact product was supplied; generic-name results may include different brands, formulations, strengths, or approved uses and cannot establish label status for the proposed use."
+  ],
+  "next_actions": [
+    "Verify the exact product and current official label before making a label-status determination."
+  ]
+}

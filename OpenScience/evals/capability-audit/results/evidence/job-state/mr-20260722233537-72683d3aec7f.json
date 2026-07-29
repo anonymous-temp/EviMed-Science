@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "tool": "evimed_mendelian_randomization",
+  "jobId": "mr-20260722233537-72683d3aec7f",
+  "status": "succeeded",
+  "request": {
+    "exposure": "LDL cholesterol",
+    "outcome": "coronary heart disease",
+    "outputLanguage": "zh",
+    "analysisDirection": "forward"
+  },
+  "createdAt": "2026-07-22T15:35:37.683399Z",
+  "updatedAt": "2026-07-22T16:02:55.463734Z",
+  "root": "/Users/wangzeyuan/Desktop/EviMedScience/项目代码/孟德尔随机化",
+  "python": "/Users/wangzeyuan/Desktop/EviMedScience/项目代码/孟德尔随机化/.venv/bin/python",
+  "executionEvidence": {
+    "schemaVersion": 1,
+    "agentSourceSha256": "75f9fb263351a49d55d8cb18990ecea05c2a90c8d1452dcbf904a6b1b306cda2",
+    "agentSourceFiles": 37,
+    "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
+    "evidenceModuleSha256": "4fea59024d5c7c3a9d6c7b40ba9bb4f58a6887d01292c91f9b4abbbdd8c0209f",
+    "model": "deepseek-v4-pro",
+    "thinking": true,
+    "reasoningEffort": "high"
+  },
+  "workspace": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace",
+  "outputRoot": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace/mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output",
+  "artifacts": [
+    {
+      "kind": "csv",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/f_statistics.csv"
+    },
+    {
+      "kind": "pdf",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.pdf"
+    },
+    {
+      "kind": "png",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.png"
+    },
+    {
+      "kind": "pdf",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.pdf"
+    },
+    {
+      "kind": "png",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.png"
+    },
+    {
+      "kind": "csv",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/heterogeneity.csv"
+    },
+    {
+      "kind": "pdf",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.pdf"
+    },
+    {
+      "kind": "png",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.png"
+    },
+    {
+      "kind": "csv",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mr_results.csv"
+    },
+    {
+      "kind": "json",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mr_summary.json"
+    },
+    {
+      "kind": "csv",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/mrpresso.csv"
+    },
+    {
+      "kind": "csv",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/pleiotropy.csv"
+    },
+    {
+      "kind": "pdf",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.pdf"
+    },
+    {
+      "kind": "png",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.png"
+    },
+    {
+      "kind": "docx",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.docx"
+    },
+    {
+      "kind": "md",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.md"
+    },
+    {
+      "kind": "pdf",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.pdf"
+    },
+    {
+      "kind": "txt",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-report.txt"
+    },
+    {
+      "kind": "json",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/mendelian-randomization-run.json"
+    },
+    {
+      "kind": "json",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/request.json"
+    },
+    {
+      "kind": "json",
+      "path": "mendelian-randomization-runs/mr-20260722233537-72683d3aec7f/output/result.json"
+    }
+  ],
+  "workerPid": 92268,
+  "startedAt": "2026-07-22T15:35:38.182990Z",
+  "finishedAt": "2026-07-22T16:02:55.463751Z",
+  "returnCode": 0
+}

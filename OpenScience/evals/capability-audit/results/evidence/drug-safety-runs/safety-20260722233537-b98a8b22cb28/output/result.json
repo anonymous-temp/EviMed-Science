@@ -1,0 +1,24 @@
+{
+  "status": "succeeded",
+  "drug": "aspirin",
+  "reactions": [
+    "gastrointestinal hemorrhage"
+  ],
+  "report": "safety-report.md",
+  "signals": "signals.csv",
+  "artifacts": [
+    "safety-report.md",
+    "safety-report.docx",
+    "safety-report.pdf",
+    "signals.csv"
+  ],
+  "scope": {
+    "drugAliases": [],
+    "suspectRoles": [],
+    "administrationRoutes": [],
+    "studyDateFrom": null,
+    "studyDateTo": null,
+    "backgroundDateFrom": null,
+    "backgroundDateTo": null
+  }
+}

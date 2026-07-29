@@ -1,0 +1,119 @@
+{
+  "status": "success",
+  "summary": "Retrieved 2 traceable EviMed trial records.",
+  "data": {
+    "items": [
+      {
+        "id": "nct07621380",
+        "title": "Ertugliflozin's Effect on Heart Function in Diabetic Patients After Myocardial Infarction",
+        "url": "https://www.clinicaltrials.gov/ct2/show/nct07621380",
+        "status": "not yet recruiting",
+        "registrationDate": "2026-05-27",
+        "phase": "phase 4",
+        "sampleSize": "476",
+        "studyType": "Interventional",
+        "conditions": [
+          "Type 2 Diabetes Mellitus Myocardial Infarction"
+        ],
+        "interventions": [
+          {
+            "intervention_type": "Drug",
+            "intervention_name": "Ertugliflozin 10 mg",
+            "description": "Ertugliflozin 10mg, oral, once daily",
+            "arm_group_label": "Ertugliflozin"
+          },
+          {
+            "intervention_type": "Other",
+            "intervention_name": "Standard AMI Care",
+            "description": "Standard pharmacotherapy for acute myocardial infarction without Ertugliflozin",
+            "arm_group_label": "Control"
+          }
+        ],
+        "registry": 1
+      },
+      {
+        "id": "nct07619833",
+        "title": "To Evaluate the Efficacy and Safety of Initial Combination Therapy With DWP16001 and DWC202518 Compared to DWP16001 Monotherapy and DWC202518 Monotherapy in Patients With Type 2 Diabetes Mellitus",
+        "url": "https://www.clinicaltrials.gov/ct2/show/nct07619833",
+        "status": "not yet recruiting",
+        "registrationDate": "2026-05-26",
+        "phase": "phase 3",
+        "sampleSize": "510",
+        "studyType": "Interventional",
+        "conditions": [
+          "T2DM (Type 2 Diabetes Mellitus)"
+        ],
+        "interventions": [
+          {
+            "intervention_type": "Drug",
+            "intervention_name": "DWP16001",
+            "description": "DWP16001 0.3mg, Tablets, Orally, Once daily",
+            "arm_group_label": "Combination Group"
+          },
+          {
+            "intervention_type": "Drug",
+            "intervention_name": "DWP16001",
+            "description": "DWP16001 0.3mg, Tablets, Orally, Once daily",
+            "arm_group_label": "DWP16001 monotherapy Group"
+          },
+          {
+            "intervention_type": "Drug",
+            "intervention_name": "DWC202518",
+            "description": "DWC202518, Tablets, Orally, Once daily",
+            "arm_group_label": "Combination Group"
+          },
+          {
+            "intervention_type": "Drug",
+            "intervention_name": "DWC202518",
+            "description": "DWC202518, Tablets, Orally, Once daily",
+            "arm_group_label": "DWC202518 monotherapy Group"
+          },
+          {
+            "intervention_type": "Drug",
+            "intervention_name": "Placebo of DWP16001",
+            "description": "DWP16001 placebo-matching tablets",
+            "arm_group_label": "DWC202518 monotherapy Group"
+          },
+          {
+            "intervention_type": "Drug",
+            "intervention_name": "Placebo of DWC202518",
+            "description": "DWC202518 placebo-matching tablets",
+            "arm_group_label": "DWP16001 monotherapy Group"
+          }
+        ],
+        "registry": 1
+      }
+    ],
+    "total": 6809,
+    "registry": 1,
+    "provenance": {
+      "tool": "evimed_clinical_trial_search",
+      "arguments": {
+        "query": "type 2 diabetes metformin",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "nct07621380",
+      "url": "https://www.clinicaltrials.gov/ct2/show/nct07621380",
+      "source": "evimed-clinical-trial",
+      "retrievedAt": "2026-07-22T16:03:35.297860Z",
+      "title": "Ertugliflozin's Effect on Heart Function in Diabetic Patients After Myocardial Infarction"
+    },
+    {
+      "id": "nct07619833",
+      "url": "https://www.clinicaltrials.gov/ct2/show/nct07619833",
+      "source": "evimed-clinical-trial",
+      "retrievedAt": "2026-07-22T16:03:35.297899Z",
+      "title": "To Evaluate the Efficacy and Safety of Initial Combination Therapy With DWP16001 and DWC202518 Compared to DWP16001 Monotherapy and DWC202518 Monotherapy in Patients With Type 2 Diabetes Mellitus"
+    }
+  ]
+}

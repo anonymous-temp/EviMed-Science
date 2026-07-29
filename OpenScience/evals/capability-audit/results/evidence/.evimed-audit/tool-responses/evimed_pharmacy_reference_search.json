@@ -1,0 +1,85 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 private pharmacy reference rows.",
+  "data": {
+    "items": [
+      {
+        "id": "PHARMACY:allergy-skin-test:6",
+        "dataset": "allergy-skin-test",
+        "rowNumber": 6,
+        "fields": {
+          "allergy_or_test_group": "阿司匹林/NSAID过敏或哮喘诱发",
+          "audit_action": "避免或选择替代",
+          "implementation_note": "COX-2 药也需谨慎。",
+          "matched_his_drugs": "阿司匹林肠溶片；布洛芬；双氯芬酸；塞来昔布；尼美舒利",
+          "rule_id": "ALG-NSAID-ASPIRIN",
+          "severity": "HIGH",
+          "source_ids": "DAILYMED_SPL_RESOURCES",
+          "target_names": "NSAID/阿司匹林",
+          "trigger_condition": "阿司匹林哮喘/NSAID过敏"
+        }
+      },
+      {
+        "id": "PHARMACY:drug-name-map:140",
+        "dataset": "drug-name-map",
+        "rowNumber": 140,
+        "fields": {
+          "focus_class": "抗血小板药",
+          "mapping_status": "PASS_MAPPED_TO_FOCUS_CLASS",
+          "normalized_category": "COMBINED_PRESCRIPTION",
+          "normalized_drug_name": "阿司匹林肠溶片",
+          "note": "低风险常规药仍需保留说明书结构化；重点风险由本批字段表兜底。",
+          "original_categories": "COMBINED_PRESCRIPTION；WESTERN_PRESCRIPTION",
+          "pharm_level1": "血液和造血器官用药",
+          "pharm_level2": "抗血栓形成药",
+          "pharm_level3": "抗血栓形成药",
+          "pharm_level4": "非肝素类的血小板聚集抑制剂",
+          "pharm_level5": "阿司匹林",
+          "positive_stock_rows": "0",
+          "queried_drug": "阿司匹林肠溶片",
+          "representative_goods_names": "阿司匹林肠溶片",
+          "representative_specs": "0.1g*30片；100mg*30/盒；25mg*100/瓶；25mg*100/盒",
+          "risk_tags": "出血/胃肠风险",
+          "source_ids": "LOCAL_HIS_NAME_SPEC_MAPPING_AUDIT；LOCAL_PHARM_CLASS_20250703",
+          "spec_row_count": "12"
+        }
+      }
+    ],
+    "release": "evimed-pharmacy-reference-v1",
+    "provenance": {
+      "tool": "evimed_pharmacy_reference_search",
+      "arguments": {
+        "query": "阿司匹林",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "PHARMACY:allergy-skin-test:6",
+      "title": "allergy-skin-test row 6",
+      "source": "evimed-private-pharmacy-reference",
+      "retrievedAt": "2026-07-22T16:03:38.345530Z",
+      "evidenceAccess": "user_provided_other"
+    },
+    {
+      "id": "PHARMACY:drug-name-map:140",
+      "title": "drug-name-map row 140",
+      "source": "evimed-private-pharmacy-reference",
+      "retrievedAt": "2026-07-22T16:03:38.345550Z",
+      "evidenceAccess": "user_provided_other"
+    }
+  ],
+  "warnings": [
+    "These curated rows are private decision-support references, may include institution-specific mappings, and are not proof of a current label, guideline, or patient-specific recommendation."
+  ],
+  "next_actions": [
+    "Verify material rules against the current official label, pharmacopeia, guideline, and local governance policy before clinical use."
+  ]
+}

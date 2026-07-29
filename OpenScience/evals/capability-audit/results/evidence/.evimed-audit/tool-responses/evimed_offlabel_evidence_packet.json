@@ -1,0 +1,119 @@
+{
+  "status": "warning",
+  "summary": "Compiled a traceable preliminary label-dimension assessment.",
+  "data": {
+    "assessmentType": "off_label",
+    "classification": "potentially_off_label",
+    "jurisdiction": "United States",
+    "mismatchDimensions": [
+      "indication"
+    ],
+    "uncertainDimensions": [],
+    "labelComparisons": [
+      {
+        "dimension": "indication",
+        "status": "mismatch",
+        "jurisdiction": "United States",
+        "evidenceIds": [
+          "audit-label-1"
+        ],
+        "rationale": "The bounded release fixture exercises the traceable mismatch path."
+      },
+      {
+        "dimension": "population",
+        "status": "match",
+        "jurisdiction": "United States",
+        "evidenceIds": [
+          "audit-label-1"
+        ],
+        "rationale": "The bounded release fixture exercises the population comparison path."
+      }
+    ],
+    "evidenceSupport": {
+      "status": "not_assessed",
+      "assessments": [],
+      "supportingEvidenceTypes": [],
+      "mixedEvidenceTypes": [],
+      "nonSupportingEvidenceTypes": [],
+      "unresolvedEvidenceTypes": [],
+      "overallGrade": "not_automatically_determined"
+    },
+    "independentAxes": {
+      "regulatoryLabelStatus": "potentially_off_label",
+      "evidenceSupport": "not_assessed",
+      "clinicalAppropriateness": "requires_clinical_review",
+      "workflowAuthorization": "out_of_scope_for_scoring_agent"
+    },
+    "audit": {
+      "compiler": "evimed-drug-assessment",
+      "compilerVersion": "1.4.0",
+      "inputSha256": "9bfe07560c45f8a1ddb5a16ac814615f20b272cc2dcc4c265acb897efc0b8cc0",
+      "automaticDecision": false,
+      "humanReviewRequired": true
+    },
+    "provenance": {
+      "tool": "evimed_offlabel_evidence_packet",
+      "arguments": {
+        "action": "compile",
+        "drug": "metformin",
+        "proposedUse": "polycystic ovary syndrome",
+        "population": "adults",
+        "jurisdiction": "United States",
+        "sourceInventory": [
+          {
+            "id": "audit-label-1",
+            "title": "Audited label fixture",
+            "url": "https://dailymed.nlm.nih.gov/dailymed/",
+            "source": "release-audit-fixture",
+            "retrievedAt": "2026-07-20T00:00:00Z",
+            "evidenceAccess": "full_text"
+          }
+        ],
+        "labelComparisons": [
+          {
+            "dimension": "indication",
+            "status": "mismatch",
+            "jurisdiction": "United States",
+            "evidenceIds": [
+              "audit-label-1"
+            ],
+            "rationale": "The bounded release fixture exercises the traceable mismatch path."
+          },
+          {
+            "dimension": "population",
+            "status": "match",
+            "jurisdiction": "United States",
+            "evidenceIds": [
+              "audit-label-1"
+            ],
+            "rationale": "The bounded release fixture exercises the population comparison path."
+          }
+        ]
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "audit-label-1",
+      "title": "Audited label fixture",
+      "url": "https://dailymed.nlm.nih.gov/dailymed/",
+      "source": "release-audit-fixture",
+      "retrievedAt": "2026-07-20T00:00:00Z",
+      "evidenceAccess": "full_text"
+    }
+  ],
+  "warnings": [
+    "Label status, evidence support, clinical appropriateness, and workflow authorization are independent conclusions.",
+    "Workflow authorization is out of scope; this compilation cannot authorize prescribing or replace current jurisdictional label verification."
+  ],
+  "next_actions": [
+    "Verify the current official product label for the exact product and jurisdiction.",
+    "Complete the evidence-support and clinical-appropriateness axes before any use decision."
+  ]
+}

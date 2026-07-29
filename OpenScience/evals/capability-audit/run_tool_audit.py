@@ -8,6 +8,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -263,6 +264,41 @@ def latest_specialist_receipt(tool, roots, max_age_days):
     }
 
 
+def snapshot_evidence(results, evidence_root: Path) -> None:
+    """Mirror every receipted file into the repository beside the probe document.
+
+    Receipts point into a live server workspace under .openscience-web-data,
+    which .gitignore keeps out of the repository, so verification would only be
+    possible on the host that ran the audit. Copy the receipted files and job
+    state here, workspace-relative, and the release gate becomes reproducible
+    from a clean clone.
+    """
+    if evidence_root.exists():
+        shutil.rmtree(evidence_root)
+    job_state_root = evidence_root / "job-state"
+    job_state_root.mkdir(parents=True, exist_ok=True)
+    for item in results:
+        workspace = REPO / str(item.get("workspace", ""))
+        receipts = list(item.get("artifacts") or [])
+        response = item.get("responseReceipt")
+        if isinstance(response, dict) and response.get("path"):
+            receipts.append(response)
+        for receipt in receipts:
+            source = (workspace / str(receipt["path"])).resolve()
+            source.relative_to(workspace.resolve())
+            target = evidence_root / str(receipt["path"])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+        job_id = item.get("jobId")
+        if not job_id:
+            continue
+        directory = SPECIALISTS[item["tool"]][0]
+        shutil.copyfile(
+            workspace / directory / ".jobs" / ("%s.json" % job_id),
+            job_state_root / ("%s.json" % job_id),
+        )
+
+
 def run_task_probes(server, workspace):
     results = []
     response_root = workspace / ".evimed-audit" / "tool-responses"
@@ -356,6 +392,7 @@ def main():
         "results": ordered,
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_evidence(ordered, args.output_dir / "evidence")
     payload = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
     for filename in ("tool-probe-v2.json", "tool-probe-v3.json"):
         (args.output_dir / filename).write_text(payload, encoding="utf-8")

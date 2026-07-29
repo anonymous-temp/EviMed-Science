@@ -1,0 +1,2217 @@
+[
+  {
+    "pmid": "41510372",
+    "title": "Diagnostic challenge of systemic amyloidosis mimicking EGFR-TKI toxicity in lung adenocarcinoma: a case report.",
+    "abstract": "BACKGROUND: Targeted therapies such as epidermal growth factor receptor (EGFR)-tyrosine kinase inhibitors (TKIs) have transformed the treatment of EGFR-mutant lung adenocarcinoma. However, distinguishing TKI-related adverse effects from coexisting systemic diseases can be challenging, especially when symptoms mimic known drug toxicities. Amyloidosis, a rare but serious condition characterized by abnormal protein deposition, may present with cardiac and renal dysfunction-features that overlap with reported toxicities of EGFR-TKIs. Early recognition and differentiation between drug-induced toxicity and systemic diseases like amyloidosis are crucial for accurate diagnosis and timely intervention. CASE DESCRIPTION: A 67-year-old East Asian female with EGFR-mutant lung adenocarcinoma was treated with the first-generation EGFR-TKI gefitinib for five years following recurrence after surgery. She was subsequently switched to osimertinib, a third-generation EGFR-TKI, after identification of the T790M resistance mutation. Fifteen months after initiating osimertinib, she developed generalized edema, nephrotic-range proteinuria, and cardiac dysfunction. Initial assessments suggested drug-induced toxicity. Osimertinib was discontinued for several weeks, leading to a reduction in proteinuria without evidence of lung cancer progression. Given these findings, the treatment was cautiously switched to lazertinib. However, renal function deteriorated again shortly thereafter, necessitating the discontinuation of lazertinib as well. Kidney biopsy subsequently revealed amyloidosis with lambda light chain predominance, ultimately requiring hemodialysis. This case highlights the complexity of distinguishing drug-induced toxicity from unrelated but coexisting systemic diseases. While osimertinib-related cardiotoxicity is well recognized, the delayed onset of symptoms and lack of improvement with drug cessation suggested an alternative etiology. Biopsy-proven amyloidosis emphasized the need for thorough evaluation when clinical findings are atypical. Also, whole genome sequencing (WGS) could be helpful to distinguish drug toxicity from disease-related pathology. CONCLUSIONS: When evaluating new symptoms in patients on targeted therapies, clinicians should not assume drug toxicity as the sole cause. A high index of suspicion for underlying systemic diseases, such as amyloidosis, is essential. Timely recognition and accurate diagnosis are critical to ensure appropriate and effective patient care.",
+    "authors": [
+      {
+        "last_name": "Kim",
+        "fore_name": "So-Yun",
+        "initials": "SY",
+        "affiliations": [
+          "Division of Pulmonology and Critical Care Medicine, Department of Internal Medicine, College of Medicine, Chungnam National University, Daejeon, Republic of Korea."
+        ]
+      },
+      {
+        "last_name": "Kang",
+        "fore_name": "Hyeong Seok",
+        "initials": "HS",
+        "affiliations": [
+          "Division of Pulmonology and Critical Care Medicine, Department of Internal Medicine, College of Medicine, Chungnam National University, Daejeon, Republic of Korea."
+        ]
+      },
+      {
+        "last_name": "Lee",
+        "fore_name": "Joo-Eun",
+        "initials": "JE",
+        "affiliations": [
+          "Division of Pulmonology and Critical Care Medicine, Department of Internal Medicine, College of Medicine, Chungnam National University, Daejeon, Republic of Korea.",
+          "Department of Biomedical Research Institute, Chungnam National University Hospital, Daejeon, Republic of Korea."
+        ]
+      },
+      {
+        "last_name": "Kim",
+        "fore_name": "Hyun-Yi",
+        "initials": "HY",
+        "affiliations": [
+          "NGeneS Inc., Asan, Republic of Korea."
+        ]
+      },
+      {
+        "last_name": "Yeo",
+        "fore_name": "Min-Kyung",
+        "initials": "MK",
+        "affiliations": [
+          "Department of Pathology, Chungnam National University, Daejeon, Republic of Korea."
+        ]
+      },
+      {
+        "last_name": "Chung",
+        "fore_name": "Chaeuk",
+        "initials": "C",
+        "affiliations": [
+          "Division of Pulmonology and Critical Care Medicine, Department of Internal Medicine, College of Medicine, Chungnam National University, Daejeon, Republic of Korea."
+        ]
+      }
+    ],
+    "affiliations": [
+      "NGeneS Inc., Asan, Republic of Korea.",
+      "Department of Biomedical Research Institute, Chungnam National University Hospital, Daejeon, Republic of Korea.",
+      "Department of Pathology, Chungnam National University, Daejeon, Republic of Korea.",
+      "Division of Pulmonology and Critical Care Medicine, Department of Internal Medicine, College of Medicine, Chungnam National University, Daejeon, Republic of Korea."
+    ],
+    "journal": {
+      "title": "Translational lung cancer research",
+      "iso": "Transl Lung Cancer Res",
+      "issn": "2218-6751"
+    },
+    "year": "2025",
+    "mesh_terms": [],
+    "keywords": [
+      "Amyloidosis",
+      "cardiotoxicity",
+      "case report",
+      "epidermal growth factor receptor-tyrosine kinase inhibitor (EGFR-TKI)",
+      "renal toxicity"
+    ],
+    "pub_types": [
+      "Case Reports",
+      "Journal Article"
+    ],
+    "doi": "10.21037/tlcr-2025-913",
+    "country": "China"
+  },
+  {
+    "pmid": "41145893",
+    "title": "Cardiotoxicity Profiles of Osimertinib Compared with Other EGFR Tyrosine Kinase Inhibitors: A Real-World Comparative Incidence Analysis.",
+    "abstract": "BACKGROUND: Osimertinib, a third-generation epidermal growth factor receptor tyrosine kinase inhibitor (EGFR-TKI), is the standard first-line therapy for EGFR-mutant non-small cell lung cancer (NSCLC). Emerging evidence suggests that it may be associated with increased cardiotoxicity; however, current evidence is conflicting, and a small sample size and a lack of direct comparisons with other EGFR-TKIs limit existing studies. OBJECTIVE: We aim to examine the incidence of cardiovascular toxicity with osimertinib compared with other EGFR-TKIs in a real-world setting. PATIENTS AND METHODS: A retrospective cohort study was conducted via the Trinetx global federated health research platform to compare the incidence of cardiotoxicity between osimertinib and other EGFR-TKIs over a 5-year follow-up. Patients were matched using 1:1 propensity score matching (PSM). Outcomes included cardiomyopathies, arrhythmias, ischemic heart disease (IHD), and heart failure (HF), assessed using ICD-10 codes. RESULTS: Following PSM, each arm consisted of 7331 patients; the arms were well balanced. Osimertinib was associated with increased risk of cardiomyopathy (2.8% vs 0.8%; HR: 3.143 [95% CI 2.342-4.218]), IHD (8.7% vs 5.5%; HR: 1.432 [95% CI 1.248-1.643]), and HF (6.2% vs 4%; HR: 1.41 [95% CI 1.210-1.644]). A similar incidence of arrhythmia was observed (9% vs 8.5%; HR: 0.938 [95% CI 0.831-1.059]); however, it increased after 3 years. Comparisons with individual EGFR-TKIs showed varying results. CONCLUSION: In this large, real-world study, osimertinib was associated with elevated cardiotoxicity risk. These findings underscore the need for serial monitoring of patients receiving osimertinib and for future studies comparing cardioprotective drugs.",
+    "authors": [
+      {
+        "last_name": "Muhanna",
+        "fore_name": "Zaid",
+        "initials": "Z",
+        "affiliations": [
+          "School of Medicine, University of Jordan, Amman, Jordan."
+        ]
+      },
+      {
+        "last_name": "Al Zyoud",
+        "fore_name": "Muntaser",
+        "initials": "M",
+        "affiliations": [
+          "School of Medicine, University of Jordan, Amman, Jordan."
+        ]
+      },
+      {
+        "last_name": "Issa",
+        "fore_name": "Ahmad",
+        "initials": "A",
+        "affiliations": [
+          "School of Medicine, University of Jordan, Amman, Jordan."
+        ]
+      },
+      {
+        "last_name": "Awidi",
+        "fore_name": "Muhammad",
+        "initials": "M",
+        "affiliations": [
+          "Roswell Park Cancer Center, Elm & Carlton Streets, Buffalo, NY, 14263, USA. muhammadawidi@gmail.com."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Roswell Park Cancer Center, Elm & Carlton Streets, Buffalo, NY, 14263, USA. muhammadawidi@gmail.com.",
+      "School of Medicine, University of Jordan, Amman, Jordan."
+    ],
+    "journal": {
+      "title": "Targeted oncology",
+      "iso": "Target Oncol",
+      "issn": "1776-260X"
+    },
+    "year": "2025",
+    "mesh_terms": [
+      "Humans",
+      "Aniline Compounds",
+      "therapeutic use",
+      "pharmacology",
+      "adverse effects",
+      "Male",
+      "Female",
+      "Acrylamides",
+      "therapeutic use",
+      "pharmacology",
+      "adverse effects",
+      "Protein Kinase Inhibitors",
+      "pharmacology",
+      "therapeutic use",
+      "adverse effects",
+      "Retrospective Studies",
+      "Incidence",
+      "Cardiotoxicity",
+      "etiology",
+      "epidemiology",
+      "pathology",
+      "Aged",
+      "Middle Aged",
+      "ErbB Receptors",
+      "antagonists & inhibitors",
+      "Carcinoma, Non-Small-Cell Lung",
+      "drug therapy",
+      "Lung Neoplasms",
+      "drug therapy",
+      "Tyrosine Kinase Inhibitors",
+      "Indoles",
+      "Pyrimidines"
+    ],
+    "keywords": [],
+    "pub_types": [
+      "Journal Article",
+      "Comparative Study"
+    ],
+    "doi": "10.1007/s11523-025-01180-2",
+    "country": "France"
+  },
+  {
+    "pmid": "41035623",
+    "title": "Long-term Survival in Lung Cancer With Brain Metastases and Coronary Artery Stenosis: A Case Report.",
+    "abstract": "Lung cancer is among the most diagnosed cancers worldwide, and its co-occurrence with coronary heart disease is life-threatening. Osimertinib is the standard treatment for epidermal growth factor receptor (EGFR) mutations in advanced non-small cell lung cancer (NSCLC). The addition of pemetrexed and carboplatin increases not only the efficacy but also the cardiotoxicity risk. We report a 59-year-old woman with NSCLC alongside brain, liver, and spleen metastases, who developed cardiovascular events following cancer therapy. With advanced imaging and multidisciplinary intervention, remarkable remission was achieved over two years. Reporting this case contributes to the understanding of its presentation and diagnostic challenges.",
+    "authors": [
+      {
+        "last_name": "Alharbi",
+        "fore_name": "Raghad O",
+        "initials": "RO",
+        "affiliations": [
+          "College of Medicine, King Saud bin Abdulaziz University for Health Sciences, Riyadh, Saudi Arabia."
+        ]
+      },
+      {
+        "last_name": "AlShammary",
+        "fore_name": "Shahad J",
+        "initials": "SJ",
+        "affiliations": [
+          "College of Medicine, Princess Nourah Bint Abdulrahman University, Riyadh, Saudi Arabia."
+        ]
+      },
+      {
+        "last_name": "Alotaibi",
+        "fore_name": "Nasser E",
+        "initials": "NE",
+        "affiliations": [
+          "College of Medicine, Prince Sattam bin Abdulaziz University, Alkharj 11942, Saudi Arabia."
+        ]
+      },
+      {
+        "last_name": "Aljohani",
+        "fore_name": "Ruba M",
+        "initials": "RM",
+        "affiliations": [
+          "College of Medicine, Taibah University, Madinah, Saudi Arabia."
+        ]
+      },
+      {
+        "last_name": "Alotaibi",
+        "fore_name": "Bader A",
+        "initials": "BA",
+        "affiliations": [
+          "College of Medicine, King Saud bin Abdulaziz University for Health Sciences, Riyadh, Saudi Arabia."
+        ]
+      },
+      {
+        "last_name": "Suliman",
+        "fore_name": "Ihab F",
+        "initials": "IF",
+        "affiliations": [
+          "College of Medicine, King Saud bin Abdulaziz University for Health Sciences, Riyadh, Saudi Arabia.",
+          "King Abdulaziz Cardiac Center, Ministry of the National Guard Health Affairs, Riyadh, Saudi Arabia."
+        ]
+      }
+    ],
+    "affiliations": [
+      "College of Medicine, Taibah University, Madinah, Saudi Arabia.",
+      "College of Medicine, Princess Nourah Bint Abdulrahman University, Riyadh, Saudi Arabia.",
+      "King Abdulaziz Cardiac Center, Ministry of the National Guard Health Affairs, Riyadh, Saudi Arabia.",
+      "College of Medicine, King Saud bin Abdulaziz University for Health Sciences, Riyadh, Saudi Arabia.",
+      "College of Medicine, Prince Sattam bin Abdulaziz University, Alkharj 11942, Saudi Arabia."
+    ],
+    "journal": {
+      "title": "Journal of the Saudi Heart Association",
+      "iso": "J Saudi Heart Assoc",
+      "issn": "1016-7315"
+    },
+    "year": "2025",
+    "mesh_terms": [],
+    "keywords": [
+      "Advanced non-small cell lung cancer",
+      "Cardiotoxicity",
+      "Osimertinib",
+      "Percutaneous coronary intervention"
+    ],
+    "pub_types": [
+      "Case Reports",
+      "Journal Article"
+    ],
+    "doi": "10.37616/2212-5043.1452",
+    "country": "Saudi Arabia"
+  },
+  {
+    "pmid": "40996941",
+    "title": "Differences in Safety Signal Detection between Osimertinib and First- and Second-Generation EGFR-TKIs: A Pharmacovigilance Study Using a Spontaneous Reporting System.",
+    "abstract": "INTRODUCTION: This study aimed to evaluate the trends in safety signal detection of osimertinib compared with other epidermal growth factor receptor tyrosine kinase inhibitors (EGFR-TKIs) through volcano plot analysis, using data from the Japanese Adverse Drug Event Report (JADER) and FDA Adverse Event Reporting System (FAERS). The overall objective of this study was to identify the potential risks associated with osimertinib-induced adverse events. METHODS: Data were retrieved from the JADER (Q1 2004-Q1 2024) and FAERS (Q4 1997-Q2 2024) databases. The target drugs were osimertinib, gefitinib, erlotinib, and afatinib. Adverse event reports were standardized by converting all records in the database to the preferred terms of the International Classification of Diseases and subsequently mapping them to the high-level terms (HLTs) of the Medical Dictionary for Regulatory Activities. Volcano plots of odds ratios and z scores were generated to assess variations in detection trends between osimertinib and the abovementioned three EGFR-TKIs. The top 20 HLTs that demonstrated significant safety signals were computed and compared. RESULTS: The numbers of safety signals detected in the JADER for osimertinib compared to the aforementioned EGFR-TKIs following volcano plot analysis were 24, 20, and 16, whereas detected safety signals were 7, 43, and 14 in FAERS. In the JADER database, the most frequently reported adverse reactions for osimertinib included \"poisoning and toxicity\" and \"heart failure.\" Conversely, in the FAERS database, the predominant adverse reactions were \"death and sudden death\" and \"marrow depression and hypoplastic anemias.\" CONCLUSION: This study confirmed an increased frequency of reports linking osimertinib to cardiotoxicity, bone marrow suppression, and anemia. However, interstitial pneumonia, previously considered a risk factor, was not identified. When evaluating risks influenced by racial and treatment-related factors, caution must be exercised regarding potential discrepancies between reported rates and true incidence.",
+    "authors": [
+      {
+        "last_name": "Sugimoto",
+        "fore_name": "Tomoya",
+        "initials": "T",
+        "affiliations": [
+          "Laboratory of Advanced Medical Care Community Pharmacy, Gifu Pharmaceutical University, Gifu, Japan.",
+          "Department of Pharmacy, Toyota Memorial Hospital, Toyota, Japan."
+        ]
+      },
+      {
+        "last_name": "Noguchi",
+        "fore_name": "Yoshihiro",
+        "initials": "Y",
+        "affiliations": [
+          "Laboratory of Clinical Pharmacy, Gifu Pharmaceutical University, Gifu, Japan."
+        ]
+      },
+      {
+        "last_name": "Masuda",
+        "fore_name": "Rikuto",
+        "initials": "R",
+        "affiliations": [
+          "Laboratory of Clinical Pharmacy, Gifu Pharmaceutical University, Gifu, Japan."
+        ]
+      },
+      {
+        "last_name": "Harada",
+        "fore_name": "Tomohiko",
+        "initials": "T",
+        "affiliations": [
+          "Laboratory of Clinical Pharmacy, Gifu Pharmaceutical University, Gifu, Japan.",
+          "Department of Pharmacy, Kanagawa Prefectural Ashigarakami Hospital, Matsuda, Japan."
+        ]
+      },
+      {
+        "last_name": "Toyama",
+        "fore_name": "Yukio",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Pharmacy, Toyota Memorial Hospital, Toyota, Japan."
+        ]
+      },
+      {
+        "last_name": "Saguchi",
+        "fore_name": "Mitsuru",
+        "initials": "M",
+        "affiliations": [
+          "Laboratory of Advanced Medical Care Community Pharmacy, Gifu Pharmaceutical University, Gifu, Japan."
+        ]
+      },
+      {
+        "last_name": "Yoshimura",
+        "fore_name": "Tomoaki",
+        "initials": "T",
+        "affiliations": [
+          "Laboratory of Advanced Medical Care Community Pharmacy, Gifu Pharmaceutical University, Gifu, Japan, yoshimurat@gifu-pu.ac.jp.",
+          "Laboratory of Clinical Pharmacy, Gifu Pharmaceutical University, Gifu, Japan, yoshimurat@gifu-pu.ac.jp."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Laboratory of Clinical Pharmacy, Gifu Pharmaceutical University, Gifu, Japan.",
+      "Department of Pharmacy, Kanagawa Prefectural Ashigarakami Hospital, Matsuda, Japan.",
+      "Laboratory of Advanced Medical Care Community Pharmacy, Gifu Pharmaceutical University, Gifu, Japan.",
+      "Department of Pharmacy, Toyota Memorial Hospital, Toyota, Japan.",
+      "Laboratory of Clinical Pharmacy, Gifu Pharmaceutical University, Gifu, Japan, yoshimurat@gifu-pu.ac.jp.",
+      "Laboratory of Advanced Medical Care Community Pharmacy, Gifu Pharmaceutical University, Gifu, Japan, yoshimurat@gifu-pu.ac.jp."
+    ],
+    "journal": {
+      "title": "Oncology",
+      "iso": "Oncology",
+      "issn": "1423-0232"
+    },
+    "year": "2026",
+    "mesh_terms": [
+      "Humans",
+      "Indoles",
+      "Aniline Compounds",
+      "adverse effects",
+      "Pyrimidines",
+      "Acrylamides",
+      "adverse effects",
+      "ErbB Receptors",
+      "antagonists & inhibitors",
+      "Protein Kinase Inhibitors",
+      "adverse effects",
+      "Adverse Drug Reaction Reporting Systems",
+      "statistics & numerical data",
+      "Pharmacovigilance",
+      "Gefitinib",
+      "adverse effects",
+      "Afatinib",
+      "adverse effects",
+      "Female",
+      "Erlotinib Hydrochloride",
+      "adverse effects",
+      "Antineoplastic Agents",
+      "adverse effects"
+    ],
+    "keywords": [
+      "Epidermal growth factor receptor tyrosine kinase inhibitor",
+      "Osimertinib",
+      "Pharmacoepidemiology",
+      "Volcano plot"
+    ],
+    "pub_types": [
+      "Journal Article"
+    ],
+    "doi": "10.1159/000548593",
+    "country": "Switzerland"
+  },
+  {
+    "pmid": "40938238",
+    "title": "Risk of Heart Failure Hospitalization in Patients Treated With Osimertinib: A Population-Based Retrospective Cohort Study.",
+    "abstract": "BACKGROUND: Osimertinib, an oral epidermal growth factor receptor tyrosine kinase inhibitor, is used to treat patients with epidermal growth factor receptor-mutant non-small-cell lung cancer. Although osimertinib has been linked to heart failure (HF), detailed risk estimates remain unclear. OBJECTIVES: The aim of this study was to examine the association between osimertinib use and HF hospitalization. METHODS: In this retrospective cohort study using a large-scale Japanese claims database, patients diagnosed with lung cancer between April 2008 and December 2021 who received cancer therapy were identified. Patients were categorized into osimertinib and control groups according to treatment received. The incidence of HF hospitalization during the treatment period was compared between the groups. Multivariable analyses were performed before and after propensity score matching. RESULTS: The osimertinib and control groups included 11,391 and 108,144 patients, respectively. Among the entire cohort, the median age was 70 years (Q1-Q3: 64-76 years), and the median follow-up duration was 173 days (Q1-Q3: 73-448 days). The incidence of HF hospitalization was 9.9 and 4.1 cases per 1,000 person-years in the osimertinib and control groups, respectively. In multivariable analysis, osimertinib was associated with a higher risk for HF hospitalization than control therapy (subdistribution HR: 2.56; 95% CI: 2.07-3.18; P < 0.001). This association remained significant after propensity score matching (subdistribution HR: 2.29; 95% CI: 1.62-3.24; P < 0.001). CONCLUSIONS: Osimertinib use was associated with an increased risk for HF hospitalization. Cardiac function should be closely monitored in patients receiving osimertinib.",
+    "authors": [
+      {
+        "last_name": "Tatebe",
+        "fore_name": "Yasuhisa",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Pharmacy, Okayama University Hospital, Okayama, Japan."
+        ]
+      },
+      {
+        "last_name": "Tanaka",
+        "fore_name": "Yuta",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Pharmacy, Okayama University Hospital, Okayama, Japan. Electronic address: yuta-tnk@okayama-u.ac.jp."
+        ]
+      },
+      {
+        "last_name": "Manabe",
+        "fore_name": "Yohei",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Pharmacy, Okayama University Hospital, Okayama, Japan."
+        ]
+      },
+      {
+        "last_name": "Okano",
+        "fore_name": "Shinobu",
+        "initials": "S",
+        "affiliations": [
+          "Department of Pharmacy, Okayama University Hospital, Okayama, Japan."
+        ]
+      },
+      {
+        "last_name": "Higashionna",
+        "fore_name": "Tsukasa",
+        "initials": "T",
+        "affiliations": [
+          "Department of Pharmacy, Okayama University Hospital, Okayama, Japan."
+        ]
+      },
+      {
+        "last_name": "Hamano",
+        "fore_name": "Hirofumi",
+        "initials": "H",
+        "affiliations": [
+          "Department of Pharmacy, Okayama University Hospital, Okayama, Japan."
+        ]
+      },
+      {
+        "last_name": "Murakawa",
+        "fore_name": "Kiminaka",
+        "initials": "K",
+        "affiliations": [
+          "Department of Pharmacy, Okayama University Hospital, Okayama, Japan."
+        ]
+      },
+      {
+        "last_name": "Zamami",
+        "fore_name": "Yoshito",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Pharmacy, Okayama University Hospital, Okayama, Japan."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Department of Pharmacy, Okayama University Hospital, Okayama, Japan. Electronic address: yuta-tnk@okayama-u.ac.jp.",
+      "Department of Pharmacy, Okayama University Hospital, Okayama, Japan."
+    ],
+    "journal": {
+      "title": "JACC. CardioOncology",
+      "iso": "JACC CardioOncol",
+      "issn": "2666-0873"
+    },
+    "year": "2025",
+    "mesh_terms": [],
+    "keywords": [
+      "adverse events",
+      "cardiotoxicity",
+      "epidermal growth factor receptor tyrosine kinase inhibitor",
+      "heart failure",
+      "lung cancer",
+      "pharmacotherapy",
+      "propensity score matching"
+    ],
+    "pub_types": [
+      "Journal Article"
+    ],
+    "doi": "10.1016/j.jaccao.2025.06.011",
+    "country": "United States"
+  },
+  {
+    "pmid": "40919674",
+    "title": "Lazertinib: A Cardio-Safer Alternative to Osimertinib for Epidermal Growth Factor Receptor L858R/T790M Double-Mutant Tyrosine Kinase Resistant Non-Small Cell Lung Cancer.",
+    "abstract": "Non-small cell lung cancer (NSCLC) remains a leading cause of cancer-related mortality, with \"epidermal growth factor receptor (EGFR)\" mutations playing a pivotal role in tumor progression and carcinogenesis. \"Third-generation epidermal growth factor receptor-tyrosine kinase inhibitors (EGFR-TKIs),\" such as Osimertinib, have significantly improved treatment outcomes by overcoming resistance mechanisms like the T790M mutation. However, Osimertinib's clinical application is limited by cardiotoxicity concerns, necessitating safer alternatives. Lazertinib, a structurally optimized third-generation EGFR-TKI, exhibits superior selectivity for mutant EGFR while sparing wild-type EGFR, thereby reducing off-target toxicities. This current opinion highlights the pharmacological properties of Lazertinib, its enhanced binding interactions, and its efficacy in overcoming resistance while demonstrating an improved safety profile. Comparative analyses reveal that Lazertinib offers stronger inhibition of key EGFR mutations, superior pharmacokinetics, and lower cardiotoxicity risks compared to Osimertinib. Additionally, Lazertinib's improved central nervous system (CNS) penetration enhances its therapeutic potential in patients with brain metastases. As ongoing clinical trials further elucidate its role, Lazertinib emerges as a promising next-generation EGFR inhibitor, offering a safer and more effective alternative for NSCLC treatment.",
+    "authors": [
+      {
+        "last_name": "Gawli",
+        "fore_name": "Chandrakant S",
+        "initials": "CS",
+        "affiliations": [
+          "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Maharashtra, India."
+        ]
+      },
+      {
+        "last_name": "Nagpure",
+        "fore_name": "Narendra R",
+        "initials": "NR",
+        "affiliations": [
+          "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Maharashtra, India."
+        ]
+      },
+      {
+        "last_name": "Patil",
+        "fore_name": "Bhatu R",
+        "initials": "BR",
+        "affiliations": [
+          "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Maharashtra, India."
+        ]
+      },
+      {
+        "last_name": "Ochi",
+        "fore_name": "Nobuaki",
+        "initials": "N",
+        "affiliations": [
+          "Department of General Internal Medicine 4, Kawasaki Medical School, Okayama, Japan."
+        ]
+      },
+      {
+        "last_name": "Takigawa",
+        "fore_name": "Nagio",
+        "initials": "N",
+        "affiliations": [
+          "Department of General Internal Medicine 4, Kawasaki Medical School, Okayama, Japan."
+        ]
+      },
+      {
+        "last_name": "Patel",
+        "fore_name": "Harun M",
+        "initials": "HM",
+        "affiliations": [
+          "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Maharashtra, India."
+        ]
+      }
+    ],
+    "affiliations": [
+      "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Maharashtra, India.",
+      "Department of General Internal Medicine 4, Kawasaki Medical School, Okayama, Japan."
+    ],
+    "journal": {
+      "title": "Drug development research",
+      "iso": "Drug Dev Res",
+      "issn": "1098-2299"
+    },
+    "year": "2025",
+    "mesh_terms": [
+      "Humans",
+      "Carcinoma, Non-Small-Cell Lung",
+      "drug therapy",
+      "genetics",
+      "ErbB Receptors",
+      "genetics",
+      "antagonists & inhibitors",
+      "Acrylamides",
+      "adverse effects",
+      "pharmacology",
+      "therapeutic use",
+      "Lung Neoplasms",
+      "drug therapy",
+      "genetics",
+      "Aniline Compounds",
+      "adverse effects",
+      "pharmacology",
+      "therapeutic use",
+      "Protein Kinase Inhibitors",
+      "adverse effects",
+      "pharmacology",
+      "therapeutic use",
+      "Drug Resistance, Neoplasm",
+      "drug effects",
+      "Mutation",
+      "Antineoplastic Agents",
+      "adverse effects",
+      "pharmacology",
+      "therapeutic use",
+      "Animals",
+      "Cardiotoxicity",
+      "Indoles",
+      "Pyrimidines"
+    ],
+    "keywords": [
+      "CNS penetration",
+      "EGFR‐TKI",
+      "Lazertinib",
+      "Osimertinib",
+      "T790M mutation",
+      "cardiotoxicity",
+      "non‐small cell lung cancer"
+    ],
+    "pub_types": [
+      "Journal Article",
+      "Review"
+    ],
+    "doi": "10.1002/ddr.70153",
+    "country": "United States"
+  },
+  {
+    "pmid": "40820655",
+    "title": "Cardiotoxicity Assessment of EGFR Tyrosine Kinase Inhibitors Using Human iPS Cell-Derived Cardiomyocytes and FDA Adverse Events Reporting System.",
+    "abstract": "Recent advances in the development of anti-cancer drugs have contributed to prolonged survival of cancer patients. In contrast, drug-induced cardiotoxicity, particularly cardiac contractile dysfunction, is of growing concern in cancer treatment. Therefore, it is important to understand the risks of anti-cancer drug-induced cardiac contractile dysfunction in drug development. We have previously developed image-based motion analysis using human induced pluripotent stem cell-derived cardiomyocytes (hiPSC-CMs) to assess the effect of drugs on contractility. However, the utility and predictive potential of image-based motion analysis using hiPSC-CMs for anti-cancer drug-induced cardiac contractile dysfunction have not been well understood. Here we focused on epidermal growth factor receptor (EGFR)-tyrosine kinase inhibitors (TKIs) and investigated the correlation between the hiPSC-CMs data and clinical signals of adverse events related to cardiac contractile dysfunction. We examined the effects of the four EGFR-TKIs, osimertinib, gefitinib, afatinib, and erlotinib, on the contractility of hiPSC-CMs using image-based motion analysis. We found that osimertinib decreased contraction velocity and deformation distance in a dose- and time-dependent manner, whereas gefitinib, afatinib, and erlotinib had little effect on these parameters. Next, we examined the real-world data of the EGFR-TKIs using FDA Adverse Event Reporting System (FAERS; JAPIC AERS). Only osimertinib showed significant clinical signals of adverse events related to cardiac contractile dysfunction. These data suggest that hiPSC-CM data correlate with clinical signals in FAERS analysis for four EGFR-TKIs. Thus, image-based motion analysis using hiPSC-CMs can be a useful platform for predicting the risk of anti-cancer drug-induced cardiac contractile dysfunction in patients.",
+    "authors": [
+      {
+        "last_name": "Yanagida",
+        "fore_name": "Shota",
+        "initials": "S",
+        "affiliations": [
+          "Division of Pharmacology, National Institute of Health Sciences (NIHS), Kawasaki, Kanagawa, Japan."
+        ]
+      },
+      {
+        "last_name": "Kawagishi",
+        "fore_name": "Hiroyuki",
+        "initials": "H",
+        "affiliations": [
+          "Division of Pharmacology, National Institute of Health Sciences (NIHS), Kawasaki, Kanagawa, Japan."
+        ]
+      },
+      {
+        "last_name": "Saito",
+        "fore_name": "Mitsuo",
+        "initials": "M",
+        "affiliations": [
+          "Japan Pharmaceutical Information Center (JAPIC), Tokyo, Japan."
+        ]
+      },
+      {
+        "last_name": "Hamano",
+        "fore_name": "Hirofumi",
+        "initials": "H",
+        "affiliations": [
+          "Department of Pharmacy, Okayama University Hospital, Okayama, Japan."
+        ]
+      },
+      {
+        "last_name": "Zamami",
+        "fore_name": "Yoshito",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Pharmacy, Okayama University Hospital, Okayama, Japan."
+        ]
+      },
+      {
+        "last_name": "Kanda",
+        "fore_name": "Yasunari",
+        "initials": "Y",
+        "affiliations": [
+          "Division of Pharmacology, National Institute of Health Sciences (NIHS), Kawasaki, Kanagawa, Japan."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Division of Pharmacology, National Institute of Health Sciences (NIHS), Kawasaki, Kanagawa, Japan.",
+      "Department of Pharmacy, Okayama University Hospital, Okayama, Japan.",
+      "Japan Pharmaceutical Information Center (JAPIC), Tokyo, Japan."
+    ],
+    "journal": {
+      "title": "Clinical and translational science",
+      "iso": "Clin Transl Sci",
+      "issn": "1752-8062"
+    },
+    "year": "2025",
+    "mesh_terms": [
+      "Humans",
+      "Induced Pluripotent Stem Cells",
+      "drug effects",
+      "cytology",
+      "Protein Kinase Inhibitors",
+      "adverse effects",
+      "Myocytes, Cardiac",
+      "drug effects",
+      "Cardiotoxicity",
+      "etiology",
+      "diagnosis",
+      "ErbB Receptors",
+      "antagonists & inhibitors",
+      "United States",
+      "United States Food and Drug Administration",
+      "Myocardial Contraction",
+      "drug effects",
+      "Antineoplastic Agents",
+      "adverse effects",
+      "Aniline Compounds",
+      "adverse effects",
+      "Acrylamides",
+      "adverse effects",
+      "Gefitinib",
+      "adverse effects",
+      "Afatinib",
+      "adverse effects",
+      "Tyrosine Kinase Inhibitors",
+      "Indoles",
+      "Pyrimidines"
+    ],
+    "keywords": [
+      "EGFR‐tyrosine kinase inhibitor",
+      "FAERS",
+      "cardiomyocytes",
+      "cardiotoxicity",
+      "contractility",
+      "human iPS cell"
+    ],
+    "pub_types": [
+      "Journal Article"
+    ],
+    "doi": "10.1111/cts.70325",
+    "country": "United States"
+  },
+  {
+    "pmid": "40789497",
+    "title": "Targeting PDK4 to mitigate osimertinib-induced cardiotoxicity: Insights into mitochondria-endoplasmic reticulum crosstalk and necroptosis.",
+    "abstract": "BACKGROUND: Osimertinib is a third-generation epidermal growth factor receptor tyrosine kinase inhibitor (EGFR-TKI) widely used in non-small cell lung cancer. However, its cardiotoxicity has raised increasing clinical concern. The underlying mechanisms remain unclear. METHODS: We evaluated the effects of osimertinib on cardiac structure and function in mice and assessed cell viability, mitochondrial function, and cell death pathways in H9C2 and AC16 cardiomyocytes. Mitochondria-associated endoplasmic reticulum membranes (MAMs), mitochondrial calcium overload, and necroptosis were analyzed by immunofluorescence, transmission electron microscopy, calcium probes, and Western blotting. Genetic and pharmacologic modulation of pyruvate dehydrogenase kinase 4 (PDK4) was used to probe its functional role. Protein-protein interactions were examined by co-immunoprecipitation and molecular docking. RESULTS: Osimertinib caused cardiac dysfunction and myocardial damage in vivo and triggered necroptosis in cardiomyocytes, characterized by increased phosphorylation of RIP3 and MLKL. Mechanistically, osimertinib upregulated PDK4, which promoted excessive MAM formation, mitochondrial calcium overload, and mitochondrial dysfunction. Co-immunoprecipitation revealed that PDK4 facilitated the interaction between BAP31 and FIS1, key tethering proteins at MAMs. Silencing PDK4 or inhibiting necroptosis with necrosulfonamide alleviated mitochondrial dysfunction and cell death. Conversely, PDK4 overexpression alone induced MAM formation, mitochondrial depolarization, and necroptotic signaling. Importantly, FIS1 knockdown mimicked the protective effects of PDK4 silencing. These results demonstrate that PDK4 contributes to osimertinib-induced cardiotoxicity by regulating MAM-associated necroptosis. CONCLUSION: Our findings identify a novel role for PDK4 in mediating osimertinib-induced cardiomyocyte necroptosis via MAM formation and mitochondrial calcium overload. Targeting the PDK4-BAP31-FIS1 axis may offer a potential therapeutic strategy to mitigate the cardiotoxic effects of osimertinib.",
+    "authors": [
+      {
+        "last_name": "Deng",
+        "fore_name": "Jingwen",
+        "initials": "J",
+        "affiliations": [
+          "Department of Cardiology, The Second Affiliated Hospital of Harbin Medical University, Harbin, 150086, China; Key Laboratory of Myocardial Ischemia, Ministry of Education, Harbin Medical University, Harbin, 150086, China."
+        ]
+      },
+      {
+        "last_name": "Wang",
+        "fore_name": "Dan",
+        "initials": "D",
+        "affiliations": [
+          "Center for Endemic Disease Control, Chinese Center for Disease Control and Prevention, Harbin Medical University, Harbin, 150081, China; NHC Key Laboratory of Etiology and Epidemiology (Harbin Medical University), Joint Key Laboratory of Endemic Diseases (Harbin Medical University Guizhou Medical University Xi'an Jiaotong University), China."
+        ]
+      },
+      {
+        "last_name": "Jiang",
+        "fore_name": "Keyi",
+        "initials": "K",
+        "affiliations": [
+          "Center for Endemic Disease Control, Chinese Center for Disease Control and Prevention, Harbin Medical University, Harbin, 150081, China; NHC Key Laboratory of Etiology and Epidemiology (Harbin Medical University), Joint Key Laboratory of Endemic Diseases (Harbin Medical University Guizhou Medical University Xi'an Jiaotong University), China."
+        ]
+      },
+      {
+        "last_name": "Lang",
+        "fore_name": "Xueyan",
+        "initials": "X",
+        "affiliations": [
+          "Department of Cardiology, The Second Affiliated Hospital of Harbin Medical University, Harbin, 150086, China; Key Laboratory of Myocardial Ischemia, Ministry of Education, Harbin Medical University, Harbin, 150086, China. Electronic address: langxueyan123456@163.com."
+        ]
+      },
+      {
+        "last_name": "Sun",
+        "fore_name": "Yue",
+        "initials": "Y",
+        "affiliations": [
+          "Center for Endemic Disease Control, Chinese Center for Disease Control and Prevention, Harbin Medical University, Harbin, 150081, China; NHC Key Laboratory of Etiology and Epidemiology (Harbin Medical University), Joint Key Laboratory of Endemic Diseases (Harbin Medical University Guizhou Medical University Xi'an Jiaotong University), China. Electronic address: sunyue@hrbmu.edu.cn."
+        ]
+      },
+      {
+        "last_name": "Li",
+        "fore_name": "Yilan",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Cardiology, The Second Affiliated Hospital of Harbin Medical University, Harbin, 150086, China; Key Laboratory of Myocardial Ischemia, Ministry of Education, Harbin Medical University, Harbin, 150086, China. Electronic address: lyl@hrbmu.edu.cn."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Center for Endemic Disease Control, Chinese Center for Disease Control and Prevention, Harbin Medical University, Harbin, 150081, China; NHC Key Laboratory of Etiology and Epidemiology (Harbin Medical University), Joint Key Laboratory of Endemic Diseases (Harbin Medical University Guizhou Medical University Xi'an Jiaotong University), China. Electronic address: sunyue@hrbmu.edu.cn.",
+      "Center for Endemic Disease Control, Chinese Center for Disease Control and Prevention, Harbin Medical University, Harbin, 150081, China; NHC Key Laboratory of Etiology and Epidemiology (Harbin Medical University), Joint Key Laboratory of Endemic Diseases (Harbin Medical University Guizhou Medical University Xi'an Jiaotong University), China.",
+      "Department of Cardiology, The Second Affiliated Hospital of Harbin Medical University, Harbin, 150086, China; Key Laboratory of Myocardial Ischemia, Ministry of Education, Harbin Medical University, Harbin, 150086, China.",
+      "Department of Cardiology, The Second Affiliated Hospital of Harbin Medical University, Harbin, 150086, China; Key Laboratory of Myocardial Ischemia, Ministry of Education, Harbin Medical University, Harbin, 150086, China. Electronic address: langxueyan123456@163.com.",
+      "Department of Cardiology, The Second Affiliated Hospital of Harbin Medical University, Harbin, 150086, China; Key Laboratory of Myocardial Ischemia, Ministry of Education, Harbin Medical University, Harbin, 150086, China. Electronic address: lyl@hrbmu.edu.cn."
+    ],
+    "journal": {
+      "title": "Free radical biology & medicine",
+      "iso": "Free Radic Biol Med",
+      "issn": "1873-4596"
+    },
+    "year": "2025",
+    "mesh_terms": [
+      "Animals",
+      "Acrylamides",
+      "adverse effects",
+      "toxicity",
+      "Mice",
+      "Necroptosis",
+      "drug effects",
+      "Myocytes, Cardiac",
+      "drug effects",
+      "metabolism",
+      "pathology",
+      "Aniline Compounds",
+      "adverse effects",
+      "toxicity",
+      "Cardiotoxicity",
+      "pathology",
+      "etiology",
+      "metabolism",
+      "Pyruvate Dehydrogenase Acetyl-Transferring Kinase",
+      "genetics",
+      "metabolism",
+      "antagonists & inhibitors",
+      "Endoplasmic Reticulum",
+      "drug effects",
+      "metabolism",
+      "Mitochondria",
+      "drug effects",
+      "metabolism",
+      "Rats",
+      "Humans",
+      "Calcium",
+      "metabolism",
+      "Male",
+      "Cell Line",
+      "Indoles",
+      "Pyrimidines"
+    ],
+    "keywords": [
+      "Cardiotoxicity",
+      "Mitochondria-associated endoplasmic reticulum membranes",
+      "Necroptosis",
+      "Osimertinib",
+      "PDK4"
+    ],
+    "pub_types": [
+      "Journal Article"
+    ],
+    "doi": "10.1016/j.freeradbiomed.2025.08.017",
+    "country": "United States"
+  },
+  {
+    "pmid": "40769633",
+    "title": "Osimertinib-Related Cardiotoxicity: Risk Factors and Clinical Implications.",
+    "abstract": "",
+    "authors": [
+      {
+        "last_name": "Matsumoto",
+        "fore_name": "Hirotaka",
+        "initials": "H",
+        "affiliations": [
+          "Department of Respiratory Medicine, Hyogo Prefectural Amagasaki General Medical Center, Hyogo, Japan. Electronic address: pbionoek3128891@gmail.com."
+        ]
+      },
+      {
+        "last_name": "Shimamura",
+        "fore_name": "Yushi",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Respiratory Medicine, Hyogo Prefectural Amagasaki General Medical Center, Hyogo, Japan."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Department of Respiratory Medicine, Hyogo Prefectural Amagasaki General Medical Center, Hyogo, Japan. Electronic address: pbionoek3128891@gmail.com.",
+      "Department of Respiratory Medicine, Hyogo Prefectural Amagasaki General Medical Center, Hyogo, Japan."
+    ],
+    "journal": {
+      "title": "Journal of thoracic oncology : official publication of the International Association for the Study of Lung Cancer",
+      "iso": "J Thorac Oncol",
+      "issn": "1556-1380"
+    },
+    "year": "2025",
+    "mesh_terms": [],
+    "keywords": [],
+    "pub_types": [
+      "Letter"
+    ],
+    "doi": "10.1016/j.jtho.2025.03.043",
+    "country": "United States"
+  },
+  {
+    "pmid": "40750174",
+    "title": "Unmasking the Heart of Osimertinib: A Closer Look at Drug-Induced Cardiotoxicity.",
+    "abstract": "BACKGROUND: Osimertinib, a third-generation epidermal growth factor receptor tyrosine kinase inhibitor, is an effective therapy for epidermal growth factor receptor-mutated non-small cell lung cancer, but it has been associated with a higher incidence of cardiotoxicity. CASE SUMMARY: A 91-year-old woman on osimertinib 80 mg daily presented with acute dyspnea and was found to have a newly reduced left ventricular ejection fraction of 30%. Coronary angiography excluded obstructive coronary disease. Osimertinib was discontinued, and guideline-directed medical therapy (GDMT) was initiated, resulting in left ventricular ejection fraction recovery to 60%. The patient was successfully rechallenged with osimertinib while continuing GDMT, without recurrence of cardiomyopathy. DISCUSSION: Although rare, osimertinib-induced cardiotoxicity may manifest as heart failure, arrhythmias, or QT interval prolongation. TAKE-HOME MESSAGES: This case underscores the potential of GDMT not only for recovery, but also for safe continuation of osimertinib. Prophylactic use of GDMT before initiating osimertinib may help reduce the risk of future cardiotoxic events.",
+    "authors": [
+      {
+        "last_name": "Sabri",
+        "fore_name": "Muhammad Salman",
+        "initials": "MS",
+        "affiliations": [
+          "Department of Internal Medicine, Jefferson Abington Hospital, Abington, Pennsylvania, USA. Electronic address: drsabri12@gmail.com."
+        ]
+      },
+      {
+        "last_name": "Javaid",
+        "fore_name": "Aheed",
+        "initials": "A",
+        "affiliations": [
+          "Department of Internal Medicine, Jefferson Abington Hospital, Abington, Pennsylvania, USA."
+        ]
+      },
+      {
+        "last_name": "Al Hennawi",
+        "fore_name": "Hussam",
+        "initials": "H",
+        "affiliations": [
+          "Department of Internal Medicine, Jefferson Abington Hospital, Abington, Pennsylvania, USA."
+        ]
+      },
+      {
+        "last_name": "Muhammadzai",
+        "fore_name": "Hamza",
+        "initials": "H",
+        "affiliations": [
+          "Department of Cardiology, Jefferson Abington Hospital, Abington, Pennsylvania, USA."
+        ]
+      },
+      {
+        "last_name": "Mallavarapu",
+        "fore_name": "Vamshi",
+        "initials": "V",
+        "affiliations": [
+          "Department of Cardiology, Jefferson Abington Hospital, Abington, Pennsylvania, USA."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Department of Cardiology, Jefferson Abington Hospital, Abington, Pennsylvania, USA.",
+      "Department of Internal Medicine, Jefferson Abington Hospital, Abington, Pennsylvania, USA.",
+      "Department of Internal Medicine, Jefferson Abington Hospital, Abington, Pennsylvania, USA. Electronic address: drsabri12@gmail.com."
+    ],
+    "journal": {
+      "title": "JACC. Case reports",
+      "iso": "JACC Case Rep",
+      "issn": "2666-0849"
+    },
+    "year": "2025",
+    "mesh_terms": [],
+    "keywords": [
+      "cardiomyopathy",
+      "guideline-directed medical therapy",
+      "heart failure",
+      "osimertinib"
+    ],
+    "pub_types": [
+      "Case Reports",
+      "Journal Article"
+    ],
+    "doi": "10.1016/j.jaccas.2025.104401",
+    "country": "Netherlands"
+  },
+  {
+    "pmid": "40653133",
+    "title": "Osimertinib induces prolongation of action potential duration via downregulation of KCNN1 expression: Exploring the potential mechanisms of arrhythmia.",
+    "abstract": "BACKGROUND: Compared with earlier generations of epidermal growth factor receptor-tyrosine kinase inhibitors, the third-generation agent osimertinib demonstrates superior efficacy in patients with non-small cell lung cancer and has become the first-line treatment, but is associated with more pronounced cardiotoxicity, especially arrhythmia. OBJECTIVE: This study aimed to investigate the underlying mechanisms of the potential proarrhythmic effects of osimertinib. METHODS: We investigated osimertinib's effects on cell viability, structure, and electrophysiological properties of human induced pluripotent stem cell-derived cardiomyocytes using cell viability assays, immunofluorescence staining, transmission electron microscopy, and optical mapping. A zebrafish in vivo model was used to validate cardiotoxicity. Western blotting (WB) assessed relative protein expression on cardiomyocyte membranes, whereas RNA sequencing and quantitative reverse transcription polymerase chain reaction identified significantly altered signaling pathways and target genes. Rescue experiments were conducted to confirm the pathogenic mechanism. RESULTS: The cell viability assay indicated that osimertinib reduced human induced pluripotent stem cell-derived cardiomyocyte viability (half-maximal inhibitory concentration = 3.492 μM). At this osimertinib concentration, immunofluorescence revealed disorganized myofilament sarcomeres, and transmission electron microscopy showed increased mitochondrial damage, whereas optical mapping demonstrated prolonged action potential duration and elevated incidence of early afterdepolarizations even at a near-physiological concentration. In vivo studies demonstrated that osimertinib-exposed zebrafish exhibited bradycardia, pericardial edema, and prolonged QT interval. WB revealed no significant changes in the expression of epidermal growth factor receptor. RNA sequencing revealed significant downregulation of potassium ion channel genes, with quantitative reverse transcription polymerase chain reaction and WB analysis demonstrating the most pronounced decrease in potassium calcium-activated channel subfamily N member 1 (KCNN1) expression. Modulating KCNN1 expression can reverse the electrophysiological alterations. CONCLUSION: Osimertinib prolongs action potential duration and promotes arrhythmias through off-target inhibition of KCNN1 expression.",
+    "authors": [
+      {
+        "last_name": "Li",
+        "fore_name": "Xin",
+        "initials": "X",
+        "affiliations": [
+          "Department of Cardiology, The Affiliated Taizhou People's Hospital of Nanjing Medical University, Taizhou School of Clinical Medicine, Nanjing Medical University, Jiangsu, China."
+        ]
+      },
+      {
+        "last_name": "Lin",
+        "fore_name": "Song",
+        "initials": "S",
+        "affiliations": [
+          "Department of Cardiology, The Affiliated Taizhou People's Hospital of Nanjing Medical University, Taizhou School of Clinical Medicine, Nanjing Medical University, Jiangsu, China."
+        ]
+      },
+      {
+        "last_name": "Huang",
+        "fore_name": "Jiayi",
+        "initials": "J",
+        "affiliations": [
+          "Department of Cardiology, The Affiliated Taizhou People's Hospital of Nanjing Medical University, Taizhou School of Clinical Medicine, Nanjing Medical University, Jiangsu, China."
+        ]
+      },
+      {
+        "last_name": "Lin",
+        "fore_name": "Yongping",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Cardiology, The Affiliated Taizhou People's Hospital of Nanjing Medical University, Taizhou School of Clinical Medicine, Nanjing Medical University, Jiangsu, China. Electronic address: Linyongping1206@163.com."
+        ]
+      },
+      {
+        "last_name": "Ruan",
+        "fore_name": "Zhongbao",
+        "initials": "Z",
+        "affiliations": [
+          "Department of Cardiology, The Affiliated Taizhou People's Hospital of Nanjing Medical University, Taizhou School of Clinical Medicine, Nanjing Medical University, Jiangsu, China. Electronic address: tzcardiac@163.com."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Department of Cardiology, The Affiliated Taizhou People's Hospital of Nanjing Medical University, Taizhou School of Clinical Medicine, Nanjing Medical University, Jiangsu, China.",
+      "Department of Cardiology, The Affiliated Taizhou People's Hospital of Nanjing Medical University, Taizhou School of Clinical Medicine, Nanjing Medical University, Jiangsu, China. Electronic address: tzcardiac@163.com.",
+      "Department of Cardiology, The Affiliated Taizhou People's Hospital of Nanjing Medical University, Taizhou School of Clinical Medicine, Nanjing Medical University, Jiangsu, China. Electronic address: Linyongping1206@163.com."
+    ],
+    "journal": {
+      "title": "Heart rhythm",
+      "iso": "Heart Rhythm",
+      "issn": "1556-3871"
+    },
+    "year": "2025",
+    "mesh_terms": [
+      "Aniline Compounds",
+      "pharmacology",
+      "Acrylamides",
+      "pharmacology",
+      "Animals",
+      "Zebrafish",
+      "Humans",
+      "Myocytes, Cardiac",
+      "drug effects",
+      "metabolism",
+      "Action Potentials",
+      "drug effects",
+      "Down-Regulation",
+      "drug effects",
+      "Arrhythmias, Cardiac",
+      "chemically induced",
+      "metabolism",
+      "physiopathology",
+      "Cells, Cultured",
+      "Induced Pluripotent Stem Cells",
+      "drug effects",
+      "Disease Models, Animal",
+      "Cell Survival",
+      "drug effects",
+      "Indoles",
+      "Pyrimidines"
+    ],
+    "keywords": [
+      "Arrhythmia",
+      "Cardiotoxicity",
+      "KCNN1",
+      "Osimertinib",
+      "SK channel",
+      "Zebrafish",
+      "hiPSC-CMs"
+    ],
+    "pub_types": [
+      "Journal Article"
+    ],
+    "doi": "10.1016/j.hrthm.2025.07.011",
+    "country": "United States"
+  },
+  {
+    "pmid": "40606994",
+    "title": "Electrocardiographic changes in QTc interval and other parameters associated with osimertinib therapy.",
+    "abstract": "INTRODUCTION: Osimertinib, a third-generation EGFR-TKI, is approved for the first-line treatment of EGFR-mutated advanced NSCLC and for T790M-positive NSCLC after progression on previous EGFR-TKI therapy. Osimertinib is associated with cardiotoxicity, including severe QT interval prolongation, which necessitates detailed evaluation due to its increasing use. METHODS: This retrospective, single-center study conducted at Jilin University China-Japan Union Hospital evaluated electrocardiographic changes with EGFR-mutated NSCLC treated with osimertinib. The study consecutively included 102 patients diagnosed with NSCLC at the China-Japan Union Hospital of Jilin University from August 1, 2019, to December 31, 2022. Among them, 41 patients who had both pre- and post-treatment ECG records while receiving osimertinib (80 mg daily) were analyzed. ECG parameters such as heart rate, PR interval, QRS duration, QRS axis, and QT intervals were manually calculated and analyzed. RESULTS: The study population had a mean age of 68.56 ± 8.73 years, comprising 46.34% males. Significant changes were observed in the QTc Bazett interval (P < 0.0001), QTc Fridericia interval (P = 0.0002) and QRS axis (P = 0.0387) post-treatment. QT interval prolongation was significant (McNemar test P = 0.0039), with both QTc Bazett and QTc Fridericia intervals showing notable prolongation. However, the changes in heart rate, PR interval, and QRS duration were not statistically significant. CONCLUSION: This study comprehensively investigates the electrocardiographic changes before and after osimertinib treatment in patients with EGFR-mutated NSCLC. The significant prolongation of QTc intervals underscores the need for rigorous ECG monitoring to mitigate potential cardiotoxicity.",
+    "authors": [
+      {
+        "last_name": "Pan",
+        "fore_name": "Yilin",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Cardiology, China-Japan Union Hospital of Jilin University, Jilin Provincial Cardiovascular Research Institute, Changchun, China.",
+          "Department of Critical Care Medicine, Beijing Anzhen Hospital, Capital Medical University, Beijing, China."
+        ]
+      },
+      {
+        "last_name": "Peng",
+        "fore_name": "Kexin",
+        "initials": "K",
+        "affiliations": [
+          "Department of Cardiology, China-Japan Union Hospital of Jilin University, Jilin Provincial Cardiovascular Research Institute, Changchun, China."
+        ]
+      },
+      {
+        "last_name": "Jiang",
+        "fore_name": "Yichuan",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Pharmacy, China-Japan Union Hospital of Jilin University, Jilin Provincial Cardiovascular Research Institute, Changchun, China."
+        ]
+      },
+      {
+        "last_name": "Yang",
+        "fore_name": "Ping",
+        "initials": "P",
+        "affiliations": [
+          "Department of Cardiology, China-Japan Union Hospital of Jilin University, Jilin Provincial Cardiovascular Research Institute, Changchun, China."
+        ]
+      },
+      {
+        "last_name": "Du",
+        "fore_name": "Beibei",
+        "initials": "B",
+        "affiliations": [
+          "Department of Cardiology, China-Japan Union Hospital of Jilin University, Jilin Provincial Cardiovascular Research Institute, Changchun, China."
+        ]
+      },
+      {
+        "last_name": "He",
+        "fore_name": "Yuquan",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Cardiology, China-Japan Union Hospital of Jilin University, Jilin Provincial Cardiovascular Research Institute, Changchun, China."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Department of Cardiology, China-Japan Union Hospital of Jilin University, Jilin Provincial Cardiovascular Research Institute, Changchun, China.",
+      "Department of Pharmacy, China-Japan Union Hospital of Jilin University, Jilin Provincial Cardiovascular Research Institute, Changchun, China.",
+      "Department of Critical Care Medicine, Beijing Anzhen Hospital, Capital Medical University, Beijing, China."
+    ],
+    "journal": {
+      "title": "Frontiers in oncology",
+      "iso": "Front Oncol",
+      "issn": "2234-943X"
+    },
+    "year": "2025",
+    "mesh_terms": [],
+    "keywords": [
+      "QTc interval",
+      "cardio-oncology",
+      "cardiotoxicity",
+      "electrocardiographic changes",
+      "osimertinib"
+    ],
+    "pub_types": [
+      "Journal Article"
+    ],
+    "doi": "10.3389/fonc.2025.1612758",
+    "country": "Switzerland"
+  },
+  {
+    "pmid": "40582919",
+    "title": "Osimertinib as First-Line Treatment for Patients With Advanced EGFR Mutation-Positive Non-Small Cell Lung Cancer in a Real-World Setting: Updated Overall Survival Data (OSI-FACT-OS).",
+    "abstract": "BACKGROUND: Previously, we reported on osimertinib (OSI) as a first-line treatment for EGFR mutation-positive non-small cell lung cancer (EGFRm+ NSCLC) in a real-world setting. However, owing to the limited observation period, data on overall survival (OS) and long-term safety were not reported. Therefore, in this study, we aimed to assess the long-term efficacy and safety of OSI in patients with EGFRm+ NSCLC. PATIENTS AND METHODS: We extended the observation period until July 2023 for 538 patients with EGFRm+ NSCLC who received OSI between August 2018 and December 2019. RESULTS: The median observation period was 37 months. The number of events was 392 (72.9%) for progression-free survival (PFS) and 285 (53%) for OS. The median PFS was 20.1 months (95% CI: 17.1-22.1) and median OS was 42.0 months (95% CI: 37.7-48.4). Safety data showed incidences of the following adverse events: pneumonitis (all grades/grade ≥ 3/grade 5), 90 (16.7%)/28 (5.2%)/5 (0.9%); grade ≥ 3 nonhematologic toxicity, 69 (12.8%); grade ≥ 3 hematologic toxicity, 34 (6.3%); QT prolongation (all grades/grade ≥ 3), 25 (4.6%)/8 (1.3%); and ejection fraction decrease and heart failure (all grades/grade ≥ 3), 14 (2.6%)/10 (1.9%). Regarding late adverse events manifesting after 1 year of treatment, 17 cases of pneumonitis and 7 cases of cardiotoxicity were recorded. CONCLUSION: This study supports the long-term efficacy of OSI, with PFS and OS comparable to those in the FLAURA trial in a Japanese real-world setting. However, it highlights the need for careful and long-term safety monitoring throughout the treatment period.",
+    "authors": [
+      {
+        "last_name": "Sakata",
+        "fore_name": "Yoshihiko",
+        "initials": "Y",
+        "affiliations": [
+          "Division of Respiratory Medicine, Saiseikai Kumamoto Hospital, Kumamoto 861-4193, Japan. Electronic address: sakata.4415@gmail.com."
+        ]
+      },
+      {
+        "last_name": "Saito",
+        "fore_name": "Go",
+        "initials": "G",
+        "affiliations": [
+          "Department of Respirology, Graduate School of Medicine, Chiba University, Chiba 260-8670, Japan."
+        ]
+      },
+      {
+        "last_name": "Sakata",
+        "fore_name": "Shinya",
+        "initials": "S",
+        "affiliations": [
+          "Department of Respiratory Medicine, Kumamoto University Hospital, Kumamoto 860-8556, Japan."
+        ]
+      },
+      {
+        "last_name": "Yamaguchi",
+        "fore_name": "Teppei",
+        "initials": "T",
+        "affiliations": [
+          "Department of Thoracic Oncology, Aichi Cancer Center Hospital, Nagoya, Aichi 464-8681, Japan."
+        ]
+      },
+      {
+        "last_name": "Tamiya",
+        "fore_name": "Motohiro",
+        "initials": "M",
+        "affiliations": [
+          "Department of Thoracic Oncology, Osaka International Cancer Institute, Osaka 541-8567, Japan."
+        ]
+      },
+      {
+        "last_name": "Suzuki",
+        "fore_name": "Hidekazu",
+        "initials": "H",
+        "affiliations": [
+          "Department of Thoracic Oncology, Osaka Habikino Medical Center, Osaka 583-8588, Japan."
+        ]
+      },
+      {
+        "last_name": "Shibaki",
+        "fore_name": "Ryota",
+        "initials": "R",
+        "affiliations": [
+          "Internal Medicine III, Wakayama Medical University, Wakayama 641-8509, Japan."
+        ]
+      },
+      {
+        "last_name": "Okada",
+        "fore_name": "Asuka",
+        "initials": "A",
+        "affiliations": [
+          "Department of Medical Oncology, Osaka City General Hospital, Osaka 531-0021, Japan."
+        ]
+      },
+      {
+        "last_name": "Yokoyama",
+        "fore_name": "Toshihide",
+        "initials": "T",
+        "affiliations": [
+          "Department of Respiratory Medicine, Kurashiki Central Hospital, Okayama 710-8602, Japan."
+        ]
+      },
+      {
+        "last_name": "Matsumoto",
+        "fore_name": "Hirotaka",
+        "initials": "H",
+        "affiliations": [
+          "Department of Respiratory Medicine, Hyogo Prefectural Amagasaki General Medical Center, Hyogo 660-8550, Japan."
+        ]
+      },
+      {
+        "last_name": "Otsuki",
+        "fore_name": "Taiichiro",
+        "initials": "T",
+        "affiliations": [
+          "Department of Respiratory Medicine and Hematology, Hyogo Medical University, School of Medicine, Hyogo 663-8501, Japan."
+        ]
+      },
+      {
+        "last_name": "Sato",
+        "fore_name": "Yuki",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Respiratory Medicine, Kobe City Medical Center General Hospital, Hyogo 650-0047, Japan."
+        ]
+      },
+      {
+        "last_name": "Uchida",
+        "fore_name": "Junji",
+        "initials": "J",
+        "affiliations": [
+          "Department of Thoracic Oncology, NHO Osaka Toneyama Medical Center, Osaka 560-8552, Japan."
+        ]
+      },
+      {
+        "last_name": "Tsukita",
+        "fore_name": "Yoko",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Respiratory Medicine, Tohoku University Graduate School of Medicine, Sendai, Miyagi 980-8574, Japan."
+        ]
+      },
+      {
+        "last_name": "Inaba",
+        "fore_name": "Megumi",
+        "initials": "M",
+        "affiliations": [
+          "Division of Respiratory Medicine, Kumamoto Chuo Hospital, Kumamoto 862-0965, Japan."
+        ]
+      },
+      {
+        "last_name": "Ikeda",
+        "fore_name": "Hideki",
+        "initials": "H",
+        "affiliations": [
+          "Department of Respiratory Medicine, Kimitsu Chuo Hospital, Chiba 292-8535, Japan; Department of Respirology, Graduate School of Medicine, Chiba University, Chiba 260-8670, Japan."
+        ]
+      },
+      {
+        "last_name": "Arai",
+        "fore_name": "Daisuke",
+        "initials": "D",
+        "affiliations": [
+          "Department of Internal Medicine, Saiseikai Utsunomiya Hospital, Utsunomiya, Tochigi 321-0974, Japan."
+        ]
+      },
+      {
+        "last_name": "Maruyama",
+        "fore_name": "Hirotaka",
+        "initials": "H",
+        "affiliations": [
+          "Department of Respiratory Medicine, Japan Organization of Occupational Health and Safety, Kumamoto Rosai Hospital, Kumamoto 866-8533, Japan."
+        ]
+      },
+      {
+        "last_name": "Hara",
+        "fore_name": "Satoshi",
+        "initials": "S",
+        "affiliations": [
+          "Department of Respiratory Medicine, Itami City Hospital, Hyogo 664-8540, Japan."
+        ]
+      },
+      {
+        "last_name": "Tsumura",
+        "fore_name": "Shinsuke",
+        "initials": "S",
+        "affiliations": [
+          "Department of Respiratory Medicine, Kumamoto Regional Medical Center, Kumamoto 860-0811, Japan."
+        ]
+      },
+      {
+        "last_name": "Morinaga",
+        "fore_name": "Jun",
+        "initials": "J",
+        "affiliations": [
+          "Department of Clinical Investigation (Biostatistics), Kumamoto University Hospital, Kumamoto 860-8556, Japan."
+        ]
+      },
+      {
+        "last_name": "Sakagami",
+        "fore_name": "Takuro",
+        "initials": "T",
+        "affiliations": [
+          "Department of Respiratory Medicine, Kumamoto University Hospital, Kumamoto 860-8556, Japan."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Division of Respiratory Medicine, Saiseikai Kumamoto Hospital, Kumamoto 861-4193, Japan. Electronic address: sakata.4415@gmail.com.",
+      "Department of Respiratory Medicine, Tohoku University Graduate School of Medicine, Sendai, Miyagi 980-8574, Japan.",
+      "Department of Respiratory Medicine, Kobe City Medical Center General Hospital, Hyogo 650-0047, Japan.",
+      "Department of Thoracic Oncology, Aichi Cancer Center Hospital, Nagoya, Aichi 464-8681, Japan.",
+      "Department of Respiratory Medicine, Kumamoto Regional Medical Center, Kumamoto 860-0811, Japan.",
+      "Department of Medical Oncology, Osaka City General Hospital, Osaka 531-0021, Japan.",
+      "Division of Respiratory Medicine, Kumamoto Chuo Hospital, Kumamoto 862-0965, Japan.",
+      "Department of Thoracic Oncology, Osaka International Cancer Institute, Osaka 541-8567, Japan.",
+      "Internal Medicine III, Wakayama Medical University, Wakayama 641-8509, Japan.",
+      "Department of Thoracic Oncology, Osaka Habikino Medical Center, Osaka 583-8588, Japan.",
+      "Department of Respirology, Graduate School of Medicine, Chiba University, Chiba 260-8670, Japan.",
+      "Department of Respiratory Medicine, Kurashiki Central Hospital, Okayama 710-8602, Japan.",
+      "Department of Thoracic Oncology, NHO Osaka Toneyama Medical Center, Osaka 560-8552, Japan.",
+      "Department of Respiratory Medicine, Itami City Hospital, Hyogo 664-8540, Japan.",
+      "Department of Respiratory Medicine, Hyogo Prefectural Amagasaki General Medical Center, Hyogo 660-8550, Japan.",
+      "Department of Respiratory Medicine, Japan Organization of Occupational Health and Safety, Kumamoto Rosai Hospital, Kumamoto 866-8533, Japan.",
+      "Department of Respiratory Medicine, Kimitsu Chuo Hospital, Chiba 292-8535, Japan; Department of Respirology, Graduate School of Medicine, Chiba University, Chiba 260-8670, Japan.",
+      "Department of Respiratory Medicine, Kumamoto University Hospital, Kumamoto 860-8556, Japan.",
+      "Department of Clinical Investigation (Biostatistics), Kumamoto University Hospital, Kumamoto 860-8556, Japan.",
+      "Department of Respiratory Medicine and Hematology, Hyogo Medical University, School of Medicine, Hyogo 663-8501, Japan.",
+      "Department of Internal Medicine, Saiseikai Utsunomiya Hospital, Utsunomiya, Tochigi 321-0974, Japan."
+    ],
+    "journal": {
+      "title": "Clinical lung cancer",
+      "iso": "Clin Lung Cancer",
+      "issn": "1938-0690"
+    },
+    "year": "2025",
+    "mesh_terms": [
+      "Humans",
+      "Carcinoma, Non-Small-Cell Lung",
+      "drug therapy",
+      "mortality",
+      "genetics",
+      "pathology",
+      "Female",
+      "Male",
+      "Lung Neoplasms",
+      "drug therapy",
+      "mortality",
+      "genetics",
+      "pathology",
+      "Aged",
+      "ErbB Receptors",
+      "genetics",
+      "Middle Aged",
+      "Aniline Compounds",
+      "therapeutic use",
+      "Mutation",
+      "Acrylamides",
+      "therapeutic use",
+      "Aged, 80 and over",
+      "Adult",
+      "Survival Rate",
+      "Protein Kinase Inhibitors",
+      "therapeutic use",
+      "Retrospective Studies",
+      "Follow-Up Studies",
+      "Antineoplastic Agents",
+      "therapeutic use",
+      "Indoles",
+      "Pyrimidines"
+    ],
+    "keywords": [
+      "Adverse events",
+      "EGFR mutation",
+      "Long-term follow-up"
+    ],
+    "pub_types": [
+      "Journal Article"
+    ],
+    "doi": "10.1016/j.cllc.2025.05.015",
+    "country": "United States"
+  },
+  {
+    "pmid": "40555063",
+    "title": "Prevalence of osimertinib-induced cardiotoxicity in non-small cell lung cancer patients: a systematic review and meta-analysis.",
+    "abstract": "OBJECTIVE: Osimertinib, a third-generation Epidermal Growth Factor Receptor (EGFR) Tyrosine Kinase Inhibitor (TKI), is the standard of care for patients with EGFR-mutated Non-Small Cell Lung Cancer (NSCLC). While clinically effective, concerns have emerged regarding its potential cardiotoxicity. This study aims to systematically evaluate the prevalence and types of cardiotoxicity associated with Osimertinib. METHODS: A systematic review and meta-analysis were performed in accordance with PRISMA guidelines. Literature searches of PubMed and ClinicalTrials.gov were conducted for studies published between October 2014 and October 2024. Data from 68 studies encompassing 14,050 patients were analyzed using the metafor package in R Studio (version 4.4.1). A generalized linear mixed model with logit transformation was used to estimate pooled prevalence. Heterogeneity was assessed via I2 statistics, and publication bias was evaluated using Egger's and Begg's tests. RESULTS: The overall pooled prevalence of Osimertinib-induced cardiotoxicity was 4.00 % (95 % CI: 2.9-5.48; I2 = 76.9 %). QT prolongation was the most commonly reported event (6.03 %), followed by atrial fibrillation (1.50 %) and cardiac failure (1.21 %). Subgroup analysis showed higher prevalence in randomized controlled trials (4.98 %) versus observational studies (0.78 %), and in combination therapies (4.89 %) versus monotherapy (3.64 %). Regional variation was noted, with the highest prevalence in North America (5.56 %). Egger's test indicated significant publication bias (p < 0.0001) for several cardiotoxic outcomes. CONCLUSION: Osimertinib is associated with a modest but clinically significant risk of cardiotoxicity, particularly QT prolongation. These findings support the need for routine cardiac monitoring in high-risk patients and emphasize the importance of standardized cardiotoxicity reporting in future trials to enhance the safety profile of Osimertinib in NSCLC treatment.",
+    "authors": [
+      {
+        "last_name": "Gawli",
+        "fore_name": "Chandrakant S",
+        "initials": "CS",
+        "affiliations": [
+          "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Dhule 425405 Maharashtra, India."
+        ]
+      },
+      {
+        "last_name": "Patil",
+        "fore_name": "Bhatu R",
+        "initials": "BR",
+        "affiliations": [
+          "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Dhule 425405 Maharashtra, India."
+        ]
+      },
+      {
+        "last_name": "Nagpure",
+        "fore_name": "Narendra R",
+        "initials": "NR",
+        "affiliations": [
+          "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Dhule 425405 Maharashtra, India."
+        ]
+      },
+      {
+        "last_name": "Patil",
+        "fore_name": "Chandrgaouda R",
+        "initials": "CR",
+        "affiliations": [
+          "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Dhule 425405 Maharashtra, India."
+        ]
+      },
+      {
+        "last_name": "Kumar",
+        "fore_name": "Anoop",
+        "initials": "A",
+        "affiliations": [
+          "Delhi Pharmaceutical Sciences & Research University (DPSRU), New Delhi 110017, India. Electronic address: abitmesra@gmail.com."
+        ]
+      },
+      {
+        "last_name": "Patel",
+        "fore_name": "Harun M",
+        "initials": "HM",
+        "affiliations": [
+          "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Dhule 425405 Maharashtra, India. Electronic address: hpatel_38@yahoo.com."
+        ]
+      }
+    ],
+    "affiliations": [
+      "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Dhule 425405 Maharashtra, India.",
+      "Delhi Pharmaceutical Sciences & Research University (DPSRU), New Delhi 110017, India. Electronic address: abitmesra@gmail.com.",
+      "R. C. Patel Institute of Pharmaceutical Education and Research, Shirpur, Dhule 425405 Maharashtra, India. Electronic address: hpatel_38@yahoo.com."
+    ],
+    "journal": {
+      "title": "Lung cancer (Amsterdam, Netherlands)",
+      "iso": "Lung Cancer",
+      "issn": "1872-8332"
+    },
+    "year": "2025",
+    "mesh_terms": [
+      "Humans",
+      "Carcinoma, Non-Small-Cell Lung",
+      "drug therapy",
+      "Cardiotoxicity",
+      "epidemiology",
+      "etiology",
+      "Lung Neoplasms",
+      "drug therapy",
+      "Aniline Compounds",
+      "adverse effects",
+      "therapeutic use",
+      "Acrylamides",
+      "adverse effects",
+      "therapeutic use",
+      "Prevalence",
+      "Protein Kinase Inhibitors",
+      "adverse effects",
+      "therapeutic use",
+      "Antineoplastic Agents",
+      "adverse effects",
+      "therapeutic use",
+      "ErbB Receptors",
+      "genetics",
+      "Indoles",
+      "Pyrimidines"
+    ],
+    "keywords": [
+      "Cardiotoxicity",
+      "EGFR",
+      "Meta-analysis",
+      "NSCLC",
+      "Osimertinib",
+      "QT prolongation",
+      "Tyrosine kinase inhibitor"
+    ],
+    "pub_types": [
+      "Systematic Review",
+      "Journal Article",
+      "Meta-Analysis"
+    ],
+    "doi": "10.1016/j.lungcan.2025.108629",
+    "country": "Ireland"
+  },
+  {
+    "pmid": "40413921",
+    "title": "Investigation of cardiotoxicity in patients treated with osimertinib: findings from the OSI-FACT study.",
+    "abstract": "INTRODUCTION: Osimertinib is a highly effective first-line treatment for advanced epithelial growth factor receptor (EGFR) mutation-positive non-small cell lung cancer (NSCLC). With its expanded perioperative use, the long-term risk of cardiotoxicity merits investigation. We assessed the occurrence and risk factors of QT prolongation and cardiac dysfunction in patients with NSCLC treated with first-line osimertinib across multiple institutions. METHODS: This retrospective cohort study, a part of the OSI-FACT study, included 538 patients who started first-line osimertinib treatment between August 2018 and December 2019. Patients receiving concurrent anticancer therapies were excluded. Clinical data, including patient characteristics, EGFR mutation status, and tumor stage, were analyzed. Cardiotoxicity graded per Common Terminology Criteria for Adverse Events version 5.0 was monitored via ECG and echocardiography over a median follow-up of 37 months. RESULTS: QT prolongation occurred in 23 patients (4.3 %), with eight reaching Grade ≥3. The median time to onset was 246 days. No significant risk factors for QT prolongation were identified. Cardiac dysfunction was reported in 14 patients (2.6 %), with five cases of Grade ≥3. The median onset was 171 days, with cases occurring after six months. Multivariate analysis identified poor performance status as a risk factor for cardiac dysfunction (HR 2.24, p = 0.005). CONCLUSION: Osimertinib-related cardiotoxicity, while rare, has important clinical implications, particularly for older patients and those with comorbidities. Regular monitoring, beyond the first year, is essential to ensure patient safety.",
+    "authors": [
+      {
+        "last_name": "Okada",
+        "fore_name": "Asuka",
+        "initials": "A",
+        "affiliations": [
+          "Department of Medical Oncology, Osaka City General Hospital, 2-13-22 Miyakojima-hondori, Miyakojima-ku, Osaka 531-0021, Japan; Department of Respiratory Medicine, Saiseikai Suita Hospital, 1-2 Kawazono-cho, Suita, Osaka 564-0013, Japan. Electronic address: aska_517@icloud.com."
+        ]
+      },
+      {
+        "last_name": "Sakata",
+        "fore_name": "Yoshihiko",
+        "initials": "Y",
+        "affiliations": [
+          "Division of Respiratory Medicine, Saiseikai Kumamoto Hospital, 5-3-1 Chikami, Minami-ku, Kumamoto 861-4193, Japan."
+        ]
+      },
+      {
+        "last_name": "Oya",
+        "fore_name": "Yuko",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Respiratory Medicine, Fujita Health University, 1-98, 1-98, Dengaku-gakubo, Kutsukake-cho, Toyoake City, Aichi, Japan."
+        ]
+      },
+      {
+        "last_name": "Sakata",
+        "fore_name": "Shinya",
+        "initials": "S",
+        "affiliations": [
+          "Department of Respiratory Medicine, Kumamoto University Hospital, 1-1-1 Honjo, Chuo-ku, Kumamoto 860-8556, Japan."
+        ]
+      },
+      {
+        "last_name": "Yamaguchi",
+        "fore_name": "Teppei",
+        "initials": "T",
+        "affiliations": [
+          "Department of Thoracic Oncology, Aichi Cancer Center Hospital, 1-1 Kanokoden, Chikusa-ku, Nagoya, Aichi 464-8681, Japan."
+        ]
+      },
+      {
+        "last_name": "Tamiya",
+        "fore_name": "Motohiro",
+        "initials": "M",
+        "affiliations": [
+          "Department of Thoracic Oncology, Osaka International Cancer Institute, 3-1-69 Otemae, Chuo-ku, Osaka, Osaka 541-8567, Japan."
+        ]
+      },
+      {
+        "last_name": "Suzuki",
+        "fore_name": "Hidekazu",
+        "initials": "H",
+        "affiliations": [
+          "Department of Thoracic Oncology, Osaka Habikino Medical Center, 3-7-1 Habikino, Habikino, Osaka 583-8588, Japan."
+        ]
+      },
+      {
+        "last_name": "Shibaki",
+        "fore_name": "Ryota",
+        "initials": "R",
+        "affiliations": [
+          "Internal Medicine III, Wakayama Medical University, 811-1 Kimiidera, Wakayama, Wakayama 641-8509, Japan."
+        ]
+      },
+      {
+        "last_name": "Yokoyama",
+        "fore_name": "Toshihide",
+        "initials": "T",
+        "affiliations": [
+          "Department of Respiratory Medicine, Kurashiki Central Hospital, 1-1-1 Miwa, Kurashiki, Okayama 710-8602, Japan."
+        ]
+      },
+      {
+        "last_name": "Matsumoto",
+        "fore_name": "Hirotaka",
+        "initials": "H",
+        "affiliations": [
+          "Department of Respiratory Medicine, Hyogo Prefectural Amagasaki General Medical Center, 2-17-77 Higashinaniwa, Amagasaki, Hyogo 660-8550, Japan."
+        ]
+      },
+      {
+        "last_name": "Otsuki",
+        "fore_name": "Taiichiro",
+        "initials": "T",
+        "affiliations": [
+          "Department of Respiratory Medicine and Hematology, Hyogo Medical University, School of Medicine, 1-1, Mukogawa-cho, Nishinomiya, Hyogo 663-8501, Japan."
+        ]
+      },
+      {
+        "last_name": "Sato",
+        "fore_name": "Yuki",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Respiratory Medicine, Kobe City Medical Center General Hospital, 2-1-1 Minatojimaminami, Chuo-ku, Kobe, Hyogo 650-0047, Japan."
+        ]
+      },
+      {
+        "last_name": "Uchida",
+        "fore_name": "Junji",
+        "initials": "J",
+        "affiliations": [
+          "Department of Thoracic Oncology, National Hospital Organization Osaka Toneyama Medical Center, 5-1-1 Toneyama, Toyonaka, Osaka 560-8552, Japan."
+        ]
+      },
+      {
+        "last_name": "Saito",
+        "fore_name": "Go",
+        "initials": "G",
+        "affiliations": [
+          "Department of Respirology, Graduate School of Medicine, Chiba University, 1-8-1 Inohana, Chuo-ku, Chiba, Chiba 260-8670, Japan."
+        ]
+      },
+      {
+        "last_name": "Tsukita",
+        "fore_name": "Yoko",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Respiratory Medicine, Tohoku University Graduate School of Medicine, 1-1 Seiryo, Aoba-ku, Sendai, Miyagi 980-8574, Japan."
+        ]
+      },
+      {
+        "last_name": "Inaba",
+        "fore_name": "Megumi",
+        "initials": "M",
+        "affiliations": [
+          "Division of Respiratory Medicine, Kumamoto Chuo Hospital, 1-5-1 Tainoshima, Minami-ku, Kumamoto 862-0965, Japan."
+        ]
+      },
+      {
+        "last_name": "Ikeda",
+        "fore_name": "Hideki",
+        "initials": "H",
+        "affiliations": [
+          "Department of Respirology, Graduate School of Medicine, Chiba University, 1-8-1 Inohana, Chuo-ku, Chiba, Chiba 260-8670, Japan; Department of Respiratory Medicine, Kimitsu Chuo Hospital, 1010 Sakurai, Kisarazu, Chiba 292-8535, Japan."
+        ]
+      },
+      {
+        "last_name": "Arai",
+        "fore_name": "Daisuke",
+        "initials": "D",
+        "affiliations": [
+          "Department of Internal Medicine, Saiseikai Utsunomiya Hospital, 911-1 Takebayashi, Utsunomiya, Tochigi 321-0974, Japan."
+        ]
+      },
+      {
+        "last_name": "Maruyama",
+        "fore_name": "Hirotaka",
+        "initials": "H",
+        "affiliations": [
+          "Department of Respiratory Medicine, Japan Organization of Occupational Health and Safety, Kumamoto Rosai Hospital, 1670 Takehara, Yatsushiro, Kumamoto 866-8533, Japan."
+        ]
+      },
+      {
+        "last_name": "Hara",
+        "fore_name": "Satoshi",
+        "initials": "S",
+        "affiliations": [
+          "Department of Respiratory Medicine, Itami City Hospital, 1-100 Koyaike, Itami, Hyogo 664-8540, Japan."
+        ]
+      },
+      {
+        "last_name": "Tsumura",
+        "fore_name": "Shinsuke",
+        "initials": "S",
+        "affiliations": [
+          "Department of Respiratory Medicine, Kumamoto Regional Medical Center, 5-16-10 Honjyo, Chuo-ku, Kumamoto 860-0811, Japan."
+        ]
+      },
+      {
+        "last_name": "Sakagami",
+        "fore_name": "Takuro",
+        "initials": "T",
+        "affiliations": [
+          "Department of Respiratory Medicine, Kumamoto University Hospital, 1-1-1 Honjo, Chuo-ku, Kumamoto 860-8556, Japan."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Department of Respiratory Medicine, Itami City Hospital, 1-100 Koyaike, Itami, Hyogo 664-8540, Japan.",
+      "Department of Medical Oncology, Osaka City General Hospital, 2-13-22 Miyakojima-hondori, Miyakojima-ku, Osaka 531-0021, Japan; Department of Respiratory Medicine, Saiseikai Suita Hospital, 1-2 Kawazono-cho, Suita, Osaka 564-0013, Japan. Electronic address: aska_517@icloud.com.",
+      "Department of Respiratory Medicine, Fujita Health University, 1-98, 1-98, Dengaku-gakubo, Kutsukake-cho, Toyoake City, Aichi, Japan.",
+      "Division of Respiratory Medicine, Saiseikai Kumamoto Hospital, 5-3-1 Chikami, Minami-ku, Kumamoto 861-4193, Japan.",
+      "Department of Respiratory Medicine, Kobe City Medical Center General Hospital, 2-1-1 Minatojimaminami, Chuo-ku, Kobe, Hyogo 650-0047, Japan.",
+      "Department of Respiratory Medicine and Hematology, Hyogo Medical University, School of Medicine, 1-1, Mukogawa-cho, Nishinomiya, Hyogo 663-8501, Japan.",
+      "Department of Internal Medicine, Saiseikai Utsunomiya Hospital, 911-1 Takebayashi, Utsunomiya, Tochigi 321-0974, Japan.",
+      "Department of Respirology, Graduate School of Medicine, Chiba University, 1-8-1 Inohana, Chuo-ku, Chiba, Chiba 260-8670, Japan; Department of Respiratory Medicine, Kimitsu Chuo Hospital, 1010 Sakurai, Kisarazu, Chiba 292-8535, Japan.",
+      "Department of Respiratory Medicine, Hyogo Prefectural Amagasaki General Medical Center, 2-17-77 Higashinaniwa, Amagasaki, Hyogo 660-8550, Japan.",
+      "Department of Thoracic Oncology, Aichi Cancer Center Hospital, 1-1 Kanokoden, Chikusa-ku, Nagoya, Aichi 464-8681, Japan.",
+      "Internal Medicine III, Wakayama Medical University, 811-1 Kimiidera, Wakayama, Wakayama 641-8509, Japan.",
+      "Department of Respiratory Medicine, Kurashiki Central Hospital, 1-1-1 Miwa, Kurashiki, Okayama 710-8602, Japan.",
+      "Department of Respiratory Medicine, Japan Organization of Occupational Health and Safety, Kumamoto Rosai Hospital, 1670 Takehara, Yatsushiro, Kumamoto 866-8533, Japan.",
+      "Department of Respirology, Graduate School of Medicine, Chiba University, 1-8-1 Inohana, Chuo-ku, Chiba, Chiba 260-8670, Japan.",
+      "Division of Respiratory Medicine, Kumamoto Chuo Hospital, 1-5-1 Tainoshima, Minami-ku, Kumamoto 862-0965, Japan.",
+      "Department of Respiratory Medicine, Kumamoto Regional Medical Center, 5-16-10 Honjyo, Chuo-ku, Kumamoto 860-0811, Japan.",
+      "Department of Thoracic Oncology, National Hospital Organization Osaka Toneyama Medical Center, 5-1-1 Toneyama, Toyonaka, Osaka 560-8552, Japan.",
+      "Department of Thoracic Oncology, Osaka Habikino Medical Center, 3-7-1 Habikino, Habikino, Osaka 583-8588, Japan.",
+      "Department of Respiratory Medicine, Kumamoto University Hospital, 1-1-1 Honjo, Chuo-ku, Kumamoto 860-8556, Japan.",
+      "Department of Respiratory Medicine, Tohoku University Graduate School of Medicine, 1-1 Seiryo, Aoba-ku, Sendai, Miyagi 980-8574, Japan.",
+      "Department of Thoracic Oncology, Osaka International Cancer Institute, 3-1-69 Otemae, Chuo-ku, Osaka, Osaka 541-8567, Japan."
+    ],
+    "journal": {
+      "title": "Lung cancer (Amsterdam, Netherlands)",
+      "iso": "Lung Cancer",
+      "issn": "1872-8332"
+    },
+    "year": "2025",
+    "mesh_terms": [
+      "Humans",
+      "Female",
+      "Male",
+      "Acrylamides",
+      "adverse effects",
+      "therapeutic use",
+      "Cardiotoxicity",
+      "etiology",
+      "diagnosis",
+      "epidemiology",
+      "Aniline Compounds",
+      "adverse effects",
+      "therapeutic use",
+      "Retrospective Studies",
+      "Aged",
+      "Carcinoma, Non-Small-Cell Lung",
+      "drug therapy",
+      "pathology",
+      "Middle Aged",
+      "Lung Neoplasms",
+      "drug therapy",
+      "pathology",
+      "Risk Factors",
+      "Mutation",
+      "Aged, 80 and over",
+      "ErbB Receptors",
+      "genetics",
+      "Antineoplastic Agents",
+      "adverse effects",
+      "therapeutic use",
+      "Electrocardiography",
+      "Protein Kinase Inhibitors",
+      "adverse effects",
+      "therapeutic use",
+      "Adult",
+      "Long QT Syndrome",
+      "chemically induced",
+      "Indoles",
+      "Pyrimidines"
+    ],
+    "keywords": [
+      "Cardiac dysfunction",
+      "Cardiotoxicity",
+      "EGFR mutation",
+      "Non-small-cell lung cancer",
+      "Osimertinib",
+      "QT prolongation",
+      "Real-world"
+    ],
+    "pub_types": [
+      "Journal Article",
+      "Multicenter Study"
+    ],
+    "doi": "10.1016/j.lungcan.2025.108589",
+    "country": "Ireland"
+  },
+  {
+    "pmid": "40343685",
+    "title": "Impact of Proton Pump Inhibitors on Osimertinib-Induced Cardiotoxicity in NSCLC Patients.",
+    "abstract": "There is a lack of comprehensive research investigating the relationship between proton pump inhibitors (PPIs) and osimertinib combination therapy concerning cardiotoxicity. We conducted a retrospective analysis of adverse event reports from the US Food and Drug Administration Adverse Event Reporting System (FAERS). In this analysis, we used patients with non-small cell lung cancer (NSCLC) who did not receive osimertinib or PPIs as a control group to assess the association between cardiotoxicity occurrence in patients receiving osimertinib with PPIs and those without PPIs. We employed disproportionality analysis along with both additive and multiplicative models. The reporting odds ratios (ROR) for cardiac events, including torsade de pointes/QT prolongation, cardiomyopathy, cardiac arrhythmias, cardiac failure, ischaemic heart disease, and embolic and thrombotic events, were significantly higher in patients using PPIs with osimertinib (14.11, 9.04-22.04; 4.67, 2.67-8.16; 4.43, 3.17-6.20; 3.67, 2.53-5.34; 2.24, 1.31-3.84; 1.92, 1.43-2.56, respectively) compared to osimertinib alone (4.87, 3.91-6.07; 2.50, 2.02-3.09; 1.59, 1.37-1.84; 2.00, 1.74-2.29; 0.65, 0.50-0.84; 1.01, 0.91-1.11). Our investigation unveiled an elevated risk of cardiotoxicity in NSCLC patients when osimertinib was combined with PPIs, compared to osimertinib monotherapy. Therefore, vigilant monitoring for cardiotoxicity is paramount in NSCLC patients undergoing these combined treatments.",
+    "authors": [
+      {
+        "last_name": "Wang",
+        "fore_name": "Haitao",
+        "initials": "H",
+        "affiliations": [
+          "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China."
+        ]
+      },
+      {
+        "last_name": "Ma",
+        "fore_name": "Sinan",
+        "initials": "S",
+        "affiliations": [
+          "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China."
+        ]
+      },
+      {
+        "last_name": "Huang",
+        "fore_name": "Weijia",
+        "initials": "W",
+        "affiliations": [
+          "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China."
+        ]
+      },
+      {
+        "last_name": "Chen",
+        "fore_name": "Keyu",
+        "initials": "K",
+        "affiliations": [
+          "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China."
+        ]
+      },
+      {
+        "last_name": "Xie",
+        "fore_name": "Jiao",
+        "initials": "J",
+        "affiliations": [
+          "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China."
+        ]
+      },
+      {
+        "last_name": "Wang",
+        "fore_name": "Na",
+        "initials": "N",
+        "affiliations": [
+          "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China."
+        ]
+      },
+      {
+        "last_name": "Li",
+        "fore_name": "Youjia",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China."
+        ]
+      },
+      {
+        "last_name": "Yang",
+        "fore_name": "Qianting",
+        "initials": "Q",
+        "affiliations": [
+          "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China."
+        ]
+      },
+      {
+        "last_name": "Yang",
+        "fore_name": "Xin",
+        "initials": "X",
+        "affiliations": [
+          "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China."
+        ]
+      },
+      {
+        "last_name": "Wang",
+        "fore_name": "Yan",
+        "initials": "Y",
+        "affiliations": [
+          "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China. wangyan0819@mail.xjtu.edu.cn."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China. wangyan0819@mail.xjtu.edu.cn.",
+      "Department of Pharmacy, The Second Affiliated Hospital of Xi'an Jiaotong University, Xi'an, China."
+    ],
+    "journal": {
+      "title": "Cardiovascular toxicology",
+      "iso": "Cardiovasc Toxicol",
+      "issn": "1559-0259"
+    },
+    "year": "2025",
+    "mesh_terms": [
+      "Humans",
+      "Carcinoma, Non-Small-Cell Lung",
+      "drug therapy",
+      "pathology",
+      "Acrylamides",
+      "adverse effects",
+      "Cardiotoxicity",
+      "Aniline Compounds",
+      "adverse effects",
+      "Lung Neoplasms",
+      "drug therapy",
+      "pathology",
+      "Retrospective Studies",
+      "Proton Pump Inhibitors",
+      "adverse effects",
+      "therapeutic use",
+      "Female",
+      "Male",
+      "Middle Aged",
+      "Risk Factors",
+      "Aged",
+      "Risk Assessment",
+      "Protein Kinase Inhibitors",
+      "adverse effects",
+      "Antineoplastic Agents",
+      "adverse effects",
+      "Heart Diseases",
+      "chemically induced",
+      "diagnosis",
+      "epidemiology",
+      "United States",
+      "epidemiology",
+      "Drug Interactions",
+      "Adverse Drug Reaction Reporting Systems",
+      "Pharmacovigilance",
+      "Indoles",
+      "Pyrimidines"
+    ],
+    "keywords": [
+      "Cardiotoxicity",
+      "Non–small cell lung cancer",
+      "Osimertinib",
+      "PPIs"
+    ],
+    "pub_types": [
+      "Journal Article"
+    ],
+    "doi": "10.1007/s12012-025-10012-8",
+    "country": "United States"
+  },
+  {
+    "pmid": "40095892",
+    "title": "Real-World Data on Osimertinib-Associated Cardiac Toxicity.",
+    "abstract": "Background: Lung cancer is the leading cause of cancer-related deaths globally, with epidermal growth factor receptor (EGFR) mutations present in approximately 17-39% of non-small cell lung cancer (NSCLC) cases. Osimertinib, a third-generation oral EGFR tyrosine kinase inhibitor (EGFR-TKI), has become a cornerstone in the treatment of EGFR-mutated NSCLC. However, the full scope of its potentially life-threatening adverse effects, particularly cardiomyopathy, remains underexplored. Methods: This retrospective study was conducted using data from a multi-center registry of NSCLC patients with EGFR mutations treated with first-line osimertinib therapy between December 2018 and April 2024. Osimertinib-related cardiotoxicity was defined as a composite of reduced ejection fraction (EF) and cardiac death. Results: The study cohort consisted of 17 patients, and most of the patients had a history of smoking. Cardiac toxicity onset varied from 1 to 28 months following osimertinib initiation, with 70.59% of the patients experiencing symptoms within the first 6 months of treatment. Fourteen patients showed some degree of symptom improvement and EF recovery, although most did not return to baseline EF levels. Comorbidities, including heart failure, hypertension, and dyslipidemia, were prevalent across the cohort. Conclusions: While osimertinib remains an effective treatment for EGFR-mutated NSCLC, its associated cardiac toxicity, particularly in patients with pre-existing conditions, presents a significant challenge. Close monitoring, early intervention, and individualized management strategies are critical in mitigating these risks. Patients with mild cardiac toxicity may be suitable for rechallenge, while those with more severe or persistent toxicity should generally be excluded from further osimertinib treatment.",
+    "authors": [
+      {
+        "last_name": "Agbarya",
+        "fore_name": "Abed",
+        "initials": "A",
+        "affiliations": [
+          "Oncology Department, Bnai Zion Medical Centre, Haifa 31048, Israel."
+        ]
+      },
+      {
+        "last_name": "Raphael",
+        "fore_name": "Ari",
+        "initials": "A",
+        "affiliations": [
+          "Thoracic Cancer Service, Davidoff Cancer Centre, Beilinson Campus, Petah Tikva 49100, Israel."
+        ]
+      },
+      {
+        "last_name": "Gantz Sorotsky",
+        "fore_name": "Hadas",
+        "initials": "H",
+        "affiliations": [
+          "Institute of Oncology, Chaim Sheba Medical Center, Ramat Gan 52600, Israel.",
+          "School of Medicine, Tel Aviv University, Tel Aviv 69978, Israel."
+        ]
+      },
+      {
+        "last_name": "Rottenberg",
+        "fore_name": "Yakir",
+        "initials": "Y",
+        "affiliations": [
+          "Sharett Institue of Oncology, Hadassah Hebrew University Medical Center, Jerusalem 91200, Israel."
+        ]
+      },
+      {
+        "last_name": "Šebek",
+        "fore_name": "Viktor",
+        "initials": "V",
+        "affiliations": [
+          "Department of Pharmacology, Faculty of Medicine and Dentistry, Palacky University Olomouc, Hnevotinska st. 976/3, 77900 Olomouc, Czech Republic."
+        ]
+      },
+      {
+        "last_name": "Radonjic",
+        "fore_name": "Dejan",
+        "initials": "D",
+        "affiliations": [
+          "Faculty of Medicine and Dentistry, Palacky University Olomouc, Hnevotinska st. 976/3, 77900 Olomouc, Czech Republic."
+        ]
+      },
+      {
+        "last_name": "Yakobson",
+        "fore_name": "Alexander",
+        "initials": "A",
+        "affiliations": [
+          "The Legacy Heritage Cancer Center and Dr. Larry Norton Institute, Soroka Medical Center, Beer Sheva 84105, Israel.",
+          "Medical School for International Health, Faculty of Health Sciences, Ben Gurion University of the Negev, Beer Sheva 84105, Israel."
+        ]
+      },
+      {
+        "last_name": "Arnon",
+        "fore_name": "Johnathan",
+        "initials": "J",
+        "affiliations": [
+          "Institute of Oncology, Chaim Sheba Medical Center, Ramat Gan 52600, Israel.",
+          "School of Medicine, Tel Aviv University, Tel Aviv 69978, Israel."
+        ]
+      },
+      {
+        "last_name": "Shalata",
+        "fore_name": "Walid",
+        "initials": "W",
+        "affiliations": [
+          "The Legacy Heritage Cancer Center and Dr. Larry Norton Institute, Soroka Medical Center, Beer Sheva 84105, Israel.",
+          "Medical School for International Health, Faculty of Health Sciences, Ben Gurion University of the Negev, Beer Sheva 84105, Israel."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Sharett Institue of Oncology, Hadassah Hebrew University Medical Center, Jerusalem 91200, Israel.",
+      "The Legacy Heritage Cancer Center and Dr. Larry Norton Institute, Soroka Medical Center, Beer Sheva 84105, Israel.",
+      "Institute of Oncology, Chaim Sheba Medical Center, Ramat Gan 52600, Israel.",
+      "Oncology Department, Bnai Zion Medical Centre, Haifa 31048, Israel.",
+      "School of Medicine, Tel Aviv University, Tel Aviv 69978, Israel.",
+      "Department of Pharmacology, Faculty of Medicine and Dentistry, Palacky University Olomouc, Hnevotinska st. 976/3, 77900 Olomouc, Czech Republic.",
+      "Faculty of Medicine and Dentistry, Palacky University Olomouc, Hnevotinska st. 976/3, 77900 Olomouc, Czech Republic.",
+      "Medical School for International Health, Faculty of Health Sciences, Ben Gurion University of the Negev, Beer Sheva 84105, Israel.",
+      "Thoracic Cancer Service, Davidoff Cancer Centre, Beilinson Campus, Petah Tikva 49100, Israel."
+    ],
+    "journal": {
+      "title": "Journal of clinical medicine",
+      "iso": "J Clin Med",
+      "issn": "2077-0383"
+    },
+    "year": "2025",
+    "mesh_terms": [],
+    "keywords": [
+      "EGFR mutations",
+      "cardiac toxicity",
+      "non-small cell lung cancer",
+      "osimertinib",
+      "real-world data"
+    ],
+    "pub_types": [
+      "Journal Article"
+    ],
+    "doi": "10.3390/jcm14051754",
+    "country": "Switzerland"
+  },
+  {
+    "pmid": "40049769",
+    "title": "Accurate Risk Factors of Cardiotoxicity in Patients With NSCLC Treated With Osimertinib.",
+    "abstract": "",
+    "authors": [
+      {
+        "last_name": "Wu",
+        "fore_name": "Lei",
+        "initials": "L",
+        "affiliations": [
+          "Department of Oncology, Central Hospital Affiliated to Shandong First Medical University, Jinan, Shandong, People's Republic of China."
+        ]
+      },
+      {
+        "last_name": "Liu",
+        "fore_name": "Ning",
+        "initials": "N",
+        "affiliations": [
+          "Department of Oncology, Central Hospital Affiliated to Shandong First Medical University, Jinan, Shandong, People's Republic of China."
+        ]
+      },
+      {
+        "last_name": "Sun",
+        "fore_name": "Meili",
+        "initials": "M",
+        "affiliations": [
+          "Department of Oncology, Central Hospital Affiliated to Shandong First Medical University, Jinan, Shandong, People's Republic of China. Electronic address: zlkzxyy@163.com."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Department of Oncology, Central Hospital Affiliated to Shandong First Medical University, Jinan, Shandong, People's Republic of China. Electronic address: zlkzxyy@163.com.",
+      "Department of Oncology, Central Hospital Affiliated to Shandong First Medical University, Jinan, Shandong, People's Republic of China."
+    ],
+    "journal": {
+      "title": "Journal of thoracic oncology : official publication of the International Association for the Study of Lung Cancer",
+      "iso": "J Thorac Oncol",
+      "issn": "1556-1380"
+    },
+    "year": "2025",
+    "mesh_terms": [],
+    "keywords": [],
+    "pub_types": [
+      "Letter"
+    ],
+    "doi": "10.1016/j.jtho.2024.11.028",
+    "country": "United States"
+  },
+  {
+    "pmid": "39914915",
+    "title": "Osimertinib and Cardiotoxicity: A Topic to Keep Addressing.",
+    "abstract": "",
+    "authors": [
+      {
+        "last_name": "Li",
+        "fore_name": "Shenduo",
+        "initials": "S",
+        "affiliations": [
+          "Division of Hematology and Medical Oncology, Mayo Clinic, Jacksonville, Florida."
+        ]
+      },
+      {
+        "last_name": "Manochakian",
+        "fore_name": "Rami",
+        "initials": "R",
+        "affiliations": [
+          "Division of Hematology and Medical Oncology, Mayo Clinic, Jacksonville, Florida."
+        ]
+      },
+      {
+        "last_name": "Zhao",
+        "fore_name": "Yujie",
+        "initials": "Y",
+        "affiliations": [
+          "Division of Hematology and Medical Oncology, Mayo Clinic, Jacksonville, Florida."
+        ]
+      },
+      {
+        "last_name": "Lou",
+        "fore_name": "Yanyan",
+        "initials": "Y",
+        "affiliations": [
+          "Division of Hematology and Medical Oncology, Mayo Clinic, Jacksonville, Florida. Electronic address: lou.yanyan@mayo.edu."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Division of Hematology and Medical Oncology, Mayo Clinic, Jacksonville, Florida.",
+      "Division of Hematology and Medical Oncology, Mayo Clinic, Jacksonville, Florida. Electronic address: lou.yanyan@mayo.edu."
+    ],
+    "journal": {
+      "title": "Journal of thoracic oncology : official publication of the International Association for the Study of Lung Cancer",
+      "iso": "J Thorac Oncol",
+      "issn": "1556-1380"
+    },
+    "year": "2025",
+    "mesh_terms": [],
+    "keywords": [],
+    "pub_types": [
+      "Editorial"
+    ],
+    "doi": "10.1016/j.jtho.2024.11.026",
+    "country": "United States"
+  },
+  {
+    "pmid": "39859270",
+    "title": "Matters of the Heart: Cardiotoxicity Related to Target Therapy in Oncogene-Addicted Non-Small Cell Lung Cancer.",
+    "abstract": "The treatment of Non Small Cell Lung Cancer (NSCLC) has been revolutionised by the introduction of targeted therapies. With the improvement of response and frequently of overall survival, however, a whole new set of adverse events emerged. In fact, due to the peculiar mechanism of action of each one of the tyrosine kinase inhibitors and other targeted therapies, every drug has its own specific safety profile. In addition, this safety profile could not fully emerge from clinical trials data, as patients in clinical practice usually have more comorbidities and frailties. Cardiotoxicity is a well-known and established adverse event of anti-cancer therapies. However, only recently it has become a central topic for targeted therapies in NSCLC, due to the unknown real range and frequency. Management of this toxicity begins with prevention, and must balance the need of continuing an effective anticancer treatment versus low risk of even fatal events and the preservation of long-term quality of life. The aim of this review is to summarise the current knowledge focusing on currently used targeted therapies in NSCLC.",
+    "authors": [
+      {
+        "last_name": "Torresan",
+        "fore_name": "Sara",
+        "initials": "S",
+        "affiliations": [
+          "Department of Medical Oncology, Centro di Riferimento Oncologico di Aviano (CRO), Istituto di Ricovero e Cura a Carattere Scientifico, 33081 Aviano, Italy.",
+          "Department of Medicine (DME), University of Udine, 33100 Udine, Italy."
+        ]
+      },
+      {
+        "last_name": "Bortolot",
+        "fore_name": "Martina",
+        "initials": "M",
+        "affiliations": [
+          "Department of Medical Oncology, Centro di Riferimento Oncologico di Aviano (CRO), Istituto di Ricovero e Cura a Carattere Scientifico, 33081 Aviano, Italy.",
+          "Department of Medicine (DME), University of Udine, 33100 Udine, Italy."
+        ]
+      },
+      {
+        "last_name": "De Carlo",
+        "fore_name": "Elisa",
+        "initials": "E",
+        "affiliations": [
+          "Department of Medical Oncology, Centro di Riferimento Oncologico di Aviano (CRO), Istituto di Ricovero e Cura a Carattere Scientifico, 33081 Aviano, Italy."
+        ]
+      },
+      {
+        "last_name": "Bertoli",
+        "fore_name": "Elisa",
+        "initials": "E",
+        "affiliations": [
+          "Department of Medical Oncology, Centro di Riferimento Oncologico di Aviano (CRO), Istituto di Ricovero e Cura a Carattere Scientifico, 33081 Aviano, Italy."
+        ]
+      },
+      {
+        "last_name": "Stanzione",
+        "fore_name": "Brigida",
+        "initials": "B",
+        "affiliations": [
+          "Department of Medical Oncology, Centro di Riferimento Oncologico di Aviano (CRO), Istituto di Ricovero e Cura a Carattere Scientifico, 33081 Aviano, Italy."
+        ]
+      },
+      {
+        "last_name": "Del Conte",
+        "fore_name": "Alessandro",
+        "initials": "A",
+        "affiliations": [
+          "Department of Medical Oncology, Centro di Riferimento Oncologico di Aviano (CRO), Istituto di Ricovero e Cura a Carattere Scientifico, 33081 Aviano, Italy."
+        ]
+      },
+      {
+        "last_name": "Spina",
+        "fore_name": "Michele",
+        "initials": "M",
+        "affiliations": [
+          "Department of Medical Oncology, Centro di Riferimento Oncologico di Aviano (CRO), Istituto di Ricovero e Cura a Carattere Scientifico, 33081 Aviano, Italy."
+        ]
+      },
+      {
+        "last_name": "Bearz",
+        "fore_name": "Alessandra",
+        "initials": "A",
+        "affiliations": [
+          "Department of Medical Oncology, Centro di Riferimento Oncologico di Aviano (CRO), Istituto di Ricovero e Cura a Carattere Scientifico, 33081 Aviano, Italy."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Department of Medical Oncology, Centro di Riferimento Oncologico di Aviano (CRO), Istituto di Ricovero e Cura a Carattere Scientifico, 33081 Aviano, Italy.",
+      "Department of Medicine (DME), University of Udine, 33100 Udine, Italy."
+    ],
+    "journal": {
+      "title": "International journal of molecular sciences",
+      "iso": "Int J Mol Sci",
+      "issn": "1422-0067"
+    },
+    "year": "2025",
+    "mesh_terms": [
+      "Humans",
+      "Carcinoma, Non-Small-Cell Lung",
+      "drug therapy",
+      "genetics",
+      "Lung Neoplasms",
+      "drug therapy",
+      "genetics",
+      "Cardiotoxicity",
+      "etiology",
+      "Molecular Targeted Therapy",
+      "adverse effects",
+      "Protein Kinase Inhibitors",
+      "adverse effects",
+      "therapeutic use",
+      "Antineoplastic Agents",
+      "adverse effects",
+      "therapeutic use",
+      "Oncogenes"
+    ],
+    "keywords": [
+      "NSCLC",
+      "cardioncology",
+      "cardiotoxicity",
+      "osimertinib",
+      "targeted therapy"
+    ],
+    "pub_types": [
+      "Journal Article",
+      "Review"
+    ],
+    "doi": "10.3390/ijms26020554",
+    "country": "Switzerland"
+  }
+]

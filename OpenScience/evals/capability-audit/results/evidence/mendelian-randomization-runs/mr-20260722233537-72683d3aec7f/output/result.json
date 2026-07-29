@@ -1,0 +1,29 @@
+{
+  "status": "succeeded",
+  "exposure": "LDL cholesterol",
+  "outcome": "coronary heart disease",
+  "analysisPairs": 1,
+  "instruments": 144,
+  "report": "mendelian-randomization-report.md",
+  "artifacts": [
+    "mendelian-randomization-report.md",
+    "mendelian-randomization-run.json",
+    "mendelian-randomization-report.docx",
+    "mendelian-randomization-report.pdf",
+    "mendelian-randomization-report.txt",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/f_statistics.csv",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.pdf",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/forest_plot.png",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.pdf",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/funnel_plot.png",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/heterogeneity.csv",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.pdf",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/loo_plot.png",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/mr_results.csv",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/mr_summary.json",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/mrpresso.csv",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/pleiotropy.csv",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.pdf",
+    "analysis-data/1-ieu-b-110-ebi-a-GCST005195/scatter_plot.png"
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 traceable records from pubmed.",
+  "data": {
+    "source": "pubmed",
+    "items": [
+      {
+        "id": "30158069",
+        "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
+        "url": "https://www.ncbi.nlm.nih.gov/pubmed/30158069/",
+        "description": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial."
+      },
+      {
+        "id": "40902613",
+        "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis.",
+        "url": "https://www.ncbi.nlm.nih.gov/pubmed/40902613/",
+        "description": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis."
+      }
+    ],
+    "provenance": {
+      "tool": "evimed_biomedical_source_search",
+      "arguments": {
+        "source": "pubmed",
+        "query": "aspirin cardiovascular prevention randomized trial",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "30158069",
+      "url": "https://www.ncbi.nlm.nih.gov/pubmed/30158069/",
+      "source": "pubmed",
+      "retrievedAt": "2026-07-22T16:03:20.257206Z",
+      "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial."
+    },
+    {
+      "id": "40902613",
+      "url": "https://www.ncbi.nlm.nih.gov/pubmed/40902613/",
+      "source": "pubmed",
+      "retrievedAt": "2026-07-22T16:03:20.257247Z",
+      "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis."
+    }
+  ],
+  "warnings": [
+    "This connector returns source metadata and selected public fields; verify the primary record before scientific interpretation."
+  ],
+  "next_actions": [
+    "Open and verify the cited primary record before using it in a material claim."
+  ]
+}

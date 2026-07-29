@@ -1,0 +1,1334 @@
+{
+  "nodes": [
+    {
+      "id": "Maruyama Hirotaka",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Okada Asuka",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Hamano Hirofumi",
+      "weight": 2,
+      "cluster": 2,
+      "degree": 0.0385,
+      "betweenness": 0.0,
+      "closeness": 0.0769,
+      "weighted_degree": 2
+    },
+    {
+      "id": "Tsumura Shinsuke",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Patil Bhatu R",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.1154,
+      "betweenness": 0.0,
+      "closeness": 0.2308,
+      "weighted_degree": 6
+    },
+    {
+      "id": "Shibaki Ryota",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Zamami Yoshito",
+      "weight": 2,
+      "cluster": 2,
+      "degree": 0.0385,
+      "betweenness": 0.0,
+      "closeness": 0.0769,
+      "weighted_degree": 2
+    },
+    {
+      "id": "Yokoyama Toshihide",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Sakata Shinya",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Arai Daisuke",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Ikeda Hideki",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Inaba Megumi",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Gawli Chandrakant S",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.1154,
+      "betweenness": 0.0,
+      "closeness": 0.2308,
+      "weighted_degree": 6
+    },
+    {
+      "id": "Sakata Yoshihiko",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Saito Go",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Nagpure Narendra R",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.1154,
+      "betweenness": 0.0,
+      "closeness": 0.2308,
+      "weighted_degree": 6
+    },
+    {
+      "id": "Otsuki Taiichiro",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Sakagami Takuro",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Uchida Junji",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Tamiya Motohiro",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Hara Satoshi",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Sato Yuki",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Matsumoto Hirotaka",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Patel Harun M",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.1154,
+      "betweenness": 0.0,
+      "closeness": 0.2308,
+      "weighted_degree": 6
+    },
+    {
+      "id": "Suzuki Hidekazu",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Yamaguchi Teppei",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Tsukita Yoko",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.7692,
+      "betweenness": 0.0,
+      "closeness": 1.5385,
+      "weighted_degree": 40
+    }
+  ],
+  "edges": [
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Yokoyama Toshihide",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Okada Asuka",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Shibaki Ryota",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Inaba Megumi",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Ikeda Hideki",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Arai Daisuke",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Tsumura Shinsuke",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Otsuki Taiichiro",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Saito Go",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Sakata Yoshihiko",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Sakata Shinya",
+      "weight": 2
+    },
+    {
+      "source": "Maruyama Hirotaka",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Tsumura Shinsuke",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Arai Daisuke",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Shibaki Ryota",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Yokoyama Toshihide",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Otsuki Taiichiro",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Inaba Megumi",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Ikeda Hideki",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Saito Go",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Sakata Shinya",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Sakata Yoshihiko",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Okada Asuka",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Hamano Hirofumi",
+      "target": "Zamami Yoshito",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Yokoyama Toshihide",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Shibaki Ryota",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Inaba Megumi",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Ikeda Hideki",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Arai Daisuke",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Otsuki Taiichiro",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Saito Go",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Sakata Yoshihiko",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Sakata Shinya",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Tsumura Shinsuke",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Patil Bhatu R",
+      "target": "Gawli Chandrakant S",
+      "weight": 2
+    },
+    {
+      "source": "Patil Bhatu R",
+      "target": "Nagpure Narendra R",
+      "weight": 2
+    },
+    {
+      "source": "Patil Bhatu R",
+      "target": "Patel Harun M",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Yokoyama Toshihide",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Otsuki Taiichiro",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Inaba Megumi",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Ikeda Hideki",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Arai Daisuke",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Saito Go",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Sakata Shinya",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Sakata Yoshihiko",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Shibaki Ryota",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Otsuki Taiichiro",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Inaba Megumi",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Ikeda Hideki",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Arai Daisuke",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Saito Go",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Sakata Shinya",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Sakata Yoshihiko",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Yokoyama Toshihide",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Saito Go",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Sakata Yoshihiko",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Otsuki Taiichiro",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Inaba Megumi",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Ikeda Hideki",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Arai Daisuke",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Shinya",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Inaba Megumi",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Ikeda Hideki",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Otsuki Taiichiro",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Saito Go",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Sakata Yoshihiko",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Arai Daisuke",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Inaba Megumi",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Otsuki Taiichiro",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Saito Go",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Sakata Yoshihiko",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Ikeda Hideki",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Otsuki Taiichiro",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Saito Go",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Sakata Yoshihiko",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Inaba Megumi",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Gawli Chandrakant S",
+      "target": "Nagpure Narendra R",
+      "weight": 2
+    },
+    {
+      "source": "Gawli Chandrakant S",
+      "target": "Patel Harun M",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Yoshihiko",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Yoshihiko",
+      "target": "Saito Go",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Yoshihiko",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Yoshihiko",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Yoshihiko",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Yoshihiko",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Yoshihiko",
+      "target": "Otsuki Taiichiro",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Yoshihiko",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Yoshihiko",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Yoshihiko",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Sakata Yoshihiko",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Saito Go",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Saito Go",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Saito Go",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Saito Go",
+      "target": "Otsuki Taiichiro",
+      "weight": 2
+    },
+    {
+      "source": "Saito Go",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Saito Go",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Saito Go",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Saito Go",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Saito Go",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Saito Go",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Nagpure Narendra R",
+      "target": "Patel Harun M",
+      "weight": 2
+    },
+    {
+      "source": "Otsuki Taiichiro",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Otsuki Taiichiro",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Otsuki Taiichiro",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Otsuki Taiichiro",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Otsuki Taiichiro",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Otsuki Taiichiro",
+      "target": "Sakagami Takuro",
+      "weight": 2
+    },
+    {
+      "source": "Otsuki Taiichiro",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Otsuki Taiichiro",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Otsuki Taiichiro",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Sakagami Takuro",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Sakagami Takuro",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Sakagami Takuro",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Sakagami Takuro",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Sakagami Takuro",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Sakagami Takuro",
+      "target": "Uchida Junji",
+      "weight": 2
+    },
+    {
+      "source": "Sakagami Takuro",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Sakagami Takuro",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Uchida Junji",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Uchida Junji",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Uchida Junji",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Uchida Junji",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Uchida Junji",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Uchida Junji",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Uchida Junji",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Tamiya Motohiro",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Tamiya Motohiro",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Tamiya Motohiro",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Tamiya Motohiro",
+      "target": "Hara Satoshi",
+      "weight": 2
+    },
+    {
+      "source": "Tamiya Motohiro",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Tamiya Motohiro",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Hara Satoshi",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Hara Satoshi",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Hara Satoshi",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Hara Satoshi",
+      "target": "Sato Yuki",
+      "weight": 2
+    },
+    {
+      "source": "Hara Satoshi",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Sato Yuki",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Sato Yuki",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Sato Yuki",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Sato Yuki",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Matsumoto Hirotaka",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Matsumoto Hirotaka",
+      "target": "Suzuki Hidekazu",
+      "weight": 2
+    },
+    {
+      "source": "Matsumoto Hirotaka",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Suzuki Hidekazu",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    },
+    {
+      "source": "Suzuki Hidekazu",
+      "target": "Yamaguchi Teppei",
+      "weight": 2
+    },
+    {
+      "source": "Yamaguchi Teppei",
+      "target": "Tsukita Yoko",
+      "weight": 2
+    }
+  ]
+}

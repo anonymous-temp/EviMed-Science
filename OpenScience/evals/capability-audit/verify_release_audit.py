@@ -13,6 +13,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 RESULTS = HERE / "results"
+# Probe receipts point at files the audit run produced inside a live server
+# workspace, which .gitignore keeps out of the repository. The generator mirrors
+# them here, workspace-relative, so a clean clone can verify the same evidence.
+EVIDENCE = RESULTS / "evidence"
+JOB_STATE = EVIDENCE / "job-state"
 SPECIALIST_SOURCES = REPO.parent / "项目代码"
 
 
@@ -97,23 +102,9 @@ def verify_tools():
             require(item.get("artifactCount", 0) > 0, "%s lacks artifacts" % item.get("tool"))
             require(item.get("artifactCount") == len(item.get("artifacts", [])), "%s artifact count does not reconcile" % item.get("tool"))
             require(all(receipt.get("bytes", 0) > 0 and len(receipt.get("sha256", "")) == 64 for receipt in item.get("artifacts", [])), "%s has invalid artifact receipts" % item.get("tool"))
-            workspace = (REPO / str(item.get("workspace", ""))).resolve()
-            require(workspace.is_relative_to(REPO) and workspace.is_dir(), "%s receipt workspace is unavailable" % item.get("tool"))
-            state_file = next(
-                workspace.glob("%s/.jobs/%s.json" % (
-                    {
-                        "evimed_meta_analysis": "meta-analysis-runs",
-                        "evimed_mendelian_randomization": "mendelian-randomization-runs",
-                        "evimed_bibliometric_analysis": "bibliometric-analysis-runs",
-                        "evimed_research_topic_selection": "research-topic-runs",
-                        "evimed_peer_review": "peer-review-runs",
-                        "evimed_drug_safety_analysis": "drug-safety-runs",
-                    }[item.get("tool")],
-                    item.get("jobId"),
-                )),
-                None,
-            )
-            require(state_file is not None and state_file.is_file() and not state_file.is_symlink(), "%s job state is unavailable" % item.get("tool"))
+            require(EVIDENCE.is_dir(), "%s receipt evidence snapshot is unavailable" % item.get("tool"))
+            state_file = JOB_STATE / ("%s.json" % item.get("jobId"))
+            require(state_file.is_file() and not state_file.is_symlink(), "%s job state is unavailable" % item.get("tool"))
             state = json.loads(state_file.read_text(encoding="utf-8"))
             require(state.get("status") in {"succeeded", "blocked"}, "%s job is not terminal" % item.get("tool"))
             require(item.get("jobStatus") == state.get("status"), "%s job outcome is misstated" % item.get("tool"))
@@ -127,8 +118,8 @@ def verify_tools():
             require(state.get("executionEvidence") == expected_evidence, "%s job does not match current specialist source" % item.get("tool"))
             require(item.get("executionEvidence") == expected_evidence, "%s audit omitted current specialist source evidence" % item.get("tool"))
             for receipt in item["artifacts"]:
-                artifact = (workspace / str(receipt.get("path", ""))).resolve()
-                require(artifact.is_relative_to(workspace) and artifact.is_file() and not artifact.is_symlink(), "%s receipt artifact is unavailable" % item.get("tool"))
+                artifact = (EVIDENCE / str(receipt.get("path", ""))).resolve()
+                require(artifact.is_relative_to(EVIDENCE) and artifact.is_file() and not artifact.is_symlink(), "%s receipt artifact is unavailable" % item.get("tool"))
                 require(artifact.stat().st_size == receipt["bytes"] and file_sha256(artifact) == receipt["sha256"], "%s artifact receipt no longer matches disk" % item.get("tool"))
         else:
             require(item.get("probeType") == "executed_tool_call" and item.get("operation") == "task", "%s lacks a real task call" % item.get("tool"))
@@ -136,8 +127,8 @@ def verify_tools():
             require(isinstance(item.get("elapsedMs"), int) and item.get("elapsedMs") >= 0, "%s lacks execution timing" % item.get("tool"))
             require(item.get("artifactError") is None, "%s has invalid task artifacts" % item.get("tool"))
             response = item.get("responseReceipt", {})
-            response_file = (REPO / str(item.get("workspace", "")) / str(response.get("path", ""))).resolve()
-            require(response_file.is_relative_to(REPO) and response_file.is_file() and not response_file.is_symlink(), "%s lacks a retained task response" % item.get("tool"))
+            response_file = (EVIDENCE / str(response.get("path", ""))).resolve()
+            require(response_file.is_relative_to(EVIDENCE) and response_file.is_file() and not response_file.is_symlink(), "%s lacks a retained task response" % item.get("tool"))
             require(response_file.stat().st_size == response.get("bytes") and file_sha256(response_file) == response.get("sha256"), "%s retained task response no longer matches disk" % item.get("tool"))
             assessment_types = {
                 "evimed_offlabel_evidence_packet": "off_label",

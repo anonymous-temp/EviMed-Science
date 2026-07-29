@@ -1,0 +1,6 @@
+"id.exposure","id.outcome","outcome","exposure","method","nsnp","b","se","pval","or","ci_lower","ci_upper"
+"ieu-b-110","ebi-a-GCST005195","Coronary artery disease || id:ebi-a-GCST005195","LDL cholesterol || id:ieu-b-110","MR Egger",144,0.502639424028751,0.0846605801171054,2.12475638516307e-08,1.65307869325193,1.40032546835537,1.95145287851755
+"ieu-b-110","ebi-a-GCST005195","Coronary artery disease || id:ebi-a-GCST005195","LDL cholesterol || id:ieu-b-110","Weighted median",144,0.304653449018861,0.0273384648626679,7.68017047393057e-29,1.35615494473468,1.28540013359546,1.43080445229448
+"ieu-b-110","ebi-a-GCST005195","Coronary artery disease || id:ebi-a-GCST005195","LDL cholesterol || id:ieu-b-110","Inverse variance weighted",144,0.438073637593331,0.0659050114706891,2.99033760297721e-11,1.54971902079697,1.36192591927101,1.76340651825279
+"ieu-b-110","ebi-a-GCST005195","Coronary artery disease || id:ebi-a-GCST005195","LDL cholesterol || id:ieu-b-110","Simple mode",144,0.541243598546921,0.118083412037576,9.88027913775928e-06,1.71814221330976,1.36315260762227,2.16557753596357
+"ieu-b-110","ebi-a-GCST005195","Coronary artery disease || id:ebi-a-GCST005195","LDL cholesterol || id:ieu-b-110","Weighted mode",144,0.364849935713256,0.0303621187596019,1.97187269352623e-23,1.4402978546609,1.35708658220048,1.52861131879819
