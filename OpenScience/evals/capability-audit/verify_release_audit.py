@@ -13,6 +13,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 RESULTS = HERE / "results"
+SPECIALIST_SOURCES = REPO.parent / "项目代码"
 
 
 def read(name):
@@ -48,6 +49,20 @@ def file_sha256(path):
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def specialist_source_root(recorded, tool):
+    """Rebase a recorded specialist root onto this checkout.
+
+    Job state stores the absolute path of the host that ran the job, so hashing
+    that path verifies nothing on any other machine. `<workspace>/项目代码/<agent>`
+    is the layout every host shares, so verify the source this checkout ships.
+    """
+    name = Path(str(recorded or "").replace("\\", "/")).name
+    require(name, "%s job did not record a specialist source root" % tool)
+    root = SPECIALIST_SOURCES / name
+    require(root.is_dir(), "%s specialist source %s is unavailable" % (tool, name))
+    return root
 
 
 def verify_tools():
@@ -108,7 +123,7 @@ def verify_tools():
             require(item.get("status") == ("success" if expected_ready else "warning"), "%s audit status hides its release outcome" % item.get("tool"))
             root_value = state.get("metaRoot") if item.get("tool") == "evimed_meta_analysis" else state.get("root")
             adapter = REPO / "runtime" / "mcp" / "evimed-research" / ("meta_agent.py" if item.get("tool") == "evimed_meta_analysis" else "specialist_jobs.py")
-            expected_evidence = execution_evidence.execution_evidence(Path(str(root_value or "")), adapter)
+            expected_evidence = execution_evidence.execution_evidence(specialist_source_root(root_value, item.get("tool")), adapter)
             require(state.get("executionEvidence") == expected_evidence, "%s job does not match current specialist source" % item.get("tool"))
             require(item.get("executionEvidence") == expected_evidence, "%s audit omitted current specialist source evidence" % item.get("tool"))
             for receipt in item["artifacts"]:
