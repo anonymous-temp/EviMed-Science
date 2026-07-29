@@ -118,6 +118,18 @@ export function startMockOpenCodeRuntime() {
           {
             info: { id: `msg_${++messageCounter}`, role: "assistant", time: { created: Date.now(), completed: Date.now() } },
             parts: [
+              // EviMed-managed agents are generated with a "load every required
+              // skill" instruction, so the mock mirrors the real runtime by
+              // recording a successful skill load for the dispatched agent.
+              ...(typeof promptBody.agent === "string" && promptBody.agent.startsWith("evimed-") ? [{
+                type: "tool",
+                tool: "skill",
+                state: {
+                  status: "completed",
+                  input: { name: promptBody.agent.slice("evimed-".length) },
+                  output: "Skill loaded.",
+                },
+              }] : []),
               ...(promptMatch[2] !== "shell" ? [{
                 type: "tool",
                 tool: "write",

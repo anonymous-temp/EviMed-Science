@@ -54,3 +54,4 @@ outputs:
 completionChecks:
   - requiredOutputsExist
   - citationsResolvable
+  - citedSourcesRecorded

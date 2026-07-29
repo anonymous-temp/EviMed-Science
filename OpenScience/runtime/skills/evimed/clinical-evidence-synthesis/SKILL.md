@@ -142,6 +142,18 @@ For an emergency-call claim, the contiguous quote must itself contain both the
 action to call emergency services and the relevant symptom condition. A quote
 that only describes the symptom is not sufficient.
 
+### Synthesized (cross-source) claims
+
+A weighed cross-source conclusion — "across these four trials the evidence leans toward X" — has no single verbatim home, so it cannot be a direct claim. Mark it `"claimType": "synthesized"` and give it the stricter multi-source package:
+
+- `claimId`, `claim`, `applicability`, `uncertainty` — as for direct claims.
+- `confidence`: exactly one of `high`, `moderate`, `low`.
+- `referenceNumber`: the primary numbered citation (must be one of `referenceNumbers`).
+- `referenceNumbers`: every numbered citation the synthesis rests on (at least two).
+- `supportingSources`: at least two distinct sources. Each entry carries `sourceUrl`, `sourceTitle`, `artifactPath`, `accessLevel`, and its own contiguous verbatim `supportQuote` from its own preserved artifact — every entry is checked exactly like a direct claim's source.
+
+Numerals in a synthesized claim must either appear in one of the supporting quotes/titles/identifiers, or be a count of the supporting sources themselves ("4 项研究中 3 项…" — the gate counts). Do not use the synthesized type to smuggle in numbers no source states, and do not use it for claims a single source does support — those stay direct claims.
+
 ### Bibliography and audit
 
 Write:

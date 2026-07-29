@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "judgePromptVersion": 1,
+  "judgeModel": "deepseek-v4-pro",
+  "answersFile": "evals/open-domain-answer-quality/results/answers-latest.json",
+  "generatedAt": "2026-07-27T02:20:35Z",
+  "cases": [
+    {
+      "id": "suxiao-case-1",
+      "tier": "synthesis",
+      "domain": "急诊/心血管",
+      "question": "胸口突然发闷发紧、像被压着一样，是心绞痛还是胃病？该先怎么办？请关联速效救心丸。",
+      "run": {
+        "runId": "run_1ca159e6e14330333676c34805dfa786",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 88079,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": null,
+        "qualityNotices": [],
+        "sessionId": "ses_05ea6ea06ffexJ7XkYuqWhPWx3",
+        "toolCalls": 7,
+        "artifacts": [],
+        "assistantChars": 2938,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 5,
+        "uncertainty_calibration": 5
+      },
+      "overall": 5.0,
+      "issues": [],
+      "rationale": "The answer immediately states the need for emergency call, correctly positions Suxiao Jiuxin Wan, and cites verifiable evidence including the Cochrane review. No internal contradictions or fabricated citations. The uncertainty table and clear limitations (e.g., weak evidence, no updated high-quality review) reflect honest calibration. Structure is reader-friendly and actionable."
+    },
+    {
+      "id": "suxiao-case-2",
+      "tier": "synthesis",
+      "domain": "急诊/药物证据",
+      "question": "需要分别分析未分化急性胸部压迫感的处置与速效救心丸在特定研究或监管语境中的证据边界，不得用服药反应判断病因或延误急救。",
+      "run": {
+        "runId": "run_0358eed7be1951ed675fb538e1a80b7a",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 93933,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": null,
+        "qualityNotices": [],
+        "sessionId": "ses_05ea6ea09ffeEaVYvEaGx8wwg4",
+        "toolCalls": 9,
+        "artifacts": [],
+        "assistantChars": 3955,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 5,
+        "uncertainty_calibration": 5
+      },
+      "overall": 5.0,
+      "issues": [],
+      "rationale": "答案首段即给出明确结论，结构清晰，将处置路径与速效救心丸证据边界分开阐述。引用的指南、系统评价及说明书均为真实可核查来源，无虚构数据。明确区分证据层级（Cochrane评为weak、稳定型心绞痛适应证），在正文和末尾均强调禁止服药反应判断病因、不得延误急救，并附不确定性说明，透明校准了证据强度与局限。完全符合synthesis层级的期望。"
+    }
+  ],
+  "summary": {
+    "expectedQuestions": 2,
+    "judgedCases": 2,
+    "failedCases": 0,
+    "missingAnswers": 0,
+    "dimensions": {
+      "directness": 5.0,
+      "readability": 5.0,
+      "usefulness": 5.0,
+      "correctness": 5.0,
+      "uncertainty_calibration": 5.0
+    },
+    "overallMean": 5.0,
+    "byTier": {
+      "direct": {
+        "cases": 0,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      },
+      "synthesis": {
+        "cases": 2,
+        "judged": 2,
+        "dimensions": {
+          "directness": 5.0,
+          "readability": 5.0,
+          "usefulness": 5.0,
+          "correctness": 5.0,
+          "uncertainty_calibration": 5.0
+        },
+        "overallMean": 5.0
+      },
+      "report": {
+        "cases": 0,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      }
+    }
+  }
+}

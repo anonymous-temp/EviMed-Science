@@ -179,7 +179,8 @@ class ToolContractTests(unittest.TestCase):
             second = self.server.call_tool("evimed_health", {})
             drug_arguments = {"term": "  acetaminophen  "}
             event_arguments = {"term": "心肌梗死", "domain": "adverse_event"}
-            drug = self.server.call_tool("evimed_drug_term_normalize", drug_arguments)
+            with mock.patch.object(self.server.public_sources, "rxnorm_resolve", return_value=None):
+                drug = self.server.call_tool("evimed_drug_term_normalize", drug_arguments)
             event = self.server.call_tool("evimed_term_normalize", event_arguments)
         self.assert_contract(first)
         self.assertEqual(first, second)
@@ -205,6 +206,45 @@ class ToolContractTests(unittest.TestCase):
             "arguments": event_arguments,
             "scope": scope,
         })
+
+    def test_drug_term_normalize_prefers_the_rxnorm_vocabulary(self):
+        resolution = {"rxcui": "1191", "preferred": "Aspirin", "synonyms": ["Aspirin", "Acetylsalicylic Acid"]}
+        with mock.patch.object(self.server.public_sources, "rxnorm_resolve", return_value=resolution):
+            result = self.server.call_tool("evimed_drug_term_normalize", {"term": "aspirin"})
+        self.assert_contract(result)
+        self.assertEqual(result["status"], "success")
+        self.assertIn("RxNorm", result["summary"])
+        self.assertEqual(result["data"]["preferred"], "Aspirin")
+        self.assertEqual(result["data"]["synonyms"], ["Aspirin", "Acetylsalicylic Acid"])
+        self.assertEqual(result["data"]["rxcui"], "1191")
+        self.assertEqual(result["data"]["vocabulary"], "rxnorm")
+        self.assertEqual(result["data"]["domain"], "drug")
+
+    def test_drug_term_normalize_falls_back_to_the_curated_table_without_rxnorm_match(self):
+        with mock.patch.object(self.server.public_sources, "rxnorm_resolve", return_value=None):
+            result = self.server.call_tool("evimed_drug_term_normalize", {"term": "acetaminophen"})
+        self.assert_contract(result)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["preferred"], "paracetamol")
+        self.assertEqual(result["data"]["vocabulary"], "curated-local")
+        self.assertNotIn("rxcui", result["data"])
+
+    def test_drug_term_normalize_tolerates_rxnorm_outages(self):
+        unavailable = self.server.public_sources.PublicSourceError("public_source_unavailable", "offline", True)
+        with mock.patch.object(self.server.public_sources, "rxnorm_resolve", side_effect=unavailable):
+            result = self.server.call_tool("evimed_drug_term_normalize", {"term": "acetaminophen"})
+        self.assert_contract(result)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["preferred"], "paracetamol")
+        self.assertEqual(result["data"]["vocabulary"], "curated-local")
+
+    def test_drug_term_normalize_passes_unknown_terms_through_with_a_warning(self):
+        with mock.patch.object(self.server.public_sources, "rxnorm_resolve", return_value=None):
+            result = self.server.call_tool("evimed_drug_term_normalize", {"term": "Unregistered Compound"})
+        self.assert_contract(result)
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(result["data"]["preferred"], "unregistered compound")
+        self.assertEqual(result["data"]["vocabulary"], "unresolved")
 
     def test_deduplicate_uses_identifiers_then_normalized_titles(self):
         arguments = {

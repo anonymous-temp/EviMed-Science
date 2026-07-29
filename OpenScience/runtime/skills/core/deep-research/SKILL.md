@@ -34,6 +34,17 @@ Select only relevant tools from the agent's declared contract:
 
 Search results are discovery records. They do not establish study design, recommendations, effects, or causality unless the returned record exposes the exact supporting content.
 
+## Iterative retrieval
+
+Run retrieval as an explicit search → read → refine → re-search loop:
+
+1. Search with the initial query variants and record every query and result count.
+2. Read the most relevant records at the deepest available access level, noting which subquestions remain uncovered.
+3. Refine the query from what was read: add newly found synonyms, drug class names, and population or outcome terms, and drop terms that returned only irrelevant records.
+4. Re-search with the refined queries and deduplicate against earlier result sets.
+
+Stop when two consecutive refined queries add no new relevant sources, or after three refinement iterations, whichever comes first; then report what the loop covered and what it could not reach.
+
 ## Quality rules
 
 - Use 15–30 relevant sources for broad scientific questions when the evidence base permits.

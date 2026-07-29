@@ -654,6 +654,17 @@ export function loadConfig(overrides = {}) {
       overrides.deepseekBaseUrl ?? process.env.OPEN_SCIENCE_DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
     deepseekModel:
       overrides.deepseekModel ?? process.env.OPEN_SCIENCE_DEEPSEEK_MODEL ?? "deepseek-v4-pro",
+    // LLM-augmented open-domain routing. On by default: the classifier only
+    // runs after the regex router returns no match and fails safe to
+    // open-domain on any error (see specialistClassifier.mjs). Set
+    // OPEN_SCIENCE_LLM_ROUTING_ENABLED=false to fall back to regex-only routing.
+    llmRoutingEnabled:
+      overrides.llmRoutingEnabled ?? boolEnv("OPEN_SCIENCE_LLM_ROUTING_ENABLED", true),
+    llmRoutingConfidenceThreshold: Number(
+      overrides.llmRoutingConfidenceThreshold
+        ?? process.env.OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD
+        ?? 0.75,
+    ),
     modelGatewaySigningSecret: modelGatewaySecret.value,
     modelGatewaySigningSecretSource: modelGatewaySecret.source,
     modelGatewaySigningSecretError: modelGatewaySecret.error,

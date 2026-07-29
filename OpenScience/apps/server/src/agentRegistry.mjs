@@ -79,6 +79,7 @@ export const EVIMED_AGENT_DATA_SOURCES = new Set([
 export const EVIMED_AGENT_COMPLETION_CHECKS = new Set([
   "requiredOutputsExist",
   "citationsResolvable",
+  "citedSourcesRecorded",
   "evidenceClaimsTraceable",
   "skillsLoaded",
 ]);
@@ -165,9 +166,10 @@ function validateEstimate(value) {
   return [minimum, maximum];
 }
 
-function validateOutputs(value) {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 64) {
-    throw registryError("outputs must contain between 1 and 64 entries.");
+function validateOutputs(value, { requireDeliverable = true } = {}) {
+  const minimum = requireDeliverable ? 1 : 0;
+  if (!Array.isArray(value) || value.length < minimum || value.length > 64) {
+    throw registryError(`outputs must contain between ${minimum} and 64 entries.`);
   }
   const paths = new Set();
   return value.map((rawOutput, index) => {
@@ -240,6 +242,14 @@ function validateManifest(value, directoryName, allowedToolIds, allowedDataSourc
   for (const check of completionChecks) {
     if (!allowedCompletionChecks.has(check)) throw registryError(`Unknown completion check "${check}" declared by agent "${id}".`);
   }
+  // File-delivery contracts must declare at least one required deliverable;
+  // answer-mode contracts (no requiredOutputsExist check) may legitimately
+  // declare zero file outputs because their deliverable is the reply itself.
+  const requiresDeliverable = completionChecks.includes("requiredOutputsExist");
+  const outputs = Object.freeze(validateOutputs(manifest.outputs, { requireDeliverable: requiresDeliverable }));
+  if (requiresDeliverable && !outputs.some((output) => output.required)) {
+    throw registryError(`Agent "${id}" declares requiredOutputsExist but no required output.`);
+  }
 
   return Object.freeze({
     id,
@@ -256,7 +266,7 @@ function validateManifest(value, directoryName, allowedToolIds, allowedDataSourc
     requiredTools: Object.freeze(requiredTools),
     optionalTools: Object.freeze(optionalTools),
     dataSources: Object.freeze(dataSources),
-    outputs: Object.freeze(validateOutputs(manifest.outputs)),
+    outputs,
     completionChecks: Object.freeze(completionChecks),
     runtimeAgent: `evimed-${id}`,
   });

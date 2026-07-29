@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-07-27T02:08:51Z",
+  "mode": "live",
+  "baseUrl": "http://127.0.0.1:8798",
+  "answers": [
+    {
+      "id": "suxiao-case-1",
+      "tier": "synthesis",
+      "question": "胸口突然发闷发紧、像被压着一样，是心绞痛还是胃病？该先怎么办？请关联速效救心丸。",
+      "answer": "## 结论与紧急行动\n\n**胸骨后压榨性发闷发紧、像被压着一样——这是心绞痛的典型描述，在排除急性冠脉综合征（ACS）之前，必须按心脏急症处理，不能自行判断为胃病。** 速效救心丸的说明书适应证仅限于已确诊的气滞血瘀型冠心病稳定型心绞痛，不能用于首次发作、性质不明的急性胸闷的自我诊断或病因鉴别。以下任一情况，立即拨打120：首次出现这种压榨性胸闷、症状持续超过10–15分钟不缓解、伴有出汗/气短/恶心/向左肩或下颌放射、或含服药物后无改善。\n\n---\n\n## 关键证据\n\n### 心绞痛 vs. 胃病：关键鉴别点\n\n胸骨后压迫感、压榨感（\"像被压着\"）是心绞痛的典型症状，而胃食管疾病更常表现为灼烧感（烧心）、反酸，且多与进食或平卧明确相关。但必须强调的是——**任何单一症状特征都不能安全地排除ACS**。糖尿病患者、老年人和女性常表现为不典型症状（仅胸闷、乏力、恶心），更容易被误判为胃病而延误。\n\n| 特征 | 更倾向心绞痛/ACS | 更倾向胃食管疾病 |\n|---|---|---|\n| 诱因 | 劳力、激动、寒冷 | 进食后、平卧时加重 |\n| 性质 | 压迫、压榨、紧缩、沉重 | 烧心、反酸 |\n| 缓解 | 休息或药物后3–5分钟 | 抑酸药、坐起后 |\n| 伴随 | 气短、出汗、恶心、濒死感 | 反酸、嗳气、口苦 |\n\n2022年ACC专家共识（J Am Coll Cardiol）确立了急性胸痛的急诊评估路径，以高敏肌钙蛋白（hs-cTn）检测为中心，强调10分钟内完成18导联心电图，不应依赖症状描述进行病因分类 [1]。\n\n### 速效救心丸的真实定位\n\n**药品说明书（NMPA）**[2] 明确限定适应证为\"气滞血瘀型冠心病，心绞痛\"，主要成分川芎、冰片，功能行气活血、祛瘀止痛、增加冠脉血流量。**说明书自身的关键安全提示：**\"在治疗期间，心绞痛持续发作，宜加用硝酸酯类药\"——说明说明书自身也承认其单独使用的局限性。禁忌为孕妇。伴有中重度心力衰竭的心肌缺血者慎用。\n\n**Cochrane系统评价（2008）**[3] 是目前速效救心丸最高层级证据：纳入15项RCT（共1 776例），结论概括为\"速效救心丸治疗心绞痛似乎有效，未发现严重副作用，**但证据仍然薄弱，原因是纳入研究的方法学质量较差（the evidence remains weak due to poor methodological quality of including studies）**\"。与硝酸甘油相比，ECG改善RR 1.16 (1.05–1.27)，症状缓解RR 1.09 (1.04–1.13)，均为弱证据；与硝酸异山梨酯相比无显著差异。\n\n2024年发表的一项贝叶斯网络Meta分析 [4]（331项RCT，36 467例）对比了7种中成药治疗心绞痛的疗效，速效救心丸的药效排名不在前三（麝香保心丸、通心络、复方丹参滴丸位列前三），且GRADE证据强度评定为低。\n\n### 先该怎么办（行动顺序）\n\n1. **立即停止活动**，坐下或半卧位休息。\n2. 如果你已被医生诊断为冠心病且备有速效救心丸或硝酸甘油：可按说明书舌下含服一次。**记录时间和症状变化。**\n3. **以下任一情况立即拨打120：** 首次出现这种压榨性胸闷；症状持续超10–15分钟不缓解；伴有出汗、恶心、气短、放射痛；含药后无改善。\n4. **不要自行驾车去医院，不要拖延，不要以服药后是否缓解来判断病因。**\n\n---\n\n## 不确定性与证据层级\n\n| 证据来源 | 层级 | 主要不确定性 |\n|---|---|---|\n| NMPA说明书 [2] | 法定监管文件 | 需确认是否为最新修订版 |\n| Cochrane系统评价 [3] | 系统评价（最高方法学类型） | 纳入研究质量差（评为weak）；搜索截止2005年，距今已近20年 |\n| 2024 NMA [4] | 系统评价/网络Meta | 纳入的331项RCT整体质量为低；GRADE评为低 |\n| 2022 ACC共识 [1] | 国际学会专家共识 | 为指导实践文件，非原始研究；推荐基于近年证据 |\n| 心绞痛典型临床表现 | 成熟临床知识 | 不典型表现（糖尿病、女性、老年）可无典型压榨感 |\n\n**本回答不可替代急诊医师的个体化评估。** 心电图和hs-cTn检测是区分ACS与胃食管疾病的客观依据。\n\n---\n\n**参考文献**\n\n[1] 2022 ACC Expert Consensus Decision Pathway on the Evaluation and Disposition of Acute Chest Pain in the Emergency Department. *J Am Coll Cardiol*. 2022;80:1925–1960. https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide\n\n[2] 速效救心丸说明书（NMPA）. 津药达仁堂集团股份有限公司第六中药厂. https://www.evimed.com/drug-details?source=nmpa&name=8ac63be3f1a3baecde08da451c44c859.pdf\n\n[3] Duan X, Zhou L, Wu T, et al. Chinese herbal medicine suxiao jiuxin wan for angina pectoris. *Cochrane Database Syst Rev*. 2008;(1):CD004468. https://pubmed.ncbi.nlm.nih.gov/18254051/\n\n[4] Jia Y, Leung SW. The efficacy of Chinese herbal drugs for adults with angina pectoris: Bayesian network meta-analysis of 331 RCTs involving 36,467 individuals. *J Ethnopharmacol*. 2024. https://pubmed.ncbi.nlm.nih.gov/38395177/",
+      "run": {
+        "runId": "run_be85125c52a6944b17ce4b1982edd029",
+        "status": "failed",
+        "dispatchStatus": "accepted",
+        "durationMs": 96106,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": "specialist_citation_invalid",
+        "qualityNotices": [],
+        "sessionId": "ses_05eac9a9effe6kKMsakUKe0z3C",
+        "toolCalls": 8,
+        "artifacts": [],
+        "assistantChars": 2654,
+        "reportArtifactChars": 0
+      },
+      "error": "run status: failed"
+    },
+    {
+      "id": "suxiao-case-2",
+      "tier": "synthesis",
+      "question": "需要分别分析未分化急性胸部压迫感的处置与速效救心丸在特定研究或监管语境中的证据边界，不得用服药反应判断病因或延误急救。",
+      "answer": "## 结论\n\n未分化急性胸部压迫感必须首先假定为急性冠脉综合征（ACS）并按心血管急症处置——第一时间完成心电图和hs-cTn检测以鉴别，**严禁以含服速效救心丸是否缓解来判断病因或延误急诊评估**。速效救心丸的NMPA说明书适应证严格限定于\"气滞血瘀型冠心病心绞痛\"（即已确诊的稳定型心绞痛），其最高层级证据——2008年Cochrane系统评价——明确结论为证据\"薄弱（weak）\"；在本品适用的稳定型心绞痛场景中，说明书自身也规定\"心绞痛持续发作，宜加用硝酸酯类药\"。\n\n---\n\n## 一、未分化急性胸部压迫感的处置\n\n### 致命病因谱\n\n2026年中国医师协会心血管内科医师分会《CT血管成像在急性胸痛临床应用专家共识》[1]明确：以急性胸痛就诊的三大致命病因是ACS、急性肺栓塞（APE）和急性主动脉综合征（AAS）。三者的治疗方向截然不同——抗栓、溶栓、降压/手术，用错方向可致命。因此，任何未明确诊断的急性胸骨后压迫感均应**先假定为ACS进行处理**，直至客观检查排除。\n\n### 急诊处置框架\n\n2019年中华医学会急诊医学分会《急性胸痛急诊诊疗专家共识》[2]确立了\"早期诊断，危险分层，正确分流，科学救治\"的方针。2022年ACC专家共识决策路径（*J Am Coll Cardiol*）[3]进一步建立了以高敏肌钙蛋白为核心的临床决策路径。核心流程为：\n\n1. **10分钟内完成18导联心电图**——排除STEMI；\n2. **高敏肌钙蛋白（hs-cTn）检测**——ACS诊断的核心生物标志物，可采用0 h/1 h快速算法 [4]；\n3. **D-二聚体 + 血气分析**——排除肺栓塞、主动脉夹层；\n4. **床旁超声（心脏+主动脉）**——评估心功能、心包积液、主动脉；\n5. **危险分层后决定CTA或急诊造影**——低中危患者优先冠脉CTA [1][5]。\n\n2025年意大利SIRM/SIC共识[6]同样强调非侵入性高级成像（尤其是冠脉CTA）在急诊胸痛患者管理中的核心地位。\n\n### 关键安全边界\n\n- **禁止以服药反应作为鉴别手段**——中成药或硝酸酯类药物缓解症状不等于排除ACS，更不能用于区分心源性与非心源性胸痛。主动脉夹层患者误用抗栓药物可导致灾难性后果。\n- Dawson等2023年发表于*JACC*的大规模人群研究（256,901例）[7]显示，女性在胸痛院前急救中接受指南推荐治疗的比例显著低于男性，STEMI女性患者的30天和长期死亡率更高——这提醒临床医师对所有患者保持同等的警惕。\n- 2023年E-HEART评分研究[8]显示，将床旁心脏超声整合进传统HEART评分可显著提高未分化胸痛危险分层的准确性（AUC 0.992）。\n\n---\n\n## 二、速效救心丸的证据边界\n\n### 法规定位：NMPA说明书 [9]\n\n| 维度 | 内容 |\n|------|------|\n| **功能主治** | 行气活血，祛瘀止痛，增加冠脉血流量，缓解心绞痛。用于**气滞血瘀型冠心病，心绞痛** |\n| **禁忌** | 孕妇禁用 |\n| **注意事项** | 寒凝血瘀、阴虚血瘀胸痹心痛不宜单用。有过敏史者、过敏体质者慎用。伴有中重度心力衰竭的心肌缺血者慎用。**在治疗期间，心绞痛持续发作，宜加用硝酸酯类药** |\n| **不良反应** | 恶心、呕吐、口干、腹痛、胃部不适、头痛、头晕、皮疹、瘙痒、潮红、乏力、过敏及过敏样反应等 |\n\n**说明书自身划出的证据边界已非常清晰**：适应证限定于已确诊且符合特定中医证型（气滞血瘀）的**稳定型心绞痛**，**不包括未分化急性胸痛**。说明书还明确提示心绞痛持续发作时\"宜加用硝酸酯类药\"——承认其单独使用时的局限性。\n\n### 最高层级证据：Cochrane系统评价（2008）[10]\n\n由四川大学华西医院中国Cochrane中心完成，纳入15项RCT共1,776例患者。主要发现：\n\n- vs 硝酸甘油：ECG改善 RR 1.16 (1.05–1.27)、症状缓解 RR 1.09 (1.04–1.13)，但证据评级为**弱（weak）**\n- vs 硝酸异山梨酯：ECG改善和症状改善均**无统计学显著差异**\n- **作者最终结论**：速效救心丸治疗心绞痛\"似乎有效\"，但\"由于纳入研究的方法学质量较差，证据仍然薄弱\"\n\n### 证据与信息缺口\n\n| 维度 | 有证据支持 | 无证据/证据不支持 |\n|------|-----------|-------------------|\n| **适应证** | 气滞血瘀型稳定型冠心病心绞痛 | 未分化急性胸痛、ACS、主动脉夹层、肺栓塞 |\n| **证据强度** | Cochrane系统评价（评为\"weak\"） | 缺乏高质量多中心RCT |\n| **作为单一急诊用药** | 说明书提示需合用硝酸酯类 | 不应用于急诊场景作为唯一治疗 |\n| **诊断价值** | 无 | **严禁以服药反应判断病因** |\n| **安全性** | 说明书已列明不良反应 | 缺乏上市后大样本安全性研究 |\n\n自2008年Cochrane系统评价以来，检索距今已近20年，**未发现更新的高质量系统评价或大型RCT**。Cochrane评价的检索截止于2005年11月，此后无同等级别证据更新。\n\n---\n\n## 不确定性说明\n\n- 急性胸痛处置框架来自国内外学会共识和指南，属于专家意见到高证据层级，用于指导实践而非原始研究。\n- 速效救心丸的证据最高为Cochrane系统评价，但其方法学质量被原作者评为\"弱\"，效应估计的方向一致但精度不足，且数据陈旧（截至2005年）。\n- NMPA说明书为法定文件，但需确认是否为当前最新修订版。\n\n---\n\n**参考文献**\n\n[1] CT血管成像在急性胸痛临床应用专家共识（2026）. 中国医师协会心血管内科医师分会. https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide\n\n[2] 急性胸痛急诊诊疗专家共识（2019）. 中华医学会急诊医学分会. https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide\n\n[3] Kontos MC, et al. 2022 ACC Expert Consensus Decision Pathway on the Evaluation and Disposition of Acute Chest Pain in the Emergency Department. *J Am Coll Cardiol*. 2022;80:1925–1960. https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide\n\n[4] Wee LS, et al. Optimizing chest pain patient management in the emergency department using 0-hour/1-hour high-sensitive cardiac troponin rapid algorithm. *Int J Cardiol*. 2024. https://www.embase.com/search/results?subaction=viewrecord&id=L2036752132&from=export\n\n[5] 2022 SCCT Expert Consensus: Use of coronary CTA for patients presenting with acute chest pain to the ED. *J Cardiovasc Comput Tomogr*. 2022. https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide\n\n[6] 2025 SIRM/SIC Consensus: Management of acute chest pain patients. 意大利医学放射学会. https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide\n\n[7] Dawson LP, et al. Sex Differences in Epidemiology, Care, and Outcomes in Patients With Acute Chest Pain. *J Am Coll Cardiol*. 2023. https://pubmed.ncbi.nlm.nih.gov/36889871/\n\n[8] Yuvaraj V, et al. E-HEART score: A novel scoring system for undifferentiated chest pain in the emergency department. *Turk J Emerg Med*. 2023. https://pubmed.ncbi.nlm.nih.gov/38024186/\n\n[9] 速效救心丸说明书（NMPA）. 津药达仁堂集团股份有限公司第六中药厂. https://www.evimed.com/drug-details?source=nmpa&name=8ac63be3f1a3baecde08da451c44c859.pdf\n\n[10] Duan X, Zhou L, Wu T, et al. Chinese herbal medicine suxiao jiuxin wan for angina pectoris. *Cochrane Database Syst Rev*. 2008. https://pubmed.ncbi.nlm.nih.gov/18254051/",
+      "run": {
+        "runId": "run_157144637272ec368aec6dde0788132d",
+        "status": "failed",
+        "dispatchStatus": "accepted",
+        "durationMs": 89422,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": "specialist_citation_invalid",
+        "qualityNotices": [],
+        "sessionId": "ses_05eac9aa3ffeZSpOufGUERYFCL",
+        "toolCalls": 7,
+        "artifacts": [],
+        "assistantChars": 4217,
+        "reportArtifactChars": 0
+      },
+      "error": "run status: failed"
+    }
+  ]
+}

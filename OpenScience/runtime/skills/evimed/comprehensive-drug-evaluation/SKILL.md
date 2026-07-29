@@ -62,6 +62,6 @@ Write:
 - `comprehensive-evaluation-report.md`: question, methods, source coverage, domain findings, certainty basis, contradictions, applicability, economics/HTA limits, and reviewer considerations.
 - `evidence-table.csv`: one traceable row per source-domain link with observed findings and limitations.
 - `evaluation-summary.json`: the exact compiler result, domain coverage, audit hash, and human-review flag.
-- `evidence-snapshot.json`: deduplicated sources, exact queries, scope, retrieval timestamps, and observed fields.
+- `evidence-snapshot.json`: deduplicated sources, exact queries, scope, retrieval timestamps, and observed fields. Every source URL cited in the report must appear here; never cite a source that is not recorded in the frozen snapshot.
 
 Resolve every material citation. Completion means the assisted evidence and domain-assessment package is reproducible, not that an external approval workflow has finished.

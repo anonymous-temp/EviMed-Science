@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 const claimFields = Object.freeze([
   "claimId",
   "claim",
@@ -11,18 +13,96 @@ const claimFields = Object.freeze([
   "uncertainty",
 ]);
 const accessLevels = new Set(["full_text", "official_page", "abstract", "structured_record"]);
+// A "synthesized" claim states a cross-source conclusion (e.g. "the evidence
+// leans toward X") that no single source phrases verbatim. It trades the
+// single-source verbatim bond for a stricter package: at least two distinct
+// preserved sources, each with its own verbatim quote, plus an explicit
+// confidence label and machine-verifiable numeric limits.
+const claimTypes = new Set(["direct", "synthesized"]);
+const synthesizedConfidenceLevels = new Set(["high", "moderate", "low"]);
+const synthesizedBaseFields = Object.freeze(["claimId", "claim", "applicability", "uncertainty"]);
+const synthesizedSourceFields = Object.freeze(["sourceUrl", "sourceTitle", "artifactPath", "accessLevel", "supportQuote"]);
+const sourceCountWordPattern = /(?:研究|试验|项|篇|文献|stud(?:y|ies)|trials?|sources?|records?)/i;
 const claimIdPattern = /^CLM-[0-9]{3,6}$/;
 const operationalFailurePattern = /(?:Transport error|Runtime configuration bootstrap|网页访问失败|工具调用失败|public[_ -]source[_ -]gateway.*(?:failed|error))/i;
-const academicProcessPattern = /(?:clinical-evidence-synthesis|\bevimed_[a-z_]+\b|EviMed.{0,24}(?:引擎|网关|工具)|证据追溯契约|\.evimed-sources\/|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单抓取|工具调用|(?:全文|页面|文件).{0,12}(?:不可及|无法获取|无法获得|未能获取|未能获得|不可得)|(?:未触及|未读取|未检索).{0,16}(?:完整|全文|文件|页面))/i;
-const medicationResponseDiagnosisPattern = /(?:(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解).{0,80}(?:诊断|排除|区分|判断)|(?:诊断|排除|区分|判断).{0,80}(?:速效救心丸|胃药|抗酸药|硝酸甘油).{0,80}(?:反应|缓解))/i;
+// Runtime/retrieval-process leakage — banned anywhere in the report. Tool and
+// gateway names, artifact paths, and first-person retrieval diaries are never
+// scientific analysis.
+const runtimeLeakagePattern = /(?:clinical-evidence-synthesis|\bevimed_[a-z_]+\b|EviMed.{0,24}(?:引擎|网关|工具)|证据追溯契约|\.evimed-sources\/|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单抓取|工具调用|(?:未触及|未读取|未检索).{0,16}(?:完整|全文|文件|页面))/i;
+// A material limit on evidence accessibility (e.g. a guideline whose full text
+// is not openly available) is a legitimate property of the evidence base. It is
+// banned in the analysis body but permitted inside the Limitations section.
+const evidenceAccessLimitationPattern = /(?:全文|页面|文件).{0,12}(?:不可及|无法获取|无法获得|未能获取|未能获得|不可得)/i;
 const emergencyCallClaimPattern = /(?:(?:呼叫|拨打).{0,16}(?:急救|120|999)|(?:急救|120|999).{0,16}(?:呼叫|拨打))/i;
 const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(?:999|emergency|ambulance).{0,16}call|呼叫|拨打|急救)/i;
-const unsupportedSelfCarePattern = /(?:(?:可|可以|建议|不妨|先|服用后).{0,24}(?:胃药|抗酸药).{0,40}(?:等待|观察)|(?:胃药|抗酸药).{0,40}(?:后再|并|然后).{0,20}(?:等待|观察)|(?:可|可以|建议|不妨|先).{0,20}(?:等待|观察).{0,30}(?:症状|变化|缓解))/i;
+// Generic (non-drug-specific) safety rule. Drug- and scenario-specific rules
+// live in clinical-safety-rules.json so pharmacists can maintain them as data.
 const exclusiveSafetyPattern = /(?:唯一.{0,24}(?:安全|可靠|正确|一致|策略|方法|途径)|(?:安全|可靠|正确).{0,24}唯一)/i;
-const suxiaoPattern = /(?:速效救心丸|Suxiao Jiuxin Wan)/i;
 const deepResearchProfile = "academic_deep_research_v1";
+// Process-documentation and presentation gaps that cannot mask a clinical error:
+// the evidence content itself (sections, claims, numbers, quotes, source
+// integrity) is validated separately and stays blocking. When a package fails
+// ONLY on issues in this allowlist, the run may be delivered marked "unverified"
+// instead of discarded (see requiredSpecialistArtifacts). Anything not listed
+// here is blocking by default.
+const degradableQualityIssues = new Set([
+  "references.bib must contain a bibliography entry for every numbered report reference.",
+  "references.bib must contain a bibliography entry for every cited source URL.",
+  "citation-ledger.csv must contain a traceability header and one row per evidence-matrix claim.",
+  "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.",
+  "citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.",
+  "citation-audit.md must reference at least one real audited source identifier from the evidence matrix.",
+  "Deep-research reports must hide internal claim IDs in HTML comments and show standard numbered citations to readers.",
+]);
 const visibleClaimMarkerPattern = /\[claim:(CLM-[0-9]{3,6})\]/g;
 const hiddenClaimMarkerPattern = /<!--\s*claim:(CLM-[0-9]{3,6})\s*-->/g;
+
+// Drug- and scenario-specific clinical safety rules are maintained as data in
+// clinical-safety-rules.json (pharmacist-owned), compiled once at module load.
+// A missing or malformed ruleset fails closed: the server will not start rather
+// than run the clinical gate without its safety rules.
+function compileClinicalSafetyRule(rule) {
+  return {
+    id: rule.id,
+    kind: rule.kind,
+    message: rule.message,
+    pattern: rule.pattern != null ? new RegExp(rule.pattern, rule.flags ?? "") : null,
+    triggerPattern: rule.triggerPattern != null ? new RegExp(rule.triggerPattern, rule.triggerFlags ?? "") : null,
+    substitutions: Array.isArray(rule.reportSubstitutions)
+      ? rule.reportSubstitutions.map((entry) => ({ find: new RegExp(entry.find, entry.flags ?? "g"), replace: String(entry.replace ?? "") }))
+      : [],
+  };
+}
+
+function loadClinicalSafetyRules() {
+  const parsed = JSON.parse(readFileSync(new URL("./clinical-safety-rules.json", import.meta.url), "utf8"));
+  if (!parsed || parsed.schemaVersion !== 1 || !Array.isArray(parsed.rules) || parsed.rules.length === 0) {
+    throw new Error("clinical-safety-rules.json is missing or malformed.");
+  }
+  return Object.freeze(parsed.rules.map(compileClinicalSafetyRule));
+}
+
+const clinicalSafetyRules = loadClinicalSafetyRules();
+
+function evaluateClinicalSafetyRules({ reportText, practical, question }) {
+  const report = String(reportText ?? "");
+  const practicalText = String(practical ?? "");
+  const found = [];
+  for (const rule of clinicalSafetyRules) {
+    if (rule.kind === "report_forbidden") {
+      let text = report;
+      for (const substitution of rule.substitutions) text = text.replace(substitution.find, substitution.replace);
+      if (rule.pattern.test(text)) found.push(rule.message);
+    } else if (rule.kind === "practical_forbidden") {
+      if (rule.pattern.test(practicalText)) found.push(rule.message);
+    } else if (rule.kind === "entity_requires_question_mention") {
+      if (nonEmpty(question) && !rule.pattern.test(question) && rule.pattern.test(report)) found.push(rule.message);
+    } else if (rule.kind === "practical_required_when_report_matches") {
+      if (rule.triggerPattern.test(report) && !rule.pattern.test(practicalText)) found.push(rule.message);
+    }
+  }
+  return found;
+}
 
 function nonEmpty(value, minimum = 1) {
   return typeof value === "string" && value.trim().length >= minimum;
@@ -51,6 +131,19 @@ function validSupportingPassage(value) {
   return normalizedPassage(value).replace(/\s+/g, "").length > 0;
 }
 
+// The text a claim's numeric and quotational support is drawn from. Direct
+// claims draw on their own single source; synthesized claims draw on every
+// supporting source plus the claim statement itself.
+function claimEvidenceText(claim) {
+  if (claim?.claimType === "synthesized" && Array.isArray(claim?.supportingSources)) {
+    return [
+      claim?.claim,
+      ...claim.supportingSources.flatMap((source) => [source?.supportQuote, source?.sourceTitle, source?.identifier]),
+    ].join(" ");
+  }
+  return [claim?.claim, claim?.supportQuote, claim?.sourceTitle, claim?.identifier].join(" ");
+}
+
 function numericTokens(value) {
   return String(value ?? "")
     .replace(/\]\(https?:\/\/[^)\s]+\)/gi, "]")
@@ -72,6 +165,116 @@ function numericTokens(value) {
         .replace(/(\.\d*?)0+$/, "$1")
         .replace(/\.$/, ""))
       .join("-")) ?? [];
+}
+
+// --- Conclusory quantity extraction (item 8) -------------------------------
+// The report-wide audit checks only *conclusory* quantitative statements — a
+// number (Arabic or Chinese) carrying a unit or statistical marker — instead of
+// every integer on every line. This stops false positives on structural numbers
+// (list positions, "3 databases", "2 groups") while still requiring that any
+// stated effect size, rate, sample size, dose, or study count trace to cited
+// evidence. Chinese numerals are supported and MUST be gated the same way, since
+// 一/十/百 also occur inside ordinary words (一致, 十分, 百般).
+const cjkDigit = { "〇": 0, "零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9 };
+const cjkUnitSmall = { "十": 10, "百": 100, "千": 1000 };
+const cjkUnitBig = { "万": 10000, "亿": 100000000 };
+
+function cjkNumberValue(run) {
+  let total = 0;
+  let section = 0;
+  let current = 0;
+  let consumed = false;
+  for (const character of run) {
+    if (character in cjkDigit) {
+      current = cjkDigit[character];
+      consumed = true;
+    } else if (character in cjkUnitSmall) {
+      section += (current || 1) * cjkUnitSmall[character];
+      current = 0;
+      consumed = true;
+    } else if (character in cjkUnitBig) {
+      section = (section + current) * cjkUnitBig[character];
+      total += section;
+      section = 0;
+      current = 0;
+      consumed = true;
+    } else {
+      return null;
+    }
+  }
+  return consumed ? total + section + current : null;
+}
+
+// Spelled-out English cardinals ("fifteen trials") are recognized on BOTH the
+// report and support sides and only when conclusory (unit/statistic adjacent),
+// exactly like Arabic and Chinese numerals, so 15 / 十五 / "fifteen" agree
+// without an asymmetric support-only widening that could mask a fabrication.
+const enOnes = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
+const enTens = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+const enScales = { hundred: 100, thousand: 1000, million: 1000000, billion: 1000000000 };
+const enWordsAlt = [...Object.keys(enOnes), ...Object.keys(enTens), ...Object.keys(enScales)].join("|");
+
+function englishNumberRunValue(words) {
+  let total = 0;
+  let current = 0;
+  let any = false;
+  for (const word of words) {
+    if (word in enOnes) { current += enOnes[word]; any = true; }
+    else if (word in enTens) { current += enTens[word]; any = true; }
+    else if (word in enScales) {
+      const scale = enScales[word];
+      if (scale === 100) current = (current || 1) * 100;
+      else { total += (current || 1) * scale; current = 0; }
+      any = true;
+    } else return null;
+  }
+  return any ? total + current : null;
+}
+
+const conclusoryNumber = `(?:[0-9]+(?:\\.[0-9]+)?(?:\\s*[–—-]\\s*[0-9]+(?:\\.[0-9]+)?)?|[〇零一二两三四五六七八九十百千万亿]+|\\b(?:${enWordsAlt})(?:[\\s-]+(?:${enWordsAlt}))*\\b)`;
+// A unit or statistic marks the number as a measured quantity. The trailing
+// (?![A-Za-z]) keeps a bare letter unit (g, L) from matching the start of an
+// ordinary word (groups, guideline). Chinese dose units are included so a dose
+// like 100毫克 is audited.
+const conclusoryUnit = "(?:%|‰|倍|percent|fold|times|mg|µg|μg|ug|mcg|ng|kg|g|mmol\\/?L?|mol|mmHg|mL|ml|L|IU|毫克|微克|纳克|千克|克|毫升|微升|升|毫摩尔|摩尔|国际单位|片|粒|支|滴|例次|人次|例患者|例|名|人|患者|项|次|周|月|年|天|日|岁|weeks?|months?|years?|days?|participants|patients|subjects|trials|studies|cases)(?![A-Za-z])";
+// Effect-size / rate labels. The separator before the number may be "=", ":", a
+// comparison operator, or a Chinese connective (为/是/约); a bare space also
+// works. Without this an "OR=4.2" or "风险比为3.8" would escape the audit.
+const ratioPrefix = "(?<![A-Za-z])(?:HR|aHR|OR|aOR|RR|aRR|风险比|比值比|危险比|相对危险度|CI|置信区间|发生率|有效率|敏感度|特异度|阳性率|死亡率|发病率|中位数|中位|平均|均值|百分之)";
+// Sample-size / p-value labels keep their required operator, so nodal staging
+// like N1/N2 or a token like P2 is not mistaken for a conclusory quantity.
+const statPrefix = "(?<![A-Za-z])(?:n|N|p|P)\\s*[<>=]";
+const conclusoryConnector = "[\\s=:：<>≈~〜约为是]*";
+const conclusorySuffixPattern = new RegExp(`(${conclusoryNumber})\\s*${conclusoryUnit}`, "gi");
+const conclusoryPrefixPattern = new RegExp(`(?:${ratioPrefix}${conclusoryConnector}|${statPrefix}\\s*)(${conclusoryNumber})`, "gi");
+
+function canonicalNumbers(text) {
+  if (/[0-9]/.test(text)) return numericTokens(text);
+  if (/[a-z]/i.test(text)) {
+    const value = englishNumberRunValue(text.toLowerCase().split(/[\s-]+/).filter(Boolean));
+    return value == null || value <= 0 ? [] : [String(value)];
+  }
+  const value = cjkNumberValue(text);
+  return value == null ? [] : [String(value)];
+}
+
+function conclusoryQuantities(text) {
+  const source = String(text ?? "");
+  const numbers = new Set();
+  for (const pattern of [conclusorySuffixPattern, conclusoryPrefixPattern]) {
+    pattern.lastIndex = 0;
+    for (const match of source.matchAll(pattern)) {
+      for (const token of canonicalNumbers(match[1])) numbers.add(token);
+    }
+  }
+  // Standalone calendar years are publication metadata, not a conclusory finding.
+  for (const token of [...numbers]) {
+    if (/^\d+$/.test(token)) {
+      const single = Number(token);
+      if (single >= 1900 && single <= 2099) numbers.delete(token);
+    }
+  }
+  return numbers;
 }
 
 function reportClaimIds(value) {
@@ -154,6 +357,104 @@ function sourceArtifactIdentity(value) {
   return value;
 }
 
+// Validates a cross-source ("synthesized") claim: the conclusion itself has no
+// single verbatim home, so every supporting source must independently satisfy
+// the same artifact/quote/URL checks a direct claim gets, and claim numbers
+// must trace to a supporting quote or be machine-verifiable source counts.
+function validateSynthesizedClaim(
+  value,
+  { label, deepResearch, reportReferenceCount, successfulArtifacts, artifactText, sourceDomains, issues },
+) {
+  if (!synthesizedConfidenceLevels.has(value.confidence)) {
+    issues.push(`${label}.confidence must be one of high, moderate, low for a synthesized claim.`);
+  }
+  if (deepResearch) {
+    if (
+      !Number.isInteger(value.referenceNumber)
+      || value.referenceNumber < 1
+      || value.referenceNumber > reportReferenceCount
+    ) {
+      issues.push(`${label}.referenceNumber must resolve to a numbered report reference.`);
+    }
+    const referenceNumbers = Array.isArray(value.referenceNumbers) ? value.referenceNumbers : [];
+    if (
+      referenceNumbers.length < 2
+      || referenceNumbers.some((entry) => !Number.isInteger(entry) || entry < 1 || entry > reportReferenceCount)
+    ) {
+      issues.push(`${label}.referenceNumbers must list at least two numbered report references.`);
+    } else if (Number.isInteger(value.referenceNumber) && !referenceNumbers.includes(value.referenceNumber)) {
+      issues.push(`${label}.referenceNumber must be one of its referenceNumbers.`);
+    }
+  }
+  const sources = Array.isArray(value.supportingSources) ? value.supportingSources : [];
+  if (sources.length < 2) {
+    issues.push(`${label}.supportingSources must name at least two distinct sources.`);
+  }
+  const supportNumbers = new Set();
+  const seenArtifacts = new Set();
+  for (const [sourceIndex, source] of sources.entries()) {
+    const sourceLabel = `${label}.supportingSources[${sourceIndex}]`;
+    if (!source || typeof source !== "object" || Array.isArray(source)) {
+      issues.push(`${sourceLabel} must be an object.`);
+      continue;
+    }
+    for (const field of synthesizedSourceFields) {
+      if (!nonEmpty(source[field])) issues.push(`${sourceLabel}.${field} must be a non-empty string.`);
+    }
+    if (!accessLevels.has(source.accessLevel)) {
+      issues.push(`${sourceLabel}.accessLevel must identify verified content access, not bibliographic metadata.`);
+    }
+    if (!validSupportingPassage(source.supportQuote)) {
+      issues.push(`${sourceLabel}.supportQuote must contain a direct supporting passage.`);
+    }
+    if (!validSourceArtifactPath(source.artifactPath)) {
+      issues.push(`${sourceLabel}.artifactPath must be a safe .evimed-sources workspace path.`);
+    } else {
+      if (seenArtifacts.has(source.artifactPath)) {
+        issues.push(`${sourceLabel}.artifactPath duplicates another supporting source.`);
+      }
+      seenArtifacts.add(source.artifactPath);
+      if (!successfulArtifacts.has(source.artifactPath)) {
+        issues.push(`${sourceLabel}.artifactPath is not listed as a successful source artifact for this run.`);
+      } else {
+        const preserved = normalizedPassage(artifactText.get(source.artifactPath));
+        const quote = normalizedPassage(source.supportQuote);
+        if (!preserved || !quote || !preserved.includes(quote)) {
+          issues.push(`${sourceLabel}.supportQuote was not found in its preserved source artifact.`);
+        }
+      }
+    }
+    const domain = sourceDomain(source.sourceUrl);
+    if (!domain) issues.push(`${sourceLabel}.sourceUrl must be a valid credential-free HTTPS URL.`);
+    else {
+      sourceDomains.add(domain);
+      if (domain === "www.evimed.com" && String(source.sourceUrl ?? "").includes("/api-evimed/")) {
+        issues.push(`${sourceLabel}.sourceUrl is an internal API route, not a public evidence citation.`);
+      }
+    }
+    for (const token of numericTokens([source.supportQuote, source.sourceTitle, source.identifier].join(" "))) {
+      supportNumbers.add(token);
+    }
+  }
+  for (const token of new Set(numericTokens(value.claim))) {
+    if (supportNumbers.has(token)) continue;
+    const asCount = Number(token);
+    const verifiableCount = sourceCountWordPattern.test(value.claim ?? "")
+      && Number.isInteger(asCount)
+      && asCount >= 1
+      && asCount <= sources.length;
+    if (!verifiableCount) {
+      issues.push(`${label}.claim numeric fact ${token} is not present in any supporting source and is not a verifiable source count.`);
+    }
+  }
+  if (
+    emergencyCallClaimPattern.test(value.claim ?? "")
+    && !sources.some((source) => emergencyCallSupportPattern.test(source?.supportQuote ?? ""))
+  ) {
+    issues.push(`${label}.emergency-call action is not present in its direct support.`);
+  }
+}
+
 export function validateClinicalEvidencePackage({
   reportText,
   matrix,
@@ -217,7 +518,10 @@ export function validateClinicalEvidencePackage({
   if (operationalFailurePattern.test(reportText ?? "")) {
     issues.push("The academic report contains operational failure prose that belongs only in the run receipt.");
   }
-  if (academicProcessPattern.test(reportText ?? "")) {
+  if (
+    runtimeLeakagePattern.test(reportText ?? "")
+    || evidenceAccessLimitationPattern.test(withoutReportSections(reportText, "局限|Limitations?"))
+  ) {
     issues.push("The academic report contains runtime or retrieval-process prose instead of scientific analysis.");
   }
   if (/\[claim:CLM-[0-9]{3,6}[^\]]+\]/.test(reportText ?? "")) {
@@ -225,10 +529,6 @@ export function validateClinicalEvidencePackage({
   }
   if (/https:\/\/www\.evimed\.com\/api-evimed\//i.test(reportText ?? "")) {
     issues.push("EviMed API endpoints cannot be used as public evidence citations.");
-  }
-  const medicationResponseText = String(reportText ?? "").replace(/不良反应/g, "药品安全信息");
-  if (medicationResponseDiagnosisPattern.test(medicationResponseText)) {
-    issues.push("Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms.");
   }
   if (exclusiveSafetyPattern.test(reportText ?? "")) {
     issues.push("The report must not turn a bounded recommendation into an unsupported exclusive safety claim.");
@@ -242,7 +542,12 @@ export function validateClinicalEvidencePackage({
       issues.push(`${label} must be an object.`);
       continue;
     }
-    for (const field of claimFields) {
+    const claimType = value.claimType ?? "direct";
+    if (!claimTypes.has(claimType)) {
+      issues.push(`${label}.claimType must be "direct" or "synthesized" when present.`);
+      continue;
+    }
+    for (const field of claimType === "synthesized" ? synthesizedBaseFields : claimFields) {
       if (!nonEmpty(value[field])) issues.push(`${label}.${field} must be a non-empty string.`);
     }
     if (!claimIdPattern.test(value.claimId ?? "")) issues.push(`${label}.claimId must match CLM-NNN.`);
@@ -250,6 +555,18 @@ export function validateClinicalEvidencePackage({
     else if (typeof value.claimId === "string") {
       seen.add(value.claimId);
       claimIds.push(value.claimId);
+    }
+    if (claimType === "synthesized") {
+      validateSynthesizedClaim(value, {
+        label,
+        deepResearch,
+        reportReferenceCount,
+        successfulArtifacts,
+        artifactText,
+        sourceDomains,
+        issues,
+      });
+      continue;
     }
     if (!accessLevels.has(value.accessLevel)) {
       issues.push(`${label}.accessLevel must identify verified content access, not bibliographic metadata.`);
@@ -318,11 +635,9 @@ export function validateClinicalEvidencePackage({
     const line = rawLine
       .replace(/^\s*[0-9]+\.\s*/, "")
       .replace(/^\s*\|\s*[0-9]+\s*\|/, "| |");
-    const reportNumbers = new Set(numericTokens(line).filter((token) => {
-      if (token === "120") return false;
-      const single = token.match(/^\d+$/) ? Number(token) : null;
-      return single == null || single < 1900 || single > 2099;
-    }));
+    // Only conclusory quantities (a number carrying a unit or statistic) are
+    // audited, not every integer on the line.
+    const reportNumbers = conclusoryQuantities(line);
     if (!reportNumbers.size) continue;
     const referencedIds = reportClaimIds(rawLine);
     if (!referencedIds.length) {
@@ -333,12 +648,10 @@ export function validateClinicalEvidencePackage({
     }
     const supportedNumbers = new Set(referencedIds.flatMap((claimId) => {
       const claim = claimsById.get(claimId);
-      return numericTokens([
-        claim?.claim,
-        claim?.supportQuote,
-        claim?.sourceTitle,
-        claim?.identifier,
-      ].join(" "));
+      // Arabic numbers in support match by value; conclusoryQuantities resolves
+      // conclusory Chinese and English numerals in the support to the same
+      // canonical value symmetrically, so 15 / 十五 / "fifteen trials" agree.
+      return [...numericTokens(claimEvidenceText(claim)), ...conclusoryQuantities(claimEvidenceText(claim))];
     }));
     const unsupportedNumbers = [...reportNumbers].filter((token) => !supportedNumbers.has(token));
     if (unsupportedNumbers.length) {
@@ -349,6 +662,9 @@ export function validateClinicalEvidencePackage({
   }
 
   const practical = reportSection(reportText, "实际处置|实用|怎么办|Practical");
+  for (const message of evaluateClinicalSafetyRules({ reportText, practical, question: runReceipt?.question })) {
+    issues.push(message);
+  }
   const numberedItems = practical.split(/\n(?=\s*[0-9]+\.\s+)/).filter((item) => /^\s*[0-9]+\.\s+/.test(item));
   if (numberedItems.some((item) => !hasClaimMarker(item))) {
     issues.push("Every numbered practical-action item must cite at least one evidence-matrix claim.");
@@ -359,16 +675,6 @@ export function validateClinicalEvidencePackage({
     .filter((line) => /^(?:(?:\*\*)?第[一二三四五六七八九十]+步|(?:\*\*)?[0-9]+[.、]|[-*+]\s+)/.test(line));
   if (practicalActionLines.some((line) => !hasClaimMarker(line))) {
     issues.push("Every practical-action step or bullet must cite at least one evidence-matrix claim.");
-  }
-  if (unsupportedSelfCarePattern.test(practical)) {
-    issues.push("The practical answer must not add unsupported advice about antacids or waiting for symptom changes.");
-  }
-  if (nonEmpty(runReceipt?.question) && !suxiaoPattern.test(runReceipt.question) && suxiaoPattern.test(reportText ?? "")) {
-    issues.push("A medicine-free question must not introduce Suxiao Jiuxin Wan into the report.");
-  }
-  if (/速效救心丸/.test(reportText ?? "")
-    && !/(?:速效救心丸.{0,120}(?:不应|不能|不得).{0,50}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估)|(?:不应|不能|不得).{0,50}(?:因|以|让)?.{0,30}速效救心丸.{0,60}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估))/s.test(practical)) {
-    issues.push("The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care.");
   }
 
   if (deepResearch) {
@@ -460,16 +766,50 @@ export function validateClinicalEvidencePackage({
     if (reportReferenceCount < largestReferenceNumber) {
       issues.push("The numbered reference list must resolve every evidence-matrix reference.");
     }
-    if (bibliographyEntryCount(referencesText) < reportReferenceCount) {
+    // references.bib: a real cross-check — it must actually contain every cited
+    // source, not merely enough @entries to hit a count.
+    const bibText = String(referencesText ?? "");
+    if (bibliographyEntryCount(bibText) < reportReferenceCount) {
       issues.push("references.bib must contain a bibliography entry for every numbered report reference.");
     }
+    const citedSourceUrls = [...new Set(claims.flatMap((claim) => (
+      claim?.claimType === "synthesized" && Array.isArray(claim?.supportingSources)
+        ? claim.supportingSources.map((source) => source?.sourceUrl)
+        : [claim?.sourceUrl]
+    )).filter((url) => typeof url === "string" && url))];
+    // Exact URL membership, not substring — otherwise .../source-1 would falsely
+    // match inside .../source-10.
+    const bibUrls = new Set([...bibText.matchAll(/https?:\/\/[^\s{}<>"'`)\]]+/g)].map((match) => match[0]));
+    if (citedSourceUrls.some((url) => !bibUrls.has(url))) {
+      issues.push("references.bib must contain a bibliography entry for every cited source URL.");
+    }
+    // citation-ledger.csv: a real cross-check — every matrix claim appears exactly
+    // once and each row's reference number matches the claim it names.
     const ledgerLines = String(citationLedgerText).trim().split(/\r?\n/).filter(Boolean);
     if (
       ledgerLines.length < claims.length + 1
-      || !/(?:claimId|claim_id).*(?:referenceNumber|reference_number).*(?:supportQuote|support_quote)/i.test(ledgerLines[0] ?? "")
+      // Positional header: the first three columns must be exactly claimId,
+      // referenceNumber, supportQuote — matching how each row is parsed below.
+      || !/^\s*"?(?:claimId|claim_id)"?\s*,\s*"?(?:referenceNumber|reference_number)"?\s*,\s*"?(?:supportQuote|support_quote)"?/i.test(ledgerLines[0] ?? "")
     ) {
       issues.push("citation-ledger.csv must contain a traceability header and one row per evidence-matrix claim.");
+    } else {
+      const ledgerRef = new Map();
+      for (const line of ledgerLines.slice(1)) {
+        const match = line.match(/^\s*"?([^",]+)"?\s*,\s*"?([^",]+)"?\s*,/);
+        if (match) ledgerRef.set(match[1].trim(), match[2].trim());
+      }
+      const matrixIds = new Set(claims.map((claim) => claim?.claimId));
+      const ledgerMismatch = ledgerRef.size !== matrixIds.size
+        || [...matrixIds].some((id) => !ledgerRef.has(id))
+        || claims.some((claim) => ledgerRef.get(claim?.claimId) !== String(claim?.referenceNumber));
+      if (ledgerMismatch) {
+        issues.push("citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.");
+      }
     }
+    // citation-audit.md: keep the required-dimension check, and make it real by
+    // requiring the audit to name at least one source identifier it actually
+    // examined, so it cannot pass as run-independent boilerplate.
     if (
       !nonEmpty(citationAuditText)
       || !/(?:unresolved|未解析)/i.test(citationAuditText)
@@ -479,6 +819,14 @@ export function validateClinicalEvidencePackage({
       || !/(?:claim mismatch|claim-source|claims?.{0,60}(?:verified|checked|audited)|主张不匹配|引文不匹配|主张.{0,20}(?:核对|验证|审计)|逐条.{0,20}(?:核对|验证|审计))/i.test(citationAuditText)
     ) {
       issues.push("citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.");
+    }
+    const auditIdentifiers = claims.flatMap((claim) => (
+      claim?.claimType === "synthesized" && Array.isArray(claim?.supportingSources)
+        ? claim.supportingSources.map((source) => source?.identifier)
+        : [claim?.identifier]
+    )).filter((id) => typeof id === "string" && id.trim());
+    if (nonEmpty(citationAuditText) && auditIdentifiers.length && !auditIdentifiers.some((id) => String(citationAuditText).includes(id))) {
+      issues.push("citation-audit.md must reference at least one real audited source identifier from the evidence matrix.");
     }
     for (const [index, claim] of claims.entries()) {
       const marker = `<!-- claim:${claim?.claimId} -->`;
@@ -515,6 +863,7 @@ export function validateClinicalEvidencePackage({
   return Object.freeze({
     valid: issues.length === 0,
     issues: Object.freeze(issues),
+    blockingIssues: Object.freeze(issues.filter((issue) => !degradableQualityIssues.has(issue))),
     claimIds: Object.freeze(claimIds),
     sourceDomains: Object.freeze([...sourceDomains].sort()),
   });

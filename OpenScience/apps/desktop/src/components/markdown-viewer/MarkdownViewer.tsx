@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/cn";
 import { CodeBlock } from "./CodeBlock";
@@ -72,7 +73,9 @@ export function MarkdownViewer({
   return (
     <div className={cn(s.root, className)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        // remark-breaks: chat prose treats a single newline as a line break
+        // (chat convention), not as the collapsible space of print markdown.
+        remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
           p: ({ children }) => <p className={s.p}>{children}</p>,
           a: ({ children, href }) => (

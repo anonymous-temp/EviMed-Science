@@ -204,7 +204,7 @@ test("mock hosted contract pins specialty identity but cannot certify specialist
       `${runtime.json.data}/session/${encodeURIComponent(openSession.json.id)}/message`,
       { headers: scoped },
     );
-    assert.equal(openMessages.json.find((message) => message.info.role === "user").info.agent, null);
+    assert.equal(openMessages.json.find((message) => message.info.role === "user").info.agent, "evimed-open-domain-answer");
     const runs = await jsonFetch(`${base}/api/agent-runs`, { headers: scoped });
     assert.equal(runs.json.data.length, 3);
     assert.equal(runs.json.data.filter((run) => run.mode === "specialist").length, 2);

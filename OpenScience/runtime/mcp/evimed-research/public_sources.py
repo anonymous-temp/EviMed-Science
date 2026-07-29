@@ -22,6 +22,9 @@ MAX_GATEWAY_CONFIG_BYTES = 1024 * 1024
 EVIMED_EVIDENCE_BASE_URL = "https://www.evimed.com/api-evimed/medicine-api/ai-api"
 _OPENFDA_CASE_BATCH_SIZE = 5
 _OPENFDA_PUBLIC_CASE_LIMIT = 25
+MAX_ABSTRACT_CHARS = 4000
+PUBMED_ABSTRACT_FETCH_LIMIT = 5
+_RXNORM_RESOLVE_LIMIT = 10
 
 
 class PublicSourceError(Exception):
@@ -334,11 +337,8 @@ def _ncbi_params(params):
     return output
 
 
-def _ncbi_get_json(url):
+def _ncbi_rate_limited(fetch):
     global _NCBI_LAST_REQUEST
-    hostname = (urllib.parse.urlsplit(url).hostname or "").casefold()
-    if hostname != "eutils.ncbi.nlm.nih.gov":
-        return _get_json(url)
     minimum_interval = 0.11 if os.environ.get("NCBI_API_KEY", "").strip() else 0.34
     for attempt in range(3):
         with _NCBI_RATE_LOCK:
@@ -347,14 +347,28 @@ def _ncbi_get_json(url):
                 time.sleep(wait)
             _NCBI_LAST_REQUEST = time.monotonic()
         try:
-            # Some NCBI ESummary databases emit literal control characters
-            # inside JSON string values. Limit tolerant parsing to the verified
-            # NCBI host; all other connectors retain strict RFC JSON parsing.
-            return _get_json(url, strict_json=False)
+            return fetch()
         except PublicSourceError as error:
             if not error.retryable or attempt == 2:
                 raise
             time.sleep(1 << attempt)
+
+
+def _ncbi_get_json(url):
+    hostname = (urllib.parse.urlsplit(url).hostname or "").casefold()
+    if hostname != "eutils.ncbi.nlm.nih.gov":
+        return _get_json(url)
+    # Some NCBI ESummary databases emit literal control characters
+    # inside JSON string values. Limit tolerant parsing to the verified
+    # NCBI host; all other connectors retain strict RFC JSON parsing.
+    return _ncbi_rate_limited(lambda: _get_json(url, strict_json=False))
+
+
+def _ncbi_get_text(url):
+    hostname = (urllib.parse.urlsplit(url).hostname or "").casefold()
+    if hostname != "eutils.ncbi.nlm.nih.gov":
+        return _get_text(url)
+    return _ncbi_rate_limited(lambda: _get_text(url))
 
 
 def _source(source_id, title, url, source):
@@ -1302,15 +1316,26 @@ def adr_signal(arguments):
     warnings = ["Disproportionality is a screening signal and does not establish causality or incidence."]
     estimable = all(value > 0 for value in (a, b, c, d))
     if estimable:
+        n = a + b + c + d
         ror = (a * d) / (b * c)
         se = math.sqrt(sum(1 / value for value in (a, b, c, d)))
         prr = (a / (a + b)) / (c / (c + d))
-        ic = math.log2((a * (a + b + c + d)) / ((a + b) * (a + c)))
+        prr_se = math.sqrt(1 / a - 1 / (a + b) + 1 / c - 1 / (c + d))
+        ic = math.log2((a * n) / ((a + b) * (a + c)))
+        # Yates-corrected chi-square on the 2x2 table (screening statistic used
+        # alongside PRR in the EVANS signal criteria: PRR>=2, chi2>=4, a>=3).
+        chi_squared = (n * (abs(a * d - b * c) - n / 2) ** 2) / ((a + b) * (c + d) * (a + c) * (b + d))
         if "ror" in metrics:
             values["ror"] = ror
             values["ror95CI"] = [math.exp(math.log(ror) - 1.96 * se), math.exp(math.log(ror) + 1.96 * se)]
         if "prr" in metrics:
             values["prr"] = prr
+            values["prr95CI"] = [math.exp(math.log(prr) - 1.96 * prr_se), math.exp(math.log(prr) + 1.96 * prr_se)]
+            values["chiSquaredYates"] = chi_squared
+            # EVANS: a signal of disproportionate reporting requires PRR>=2 AND
+            # chi-square>=4 AND at least 3 joint reports. Reported as a flag, not
+            # a causal conclusion.
+            values["evansSignal"] = bool(prr >= 2 and chi_squared >= 4 and a >= 3)
         if "ic" in metrics:
             values["crudeIc"] = ic
     else:
@@ -1456,7 +1481,7 @@ def drug_selection(arguments):
             "summary": "No traceable public evidence was retrieved for the candidate medicines.",
             "data": {"items": []},
             "warnings": list(dict.fromkeys(warnings)),
-            "next_actions": ["Configure the legacy drug-selection adapter for validated scoring."],
+            "next_actions": ["Broaden the indication or candidate list, or supply institution-specific evidence for these medicines."],
         }
     unique_sources = []
     seen_sources = set()
@@ -1471,7 +1496,7 @@ def drug_selection(arguments):
         "data": {"items": records, "weights": arguments.get("selectionCriteria") or [], "budgetContext": arguments.get("budgetContext")},
         "sources": unique_sources,
         "warnings": list(dict.fromkeys(warnings)),
-        "next_actions": ["Configure the legacy drug-selection adapter before assigning validated domain scores."],
+        "next_actions": ["Assess each domain from this evidence, then call evimed_drug_selection_evaluation with action=compile and an institution-supplied scoring rubric to obtain a transparent weighted score."],
     }
 
 
@@ -1490,6 +1515,15 @@ def _first_text(*values):
     return "Untitled record"
 
 
+def _clean_abstract(value):
+    if not isinstance(value, str):
+        return None
+    text = " ".join(re.sub(r"<[^>]+>", " ", value).split())
+    if not text:
+        return None
+    return text[:MAX_ABSTRACT_CHARS]
+
+
 def _metadata_result(source_id, items, sources, limitation=None):
     warning_text = limitation or (
         "This connector returns source metadata and selected public fields; verify the primary record before scientific interpretation."
@@ -1502,6 +1536,39 @@ def _metadata_result(source_id, items, sources, limitation=None):
         "warnings": [warning_text],
         "next_actions": ["Open and verify the cited primary record before using it in a material claim."],
     }
+
+
+def _pubmed_abstracts(base, ids):
+    """Fetch abstracts for the top PubMed hits without ever breaking the metadata path."""
+    fetch_ids = [identifier for identifier in ids[:PUBMED_ABSTRACT_FETCH_LIMIT]]
+    if not fetch_ids:
+        return {}, None
+    fetch_url = _url(base, "efetch.fcgi", _ncbi_params({
+        "db": "pubmed", "id": ",".join(fetch_ids), "rettype": "abstract", "retmode": "xml",
+    }))
+    try:
+        root = ET.fromstring(_ncbi_get_text(fetch_url))
+    except (PublicSourceError, ET.ParseError):
+        return {}, "PubMed abstract retrieval failed; results are bibliographic metadata only."
+    abstracts = {}
+    for article in root.findall(".//PubmedArticle"):
+        citation = article.find("MedlineCitation")
+        if citation is None:
+            continue
+        pmid = (citation.findtext("PMID") or "").strip()
+        if not pmid:
+            continue
+        sections = []
+        for element in article.findall(".//Abstract/AbstractText"):
+            text = " ".join("".join(element.itertext()).split())
+            if not text:
+                continue
+            label = (element.get("Label") or "").strip()
+            sections.append("%s: %s" % (label, text) if label else text)
+        abstract = _clean_abstract(" ".join(sections))
+        if abstract:
+            abstracts[pmid] = abstract
+    return abstracts, None
 
 
 def _ncbi_database(source_id, query, limit):
@@ -1544,7 +1611,18 @@ def _ncbi_database(source_id, query, limit):
         }
         items.append(item)
         sources.append(_source(identifier, title, record_url, source_id))
-    return _metadata_result(source_id, items, sources)
+    if source_id != "pubmed":
+        return _metadata_result(source_id, items, sources)
+    abstracts, note = _pubmed_abstracts(base, ids)
+    for item in items:
+        abstract = abstracts.get(item["id"])
+        item["evidenceLevel"] = "abstract" if abstract else "metadata"
+        if abstract:
+            item["abstract"] = abstract
+    result = _metadata_result(source_id, items, sources)
+    if note:
+        result["warnings"].append(note)
+    return result
 
 
 def _arxiv(query, limit):
@@ -1576,7 +1654,7 @@ def _arxiv(query, limit):
 
 def _europe_pmc(query, limit):
     base = _base("EVIMED_EUROPE_PMC_BASE_URL", "https://www.ebi.ac.uk/europepmc/webservices/rest")
-    url = _url(base, "search", {"query": query, "format": "json", "pageSize": limit})
+    url = _url(base, "search", {"query": query, "format": "json", "pageSize": limit, "resultType": "core"})
     records = _list(_dict(_get_json(url).get("resultList")).get("result"))
     items, sources = [], []
     for record in records[:limit]:
@@ -1586,14 +1664,37 @@ def _europe_pmc(query, limit):
         record_url = "https://europepmc.org/article/%s/%s" % (
             urllib.parse.quote(_first_text(record.get("source"), "MED")), urllib.parse.quote(identifier)
         )
-        items.append({"id": identifier, "title": title, "url": record_url, "doi": record.get("doi"), "year": record.get("pubYear")})
+        abstract = _clean_abstract(record.get("abstractText"))
+        item = {
+            "id": identifier, "title": title, "url": record_url,
+            "doi": record.get("doi"), "year": record.get("pubYear"),
+            "evidenceLevel": "abstract" if abstract else "metadata",
+        }
+        if abstract:
+            item["abstract"] = abstract
+        items.append(item)
         sources.append(_source(identifier, title, record_url, "europe-pmc"))
     return _metadata_result("europe-pmc", items, sources)
 
 
+def _openalex_abstract_text(inverted_index):
+    if not isinstance(inverted_index, dict):
+        return None
+    words = {}
+    for word, positions in inverted_index.items():
+        if not isinstance(word, str) or not isinstance(positions, list):
+            continue
+        for position in positions:
+            if isinstance(position, int) and not isinstance(position, bool) and position >= 0:
+                words[position] = word
+    if not words:
+        return None
+    return _clean_abstract(" ".join(words[index] for index in sorted(words)))
+
+
 def _openalex(query, limit):
     base = _base("EVIMED_OPENALEX_BASE_URL", "https://api.openalex.org")
-    url = _url(base, "works", {"search": query, "per-page": limit, "select": "id,doi,title,publication_year,type,primary_location"})
+    url = _url(base, "works", {"search": query, "per-page": limit, "select": "id,doi,title,publication_year,type,primary_location,abstract_inverted_index"})
     records = _list(_get_json(url).get("results"))
     items, sources = [], []
     for record in records[:limit]:
@@ -1601,7 +1702,15 @@ def _openalex(query, limit):
         identifier = _first_text(record.get("id"))
         title = _first_text(record.get("title"), identifier)
         record_url = _first_text(record.get("doi"), identifier)
-        items.append({"id": identifier, "title": title, "url": record_url, "year": record.get("publication_year"), "type": record.get("type")})
+        abstract = _openalex_abstract_text(record.get("abstract_inverted_index"))
+        item = {
+            "id": identifier, "title": title, "url": record_url,
+            "year": record.get("publication_year"), "type": record.get("type"),
+            "evidenceLevel": "abstract" if abstract else "metadata",
+        }
+        if abstract:
+            item["abstract"] = abstract
+        items.append(item)
         sources.append(_source(identifier, title, record_url, "openalex"))
     return _metadata_result("openalex", items, sources)
 
@@ -1650,6 +1759,49 @@ def _ols(source_id, query, limit, ontology):
         items.append({"id": identifier, "title": title, "url": record_url, "ontology": ontology, "description": _first_text(*_list(record.get("description")), title)[:1500]})
         sources.append(_source(identifier, title, record_url, source_id))
     return _metadata_result(source_id, items, sources)
+
+
+def rxnorm_drug_concepts(name, limit=10):
+    """Resolve a drug name to RxNorm concept records through the public RxNav API."""
+    base = _base("EVIMED_RXNORM_BASE_URL", "https://rxnav.nlm.nih.gov/REST")
+    url = _url(base, "drugs.json", {"name": name})
+    groups = _list(_dict(_get_json(url).get("drugGroup")).get("conceptGroup"))
+    records = [entry for group in groups for entry in _list(_dict(group).get("conceptProperties"))][:limit]
+    concepts = []
+    for record in records:
+        record = _dict(record)
+        rxcui = str(record.get("rxcui") or "").strip()
+        concept_name = str(record.get("name") or "").strip()
+        if not rxcui or not concept_name:
+            continue
+        concepts.append({
+            "rxcui": rxcui,
+            "name": concept_name,
+            "synonym": str(record.get("synonym") or "").strip(),
+            "tty": str(record.get("tty") or "").strip(),
+        })
+    return concepts
+
+
+def rxnorm_resolve(term):
+    """Resolve a drug term to its RxNorm ingredient concept and synonyms, or None."""
+    concepts = rxnorm_drug_concepts(term, _RXNORM_RESOLVE_LIMIT)
+    if not concepts:
+        return None
+    preferred_concept = next(
+        (item for item in concepts if item["tty"] == "IN"),
+        next((item for item in concepts if item["tty"] == "PIN"), concepts[0]),
+    )
+    synonyms = []
+    for concept in concepts:
+        for value in (concept["name"], concept["synonym"]):
+            if value and value not in synonyms:
+                synonyms.append(value)
+    return {
+        "rxcui": preferred_concept["rxcui"],
+        "preferred": preferred_concept["name"],
+        "synonyms": synonyms[:20],
+    }
 
 
 def _simple_json_source(source_id, query, limit):
@@ -1762,10 +1914,7 @@ def _simple_json_source(source_id, query, limit):
         get_title = lambda r: r.get("IndicatorName")
         get_url = lambda r, i: "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/%s" % urllib.parse.quote(i)
     elif source_id == "rxnorm":
-        base = _base("EVIMED_RXNORM_BASE_URL", "https://rxnav.nlm.nih.gov/REST")
-        url = _url(base, "drugs.json", {"name": query})
-        groups = _list(_dict(_get_json(url).get("drugGroup")).get("conceptGroup"))
-        records = [entry for group in groups for entry in _list(_dict(group).get("conceptProperties"))][:limit]
+        records = rxnorm_drug_concepts(query, limit)
         get_id = lambda r: r.get("rxcui")
         get_title = lambda r: r.get("name")
         get_url = lambda r, i: "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=%s" % urllib.parse.quote(i)
@@ -2499,11 +2648,37 @@ def _rummageo(query, limit):
     )
 
 
+def _keyless_public_params(profile):
+    """Anonymous-access parameters for connectors with a keyless public tier, or None."""
+    if profile == "semantic-scholar":
+        return {}
+    if profile == "unpaywall":
+        email = os.environ.get("EVIMED_UNPAYWALL_EMAIL", "").strip()
+        if email:
+            return {"email": email}
+    return None
+
+
+def _keyless_public_active(profile):
+    params = _keyless_public_params(profile)
+    if params is None:
+        return False
+    if _gateway_settings() is not None:
+        return False
+    return _direct_credential(profile) is None
+
+
 def _credentialed_json(url, profile):
+    if _keyless_public_active(profile):
+        params = _keyless_public_params(profile)
+        if params:
+            url = "%s%s%s" % (url, "&" if "?" in url else "?", urllib.parse.urlencode(params))
+        return _get_json_value(url)
     return _get_json_value(url, credential_profile=profile)
 
 
 def _semantic_scholar(query, limit):
+    credential_mode = "keyless-public" if _keyless_public_active("semantic-scholar") else "managed"
     url = _url("https://api.semanticscholar.org/graph/v1", "paper/search", {
         "query": query, "limit": limit,
         "fields": "paperId,title,url,year,authors,externalIds,abstract,openAccessPdf",
@@ -2526,7 +2701,13 @@ def _semantic_scholar(query, limit):
             "openAccessPdf": _dict(record.get("openAccessPdf")).get("url"),
         })
         sources.append(_source(identifier, title, record_url, "semantic-scholar"))
-    return _metadata_result("semantic-scholar", items, sources, "Semantic Scholar is a discovery index; verify identifiers, metadata, and claims against the primary record.")
+    result = _metadata_result("semantic-scholar", items, sources, "Semantic Scholar is a discovery index; verify identifiers, metadata, and claims against the primary record.")
+    result["data"]["credentialMode"] = credential_mode
+    if credential_mode == "keyless-public":
+        result["warnings"].append(
+            "Semantic Scholar is used through its anonymous public tier, which applies shared rate limits; configure the server-managed credential for production throughput."
+        )
+    return result
 
 
 def _core(query, limit):
@@ -2551,6 +2732,7 @@ def _core(query, limit):
 
 
 def _unpaywall(query, limit):
+    credential_mode = "keyless-public" if _keyless_public_active("unpaywall") else "managed"
     url = _url("https://api.unpaywall.org/v2", "search", {"query": query, "page": 1})
     payload = _dict(_credentialed_json(url, "unpaywall"))
     records = _list(payload.get("results"))
@@ -2570,7 +2752,13 @@ def _unpaywall(query, limit):
             "license": best_oa.get("license"), "pdfUrl": best_oa.get("url_for_pdf"),
         })
         sources.append(_source(identifier, title, record_url, "unpaywall"))
-    return _metadata_result("unpaywall", items, sources, "Unpaywall reports open-access locations; verify the landing page, file integrity, and article-level license before reuse.")
+    result = _metadata_result("unpaywall", items, sources, "Unpaywall reports open-access locations; verify the landing page, file integrity, and article-level license before reuse.")
+    result["data"]["credentialMode"] = credential_mode
+    if credential_mode == "keyless-public":
+        result["warnings"].append(
+            "Unpaywall is used through its keyless public tier identified by EVIMED_UNPAYWALL_EMAIL; configure the server-managed credential for production use."
+        )
+    return result
 
 
 def _umls(query, limit):

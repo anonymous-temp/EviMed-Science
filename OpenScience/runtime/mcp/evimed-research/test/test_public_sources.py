@@ -569,6 +569,170 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 sources._get_json("https://uts-ws.nlm.nih.gov/rest/search/current?string=TP53", credential_profile="umls")
         self.assertEqual(raised.exception.code, "public_source_managed_credential_required")
 
+    def test_europe_pmc_requests_core_records_and_marks_abstract_evidence(self):
+        payload = {"resultList": {"result": [
+            {"pmid": "101", "title": "With abstract", "doi": "10.1/observed", "pubYear": "2024",
+             "abstractText": "An <i>important</i>   abstract."},
+            {"pmid": "102", "title": "Without abstract"},
+        ]}}
+        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+            result = sources.biomedical_search({"source": "europe-pmc", "query": "observed", "limit": 2})
+        self.assertIn("resultType=core", request.call_args.args[0])
+        first, second = result["data"]["items"]
+        self.assertEqual(first["abstract"], "An important abstract.")
+        self.assertEqual(first["evidenceLevel"], "abstract")
+        self.assertNotIn("abstract", second)
+        self.assertEqual(second["evidenceLevel"], "metadata")
+        self.assertEqual(len(result["sources"]), 2)
+
+    def test_openalex_reconstructs_abstracts_from_the_inverted_index(self):
+        payload = {"results": [
+            {"id": "https://openalex.org/W1", "doi": "https://doi.org/10.1/observed", "title": "Observed",
+             "publication_year": 2024, "type": "article",
+             "abstract_inverted_index": {"Observed": [0], "abstract": [1], "text.": [2]}},
+            {"id": "https://openalex.org/W2", "title": "No abstract"},
+        ]}
+        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+            result = sources.biomedical_search({"source": "openalex", "query": "observed", "limit": 2})
+        self.assertIn("abstract_inverted_index", request.call_args.args[0])
+        first, second = result["data"]["items"]
+        self.assertEqual(first["abstract"], "Observed abstract text.")
+        self.assertEqual(first["evidenceLevel"], "abstract")
+        self.assertNotIn("abstract", second)
+        self.assertEqual(second["evidenceLevel"], "metadata")
+
+    def test_pubmed_search_attaches_efetch_abstracts_to_top_hits(self):
+        ids = [str(100 + index) for index in range(6)]
+        search = {"esearchresult": {"idlist": ids}}
+        summary = {"result": {identifier: {"uid": identifier, "title": "Observed %s" % identifier} for identifier in ids}}
+        efetch_xml = """
+        <PubmedArticleSet>
+          <PubmedArticle><MedlineCitation><PMID>100</PMID><Article><Abstract>
+            <AbstractText Label="BACKGROUND">Observed background.</AbstractText>
+            <AbstractText>Plain section.</AbstractText>
+          </Abstract></Article></MedlineCitation></PubmedArticle>
+          <PubmedArticle><MedlineCitation><PMID>101</PMID><Article><Abstract>
+            <AbstractText>Second abstract.</AbstractText>
+          </Abstract></Article></MedlineCitation></PubmedArticle>
+        </PubmedArticleSet>
+        """
+        with mock.patch.object(sources, "_get_json", side_effect=[search, summary]):
+            with mock.patch.object(sources, "_get_text", return_value=efetch_xml) as fetch:
+                result = sources.biomedical_search({"source": "pubmed", "query": "observed", "limit": 6})
+        fetch_url = fetch.call_args.args[0]
+        self.assertIn("efetch.fcgi", fetch_url)
+        self.assertIn("rettype=abstract", fetch_url)
+        self.assertIn("id=100%2C101%2C102%2C103%2C104", fetch_url)
+        self.assertNotIn("105", fetch_url)
+        items = result["data"]["items"]
+        self.assertEqual(items[0]["abstract"], "BACKGROUND: Observed background. Plain section.")
+        self.assertEqual(items[0]["evidenceLevel"], "abstract")
+        self.assertEqual(items[1]["abstract"], "Second abstract.")
+        for item in items[2:]:
+            self.assertEqual(item["evidenceLevel"], "metadata")
+            self.assertNotIn("abstract", item)
+        self.assertEqual(len(result["sources"]), 6)
+
+    def test_pubmed_abstract_failure_degrades_to_metadata_with_a_note(self):
+        search = {"esearchresult": {"idlist": ["101"]}}
+        summary = {"result": {"101": {"uid": "101", "title": "Observed"}}}
+        unavailable = sources.PublicSourceError("public_source_unavailable", "timed out", True)
+        with mock.patch.object(sources, "_get_json", side_effect=[search, summary]):
+            with mock.patch.object(sources, "_get_text", side_effect=unavailable):
+                with mock.patch.object(sources.time, "sleep"):
+                    result = sources.biomedical_search({"source": "pubmed", "query": "observed", "limit": 1})
+        item = result["data"]["items"][0]
+        self.assertEqual(item["title"], "Observed")
+        self.assertEqual(item["evidenceLevel"], "metadata")
+        self.assertNotIn("abstract", item)
+        self.assertTrue(any("bibliographic metadata only" in warning for warning in result["warnings"]))
+
+    def test_non_pubmed_ncbi_databases_never_fetch_abstracts(self):
+        search = {"esearchresult": {"idlist": ["101"]}}
+        summary = {"result": {"101": {"uid": "101", "title": "Observed"}}}
+        with mock.patch.object(sources, "_get_json", side_effect=[search, summary]):
+            with mock.patch.object(sources, "_get_text") as fetch:
+                result = sources.biomedical_search({"source": "pmc", "query": "observed", "limit": 1})
+        fetch.assert_not_called()
+        self.assertNotIn("evidenceLevel", result["data"]["items"][0])
+
+    def test_rxnorm_resolve_prefers_the_ingredient_concept(self):
+        payload = {"drugGroup": {"conceptGroup": [
+            {"tty": "BN", "conceptProperties": [{"rxcui": "5640", "name": "Advil", "synonym": "", "tty": "BN"}]},
+            {"tty": "IN", "conceptProperties": [{"rxcui": "161", "name": "Ibuprofen", "synonym": "Brufen", "tty": "IN"}]},
+        ]}}
+        with mock.patch.object(sources, "_get_json", return_value=payload):
+            resolved = sources.rxnorm_resolve("ibuprofen")
+        self.assertEqual(resolved["rxcui"], "161")
+        self.assertEqual(resolved["preferred"], "Ibuprofen")
+        self.assertIn("Advil", resolved["synonyms"])
+        self.assertIn("Brufen", resolved["synonyms"])
+
+    def test_rxnorm_resolve_returns_none_without_concepts(self):
+        with mock.patch.object(sources, "_get_json", return_value={"drugGroup": {}}):
+            self.assertIsNone(sources.rxnorm_resolve("not-a-drug"))
+
+    def test_rxnorm_connector_still_returns_traceable_records(self):
+        payload = {"drugGroup": {"conceptGroup": [
+            {"tty": "IN", "conceptProperties": [{"rxcui": "1191", "name": "Aspirin", "tty": "IN"}]},
+        ]}}
+        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+            result = sources.biomedical_search({"source": "rxnorm", "query": "aspirin", "limit": 5})
+        self.assertIn("drugs.json", request.call_args.args[0])
+        self.assertEqual(result["data"]["items"][0]["id"], "1191")
+        self.assertEqual(result["sources"][0]["source"], "rxnorm")
+
+    def test_semantic_scholar_operates_keyless_public_without_managed_credential(self):
+        payload = {"data": [{"paperId": "paper-1", "title": "Observed paper"}]}
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with mock.patch.object(sources, "_get_json_value", return_value=payload) as request:
+                result = sources.biomedical_search({"source": "semantic-scholar", "query": "TP53", "limit": 1})
+        self.assertNotIn("credential_profile", request.call_args.kwargs)
+        self.assertEqual(result["data"]["credentialMode"], "keyless-public")
+        self.assertEqual(len(result["data"]["items"]), 1)
+        self.assertTrue(any("rate limits" in warning for warning in result["warnings"]))
+
+    def test_unpaywall_keyless_tier_requires_a_contact_email(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(sources.PublicSourceError) as raised:
+                sources.biomedical_search({"source": "unpaywall", "query": "TP53", "limit": 1})
+        self.assertEqual(raised.exception.code, "public_source_managed_credential_required")
+
+    def test_unpaywall_operates_keyless_public_with_a_contact_email(self):
+        payload = {"results": [{"response": {"doi": "10.1/observed", "title": "Observed OA"}}]}
+        with mock.patch.dict(os.environ, {"EVIMED_UNPAYWALL_EMAIL": "researcher@example.org"}, clear=True):
+            with mock.patch.object(sources, "_get_json_value", return_value=payload) as request:
+                result = sources.biomedical_search({"source": "unpaywall", "query": "TP53", "limit": 1})
+        self.assertNotIn("credential_profile", request.call_args.kwargs)
+        self.assertIn("email=researcher%40example.org", request.call_args.args[0])
+        self.assertEqual(result["data"]["credentialMode"], "keyless-public")
+        self.assertEqual(len(result["data"]["items"]), 1)
+
+    def test_keyless_public_never_bypasses_the_managed_gateway(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = pathlib.Path(temporary) / "opencode.json"
+            config.write_text(json.dumps({
+                "provider": {"deepseek": {"options": {"apiKey": "runtime-token"}}}
+            }), encoding="utf-8")
+            environment = {
+                "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": "http://internal.test/internal/sources/v1/fetch",
+                "EVIMED_MODEL_CONFIG_FILE": str(config),
+            }
+            with mock.patch.dict(os.environ, environment, clear=True):
+                with mock.patch.object(sources, "_get_json_value", return_value={"data": []}) as request:
+                    result = sources.biomedical_search({"source": "semantic-scholar", "query": "TP53", "limit": 1})
+        self.assertEqual(request.call_args.kwargs.get("credential_profile"), "semantic-scholar")
+        self.assertEqual(result["data"]["credentialMode"], "managed")
+
+    def test_other_credentialed_connectors_still_fail_closed(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            for profile in ("core", "umls", "omim", "addgene", "biogrid", "opengwas"):
+                with self.subTest(profile=profile):
+                    self.assertIsNone(sources._keyless_public_params(profile))
+                    with self.assertRaises(sources.PublicSourceError) as raised:
+                        sources._credentialed_json("https://example.test/api", profile)
+                    self.assertEqual(raised.exception.code, "public_source_managed_credential_required")
+
     def test_literature_results_are_explicitly_bibliographic_metadata_only(self):
         result = {
             "summary": "Retrieved one record.",
@@ -643,6 +807,50 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertTrue(math.isclose(result["data"]["metrics"]["ror"], (10 * 860) / (90 * 40)))
         self.assertEqual(len(result["sources"]), 4)
         self.assertIn("does not establish causality", result["warnings"][0])
+
+    def test_prr_confidence_interval_and_chi_square_enable_the_evans_signal_flag(self):
+        totals = [
+            (10, "https://source.test/joint"),
+            (100, "https://source.test/drug"),
+            (50, "https://source.test/event"),
+            (1000, "https://source.test/total"),
+        ]
+        with mock.patch.object(sources, "_openfda_total", side_effect=totals):
+            result = sources.adr_signal({
+                "drug": "observed drug",
+                "adverseEvent": "observed event",
+                "metrics": ["prr"],
+            })
+        metrics = result["data"]["metrics"]
+        # a=10, b=90, c=40, d=860, N=1000.
+        self.assertTrue(math.isclose(metrics["prr"], (10 / 100) / (40 / 900)))  # 2.25
+        se = math.sqrt(1 / 10 - 1 / 100 + 1 / 40 - 1 / 900)
+        self.assertTrue(math.isclose(metrics["prr95CI"][0], math.exp(math.log(2.25) - 1.96 * se)))
+        self.assertTrue(math.isclose(metrics["prr95CI"][1], math.exp(math.log(2.25) + 1.96 * se)))
+        expected_chi = (1000 * (abs(10 * 860 - 90 * 40) - 500) ** 2) / (100 * 900 * 50 * 950)
+        self.assertTrue(math.isclose(metrics["chiSquaredYates"], expected_chi))
+        self.assertGreaterEqual(metrics["chiSquaredYates"], 4)
+        # PRR>=2 and chi2>=4 and a>=3 -> EVANS signal true.
+        self.assertTrue(metrics["evansSignal"])
+
+    def test_evans_signal_is_false_when_disproportionality_is_weak(self):
+        # a=3, b=97, c=40, d=860 -> PRR small, no EVANS signal even though estimable.
+        totals = [
+            (3, "https://source.test/joint"),
+            (100, "https://source.test/drug"),
+            (43, "https://source.test/event"),
+            (1000, "https://source.test/total"),
+        ]
+        with mock.patch.object(sources, "_openfda_total", side_effect=totals):
+            result = sources.adr_signal({
+                "drug": "observed drug",
+                "adverseEvent": "observed event",
+                "metrics": ["prr"],
+            })
+        metrics = result["data"]["metrics"]
+        self.assertIn("prr95CI", metrics)
+        self.assertIn("chiSquaredYates", metrics)
+        self.assertFalse(metrics["evansSignal"])
 
     def test_zero_faers_cells_are_reported_as_not_estimable_without_corrected_pseudo_signals(self):
         totals = [

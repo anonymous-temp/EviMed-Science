@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
+import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
 
 function claim(index, domain) {
@@ -58,162 +59,6 @@ function validPackage() {
       ".evimed-sources/a/page.md": claims.filter((item) => item.artifactPath.endsWith("page.md")).map((item) => item.supportQuote).join("\n"),
       ".evimed-sources/b/fulltext.md": claims.filter((item) => item.artifactPath.endsWith("fulltext.md")).map((item) => item.supportQuote).join("\n"),
     },
-  };
-}
-
-function deepResearchPackage() {
-  const domains = [
-    "pubmed.ncbi.nlm.nih.gov",
-    "www.acc.org",
-    "www.escardio.org",
-  ];
-  const sources = Array.from({ length: 12 }, (_, index) => {
-    const referenceNumber = index + 1;
-    return {
-      referenceNumber,
-      sourceUrl: `https://${domains[index % domains.length]}/evidence/source-${referenceNumber}`,
-      sourceTitle: `Verified clinical source ${referenceNumber}`,
-      artifactPath: `.evimed-sources/source-${referenceNumber}/content.md`,
-      identifier: `PMID ${900000 + referenceNumber}`,
-      supportQuote: `Verified source passage ${referenceNumber} directly supports the corresponding bounded clinical statement.`,
-    };
-  });
-  const claims = Array.from({ length: 18 }, (_, index) => {
-    const source = sources[index % sources.length];
-    return {
-      claimId: `CLM-${String(index + 1).padStart(3, "0")}`,
-      claim: "This bounded clinical statement is supported by inspected evidence.",
-      sourceUrl: source.sourceUrl,
-      sourceTitle: source.sourceTitle,
-      artifactPath: source.artifactPath,
-      identifier: source.identifier,
-      accessLevel: index % 3 === 0 ? "official_page" : "full_text",
-      supportQuote: source.supportQuote,
-      applicability: "The population, symptom context, and urgent-care setting are explicitly bounded.",
-      uncertainty: "Residual indirectness and individual diagnostic uncertainty remain.",
-      referenceNumber: source.referenceNumber,
-    };
-  });
-  const claimLines = claims.map((item) => (
-    `${item.claim} [${item.referenceNumber}](${item.sourceUrl}) <!-- claim:${item.claimId} -->`
-  ));
-  const reportText = [
-    "# 急性胸部压迫感的鉴别与处置",
-    "",
-    "## 摘要",
-    "急性胸部压迫感的学术判断必须同时处理时间敏感性、鉴别诊断的不确定性、检查路径的条件性和治疗建议的适用边界。本文以结构化临床问题为起点，将指南、诊断研究、系统证据与官方资料按主张逐项对应，并将可直接支持的结论与仍需临床评估的部分分开表述。",
-    "",
-    "## 临床问题与分析框架",
-    claimLines.slice(0, 3).join("\n\n"),
-    "",
-    "## 检索与方法",
-    "证据发现采用可复现的概念组合法，覆盖症状表型、急性冠脉事件、非心源性胸部不适、早期分层、诊断路径、院前处置与药物边界。来源按预设资格标准筛选，并以直接支持程度、适用人群、照护场景、方法学质量和证据新近性进行分层。只有已检查摘要、结构化记录、官方页面或全文的来源才能进入主张矩阵。",
-    claimLines.slice(3, 6).join("\n\n"),
-    "",
-    "## 结果",
-    "纳入证据共同支持一种安全优先、分层评估的分析路径：症状描述影响先验判断，但不能单独完成病因归类；紧急性由症状动态、生命体征、心电图、生物标志物及临床背景共同决定；药物相关结论必须服从具体适应证和证据层级。",
-    claimLines.slice(6, 10).join("\n\n"),
-    "",
-    "## 诊断与鉴别",
-    "胸部压迫感的诊断推理需要区分危险病因的及时排除与常见病因的后续确认。症状位置、性质、诱因和伴随表现可以调整可能性，却不能替代标准化评估。胃食管、肌骨和焦虑相关机制可以产生相似体验，因此早期判断应避免把单一症状或服药反应当成诊断试验。",
-    claimLines.slice(10, 13).join("\n\n"),
-    "",
-    "## 证据综合与临床含义",
-    "跨来源综合显示，高水平临床写作的关键不在于堆叠结论，而在于明确每个结论由何种证据支持、证据适用于谁、哪些变量可能改变结论，以及未被证据直接回答的问题。诊断性证据、治疗性证据与公共急救建议应分别解释，避免相互替代。",
-    claimLines.slice(13, 15).join("\n\n"),
-    "",
-    "## 讨论",
-    "现有证据形成了方向一致但层级不同的知识结构。指南提供决策路径和风险控制原则，诊断研究说明检查策略的性能边界，系统证据汇总干预研究的总体可信度，官方资料则界定公共处置和药品使用的规范语境。综合时应优先保留这些来源之间的一致核心，并对来源目的不同造成的表述差异进行解释。",
-    "临床推理还应区分群体证据和个体决策。群体层面的关联不能直接确定个体病因，诊断阈值也依赖检测平台、症状时间和医疗环境。因而，规范报告应把确定性结论写得清楚，把条件性结论写出适用前提，把推断性内容标明不确定来源。这种表达方式能同时提高科学严谨性与临床可执行性。",
-    "在药物问题上，证据边界尤为重要。某种药物在特定人群中的研究结果，不能自动外推为院前排除急症的工具，也不能用症状是否缓解反推病因。药物价值、用药安全与急诊分流属于不同的决策问题，需要分别由相应证据支持。",
-    "篇幅由临床问题与可用证据决定，不通过重复段落或拆分微小主张制造表面深度。",
-    claimLines.slice(15, 18).join("\n\n"),
-    "",
-    "## 局限与不确定性",
-    "纳入来源的方法学质量与偏倚风险并不完全一致，部分诊断结论对人群谱和检测平台存在间接性。医疗体系、管辖权和院前资源差异限制了公共建议的直接适用性，个体层面的敏感度、特异度和似然比还需要结合具体检查路径解释。证据新近性也可能影响药物和诊断策略的外推，因此结论保留明确的条件边界。",
-    "",
-    "## 结论",
-    "高质量结论应先回答危险性和决策顺序，再说明鉴别诊断与药物证据，最后明确哪些问题仍需现场检查。学术报告与实用处置可以共享证据基础，但必须保持用途和语气的区别。",
-    "",
-    "## 实际处置",
-    `1. 先按时间敏感的胸痛情境进行风险判断并寻求规范评估。[1](${sources[0].sourceUrl}) <!-- claim:CLM-001 -->`,
-    `2. 不以症状描述或服药后的主观变化自行排除危险病因。[2](${sources[1].sourceUrl}) <!-- claim:CLM-002 -->`,
-    `3. 后续鉴别与治疗由现场检查结果、个体背景和适用指南共同决定。[3](${sources[2].sourceUrl}) <!-- claim:CLM-003 -->`,
-    "",
-    "## 参考文献",
-    ...sources.map((source) => (
-      `${source.referenceNumber}. Author group. ${source.sourceTitle}. Journal. DOI: example.${source.referenceNumber}. ${source.sourceUrl}`
-    )),
-  ].join("\n");
-  const sourceArtifacts = Object.fromEntries(
-    sources.map((source) => [source.artifactPath, source.supportQuote]),
-  );
-  const searchLogText = JSON.stringify({
-    schemaVersion: 1,
-    queries: Array.from({ length: 8 }, (_, index) => ({
-      database: index % 2 === 0 ? "PubMed" : "Official guidelines",
-      query: `distinct structured search concept ${index + 1}`,
-    })),
-    screening: {
-      recordsIdentified: 42,
-      recordsAfterDeduplication: 24,
-      sourcesIncluded: 12,
-    },
-    sourceRecords: sources.map((source, index) => ({
-      sourceUrl: source.sourceUrl,
-      included: true,
-      accessLevel: index < 10 ? "full_text" : "official_page",
-    })),
-  });
-  const referencesText = sources.map((source) => [
-    `@article{source${source.referenceNumber},`,
-    `  title = {${source.sourceTitle}},`,
-    `  doi = {10.1000/source.${source.referenceNumber}},`,
-    `  pmid = {${900000 + source.referenceNumber}},`,
-    `  url = {${source.sourceUrl}}`,
-    "}",
-  ].join("\n")).join("\n\n");
-  const citationLedgerText = [
-    "claimId,referenceNumber,supportQuote",
-    ...claims.map((item) => `${item.claimId},${item.referenceNumber},"${item.supportQuote}"`),
-  ].join("\n");
-  const citationAuditText = [
-    "# Citation audit",
-    "Unresolved identifiers: none after DOI and PMID normalization.",
-    "Duplicate detection: title, identifier, and URL fields were compared before inclusion.",
-    "Correction and retraction checks: no correction or retraction notice was identified for the included records.",
-    "Metadata-only exclusion: bibliographic metadata alone was not treated as support for a clinical claim.",
-    "Claim mismatch review: each support passage was compared with the exact bounded proposition and context.",
-    "The audit also reviewed source authority, publication type, population applicability, care setting, intervention identity, outcome meaning, conflicting interpretations, and the distinction between direct evidence and cautious inference. ".repeat(8),
-  ].join("\n\n");
-  return {
-    reportText,
-    matrix: { schemaVersion: 1, claims },
-    searchLogText,
-    referencesText,
-    citationLedgerText,
-    citationAuditText,
-    runReceipt: {
-      question: "胸口突然发闷发紧、像被压着一样，是心绞痛还是胃病？该先怎么办？",
-      reportProfile: "academic_deep_research_v1",
-      status: "succeeded",
-      successfulSourceArtifacts: sources.map((source) => source.artifactPath),
-      failedSources: [],
-      stats: {
-        totalSearches: 8,
-        recordsIdentified: 42,
-        recordsAfterDeduplication: 24,
-        sourcesIncluded: 12,
-        distinctPreservedSources: 12,
-      },
-      qualityChecks: {
-        claimTraceability: true,
-        contradictionAudit: true,
-        arithmeticAudit: true,
-        citationAudit: true,
-      },
-    },
-    sourceArtifacts,
   };
 }
 
@@ -295,7 +140,7 @@ test("rejects explanatory objects where the run receipt requires path strings an
   assert.match(result.issues.join("\n"), /quality checks must pass/);
 });
 
-test("rejects access-failure limitations, uncited practical actions, and response-based diagnosis", () => {
+test("permits an evidence-accessibility limitation but still rejects uncited practical actions and response-based diagnosis", () => {
   const input = validPackage();
   input.reportText = input.reportText
     .replace(/## 科学局限[\s\S]*?(?=\n## 结论与实际处置)/, "## 科学局限\n核心指南全文不可及。")
@@ -305,9 +150,22 @@ test("rejects access-failure limitations, uncited practical actions, and respons
     );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /runtime or retrieval-process prose/);
+  // A material evidence-accessibility limit inside the Limitations section is
+  // legitimate scientific content, not banned retrieval-process prose.
+  assert.doesNotMatch(result.issues.join("\n"), /runtime or retrieval-process prose/);
   assert.match(result.issues.join("\n"), /Every numbered practical-action item/);
   assert.match(result.issues.join("\n"), /Medication response/);
+});
+
+test("still bans an evidence-accessibility statement outside the Limitations section", () => {
+  const input = validPackage();
+  input.reportText = input.reportText.replace(
+    "## 药物角色\n速效救心丸不应延误急诊评估。[claim:CLM-003]",
+    "## 药物角色\n核心指南全文不可及。速效救心丸不应延误急诊评估。[claim:CLM-003]",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /runtime or retrieval-process prose/);
 });
 
 test("rejects a report number absent from every cited claim proposition and source passage", () => {
@@ -380,6 +238,93 @@ test("does not treat table ordinals or parenthesized enumeration as clinical num
       "证据边界包括（1）适用人群、（2）照护场景与（3）结局定义。[claim:CLM-001]",
       "| 1 | 立即完成结构化评估 | [claim:CLM-001] |",
     ].join("\n"),
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
+test("resolves Chinese numerals in the report against Arabic numbers in the cited support", () => {
+  const input = validPackage();
+  input.matrix.claims[0].claim = "The pooled analysis enrolled 1776 participants.";
+  input.matrix.claims[0].supportQuote = "A total of 1776 participants were enrolled across the included trials.";
+  input.sourceArtifacts[".evimed-sources/a/page.md"] = input.matrix.claims
+    .filter((item) => item.artifactPath.endsWith("page.md"))
+    .map((item) => item.supportQuote)
+    .join("\n");
+  input.reportText = input.reportText.replace(
+    "症状不能单独完成病因归类。[claim:CLM-001]",
+    "该分析共纳入一千七百七十六名受试者。[claim:CLM-001]",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
+test("flags a Chinese-numeral quantity absent from the cited evidence", () => {
+  const input = validPackage();
+  input.reportText = input.reportText.replace(
+    "症状不能单独完成病因归类。[claim:CLM-001]",
+    "该分析共纳入一千七百七十六名受试者。[claim:CLM-001]",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /numeric facts? 1776/);
+});
+
+test("audits an effect size written with an equals sign or Chinese connective", () => {
+  for (const proposition of ["该药显著增加风险（OR=4.2）。[claim:CLM-002]", "风险比为3.8。[claim:CLM-002]"]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("诊断需要规范评估。[claim:CLM-002]", proposition);
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, false, proposition);
+    assert.match(result.issues.join("\n"), /numeric facts?\s+(?:4\.2|3\.8)/);
+  }
+});
+
+test("audits a Chinese-unit dose as a conclusory quantity", () => {
+  const input = validPackage();
+  input.reportText = input.reportText.replace("诊断需要规范评估。[claim:CLM-002]", "推荐每次口服100毫克。[claim:CLM-002]");
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /numeric facts?\s+100/);
+});
+
+test("does not let a structural English number-word in the source mask a fabricated report quantity", () => {
+  const input = validPackage();
+  input.matrix.claims[0].claim = "The review searched multiple electronic databases.";
+  input.matrix.claims[0].supportQuote = "We searched three electronic databases without language restriction.";
+  input.sourceArtifacts[".evimed-sources/a/page.md"] = input.matrix.claims
+    .filter((item) => item.artifactPath.endsWith("page.md"))
+    .map((item) => item.supportQuote)
+    .join("\n");
+  input.reportText = input.reportText.replace(
+    "症状不能单独完成病因归类。[claim:CLM-001]",
+    "该疗法使风险增加3倍。[claim:CLM-001]",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  // The source's "three databases" is structural (not unit-adjacent) so it must
+  // not supply a "3" that would mask the fabricated 3-fold effect.
+  assert.match(result.issues.join("\n"), /numeric facts?\s+3\b/);
+});
+
+test("rejects a citation ledger whose columns are not in the required positional order", () => {
+  const input = deepResearchPackage();
+  input.citationLedgerText = input.citationLedgerText.replace(
+    "claimId,referenceNumber,supportQuote",
+    "claimId,sourceUrl,referenceNumber,supportQuote",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /citation-ledger\.csv must contain a traceability header/);
+});
+
+test("does not audit structural numbers that carry no unit or statistic", () => {
+  const input = validPackage();
+  // A bare enumeration in a line with no claim reference: previously every
+  // integer was audited; now only conclusory quantities are.
+  input.reportText = input.reportText.replace(
+    "## 摘要\n",
+    "## 摘要\n本文覆盖 3 个方面并分为两组，共 2 个部分。\n",
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, true, result.issues.join("\n"));
@@ -569,4 +514,155 @@ test("does not count companion Markdown and XML files as distinct preserved sour
   assert.equal(result.valid, false);
   const issues = result.issues.join("\n");
   assert.match(issues, /companion XML and Markdown files cannot be counted twice/);
+});
+
+test("classifies a citation-audit-documentation-only failure as degradable, not blocking", () => {
+  const input = deepResearchPackage();
+  // Drop only the correction/retraction line, so the sole failure is the
+  // citation-audit documentation-completeness check — a process-documentation
+  // gap that cannot mask a clinical error.
+  input.citationAuditText = input.citationAuditText.replace(
+    "Correction and retraction checks: no correction or retraction notice was identified for the included records.\n\n",
+    "",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /citation-audit\.md must document/);
+  assert.deepEqual([...result.blockingIssues], []);
+});
+
+test("classifies a fabricated support quote as a blocking failure", () => {
+  const input = deepResearchPackage();
+  input.matrix.claims[0].supportQuote = "This passage was never present in any preserved source artifact.";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.ok(result.blockingIssues.length > 0);
+  assert.match(result.blockingIssues.join("\n"), /was not found in its preserved source artifact/);
+});
+
+test("cross-checks the citation ledger's reference numbers against the matrix", () => {
+  const input = deepResearchPackage();
+  // Corrupt one ledger row's reference number so it disagrees with the matrix.
+  input.citationLedgerText = input.citationLedgerText.replace("CLM-001,1,", "CLM-001,99,");
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /citation-ledger\.csv rows must match each evidence-matrix claim/);
+  assert.deepEqual([...result.blockingIssues], []); // supporting-doc gap stays degradable
+});
+
+test("cross-checks references.bib against every cited source URL", () => {
+  const input = deepResearchPackage();
+  // Blank one entry's URL so a cited source has no bibliography URL match.
+  input.referencesText = input.referencesText.replace(
+    "  url = {https://pubmed.ncbi.nlm.nih.gov/evidence/source-1}",
+    "  url = {}",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /references\.bib must contain a bibliography entry for every cited source URL/);
+  assert.deepEqual([...result.blockingIssues], []);
+});
+
+test("requires the citation audit to name a real audited source identifier", () => {
+  const input = deepResearchPackage();
+  input.citationAuditText = input.citationAuditText.replace("(for example PMID 900001) ", "");
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /citation-audit\.md must reference at least one real audited source identifier/);
+  assert.deepEqual([...result.blockingIssues], []);
+});
+
+
+// --- Synthesized (cross-source) claims ---------------------------------------
+
+function withSynthesizedClaim(mutate = (claim) => claim) {
+  const input = deepResearchPackage();
+  const claim = mutate({
+    claimId: "CLM-019",
+    claimType: "synthesized",
+    claim: "跨来源综合显示，2 项独立来源一致支持安全优先的分层评估路径。",
+    confidence: "moderate",
+    applicability: "适用于急性胸部压迫感的院前分层语境。",
+    uncertainty: "综合方向受纳入来源数量限制。",
+    referenceNumber: 1,
+    referenceNumbers: [1, 2],
+    supportingSources: [
+      {
+        sourceUrl: "https://pubmed.ncbi.nlm.nih.gov/evidence/source-1",
+        sourceTitle: "Verified clinical source 1",
+        artifactPath: ".evimed-sources/source-1/content.md",
+        accessLevel: "full_text",
+        supportQuote: "Verified source passage 1 directly supports the corresponding bounded clinical statement.",
+      },
+      {
+        sourceUrl: "https://www.acc.org/evidence/source-2",
+        sourceTitle: "Verified clinical source 2",
+        artifactPath: ".evimed-sources/source-2/content.md",
+        accessLevel: "full_text",
+        supportQuote: "Verified source passage 2 directly supports the corresponding bounded clinical statement.",
+      },
+    ],
+  });
+  input.matrix.claims.push(claim);
+  input.reportText = input.reportText.replace(
+    "## 讨论",
+    "跨来源综合显示，2 项独立来源一致支持安全优先的分层评估路径。[1](https://pubmed.ncbi.nlm.nih.gov/evidence/source-1) <!-- claim:CLM-019 -->\n\n## 讨论",
+  );
+  input.citationLedgerText += `\nCLM-019,1,"${claim.supportingSources[0].supportQuote}"`;
+  return input;
+}
+
+test("accepts a synthesized cross-source claim with a verifiable source count", () => {
+  const result = validateClinicalEvidencePackage(withSynthesizedClaim());
+  assert.equal(result.valid, true, result.issues.join("\n"));
+  assert.ok(result.claimIds.includes("CLM-019"));
+});
+
+test("rejects a synthesized claim resting on a single source", () => {
+  const result = validateClinicalEvidencePackage(
+    withSynthesizedClaim((claim) => ({ ...claim, referenceNumbers: [1, 2], supportingSources: [claim.supportingSources[0]] })),
+  );
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /supportingSources must name at least two distinct sources/);
+});
+
+test("rejects a synthesized claim whose source count exceeds its sources", () => {
+  const result = validateClinicalEvidencePackage(
+    withSynthesizedClaim((claim) => ({ ...claim, claim: "跨来源综合显示，5 项研究一致支持该路径。" })),
+  );
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /not a verifiable source count/);
+});
+
+test("rejects a synthesized claim without a confidence label", () => {
+  const result = validateClinicalEvidencePackage(
+    withSynthesizedClaim((claim) => {
+      const { confidence: _confidence, ...rest } = claim;
+      return rest;
+    }),
+  );
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /confidence must be one of high, moderate, low/);
+});
+
+test("rejects a synthesized claim when a supporting quote is absent from its artifact", () => {
+  const result = validateClinicalEvidencePackage(
+    withSynthesizedClaim((claim) => ({
+      ...claim,
+      supportingSources: [
+        claim.supportingSources[0],
+        { ...claim.supportingSources[1], supportQuote: "A passage invented after retrieval that the source never stated." },
+      ],
+    })),
+  );
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /supportingSources\[1\]\.supportQuote was not found in its preserved source artifact/);
+});
+
+test("rejects a synthesized claim whose primary reference is not among its referenceNumbers", () => {
+  const result = validateClinicalEvidencePackage(
+    withSynthesizedClaim((claim) => ({ ...claim, referenceNumber: 3 })),
+  );
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /referenceNumber must be one of its referenceNumbers/);
 });

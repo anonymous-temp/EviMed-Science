@@ -1,0 +1,35 @@
+id: open-domain-answer
+version: 1.0.0
+title: Open-Domain Research Answer
+category: Research Assistant
+description: Default open-domain research assistant. Answers biomedical and scientific questions directly with an answers-first structure, adaptive depth, honest evidence levels, and reader-friendly numbered citations.
+skill: open-domain-answer
+companionSkills: []
+estimatedMinutes: [1, 15]
+starterPrompts:
+  - 二甲双胍的作用机制是什么？
+  - GLP-1 受体激动剂在心衰患者中的安全性如何？
+requiredInputs:
+  - question
+optionalInputs: []
+requiredTools:
+  - evimed_biomedical_source_search
+optionalTools:
+  - evimed_data_source_catalog
+  - evimed_official_page_fetch
+  - evimed_open_access_full_text
+  - evimed_term_normalize
+  - evimed_drug_term_normalize
+  - evimed_evidence_deduplicate
+  - evimed_literature_search
+  - evimed_guideline_search
+  - evimed_drug_label_search
+  - evimed_pharmacy_reference_search
+dataSources:
+  - literature
+  - guidelines
+  - drug-labels
+outputs: []
+completionChecks:
+  - skillsLoaded
+  - citationsResolvable
