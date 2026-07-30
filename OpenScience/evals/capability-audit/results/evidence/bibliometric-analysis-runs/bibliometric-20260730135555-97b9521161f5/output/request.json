@@ -1,0 +1,7 @@
+{
+  "topic": "osimertinib AND (cardiotoxicity OR cardiac OR cardiotoxic OR QT prolongation OR heart failure OR cardiomyopathy OR arrhythmia OR left ventricular)",
+  "dateFrom": "2020",
+  "dateTo": "2026",
+  "maxRecords": 2000,
+  "outputLanguage": "zh"
+}

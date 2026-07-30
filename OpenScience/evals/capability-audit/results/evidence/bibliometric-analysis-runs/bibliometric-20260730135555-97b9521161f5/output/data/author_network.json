@@ -1,0 +1,1027 @@
+{
+  "nodes": [
+    {
+      "id": "Hara Satoshi",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.1429,
+      "betweenness": 0.0,
+      "closeness": 0.2286,
+      "weighted_degree": 7
+    },
+    {
+      "id": "Lee Shin Yup",
+      "weight": 5,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0004,
+      "closeness": 1.0608,
+      "weighted_degree": 61
+    },
+    {
+      "id": "Kato Terufumi",
+      "weight": 3,
+      "cluster": 2,
+      "degree": 0.0714,
+      "betweenness": 0.0,
+      "closeness": 0.3506,
+      "weighted_degree": 3
+    },
+    {
+      "id": "Choi Chang-Min",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.5357,
+      "betweenness": 0.0,
+      "closeness": 0.8571,
+      "weighted_degree": 35
+    },
+    {
+      "id": "Kim Young-Chul",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0035,
+      "closeness": 0.8658,
+      "weighted_degree": 29
+    },
+    {
+      "id": "Wu Yi-Long",
+      "weight": 5,
+      "cluster": 2,
+      "degree": 0.1071,
+      "betweenness": 0.0503,
+      "closeness": 0.3549,
+      "weighted_degree": 4
+    },
+    {
+      "id": "Kim Seung Joon",
+      "weight": 5,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0004,
+      "closeness": 1.0608,
+      "weighted_degree": 61
+    },
+    {
+      "id": "Zamami Yoshito",
+      "weight": 3,
+      "cluster": 3,
+      "degree": 0.0714,
+      "betweenness": 0.0,
+      "closeness": 0.1071,
+      "weighted_degree": 4
+    },
+    {
+      "id": "Imamura Fumio",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.1071,
+      "betweenness": 0.0,
+      "closeness": 0.2017,
+      "weighted_degree": 5
+    },
+    {
+      "id": "Cho Byoung Chul",
+      "weight": 4,
+      "cluster": 2,
+      "degree": 0.1786,
+      "betweenness": 0.1349,
+      "closeness": 0.5772,
+      "weighted_degree": 5
+    },
+    {
+      "id": "Ryu Jeong Seon",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0,
+      "closeness": 0.8837,
+      "weighted_degree": 39
+    },
+    {
+      "id": "Chang Yoon Soo",
+      "weight": 4,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0,
+      "closeness": 0.9967,
+      "weighted_degree": 52
+    },
+    {
+      "id": "Jang Seung Hun",
+      "weight": 7,
+      "cluster": 1,
+      "degree": 0.6071,
+      "betweenness": 0.0256,
+      "closeness": 1.0728,
+      "weighted_degree": 54
+    },
+    {
+      "id": "Kanda Yasunari",
+      "weight": 3,
+      "cluster": 3,
+      "degree": 0.0714,
+      "betweenness": 0.0,
+      "closeness": 0.0714,
+      "weighted_degree": 2
+    },
+    {
+      "id": "Tamiya Motohiro",
+      "weight": 4,
+      "cluster": 0,
+      "degree": 0.1429,
+      "betweenness": 0.0106,
+      "closeness": 0.3117,
+      "weighted_degree": 9
+    },
+    {
+      "id": "Lee Kye Young",
+      "weight": 5,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0004,
+      "closeness": 1.0608,
+      "weighted_degree": 61
+    },
+    {
+      "id": "Park Chan Kwon",
+      "weight": 4,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0,
+      "closeness": 0.9685,
+      "weighted_degree": 48
+    },
+    {
+      "id": "Lee Sang Hoon",
+      "weight": 5,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0004,
+      "closeness": 1.0608,
+      "weighted_degree": 61
+    },
+    {
+      "id": "Matsumoto Hirotaka",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.0714,
+      "betweenness": 0.0,
+      "closeness": 0.1905,
+      "weighted_degree": 4
+    },
+    {
+      "id": "Kunimasa Kei",
+      "weight": 4,
+      "cluster": 0,
+      "degree": 0.1071,
+      "betweenness": 0.0,
+      "closeness": 0.2017,
+      "weighted_degree": 5
+    },
+    {
+      "id": "Yoon Seong Hoon",
+      "weight": 4,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0,
+      "closeness": 0.9967,
+      "weighted_degree": 52
+    },
+    {
+      "id": "Jang Tae Won",
+      "weight": 4,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0,
+      "closeness": 0.9967,
+      "weighted_degree": 52
+    },
+    {
+      "id": "Jung Chi Young",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0,
+      "closeness": 0.7792,
+      "weighted_degree": 29
+    },
+    {
+      "id": "Popat Sanjay",
+      "weight": 3,
+      "cluster": 2,
+      "degree": 0.0357,
+      "betweenness": 0.0,
+      "closeness": 0.2411,
+      "weighted_degree": 1
+    },
+    {
+      "id": "Lee Sung Yong",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.6071,
+      "betweenness": 0.1292,
+      "closeness": 1.1474,
+      "weighted_degree": 64
+    },
+    {
+      "id": "Lee Jeong Eun",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0146,
+      "closeness": 1.0919,
+      "weighted_degree": 64
+    },
+    {
+      "id": "Choi Chang Min",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.5,
+      "betweenness": 0.0,
+      "closeness": 0.8086,
+      "weighted_degree": 29
+    },
+    {
+      "id": "Hamano Hirofumi",
+      "weight": 3,
+      "cluster": 3,
+      "degree": 0.0714,
+      "betweenness": 0.0,
+      "closeness": 0.1071,
+      "weighted_degree": 4
+    },
+    {
+      "id": "Yang Sei Hoon",
+      "weight": 4,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0,
+      "closeness": 0.974,
+      "weighted_degree": 48
+    }
+  ],
+  "edges": [
+    {
+      "source": "Hara Satoshi",
+      "target": "Tamiya Motohiro",
+      "weight": 3
+    },
+    {
+      "source": "Hara Satoshi",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Hara Satoshi",
+      "target": "Imamura Fumio",
+      "weight": 1
+    },
+    {
+      "source": "Hara Satoshi",
+      "target": "Kunimasa Kei",
+      "weight": 1
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Lee Sang Hoon",
+      "weight": 5
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Kim Seung Joon",
+      "weight": 5
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Lee Sung Yong",
+      "weight": 5
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Lee Jeong Eun",
+      "weight": 5
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Lee Kye Young",
+      "weight": 5
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Jang Seung Hun",
+      "weight": 4
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Yoon Seong Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Park Chan Kwon",
+      "weight": 4
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Yang Sei Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Jang Tae Won",
+      "weight": 4
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Chang Yoon Soo",
+      "weight": 4
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Ryu Jeong Seon",
+      "weight": 3
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Choi Chang-Min",
+      "weight": 3
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Choi Chang Min",
+      "weight": 2
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Kim Young-Chul",
+      "weight": 2
+    },
+    {
+      "source": "Lee Shin Yup",
+      "target": "Jung Chi Young",
+      "weight": 2
+    },
+    {
+      "source": "Kato Terufumi",
+      "target": "Wu Yi-Long",
+      "weight": 2
+    },
+    {
+      "source": "Kato Terufumi",
+      "target": "Cho Byoung Chul",
+      "weight": 1
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Lee Jeong Eun",
+      "weight": 3
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Lee Kye Young",
+      "weight": 3
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Lee Sang Hoon",
+      "weight": 3
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Lee Sung Yong",
+      "weight": 3
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Kim Seung Joon",
+      "weight": 3
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Yang Sei Hoon",
+      "weight": 2
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Park Chan Kwon",
+      "weight": 2
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Jang Seung Hun",
+      "weight": 2
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Chang Yoon Soo",
+      "weight": 2
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Kim Young-Chul",
+      "weight": 2
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Jung Chi Young",
+      "weight": 2
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Jang Tae Won",
+      "weight": 2
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Yoon Seong Hoon",
+      "weight": 2
+    },
+    {
+      "source": "Choi Chang-Min",
+      "target": "Ryu Jeong Seon",
+      "weight": 1
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Lee Sung Yong",
+      "weight": 3
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Jang Seung Hun",
+      "weight": 2
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Yoon Seong Hoon",
+      "weight": 2
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Lee Sang Hoon",
+      "weight": 2
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Jung Chi Young",
+      "weight": 2
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Jang Tae Won",
+      "weight": 2
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Kim Seung Joon",
+      "weight": 2
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Lee Kye Young",
+      "weight": 2
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Chang Yoon Soo",
+      "weight": 2
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Lee Jeong Eun",
+      "weight": 2
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Cho Byoung Chul",
+      "weight": 1
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Yang Sei Hoon",
+      "weight": 1
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Ryu Jeong Seon",
+      "weight": 1
+    },
+    {
+      "source": "Kim Young-Chul",
+      "target": "Park Chan Kwon",
+      "weight": 1
+    },
+    {
+      "source": "Wu Yi-Long",
+      "target": "Popat Sanjay",
+      "weight": 1
+    },
+    {
+      "source": "Wu Yi-Long",
+      "target": "Cho Byoung Chul",
+      "weight": 1
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Lee Kye Young",
+      "weight": 5
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Lee Jeong Eun",
+      "weight": 5
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Lee Sang Hoon",
+      "weight": 5
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Lee Sung Yong",
+      "weight": 5
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Jang Tae Won",
+      "weight": 4
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Jang Seung Hun",
+      "weight": 4
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Yoon Seong Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Yang Sei Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Park Chan Kwon",
+      "weight": 4
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Chang Yoon Soo",
+      "weight": 4
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Ryu Jeong Seon",
+      "weight": 3
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Choi Chang Min",
+      "weight": 2
+    },
+    {
+      "source": "Kim Seung Joon",
+      "target": "Jung Chi Young",
+      "weight": 2
+    },
+    {
+      "source": "Zamami Yoshito",
+      "target": "Hamano Hirofumi",
+      "weight": 3
+    },
+    {
+      "source": "Zamami Yoshito",
+      "target": "Kanda Yasunari",
+      "weight": 1
+    },
+    {
+      "source": "Imamura Fumio",
+      "target": "Tamiya Motohiro",
+      "weight": 2
+    },
+    {
+      "source": "Imamura Fumio",
+      "target": "Kunimasa Kei",
+      "weight": 2
+    },
+    {
+      "source": "Cho Byoung Chul",
+      "target": "Lee Sung Yong",
+      "weight": 1
+    },
+    {
+      "source": "Cho Byoung Chul",
+      "target": "Jang Seung Hun",
+      "weight": 1
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Chang Yoon Soo",
+      "weight": 3
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Jang Tae Won",
+      "weight": 3
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Lee Jeong Eun",
+      "weight": 3
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Lee Sung Yong",
+      "weight": 3
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Lee Kye Young",
+      "weight": 3
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Yang Sei Hoon",
+      "weight": 3
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Yoon Seong Hoon",
+      "weight": 3
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Lee Sang Hoon",
+      "weight": 3
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Choi Chang Min",
+      "weight": 2
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Park Chan Kwon",
+      "weight": 2
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Jang Seung Hun",
+      "weight": 2
+    },
+    {
+      "source": "Ryu Jeong Seon",
+      "target": "Jung Chi Young",
+      "weight": 1
+    },
+    {
+      "source": "Chang Yoon Soo",
+      "target": "Yoon Seong Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Chang Yoon Soo",
+      "target": "Jang Tae Won",
+      "weight": 4
+    },
+    {
+      "source": "Chang Yoon Soo",
+      "target": "Lee Sung Yong",
+      "weight": 4
+    },
+    {
+      "source": "Chang Yoon Soo",
+      "target": "Lee Jeong Eun",
+      "weight": 4
+    },
+    {
+      "source": "Chang Yoon Soo",
+      "target": "Lee Kye Young",
+      "weight": 4
+    },
+    {
+      "source": "Chang Yoon Soo",
+      "target": "Lee Sang Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Chang Yoon Soo",
+      "target": "Yang Sei Hoon",
+      "weight": 3
+    },
+    {
+      "source": "Chang Yoon Soo",
+      "target": "Jang Seung Hun",
+      "weight": 3
+    },
+    {
+      "source": "Chang Yoon Soo",
+      "target": "Park Chan Kwon",
+      "weight": 3
+    },
+    {
+      "source": "Chang Yoon Soo",
+      "target": "Choi Chang Min",
+      "weight": 2
+    },
+    {
+      "source": "Chang Yoon Soo",
+      "target": "Jung Chi Young",
+      "weight": 2
+    },
+    {
+      "source": "Jang Seung Hun",
+      "target": "Lee Jeong Eun",
+      "weight": 5
+    },
+    {
+      "source": "Jang Seung Hun",
+      "target": "Lee Sung Yong",
+      "weight": 5
+    },
+    {
+      "source": "Jang Seung Hun",
+      "target": "Lee Kye Young",
+      "weight": 4
+    },
+    {
+      "source": "Jang Seung Hun",
+      "target": "Lee Sang Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Jang Seung Hun",
+      "target": "Park Chan Kwon",
+      "weight": 4
+    },
+    {
+      "source": "Jang Seung Hun",
+      "target": "Yoon Seong Hoon",
+      "weight": 3
+    },
+    {
+      "source": "Jang Seung Hun",
+      "target": "Jang Tae Won",
+      "weight": 3
+    },
+    {
+      "source": "Jang Seung Hun",
+      "target": "Choi Chang Min",
+      "weight": 3
+    },
+    {
+      "source": "Jang Seung Hun",
+      "target": "Yang Sei Hoon",
+      "weight": 3
+    },
+    {
+      "source": "Jang Seung Hun",
+      "target": "Jung Chi Young",
+      "weight": 2
+    },
+    {
+      "source": "Kanda Yasunari",
+      "target": "Hamano Hirofumi",
+      "weight": 1
+    },
+    {
+      "source": "Tamiya Motohiro",
+      "target": "Matsumoto Hirotaka",
+      "weight": 2
+    },
+    {
+      "source": "Tamiya Motohiro",
+      "target": "Kunimasa Kei",
+      "weight": 2
+    },
+    {
+      "source": "Lee Kye Young",
+      "target": "Lee Jeong Eun",
+      "weight": 5
+    },
+    {
+      "source": "Lee Kye Young",
+      "target": "Lee Sang Hoon",
+      "weight": 5
+    },
+    {
+      "source": "Lee Kye Young",
+      "target": "Lee Sung Yong",
+      "weight": 5
+    },
+    {
+      "source": "Lee Kye Young",
+      "target": "Yang Sei Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Lee Kye Young",
+      "target": "Jang Tae Won",
+      "weight": 4
+    },
+    {
+      "source": "Lee Kye Young",
+      "target": "Yoon Seong Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Lee Kye Young",
+      "target": "Park Chan Kwon",
+      "weight": 4
+    },
+    {
+      "source": "Lee Kye Young",
+      "target": "Choi Chang Min",
+      "weight": 2
+    },
+    {
+      "source": "Lee Kye Young",
+      "target": "Jung Chi Young",
+      "weight": 2
+    },
+    {
+      "source": "Park Chan Kwon",
+      "target": "Lee Jeong Eun",
+      "weight": 4
+    },
+    {
+      "source": "Park Chan Kwon",
+      "target": "Lee Sang Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Park Chan Kwon",
+      "target": "Lee Sung Yong",
+      "weight": 4
+    },
+    {
+      "source": "Park Chan Kwon",
+      "target": "Jang Tae Won",
+      "weight": 3
+    },
+    {
+      "source": "Park Chan Kwon",
+      "target": "Yoon Seong Hoon",
+      "weight": 3
+    },
+    {
+      "source": "Park Chan Kwon",
+      "target": "Yang Sei Hoon",
+      "weight": 3
+    },
+    {
+      "source": "Park Chan Kwon",
+      "target": "Choi Chang Min",
+      "weight": 2
+    },
+    {
+      "source": "Park Chan Kwon",
+      "target": "Jung Chi Young",
+      "weight": 1
+    },
+    {
+      "source": "Lee Sang Hoon",
+      "target": "Lee Sung Yong",
+      "weight": 5
+    },
+    {
+      "source": "Lee Sang Hoon",
+      "target": "Lee Jeong Eun",
+      "weight": 5
+    },
+    {
+      "source": "Lee Sang Hoon",
+      "target": "Yang Sei Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Lee Sang Hoon",
+      "target": "Yoon Seong Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Lee Sang Hoon",
+      "target": "Jang Tae Won",
+      "weight": 4
+    },
+    {
+      "source": "Lee Sang Hoon",
+      "target": "Choi Chang Min",
+      "weight": 2
+    },
+    {
+      "source": "Lee Sang Hoon",
+      "target": "Jung Chi Young",
+      "weight": 2
+    },
+    {
+      "source": "Yoon Seong Hoon",
+      "target": "Jang Tae Won",
+      "weight": 4
+    },
+    {
+      "source": "Yoon Seong Hoon",
+      "target": "Lee Sung Yong",
+      "weight": 4
+    },
+    {
+      "source": "Yoon Seong Hoon",
+      "target": "Lee Jeong Eun",
+      "weight": 4
+    },
+    {
+      "source": "Yoon Seong Hoon",
+      "target": "Yang Sei Hoon",
+      "weight": 3
+    },
+    {
+      "source": "Yoon Seong Hoon",
+      "target": "Choi Chang Min",
+      "weight": 2
+    },
+    {
+      "source": "Yoon Seong Hoon",
+      "target": "Jung Chi Young",
+      "weight": 2
+    },
+    {
+      "source": "Jang Tae Won",
+      "target": "Lee Sung Yong",
+      "weight": 4
+    },
+    {
+      "source": "Jang Tae Won",
+      "target": "Lee Jeong Eun",
+      "weight": 4
+    },
+    {
+      "source": "Jang Tae Won",
+      "target": "Yang Sei Hoon",
+      "weight": 3
+    },
+    {
+      "source": "Jang Tae Won",
+      "target": "Choi Chang Min",
+      "weight": 2
+    },
+    {
+      "source": "Jang Tae Won",
+      "target": "Jung Chi Young",
+      "weight": 2
+    },
+    {
+      "source": "Jung Chi Young",
+      "target": "Lee Jeong Eun",
+      "weight": 3
+    },
+    {
+      "source": "Jung Chi Young",
+      "target": "Lee Sung Yong",
+      "weight": 2
+    },
+    {
+      "source": "Jung Chi Young",
+      "target": "Choi Chang Min",
+      "weight": 1
+    },
+    {
+      "source": "Jung Chi Young",
+      "target": "Yang Sei Hoon",
+      "weight": 1
+    },
+    {
+      "source": "Lee Sung Yong",
+      "target": "Lee Jeong Eun",
+      "weight": 5
+    },
+    {
+      "source": "Lee Sung Yong",
+      "target": "Yang Sei Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Lee Sung Yong",
+      "target": "Choi Chang Min",
+      "weight": 2
+    },
+    {
+      "source": "Lee Jeong Eun",
+      "target": "Yang Sei Hoon",
+      "weight": 4
+    },
+    {
+      "source": "Lee Jeong Eun",
+      "target": "Choi Chang Min",
+      "weight": 3
+    },
+    {
+      "source": "Choi Chang Min",
+      "target": "Yang Sei Hoon",
+      "weight": 2
+    }
+  ]
+}

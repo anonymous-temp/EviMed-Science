@@ -1,0 +1,23 @@
+{
+  "status": "succeeded",
+  "drug": "atorvastatin",
+  "reactions": [
+    "rhabdomyolysis"
+  ],
+  "report": "safety-report.md",
+  "signals": "signals.csv",
+  "artifacts": [
+    "safety-report.md",
+    "safety-report.docx",
+    "signals.csv"
+  ],
+  "scope": {
+    "drugAliases": [],
+    "suspectRoles": [],
+    "administrationRoutes": [],
+    "studyDateFrom": null,
+    "studyDateTo": null,
+    "backgroundDateFrom": null,
+    "backgroundDateTo": null
+  }
+}

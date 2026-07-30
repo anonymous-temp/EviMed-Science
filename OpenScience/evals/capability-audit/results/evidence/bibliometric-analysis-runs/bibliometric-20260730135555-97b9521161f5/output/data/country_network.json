@@ -1,0 +1,306 @@
+{
+  "nodes": [
+    {
+      "id": "South Korea",
+      "weight": 20,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 2.0,
+      "weighted_degree": 18
+    },
+    {
+      "id": "United Kingdom",
+      "weight": 16,
+      "cluster": 1,
+      "degree": 0.8889,
+      "betweenness": 0.0,
+      "closeness": 2.2979,
+      "weighted_degree": 21
+    },
+    {
+      "id": "Japan",
+      "weight": 43,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.1481,
+      "closeness": 3.1395,
+      "weighted_degree": 30
+    },
+    {
+      "id": "France",
+      "weight": 5,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 2.1176,
+      "weighted_degree": 19
+    },
+    {
+      "id": "United States",
+      "weight": 24,
+      "cluster": 1,
+      "degree": 1.0,
+      "betweenness": 0.0231,
+      "closeness": 2.8272,
+      "weighted_degree": 27
+    },
+    {
+      "id": "Canada",
+      "weight": 5,
+      "cluster": 1,
+      "degree": 0.8889,
+      "betweenness": 0.0,
+      "closeness": 2.1429,
+      "weighted_degree": 18
+    },
+    {
+      "id": "China",
+      "weight": 44,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.2315,
+      "closeness": 3.0508,
+      "weighted_degree": 29
+    },
+    {
+      "id": "Singapore",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.8889,
+      "betweenness": 0.0,
+      "closeness": 1.9286,
+      "weighted_degree": 17
+    },
+    {
+      "id": "Taiwan",
+      "weight": 5,
+      "cluster": 0,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 1.6024,
+      "weighted_degree": 8
+    },
+    {
+      "id": "Germany",
+      "weight": 7,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 2.2407,
+      "weighted_degree": 21
+    }
+  ],
+  "edges": [
+    {
+      "source": "South Korea",
+      "target": "China",
+      "weight": 3
+    },
+    {
+      "source": "South Korea",
+      "target": "United States",
+      "weight": 3
+    },
+    {
+      "source": "South Korea",
+      "target": "Japan",
+      "weight": 3
+    },
+    {
+      "source": "South Korea",
+      "target": "Germany",
+      "weight": 2
+    },
+    {
+      "source": "South Korea",
+      "target": "United Kingdom",
+      "weight": 2
+    },
+    {
+      "source": "South Korea",
+      "target": "France",
+      "weight": 2
+    },
+    {
+      "source": "South Korea",
+      "target": "Canada",
+      "weight": 1
+    },
+    {
+      "source": "South Korea",
+      "target": "Taiwan",
+      "weight": 1
+    },
+    {
+      "source": "South Korea",
+      "target": "Singapore",
+      "weight": 1
+    },
+    {
+      "source": "United Kingdom",
+      "target": "United States",
+      "weight": 4
+    },
+    {
+      "source": "United Kingdom",
+      "target": "Canada",
+      "weight": 4
+    },
+    {
+      "source": "United Kingdom",
+      "target": "Japan",
+      "weight": 3
+    },
+    {
+      "source": "United Kingdom",
+      "target": "China",
+      "weight": 3
+    },
+    {
+      "source": "United Kingdom",
+      "target": "Singapore",
+      "weight": 2
+    },
+    {
+      "source": "United Kingdom",
+      "target": "Germany",
+      "weight": 2
+    },
+    {
+      "source": "United Kingdom",
+      "target": "France",
+      "weight": 1
+    },
+    {
+      "source": "Japan",
+      "target": "Germany",
+      "weight": 5
+    },
+    {
+      "source": "Japan",
+      "target": "China",
+      "weight": 4
+    },
+    {
+      "source": "Japan",
+      "target": "France",
+      "weight": 4
+    },
+    {
+      "source": "Japan",
+      "target": "United States",
+      "weight": 4
+    },
+    {
+      "source": "Japan",
+      "target": "Singapore",
+      "weight": 3
+    },
+    {
+      "source": "Japan",
+      "target": "Canada",
+      "weight": 3
+    },
+    {
+      "source": "Japan",
+      "target": "Taiwan",
+      "weight": 1
+    },
+    {
+      "source": "France",
+      "target": "Germany",
+      "weight": 3
+    },
+    {
+      "source": "France",
+      "target": "China",
+      "weight": 3
+    },
+    {
+      "source": "France",
+      "target": "Singapore",
+      "weight": 2
+    },
+    {
+      "source": "France",
+      "target": "United States",
+      "weight": 2
+    },
+    {
+      "source": "France",
+      "target": "Taiwan",
+      "weight": 1
+    },
+    {
+      "source": "France",
+      "target": "Canada",
+      "weight": 1
+    },
+    {
+      "source": "United States",
+      "target": "China",
+      "weight": 5
+    },
+    {
+      "source": "United States",
+      "target": "Singapore",
+      "weight": 3
+    },
+    {
+      "source": "United States",
+      "target": "Canada",
+      "weight": 3
+    },
+    {
+      "source": "United States",
+      "target": "Germany",
+      "weight": 2
+    },
+    {
+      "source": "United States",
+      "target": "Taiwan",
+      "weight": 1
+    },
+    {
+      "source": "Canada",
+      "target": "China",
+      "weight": 3
+    },
+    {
+      "source": "Canada",
+      "target": "Singapore",
+      "weight": 2
+    },
+    {
+      "source": "Canada",
+      "target": "Germany",
+      "weight": 1
+    },
+    {
+      "source": "China",
+      "target": "Germany",
+      "weight": 3
+    },
+    {
+      "source": "China",
+      "target": "Taiwan",
+      "weight": 3
+    },
+    {
+      "source": "China",
+      "target": "Singapore",
+      "weight": 2
+    },
+    {
+      "source": "Singapore",
+      "target": "Germany",
+      "weight": 2
+    },
+    {
+      "source": "Taiwan",
+      "target": "Germany",
+      "weight": 1
+    }
+  ]
+}

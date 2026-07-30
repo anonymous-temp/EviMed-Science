@@ -1,0 +1,5201 @@
+{
+  "nodes": [
+    {
+      "id": "Aged, 80 and over",
+      "weight": 17,
+      "cluster": 0,
+      "degree": 0.8367,
+      "betweenness": 0.0,
+      "closeness": 5.8402,
+      "weighted_degree": 266
+    },
+    {
+      "id": "Pharmacovigilance",
+      "weight": 8,
+      "cluster": 1,
+      "degree": 0.5918,
+      "betweenness": 0.0,
+      "closeness": 3.1954,
+      "weighted_degree": 74
+    },
+    {
+      "id": "adverse effects",
+      "weight": 51,
+      "cluster": 1,
+      "degree": 1.0,
+      "betweenness": 0.1491,
+      "closeness": 8.2569,
+      "weighted_degree": 713
+    },
+    {
+      "id": "Acrylamides",
+      "weight": 70,
+      "cluster": 2,
+      "degree": 1.0,
+      "betweenness": 0.1366,
+      "closeness": 8.6941,
+      "weighted_degree": 952
+    },
+    {
+      "id": "chemically induced",
+      "weight": 26,
+      "cluster": 1,
+      "degree": 0.9184,
+      "betweenness": 0.0,
+      "closeness": 6.673,
+      "weighted_degree": 375
+    },
+    {
+      "id": "EGFR",
+      "weight": 11,
+      "cluster": 1,
+      "degree": 0.7347,
+      "betweenness": 0.0,
+      "closeness": 3.7857,
+      "weighted_degree": 91
+    },
+    {
+      "id": "Long QT Syndrome",
+      "weight": 5,
+      "cluster": 1,
+      "degree": 0.6531,
+      "betweenness": 0.0,
+      "closeness": 3.1543,
+      "weighted_degree": 82
+    },
+    {
+      "id": "Cardiotoxicity",
+      "weight": 47,
+      "cluster": 1,
+      "degree": 1.0,
+      "betweenness": 0.0748,
+      "closeness": 7.4524,
+      "weighted_degree": 474
+    },
+    {
+      "id": "pathology",
+      "weight": 30,
+      "cluster": 2,
+      "degree": 0.9184,
+      "betweenness": 0.0,
+      "closeness": 6.7725,
+      "weighted_degree": 408
+    },
+    {
+      "id": "Myocytes, Cardiac",
+      "weight": 10,
+      "cluster": 1,
+      "degree": 0.6122,
+      "betweenness": 0.0,
+      "closeness": 4.197,
+      "weighted_degree": 119
+    },
+    {
+      "id": "Osimertinib",
+      "weight": 82,
+      "cluster": 1,
+      "degree": 1.0,
+      "betweenness": 0.2968,
+      "closeness": 7.9909,
+      "weighted_degree": 593
+    },
+    {
+      "id": "metabolism",
+      "weight": 16,
+      "cluster": 1,
+      "degree": 0.6939,
+      "betweenness": 0.0,
+      "closeness": 5.4609,
+      "weighted_degree": 189
+    },
+    {
+      "id": "Induced Pluripotent Stem Cells",
+      "weight": 5,
+      "cluster": 1,
+      "degree": 0.449,
+      "betweenness": 0.0,
+      "closeness": 3.0837,
+      "weighted_degree": 63
+    },
+    {
+      "id": "Drug Resistance, Neoplasm",
+      "weight": 6,
+      "cluster": 2,
+      "degree": 0.5714,
+      "betweenness": 0.0,
+      "closeness": 3.5634,
+      "weighted_degree": 87
+    },
+    {
+      "id": "Aniline Compounds",
+      "weight": 69,
+      "cluster": 2,
+      "degree": 1.0,
+      "betweenness": 0.0184,
+      "closeness": 8.6302,
+      "weighted_degree": 940
+    },
+    {
+      "id": "Adverse Drug Reaction Reporting Systems",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.5102,
+      "betweenness": 0.0,
+      "closeness": 3.2042,
+      "weighted_degree": 71
+    },
+    {
+      "id": "cardio-oncology",
+      "weight": 11,
+      "cluster": 1,
+      "degree": 0.6735,
+      "betweenness": 0.0,
+      "closeness": 3.4075,
+      "weighted_degree": 79
+    },
+    {
+      "id": "pharmacology",
+      "weight": 18,
+      "cluster": 2,
+      "degree": 0.6939,
+      "betweenness": 0.0,
+      "closeness": 5.6438,
+      "weighted_degree": 224
+    },
+    {
+      "id": "Indoles",
+      "weight": 69,
+      "cluster": 2,
+      "degree": 1.0,
+      "betweenness": 0.0184,
+      "closeness": 8.6302,
+      "weighted_degree": 940
+    },
+    {
+      "id": "lung cancer",
+      "weight": 21,
+      "cluster": 1,
+      "degree": 0.8163,
+      "betweenness": 0.0,
+      "closeness": 4.5013,
+      "weighted_degree": 137
+    },
+    {
+      "id": "drug effects",
+      "weight": 14,
+      "cluster": 1,
+      "degree": 0.7347,
+      "betweenness": 0.0,
+      "closeness": 5.344,
+      "weighted_degree": 184
+    },
+    {
+      "id": "epidemiology",
+      "weight": 16,
+      "cluster": 0,
+      "degree": 0.8163,
+      "betweenness": 0.0,
+      "closeness": 5.6133,
+      "weighted_degree": 251
+    },
+    {
+      "id": "QT prolongation",
+      "weight": 7,
+      "cluster": 1,
+      "degree": 0.551,
+      "betweenness": 0.0,
+      "closeness": 3.7724,
+      "weighted_degree": 49
+    },
+    {
+      "id": "Neoplasm Recurrence, Local",
+      "weight": 6,
+      "cluster": 2,
+      "degree": 0.551,
+      "betweenness": 0.0,
+      "closeness": 3.1839,
+      "weighted_degree": 68
+    },
+    {
+      "id": "targeted therapy",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.6327,
+      "betweenness": 0.0,
+      "closeness": 3.1801,
+      "weighted_degree": 71
+    },
+    {
+      "id": "Tyrosine Kinase Inhibitors",
+      "weight": 8,
+      "cluster": 0,
+      "degree": 0.7143,
+      "betweenness": 0.0,
+      "closeness": 3.2724,
+      "weighted_degree": 94
+    },
+    {
+      "id": "diagnosis",
+      "weight": 15,
+      "cluster": 1,
+      "degree": 0.8571,
+      "betweenness": 0.0,
+      "closeness": 4.9125,
+      "weighted_degree": 198
+    },
+    {
+      "id": "drug therapy",
+      "weight": 65,
+      "cluster": 2,
+      "degree": 0.9796,
+      "betweenness": 0.1112,
+      "closeness": 8.4931,
+      "weighted_degree": 884
+    },
+    {
+      "id": "etiology",
+      "weight": 20,
+      "cluster": 1,
+      "degree": 0.898,
+      "betweenness": 0.0,
+      "closeness": 6.0112,
+      "weighted_degree": 270
+    },
+    {
+      "id": "EGFR mutation",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.551,
+      "betweenness": 0.0,
+      "closeness": 3.1147,
+      "weighted_degree": 47
+    },
+    {
+      "id": "therapeutic use",
+      "weight": 36,
+      "cluster": 2,
+      "degree": 0.9388,
+      "betweenness": 0.0,
+      "closeness": 7.2167,
+      "weighted_degree": 522
+    },
+    {
+      "id": "epidermal growth factor receptor",
+      "weight": 10,
+      "cluster": 1,
+      "degree": 0.4898,
+      "betweenness": 0.0,
+      "closeness": 3.7781,
+      "weighted_degree": 57
+    },
+    {
+      "id": "Case report",
+      "weight": 7,
+      "cluster": 1,
+      "degree": 0.4082,
+      "betweenness": 0.0,
+      "closeness": 2.2418,
+      "weighted_degree": 27
+    },
+    {
+      "id": "non-small cell lung cancer",
+      "weight": 19,
+      "cluster": 1,
+      "degree": 0.6531,
+      "betweenness": 0.0,
+      "closeness": 4.9977,
+      "weighted_degree": 84
+    },
+    {
+      "id": "administration & dosage",
+      "weight": 9,
+      "cluster": 0,
+      "degree": 0.6939,
+      "betweenness": 0.0,
+      "closeness": 4.3298,
+      "weighted_degree": 125
+    },
+    {
+      "id": "Adenocarcinoma",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.4286,
+      "betweenness": 0.0,
+      "closeness": 2.7024,
+      "weighted_degree": 36
+    },
+    {
+      "id": "NSCLC",
+      "weight": 13,
+      "cluster": 2,
+      "degree": 0.7347,
+      "betweenness": 0.0,
+      "closeness": 4.9637,
+      "weighted_degree": 164
+    },
+    {
+      "id": "Afatinib",
+      "weight": 7,
+      "cluster": 2,
+      "degree": 0.6122,
+      "betweenness": 0.0,
+      "closeness": 3.608,
+      "weighted_degree": 82
+    },
+    {
+      "id": "heart failure",
+      "weight": 31,
+      "cluster": 1,
+      "degree": 0.8776,
+      "betweenness": 0.0,
+      "closeness": 5.866,
+      "weighted_degree": 238
+    },
+    {
+      "id": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 59,
+      "cluster": 2,
+      "degree": 0.9796,
+      "betweenness": 0.004,
+      "closeness": 8.2447,
+      "weighted_degree": 826
+    },
+    {
+      "id": "Protein Kinase Inhibitors",
+      "weight": 49,
+      "cluster": 2,
+      "degree": 1.0,
+      "betweenness": 0.0002,
+      "closeness": 7.9209,
+      "weighted_degree": 700
+    },
+    {
+      "id": "Pyrimidines",
+      "weight": 71,
+      "cluster": 2,
+      "degree": 1.0,
+      "betweenness": 0.1,
+      "closeness": 8.6635,
+      "weighted_degree": 960
+    },
+    {
+      "id": "Lung Neoplasms",
+      "weight": 66,
+      "cluster": 2,
+      "degree": 0.9796,
+      "betweenness": 0.1341,
+      "closeness": 8.4118,
+      "weighted_degree": 883
+    },
+    {
+      "id": "genetics",
+      "weight": 44,
+      "cluster": 2,
+      "degree": 0.9184,
+      "betweenness": 0.0009,
+      "closeness": 7.5857,
+      "weighted_degree": 606
+    },
+    {
+      "id": "Antineoplastic Agents",
+      "weight": 36,
+      "cluster": 1,
+      "degree": 0.9796,
+      "betweenness": 0.0,
+      "closeness": 7.4077,
+      "weighted_degree": 540
+    },
+    {
+      "id": "Mutation",
+      "weight": 39,
+      "cluster": 2,
+      "degree": 0.898,
+      "betweenness": 0.0,
+      "closeness": 7.3953,
+      "weighted_degree": 524
+    },
+    {
+      "id": "antagonists & inhibitors",
+      "weight": 18,
+      "cluster": 0,
+      "degree": 0.8571,
+      "betweenness": 0.0,
+      "closeness": 5.9153,
+      "weighted_degree": 275
+    },
+    {
+      "id": "Heart Diseases",
+      "weight": 9,
+      "cluster": 1,
+      "degree": 0.6939,
+      "betweenness": 0.0,
+      "closeness": 3.9611,
+      "weighted_degree": 115
+    },
+    {
+      "id": "ErbB Receptors",
+      "weight": 53,
+      "cluster": 2,
+      "degree": 0.9796,
+      "betweenness": 0.0013,
+      "closeness": 7.9761,
+      "weighted_degree": 745
+    },
+    {
+      "id": "Tyrosine kinase inhibitor",
+      "weight": 8,
+      "cluster": 1,
+      "degree": 0.6531,
+      "betweenness": 0.0,
+      "closeness": 3.1147,
+      "weighted_degree": 72
+    }
+  ],
+  "edges": [
+    {
+      "source": "Aged, 80 and over",
+      "target": "Pyrimidines",
+      "weight": 16
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Aniline Compounds",
+      "weight": 16
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Acrylamides",
+      "weight": 16
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Indoles",
+      "weight": 16
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Lung Neoplasms",
+      "weight": 15
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 15
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "ErbB Receptors",
+      "weight": 14
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "drug therapy",
+      "weight": 14
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "adverse effects",
+      "weight": 12
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "genetics",
+      "weight": 11
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Antineoplastic Agents",
+      "weight": 10
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "therapeutic use",
+      "weight": 10
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Mutation",
+      "weight": 10
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "pathology",
+      "weight": 10
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 9
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Osimertinib",
+      "weight": 9
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "antagonists & inhibitors",
+      "weight": 7
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "epidemiology",
+      "weight": 7
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "administration & dosage",
+      "weight": 7
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "chemically induced",
+      "weight": 6
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Cardiotoxicity",
+      "weight": 4
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "NSCLC",
+      "weight": 3
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 3
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "etiology",
+      "weight": 3
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "diagnosis",
+      "weight": 3
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "EGFR mutation",
+      "weight": 2
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "lung cancer",
+      "weight": 2
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "targeted therapy",
+      "weight": 2
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Long QT Syndrome",
+      "weight": 2
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "QT prolongation",
+      "weight": 1
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Heart Diseases",
+      "weight": 1
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "heart failure",
+      "weight": 1
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Drug Resistance, Neoplasm",
+      "weight": 1
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "non-small cell lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "cardio-oncology",
+      "weight": 1
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "pharmacology",
+      "weight": 1
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Pharmacovigilance",
+      "weight": 1
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "Adverse Drug Reaction Reporting Systems",
+      "weight": 1
+    },
+    {
+      "source": "Aged, 80 and over",
+      "target": "EGFR",
+      "weight": 1
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Adverse Drug Reaction Reporting Systems",
+      "weight": 5
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "adverse effects",
+      "weight": 5
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Acrylamides",
+      "weight": 4
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Osimertinib",
+      "weight": 4
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Pyrimidines",
+      "weight": 4
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Antineoplastic Agents",
+      "weight": 4
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Indoles",
+      "weight": 4
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Aniline Compounds",
+      "weight": 4
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Cardiotoxicity",
+      "weight": 4
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "drug therapy",
+      "weight": 4
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "epidemiology",
+      "weight": 3
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Lung Neoplasms",
+      "weight": 3
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "ErbB Receptors",
+      "weight": 2
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "antagonists & inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 2
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "heart failure",
+      "weight": 2
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Heart Diseases",
+      "weight": 2
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "chemically induced",
+      "weight": 2
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "diagnosis",
+      "weight": 2
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "Afatinib",
+      "weight": 1
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "non-small cell lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "cardio-oncology",
+      "weight": 1
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "NSCLC",
+      "weight": 1
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "etiology",
+      "weight": 1
+    },
+    {
+      "source": "Pharmacovigilance",
+      "target": "pathology",
+      "weight": 1
+    },
+    {
+      "source": "adverse effects",
+      "target": "Pyrimidines",
+      "weight": 42
+    },
+    {
+      "source": "adverse effects",
+      "target": "Aniline Compounds",
+      "weight": 42
+    },
+    {
+      "source": "adverse effects",
+      "target": "Acrylamides",
+      "weight": 42
+    },
+    {
+      "source": "adverse effects",
+      "target": "Indoles",
+      "weight": 42
+    },
+    {
+      "source": "adverse effects",
+      "target": "drug therapy",
+      "weight": 41
+    },
+    {
+      "source": "adverse effects",
+      "target": "Lung Neoplasms",
+      "weight": 38
+    },
+    {
+      "source": "adverse effects",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 34
+    },
+    {
+      "source": "adverse effects",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 33
+    },
+    {
+      "source": "adverse effects",
+      "target": "Antineoplastic Agents",
+      "weight": 31
+    },
+    {
+      "source": "adverse effects",
+      "target": "ErbB Receptors",
+      "weight": 29
+    },
+    {
+      "source": "adverse effects",
+      "target": "Osimertinib",
+      "weight": 26
+    },
+    {
+      "source": "adverse effects",
+      "target": "Cardiotoxicity",
+      "weight": 25
+    },
+    {
+      "source": "adverse effects",
+      "target": "chemically induced",
+      "weight": 22
+    },
+    {
+      "source": "adverse effects",
+      "target": "genetics",
+      "weight": 22
+    },
+    {
+      "source": "adverse effects",
+      "target": "therapeutic use",
+      "weight": 21
+    },
+    {
+      "source": "adverse effects",
+      "target": "Mutation",
+      "weight": 21
+    },
+    {
+      "source": "adverse effects",
+      "target": "etiology",
+      "weight": 18
+    },
+    {
+      "source": "adverse effects",
+      "target": "antagonists & inhibitors",
+      "weight": 15
+    },
+    {
+      "source": "adverse effects",
+      "target": "pathology",
+      "weight": 14
+    },
+    {
+      "source": "adverse effects",
+      "target": "epidemiology",
+      "weight": 13
+    },
+    {
+      "source": "adverse effects",
+      "target": "heart failure",
+      "weight": 12
+    },
+    {
+      "source": "adverse effects",
+      "target": "diagnosis",
+      "weight": 11
+    },
+    {
+      "source": "adverse effects",
+      "target": "drug effects",
+      "weight": 9
+    },
+    {
+      "source": "adverse effects",
+      "target": "administration & dosage",
+      "weight": 8
+    },
+    {
+      "source": "adverse effects",
+      "target": "Heart Diseases",
+      "weight": 7
+    },
+    {
+      "source": "adverse effects",
+      "target": "metabolism",
+      "weight": 7
+    },
+    {
+      "source": "adverse effects",
+      "target": "Myocytes, Cardiac",
+      "weight": 6
+    },
+    {
+      "source": "adverse effects",
+      "target": "Adverse Drug Reaction Reporting Systems",
+      "weight": 5
+    },
+    {
+      "source": "adverse effects",
+      "target": "Afatinib",
+      "weight": 5
+    },
+    {
+      "source": "adverse effects",
+      "target": "lung cancer",
+      "weight": 5
+    },
+    {
+      "source": "adverse effects",
+      "target": "Long QT Syndrome",
+      "weight": 5
+    },
+    {
+      "source": "adverse effects",
+      "target": "pharmacology",
+      "weight": 5
+    },
+    {
+      "source": "adverse effects",
+      "target": "cardio-oncology",
+      "weight": 5
+    },
+    {
+      "source": "adverse effects",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 4
+    },
+    {
+      "source": "adverse effects",
+      "target": "targeted therapy",
+      "weight": 4
+    },
+    {
+      "source": "adverse effects",
+      "target": "NSCLC",
+      "weight": 4
+    },
+    {
+      "source": "adverse effects",
+      "target": "Induced Pluripotent Stem Cells",
+      "weight": 4
+    },
+    {
+      "source": "adverse effects",
+      "target": "EGFR",
+      "weight": 3
+    },
+    {
+      "source": "adverse effects",
+      "target": "non-small cell lung cancer",
+      "weight": 3
+    },
+    {
+      "source": "adverse effects",
+      "target": "epidermal growth factor receptor",
+      "weight": 2
+    },
+    {
+      "source": "adverse effects",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "adverse effects",
+      "target": "Drug Resistance, Neoplasm",
+      "weight": 2
+    },
+    {
+      "source": "adverse effects",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 2
+    },
+    {
+      "source": "adverse effects",
+      "target": "QT prolongation",
+      "weight": 2
+    },
+    {
+      "source": "adverse effects",
+      "target": "EGFR mutation",
+      "weight": 1
+    },
+    {
+      "source": "adverse effects",
+      "target": "Case report",
+      "weight": 1
+    },
+    {
+      "source": "adverse effects",
+      "target": "Adenocarcinoma",
+      "weight": 1
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Pyrimidines",
+      "weight": 69
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Aniline Compounds",
+      "weight": 68
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Indoles",
+      "weight": 68
+    },
+    {
+      "source": "Acrylamides",
+      "target": "drug therapy",
+      "weight": 57
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Lung Neoplasms",
+      "weight": 56
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 51
+    },
+    {
+      "source": "Acrylamides",
+      "target": "ErbB Receptors",
+      "weight": 46
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 42
+    },
+    {
+      "source": "Acrylamides",
+      "target": "genetics",
+      "weight": 36
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Osimertinib",
+      "weight": 33
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Mutation",
+      "weight": 33
+    },
+    {
+      "source": "Acrylamides",
+      "target": "therapeutic use",
+      "weight": 30
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Antineoplastic Agents",
+      "weight": 30
+    },
+    {
+      "source": "Acrylamides",
+      "target": "pathology",
+      "weight": 25
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Cardiotoxicity",
+      "weight": 25
+    },
+    {
+      "source": "Acrylamides",
+      "target": "chemically induced",
+      "weight": 21
+    },
+    {
+      "source": "Acrylamides",
+      "target": "antagonists & inhibitors",
+      "weight": 17
+    },
+    {
+      "source": "Acrylamides",
+      "target": "etiology",
+      "weight": 15
+    },
+    {
+      "source": "Acrylamides",
+      "target": "pharmacology",
+      "weight": 15
+    },
+    {
+      "source": "Acrylamides",
+      "target": "metabolism",
+      "weight": 13
+    },
+    {
+      "source": "Acrylamides",
+      "target": "heart failure",
+      "weight": 13
+    },
+    {
+      "source": "Acrylamides",
+      "target": "epidemiology",
+      "weight": 13
+    },
+    {
+      "source": "Acrylamides",
+      "target": "drug effects",
+      "weight": 12
+    },
+    {
+      "source": "Acrylamides",
+      "target": "NSCLC",
+      "weight": 9
+    },
+    {
+      "source": "Acrylamides",
+      "target": "diagnosis",
+      "weight": 8
+    },
+    {
+      "source": "Acrylamides",
+      "target": "administration & dosage",
+      "weight": 8
+    },
+    {
+      "source": "Acrylamides",
+      "target": "lung cancer",
+      "weight": 7
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Myocytes, Cardiac",
+      "weight": 7
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Heart Diseases",
+      "weight": 6
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Afatinib",
+      "weight": 6
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 5
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Drug Resistance, Neoplasm",
+      "weight": 5
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 4
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Induced Pluripotent Stem Cells",
+      "weight": 4
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Long QT Syndrome",
+      "weight": 4
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Adverse Drug Reaction Reporting Systems",
+      "weight": 4
+    },
+    {
+      "source": "Acrylamides",
+      "target": "EGFR",
+      "weight": 4
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 4
+    },
+    {
+      "source": "Acrylamides",
+      "target": "cardio-oncology",
+      "weight": 3
+    },
+    {
+      "source": "Acrylamides",
+      "target": "non-small cell lung cancer",
+      "weight": 3
+    },
+    {
+      "source": "Acrylamides",
+      "target": "epidermal growth factor receptor",
+      "weight": 2
+    },
+    {
+      "source": "Acrylamides",
+      "target": "EGFR mutation",
+      "weight": 2
+    },
+    {
+      "source": "Acrylamides",
+      "target": "QT prolongation",
+      "weight": 2
+    },
+    {
+      "source": "Acrylamides",
+      "target": "targeted therapy",
+      "weight": 2
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Adenocarcinoma",
+      "weight": 2
+    },
+    {
+      "source": "Acrylamides",
+      "target": "Case report",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "drug therapy",
+      "weight": 22
+    },
+    {
+      "source": "chemically induced",
+      "target": "Indoles",
+      "weight": 21
+    },
+    {
+      "source": "chemically induced",
+      "target": "Aniline Compounds",
+      "weight": 21
+    },
+    {
+      "source": "chemically induced",
+      "target": "Pyrimidines",
+      "weight": 21
+    },
+    {
+      "source": "chemically induced",
+      "target": "Lung Neoplasms",
+      "weight": 19
+    },
+    {
+      "source": "chemically induced",
+      "target": "Antineoplastic Agents",
+      "weight": 18
+    },
+    {
+      "source": "chemically induced",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 18
+    },
+    {
+      "source": "chemically induced",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 17
+    },
+    {
+      "source": "chemically induced",
+      "target": "Cardiotoxicity",
+      "weight": 15
+    },
+    {
+      "source": "chemically induced",
+      "target": "ErbB Receptors",
+      "weight": 14
+    },
+    {
+      "source": "chemically induced",
+      "target": "therapeutic use",
+      "weight": 12
+    },
+    {
+      "source": "chemically induced",
+      "target": "heart failure",
+      "weight": 11
+    },
+    {
+      "source": "chemically induced",
+      "target": "Osimertinib",
+      "weight": 11
+    },
+    {
+      "source": "chemically induced",
+      "target": "epidemiology",
+      "weight": 9
+    },
+    {
+      "source": "chemically induced",
+      "target": "diagnosis",
+      "weight": 9
+    },
+    {
+      "source": "chemically induced",
+      "target": "genetics",
+      "weight": 9
+    },
+    {
+      "source": "chemically induced",
+      "target": "Mutation",
+      "weight": 9
+    },
+    {
+      "source": "chemically induced",
+      "target": "antagonists & inhibitors",
+      "weight": 8
+    },
+    {
+      "source": "chemically induced",
+      "target": "Heart Diseases",
+      "weight": 7
+    },
+    {
+      "source": "chemically induced",
+      "target": "etiology",
+      "weight": 6
+    },
+    {
+      "source": "chemically induced",
+      "target": "pathology",
+      "weight": 6
+    },
+    {
+      "source": "chemically induced",
+      "target": "metabolism",
+      "weight": 4
+    },
+    {
+      "source": "chemically induced",
+      "target": "Long QT Syndrome",
+      "weight": 4
+    },
+    {
+      "source": "chemically induced",
+      "target": "administration & dosage",
+      "weight": 3
+    },
+    {
+      "source": "chemically induced",
+      "target": "cardio-oncology",
+      "weight": 3
+    },
+    {
+      "source": "chemically induced",
+      "target": "drug effects",
+      "weight": 3
+    },
+    {
+      "source": "chemically induced",
+      "target": "lung cancer",
+      "weight": 3
+    },
+    {
+      "source": "chemically induced",
+      "target": "Myocytes, Cardiac",
+      "weight": 3
+    },
+    {
+      "source": "chemically induced",
+      "target": "Adverse Drug Reaction Reporting Systems",
+      "weight": 3
+    },
+    {
+      "source": "chemically induced",
+      "target": "pharmacology",
+      "weight": 2
+    },
+    {
+      "source": "chemically induced",
+      "target": "Afatinib",
+      "weight": 2
+    },
+    {
+      "source": "chemically induced",
+      "target": "targeted therapy",
+      "weight": 2
+    },
+    {
+      "source": "chemically induced",
+      "target": "QT prolongation",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "EGFR mutation",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "Induced Pluripotent Stem Cells",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "non-small cell lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "Case report",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "Adenocarcinoma",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "EGFR",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "Osimertinib",
+      "weight": 7
+    },
+    {
+      "source": "EGFR",
+      "target": "genetics",
+      "weight": 6
+    },
+    {
+      "source": "EGFR",
+      "target": "Lung Neoplasms",
+      "weight": 5
+    },
+    {
+      "source": "EGFR",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 5
+    },
+    {
+      "source": "EGFR",
+      "target": "ErbB Receptors",
+      "weight": 5
+    },
+    {
+      "source": "EGFR",
+      "target": "lung cancer",
+      "weight": 4
+    },
+    {
+      "source": "EGFR",
+      "target": "Pyrimidines",
+      "weight": 4
+    },
+    {
+      "source": "EGFR",
+      "target": "drug therapy",
+      "weight": 4
+    },
+    {
+      "source": "EGFR",
+      "target": "pathology",
+      "weight": 4
+    },
+    {
+      "source": "EGFR",
+      "target": "Aniline Compounds",
+      "weight": 4
+    },
+    {
+      "source": "EGFR",
+      "target": "Indoles",
+      "weight": 4
+    },
+    {
+      "source": "EGFR",
+      "target": "Mutation",
+      "weight": 3
+    },
+    {
+      "source": "EGFR",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "EGFR",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "EGFR",
+      "target": "Antineoplastic Agents",
+      "weight": 2
+    },
+    {
+      "source": "EGFR",
+      "target": "NSCLC",
+      "weight": 2
+    },
+    {
+      "source": "EGFR",
+      "target": "Cardiotoxicity",
+      "weight": 2
+    },
+    {
+      "source": "EGFR",
+      "target": "targeted therapy",
+      "weight": 2
+    },
+    {
+      "source": "EGFR",
+      "target": "diagnosis",
+      "weight": 2
+    },
+    {
+      "source": "EGFR",
+      "target": "epidermal growth factor receptor",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "QT prolongation",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "epidemiology",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "etiology",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "pharmacology",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "Myocytes, Cardiac",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "heart failure",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "metabolism",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "Afatinib",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "cardio-oncology",
+      "weight": 1
+    },
+    {
+      "source": "EGFR",
+      "target": "Heart Diseases",
+      "weight": 1
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Lung Neoplasms",
+      "weight": 4
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Aniline Compounds",
+      "weight": 4
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 4
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "drug therapy",
+      "weight": 4
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Osimertinib",
+      "weight": 4
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 4
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Indoles",
+      "weight": 4
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Pyrimidines",
+      "weight": 4
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "diagnosis",
+      "weight": 3
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "etiology",
+      "weight": 3
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Cardiotoxicity",
+      "weight": 3
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "ErbB Receptors",
+      "weight": 3
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Antineoplastic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "genetics",
+      "weight": 2
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "heart failure",
+      "weight": 2
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "epidemiology",
+      "weight": 2
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Mutation",
+      "weight": 2
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "pathology",
+      "weight": 2
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "QT prolongation",
+      "weight": 1
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "EGFR mutation",
+      "weight": 1
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "non-small cell lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "cardio-oncology",
+      "weight": 1
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "antagonists & inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Case report",
+      "weight": 1
+    },
+    {
+      "source": "Long QT Syndrome",
+      "target": "Adenocarcinoma",
+      "weight": 1
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Osimertinib",
+      "weight": 27
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Indoles",
+      "weight": 25
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Aniline Compounds",
+      "weight": 25
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Pyrimidines",
+      "weight": 25
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "drug therapy",
+      "weight": 21
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "etiology",
+      "weight": 19
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Lung Neoplasms",
+      "weight": 18
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Antineoplastic Agents",
+      "weight": 18
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "heart failure",
+      "weight": 17
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 17
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 16
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "ErbB Receptors",
+      "weight": 13
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "genetics",
+      "weight": 12
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "drug effects",
+      "weight": 11
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "therapeutic use",
+      "weight": 10
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "epidemiology",
+      "weight": 9
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "metabolism",
+      "weight": 9
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "pathology",
+      "weight": 8
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "pharmacology",
+      "weight": 8
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Myocytes, Cardiac",
+      "weight": 8
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "antagonists & inhibitors",
+      "weight": 8
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "diagnosis",
+      "weight": 7
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Mutation",
+      "weight": 7
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "lung cancer",
+      "weight": 6
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "cardio-oncology",
+      "weight": 6
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Induced Pluripotent Stem Cells",
+      "weight": 5
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Heart Diseases",
+      "weight": 5
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "non-small cell lung cancer",
+      "weight": 4
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 4
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "NSCLC",
+      "weight": 4
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "targeted therapy",
+      "weight": 3
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Adenocarcinoma",
+      "weight": 3
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Case report",
+      "weight": 3
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "epidermal growth factor receptor",
+      "weight": 2
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "administration & dosage",
+      "weight": 2
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "QT prolongation",
+      "weight": 2
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Adverse Drug Reaction Reporting Systems",
+      "weight": 2
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "EGFR mutation",
+      "weight": 1
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Afatinib",
+      "weight": 1
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Drug Resistance, Neoplasm",
+      "weight": 1
+    },
+    {
+      "source": "Cardiotoxicity",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 1
+    },
+    {
+      "source": "pathology",
+      "target": "Pyrimidines",
+      "weight": 26
+    },
+    {
+      "source": "pathology",
+      "target": "Lung Neoplasms",
+      "weight": 26
+    },
+    {
+      "source": "pathology",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 25
+    },
+    {
+      "source": "pathology",
+      "target": "Aniline Compounds",
+      "weight": 25
+    },
+    {
+      "source": "pathology",
+      "target": "Indoles",
+      "weight": 25
+    },
+    {
+      "source": "pathology",
+      "target": "drug therapy",
+      "weight": 23
+    },
+    {
+      "source": "pathology",
+      "target": "genetics",
+      "weight": 22
+    },
+    {
+      "source": "pathology",
+      "target": "ErbB Receptors",
+      "weight": 20
+    },
+    {
+      "source": "pathology",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 14
+    },
+    {
+      "source": "pathology",
+      "target": "therapeutic use",
+      "weight": 14
+    },
+    {
+      "source": "pathology",
+      "target": "Osimertinib",
+      "weight": 14
+    },
+    {
+      "source": "pathology",
+      "target": "Mutation",
+      "weight": 14
+    },
+    {
+      "source": "pathology",
+      "target": "pharmacology",
+      "weight": 9
+    },
+    {
+      "source": "pathology",
+      "target": "Antineoplastic Agents",
+      "weight": 9
+    },
+    {
+      "source": "pathology",
+      "target": "epidemiology",
+      "weight": 8
+    },
+    {
+      "source": "pathology",
+      "target": "metabolism",
+      "weight": 7
+    },
+    {
+      "source": "pathology",
+      "target": "antagonists & inhibitors",
+      "weight": 5
+    },
+    {
+      "source": "pathology",
+      "target": "drug effects",
+      "weight": 5
+    },
+    {
+      "source": "pathology",
+      "target": "NSCLC",
+      "weight": 5
+    },
+    {
+      "source": "pathology",
+      "target": "administration & dosage",
+      "weight": 5
+    },
+    {
+      "source": "pathology",
+      "target": "diagnosis",
+      "weight": 4
+    },
+    {
+      "source": "pathology",
+      "target": "etiology",
+      "weight": 4
+    },
+    {
+      "source": "pathology",
+      "target": "Myocytes, Cardiac",
+      "weight": 4
+    },
+    {
+      "source": "pathology",
+      "target": "heart failure",
+      "weight": 3
+    },
+    {
+      "source": "pathology",
+      "target": "Heart Diseases",
+      "weight": 2
+    },
+    {
+      "source": "pathology",
+      "target": "lung cancer",
+      "weight": 2
+    },
+    {
+      "source": "pathology",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 2
+    },
+    {
+      "source": "pathology",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "pathology",
+      "target": "EGFR mutation",
+      "weight": 2
+    },
+    {
+      "source": "pathology",
+      "target": "targeted therapy",
+      "weight": 2
+    },
+    {
+      "source": "pathology",
+      "target": "Afatinib",
+      "weight": 2
+    },
+    {
+      "source": "pathology",
+      "target": "Drug Resistance, Neoplasm",
+      "weight": 2
+    },
+    {
+      "source": "pathology",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "pathology",
+      "target": "QT prolongation",
+      "weight": 1
+    },
+    {
+      "source": "pathology",
+      "target": "cardio-oncology",
+      "weight": 1
+    },
+    {
+      "source": "pathology",
+      "target": "non-small cell lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "pathology",
+      "target": "Adverse Drug Reaction Reporting Systems",
+      "weight": 1
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "metabolism",
+      "weight": 9
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "drug effects",
+      "weight": 8
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Pyrimidines",
+      "weight": 7
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Aniline Compounds",
+      "weight": 7
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Indoles",
+      "weight": 7
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "pharmacology",
+      "weight": 6
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Induced Pluripotent Stem Cells",
+      "weight": 5
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Antineoplastic Agents",
+      "weight": 5
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "etiology",
+      "weight": 5
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Osimertinib",
+      "weight": 5
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "ErbB Receptors",
+      "weight": 3
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "heart failure",
+      "weight": 3
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "genetics",
+      "weight": 3
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "antagonists & inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Afatinib",
+      "weight": 2
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "diagnosis",
+      "weight": 1
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Lung Neoplasms",
+      "weight": 1
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "drug therapy",
+      "weight": 1
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 1
+    },
+    {
+      "source": "Myocytes, Cardiac",
+      "target": "Heart Diseases",
+      "weight": 1
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Indoles",
+      "weight": 33
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Aniline Compounds",
+      "weight": 33
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Pyrimidines",
+      "weight": 33
+    },
+    {
+      "source": "Osimertinib",
+      "target": "drug therapy",
+      "weight": 27
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Lung Neoplasms",
+      "weight": 26
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 25
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 24
+    },
+    {
+      "source": "Osimertinib",
+      "target": "ErbB Receptors",
+      "weight": 22
+    },
+    {
+      "source": "Osimertinib",
+      "target": "genetics",
+      "weight": 20
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Antineoplastic Agents",
+      "weight": 19
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Mutation",
+      "weight": 18
+    },
+    {
+      "source": "Osimertinib",
+      "target": "heart failure",
+      "weight": 17
+    },
+    {
+      "source": "Osimertinib",
+      "target": "therapeutic use",
+      "weight": 15
+    },
+    {
+      "source": "Osimertinib",
+      "target": "non-small cell lung cancer",
+      "weight": 13
+    },
+    {
+      "source": "Osimertinib",
+      "target": "etiology",
+      "weight": 9
+    },
+    {
+      "source": "Osimertinib",
+      "target": "NSCLC",
+      "weight": 9
+    },
+    {
+      "source": "Osimertinib",
+      "target": "drug effects",
+      "weight": 8
+    },
+    {
+      "source": "Osimertinib",
+      "target": "lung cancer",
+      "weight": 8
+    },
+    {
+      "source": "Osimertinib",
+      "target": "epidermal growth factor receptor",
+      "weight": 7
+    },
+    {
+      "source": "Osimertinib",
+      "target": "QT prolongation",
+      "weight": 7
+    },
+    {
+      "source": "Osimertinib",
+      "target": "metabolism",
+      "weight": 7
+    },
+    {
+      "source": "Osimertinib",
+      "target": "pharmacology",
+      "weight": 7
+    },
+    {
+      "source": "Osimertinib",
+      "target": "diagnosis",
+      "weight": 7
+    },
+    {
+      "source": "Osimertinib",
+      "target": "antagonists & inhibitors",
+      "weight": 6
+    },
+    {
+      "source": "Osimertinib",
+      "target": "epidemiology",
+      "weight": 6
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 5
+    },
+    {
+      "source": "Osimertinib",
+      "target": "cardio-oncology",
+      "weight": 5
+    },
+    {
+      "source": "Osimertinib",
+      "target": "EGFR mutation",
+      "weight": 5
+    },
+    {
+      "source": "Osimertinib",
+      "target": "administration & dosage",
+      "weight": 4
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Adverse Drug Reaction Reporting Systems",
+      "weight": 4
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Heart Diseases",
+      "weight": 4
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Adenocarcinoma",
+      "weight": 4
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Case report",
+      "weight": 3
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Afatinib",
+      "weight": 3
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Induced Pluripotent Stem Cells",
+      "weight": 3
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Drug Resistance, Neoplasm",
+      "weight": 2
+    },
+    {
+      "source": "Osimertinib",
+      "target": "targeted therapy",
+      "weight": 2
+    },
+    {
+      "source": "Osimertinib",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Indoles",
+      "weight": 13
+    },
+    {
+      "source": "metabolism",
+      "target": "Pyrimidines",
+      "weight": 13
+    },
+    {
+      "source": "metabolism",
+      "target": "Aniline Compounds",
+      "weight": 13
+    },
+    {
+      "source": "metabolism",
+      "target": "pharmacology",
+      "weight": 11
+    },
+    {
+      "source": "metabolism",
+      "target": "drug effects",
+      "weight": 10
+    },
+    {
+      "source": "metabolism",
+      "target": "ErbB Receptors",
+      "weight": 6
+    },
+    {
+      "source": "metabolism",
+      "target": "drug therapy",
+      "weight": 6
+    },
+    {
+      "source": "metabolism",
+      "target": "genetics",
+      "weight": 6
+    },
+    {
+      "source": "metabolism",
+      "target": "Antineoplastic Agents",
+      "weight": 6
+    },
+    {
+      "source": "metabolism",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 6
+    },
+    {
+      "source": "metabolism",
+      "target": "Lung Neoplasms",
+      "weight": 6
+    },
+    {
+      "source": "metabolism",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 5
+    },
+    {
+      "source": "metabolism",
+      "target": "etiology",
+      "weight": 4
+    },
+    {
+      "source": "metabolism",
+      "target": "Induced Pluripotent Stem Cells",
+      "weight": 4
+    },
+    {
+      "source": "metabolism",
+      "target": "therapeutic use",
+      "weight": 4
+    },
+    {
+      "source": "metabolism",
+      "target": "heart failure",
+      "weight": 4
+    },
+    {
+      "source": "metabolism",
+      "target": "antagonists & inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Heart Diseases",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Drug Resistance, Neoplasm",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "NSCLC",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Mutation",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Afatinib",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "diagnosis",
+      "weight": 1
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "drug effects",
+      "weight": 5
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "Indoles",
+      "weight": 4
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "Pyrimidines",
+      "weight": 4
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "etiology",
+      "weight": 4
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "Antineoplastic Agents",
+      "weight": 4
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "Aniline Compounds",
+      "weight": 4
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "pharmacology",
+      "weight": 3
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "heart failure",
+      "weight": 2
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "Afatinib",
+      "weight": 1
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "diagnosis",
+      "weight": 1
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "ErbB Receptors",
+      "weight": 1
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "antagonists & inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "Induced Pluripotent Stem Cells",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 1
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "drug therapy",
+      "weight": 6
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "Pyrimidines",
+      "weight": 5
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "Indoles",
+      "weight": 5
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "Aniline Compounds",
+      "weight": 5
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "Lung Neoplasms",
+      "weight": 5
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 5
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 4
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "therapeutic use",
+      "weight": 4
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "ErbB Receptors",
+      "weight": 4
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "pharmacology",
+      "weight": 4
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "drug effects",
+      "weight": 4
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "genetics",
+      "weight": 3
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "NSCLC",
+      "weight": 3
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "Antineoplastic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "antagonists & inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "Mutation",
+      "weight": 3
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "diagnosis",
+      "weight": 1
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 1
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "Drug Resistance, Neoplasm",
+      "target": "lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Pyrimidines",
+      "weight": 69
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Indoles",
+      "weight": 69
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "drug therapy",
+      "weight": 56
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Lung Neoplasms",
+      "weight": 55
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 50
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "ErbB Receptors",
+      "weight": 45
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 41
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "genetics",
+      "weight": 36
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Mutation",
+      "weight": 33
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "therapeutic use",
+      "weight": 30
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Antineoplastic Agents",
+      "weight": 29
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "etiology",
+      "weight": 15
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "antagonists & inhibitors",
+      "weight": 15
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "heart failure",
+      "weight": 13
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "epidemiology",
+      "weight": 13
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "pharmacology",
+      "weight": 13
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "drug effects",
+      "weight": 11
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "diagnosis",
+      "weight": 9
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "administration & dosage",
+      "weight": 8
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "NSCLC",
+      "weight": 8
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Heart Diseases",
+      "weight": 6
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Afatinib",
+      "weight": 6
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "lung cancer",
+      "weight": 6
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 4
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 4
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 4
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Adverse Drug Reaction Reporting Systems",
+      "weight": 4
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "cardio-oncology",
+      "weight": 3
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "non-small cell lung cancer",
+      "weight": 3
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "epidermal growth factor receptor",
+      "weight": 2
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "EGFR mutation",
+      "weight": 2
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "QT prolongation",
+      "weight": 2
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "targeted therapy",
+      "weight": 2
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Adenocarcinoma",
+      "weight": 2
+    },
+    {
+      "source": "Aniline Compounds",
+      "target": "Case report",
+      "weight": 1
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "Antineoplastic Agents",
+      "weight": 5
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "Pyrimidines",
+      "weight": 4
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "Indoles",
+      "weight": 4
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "drug therapy",
+      "weight": 4
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "epidemiology",
+      "weight": 3
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "diagnosis",
+      "weight": 3
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "Heart Diseases",
+      "weight": 3
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "ErbB Receptors",
+      "weight": 2
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "antagonists & inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 2
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "Lung Neoplasms",
+      "weight": 2
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "Afatinib",
+      "weight": 1
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "Adverse Drug Reaction Reporting Systems",
+      "target": "heart failure",
+      "weight": 1
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "drug therapy",
+      "weight": 5
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "Lung Neoplasms",
+      "weight": 4
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 4
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "etiology",
+      "weight": 3
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 3
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "Pyrimidines",
+      "weight": 3
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "Indoles",
+      "weight": 3
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "heart failure",
+      "weight": 3
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "Antineoplastic Agents",
+      "weight": 3
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "ErbB Receptors",
+      "weight": 2
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "administration & dosage",
+      "weight": 2
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "non-small cell lung cancer",
+      "weight": 2
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "Mutation",
+      "weight": 2
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "NSCLC",
+      "weight": 2
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "Case report",
+      "weight": 1
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "epidemiology",
+      "weight": 1
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "antagonists & inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "targeted therapy",
+      "weight": 1
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "genetics",
+      "weight": 1
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "Heart Diseases",
+      "weight": 1
+    },
+    {
+      "source": "cardio-oncology",
+      "target": "diagnosis",
+      "weight": 1
+    },
+    {
+      "source": "pharmacology",
+      "target": "Pyrimidines",
+      "weight": 14
+    },
+    {
+      "source": "pharmacology",
+      "target": "Indoles",
+      "weight": 13
+    },
+    {
+      "source": "pharmacology",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 11
+    },
+    {
+      "source": "pharmacology",
+      "target": "Lung Neoplasms",
+      "weight": 11
+    },
+    {
+      "source": "pharmacology",
+      "target": "drug therapy",
+      "weight": 11
+    },
+    {
+      "source": "pharmacology",
+      "target": "ErbB Receptors",
+      "weight": 10
+    },
+    {
+      "source": "pharmacology",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 10
+    },
+    {
+      "source": "pharmacology",
+      "target": "therapeutic use",
+      "weight": 9
+    },
+    {
+      "source": "pharmacology",
+      "target": "drug effects",
+      "weight": 9
+    },
+    {
+      "source": "pharmacology",
+      "target": "genetics",
+      "weight": 9
+    },
+    {
+      "source": "pharmacology",
+      "target": "Mutation",
+      "weight": 6
+    },
+    {
+      "source": "pharmacology",
+      "target": "Antineoplastic Agents",
+      "weight": 5
+    },
+    {
+      "source": "pharmacology",
+      "target": "NSCLC",
+      "weight": 4
+    },
+    {
+      "source": "pharmacology",
+      "target": "antagonists & inhibitors",
+      "weight": 4
+    },
+    {
+      "source": "pharmacology",
+      "target": "etiology",
+      "weight": 3
+    },
+    {
+      "source": "pharmacology",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "pharmacology",
+      "target": "heart failure",
+      "weight": 2
+    },
+    {
+      "source": "pharmacology",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "pharmacology",
+      "target": "lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "pharmacology",
+      "target": "epidemiology",
+      "weight": 1
+    },
+    {
+      "source": "pharmacology",
+      "target": "Heart Diseases",
+      "weight": 1
+    },
+    {
+      "source": "Indoles",
+      "target": "Pyrimidines",
+      "weight": 69
+    },
+    {
+      "source": "Indoles",
+      "target": "drug therapy",
+      "weight": 56
+    },
+    {
+      "source": "Indoles",
+      "target": "Lung Neoplasms",
+      "weight": 55
+    },
+    {
+      "source": "Indoles",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 50
+    },
+    {
+      "source": "Indoles",
+      "target": "ErbB Receptors",
+      "weight": 45
+    },
+    {
+      "source": "Indoles",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 41
+    },
+    {
+      "source": "Indoles",
+      "target": "genetics",
+      "weight": 36
+    },
+    {
+      "source": "Indoles",
+      "target": "Mutation",
+      "weight": 33
+    },
+    {
+      "source": "Indoles",
+      "target": "therapeutic use",
+      "weight": 30
+    },
+    {
+      "source": "Indoles",
+      "target": "Antineoplastic Agents",
+      "weight": 29
+    },
+    {
+      "source": "Indoles",
+      "target": "antagonists & inhibitors",
+      "weight": 15
+    },
+    {
+      "source": "Indoles",
+      "target": "etiology",
+      "weight": 15
+    },
+    {
+      "source": "Indoles",
+      "target": "heart failure",
+      "weight": 13
+    },
+    {
+      "source": "Indoles",
+      "target": "epidemiology",
+      "weight": 13
+    },
+    {
+      "source": "Indoles",
+      "target": "drug effects",
+      "weight": 11
+    },
+    {
+      "source": "Indoles",
+      "target": "diagnosis",
+      "weight": 9
+    },
+    {
+      "source": "Indoles",
+      "target": "administration & dosage",
+      "weight": 8
+    },
+    {
+      "source": "Indoles",
+      "target": "NSCLC",
+      "weight": 8
+    },
+    {
+      "source": "Indoles",
+      "target": "Heart Diseases",
+      "weight": 6
+    },
+    {
+      "source": "Indoles",
+      "target": "lung cancer",
+      "weight": 6
+    },
+    {
+      "source": "Indoles",
+      "target": "Afatinib",
+      "weight": 6
+    },
+    {
+      "source": "Indoles",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 4
+    },
+    {
+      "source": "Indoles",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 4
+    },
+    {
+      "source": "Indoles",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 4
+    },
+    {
+      "source": "Indoles",
+      "target": "non-small cell lung cancer",
+      "weight": 3
+    },
+    {
+      "source": "Indoles",
+      "target": "epidermal growth factor receptor",
+      "weight": 2
+    },
+    {
+      "source": "Indoles",
+      "target": "EGFR mutation",
+      "weight": 2
+    },
+    {
+      "source": "Indoles",
+      "target": "QT prolongation",
+      "weight": 2
+    },
+    {
+      "source": "Indoles",
+      "target": "targeted therapy",
+      "weight": 2
+    },
+    {
+      "source": "Indoles",
+      "target": "Adenocarcinoma",
+      "weight": 2
+    },
+    {
+      "source": "Indoles",
+      "target": "Case report",
+      "weight": 1
+    },
+    {
+      "source": "lung cancer",
+      "target": "Lung Neoplasms",
+      "weight": 9
+    },
+    {
+      "source": "lung cancer",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 7
+    },
+    {
+      "source": "lung cancer",
+      "target": "drug therapy",
+      "weight": 7
+    },
+    {
+      "source": "lung cancer",
+      "target": "Pyrimidines",
+      "weight": 6
+    },
+    {
+      "source": "lung cancer",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 6
+    },
+    {
+      "source": "lung cancer",
+      "target": "ErbB Receptors",
+      "weight": 6
+    },
+    {
+      "source": "lung cancer",
+      "target": "heart failure",
+      "weight": 5
+    },
+    {
+      "source": "lung cancer",
+      "target": "Antineoplastic Agents",
+      "weight": 4
+    },
+    {
+      "source": "lung cancer",
+      "target": "genetics",
+      "weight": 4
+    },
+    {
+      "source": "lung cancer",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 3
+    },
+    {
+      "source": "lung cancer",
+      "target": "Mutation",
+      "weight": 3
+    },
+    {
+      "source": "lung cancer",
+      "target": "antagonists & inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "lung cancer",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "lung cancer",
+      "target": "diagnosis",
+      "weight": 2
+    },
+    {
+      "source": "lung cancer",
+      "target": "Adenocarcinoma",
+      "weight": 2
+    },
+    {
+      "source": "lung cancer",
+      "target": "epidermal growth factor receptor",
+      "weight": 2
+    },
+    {
+      "source": "lung cancer",
+      "target": "targeted therapy",
+      "weight": 2
+    },
+    {
+      "source": "lung cancer",
+      "target": "etiology",
+      "weight": 2
+    },
+    {
+      "source": "lung cancer",
+      "target": "Heart Diseases",
+      "weight": 1
+    },
+    {
+      "source": "lung cancer",
+      "target": "epidemiology",
+      "weight": 1
+    },
+    {
+      "source": "lung cancer",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "lung cancer",
+      "target": "NSCLC",
+      "weight": 1
+    },
+    {
+      "source": "lung cancer",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "lung cancer",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "lung cancer",
+      "target": "Case report",
+      "weight": 1
+    },
+    {
+      "source": "lung cancer",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 1
+    },
+    {
+      "source": "drug effects",
+      "target": "Pyrimidines",
+      "weight": 11
+    },
+    {
+      "source": "drug effects",
+      "target": "Antineoplastic Agents",
+      "weight": 8
+    },
+    {
+      "source": "drug effects",
+      "target": "antagonists & inhibitors",
+      "weight": 6
+    },
+    {
+      "source": "drug effects",
+      "target": "etiology",
+      "weight": 5
+    },
+    {
+      "source": "drug effects",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 5
+    },
+    {
+      "source": "drug effects",
+      "target": "drug therapy",
+      "weight": 5
+    },
+    {
+      "source": "drug effects",
+      "target": "Lung Neoplasms",
+      "weight": 4
+    },
+    {
+      "source": "drug effects",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 4
+    },
+    {
+      "source": "drug effects",
+      "target": "ErbB Receptors",
+      "weight": 4
+    },
+    {
+      "source": "drug effects",
+      "target": "genetics",
+      "weight": 4
+    },
+    {
+      "source": "drug effects",
+      "target": "heart failure",
+      "weight": 3
+    },
+    {
+      "source": "drug effects",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "drug effects",
+      "target": "Heart Diseases",
+      "weight": 2
+    },
+    {
+      "source": "drug effects",
+      "target": "diagnosis",
+      "weight": 2
+    },
+    {
+      "source": "drug effects",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "drug effects",
+      "target": "NSCLC",
+      "weight": 2
+    },
+    {
+      "source": "drug effects",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "drug effects",
+      "target": "Afatinib",
+      "weight": 1
+    },
+    {
+      "source": "drug effects",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 1
+    },
+    {
+      "source": "drug effects",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "drug effects",
+      "target": "Mutation",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 15
+    },
+    {
+      "source": "epidemiology",
+      "target": "Lung Neoplasms",
+      "weight": 15
+    },
+    {
+      "source": "epidemiology",
+      "target": "drug therapy",
+      "weight": 14
+    },
+    {
+      "source": "epidemiology",
+      "target": "Pyrimidines",
+      "weight": 13
+    },
+    {
+      "source": "epidemiology",
+      "target": "ErbB Receptors",
+      "weight": 12
+    },
+    {
+      "source": "epidemiology",
+      "target": "Antineoplastic Agents",
+      "weight": 12
+    },
+    {
+      "source": "epidemiology",
+      "target": "therapeutic use",
+      "weight": 9
+    },
+    {
+      "source": "epidemiology",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 9
+    },
+    {
+      "source": "epidemiology",
+      "target": "genetics",
+      "weight": 8
+    },
+    {
+      "source": "epidemiology",
+      "target": "etiology",
+      "weight": 6
+    },
+    {
+      "source": "epidemiology",
+      "target": "antagonists & inhibitors",
+      "weight": 6
+    },
+    {
+      "source": "epidemiology",
+      "target": "Mutation",
+      "weight": 5
+    },
+    {
+      "source": "epidemiology",
+      "target": "diagnosis",
+      "weight": 4
+    },
+    {
+      "source": "epidemiology",
+      "target": "Tyrosine Kinase Inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "epidemiology",
+      "target": "heart failure",
+      "weight": 3
+    },
+    {
+      "source": "epidemiology",
+      "target": "Heart Diseases",
+      "weight": 3
+    },
+    {
+      "source": "epidemiology",
+      "target": "Neoplasm Recurrence, Local",
+      "weight": 2
+    },
+    {
+      "source": "epidemiology",
+      "target": "administration & dosage",
+      "weight": 2
+    },
+    {
+      "source": "epidemiology",
+      "target": "QT prolongation",
+      "weight": 2
+    },
+    {
+      "source": "epidemiology",
+      "target": "targeted therapy",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "EGFR mutation",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "NSCLC",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "non-small cell lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "QT prolongation",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "QT prolongation",
+      "target": "Antineoplastic Agents",
+      "weight": 2
+    },
+    {
+      "source": "QT prolongation",
+      "target": "ErbB Receptors",
+      "weight": 2
+    },
+    {
+      "source": "QT prolongation",
+      "target": "genetics",
+      "weight": 2
+    },
+    {
+      "source": "QT prolongation",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 2
+    },
+    {
+      "source": "QT prolongation",
+      "target": "drug therapy",
+      "weight": 2
+    },
+    {
+      "source": "QT prolongation",
+      "target": "Pyrimidines",
+      "weight": 2
+    },
+    {
+      "source": "QT prolongation",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "QT prolongation",
+      "target": "etiology",
+      "weight": 2
+    },
+    {
+      "source": "QT prolongation",
+      "target": "Lung Neoplasms",
+      "weight": 2
+    },
+    {
+      "source": "QT prolongation",
+      "target": "diagnosis",
+      "weight": 1
+    },
+    {
+      "source": "QT prolongation",
+      "target": "Mutation",
+      "weight": 1
+    },
+    {
+      "source": "QT prolongation",
+      "target": "EGFR mutation",
+      "weight": 1
+    },
+    {
+      "source": "QT prolongation",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 1
+    },
+    {
+      "source": "QT prolongation",
+      "target": "NSCLC",
+      "weight": 1
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "Lung Neoplasms",
+      "weight": 5
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "ErbB Receptors",
+      "weight": 5
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "Pyrimidines",
+      "weight": 4
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 4
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "genetics",
+      "weight": 4
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "Mutation",
+      "weight": 4
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "drug therapy",
+      "weight": 3
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "Antineoplastic Agents",
+      "weight": 2
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "antagonists & inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "diagnosis",
+      "weight": 1
+    },
+    {
+      "source": "Neoplasm Recurrence, Local",
+      "target": "heart failure",
+      "weight": 1
+    },
+    {
+      "source": "targeted therapy",
+      "target": "Lung Neoplasms",
+      "weight": 5
+    },
+    {
+      "source": "targeted therapy",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 5
+    },
+    {
+      "source": "targeted therapy",
+      "target": "drug therapy",
+      "weight": 4
+    },
+    {
+      "source": "targeted therapy",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "targeted therapy",
+      "target": "Antineoplastic Agents",
+      "weight": 3
+    },
+    {
+      "source": "targeted therapy",
+      "target": "etiology",
+      "weight": 3
+    },
+    {
+      "source": "targeted therapy",
+      "target": "ErbB Receptors",
+      "weight": 3
+    },
+    {
+      "source": "targeted therapy",
+      "target": "Pyrimidines",
+      "weight": 3
+    },
+    {
+      "source": "targeted therapy",
+      "target": "genetics",
+      "weight": 3
+    },
+    {
+      "source": "targeted therapy",
+      "target": "administration & dosage",
+      "weight": 2
+    },
+    {
+      "source": "targeted therapy",
+      "target": "Mutation",
+      "weight": 2
+    },
+    {
+      "source": "targeted therapy",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "targeted therapy",
+      "target": "NSCLC",
+      "weight": 1
+    },
+    {
+      "source": "targeted therapy",
+      "target": "Heart Diseases",
+      "weight": 1
+    },
+    {
+      "source": "targeted therapy",
+      "target": "antagonists & inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "targeted therapy",
+      "target": "epidermal growth factor receptor",
+      "weight": 1
+    },
+    {
+      "source": "targeted therapy",
+      "target": "non-small cell lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "targeted therapy",
+      "target": "diagnosis",
+      "weight": 1
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "drug therapy",
+      "weight": 5
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 5
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "Lung Neoplasms",
+      "weight": 5
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 5
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "ErbB Receptors",
+      "weight": 5
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "antagonists & inhibitors",
+      "weight": 4
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "Pyrimidines",
+      "weight": 4
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "Antineoplastic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "etiology",
+      "weight": 3
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "Mutation",
+      "weight": 2
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "NSCLC",
+      "weight": 2
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "genetics",
+      "weight": 2
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "non-small cell lung cancer",
+      "weight": 2
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "Afatinib",
+      "weight": 1
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "diagnosis",
+      "weight": 1
+    },
+    {
+      "source": "Tyrosine Kinase Inhibitors",
+      "target": "epidermal growth factor receptor",
+      "weight": 1
+    },
+    {
+      "source": "diagnosis",
+      "target": "drug therapy",
+      "weight": 10
+    },
+    {
+      "source": "diagnosis",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 10
+    },
+    {
+      "source": "diagnosis",
+      "target": "Lung Neoplasms",
+      "weight": 10
+    },
+    {
+      "source": "diagnosis",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 10
+    },
+    {
+      "source": "diagnosis",
+      "target": "Antineoplastic Agents",
+      "weight": 9
+    },
+    {
+      "source": "diagnosis",
+      "target": "Pyrimidines",
+      "weight": 9
+    },
+    {
+      "source": "diagnosis",
+      "target": "ErbB Receptors",
+      "weight": 8
+    },
+    {
+      "source": "diagnosis",
+      "target": "Mutation",
+      "weight": 6
+    },
+    {
+      "source": "diagnosis",
+      "target": "genetics",
+      "weight": 6
+    },
+    {
+      "source": "diagnosis",
+      "target": "therapeutic use",
+      "weight": 6
+    },
+    {
+      "source": "diagnosis",
+      "target": "Heart Diseases",
+      "weight": 5
+    },
+    {
+      "source": "diagnosis",
+      "target": "etiology",
+      "weight": 4
+    },
+    {
+      "source": "diagnosis",
+      "target": "heart failure",
+      "weight": 4
+    },
+    {
+      "source": "diagnosis",
+      "target": "antagonists & inhibitors",
+      "weight": 4
+    },
+    {
+      "source": "diagnosis",
+      "target": "EGFR mutation",
+      "weight": 1
+    },
+    {
+      "source": "diagnosis",
+      "target": "Afatinib",
+      "weight": 1
+    },
+    {
+      "source": "diagnosis",
+      "target": "Case report",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Lung Neoplasms",
+      "weight": 60
+    },
+    {
+      "source": "drug therapy",
+      "target": "Pyrimidines",
+      "weight": 57
+    },
+    {
+      "source": "drug therapy",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 54
+    },
+    {
+      "source": "drug therapy",
+      "target": "ErbB Receptors",
+      "weight": 44
+    },
+    {
+      "source": "drug therapy",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 43
+    },
+    {
+      "source": "drug therapy",
+      "target": "genetics",
+      "weight": 37
+    },
+    {
+      "source": "drug therapy",
+      "target": "Mutation",
+      "weight": 35
+    },
+    {
+      "source": "drug therapy",
+      "target": "therapeutic use",
+      "weight": 34
+    },
+    {
+      "source": "drug therapy",
+      "target": "Antineoplastic Agents",
+      "weight": 28
+    },
+    {
+      "source": "drug therapy",
+      "target": "antagonists & inhibitors",
+      "weight": 14
+    },
+    {
+      "source": "drug therapy",
+      "target": "etiology",
+      "weight": 13
+    },
+    {
+      "source": "drug therapy",
+      "target": "NSCLC",
+      "weight": 11
+    },
+    {
+      "source": "drug therapy",
+      "target": "heart failure",
+      "weight": 11
+    },
+    {
+      "source": "drug therapy",
+      "target": "administration & dosage",
+      "weight": 8
+    },
+    {
+      "source": "drug therapy",
+      "target": "Heart Diseases",
+      "weight": 7
+    },
+    {
+      "source": "drug therapy",
+      "target": "Afatinib",
+      "weight": 4
+    },
+    {
+      "source": "drug therapy",
+      "target": "non-small cell lung cancer",
+      "weight": 3
+    },
+    {
+      "source": "drug therapy",
+      "target": "epidermal growth factor receptor",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "Adenocarcinoma",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "EGFR mutation",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "Case report",
+      "weight": 1
+    },
+    {
+      "source": "etiology",
+      "target": "Pyrimidines",
+      "weight": 15
+    },
+    {
+      "source": "etiology",
+      "target": "Antineoplastic Agents",
+      "weight": 12
+    },
+    {
+      "source": "etiology",
+      "target": "Lung Neoplasms",
+      "weight": 11
+    },
+    {
+      "source": "etiology",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 10
+    },
+    {
+      "source": "etiology",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 10
+    },
+    {
+      "source": "etiology",
+      "target": "ErbB Receptors",
+      "weight": 8
+    },
+    {
+      "source": "etiology",
+      "target": "genetics",
+      "weight": 7
+    },
+    {
+      "source": "etiology",
+      "target": "therapeutic use",
+      "weight": 7
+    },
+    {
+      "source": "etiology",
+      "target": "antagonists & inhibitors",
+      "weight": 5
+    },
+    {
+      "source": "etiology",
+      "target": "heart failure",
+      "weight": 5
+    },
+    {
+      "source": "etiology",
+      "target": "NSCLC",
+      "weight": 3
+    },
+    {
+      "source": "etiology",
+      "target": "administration & dosage",
+      "weight": 2
+    },
+    {
+      "source": "etiology",
+      "target": "Mutation",
+      "weight": 2
+    },
+    {
+      "source": "etiology",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "etiology",
+      "target": "Heart Diseases",
+      "weight": 1
+    },
+    {
+      "source": "etiology",
+      "target": "EGFR mutation",
+      "weight": 1
+    },
+    {
+      "source": "etiology",
+      "target": "Afatinib",
+      "weight": 1
+    },
+    {
+      "source": "etiology",
+      "target": "Adenocarcinoma",
+      "weight": 1
+    },
+    {
+      "source": "etiology",
+      "target": "Case report",
+      "weight": 1
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "non-small cell lung cancer",
+      "weight": 2
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "Pyrimidines",
+      "weight": 2
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "genetics",
+      "weight": 2
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "Lung Neoplasms",
+      "weight": 2
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "ErbB Receptors",
+      "weight": 2
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "Mutation",
+      "weight": 2
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "Antineoplastic Agents",
+      "weight": 2
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 2
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "heart failure",
+      "weight": 1
+    },
+    {
+      "source": "EGFR mutation",
+      "target": "NSCLC",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Lung Neoplasms",
+      "weight": 33
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 31
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Pyrimidines",
+      "weight": 31
+    },
+    {
+      "source": "therapeutic use",
+      "target": "ErbB Receptors",
+      "weight": 29
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 29
+    },
+    {
+      "source": "therapeutic use",
+      "target": "genetics",
+      "weight": 27
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Mutation",
+      "weight": 20
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Antineoplastic Agents",
+      "weight": 18
+    },
+    {
+      "source": "therapeutic use",
+      "target": "antagonists & inhibitors",
+      "weight": 9
+    },
+    {
+      "source": "therapeutic use",
+      "target": "NSCLC",
+      "weight": 6
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Heart Diseases",
+      "weight": 5
+    },
+    {
+      "source": "therapeutic use",
+      "target": "administration & dosage",
+      "weight": 4
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Afatinib",
+      "weight": 3
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic use",
+      "target": "heart failure",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "epidermal growth factor receptor",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "non-small cell lung cancer",
+      "weight": 1
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "non-small cell lung cancer",
+      "weight": 5
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "Pyrimidines",
+      "weight": 3
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 3
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "ErbB Receptors",
+      "weight": 3
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "Lung Neoplasms",
+      "weight": 3
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "Mutation",
+      "weight": 3
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "genetics",
+      "weight": 2
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "Adenocarcinoma",
+      "weight": 2
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "heart failure",
+      "weight": 2
+    },
+    {
+      "source": "epidermal growth factor receptor",
+      "target": "Antineoplastic Agents",
+      "weight": 1
+    },
+    {
+      "source": "Case report",
+      "target": "heart failure",
+      "weight": 3
+    },
+    {
+      "source": "Case report",
+      "target": "non-small cell lung cancer",
+      "weight": 2
+    },
+    {
+      "source": "Case report",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 1
+    },
+    {
+      "source": "Case report",
+      "target": "Pyrimidines",
+      "weight": 1
+    },
+    {
+      "source": "Case report",
+      "target": "Lung Neoplasms",
+      "weight": 1
+    },
+    {
+      "source": "Case report",
+      "target": "Antineoplastic Agents",
+      "weight": 1
+    },
+    {
+      "source": "Case report",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 4
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "ErbB Receptors",
+      "weight": 4
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 4
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "Pyrimidines",
+      "weight": 4
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "Lung Neoplasms",
+      "weight": 4
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "Mutation",
+      "weight": 3
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "Antineoplastic Agents",
+      "weight": 2
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "genetics",
+      "weight": 2
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "heart failure",
+      "weight": 1
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 1
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "non-small cell lung cancer",
+      "target": "antagonists & inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Pyrimidines",
+      "weight": 8
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Lung Neoplasms",
+      "weight": 6
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 6
+    },
+    {
+      "source": "administration & dosage",
+      "target": "ErbB Receptors",
+      "weight": 5
+    },
+    {
+      "source": "administration & dosage",
+      "target": "antagonists & inhibitors",
+      "weight": 4
+    },
+    {
+      "source": "administration & dosage",
+      "target": "genetics",
+      "weight": 4
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Antineoplastic Agents",
+      "weight": 4
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Mutation",
+      "weight": 3
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "Adenocarcinoma",
+      "target": "ErbB Receptors",
+      "weight": 2
+    },
+    {
+      "source": "Adenocarcinoma",
+      "target": "heart failure",
+      "weight": 2
+    },
+    {
+      "source": "Adenocarcinoma",
+      "target": "genetics",
+      "weight": 2
+    },
+    {
+      "source": "Adenocarcinoma",
+      "target": "Pyrimidines",
+      "weight": 2
+    },
+    {
+      "source": "Adenocarcinoma",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 1
+    },
+    {
+      "source": "Adenocarcinoma",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 1
+    },
+    {
+      "source": "Adenocarcinoma",
+      "target": "Lung Neoplasms",
+      "weight": 1
+    },
+    {
+      "source": "Adenocarcinoma",
+      "target": "Mutation",
+      "weight": 1
+    },
+    {
+      "source": "Adenocarcinoma",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "NSCLC",
+      "target": "Lung Neoplasms",
+      "weight": 11
+    },
+    {
+      "source": "NSCLC",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 10
+    },
+    {
+      "source": "NSCLC",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 8
+    },
+    {
+      "source": "NSCLC",
+      "target": "Pyrimidines",
+      "weight": 8
+    },
+    {
+      "source": "NSCLC",
+      "target": "ErbB Receptors",
+      "weight": 8
+    },
+    {
+      "source": "NSCLC",
+      "target": "genetics",
+      "weight": 8
+    },
+    {
+      "source": "NSCLC",
+      "target": "Antineoplastic Agents",
+      "weight": 6
+    },
+    {
+      "source": "NSCLC",
+      "target": "Mutation",
+      "weight": 5
+    },
+    {
+      "source": "NSCLC",
+      "target": "heart failure",
+      "weight": 4
+    },
+    {
+      "source": "NSCLC",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 1
+    },
+    {
+      "source": "NSCLC",
+      "target": "antagonists & inhibitors",
+      "weight": 1
+    },
+    {
+      "source": "NSCLC",
+      "target": "Afatinib",
+      "weight": 1
+    },
+    {
+      "source": "Afatinib",
+      "target": "Pyrimidines",
+      "weight": 6
+    },
+    {
+      "source": "Afatinib",
+      "target": "ErbB Receptors",
+      "weight": 5
+    },
+    {
+      "source": "Afatinib",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 5
+    },
+    {
+      "source": "Afatinib",
+      "target": "Lung Neoplasms",
+      "weight": 4
+    },
+    {
+      "source": "Afatinib",
+      "target": "Antineoplastic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Afatinib",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 3
+    },
+    {
+      "source": "Afatinib",
+      "target": "genetics",
+      "weight": 2
+    },
+    {
+      "source": "Afatinib",
+      "target": "Mutation",
+      "weight": 2
+    },
+    {
+      "source": "Afatinib",
+      "target": "antagonists & inhibitors",
+      "weight": 2
+    },
+    {
+      "source": "heart failure",
+      "target": "Pyrimidines",
+      "weight": 13
+    },
+    {
+      "source": "heart failure",
+      "target": "Lung Neoplasms",
+      "weight": 10
+    },
+    {
+      "source": "heart failure",
+      "target": "Carcinoma, Non-Small-Cell Lung",
+      "weight": 9
+    },
+    {
+      "source": "heart failure",
+      "target": "Antineoplastic Agents",
+      "weight": 9
+    },
+    {
+      "source": "heart failure",
+      "target": "ErbB Receptors",
+      "weight": 7
+    },
+    {
+      "source": "heart failure",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 6
+    },
+    {
+      "source": "heart failure",
+      "target": "genetics",
+      "weight": 5
+    },
+    {
+      "source": "heart failure",
+      "target": "Mutation",
+      "weight": 5
+    },
+    {
+      "source": "heart failure",
+      "target": "antagonists & inhibitors",
+      "weight": 3
+    },
+    {
+      "source": "heart failure",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 3
+    },
+    {
+      "source": "heart failure",
+      "target": "Heart Diseases",
+      "weight": 2
+    },
+    {
+      "source": "Carcinoma, Non-Small-Cell Lung",
+      "target": "Lung Neoplasms",
+      "weight": 59
+    },
+    {
+      "source": "Carcinoma, Non-Small-Cell Lung",
+      "target": "Pyrimidines",
+      "weight": 52
+    },
+    {
+      "source": "Carcinoma, Non-Small-Cell Lung",
+      "target": "ErbB Receptors",
+      "weight": 46
+    },
+    {
+      "source": "Carcinoma, Non-Small-Cell Lung",
+      "target": "Protein Kinase Inhibitors",
+      "weight": 40
+    },
+    {
+      "source": "Carcinoma, Non-Small-Cell Lung",
+      "target": "genetics",
+      "weight": 39
+    },
+    {
+      "source": "Carcinoma, Non-Small-Cell Lung",
+      "target": "Mutation",
+      "weight": 36
+    },
+    {
+      "source": "Carcinoma, Non-Small-Cell Lung",
+      "target": "Antineoplastic Agents",
+      "weight": 26
+    },
+    {
+      "source": "Carcinoma, Non-Small-Cell Lung",
+      "target": "antagonists & inhibitors",
+      "weight": 13
+    },
+    {
+      "source": "Carcinoma, Non-Small-Cell Lung",
+      "target": "Heart Diseases",
+      "weight": 3
+    },
+    {
+      "source": "Carcinoma, Non-Small-Cell Lung",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "Protein Kinase Inhibitors",
+      "target": "Lung Neoplasms",
+      "weight": 44
+    },
+    {
+      "source": "Protein Kinase Inhibitors",
+      "target": "Pyrimidines",
+      "weight": 43
+    },
+    {
+      "source": "Protein Kinase Inhibitors",
+      "target": "ErbB Receptors",
+      "weight": 38
+    },
+    {
+      "source": "Protein Kinase Inhibitors",
+      "target": "Mutation",
+      "weight": 30
+    },
+    {
+      "source": "Protein Kinase Inhibitors",
+      "target": "genetics",
+      "weight": 27
+    },
+    {
+      "source": "Protein Kinase Inhibitors",
+      "target": "Antineoplastic Agents",
+      "weight": 25
+    },
+    {
+      "source": "Protein Kinase Inhibitors",
+      "target": "antagonists & inhibitors",
+      "weight": 12
+    },
+    {
+      "source": "Protein Kinase Inhibitors",
+      "target": "Heart Diseases",
+      "weight": 5
+    },
+    {
+      "source": "Protein Kinase Inhibitors",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 3
+    },
+    {
+      "source": "Pyrimidines",
+      "target": "Lung Neoplasms",
+      "weight": 57
+    },
+    {
+      "source": "Pyrimidines",
+      "target": "ErbB Receptors",
+      "weight": 47
+    },
+    {
+      "source": "Pyrimidines",
+      "target": "genetics",
+      "weight": 37
+    },
+    {
+      "source": "Pyrimidines",
+      "target": "Mutation",
+      "weight": 35
+    },
+    {
+      "source": "Pyrimidines",
+      "target": "Antineoplastic Agents",
+      "weight": 29
+    },
+    {
+      "source": "Pyrimidines",
+      "target": "antagonists & inhibitors",
+      "weight": 16
+    },
+    {
+      "source": "Pyrimidines",
+      "target": "Heart Diseases",
+      "weight": 6
+    },
+    {
+      "source": "Pyrimidines",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 4
+    },
+    {
+      "source": "Lung Neoplasms",
+      "target": "ErbB Receptors",
+      "weight": 48
+    },
+    {
+      "source": "Lung Neoplasms",
+      "target": "genetics",
+      "weight": 40
+    },
+    {
+      "source": "Lung Neoplasms",
+      "target": "Mutation",
+      "weight": 39
+    },
+    {
+      "source": "Lung Neoplasms",
+      "target": "Antineoplastic Agents",
+      "weight": 26
+    },
+    {
+      "source": "Lung Neoplasms",
+      "target": "antagonists & inhibitors",
+      "weight": 13
+    },
+    {
+      "source": "Lung Neoplasms",
+      "target": "Heart Diseases",
+      "weight": 5
+    },
+    {
+      "source": "Lung Neoplasms",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "genetics",
+      "target": "ErbB Receptors",
+      "weight": 39
+    },
+    {
+      "source": "genetics",
+      "target": "Mutation",
+      "weight": 30
+    },
+    {
+      "source": "genetics",
+      "target": "Antineoplastic Agents",
+      "weight": 17
+    },
+    {
+      "source": "genetics",
+      "target": "antagonists & inhibitors",
+      "weight": 8
+    },
+    {
+      "source": "genetics",
+      "target": "Heart Diseases",
+      "weight": 2
+    },
+    {
+      "source": "genetics",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "Antineoplastic Agents",
+      "target": "ErbB Receptors",
+      "weight": 24
+    },
+    {
+      "source": "Antineoplastic Agents",
+      "target": "Mutation",
+      "weight": 12
+    },
+    {
+      "source": "Antineoplastic Agents",
+      "target": "antagonists & inhibitors",
+      "weight": 11
+    },
+    {
+      "source": "Antineoplastic Agents",
+      "target": "Heart Diseases",
+      "weight": 6
+    },
+    {
+      "source": "Antineoplastic Agents",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    },
+    {
+      "source": "Mutation",
+      "target": "ErbB Receptors",
+      "weight": 34
+    },
+    {
+      "source": "Mutation",
+      "target": "antagonists & inhibitors",
+      "weight": 6
+    },
+    {
+      "source": "Mutation",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 1
+    },
+    {
+      "source": "Mutation",
+      "target": "Heart Diseases",
+      "weight": 1
+    },
+    {
+      "source": "antagonists & inhibitors",
+      "target": "ErbB Receptors",
+      "weight": 16
+    },
+    {
+      "source": "antagonists & inhibitors",
+      "target": "Heart Diseases",
+      "weight": 2
+    },
+    {
+      "source": "Heart Diseases",
+      "target": "ErbB Receptors",
+      "weight": 3
+    },
+    {
+      "source": "ErbB Receptors",
+      "target": "Tyrosine kinase inhibitor",
+      "weight": 2
+    }
+  ]
+}

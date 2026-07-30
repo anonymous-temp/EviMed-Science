@@ -1,0 +1,6 @@
+{
+  "status": "succeeded",
+  "topic": "osimertinib AND (cardiotoxicity OR cardiac OR cardiotoxic OR QT prolongation OR heart failure OR cardiomyopathy OR arrhythmia OR left ventricular)",
+  "records": 167,
+  "report": "report.md"
+}

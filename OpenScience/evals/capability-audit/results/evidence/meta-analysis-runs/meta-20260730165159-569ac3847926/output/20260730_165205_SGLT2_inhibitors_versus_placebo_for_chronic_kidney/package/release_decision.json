@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "status": "blocked",
+  "ready_for_submission": false,
+  "requires_review": true,
+  "summary": "Generated article failed one or more required evidence or statistical quality gates.",
+  "next_actions": [
+    "Resolve the blocking issues and rerun article generation.",
+    "Keep the current draft only as a diagnostic artifact."
+  ],
+  "artifacts": [
+    {
+      "kind": "review_package",
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/cohort-sweep-20260730/workspace/meta-analysis-runs/meta-20260730165159-569ac3847926/output/20260730_165205_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip"
+    }
+  ],
+  "blocker_codes": [
+    "project_submission_quality_gate",
+    "manuscript_language",
+    "readability",
+    "primary_source_context"
+  ],
+  "warning_codes": [
+    "citation_coverage",
+    "llm_reliability",
+    "benchmark"
+  ],
+  "failed_gates": [
+    {
+      "id": "project_submission_quality_gate",
+      "label": "Project-level submission quality gate",
+      "status": "fail",
+      "passed": false,
+      "detail": "status=fail; failed=1; warnings=2; failed_checks=citation_contract.",
+      "label_localized": "项目级投稿质量闸"
+    },
+    {
+      "id": "manuscript_language",
+      "label": "Requested output language",
+      "status": "fail",
+      "passed": false,
+      "detail": "expected=zh; detected=mixed.",
+      "label_localized": "输出语言"
+    },
+    {
+      "id": "readability",
+      "label": "Readability",
+      "status": "fail",
+      "passed": false,
+      "detail": "scanned_sections=6; scanned_words=6217; verbose_pico_fragments=0; overlong_sentences=1; failed_issues=1.",
+      "label_localized": "可读性"
+    },
+    {
+      "id": "primary_source_context",
+      "label": "Primary-analysis source context",
+      "status": "fail",
+      "passed": false,
+      "detail": "0/0 primary source card(s) have source context.",
+      "label_localized": "主要分析来源语境"
+    }
+  ],
+  "warning_gates": [
+    {
+      "id": "citation_coverage",
+      "label": "Main-text citation coverage",
+      "status": "warn",
+      "passed": true,
+      "detail": "required=False; references=35; publication_min_references=12; main_text_citations=46; Introduction=14; Introduction_background=8/2; Introduction_paragraphs=5/5; Methods=7; Methods_methodology=4/2; Results=2; Discussion=21; Discussion_context=7/2; Discussion_paragraphs=8/8; uncited_discussion_results=0; uncited_discussion_mechanisms=0; undefined=0; failed_issues=0; warning_issues=5; density=7.33 per 1000 words.",
+      "label_localized": "正文引用覆盖"
+    },
+    {
+      "id": "llm_reliability",
+      "label": "LLM output reliability",
+      "status": "warn",
+      "passed": true,
+      "detail": "calls=69; retryable_output_issues=6; near_truncation_events=1; failed_issues=0.",
+      "label_localized": "LLM输出可靠性"
+    },
+    {
+      "id": "benchmark",
+      "label": "Published benchmark comparison",
+      "status": "warn",
+      "passed": true,
+      "detail": "No benchmark attached.",
+      "label_localized": "已发表基准对照"
+    }
+  ]
+}

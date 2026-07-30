@@ -47,14 +47,14 @@
       "id": "EVIMED-GUIDE:0",
       "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide",
       "source": "evimed-guideline",
-      "retrievedAt": "2026-07-30T11:09:59.849643Z",
+      "retrievedAt": "2026-07-30T17:25:07.319107Z",
       "title": "2020 International Society of Hypertension global hypertension practice guidelines."
     },
     {
       "id": "EVIMED-GUIDE:1",
       "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide",
       "source": "evimed-guideline",
-      "retrievedAt": "2026-07-30T11:09:59.849663Z",
+      "retrievedAt": "2026-07-30T17:25:07.319127Z",
       "title": "Variation in hypertension clinical practice guidelines: a global comparison."
     }
   ],

@@ -1,0 +1,21 @@
+topic,frontier_score,growth_rate,burst_score,novelty_score,centrality,evidence
+Mitochondria,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+Meta-analysis,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+disproportionality analysis,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+Induced Pluripotent Stem Cells,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+prevention & control,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+toxicity,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+Incidence,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+cardiac toxicity,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+Atrial Fibrillation,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+Risk Assessment,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+network pharmacology,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+drug effects,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+Electrocardiography,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+"Disease Models, Animal",0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+epidermal growth factor receptor tyrosine kinase inhibitor,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+Cardiovascular Diseases,0.6,1.0,0.0,1.0,0.0,近期快速增长（100%）；相对新颖的主题
+"Aged, 80 and over",0.518,0.765,13.0,0.0,0.0,近期快速增长（76%）；检测到突现（得分=13.0）
+epidemiology,0.512,0.812,10.0,0.143,0.0,近期快速增长（81%）；检测到突现（得分=10.0）
+administration & dosage,0.462,0.889,6.0,0.143,0.0,近期快速增长（89%）；检测到突现（得分=6.0）
+"Myocytes, Cardiac",0.422,0.9,0.0,0.429,0.0,近期快速增长（90%）

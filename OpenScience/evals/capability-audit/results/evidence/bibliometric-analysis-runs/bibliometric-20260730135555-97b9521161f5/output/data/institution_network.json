@@ -1,0 +1,602 @@
+{
+  "nodes": [
+    {
+      "id": "Osaka International Cancer Institute",
+      "weight": 7,
+      "cluster": 0,
+      "degree": 0.1667,
+      "betweenness": 0.0,
+      "closeness": 0.5,
+      "weighted_degree": 9
+    },
+    {
+      "id": "Konkuk University Medical Center",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 1.235,
+      "weighted_degree": 25
+    },
+    {
+      "id": "Itami City Hospital",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.1667,
+      "betweenness": 0.0,
+      "closeness": 0.375,
+      "weighted_degree": 7
+    },
+    {
+      "id": "Asan Medical Center",
+      "weight": 5,
+      "cluster": 2,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 1.4848,
+      "weighted_degree": 33
+    },
+    {
+      "id": "Yeouido St. Mary's Hospital",
+      "weight": 5,
+      "cluster": 2,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 1.4848,
+      "weighted_degree": 33
+    },
+    {
+      "id": "Guangdong Lung Cancer Institute",
+      "weight": 5,
+      "cluster": 2,
+      "degree": 0.1111,
+      "betweenness": 0.0,
+      "closeness": 0.5435,
+      "weighted_degree": 2
+    },
+    {
+      "id": "Hyogo Prefectural Amagasaki General Medical Center",
+      "weight": 4,
+      "cluster": 0,
+      "degree": 0.1667,
+      "betweenness": 0.0,
+      "closeness": 0.4286,
+      "weighted_degree": 8
+    },
+    {
+      "id": "Inha University Hospital",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0245,
+      "closeness": 1.5819,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Chonnam National University Hwasun Hospital",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.6111,
+      "betweenness": 0.0,
+      "closeness": 1.1362,
+      "weighted_degree": 20
+    },
+    {
+      "id": "Samsung Medical Center",
+      "weight": 7,
+      "cluster": 2,
+      "degree": 0.7222,
+      "betweenness": 0.1569,
+      "closeness": 1.3555,
+      "weighted_degree": 24
+    },
+    {
+      "id": "Chungnam National University",
+      "weight": 5,
+      "cluster": 1,
+      "degree": 0.5556,
+      "betweenness": 0.0,
+      "closeness": 1.1362,
+      "weighted_degree": 20
+    },
+    {
+      "id": "Wonkwang University Hospital",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 1.235,
+      "weighted_degree": 25
+    },
+    {
+      "id": "Yonsei University Gangnam Severance Hospital",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 1.235,
+      "weighted_degree": 25
+    },
+    {
+      "id": "Graduate School of Medicine",
+      "weight": 4,
+      "cluster": 0,
+      "degree": 0.1667,
+      "betweenness": 0.0,
+      "closeness": 0.4286,
+      "weighted_degree": 8
+    },
+    {
+      "id": "Korea University Guro Hospital",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0049,
+      "closeness": 1.6172,
+      "weighted_degree": 43
+    },
+    {
+      "id": "AstraZeneca",
+      "weight": 4,
+      "cluster": 2,
+      "degree": 0.1111,
+      "betweenness": 0.0,
+      "closeness": 0.5435,
+      "weighted_degree": 2
+    },
+    {
+      "id": "Pusan National University Yangsan Hospital",
+      "weight": 5,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0049,
+      "closeness": 1.5229,
+      "weighted_degree": 38
+    },
+    {
+      "id": "Hallym University Sacred Heart Hospital",
+      "weight": 8,
+      "cluster": 2,
+      "degree": 0.6667,
+      "betweenness": 0.1977,
+      "closeness": 1.7998,
+      "weighted_degree": 47
+    },
+    {
+      "id": "Seoul St. Mary's Hospital",
+      "weight": 4,
+      "cluster": 2,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 1.3499,
+      "weighted_degree": 27
+    }
+  ],
+  "edges": [
+    {
+      "source": "Osaka International Cancer Institute",
+      "target": "Graduate School of Medicine",
+      "weight": 3
+    },
+    {
+      "source": "Osaka International Cancer Institute",
+      "target": "Itami City Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Osaka International Cancer Institute",
+      "target": "Hyogo Prefectural Amagasaki General Medical Center",
+      "weight": 3
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Hallym University Sacred Heart Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Wonkwang University Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Korea University Guro Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Pusan National University Yangsan Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Inha University Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Yonsei University Gangnam Severance Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Chonnam National University Hwasun Hospital",
+      "weight": 2
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Yeouido St. Mary's Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Asan Medical Center",
+      "weight": 1
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Samsung Medical Center",
+      "weight": 1
+    },
+    {
+      "source": "Konkuk University Medical Center",
+      "target": "Chungnam National University",
+      "weight": 1
+    },
+    {
+      "source": "Itami City Hospital",
+      "target": "Hyogo Prefectural Amagasaki General Medical Center",
+      "weight": 2
+    },
+    {
+      "source": "Itami City Hospital",
+      "target": "Graduate School of Medicine",
+      "weight": 2
+    },
+    {
+      "source": "Asan Medical Center",
+      "target": "Hallym University Sacred Heart Hospital",
+      "weight": 5
+    },
+    {
+      "source": "Asan Medical Center",
+      "target": "Yeouido St. Mary's Hospital",
+      "weight": 5
+    },
+    {
+      "source": "Asan Medical Center",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 4
+    },
+    {
+      "source": "Asan Medical Center",
+      "target": "Korea University Guro Hospital",
+      "weight": 4
+    },
+    {
+      "source": "Asan Medical Center",
+      "target": "Pusan National University Yangsan Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Asan Medical Center",
+      "target": "Samsung Medical Center",
+      "weight": 3
+    },
+    {
+      "source": "Asan Medical Center",
+      "target": "Inha University Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Asan Medical Center",
+      "target": "Chungnam National University",
+      "weight": 2
+    },
+    {
+      "source": "Asan Medical Center",
+      "target": "Yonsei University Gangnam Severance Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Asan Medical Center",
+      "target": "Chonnam National University Hwasun Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Asan Medical Center",
+      "target": "Wonkwang University Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Yeouido St. Mary's Hospital",
+      "target": "Hallym University Sacred Heart Hospital",
+      "weight": 5
+    },
+    {
+      "source": "Yeouido St. Mary's Hospital",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 4
+    },
+    {
+      "source": "Yeouido St. Mary's Hospital",
+      "target": "Korea University Guro Hospital",
+      "weight": 4
+    },
+    {
+      "source": "Yeouido St. Mary's Hospital",
+      "target": "Inha University Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Yeouido St. Mary's Hospital",
+      "target": "Pusan National University Yangsan Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Yeouido St. Mary's Hospital",
+      "target": "Samsung Medical Center",
+      "weight": 3
+    },
+    {
+      "source": "Yeouido St. Mary's Hospital",
+      "target": "Chungnam National University",
+      "weight": 2
+    },
+    {
+      "source": "Yeouido St. Mary's Hospital",
+      "target": "Wonkwang University Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Yeouido St. Mary's Hospital",
+      "target": "Chonnam National University Hwasun Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Yeouido St. Mary's Hospital",
+      "target": "Yonsei University Gangnam Severance Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Guangdong Lung Cancer Institute",
+      "target": "AstraZeneca",
+      "weight": 1
+    },
+    {
+      "source": "Guangdong Lung Cancer Institute",
+      "target": "Samsung Medical Center",
+      "weight": 1
+    },
+    {
+      "source": "Hyogo Prefectural Amagasaki General Medical Center",
+      "target": "Graduate School of Medicine",
+      "weight": 3
+    },
+    {
+      "source": "Inha University Hospital",
+      "target": "Korea University Guro Hospital",
+      "weight": 5
+    },
+    {
+      "source": "Inha University Hospital",
+      "target": "Pusan National University Yangsan Hospital",
+      "weight": 5
+    },
+    {
+      "source": "Inha University Hospital",
+      "target": "Hallym University Sacred Heart Hospital",
+      "weight": 5
+    },
+    {
+      "source": "Inha University Hospital",
+      "target": "Chungnam National University",
+      "weight": 3
+    },
+    {
+      "source": "Inha University Hospital",
+      "target": "Chonnam National University Hwasun Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Inha University Hospital",
+      "target": "Wonkwang University Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Inha University Hospital",
+      "target": "Yonsei University Gangnam Severance Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Inha University Hospital",
+      "target": "Samsung Medical Center",
+      "weight": 2
+    },
+    {
+      "source": "Inha University Hospital",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 2
+    },
+    {
+      "source": "Chonnam National University Hwasun Hospital",
+      "target": "Samsung Medical Center",
+      "weight": 2
+    },
+    {
+      "source": "Chonnam National University Hwasun Hospital",
+      "target": "Wonkwang University Hospital",
+      "weight": 2
+    },
+    {
+      "source": "Chonnam National University Hwasun Hospital",
+      "target": "Yonsei University Gangnam Severance Hospital",
+      "weight": 2
+    },
+    {
+      "source": "Chonnam National University Hwasun Hospital",
+      "target": "Hallym University Sacred Heart Hospital",
+      "weight": 2
+    },
+    {
+      "source": "Chonnam National University Hwasun Hospital",
+      "target": "Korea University Guro Hospital",
+      "weight": 2
+    },
+    {
+      "source": "Chonnam National University Hwasun Hospital",
+      "target": "Pusan National University Yangsan Hospital",
+      "weight": 2
+    },
+    {
+      "source": "Chonnam National University Hwasun Hospital",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Samsung Medical Center",
+      "target": "Hallym University Sacred Heart Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Samsung Medical Center",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Samsung Medical Center",
+      "target": "Korea University Guro Hospital",
+      "weight": 2
+    },
+    {
+      "source": "Samsung Medical Center",
+      "target": "Yonsei University Gangnam Severance Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Samsung Medical Center",
+      "target": "Pusan National University Yangsan Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Samsung Medical Center",
+      "target": "Wonkwang University Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Samsung Medical Center",
+      "target": "AstraZeneca",
+      "weight": 1
+    },
+    {
+      "source": "Chungnam National University",
+      "target": "Pusan National University Yangsan Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Chungnam National University",
+      "target": "Hallym University Sacred Heart Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Chungnam National University",
+      "target": "Korea University Guro Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Chungnam National University",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Chungnam National University",
+      "target": "Yonsei University Gangnam Severance Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Chungnam National University",
+      "target": "Wonkwang University Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Wonkwang University Hospital",
+      "target": "Hallym University Sacred Heart Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Wonkwang University Hospital",
+      "target": "Yonsei University Gangnam Severance Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Wonkwang University Hospital",
+      "target": "Pusan National University Yangsan Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Wonkwang University Hospital",
+      "target": "Korea University Guro Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Wonkwang University Hospital",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Yonsei University Gangnam Severance Hospital",
+      "target": "Pusan National University Yangsan Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Yonsei University Gangnam Severance Hospital",
+      "target": "Hallym University Sacred Heart Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Yonsei University Gangnam Severance Hospital",
+      "target": "Korea University Guro Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Yonsei University Gangnam Severance Hospital",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 1
+    },
+    {
+      "source": "Korea University Guro Hospital",
+      "target": "Hallym University Sacred Heart Hospital",
+      "weight": 6
+    },
+    {
+      "source": "Korea University Guro Hospital",
+      "target": "Pusan National University Yangsan Hospital",
+      "weight": 5
+    },
+    {
+      "source": "Korea University Guro Hospital",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 3
+    },
+    {
+      "source": "Pusan National University Yangsan Hospital",
+      "target": "Hallym University Sacred Heart Hospital",
+      "weight": 5
+    },
+    {
+      "source": "Pusan National University Yangsan Hospital",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 2
+    },
+    {
+      "source": "Hallym University Sacred Heart Hospital",
+      "target": "Seoul St. Mary's Hospital",
+      "weight": 4
+    }
+  ]
+}

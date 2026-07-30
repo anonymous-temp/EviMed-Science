@@ -71,14 +71,14 @@
       "id": "FAERS:10004085",
       "url": "https://api.fda.gov/drug/event.json?search=safetyreportid:10004085",
       "source": "openfda-faers",
-      "retrievedAt": "2026-07-30T11:10:06.324614Z",
+      "retrievedAt": "2026-07-30T17:25:14.002541Z",
       "title": "FAERS safety report 10004085"
     },
     {
       "id": "FAERS:10006272",
       "url": "https://api.fda.gov/drug/event.json?search=safetyreportid:10006272",
       "source": "openfda-faers",
-      "retrievedAt": "2026-07-30T11:10:06.324633Z",
+      "retrievedAt": "2026-07-30T17:25:14.002573Z",
       "title": "FAERS safety report 10006272"
     }
   ]

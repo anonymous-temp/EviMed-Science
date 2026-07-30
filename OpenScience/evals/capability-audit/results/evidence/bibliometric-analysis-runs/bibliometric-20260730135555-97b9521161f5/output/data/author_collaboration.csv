@@ -1,0 +1,641 @@
+source,target,weight,source_freq,target_freq
+Kim Seung Joon,Lee Kye Young,5,5,5
+Jang Seung Hun,Lee Jeong Eun,5,7,6
+Lee Sang Hoon,Lee Shin Yup,5,5,5
+Kim Seung Joon,Lee Jeong Eun,5,5,6
+Kim Seung Joon,Lee Shin Yup,5,5,5
+Lee Jeong Eun,Lee Sung Yong,5,6,6
+Lee Shin Yup,Lee Sung Yong,5,5,6
+Kim Seung Joon,Lee Sang Hoon,5,5,5
+Kim Seung Joon,Lee Sung Yong,5,5,6
+Lee Jeong Eun,Lee Shin Yup,5,6,5
+Lee Jeong Eun,Lee Kye Young,5,6,5
+Lee Kye Young,Lee Shin Yup,5,5,5
+Jang Seung Hun,Lee Sung Yong,5,7,6
+Lee Kye Young,Lee Sang Hoon,5,5,5
+Lee Sang Hoon,Lee Sung Yong,5,5,6
+Lee Jeong Eun,Lee Sang Hoon,5,6,5
+Lee Kye Young,Lee Sung Yong,5,5,6
+Lee Kye Young,Yang Sei Hoon,4,5,4
+Jang Tae Won,Lee Sung Yong,4,4,6
+Chang Yoon Soo,Yoon Seong Hoon,4,4,4
+Jang Tae Won,Kim Seung Joon,4,4,5
+Jang Tae Won,Yoon Seong Hoon,4,4,4
+Chang Yoon Soo,Jang Tae Won,4,4,4
+Jang Tae Won,Lee Kye Young,4,4,5
+Jang Seung Hun,Kim Seung Joon,4,7,5
+Kim Seung Joon,Yoon Seong Hoon,4,5,4
+Jang Seung Hun,Lee Shin Yup,4,7,5
+Lee Shin Yup,Yoon Seong Hoon,4,5,4
+Chang Yoon Soo,Lee Sung Yong,4,4,6
+Lee Jeong Eun,Park Chan Kwon,4,6,4
+Lee Sung Yong,Yoon Seong Hoon,4,6,4
+Lee Shin Yup,Park Chan Kwon,4,5,4
+Lee Jeong Eun,Yoon Seong Hoon,4,6,4
+Lee Jeong Eun,Yang Sei Hoon,4,6,4
+Kim Seung Joon,Yang Sei Hoon,4,5,4
+Lee Kye Young,Yoon Seong Hoon,4,5,4
+Jang Seung Hun,Lee Kye Young,4,7,5
+Lee Sang Hoon,Yang Sei Hoon,4,5,4
+Lee Sang Hoon,Park Chan Kwon,4,5,4
+Lee Shin Yup,Yang Sei Hoon,4,5,4
+Lee Sang Hoon,Yoon Seong Hoon,4,5,4
+Jang Seung Hun,Lee Sang Hoon,4,7,5
+Jang Tae Won,Lee Jeong Eun,4,4,6
+Jang Tae Won,Lee Shin Yup,4,4,5
+Kim Seung Joon,Park Chan Kwon,4,5,4
+Jang Tae Won,Lee Sang Hoon,4,4,5
+Jang Seung Hun,Park Chan Kwon,4,7,4
+Chang Yoon Soo,Lee Shin Yup,4,4,5
+Chang Yoon Soo,Lee Jeong Eun,4,4,6
+Chang Yoon Soo,Lee Kye Young,4,4,5
+Lee Kye Young,Park Chan Kwon,4,5,4
+Chang Yoon Soo,Lee Sang Hoon,4,4,5
+Lee Sung Yong,Park Chan Kwon,4,6,4
+Lee Sung Yong,Yang Sei Hoon,4,6,4
+Chang Yoon Soo,Kim Seung Joon,4,4,5
+Chang Yoon Soo,Yang Sei Hoon,3,4,4
+Chang Yoon Soo,Ryu Jeong Seon,3,4,3
+Jang Tae Won,Yang Sei Hoon,3,4,4
+Jang Seung Hun,Yoon Seong Hoon,3,7,4
+Jang Tae Won,Ryu Jeong Seon,3,4,3
+Chang Yoon Soo,Jang Seung Hun,3,4,7
+Lee Shin Yup,Ryu Jeong Seon,3,5,3
+Lee Jeong Eun,Ryu Jeong Seon,3,6,3
+Lee Sung Yong,Ryu Jeong Seon,3,6,3
+Jang Tae Won,Park Chan Kwon,3,4,4
+Lee Kye Young,Ryu Jeong Seon,3,5,3
+Ryu Jeong Seon,Yang Sei Hoon,3,3,4
+Jang Seung Hun,Jang Tae Won,3,7,4
+Park Chan Kwon,Yoon Seong Hoon,3,4,4
+Ryu Jeong Seon,Yoon Seong Hoon,3,3,4
+Lee Sang Hoon,Ryu Jeong Seon,3,5,3
+Choi Chang Min,Jang Seung Hun,3,3,7
+Chang Yoon Soo,Park Chan Kwon,3,4,4
+Hara Satoshi,Tamiya Motohiro,3,3,4
+Jang Seung Hun,Yang Sei Hoon,3,7,4
+Hamano Hirofumi,Zamami Yoshito,3,3,3
+Choi Chang Min,Lee Jeong Eun,3,3,6
+Choi Chang-Min,Lee Shin Yup,3,3,5
+Choi Chang-Min,Lee Jeong Eun,3,3,6
+Park Chan Kwon,Yang Sei Hoon,3,4,4
+Jung Chi Young,Lee Jeong Eun,3,3,6
+Yang Sei Hoon,Yoon Seong Hoon,3,4,4
+Kim Seung Joon,Ryu Jeong Seon,3,5,3
+Kim Young-Chul,Lee Sung Yong,3,3,6
+Choi Chang-Min,Lee Kye Young,3,3,5
+Choi Chang-Min,Lee Sang Hoon,3,3,5
+Choi Chang-Min,Lee Sung Yong,3,3,6
+Choi Chang-Min,Kim Seung Joon,3,3,5
+Choi Chang Min,Kim Taeyun,2,3,2
+Kim Taeyun,Lee Sung Yong,2,2,6
+Chang Yoon Soo,Kim Taeyun,2,4,2
+Kim Taeyun,Lee Kye Young,2,2,5
+Kim Seung Joon,Kim Taeyun,2,5,2
+Li Yanming,Wang Gongxin,2,2,2
+Kim Taeyun,Ryu Jeong Seon,2,2,3
+Kim Mi-Hyun,Kim Taeyun,2,2,2
+Hsu Kristie Y,Patel Karishma,2,2,2
+Baik Alan H,Lou Kevin,2,2,2
+Lou Kevin,Mulvey Claire K,2,2,2
+Lee Yoo Jin,Lou Kevin,2,2,2
+Lou Kevin,Soni Krishan,2,2,2
+Baik Alan H,Hsu Kristie Y,2,2,2
+Li Peiwen,Wang Gongxin,2,2,2
+Hsu Kristie Y,Soni Krishan,2,2,2
+Hao Guoliang,Wang Gongxin,2,2,2
+Elkonaissi Islam,Foreman Emma,2,2,2
+Kim Taeyun,Yang Sei Hoon,2,2,4
+Foreman Emma,Kobat Hasan,2,2,2
+Elkonaissi Islam,Kobat Hasan,2,2,2
+Kato Terufumi,Voon Pei Jye,2,3,2
+Hara Satoshi,Tsumura Shinsuke,2,3,2
+Hara Satoshi,Sakagami Takuro,2,3,2
+Sakagami Takuro,Tsumura Shinsuke,2,2,2
+Mulvey Claire K,Soni Krishan,2,2,2
+Baik Alan H,Soni Krishan,2,2,2
+Kim Taeyun,Lee Sang Hoon,2,2,5
+Baik Alan H,Lee Yoo Jin,2,2,2
+Baik Alan H,Mulvey Claire K,2,2,2
+Li Peiwen,Tian Xiaohui,2,2,2
+Jang Tae Won,Kim Taeyun,2,4,2
+Kim Taeyun,Yoon Seong Hoon,2,2,4
+Jang Seung Hun,Kim Taeyun,2,7,2
+Smit Egbert F,Wu Yi-Long,2,2,5
+Kim Taeyun,Park Chan Kwon,2,2,4
+Kim Taeyun,Lee Shin Yup,2,2,5
+Kim Taeyun,Lee Jeong Eun,2,2,6
+Lee Yoo Jin,Mulvey Claire K,2,2,2
+Waliany Sarah,Zhu Han,2,2,2
+Cui Wanyuan,Yousaf Nadia,2,2,2
+Lee Sung Yong,Park Cheol-Kyu,2,6,2
+Jang Seung Hun,Park Cheol-Kyu,2,7,2
+Lee Kye Young,Park Cheol-Kyu,2,5,2
+Park Cheol-Kyu,Yang Sei Hoon,2,2,4
+Hsu Kristie Y,Lou Kevin,2,2,2
+Park Chan Kwon,Park Cheol-Kyu,2,4,2
+Kobat Hasan,Nabhani-Gebara Shereen,2,2,2
+Kanda Yasunari,Nishida Motohiro,2,3,2
+Elkonaissi Islam,Nabhani-Gebara Shereen,2,2,2
+Choi Chang-Min,Yang Sei Hoon,2,3,4
+Choi Chang-Min,Park Chan Kwon,2,3,4
+Baik Alan H,Patel Karishma,2,2,2
+O'Sullivan Hazel,d'Arienzo Paolo D,2,2,2
+Lou Kevin,Patel Karishma,2,2,2
+Patel Karishma,Soni Krishan,2,2,2
+Lee Yoo Jin,Patel Karishma,2,2,2
+Mulvey Claire K,Patel Karishma,2,2,2
+Choi Chang-Min,Jang Seung Hun,2,3,7
+Kondo Moe,Nakamura Yuya,2,2,2
+Kanda Yasunari,Nakamura Yuya,2,3,2
+Nakamura Yuya,Nishida Motohiro,2,2,2
+Kanda Yasunari,Kondo Moe,2,3,2
+Kondo Moe,Nishida Motohiro,2,2,2
+Lee Yoo Jin,Soni Krishan,2,2,2
+Popat Sanjay,Yousaf Nadia,2,3,2
+Jang Seung Hun,Jung Chi Young,2,7,3
+Kim Ho Cheol,Lee Jeong Eun,2,2,6
+Hsu Kristie Y,Lee Yoo Jin,2,2,2
+Jang Seung Hun,Kim Ho Cheol,2,7,2
+Chang Yoon Soo,Choi Chang-Min,2,4,3
+O'Sullivan Hazel,Yousaf Nadia,2,2,2
+Cui Wanyuan,O'Sullivan Hazel,2,2,2
+O'Sullivan Hazel,Popat Sanjay,2,2,3
+Yousaf Nadia,d'Arienzo Paolo D,2,2,2
+Cui Wanyuan,d'Arienzo Paolo D,2,2,2
+Popat Sanjay,d'Arienzo Paolo D,2,3,2
+Hsu Kristie Y,Mulvey Claire K,2,2,2
+Jung Chi Young,Kim Ho Cheol,2,3,2
+Kamada Risa,Kunimasa Kei,2,2,4
+Kunimasa Kei,Oka Toru,2,4,2
+Jang Seung Hun,Kim Young-Chul,2,7,3
+Kamada Risa,Oka Toru,2,2,2
+Kumagai Toru,Kunimasa Kei,2,2,4
+Saito Go,Sakata Yoshihiko,2,2,2
+Du Beibei,Yang Ping,2,2,3
+Du Beibei,Pan Yilin,2,2,2
+Inaba Megumi,Sakata Yoshihiko,2,2,2
+Sakata Yoshihiko,Tsukita Yoko,2,2,2
+Sakata Yoshihiko,Uchida Junji,2,2,2
+Maruyama Hirotaka,Sakagami Takuro,2,2,2
+Otsuki Taiichiro,Sakata Yoshihiko,2,2,2
+Nagpure Narendra R,Patil Bhatu R,2,2,2
+Pan Yilin,Yang Ping,2,2,3
+Cheng Ying,Lu Shun,2,2,2
+Sakata Yoshihiko,Shibaki Ryota,2,2,2
+Sakata Yoshihiko,Suzuki Hidekazu,2,2,2
+Sakata Yoshihiko,Tamiya Motohiro,2,2,4
+Sakata Yoshihiko,Yamaguchi Teppei,2,2,2
+Sakata Shinya,Sakata Yoshihiko,2,2,2
+Sakata Shinya,Shibaki Ryota,2,2,2
+Sakata Shinya,Suzuki Hidekazu,2,2,2
+Sakata Yoshihiko,Sato Yuki,2,2,2
+Imamura Fumio,Nishino Kazumi,2,3,2
+Kumagai Toru,Tamiya Motohiro,2,2,4
+Fujita Masashi,Tamiya Motohiro,2,2,4
+Imamura Fumio,Tamiya Motohiro,2,3,4
+Fujita Masashi,Kumagai Toru,2,2,2
+Inoue Takako,Nishino Kazumi,2,2,2
+Inoue Takako,Tamiya Motohiro,2,2,4
+Kamada Risa,Kumagai Toru,2,2,2
+Fujita Masashi,Kamada Risa,2,2,2
+Imamura Fumio,Kumagai Toru,2,3,2
+Fujita Masashi,Imamura Fumio,2,2,3
+Okada Asuka,Sakata Yoshihiko,2,2,2
+Fujita Masashi,Nishino Kazumi,2,2,2
+Gawli Chandrakant S,Patel Harun M,2,2,2
+Kamada Risa,Nishino Kazumi,2,2,2
+Kamada Risa,Tamiya Motohiro,2,2,4
+Inoue Takako,Kamada Risa,2,2,2
+Nishino Kazumi,Tamiya Motohiro,2,2,4
+Inoue Takako,Kumagai Toru,2,2,2
+Fujita Masashi,Inoue Takako,2,2,2
+Imamura Fumio,Inoue Takako,2,3,2
+Imamura Fumio,Kamada Risa,2,3,2
+Sakata Yoshihiko,Yokoyama Toshihide,2,2,2
+Kumagai Toru,Nishino Kazumi,2,2,2
+Kim Mi-Hyun,Lee Kye Young,2,2,5
+Chang Yoon Soo,Kim Mi-Hyun,2,4,2
+Kim Mi-Hyun,Lee Sung Yong,2,2,6
+Choi Chang Min,Yoon Seong Hoon,2,3,4
+Jiang Enshe,Wang Gongxin,2,2,2
+Hao Guoliang,Tian Xiaohui,2,2,2
+Li Yanming,Tian Xiaohui,2,2,2
+Choi Chang Min,Ryu Jeong Seon,2,3,3
+Choi Chang Min,Yang Sei Hoon,2,3,4
+Choi Chang Min,Kim Seung Joon,2,3,5
+Choi Chang Min,Lee Kye Young,2,3,5
+Sakata Shinya,Tamiya Motohiro,2,2,4
+Kim Mi-Hyun,Lee Jeong Eun,2,2,6
+Kim Mi-Hyun,Ryu Jeong Seon,2,2,3
+Kim Mi-Hyun,Yang Sei Hoon,2,2,4
+Choi Chang Min,Lee Sang Hoon,2,3,5
+Choi Chang Min,Park Chan Kwon,2,3,4
+Choi Chang Min,Lee Shin Yup,2,3,5
+Kim Seung Joon,Park Cheol-Kyu,2,5,2
+Lee Sang Hoon,Park Cheol-Kyu,2,5,2
+Lee Jeong Eun,Park Cheol-Kyu,2,6,2
+Lee Shin Yup,Park Cheol-Kyu,2,5,2
+Foreman Emma,Nabhani-Gebara Shereen,2,2,2
+Chang Yoon Soo,Choi Chang Min,2,4,3
+Sakata Shinya,Yamaguchi Teppei,2,2,2
+Saito Go,Sakagami Takuro,2,2,2
+Patel Harun M,Patil Bhatu R,2,2,2
+Nagpure Narendra R,Patel Harun M,2,2,2
+Kim Mi-Hyun,Yoon Seong Hoon,2,2,4
+Jang Seung Hun,Kim Mi-Hyun,2,7,2
+Kim Mi-Hyun,Lee Sang Hoon,2,2,5
+Kim Mi-Hyun,Park Chan Kwon,2,2,4
+Kim Mi-Hyun,Lee Shin Yup,2,2,5
+Park Chan Kwon,Ryu Jeong Seon,2,4,3
+Jang Seung Hun,Ryu Jeong Seon,2,7,3
+Kim Mi-Hyun,Kim Seung Joon,2,2,5
+Choi Chang Min,Jang Tae Won,2,3,4
+Choi Chang Min,Lee Sung Yong,2,3,6
+Choi Chang Min,Kim Mi-Hyun,2,3,2
+Jiang Enshe,Tian Xiaohui,2,2,2
+Tian Xiaohui,Wang Gongxin,2,2,2
+Hao Guoliang,Li Peiwen,2,2,2
+Li Peiwen,Li Yanming,2,2,2
+Jiang Enshe,Li Peiwen,2,2,2
+Hao Guoliang,Li Yanming,2,2,2
+Hao Guoliang,Jiang Enshe,2,2,2
+Jiang Enshe,Li Yanming,2,2,2
+Jang Tae Won,Kim Mi-Hyun,2,4,2
+Tamiya Motohiro,Yamaguchi Teppei,2,4,2
+Sakagami Takuro,Sakata Shinya,2,2,2
+Sakata Shinya,Tsumura Shinsuke,2,2,2
+Hara Satoshi,Sakata Shinya,2,3,2
+Arai Daisuke,Yamaguchi Teppei,2,2,2
+Ikeda Hideki,Yamaguchi Teppei,2,2,2
+Ikeda Hideki,Sakata Shinya,2,2,2
+Inaba Megumi,Sakata Shinya,2,2,2
+Sakata Shinya,Tsukita Yoko,2,2,2
+Sakata Shinya,Uchida Junji,2,2,2
+Sakata Shinya,Sato Yuki,2,2,2
+Otsuki Taiichiro,Sakata Shinya,2,2,2
+Yamaguchi Teppei,Yokoyama Toshihide,2,2,2
+Okada Asuka,Yamaguchi Teppei,2,2,2
+Matsumoto Hirotaka,Shibaki Ryota,2,3,2
+Voon Pei Jye,Wu Yi-Long,2,2,5
+Okada Asuka,Shibaki Ryota,2,2,2
+Sakagami Takuro,Suzuki Hidekazu,2,2,2
+Suzuki Hidekazu,Tsumura Shinsuke,2,2,2
+Hara Satoshi,Suzuki Hidekazu,2,3,2
+Maruyama Hirotaka,Sakata Shinya,2,2,2
+Arai Daisuke,Sakata Shinya,2,2,2
+Maruyama Hirotaka,Saito Go,2,2,2
+Arai Daisuke,Saito Go,2,2,2
+Ikeda Hideki,Saito Go,2,2,2
+Inaba Megumi,Saito Go,2,2,2
+Saito Go,Tsukita Yoko,2,2,2
+Saito Go,Uchida Junji,2,2,2
+Matsumoto Hirotaka,Sakata Shinya,2,3,2
+Sakata Shinya,Yokoyama Toshihide,2,2,2
+Matsumoto Hirotaka,Saito Go,2,3,2
+Shibaki Ryota,Yokoyama Toshihide,2,2,2
+Okada Asuka,Suzuki Hidekazu,2,2,2
+Shibaki Ryota,Suzuki Hidekazu,2,2,2
+Sakagami Takuro,Tamiya Motohiro,2,2,4
+Tamiya Motohiro,Tsumura Shinsuke,2,4,2
+Maruyama Hirotaka,Tamiya Motohiro,2,2,4
+Maruyama Hirotaka,Suzuki Hidekazu,2,2,2
+Arai Daisuke,Suzuki Hidekazu,2,2,2
+Inaba Megumi,Tamiya Motohiro,2,2,4
+Tamiya Motohiro,Tsukita Yoko,2,4,2
+Tamiya Motohiro,Uchida Junji,2,4,2
+Sato Yuki,Tamiya Motohiro,2,2,4
+Otsuki Taiichiro,Tamiya Motohiro,2,2,4
+Matsumoto Hirotaka,Tamiya Motohiro,2,3,4
+Matsumoto Hirotaka,Suzuki Hidekazu,2,3,2
+Suzuki Hidekazu,Yokoyama Toshihide,2,2,2
+Suzuki Hidekazu,Yamaguchi Teppei,2,2,2
+Shibaki Ryota,Yamaguchi Teppei,2,2,2
+Okada Asuka,Tamiya Motohiro,2,2,4
+Tamiya Motohiro,Yokoyama Toshihide,2,4,2
+Matsumoto Hirotaka,Yamaguchi Teppei,2,3,2
+Otsuki Taiichiro,Yamaguchi Teppei,2,2,2
+Sato Yuki,Yamaguchi Teppei,2,2,2
+Uchida Junji,Yamaguchi Teppei,2,2,2
+Arai Daisuke,Yokoyama Toshihide,2,2,2
+Inaba Megumi,Yamaguchi Teppei,2,2,2
+Ikeda Hideki,Tamiya Motohiro,2,2,4
+Arai Daisuke,Tamiya Motohiro,2,2,4
+Sato Yuki,Yokoyama Toshihide,2,2,2
+Uchida Junji,Yokoyama Toshihide,2,2,2
+Tsukita Yoko,Yokoyama Toshihide,2,2,2
+Inaba Megumi,Yokoyama Toshihide,2,2,2
+Ikeda Hideki,Yokoyama Toshihide,2,2,2
+Tsukita Yoko,Yamaguchi Teppei,2,2,2
+Jiang Yun,Zhang Yuanming,2,2,2
+Gao Mengjiao,Jiang Yun,2,2,2
+Wu Li,Zhang Yuanming,2,2,2
+Gao Mengjiao,Wu Li,2,2,2
+Jiang Yun,Wu Li,2,2,2
+Yu Jian,Zhang Yuanming,2,2,2
+Gao Mengjiao,Yu Jian,2,2,2
+Jiang Yun,Yu Jian,2,2,2
+Wu Li,Yu Jian,2,2,2
+Liu Xinya,Zhang Yuanming,2,2,2
+Gao Mengjiao,Liu Xinya,2,2,2
+Jiang Yun,Liu Xinya,2,2,2
+Matsumoto Hirotaka,Sakata Yoshihiko,2,3,2
+Liu Xinya,Yu Jian,2,2,2
+Shi Jing,Zhang Yuanming,2,2,2
+Saito Go,Yokoyama Toshihide,2,2,2
+Jiang Yun,Shi Jing,2,2,2
+Shi Jing,Wu Li,2,2,2
+Shi Jing,Yu Jian,2,2,2
+Liu Xinya,Shi Jing,2,2,2
+Fujita Masashi,Kunimasa Kei,2,2,4
+Imamura Fumio,Kunimasa Kei,2,3,4
+Kunimasa Kei,Nishino Kazumi,2,4,2
+Kunimasa Kei,Tamiya Motohiro,2,4,4
+Inoue Takako,Kunimasa Kei,2,2,4
+Kumagai Toru,Oka Toru,2,2,2
+Fujita Masashi,Oka Toru,2,2,2
+Imamura Fumio,Oka Toru,2,3,2
+Nishino Kazumi,Oka Toru,2,2,2
+Oka Toru,Tamiya Motohiro,2,2,4
+Inoue Takako,Oka Toru,2,2,2
+Gao Mengjiao,Shi Jing,2,2,2
+Okada Asuka,Saito Go,2,2,2
+Saito Go,Shibaki Ryota,2,2,2
+Saito Go,Suzuki Hidekazu,2,2,2
+Saito Go,Tamiya Motohiro,2,2,4
+Saito Go,Tsumura Shinsuke,2,2,2
+Hara Satoshi,Saito Go,2,3,2
+Sakagami Takuro,Sakata Yoshihiko,2,2,2
+Sakata Yoshihiko,Tsumura Shinsuke,2,2,2
+Hara Satoshi,Sakata Yoshihiko,2,3,2
+Maruyama Hirotaka,Sakata Yoshihiko,2,2,2
+Arai Daisuke,Sakata Yoshihiko,2,2,2
+Ikeda Hideki,Sakata Yoshihiko,2,2,2
+Saito Go,Sato Yuki,2,2,2
+Otsuki Taiichiro,Saito Go,2,2,2
+Shibaki Ryota,Tamiya Motohiro,2,2,4
+Gao Mengjiao,Zhang Yuanming,2,2,2
+Tanaka Yuta,Tatebe Yasuhisa,2,2,2
+Hamano Hirofumi,Tanaka Yuta,2,3,2
+Tanaka Yuta,Zamami Yoshito,2,2,3
+Hamano Hirofumi,Tatebe Yasuhisa,2,3,2
+Tatebe Yasuhisa,Zamami Yoshito,2,2,3
+Chung Chaeuk,Kim So-Yun,2,2,2
+Kim Eun Kyoung,Lee Se-Hoon,2,2,3
+Suzuki Hidekazu,Tamiya Motohiro,2,2,4
+Gawli Chandrakant S,Patil Bhatu R,2,2,2
+Okada Asuka,Sakata Shinya,2,2,2
+Saito Go,Sakata Shinya,2,2,2
+Saito Go,Yamaguchi Teppei,2,2,2
+Maruyama Hirotaka,Yamaguchi Teppei,2,2,2
+Hara Satoshi,Yamaguchi Teppei,2,3,2
+Tsumura Shinsuke,Yamaguchi Teppei,2,2,2
+Sakagami Takuro,Yamaguchi Teppei,2,2,2
+Gawli Chandrakant S,Nagpure Narendra R,2,2,2
+Hara Satoshi,Maruyama Hirotaka,2,3,2
+Tsukita Yoko,Tsumura Shinsuke,2,2,2
+Hara Satoshi,Tsukita Yoko,2,3,2
+Maruyama Hirotaka,Tsukita Yoko,2,2,2
+Arai Daisuke,Tsukita Yoko,2,2,2
+Ikeda Hideki,Tsukita Yoko,2,2,2
+Inaba Megumi,Tsukita Yoko,2,2,2
+Hara Satoshi,Ikeda Hideki,2,3,2
+Ikeda Hideki,Maruyama Hirotaka,2,2,2
+Hara Satoshi,Uchida Junji,2,3,2
+Maruyama Hirotaka,Uchida Junji,2,2,2
+Arai Daisuke,Uchida Junji,2,2,2
+Ikeda Hideki,Uchida Junji,2,2,2
+Inaba Megumi,Uchida Junji,2,2,2
+Tsukita Yoko,Uchida Junji,2,2,2
+Otsuki Taiichiro,Shibaki Ryota,2,2,2
+Sakagami Takuro,Tsukita Yoko,2,2,2
+Kanda Yasunari,Kato Yuri,2,3,2
+Kato Yuri,Kondo Moe,2,2,2
+Kato Yuri,Nakamura Yuya,2,2,2
+Kagamu Hiroshi,Yamaguchi Ou,2,2,3
+Kagamu Hiroshi,Kaira Kyoichi,2,2,3
+Kaira Kyoichi,Yamaguchi Ou,2,3,3
+Sakagami Takuro,Uchida Junji,2,2,2
+Tsumura Shinsuke,Uchida Junji,2,2,2
+Otsuki Taiichiro,Tsumura Shinsuke,2,2,2
+Hara Satoshi,Otsuki Taiichiro,2,3,2
+Maruyama Hirotaka,Otsuki Taiichiro,2,2,2
+Arai Daisuke,Otsuki Taiichiro,2,2,2
+Ikeda Hideki,Otsuki Taiichiro,2,2,2
+Inaba Megumi,Otsuki Taiichiro,2,2,2
+Ikeda Hideki,Inaba Megumi,2,2,2
+Liu Xinya,Wu Li,2,2,2
+Kato Terufumi,Wu Yi-Long,2,3,5
+Kato Yuri,Nishida Motohiro,2,2,2
+Kim Young-Chul,Yoon Seong Hoon,2,3,4
+Kim Young-Chul,Lee Sang Hoon,2,3,5
+Jung Chi Young,Kim Young-Chul,2,3,3
+Jang Tae Won,Jung Chi Young,2,4,3
+Jung Chi Young,Yoon Seong Hoon,2,3,4
+Jung Chi Young,Lee Sang Hoon,2,3,5
+Jang Tae Won,Kim Young-Chul,2,4,3
+He Yong,Wu Yi-Long,2,2,5
+Choi Chang-Min,Kim Young-Chul,2,3,3
+Jung Chi Young,Kim Seung Joon,2,3,5
+Kim Seung Joon,Kim Young-Chul,2,5,3
+Jung Chi Young,Lee Kye Young,2,3,5
+Maruyama Hirotaka,Tsumura Shinsuke,2,2,2
+Arai Daisuke,Inaba Megumi,2,2,2
+Inaba Megumi,Maruyama Hirotaka,2,2,2
+Hara Satoshi,Inaba Megumi,2,3,2
+Inaba Megumi,Tsumura Shinsuke,2,2,2
+Inaba Megumi,Sakagami Takuro,2,2,2
+Arai Daisuke,Ikeda Hideki,2,2,2
+Choi Chang-Min,Jung Chi Young,2,3,3
+Kim Young-Chul,Lee Kye Young,2,3,5
+Choi Chang-Min,Jang Tae Won,2,3,4
+Chang Yoon Soo,Kim Young-Chul,2,4,3
+Chang Yoon Soo,Jung Chi Young,2,4,3
+Cui Wanyuan,Popat Sanjay,2,2,3
+Jung Chi Young,Lee Sung Yong,2,3,6
+Kim Young-Chul,Lee Jeong Eun,2,3,6
+Kim Young-Chul,Lee Shin Yup,2,3,5
+Jung Chi Young,Lee Shin Yup,2,3,5
+Choi Chang-Min,Yoon Seong Hoon,2,3,4
+Okada Asuka,Uchida Junji,2,2,2
+Okada Asuka,Sato Yuki,2,2,2
+Okada Asuka,Otsuki Taiichiro,2,2,2
+Matsumoto Hirotaka,Okada Asuka,2,3,2
+Okada Asuka,Yokoyama Toshihide,2,2,2
+Sakagami Takuro,Shibaki Ryota,2,2,2
+Otsuki Taiichiro,Yokoyama Toshihide,2,2,2
+Matsumoto Hirotaka,Yokoyama Toshihide,2,3,2
+Maruyama Hirotaka,Shibaki Ryota,2,2,2
+Arai Daisuke,Shibaki Ryota,2,2,2
+Ikeda Hideki,Shibaki Ryota,2,2,2
+Inaba Megumi,Shibaki Ryota,2,2,2
+Shibaki Ryota,Tsukita Yoko,2,2,2
+Shibaki Ryota,Uchida Junji,2,2,2
+Inaba Megumi,Okada Asuka,2,2,2
+Sakagami Takuro,Sato Yuki,2,2,2
+Hara Satoshi,Sato Yuki,2,3,2
+Maruyama Hirotaka,Sato Yuki,2,2,2
+Arai Daisuke,Sato Yuki,2,2,2
+Ikeda Hideki,Sato Yuki,2,2,2
+Inaba Megumi,Sato Yuki,2,2,2
+Sato Yuki,Tsukita Yoko,2,2,2
+Shibaki Ryota,Tsumura Shinsuke,2,2,2
+Hara Satoshi,Shibaki Ryota,2,3,2
+Ikeda Hideki,Suzuki Hidekazu,2,2,2
+Inaba Megumi,Suzuki Hidekazu,2,2,2
+Suzuki Hidekazu,Tsukita Yoko,2,2,2
+Suzuki Hidekazu,Uchida Junji,2,2,2
+Sato Yuki,Suzuki Hidekazu,2,2,2
+Otsuki Taiichiro,Suzuki Hidekazu,2,2,2
+Sato Yuki,Shibaki Ryota,2,2,2
+Okada Asuka,Tsukita Yoko,2,2,2
+Sato Yuki,Tsumura Shinsuke,2,2,2
+Otsuki Taiichiro,Sato Yuki,2,2,2
+Matsumoto Hirotaka,Sakagami Takuro,2,3,2
+Matsumoto Hirotaka,Tsumura Shinsuke,2,3,2
+Hara Satoshi,Matsumoto Hirotaka,2,3,3
+Maruyama Hirotaka,Matsumoto Hirotaka,2,2,3
+Arai Daisuke,Matsumoto Hirotaka,2,2,3
+Sato Yuki,Uchida Junji,2,2,2
+Otsuki Taiichiro,Sakagami Takuro,2,2,2
+Matsumoto Hirotaka,Tsukita Yoko,2,3,2
+Matsumoto Hirotaka,Uchida Junji,2,3,2
+Matsumoto Hirotaka,Sato Yuki,2,3,2
+Matsumoto Hirotaka,Otsuki Taiichiro,2,3,2
+Sakagami Takuro,Yokoyama Toshihide,2,2,2
+Tsumura Shinsuke,Yokoyama Toshihide,2,2,2
+Maruyama Hirotaka,Yokoyama Toshihide,2,2,2
+Hara Satoshi,Yokoyama Toshihide,2,3,2
+Ikeda Hideki,Okada Asuka,2,2,2
+Arai Daisuke,Okada Asuka,2,2,2
+Maruyama Hirotaka,Okada Asuka,2,2,2
+Hara Satoshi,Okada Asuka,2,3,2
+Okada Asuka,Tsumura Shinsuke,2,2,2
+Okada Asuka,Sakagami Takuro,2,2,2
+Otsuki Taiichiro,Tsukita Yoko,2,2,2
+Ikeda Hideki,Matsumoto Hirotaka,2,2,3
+Ikeda Hideki,Tsumura Shinsuke,2,2,2
+Ikeda Hideki,Sakagami Takuro,2,2,2
+Arai Daisuke,Maruyama Hirotaka,2,2,2
+Arai Daisuke,Hara Satoshi,2,2,3
+Arai Daisuke,Tsumura Shinsuke,2,2,2
+Arai Daisuke,Sakagami Takuro,2,2,2
+Otsuki Taiichiro,Uchida Junji,2,2,2
+Inaba Megumi,Matsumoto Hirotaka,2,2,3
+Hara Satoshi,Nishino Kazumi,1,3,2
+Hara Satoshi,Imamura Fumio,1,3,3
+Fujita Masashi,Hara Satoshi,1,2,3
+Hara Satoshi,Kumagai Toru,1,3,2
+Baba Tomohisa,Ikeda Satoshi,1,2,2
+Baba Tomohisa,Kato Terufumi,1,2,3
+Kato Terufumi,Yamaguchi Ou,1,3,3
+Baba Tomohisa,Yamaguchi Ou,1,2,3
+Cho Byoung Chul,Lee Sung Yong,1,4,6
+Cho Byoung Chul,Jang Seung Hun,1,4,7
+Cho Byoung Chul,Kim Young-Chul,1,4,3
+Cheng Ying,He Yong,1,2,2
+He Yong,Lu Shun,1,2,2
+Cheng Ying,Wu Yi-Long,1,2,5
+Lu Shun,Wu Yi-Long,1,2,5
+Choi Chang-Min,Park Cheol-Kyu,1,3,2
+Popat Sanjay,Smit Egbert F,1,3,2
+Popat Sanjay,Wu Yi-Long,1,3,5
+Cheng Paul,Waliany Sarah,1,2,2
+Wakelee Heather A,Waliany Sarah,1,2,2
+Cheng Paul,Wakelee Heather A,1,2,2
+Cheng Paul,Zhu Han,1,2,2
+Wakelee Heather A,Zhu Han,1,2,2
+Ahn Myung-Ju,Lee Se-Hoon,1,2,3
+Ahn Jin Seok,Lee Se-Hoon,1,2,3
+Ahn Jin Seok,Ahn Myung-Ju,1,2,2
+Ahn Myung-Ju,Kim Eun Kyoung,1,2,2
+Ahn Jin Seok,Kim Eun Kyoung,1,2,2
+Hayashi Hidetoshi,Wu Yi-Long,1,2,5
+Hayashi Hidetoshi,Voon Pei Jye,1,2,2
+Smit Egbert F,Voon Pei Jye,1,2,2
+Hayashi Hidetoshi,Kato Terufumi,1,2,3
+Hayashi Hidetoshi,Smit Egbert F,1,2,2
+Kato Terufumi,Smit Egbert F,1,3,2
+Ahn Jin Seok,Kim Ho Cheol,1,2,2
+Choi Chang Min,Kim Ho Cheol,1,3,2
+Ahn Jin Seok,Lee Jeong Eun,1,2,6
+Ahn Jin Seok,Jung Chi Young,1,2,3
+Ahn Jin Seok,Choi Chang Min,1,2,3
+Ahn Jin Seok,Jang Seung Hun,1,2,7
+Choi Chang Min,Jung Chi Young,1,3,3
+Ikeda Satoshi,Imamura Fumio,1,2,3
+Lee Sung Yong,Park Ji Young,1,6,2
+Choi Chang-Min,Ryu Jeong Seon,1,3,3
+Choi Chang-Min,Park Ji Young,1,3,2
+Chang Yoon Soo,Park Ji Young,1,4,2
+Lee Kye Young,Park Ji Young,1,5,2
+Kim Seung Joon,Park Ji Young,1,5,2
+Park Ji Young,Yang Sei Hoon,1,2,4
+Kim Young-Chul,Yang Sei Hoon,1,3,4
+Jung Chi Young,Yang Sei Hoon,1,3,4
+Park Ji Young,Ryu Jeong Seon,1,2,3
+Kim Young-Chul,Ryu Jeong Seon,1,3,3
+Jung Chi Young,Ryu Jeong Seon,1,3,3
+Lee Jeong Eun,Park Ji Young,1,6,2
+Lee Shin Yup,Park Ji Young,1,5,2
+Kim Young-Chul,Park Ji Young,1,3,2
+Jung Chi Young,Park Ji Young,1,3,2
+Lee Sang Hoon,Park Ji Young,1,5,2
+Park Ji Young,Yoon Seong Hoon,1,2,4
+Jang Tae Won,Park Ji Young,1,4,2
+Jang Seung Hun,Park Ji Young,1,7,2
+Neal Joel W,Waliany Sarah,1,2,2
+Neal Joel W,Zhu Han,1,2,2
+Kim Taeyun,Park Cheol-Kyu,1,2,2
+Jang Tae Won,Park Cheol-Kyu,1,4,2
+Choi Chang Min,Park Cheol-Kyu,1,3,2
+Kim Mi-Hyun,Park Cheol-Kyu,1,2,2
+Chang Yoon Soo,Park Cheol-Kyu,1,4,2
+Park Cheol-Kyu,Ryu Jeong Seon,1,2,3
+Park Cheol-Kyu,Yoon Seong Hoon,1,2,4
+Neal Joel W,Wakelee Heather A,1,2,2
+Kim Ho Cheol,Kim Young-Chul,1,2,3
+Ahn Myung-Ju,He Yong,1,2,2
+He Yong,Kato Terufumi,1,2,3
+He Yong,Voon Pei Jye,1,2,2
+He Yong,Huang Xiangning,1,2,2
+Cho Byoung Chul,He Yong,1,4,2
+Ahn Myung-Ju,Kato Terufumi,1,2,3
+Ahn Myung-Ju,Voon Pei Jye,1,2,2
+Ahn Myung-Ju,Wu Yi-Long,1,2,5
+Ahn Myung-Ju,Huang Xiangning,1,2,2
+Ahn Myung-Ju,Cho Byoung Chul,1,2,4
+Huang Xiangning,Kato Terufumi,1,2,3
+Cho Byoung Chul,Kato Terufumi,1,4,3
+Huang Xiangning,Voon Pei Jye,1,2,2
+Cho Byoung Chul,Voon Pei Jye,1,4,2
+Huang Xiangning,Wu Yi-Long,1,2,5
+Cho Byoung Chul,Wu Yi-Long,1,4,5
+Cho Byoung Chul,Huang Xiangning,1,4,2
+Hamano Hirofumi,Kanda Yasunari,1,3,3
+Kanda Yasunari,Zamami Yoshito,1,3,3
+Lee Se-Hoon,Lu Shun,1,3,2
+Hayashi Hidetoshi,Lee Se-Hoon,1,2,3
+Cheng Ying,Lee Se-Hoon,1,2,3
+Cho Byoung Chul,Lee Se-Hoon,1,4,3
+Hayashi Hidetoshi,Lu Shun,1,2,2
+Cho Byoung Chul,Lu Shun,1,4,2
+Cheng Ying,Hayashi Hidetoshi,1,2,2
+Cho Byoung Chul,Hayashi Hidetoshi,1,4,2
+Cheng Ying,Cho Byoung Chul,1,2,4
+Kim Ho Cheol,Lee Kye Young,1,2,5
+Kim Ho Cheol,Lee Shin Yup,1,2,5
+Kim Ho Cheol,Lee Sang Hoon,1,2,5
+Kim Ho Cheol,Lee Sung Yong,1,2,6
+Kim Ho Cheol,Yoon Seong Hoon,1,2,4
+Jang Tae Won,Kim Ho Cheol,1,4,2
+Chang Yoon Soo,Kim Ho Cheol,1,4,2
+Kim Ho Cheol,Kim Seung Joon,1,2,5
+Kim Ho Cheol,Park Chan Kwon,1,2,4
+Choi Chang-Min,Kim Ho Cheol,1,3,2
+Kim Young-Chul,Park Chan Kwon,1,3,4
+Jung Chi Young,Park Chan Kwon,1,3,4
+Hara Satoshi,Kunimasa Kei,1,3,4
+Hara Satoshi,Oka Toru,1,3,2
+Hara Satoshi,Kamada Risa,1,3,2
+Hara Satoshi,Inoue Takako,1,3,2
