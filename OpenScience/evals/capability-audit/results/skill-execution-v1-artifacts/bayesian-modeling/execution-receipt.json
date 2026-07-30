@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 206,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bayesian-modeling/results.json",
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bayesian-modeling/results.json",
       "sha256": "d4d8dc36ef8e2642629e68c9aa50bf3370284cf59578e3ad2ade3ff7045761b6"
     },
     {
       "bytes": 758,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bayesian-modeling/bayesian-modeling-report.md",
-      "sha256": "04fce379c58db3b68fe83d4a2f3e9787105fcb385e785bc7366f3cf302cb5164"
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bayesian-modeling/bayesian-modeling-report.md",
+      "sha256": "b8671ba5bce46fd348483dad46d07943cc8314dece03bf3e888645b00af6910c"
     }
   ],
-  "finishedAt": "2026-07-19T19:31:21.735772Z",
+  "finishedAt": "2026-07-30T06:48:47.678971Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "bayesian-modeling",
-  "startedAt": "2026-07-19T19:31:21.734285Z",
+  "startedAt": "2026-07-30T06:48:47.678427Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for bayesian-modeling and wrote 2 verified artifacts.",
   "warnings": [

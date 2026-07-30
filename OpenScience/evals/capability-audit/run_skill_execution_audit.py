@@ -35,6 +35,9 @@ def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
         **os.environ,
         "MPLBACKEND": "Agg",
         "PYTHONHASHSEED": "0",
+        # Skill packages ship as installer resources and are digest-pinned, so a
+        # certification run must not leave __pycache__ behind inside them.
+        "PYTHONDONTWRITEBYTECODE": "1",
     }
     return subprocess.run(command, cwd=cwd, env=environment, text=True, capture_output=True, timeout=120, check=False)
 

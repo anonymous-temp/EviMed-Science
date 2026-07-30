@@ -1,6 +1,6 @@
 # statistical-analysis execution report
 
-- Generated: 2026-07-19T19:31:47.368316Z
+- Generated: 2026-07-30T06:49:09.135436Z
 - Engine schema: 1
 
 ## Executed result
@@ -10,10 +10,10 @@
   "association": {
     "intercept": -0.02654514022917559,
     "n": 48,
-    "pValue": 0.04681651170246756,
-    "r": 0.28840980290332485,
+    "pValue": 0.04681651170246771,
+    "r": 0.28840980290332474,
     "slope": 0.598367362355352,
-    "slopeStandardError": 0.29290106587042986,
+    "slopeStandardError": 0.2929010658704299,
     "x": "group",
     "y": "feature_a"
   },

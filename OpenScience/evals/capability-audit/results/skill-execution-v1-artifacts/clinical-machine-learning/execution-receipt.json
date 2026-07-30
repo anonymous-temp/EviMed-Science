@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1298,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/clinical-machine-learning/results.json",
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/clinical-machine-learning/results.json",
       "sha256": "d67f8ea8f8359a94c82f39d9004fad48765f8eb5cf4388413e589d9e82a61b48"
     },
     {
       "bytes": 1830,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/clinical-machine-learning/clinical-machine-learning-report.md",
-      "sha256": "6ed7edadf8c079c3571964e08d798e67eca152e4e298f6ade22d94f0031e4174"
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/clinical-machine-learning/clinical-machine-learning-report.md",
+      "sha256": "0813e848fe489862a1b505bfa269ba5cbe23c7dce25b11bbdd10e75f303fa12a"
     }
   ],
-  "finishedAt": "2026-07-19T19:31:28.781212Z",
+  "finishedAt": "2026-07-30T06:48:53.301929Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "clinical-machine-learning",
-  "startedAt": "2026-07-19T19:31:28.764179Z",
+  "startedAt": "2026-07-30T06:48:53.287940Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for clinical-machine-learning and wrote 2 verified artifacts.",
   "warnings": [
