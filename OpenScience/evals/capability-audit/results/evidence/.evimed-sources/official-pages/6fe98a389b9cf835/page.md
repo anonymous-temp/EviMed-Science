@@ -1,8 +1,8 @@
 # Chest pain - NHS
 
 - Source: https://www.nhs.uk/symptoms/chest-pain/
-- Retrieved: 2026-07-22T16:03:22.301016Z
-- SHA-256: 84a4f414b5b75d30e044666f9876cbfd9c7f44319ebb5653f8dec1b5aeb2968a
+- Retrieved: 2026-07-30T11:09:49.803335Z
+- SHA-256: 6fe98a389b9cf835539e03d1d2ec57d544bac03be7e317d6897da742763fccad
 
 # Chest pain
 

@@ -51,7 +51,7 @@
         "tenantId": "",
         "userId": "",
         "projectId": "",
-        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -60,14 +60,14 @@
       "id": "EVIMED-PATENT:USUS2018/029915",
       "url": "https://d.wanfangdata.com.cn/patent/ChhQYXRlbnROZXdTMjAyNDEwMTIxNTQ1MDUSD1VTVVMyMDE4LzAyOTkxNRoId3UydXZ2dnQ%3D",
       "source": "evimed-patent",
-      "retrievedAt": "2026-07-22T16:03:38.338960Z",
+      "retrievedAt": "2026-07-30T11:10:01.949723Z",
       "title": "BIOMARKERS FOR CANCER THERAPEUTICS"
     },
     {
       "id": "EVIMED-PATENT:USUS2022/019487",
       "url": "https://d.wanfangdata.com.cn/patent/ChhQYXRlbnROZXdTMjAyNDEwMTIxNTQ1MDUSD1VTVVMyMDIyLzAxOTQ4NxoIZmNxcHZ4c3o%3D",
       "source": "evimed-patent",
-      "retrievedAt": "2026-07-22T16:03:38.339007Z",
+      "retrievedAt": "2026-07-30T11:10:01.949739Z",
       "title": "BIOMARKERS FOR IDENTIFYING AND TREATING CANCER PATIENTS"
     }
   ],

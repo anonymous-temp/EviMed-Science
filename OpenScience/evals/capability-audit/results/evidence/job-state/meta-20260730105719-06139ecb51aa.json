@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "jobId": "meta-20260730105719-06139ecb51aa",
+  "status": "blocked",
+  "topic": "SGLT2 inhibitors versus placebo for chronic kidney disease progression in adults",
+  "outputLanguage": "zh",
+  "maxPapers": 20,
+  "analysisType": "pairwise",
+  "userPdfDirectory": null,
+  "ipdData": null,
+  "createdAt": "2026-07-30T10:57:19.741704Z",
+  "updatedAt": "2026-07-30T11:04:52.262969Z",
+  "metaRoot": "/home/coder/workspace/EviMedScience/项目代码/meta",
+  "metaPython": "/home/coder/workspace/EviMedScience/项目代码/meta/.venv/bin/python",
+  "executionEvidence": {
+    "schemaVersion": 1,
+    "agentSourceSha256": "fc4fc322aa5a0f2e31220e4fcb06a56d41a5fd06ac5d36b89ab1c5f229352caa",
+    "agentSourceFiles": 341,
+    "adapterSha256": "186cf07483f83e5ba02c3762f4839df67fcc30ba97297552fb00231501d2f422",
+    "evidenceModuleSha256": "4fea59024d5c7c3a9d6c7b40ba9bb4f58a6887d01292c91f9b4abbbdd8c0209f",
+    "model": "deepseek-v4-pro",
+    "thinking": true,
+    "reasoningEffort": "high"
+  },
+  "outputRoot": "/home/coder/workspace/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/quality-review-20260730/workspace/meta-analysis-runs/meta-20260730105719-06139ecb51aa/output",
+  "workspace": "/home/coder/workspace/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/quality-review-20260730/workspace",
+  "artifacts": [
+    {
+      "kind": "manuscript",
+      "path": "meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.md"
+    },
+    {
+      "kind": "manuscript_pdf",
+      "path": "meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.pdf"
+    },
+    {
+      "kind": "manuscript_docx",
+      "path": "meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.docx"
+    },
+    {
+      "kind": "release_decision",
+      "path": "meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/release_decision.json"
+    },
+    {
+      "kind": "review_package",
+      "path": "meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip"
+    }
+  ],
+  "workerPid": 584915,
+  "startedAt": "2026-07-30T10:57:24.103441Z",
+  "finishedAt": "2026-07-30T11:04:52.262984Z",
+  "returnCode": 2,
+  "projectRelativePath": "meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney",
+  "releaseStatus": "blocked",
+  "nextActions": [
+    "Resolve the blocking issues and rerun article generation.",
+    "Keep the current draft only as a diagnostic artifact."
+  ]
+}
