@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Bot, Clock3, FileCheck2, Search, ServerCrash } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import {
   hasWebApi,
   listWebResearchAgents,

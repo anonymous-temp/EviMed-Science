@@ -1,7 +1,7 @@
 import "./lib/polyfills";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { RouterProvider } from "react-router-dom";
+import { RouterProvider } from "react-router";
 import { ThemeProvider } from "./app/providers/ThemeProvider";
 import { router } from "./app/router";
 import "./index.css";

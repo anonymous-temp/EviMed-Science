@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowRight, Loader2, LockKeyhole, UserRound } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import evimedMark from "@/assets/evimed-mark.svg";
 import {
   fetchWebAuthMethods,

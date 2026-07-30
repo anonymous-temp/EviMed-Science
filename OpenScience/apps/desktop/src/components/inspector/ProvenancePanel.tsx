@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, MessageSquare, Package, RotateCcw } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import type { ProvenanceRecord } from "@ai4s/shared";
 import { listProvenance, readEnvLockfile } from "@/lib/provenance";
 import { useUiStore } from "@/lib/store";

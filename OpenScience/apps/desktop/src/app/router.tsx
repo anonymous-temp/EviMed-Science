@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, type RouteObject } from "react-router-dom";
+import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
 import { AppShell } from "./layout/AppShell";
 import { LiveSessionPage } from "./routes/LiveSessionPage";
 import { FilesPage } from "./routes/FilesPage";

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router";
 import { Bot, Brain, FlaskConical, FolderTree, NotebookPen, PanelLeft, Pencil, Search, Settings, SquarePen, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isTauri } from "@/lib/tauri";
