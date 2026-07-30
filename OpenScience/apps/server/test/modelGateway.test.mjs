@@ -242,10 +242,19 @@ test("model gateway rejects stale tokens, unknown fields, and oversized collecti
   const tooMany = await fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
     method: "POST",
     headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
-    body: JSON.stringify({ messages: Array.from({ length: 257 }, () => ({ role: "user", content: "x" })) }),
+    body: JSON.stringify({ messages: Array.from({ length: 1025 }, () => ({ role: "user", content: "x" })) }),
   });
   assert.equal(tooMany.status, 400);
-  assert.equal(calls, 0);
+
+  // A long specialist run legitimately reaches several hundred messages and
+  // must still be forwarded.
+  const longRun = await fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
+    body: JSON.stringify({ messages: Array.from({ length: 400 }, () => ({ role: "user", content: "x" })) }),
+  });
+  assert.notEqual(longRun.status, 400);
+  assert.equal(calls, 1);
 });
 
 test("model gateway maps upstream errors and timeouts to redacted stable errors", async (t) => {
@@ -331,4 +340,13 @@ test("production model gateway sends credentials only to the exact official Deep
     authorization: "Bearer server-only-test-secret",
     redirect: "error",
   });
+});
+
+test("the message ceiling accommodates a long specialist run and stays configurable", async () => {
+  const config = loadConfig({ dataDir: "/tmp/os-model-gateway-messages" });
+  assert.equal(config.modelGatewayMaxMessages, 1024);
+  assert.equal(
+    loadConfig({ dataDir: "/tmp/os-model-gateway-messages", modelGatewayMaxMessages: 64 }).modelGatewayMaxMessages,
+    64,
+  );
 });
