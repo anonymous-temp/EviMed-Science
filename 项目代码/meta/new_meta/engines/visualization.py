@@ -30,6 +30,12 @@ def _detect_chinese_font() -> str:
     for c in candidates:
         if c in available:
             return c
+    # Linux hosts commonly ship one pan-CJK family registered under a regional
+    # name such as "Noto Sans CJK JP". It carries the Simplified Chinese
+    # glyphs, so take any CJK family rather than rendering tofu boxes.
+    fallback = sorted(name for name in available if "CJK" in name and "Serif" not in name)
+    if fallback:
+        return fallback[0]
     logger.warning("No Chinese-capable font found; Chinese labels may not render correctly")
     return ""
 

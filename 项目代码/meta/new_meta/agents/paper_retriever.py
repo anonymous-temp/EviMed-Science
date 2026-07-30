@@ -1453,6 +1453,7 @@ class PaperRetriever(BaseAgent):
                 self.log(f"年份过滤(合并后): {before} → {len(all_papers)}")
 
         all_papers = _rank_search_results(all_papers, query=query)
+        deduplicated = len(all_papers)
 
         # Apply user/requested cap to the merged set, not just PubMed.
         all_papers = self._cap_results(all_papers, max_results, "Search")
@@ -1460,7 +1461,8 @@ class PaperRetriever(BaseAgent):
         # PRISMA: records_identified = pre-dedup total (sum of all sources)
         project.prisma.records_from_database = n_db_raw + n_pm_raw + n_multi_raw + n_registry_raw
         project.prisma.records_identified = n_db_raw + n_pm_raw + n_multi_raw + n_registry_raw
-        project.prisma.records_after_dedup = len(all_papers)
+        project.prisma.records_after_dedup = deduplicated
+        project.prisma.set_records_not_screened(deduplicated - len(all_papers), "relevance cap before screening")
         self.log(
             f"Combined search: {len(all_papers)} unique papers "
             f"(raw: {n_db_raw} DB + {n_pm_raw} PubMed + {n_multi_raw} fallback + "
@@ -1603,13 +1605,15 @@ class PaperRetriever(BaseAgent):
         for p in all_papers:
             p.pop("_monotherapy_priority", None)
 
+        deduplicated = len(all_papers)
         all_papers = self._cap_results(all_papers, max_results, "Monotherapy-priority search")
 
         # PRISMA counts
         total_raw = n_mono_db + n_mono_pm + n_broad_db + n_broad_pm
         project.prisma.records_from_database = n_mono_db + n_broad_db
         project.prisma.records_identified = total_raw
-        project.prisma.records_after_dedup = len(all_papers)
+        project.prisma.records_after_dedup = deduplicated
+        project.prisma.set_records_not_screened(deduplicated - len(all_papers), "relevance cap before screening")
         self.log(f"单药优先检索合计: {len(all_papers)} unique papers "
                  f"(Pass1: {n_mono_db}+{n_mono_pm}, Pass2 补充: {added})")
 

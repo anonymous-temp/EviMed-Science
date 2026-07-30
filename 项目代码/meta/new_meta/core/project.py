@@ -360,6 +360,10 @@ class PRISMAFlow:
     def __init__(self):
         self.records_identified = 0
         self.records_after_dedup = 0
+        # Relevance caps and date filters remove records before anyone screens
+        # them. PRISMA 2020 keeps that separate from duplicate removal.
+        self.records_not_screened = 0
+        self.records_not_screened_reasons: dict[str, int] = {}
         self.title_abstract_screened = 0
         self.title_abstract_excluded = 0
         self.title_abstract_exclusion_reasons: dict[str, int] = {}
@@ -371,6 +375,16 @@ class PRISMAFlow:
         self.records_from_database: int = 0
         self.records_from_user_upload: int = 0
 
+    def set_records_not_screened(self, count: int, reason: str) -> None:
+        """Record records dropped after deduplication but before screening."""
+        count = max(0, int(count))
+        if not count:
+            return
+        self.records_not_screened += count
+        self.records_not_screened_reasons[reason] = (
+            self.records_not_screened_reasons.get(reason, 0) + count
+        )
+
     def to_dict(self) -> dict:
         dup_removed = max(0, self.records_identified - self.records_after_dedup)
         return {
@@ -378,6 +392,9 @@ class PRISMAFlow:
                 "records_identified": self.records_identified,
                 "records_after_dedup": self.records_after_dedup,
                 "duplicates_removed": dup_removed,
+                "records_not_screened": self.records_not_screened,
+                "automation_excluded": self.records_not_screened,
+                "records_not_screened_reasons": self.records_not_screened_reasons,
                 "records_from_database": self.records_from_database,
                 "records_from_user_upload": self.records_from_user_upload,
             },
@@ -403,6 +420,8 @@ class PRISMAFlow:
         ident = data.get("identification", {})
         pf.records_identified = ident.get("records_identified", 0)
         pf.records_after_dedup = ident.get("records_after_dedup", 0)
+        pf.records_not_screened = ident.get("records_not_screened", 0)
+        pf.records_not_screened_reasons = ident.get("records_not_screened_reasons", {})
         pf.records_from_database = ident.get("records_from_database", 0)
         pf.records_from_user_upload = ident.get("records_from_user_upload", 0)
         screen = data.get("screening", {})

@@ -79,6 +79,8 @@ class ReportState(BaseModel):
     # PRISMA flow numbers (single source of truth)
     prisma_records_identified: int = 0
     prisma_after_dedup: int = 0
+    prisma_not_screened: int = 0
+    prisma_screened: int = 0
     prisma_full_text_assessed: int = 0
     prisma_studies_included: int = 0
 
@@ -133,6 +135,7 @@ def build_report_state(
     identification = prisma.get("identification", {}) if isinstance(prisma.get("identification", {}), dict) else {}
     eligibility = prisma.get("eligibility", {}) if isinstance(prisma.get("eligibility", {}), dict) else {}
     included = prisma.get("included", {}) if isinstance(prisma.get("included", {}), dict) else {}
+    screening = prisma.get("screening", {}) if isinstance(prisma.get("screening", {}), dict) else {}
 
     search_end_year = _parse_date_range_end(date_range) if date_range else None
     if search_end_year is None:
@@ -153,6 +156,8 @@ def build_report_state(
         n_meta_eligible=len(meta_ids),
         prisma_records_identified=identification.get("records_identified", 0),
         prisma_after_dedup=identification.get("records_after_dedup", 0),
+        prisma_not_screened=identification.get("records_not_screened", 0),
+        prisma_screened=screening.get("title_abstract_screened", 0),
         prisma_full_text_assessed=eligibility.get("full_text_assessed", 0),
         prisma_studies_included=included.get("studies_included", 0),
         prisma_source_database=identification.get("records_from_database", 0),

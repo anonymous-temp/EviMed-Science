@@ -287,7 +287,7 @@ class SectionWritersMixin:
             full_text_assessed = elig.get("full_text_assessed", 0)
             included = incl.get("studies_included", 0)
         if rs is not None:
-            screened = rs.prisma_after_dedup
+            screened = rs.prisma_screened or rs.prisma_after_dedup
         else:
             screened = prisma.get("screening", {}).get("title_abstract_screened", 0)
 
