@@ -44,6 +44,21 @@ if _chosen_font:
     plt.rcParams["font.sans-serif"] = [_chosen_font] + plt.rcParams.get("font.sans-serif", [])
 plt.rcParams["axes.unicode_minus"] = False
 
+
+def _set_row_labels(ax, labels, fontsize: int = 7) -> None:
+    """Label rows in monospace so the effect columns line up.
+
+    No monospace font on a typical Linux host carries CJK glyphs, so a row that
+    contains Chinese — the pooled-effect row — falls back to the sans-serif
+    family that does. Keeping it per row leaves the ASCII rows aligned.
+    """
+    ax.set_yticklabels(labels, fontsize=fontsize, fontfamily="monospace")
+    if not _chosen_font:
+        return
+    for tick, label in zip(ax.get_yticklabels(), labels):
+        if any("\u4e00" <= character <= "\u9fff" for character in str(label)):
+            tick.set_fontfamily(_chosen_font)
+
 from new_meta.schemas.meta_result import PooledEffect, LeaveOneOutResult, StudyEffect, CumulativeResult
 
 _LOG_MEASURES = {"OR", "RR", "HR", "IRR"}
@@ -139,7 +154,7 @@ def forest_plot(
     # Labels
     all_y = y_positions + [p_y]
     ax.set_yticks(all_y)
-    ax.set_yticklabels(labels, fontsize=7, fontfamily="monospace")
+    _set_row_labels(ax, labels)
     model_label = "\u968f\u673a\u6548\u5e94\u6a21\u578b" if (zh and pooled.model == "random") else ("\u56fa\u5b9a\u6548\u5e94\u6a21\u578b" if zh else f"{pooled.model}-effect model")
     ax.set_xlabel(f"{pooled.effect_measure} ({model_label})", fontsize=10)
 
@@ -687,7 +702,7 @@ def sensitivity_plot(
     labels = [f"{excl_prefix} {r.excluded_study_label}  \u2192  {r.pooled_effect:.2f} [{r.ci_lower:.2f}, {r.ci_upper:.2f}]  I\u00b2={r.i_squared:.1f}%"
               for r in results]
     ax.set_yticks(y_positions)
-    ax.set_yticklabels(labels, fontsize=7, fontfamily="monospace")
+    _set_row_labels(ax, labels)
     ax.set_xlabel(f"{effect_measure}", fontsize=10)
     ax.set_title("\u9010\u4e00\u5254\u9664\u654f\u611f\u6027\u5206\u6790" if zh else "Leave-one-out Sensitivity Analysis", fontsize=12, fontweight="bold")
 
@@ -749,7 +764,7 @@ def cumulative_forest_plot(
     labels = [f"+{r.study_label} (k={r.n_studies})  {r.pooled_effect:.2f} [{r.ci_lower:.2f}, {r.ci_upper:.2f}]"
               for r in results]
     ax.set_yticks(y_positions)
-    ax.set_yticklabels(labels, fontsize=7, fontfamily="monospace")
+    _set_row_labels(ax, labels)
     ax.set_xlabel(f"{effect_measure}", fontsize=10)
     ax.set_title(title, fontsize=12, fontweight="bold")
 
