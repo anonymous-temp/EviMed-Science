@@ -4304,6 +4304,15 @@ def main():
                 else:
                     print(f"  Directory not found: {fallback_dir}")
 
+        # PRISMA 2020 counts records found outside the database search on their
+        # own identification arm. A supplied full text that matched a screened
+        # record is a source for that record, not a new record; an unmatched one
+        # is a record this search never found.
+        if extra_user_papers:
+            project.prisma.records_from_user_upload = len(extra_user_papers)
+            project.prisma.records_identified += len(extra_user_papers)
+            project.prisma.records_after_dedup += len(extra_user_papers)
+
         # Combine all papers with PDF
         papers_with_pdf, papers_without_pdf = _partition_full_text_sources(
             ta_included_papers
