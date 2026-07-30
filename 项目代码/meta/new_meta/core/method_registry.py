@@ -99,6 +99,16 @@ class MethodRegistry:
                 plugin.blocking_reason
                 or f"{spec.family.value} has not passed production validation"
             )
+            # A design list that mixes one unvalidated design into an otherwise
+            # supported review blocks the whole run, and the reason alone reads
+            # as "this review family is unsupported". Name the narrower
+            # capability that would run so the eligibility can be tightened.
+            alternative = self._narrower_production_capability(spec)
+            if alternative:
+                blocking_reasons.append(
+                    f"restricting eligible designs to {', '.join(alternative.supported_designs)} "
+                    f"uses {alternative.capability_id}, which is production validated"
+                )
         elif capability_status is CapabilityStatus.VALIDATING and not allow_validating:
             blocking_reasons.append(
                 f"{(capability.capability_id if capability else spec.family.value)} is still "
@@ -149,6 +159,24 @@ class MethodRegistry:
             execution_allowed=not blocking_reasons,
             blocking_reasons=blocking_reasons,
         )
+
+
+    def _narrower_production_capability(self, spec):
+        """A production capability in this family covering a subset of the designs."""
+        if not self._validation_manifest:
+            return None
+        requested = set(spec.study_designs or [])
+        candidates = [
+            item for item in self._validation_manifest.capabilities
+            if item.family == spec.family.value
+            and item.release_status is CapabilityStatus.PRODUCTION
+            and set(item.supported_designs) < requested
+            and spec.outcome_type in item.supported_outcome_types
+            and spec.requested_effect_measure in item.supported_effect_measures
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: len(item.supported_designs))
 
 
 def default_method_registry() -> MethodRegistry:
