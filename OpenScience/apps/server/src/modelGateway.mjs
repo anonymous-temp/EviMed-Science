@@ -167,8 +167,13 @@ function normalizedRequest(body, config) {
   if (Object.keys(body).some((key) => !allowedRequestFields.has(key))) {
     throw gatewayError(400, "model_gateway_field_invalid", "The model request contains an unsupported field.");
   }
-  if (!Array.isArray(body.messages) || body.messages.length < 1 || body.messages.length > 256) {
-    throw gatewayError(400, "model_gateway_messages_invalid", "The model request must contain 1 to 256 messages.");
+  const maxMessages = Math.max(1, Number(config.modelGatewayMaxMessages) || 1024);
+  if (!Array.isArray(body.messages) || body.messages.length < 1 || body.messages.length > maxMessages) {
+    throw gatewayError(
+      400,
+      "model_gateway_messages_invalid",
+      `The model request must contain 1 to ${maxMessages} messages.`,
+    );
   }
   body.messages.forEach(validateMessage);
   if (body.tools != null) {

@@ -712,6 +712,12 @@ export function loadConfig(overrides = {}) {
     modelGatewayTimeoutMs: Number(
       overrides.modelGatewayTimeoutMs ?? process.env.OPEN_SCIENCE_MODEL_GATEWAY_TIMEOUT_MS ?? 300_000,
     ),
+    // Every tool call and result is a message, so a systematic review run
+    // reaches several hundred long before it is finished. Request size stays
+    // bounded by modelGatewayMaxBodyBytes; this is the structural guard.
+    modelGatewayMaxMessages: Number(
+      overrides.modelGatewayMaxMessages ?? process.env.OPEN_SCIENCE_MODEL_GATEWAY_MAX_MESSAGES ?? 1024,
+    ),
     modelGatewayMaxBodyBytes: Number(
       overrides.modelGatewayMaxBodyBytes ?? process.env.OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES ?? 2 * 1024 * 1024,
     ),
