@@ -913,6 +913,9 @@ class WritingAgent(
         # 【一】结论确定性措辞修复
         manuscript = self._enforce_hedged_language(manuscript)
 
+        # 【一b】移除凭空出现的统计软件声明
+        manuscript = self._remove_fabricated_software_claims(manuscript)
+
         # 【八+九】Narrative 模式约束 + 自动一致性检查
         if self._narrative_mode:
             manuscript = self._enforce_narrative_constraints(manuscript)
