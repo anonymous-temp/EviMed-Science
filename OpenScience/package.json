@@ -53,7 +53,7 @@
     "lint": "pnpm --filter @ai4s/desktop lint"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.22.0"
   },
   "packageManager": "pnpm@9.4.0",
   "pnpm": {
@@ -64,6 +64,11 @@
       "exceljs>uuid": "11.1.1",
       "pptx-preview>echarts": "6.1.0",
       "pptx-preview>uuid": "11.1.1"
+    },
+    "auditConfig": {
+      "ignoreCves": [
+        "CVE-2026-14257"
+      ]
     }
   }
 }
