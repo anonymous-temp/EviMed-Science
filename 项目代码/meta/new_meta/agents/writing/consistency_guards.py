@@ -37,6 +37,27 @@ class ConsistencyGuardsMixin:
         (r'confirmed\s+that\b', 'suggested that'),
     ]
 
+    # The prompt already forbids describing software in Methods, and the writer
+    # still claimed "所有分析在R中完成" on a run whose statistics ran in this
+    # package's numpy and scipy engines. A named tool the pipeline never used is
+    # a fabricated method, so remove the sentence rather than hedge it.
+    _SOFTWARE_CLAIM_PATTERNS = [
+        re.compile(r"[^。；\n]*(?:所有)?(?:统计)?(?:分析|计算)[^。；\n]{0,20}(?:在|使用|采用|通过)\s*"
+                   r"(?:R|SAS|SPSS|Stata|RevMan|Comprehensive\s*Meta-?Analysis|CMA)(?![A-Za-z])[^。；\n]*[。；]?"),
+        re.compile(r"[^.;\n]*\b(?:analyses|analysis|calculations?)\b[^.;\n]{0,40}"
+                   r"\b(?:performed|conducted|carried out|done)\b[^.;\n]{0,20}\b(?:in|using|with)\s+"
+                   r"(?:R|SAS|SPSS|Stata|RevMan|CMA)\b[^.;\n]*[.;]?", re.IGNORECASE),
+    ]
+
+    def _remove_fabricated_software_claims(self, manuscript: str) -> str:
+        """Drop Methods sentences naming statistical software the run never used."""
+        for pattern in self._SOFTWARE_CLAIM_PATTERNS:
+            updated = pattern.sub("", manuscript)
+            if updated != manuscript:
+                self.log("移除未使用的统计软件声明", level="warning")
+                manuscript = updated
+        return re.sub(r"\n{3,}", "\n\n", manuscript)
+
     def _enforce_hedged_language(self, manuscript: str) -> str:
         """Replace definitive claims with hedged language throughout the manuscript."""
         # Patterns also covered by narrative constraints — skip in narrative mode
