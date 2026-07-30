@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { stringify } from "yaml";
+import { generatedRuntimeAgent } from "../src/runtimeManager.mjs";
 import {
   EVIMED_AGENT_COMPLETION_CHECKS,
   EVIMED_AGENT_DATA_SOURCES,
@@ -359,4 +360,35 @@ test("rejects symlinked roots, package directories, and package files", async (t
       await assert.rejects(loadAgentRegistry({ packageDirs: [root] }), /agent\.yaml.*symlink/i);
     });
   });
+});
+
+test("a specialist that writes outputs is told to deliver the report, not the file list", () => {
+  const prompt = generatedRuntimeAgent({
+    title: "Clinical Evidence Synthesis",
+    description: "synthesize clinical evidence",
+    skill: "clinical-evidence-synthesis",
+    runtimeAgent: "evimed-clinical-evidence-synthesis",
+    companionSkills: [],
+    requiredTools: ["evimed_literature_search"],
+    optionalTools: [],
+    outputs: [{ path: "clinical-evidence-report.md", required: true }],
+  });
+  assert.match(prompt, /Open with the conclusion/);
+  assert.match(prompt, /A list of file names is not an answer\./);
+  assert.match(prompt, /Never paste a tool log, a JSON artifact, a hash, or an internal marker/);
+});
+
+test("an answer-only package keeps its reply contract unchanged", () => {
+  const prompt = generatedRuntimeAgent({
+    title: "Open-Domain Answer",
+    description: "answer open-domain questions",
+    skill: "open-domain-answer",
+    runtimeAgent: "evimed-open-domain-answer",
+    companionSkills: [],
+    requiredTools: ["evimed_literature_search"],
+    optionalTools: [],
+    outputs: [],
+  });
+  assert.match(prompt, /delivers its answer directly in the assistant reply/);
+  assert.doesNotMatch(prompt, /A list of file names is not an answer\./);
 });

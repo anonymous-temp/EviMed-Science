@@ -960,7 +960,7 @@ function managedAgentMarker(skill, agent) {
   return `<!-- evimed-managed-agent: ${agent}; skill: ${skill} -->`;
 }
 
-function generatedRuntimeAgent(manifest) {
+export function generatedRuntimeAgent(manifest) {
   const description = `EviMed ${manifest.title}: ${manifest.description}`;
   const skills = [...(manifest.companionSkills ?? []), manifest.skill];
   const skillLines = skills.map((skill, index) => `${index + 1}. \`${skill}\``).join("\n");
@@ -969,8 +969,21 @@ function generatedRuntimeAgent(manifest) {
   const outputLines = manifest.outputs
     .map((output) => `- \`${output.path}\` (${output.required ? "required" : "optional"})`)
     .join("\n");
+  // Writing the files is not delivering the work. Without this the reply comes
+  // back as running commentary plus a table of file names, and the reader never
+  // sees the report at all.
+  const replyContract = manifest.outputs.length > 0
+    ? `Your reply is what the reader receives. Write it in the user's language as the report's own summary:
+
+1. Open with the conclusion — the bottom line in one to three sentences, including any action or safety implication.
+2. Give the findings that carry that conclusion, with the same numbered citations the report uses, and say how strong the evidence is and what it rests on.
+3. State the material uncertainty, the evidence gaps, and anything that still needs human review.
+4. Close with one short list of the files you wrote.
+
+Never open with a plan, a restatement of the question, or search narration. Never paste a tool log, a JSON artifact, a hash, or an internal marker into the reply. A list of file names is not an answer.`
+    : "";
   const outputContract = manifest.outputs.length > 0
-    ? `Write package outputs only to these declared workspace-relative paths:\n${outputLines}\n\nDo not call undeclared EviMed tools or write package outputs outside the declared paths.`
+    ? `Write package outputs only to these declared workspace-relative paths:\n${outputLines}\n\nDo not call undeclared EviMed tools or write package outputs outside the declared paths.\n\n${replyContract}`
     : "This package delivers its answer directly in the assistant reply. Do not write package output files, and do not call undeclared EviMed tools.";
   return `---
 description: ${JSON.stringify(description)}

@@ -182,21 +182,35 @@ def start_runtime(base: str, headers: dict[str, str], opener: urllib.request.Ope
     return runtime_url.rstrip("/")
 
 
-def message_text(messages: list[dict[str, Any]], role: str) -> str:
-    parts: list[str] = []
+def message_texts(messages: list[dict[str, Any]], role: str) -> list[str]:
+    """Return one entry per message, in order, for the given role."""
+    texts: list[str] = []
     for message in messages:
         if not isinstance(message, dict) or message.get("info", {}).get("role") != role:
             continue
-        for part in message.get("parts") or []:
-            if (
-                isinstance(part, dict)
-                and part.get("type") == "text"
-                and not part.get("synthetic")
-                and isinstance(part.get("text"), str)
-                and part["text"].strip()
-            ):
-                parts.append(part["text"].strip())
-    return "\n\n".join(parts)
+        parts = [
+            part["text"].strip()
+            for part in message.get("parts") or []
+            if isinstance(part, dict)
+            and part.get("type") == "text"
+            and not part.get("synthetic")
+            and isinstance(part.get("text"), str)
+            and part["text"].strip()
+        ]
+        if parts:
+            texts.append("\n\n".join(parts))
+    return texts
+
+
+def message_text(messages: list[dict[str, Any]], role: str) -> str:
+    """The reply a user reads.
+
+    An agent narrates between tool calls, and every one of those turns is an
+    assistant message. Joining them all judges the transcript rather than the
+    answer, so take the last message the agent produced.
+    """
+    texts = message_texts(messages, role)
+    return texts[-1] if texts else ""
 
 
 def tool_call_count(messages: list[dict[str, Any]]) -> int:
@@ -281,12 +295,19 @@ def collect_one(
         opener, "GET", f"{runtime_url}/session/{urllib.parse.quote(session_id)}/message", headers=headers
     )
     messages = messages_payload if isinstance(messages_payload, list) else []
-    assistant_text = message_text(messages, "assistant")
+    assistant_messages = message_texts(messages, "assistant")
+    assistant_text = assistant_messages[-1] if assistant_messages else ""
     artifacts = capture_artifacts(base, headers, opener, terminal.get("artifacts") or [])
-    artifact_texts = [
-        item["data"] for item in artifacts if item.get("encoding") == "utf8" and isinstance(item.get("data"), str)
+    # Prefer the written report over the largest file: a specialist run's biggest
+    # utf8 artifact is usually a JSON evidence snapshot, and appending that to the
+    # answer is what makes the reply unreadable.
+    readable = [
+        item for item in artifacts
+        if item.get("encoding") == "utf8" and isinstance(item.get("data"), str) and item["data"].strip()
     ]
-    artifact_text = max(artifact_texts, key=len) if artifact_texts else ""
+    reports = [item for item in readable if str(item.get("path", "")).lower().endswith((".md", ".markdown"))]
+    preferred = reports or [item for item in readable if not str(item.get("path", "")).lower().endswith(".json")]
+    artifact_text = max(preferred, key=lambda item: len(item["data"]))["data"] if preferred else ""
 
     answer = assistant_text
     if question["tier"] == "report" and artifact_text:
@@ -308,6 +329,7 @@ def collect_one(
             "model": terminal.get("model"),
             "errorCode": terminal.get("errorCode"),
             "qualityNotices": terminal.get("qualityNotices") or [],
+            "narrationMessages": max(0, len(assistant_messages) - 1),
             "sessionId": session_id,
             "toolCalls": tool_call_count(messages),
             "artifacts": [item.get("path", "") for item in artifacts],
