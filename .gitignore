@@ -43,3 +43,6 @@ __pycache__/
 dist/
 build/
 coverage/
+
+# Per-machine agent tool settings
+**/.claude/settings.local.json
