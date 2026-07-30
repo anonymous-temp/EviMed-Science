@@ -345,6 +345,7 @@ export function createWebApiApp(overrides = {}) {
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
     model: `deepseek/${config.deepseekModel}`,
+    monitorMaxPolls: Math.max(1, Math.ceil(config.agentRunMonitorTimeoutMs / 500)),
     readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),

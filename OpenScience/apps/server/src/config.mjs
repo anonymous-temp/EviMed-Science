@@ -536,6 +536,11 @@ export function loadConfig(overrides = {}) {
     runtimeQuotaCheckIntervalMs: Number(
       overrides.runtimeQuotaCheckIntervalMs ?? process.env.OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS ?? 30_000,
     ),
+    // A systematic review screens and extracts hundreds of records, so the run
+    // monitor has to outlast the specialist rather than the other way round.
+    agentRunMonitorTimeoutMs: Number(
+      overrides.agentRunMonitorTimeoutMs ?? process.env.OPEN_SCIENCE_AGENT_RUN_MONITOR_TIMEOUT_MS ?? 4 * 60 * 60_000,
+    ),
     maxRuntimeProxyConnections: Number(
       overrides.maxRuntimeProxyConnections ?? process.env.OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS ?? 64,
     ),

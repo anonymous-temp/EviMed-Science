@@ -37,7 +37,12 @@ def test_search_and_fetch_caps_merged_internal_db_results(monkeypatch, tmp_path:
     assert len(papers) == 10
     assert project.prisma.records_identified == 50
     assert project.prisma.records_from_database == 50
-    assert project.prisma.records_after_dedup == 10
+    # 50 distinct records survive deduplication; the cap then withholds 40 from
+    # screening, and PRISMA has to report that separately from duplicates.
+    assert project.prisma.records_after_dedup == 50
+    assert project.prisma.records_not_screened == 40
+    assert project.prisma.records_not_screened_reasons == {"relevance cap before screening": 40}
+    assert project.prisma.to_dict()["identification"]["duplicates_removed"] == 0
 
 
 def test_search_and_fetch_passes_date_range_to_pubmed(monkeypatch, tmp_path: Path) -> None:

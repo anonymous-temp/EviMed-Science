@@ -127,3 +127,12 @@ test("opt-in local auto configuration loads mode-600 EviMed service secrets", as
     await rm(parent, { recursive: true, force: true });
   }
 });
+
+test("the agent run monitor outlasts a systematic review by default", () => {
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-monitor" }).agentRunMonitorTimeoutMs, 4 * 60 * 60_000);
+});
+
+test("the agent run monitor timeout is configurable", () => {
+  const config = loadConfig({ dataDir: "/tmp/os-config-monitor", agentRunMonitorTimeoutMs: 90 * 60_000 });
+  assert.equal(config.agentRunMonitorTimeoutMs, 90 * 60_000);
+});
