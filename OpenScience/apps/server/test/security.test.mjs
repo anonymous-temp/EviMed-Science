@@ -160,3 +160,42 @@ test("appendJsonLineNoFollow refuses symlinked rotation targets", async () => {
   );
   assert.equal(await readFile(outside, "utf8"), "{\"message\":\"outside\"}\n");
 });
+
+test("Linux scoped reads survive a concurrent atomic replace of the same file", { skip: process.platform !== "linux" }, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-web-security-replace-"));
+  const file = path.join(root, "ledger.jsonl");
+  await writeFile(file, "seed\n", "utf8");
+  let missing = 0;
+  const replaces = (async () => {
+    for (let round = 0; round < 1200; round += 1) {
+      await writeFileAtomicNoFollow(root, file, `line ${round}\n`, { encoding: "utf8" });
+    }
+  })();
+  const reads = (async () => {
+    for (let round = 0; round < 1200; round += 1) {
+      try {
+        await readFileNoFollow(root, file, "utf8");
+      } catch (error) {
+        if (error?.code === "ENOENT" || error?.code === "file_not_found") missing += 1;
+        else throw error;
+      }
+    }
+  })();
+  try {
+    await Promise.all([replaces, reads]);
+    assert.equal(missing, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Linux descriptor checks do not accept a live file named like an unlinked one", { skip: process.platform !== "linux" }, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-web-security-deleted-"));
+  const file = path.join(root, "report (deleted)");
+  await writeFile(file, "present\n", "utf8");
+  try {
+    assert.equal(await readFileNoFollow(root, file, "utf8"), "present\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

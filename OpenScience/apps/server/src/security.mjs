@@ -384,11 +384,35 @@ function descriptorPath(handle) {
   return process.platform === "linux" ? `/proc/self/fd/${handle.fd}` : null;
 }
 
+const deletedDescriptorSuffix = " (deleted)";
+
+/** Resolve the path a descriptor was opened from.
+ *  Atomically replacing a file unlinks the inode that an already-open handle
+ *  holds, and realpath cannot resolve a descriptor whose inode has no link.
+ *  Linux still records the path it was opened from, suffixed with " (deleted)",
+ *  and nlink === 0 proves the inode really is unlinked, so a live file whose
+ *  name merely ends in that suffix resolves above and never reaches the
+ *  fallback. Without this the reader of any concurrently replaced file sees a
+ *  spurious "no such file". */
+async function descriptorRealPath(handle) {
+  const descriptor = descriptorPath(handle);
+  try {
+    return await fs.realpath(descriptor);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  const [link, stat] = await Promise.all([fs.readlink(descriptor), handle.stat()]);
+  if (stat.nlink > 0 || !link.endsWith(deletedDescriptorSuffix)) {
+    throw new HttpError(403, "path_forbidden", "opened file has no resolvable path.");
+  }
+  return link.slice(0, -deletedDescriptorSuffix.length);
+}
+
 async function assertHandleWithinRoot(rootDir, handle) {
   const stat = await handle.stat();
   if (process.platform === "linux") {
     const root = await fs.realpath(path.resolve(rootDir));
-    const actual = await fs.realpath(descriptorPath(handle));
+    const actual = await descriptorRealPath(handle);
     if (actual !== root && !actual.startsWith(root + path.sep)) {
       throw new HttpError(403, "path_forbidden", "opened file escapes the workspace.");
     }
