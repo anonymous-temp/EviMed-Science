@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-07-30T11:15:33Z",
+  "mode": "live",
+  "baseUrl": "http://127.0.0.1:8798",
+  "answers": [
+    {
+      "id": "q-direct-01",
+      "tier": "direct",
+      "question": "二甲双胍治疗2型糖尿病的主要作用机制是什么？",
+      "answer": "这是直接类问题，我先做一次快速文献检索以确认当前对二甲双胍作用机制的最新认识。\n\n## 二甲双胍治疗2型糖尿病的主要作用机制\n\n### 核心结论\n\n二甲双胍的核心降糖机制是**抑制肝脏糖异生、减少肝糖输出**，而其上游药理学起点是**线粒体呼吸链复合体I的温和抑制**。这一作用改变细胞能量状态（AMP/ATP比值升高），进而激活AMP活化蛋白激酶（AMPK），并通过AMPK依赖和非依赖两条通路实现代谢效应。此外，近年研究确认肠道也是二甲双胍发挥降糖作用的重要靶器官。\n\n### 关键机制分述\n\n**1. 线粒体复合体I抑制 → 能量应激（起始事件）**\n\n二甲双胍通过有机阳离子转运体OCT1进入肝细胞后，在线粒体内膜富集，部分抑制呼吸链复合体I，引起温和且可控的ATP合成下降。这一细胞能量应激是后续几乎所有效应的共同起点 [1][2]。\n\n**2. AMPK激活（中心枢纽）**\n\nAMP/ATP比值升高激活LKB1-AMPK通路。AMPK作为细胞能量感受器，磷酸化多个下游靶点：\n\n- **肝脏**：抑制糖异生关键酶基因转录（PEPCK、G6Pase），并直接磷酸化CRTC2使其出核失活，阻断CREB介导的糖异生程序；同时促进脂肪酸氧化、减少脂质合成，改善肝脏胰岛素敏感性 [1][3]。\n- **骨骼肌**：促进GLUT4转位至细胞膜，增强外周组织对葡萄糖的摄取利用。\n\n**3. AMPK非依赖通路：mGPD抑制**\n\n二甲双胍直接抑制线粒体甘油-3-磷酸脱氢酶（mGPD），增加胞质NADH/NAD⁺比值，阻断甘油到葡萄糖的底物循环，从氧化还原层面抑制糖异生——该作用不依赖AMPK [1]。\n\n**4. 肠道机制（近十年重要新认知）**\n\n二甲双胍在肠道的浓度远高于血浆，其肠源性效应包括：\n- 促进肠道L细胞分泌GLP-1，增强葡萄糖依赖的胰岛素分泌\n- 改变肠道菌群组成（如增加Akkermansia muciniphila丰度）\n- 延缓肠道葡萄糖吸收\n- 通过肠-脑轴（迷走神经传入）间接影响肝糖代谢\n\n### 不确定性及证据层级\n\n上述机制整合了数十年基础研究与临床药理数据，属于成熟的药理学知识体系。2026年Pharmacological Reviews发表的最新综述对二甲双胍降糖机制做了系统更新 [1]，确认了以肝脏线粒体抑制-AMPK轴为核心、肠道作用为重要补充的多靶点模型。但需要指出：\n\n- 各项机制在人体内的相对贡献权重（肝脏 vs 肠道 vs AMPK依赖 vs 非依赖）尚无精确定量共识\n- 临床剂量（常规1.5–2.0 g/日）下，各靶点的占有率和对总体降糖效果的贡献比例仍在研究中\n- 本次检索仅获取到题录级证据，未获取全文——但机制内容为学界广泛共识，并非依赖单篇文献的推断\n\n---\n\n**参考文献**\n\n[1] Drewe J, Foretz M, Krähenbühl S. Metformin—mechanisms of its glycemia-reducing effect. *Pharmacol Rev*. 2026;100106. https://pubmed.ncbi.nlm.nih.gov/41389439/\n\n[2] Wang Y, An H, Liu T, et al. Metformin Improves Mitochondrial Respiratory Activity through Activation of AMPK. *Cell Rep*. 2019;29(6):1510-1521. https://pubmed.ncbi.nlm.nih.gov/31693892/\n\n[3] Sliwinska A, Drzewoski J. Molecular action of metformin in hepatocytes: an updated insight. *Curr Diabetes Rev*. 2015;11(3):175-181. https://pubmed.ncbi.nlm.nih.gov/25808533/",
+      "run": {
+        "runId": "run_c3590863e574862d1f26e6930d043f33",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 58225,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": null,
+        "qualityNotices": [],
+        "sessionId": "ses_04d445a84ffeZjSzIhxvFmLH6M",
+        "toolCalls": 4,
+        "artifacts": [],
+        "assistantChars": 1715,
+        "reportArtifactChars": 0
+      },
+      "error": null
+    }
+  ]
+}
