@@ -1,0 +1,566 @@
+source,target,weight,source_freq,target_freq
+Hallym University Sacred Heart Hospital,Korea University Guro Hospital,6,8,6
+Hallym University Sacred Heart Hospital,Yeouido St. Mary's Hospital,5,8,5
+Asan Medical Center,Hallym University Sacred Heart Hospital,5,5,8
+Korea University Guro Hospital,Pusan National University Yangsan Hospital,5,6,5
+Inha University Hospital,Korea University Guro Hospital,5,6,6
+Asan Medical Center,Yeouido St. Mary's Hospital,5,5,5
+Inha University Hospital,Pusan National University Yangsan Hospital,5,6,5
+Hallym University Sacred Heart Hospital,Pusan National University Yangsan Hospital,5,8,5
+Hallym University Sacred Heart Hospital,Inha University Hospital,5,8,6
+Asan Medical Center,Seoul St. Mary's Hospital,4,5,4
+Hallym University Sacred Heart Hospital,Seoul St. Mary's Hospital,4,8,4
+Seoul St. Mary's Hospital,Yeouido St. Mary's Hospital,4,4,5
+Asan Medical Center,Korea University Guro Hospital,4,5,6
+Korea University Guro Hospital,Yeouido St. Mary's Hospital,4,6,5
+Chungnam National University,Pusan National University Yangsan Hospital,3,5,5
+Hallym University Sacred Heart Hospital,Wonkwang University Hospital,3,8,3
+Chungnam National University,Inha University Hospital,3,5,6
+Hallym University Sacred Heart Hospital,Samsung Medical Center,3,8,7
+Hallym University Sacred Heart Hospital,Konkuk University Medical Center,3,8,3
+Chonnam National University Hwasun Hospital,Inha University Hospital,3,3,6
+Wonkwang University Hospital,Yonsei University Gangnam Severance Hospital,3,3,3
+Graduate School of Medicine,Osaka International Cancer Institute,3,4,7
+Itami City Hospital,Osaka International Cancer Institute,3,3,7
+Pusan National University Hospital,Yeouido St. Mary's Hospital,3,3,5
+Pusan National University Yangsan Hospital,Wonkwang University Hospital,3,5,3
+Konkuk University Medical Center,Wonkwang University Hospital,3,3,3
+Konkuk University Medical Center,Korea University Guro Hospital,3,3,6
+Korea University Guro Hospital,Wonkwang University Hospital,3,6,3
+Konkuk University Medical Center,Pusan National University Yangsan Hospital,3,3,5
+Graduate School of Medicine,Hyogo Prefectural Amagasaki General Medical Center,3,4,4
+Asan Medical Center,Pusan National University Yangsan Hospital,3,5,5
+Hyogo Prefectural Amagasaki General Medical Center,Osaka International Cancer Institute,3,4,7
+Pusan National University Hospital,Seoul St. Mary's Hospital,3,3,4
+Daegu Catholic University Medical Center,Hallym University Sacred Heart Hospital,3,3,8
+Samsung Medical Center,Seoul St. Mary's Hospital,3,7,4
+Asan Medical Center,Samsung Medical Center,3,5,7
+Samsung Medical Center,Yonsei Cancer Center,3,7,3
+Inha University Hospital,Yeouido St. Mary's Hospital,3,6,5
+Asan Medical Center,Pusan National University Hospital,3,5,3
+Chungnam National University,Hallym University Sacred Heart Hospital,3,5,8
+Inha University Hospital,Wonkwang University Hospital,3,6,3
+Chungnam National University,Korea University Guro Hospital,3,5,6
+Inha University Hospital,Konkuk University Medical Center,3,6,3
+Kosin University Gospel Hospital,Pusan National University Yangsan Hospital,3,3,5
+Pusan National University Yangsan Hospital,Yeouido St. Mary's Hospital,3,5,5
+Hallym University Sacred Heart Hospital,Kosin University Gospel Hospital,3,8,3
+Samsung Medical Center,Seoul National University Bundang Hospital,3,7,3
+Korea University Guro Hospital,Seoul St. Mary's Hospital,3,6,4
+Pusan National University Yangsan Hospital,Yonsei University Gangnam Severance Hospital,3,5,3
+Samsung Medical Center,Yeouido St. Mary's Hospital,3,7,5
+Hallym University Sacred Heart Hospital,Yonsei University Gangnam Severance Hospital,3,8,3
+Asan Medical Center,Inha University Hospital,3,5,6
+Inha University Hospital,Yonsei University Gangnam Severance Hospital,3,6,3
+Korea University Guro Hospital,Yonsei University Gangnam Severance Hospital,3,6,3
+Konkuk University Medical Center,Yonsei University Gangnam Severance Hospital,3,3,3
+Hallym University Sacred Heart Hospital,Pusan National University Hospital,3,8,3
+Korea University Guro Hospital,Kosin University Gospel Hospital,3,6,3
+Inha University Hospital,Kosin University Gospel Hospital,3,6,3
+Korea University Guro Hospital,Yonsei University College of Medicine,2,6,2
+Hallym University Sacred Heart Hospital,Yonsei University College of Medicine,2,8,2
+Hallym University Sacred Heart Hospital,Kyungpook National University,2,8,3
+Konkuk University School of Medicine,Kyungpook National University,2,2,3
+Korea University Guro Hospital,Kyungpook National University,2,6,3
+Asan Medical Center,Kyungpook National University,2,5,3
+Kyungpook National University,Yeouido St. Mary's Hospital,2,3,5
+Pusan National University Hospital,Samsung Medical Center,2,3,7
+Konkuk University School of Medicine,Pusan National University Yangsan Hospital,2,2,5
+Konkuk University School of Medicine,Yeouido St. Mary's Hospital,2,2,5
+Chungnam National University,Kyungpook National University,2,5,3
+Inha University Hospital,Kyungpook National University,2,6,3
+Inha University Hospital,Konkuk University School of Medicine,2,6,2
+Asan Medical Center,Chungnam National University,2,5,5
+Kyungpook National University,Pusan National University Yangsan Hospital,2,3,5
+Guangdong Lung Cancer Institute,Hospital Umum Sarawak,2,5,2
+Ulsan University Asan Medical Center,Yonsei University Gangnam Severance Hospital,2,2,3
+Kyungpook National University Chilgok Hospital,Ulsan University Asan Medical Center,2,2,2
+Konkuk University Medical Center,Ulsan University Asan Medical Center,2,3,2
+Inha University Hospital,Ulsan University Asan Medical Center,2,6,2
+Pusan National University Yangsan Hospital,Ulsan University Asan Medical Center,2,5,2
+Inha University Hospital,Yonsei University Severance Hospital,2,6,2
+Ulsan University Asan Medical Center,Wonkwang University Hospital,2,2,3
+Hallym University Sacred Heart Hospital,Kyungpook National University Chilgok Hospital,2,8,2
+Korea University Guro Hospital,Kyungpook National University Chilgok Hospital,2,6,2
+Daegu Catholic University Medical Center,Korea University Guro Hospital,2,3,6
+Korea University Guro Hospital,Yonsei University Severance Hospital,2,6,2
+Korea University Guro Hospital,Ulsan University Asan Medical Center,2,6,2
+Ulsan University Asan Medical Center,Yonsei University Severance Hospital,2,2,2
+Hallym University Sacred Heart Hospital,Ulsan University Asan Medical Center,2,8,2
+Kyungpook National University Chilgok Hospital,Yonsei University Gangnam Severance Hospital,2,2,3
+Pusan National University Yangsan Hospital,Yonsei University Severance Hospital,2,5,2
+Asan Medical Center,Yonsei University College of Medicine,2,5,2
+Chungnam National University,Yonsei University College of Medicine,2,5,2
+Inha University Hospital,Yonsei University College of Medicine,2,6,2
+Pusan National University Yangsan Hospital,Yonsei University College of Medicine,2,5,2
+Yeouido St. Mary's Hospital,Yonsei University College of Medicine,2,5,2
+Guangdong Lung Cancer Institute,Netherlands Cancer Institute,2,5,2
+Pusan National University Hospital,Pusan National University Yangsan Hospital,2,3,5
+Inha University Hospital,Samsung Medical Center,2,6,7
+Kyungpook National University,Yonsei University College of Medicine,2,3,2
+National Health Service,School of Life Sciences,2,6,2
+Chungnam National University Hospital,Wonkwang University Hospital,2,3,3
+Konkuk University School of Medicine,Yonsei University College of Medicine,2,2,2
+Hallym University Sacred Heart Hospital,Yonsei University Severance Hospital,2,8,2
+Hospital Umum Sarawak,Kanagawa Cancer Center,2,2,3
+Guangdong Lung Cancer Institute,Kanagawa Cancer Center,2,5,3
+Chonnam National University Hwasun Hospital,Samsung Medical Center,2,3,7
+Chungnam National University Hospital,Pusan National University Yangsan Hospital,2,3,5
+Osaka City General Hospital,Wakayama Medical University,2,2,2
+Kobe City Medical Center General Hospital,Osaka City General Hospital,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Osaka City General Hospital,2,4,2
+Kumamoto Regional Medical Center,Osaka City General Hospital,2,2,2
+Osaka City General Hospital,Osaka International Cancer Institute,2,2,7
+Itami City Hospital,Saiseikai Utsunomiya Hospital,2,3,2
+Daegu Catholic University Medical Center,Inha University Hospital,2,3,6
+Inha University Hospital,Kyungpook National University Chilgok Hospital,2,6,2
+Konkuk University Medical Center,Kyungpook National University Chilgok Hospital,2,3,2
+Chungnam National University,Daegu Catholic University Medical Center,2,5,3
+Konkuk University Medical Center,Yonsei University Severance Hospital,2,3,2
+Kyungpook National University Chilgok Hospital,Yonsei University Severance Hospital,2,2,2
+Wonkwang University Hospital,Yonsei University Severance Hospital,2,3,2
+Kumamoto University Hospital,Osaka City General Hospital,2,2,2
+Chungnam National University Hospital,Hallym University Sacred Heart Hospital,2,3,8
+Asan Medical Center,Seoul National University Bundang Hospital,2,5,3
+Inha University Hospital,Severance Hospital,2,6,2
+Korea University Guro Hospital,Samsung Medical Center,2,6,7
+Chungnam National University Hospital,Korea University Guro Hospital,2,3,6
+Pusan National University Yangsan Hospital,Seoul St. Mary's Hospital,2,5,4
+Huaihe Hospital of Henan University,Scope Research Institute of Electrophysiology,2,2,2
+Henan University,Huaihe Hospital of Henan University,2,2,2
+Henan University,Scope Research Institute of Electrophysiology,2,2,2
+Chungnam National University Hospital,Inha University Hospital,2,3,6
+Inha University Hospital,Pusan National University Hospital,2,6,3
+Chonnam National University Hwasun Hospital,Wonkwang University Hospital,2,3,3
+Kosin University Gospel Hospital,Yeouido St. Mary's Hospital,2,3,5
+Severance Hospital,Yeouido St. Mary's Hospital,2,2,5
+Chonnam National University Hwasun Hospital,Yonsei University Gangnam Severance Hospital,2,3,3
+Chonnam National University Hwasun Hospital,Hallym University Sacred Heart Hospital,2,3,8
+Chonnam National University Hwasun Hospital,Korea University Guro Hospital,2,3,6
+Inha University Hospital,Seoul St. Mary's Hospital,2,6,4
+Chonnam National University Hwasun Hospital,Chungnam National University Hospital,2,3,3
+Chonnam National University Hwasun Hospital,Konkuk University Medical Center,2,3,3
+Seoul National University Bundang Hospital,Yeouido St. Mary's Hospital,2,3,5
+Hallym University Sacred Heart Hospital,Seoul National University Bundang Hospital,2,8,3
+Asan Medical Center,Chonnam National University Medical School,2,5,2
+Chonnam National University Medical School,Yeouido St. Mary's Hospital,2,2,5
+Seoul National University Bundang Hospital,Seoul St. Mary's Hospital,2,3,4
+Asan Medical Center,Daegu Catholic University Medical Center,2,5,3
+Daegu Catholic University Medical Center,Yeouido St. Mary's Hospital,2,3,5
+Yonsei University Gangnam Severance Hospital,Yonsei University Severance Hospital,2,3,2
+Chungnam National University Hospital,Konkuk University Medical Center,2,3,3
+Korea University Guro Hospital,Pusan National University Hospital,2,6,3
+Chonnam National University Medical School,Daegu Catholic University Medical Center,2,2,3
+Chonnam National University Medical School,Hallym University Sacred Heart Hospital,2,2,8
+Kumamoto Rosai Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Kurashiki Central Hospital,Osaka City General Hospital,2,2,2
+Saiseikai Utsunomiya Hospital,Wakayama Medical University,2,2,2
+Kobe City Medical Center General Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Saiseikai Utsunomiya Hospital,2,4,2
+Kumamoto Regional Medical Center,Saiseikai Utsunomiya Hospital,2,2,2
+Osaka International Cancer Institute,Saiseikai Utsunomiya Hospital,2,7,2
+Osaka City General Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Graduate School of Medicine,Saiseikai Utsunomiya Hospital,2,4,2
+Aichi Cancer Center Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Saiseikai Utsunomiya Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Osaka Habikino Medical Center,Saiseikai Utsunomiya Hospital,2,2,2
+Kumamoto Chuo Hospital,Osaka City General Hospital,2,2,2
+Hyogo Medical University,Osaka City General Hospital,2,2,2
+Osaka City General Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Kumamoto University Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Kumamoto Rosai Hospital,Osaka City General Hospital,2,2,2
+Kurashiki Central Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Kumamoto Rosai Hospital,Kumamoto University Hospital,2,2,2
+Osaka Habikino Medical Center,Saiseikai Kumamoto Hospital,2,2,2
+Saiseikai Kumamoto Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Hyogo Medical University,Osaka International Cancer Institute,2,2,7
+Hyogo Medical University,Kumamoto Regional Medical Center,2,2,2
+Hyogo Medical University,Hyogo Prefectural Amagasaki General Medical Center,2,2,4
+Hyogo Medical University,Kobe City Medical Center General Hospital,2,2,2
+Hyogo Medical University,Wakayama Medical University,2,2,2
+Aichi Cancer Center Hospital,Osaka Habikino Medical Center,2,2,2
+Hyogo Medical University,Saiseikai Utsunomiya Hospital,2,2,2
+Kumamoto Chuo Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Hyogo Medical University,Saiseikai Kumamoto Hospital,2,2,2
+Kumamoto Chuo Hospital,Osaka Habikino Medical Center,2,2,2
+Kumamoto Chuo Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Aichi Cancer Center Hospital,Kumamoto Chuo Hospital,2,2,2
+Graduate School of Medicine,Kumamoto Chuo Hospital,2,4,2
+Aichi Cancer Center Hospital,Hyogo Medical University,2,2,2
+Graduate School of Medicine,Hyogo Medical University,2,4,2
+Saiseikai Kumamoto Hospital,Saiseikai Utsunomiya Hospital,2,2,2
+Kobe City Medical Center General Hospital,Kumamoto University Hospital,2,2,2
+Kumamoto University Hospital,Wakayama Medical University,2,2,2
+Kumamoto University Hospital,Kurashiki Central Hospital,2,2,2
+Kumamoto Regional Medical Center,Kumamoto Rosai Hospital,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Kumamoto Rosai Hospital,2,4,2
+Kobe City Medical Center General Hospital,Kumamoto Rosai Hospital,2,2,2
+Aichi Cancer Center Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Graduate School of Medicine,Saiseikai Kumamoto Hospital,2,4,2
+Hyogo Medical University,Tohoku University Graduate School of Medicine,2,2,2
+Osaka International Cancer Institute,Saiseikai Kumamoto Hospital,2,7,2
+Kumamoto Regional Medical Center,Saiseikai Kumamoto Hospital,2,2,2
+Graduate School of Medicine,Kumamoto University Hospital,2,4,2
+Itami City Hospital,Kumamoto University Hospital,2,3,2
+Kumamoto University Hospital,Osaka International Cancer Institute,2,2,7
+Kurashiki Central Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Kumamoto Rosai Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Kumamoto University Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Hyogo Medical University,Osaka Habikino Medical Center,2,2,2
+Itami City Hospital,Saiseikai Kumamoto Hospital,2,3,2
+Asan Medical Center,Severance Hospital,2,5,2
+Korea University Guro Hospital,Severance Hospital,2,6,2
+Kosin University Gospel Hospital,Seoul St. Mary's Hospital,2,3,4
+Kosin University Gospel Hospital,Wonkwang University Hospital,2,3,3
+Kosin University Gospel Hospital,Pusan National University Hospital,2,3,3
+Kosin University Gospel Hospital,Yonsei University Gangnam Severance Hospital,2,3,3
+Konkuk University Medical Center,Kosin University Gospel Hospital,2,3,3
+Asan Medical Center,Kosin University Gospel Hospital,2,5,3
+Hyogo Medical University,Itami City Hospital,2,2,3
+Affiliated Cancer Hospital of Xinjiang Medical University,Xinjiang Medical University,2,2,2
+Affiliated Cancer Hospital of Xinjiang Medical University,The Fifth Affiliated Hospital of Xinjiang Medical University,2,2,2
+The Fifth Affiliated Hospital of Xinjiang Medical University,Xinjiang Medical University,2,2,2
+Harbin Medical University Cancer Hospital,Jilin Cancer Hospital,2,2,2
+Kindai University Faculty of Medicine,University of Malaya,2,2,2
+Seoul National University Bundang Hospital,Yonsei Cancer Center,2,3,3
+Chonnam National University Hwasun Hospital,Pusan National University Yangsan Hospital,2,3,5
+Kyungpook National University Chilgok Hospital,Pusan National University Yangsan Hospital,2,2,5
+Daegu Catholic University Medical Center,Pusan National University Yangsan Hospital,2,3,5
+Heart Vascular Stroke Institute,Samsung Medical Center,2,2,7
+Hyogo Prefectural Amagasaki General Medical Center,Kumamoto Chuo Hospital,2,4,2
+Kobe City Medical Center General Hospital,Kumamoto Chuo Hospital,2,2,2
+Kumamoto Chuo Hospital,Wakayama Medical University,2,2,2
+Kumamoto Chuo Hospital,Kurashiki Central Hospital,2,2,2
+Kumamoto Chuo Hospital,Kumamoto Rosai Hospital,2,2,2
+Hyogo Medical University,Kurashiki Central Hospital,2,2,2
+Hyogo Medical University,Kumamoto Rosai Hospital,2,2,2
+Hyogo Medical University,Kumamoto University Hospital,2,2,2
+Pusan National University Yangsan Hospital,Severance Hospital,2,5,2
+Osaka City General Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Aichi Cancer Center Hospital,Osaka City General Hospital,2,2,2
+Graduate School of Medicine,Osaka City General Hospital,2,4,2
+Itami City Hospital,Osaka City General Hospital,2,3,2
+Itami City Hospital,Kumamoto Chuo Hospital,2,3,2
+Kumamoto Chuo Hospital,Osaka International Cancer Institute,2,2,7
+Kumamoto Chuo Hospital,Kumamoto Regional Medical Center,2,2,2
+Hallym University Sacred Heart Hospital,Severance Hospital,2,8,2
+Chungnam National University Hospital,Yonsei University Gangnam Severance Hospital,2,3,3
+Osaka City General Hospital,Osaka Habikino Medical Center,2,2,2
+Osaka Habikino Medical Center,Osaka International Cancer Institute,2,2,7
+Osaka International Cancer Institute,Tohoku University Graduate School of Medicine,2,7,2
+Aichi Cancer Center Hospital,Osaka International Cancer Institute,2,2,7
+Kumamoto Regional Medical Center,Osaka Habikino Medical Center,2,2,2
+Kumamoto Regional Medical Center,Tohoku University Graduate School of Medicine,2,2,2
+Aichi Cancer Center Hospital,Kumamoto Regional Medical Center,2,2,2
+Graduate School of Medicine,Kumamoto Regional Medical Center,2,4,2
+Itami City Hospital,Kumamoto Regional Medical Center,2,3,2
+Hyogo Prefectural Amagasaki General Medical Center,Kumamoto University Hospital,2,4,2
+Hyogo Prefectural Amagasaki General Medical Center,Osaka Habikino Medical Center,2,4,2
+Hyogo Prefectural Amagasaki General Medical Center,Tohoku University Graduate School of Medicine,2,4,2
+Aichi Cancer Center Hospital,Hyogo Prefectural Amagasaki General Medical Center,2,2,4
+Hyogo Prefectural Amagasaki General Medical Center,Itami City Hospital,2,4,3
+Hyogo Prefectural Amagasaki General Medical Center,Kumamoto Regional Medical Center,2,4,2
+Kobe City Medical Center General Hospital,Osaka Habikino Medical Center,2,2,2
+Itami City Hospital,Kobe City Medical Center General Hospital,2,3,2
+Kobe City Medical Center General Hospital,Osaka International Cancer Institute,2,2,7
+Kobe City Medical Center General Hospital,Kumamoto Regional Medical Center,2,2,2
+Kumamoto Regional Medical Center,Osaka International Cancer Institute,2,2,7
+Chungnam National University,Yeouido St. Mary's Hospital,2,5,5
+Hallym University Sacred Heart Hospital,Konkuk University School of Medicine,2,8,2
+Konkuk University School of Medicine,Korea University Guro Hospital,2,2,6
+Asan Medical Center,Konkuk University School of Medicine,2,5,2
+Chungnam National University,Kosin University Gospel Hospital,2,5,3
+Chungnam National University,Konkuk University School of Medicine,2,5,2
+Osaka Habikino Medical Center,Tohoku University Graduate School of Medicine,2,2,2
+Kyungpook National University Chilgok Hospital,Wonkwang University Hospital,2,2,3
+Graduate School of Medicine,Itami City Hospital,2,4,3
+Graduate School of Medicine,Osaka Habikino Medical Center,2,4,2
+Graduate School of Medicine,Tohoku University Graduate School of Medicine,2,4,2
+Kobe City Medical Center General Hospital,Kurashiki Central Hospital,2,2,2
+Kurashiki Central Hospital,Wakayama Medical University,2,2,2
+Kumamoto Rosai Hospital,Osaka Habikino Medical Center,2,2,2
+Aichi Cancer Center Hospital,Graduate School of Medicine,2,2,4
+Itami City Hospital,Osaka Habikino Medical Center,2,3,2
+Itami City Hospital,Tohoku University Graduate School of Medicine,2,3,2
+Aichi Cancer Center Hospital,Itami City Hospital,2,2,3
+Aichi Cancer Center Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Graduate School of Medicine,Wakayama Medical University,2,4,2
+Kumamoto Rosai Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Aichi Cancer Center Hospital,Kumamoto Rosai Hospital,2,2,2
+Graduate School of Medicine,Kumamoto Rosai Hospital,2,4,2
+Itami City Hospital,Kumamoto Rosai Hospital,2,3,2
+Kumamoto Rosai Hospital,Osaka International Cancer Institute,2,2,7
+Kurashiki Central Hospital,Osaka Habikino Medical Center,2,2,2
+Kurashiki Central Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Kobe City Medical Center General Hospital,2,4,2
+Kumamoto Rosai Hospital,Wakayama Medical University,2,2,2
+Kumamoto Rosai Hospital,Kurashiki Central Hospital,2,2,2
+Kumamoto University Hospital,Osaka Habikino Medical Center,2,2,2
+Kumamoto University Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Aichi Cancer Center Hospital,Kumamoto University Hospital,2,2,2
+Kumamoto Chuo Hospital,Kumamoto University Hospital,2,2,2
+Kumamoto Chuo Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Hyogo Medical University,Kumamoto Chuo Hospital,2,2,2
+Kumamoto Regional Medical Center,Kumamoto University Hospital,2,2,2
+Aichi Cancer Center Hospital,Kurashiki Central Hospital,2,2,2
+Osaka Habikino Medical Center,Wakayama Medical University,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Saiseikai Kumamoto Hospital,2,4,2
+Kobe City Medical Center General Hospital,Saiseikai Kumamoto Hospital,2,2,2
+Saiseikai Kumamoto Hospital,Wakayama Medical University,2,2,2
+Itami City Hospital,Wakayama Medical University,2,3,2
+Osaka International Cancer Institute,Wakayama Medical University,2,7,2
+Kumamoto Regional Medical Center,Wakayama Medical University,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Wakayama Medical University,2,4,2
+Aichi Cancer Center Hospital,Wakayama Medical University,2,2,2
+Kobe City Medical Center General Hospital,Tohoku University Graduate School of Medicine,2,2,2
+Aichi Cancer Center Hospital,Kobe City Medical Center General Hospital,2,2,2
+Graduate School of Medicine,Kobe City Medical Center General Hospital,2,4,2
+Graduate School of Medicine,Kurashiki Central Hospital,2,4,2
+Itami City Hospital,Kurashiki Central Hospital,2,3,2
+Kurashiki Central Hospital,Osaka International Cancer Institute,2,2,7
+Kumamoto Regional Medical Center,Kurashiki Central Hospital,2,2,2
+Hyogo Prefectural Amagasaki General Medical Center,Kurashiki Central Hospital,2,4,2
+Tohoku University Graduate School of Medicine,Wakayama Medical University,2,2,2
+Kobe City Medical Center General Hospital,Wakayama Medical University,2,2,2
+Copenhagen University Hospital,University of Copenhagen,1,2,3
+Chungnam National University,Chungnam National University Hospital,1,5,3
+Stanford University,University of California,1,2,3
+National Institute of Health Sciences (NIHS),Okayama University Hospital,1,2,3
+Jilin Cancer Hospital,Yonsei Cancer Center,1,2,3
+Jilin Cancer Hospital,Kindai University Faculty of Medicine,1,2,2
+Jilin Cancer Hospital,Samsung Medical Center,1,2,7
+Jilin Cancer Hospital,University of Malaya,1,2,2
+Jilin Cancer Hospital,Seoul National University Bundang Hospital,1,2,3
+Chung Shan Medical University Hospital,Jilin Cancer Hospital,1,2,2
+Kindai University Faculty of Medicine,Yonsei Cancer Center,1,2,3
+University of Malaya,Yonsei Cancer Center,1,2,3
+Harbin Medical University Cancer Hospital,Yonsei Cancer Center,1,2,3
+Chung Shan Medical University Hospital,Yonsei Cancer Center,1,2,3
+Kindai University Faculty of Medicine,Samsung Medical Center,1,2,7
+Harbin Medical University Cancer Hospital,Kindai University Faculty of Medicine,1,2,2
+Kindai University Faculty of Medicine,Seoul National University Bundang Hospital,1,2,3
+Chung Shan Medical University Hospital,Kindai University Faculty of Medicine,1,2,2
+Samsung Medical Center,University of Malaya,1,7,2
+Harbin Medical University Cancer Hospital,Samsung Medical Center,1,2,7
+Chung Shan Medical University Hospital,Samsung Medical Center,1,2,7
+Harbin Medical University Cancer Hospital,University of Malaya,1,2,2
+Seoul National University Bundang Hospital,University of Malaya,1,3,2
+Chonnam National University Hwasun Hospital,Kyungpook National University Chilgok Hospital,1,3,2
+Chonnam National University Hwasun Hospital,Ulsan University Asan Medical Center,1,3,2
+Chonnam National University Hwasun Hospital,Yonsei University Severance Hospital,1,3,2
+Chungnam National University Hospital,Kyungpook National University Chilgok Hospital,1,3,2
+Chungnam National University Hospital,Ulsan University Asan Medical Center,1,3,2
+Chungnam National University Hospital,Yonsei University Severance Hospital,1,3,2
+Stanford University,Stanford University School of Medicine,1,2,2
+Chonnam National University Medical School,Chungnam National University,1,2,5
+Chungnam National University,Severance Hospital,1,5,2
+Daegu Catholic University Medical Center,Kyungpook National University,1,3,3
+Chonnam National University Medical School,Kyungpook National University,1,2,3
+Kyungpook National University,Severance Hospital,1,3,2
+Daegu Catholic University Medical Center,Yonsei University College of Medicine,1,3,2
+Daegu Catholic University Medical Center,Severance Hospital,1,3,2
+Daegu Catholic University Medical Center,Konkuk University School of Medicine,1,3,2
+Chonnam National University Medical School,Pusan National University Yangsan Hospital,1,2,5
+Chonnam National University Medical School,Yonsei University College of Medicine,1,2,2
+Chonnam National University Medical School,Korea University Guro Hospital,1,2,6
+Chonnam National University Medical School,Severance Hospital,1,2,2
+Chonnam National University Medical School,Konkuk University School of Medicine,1,2,2
+Chonnam National University Medical School,Inha University Hospital,1,2,6
+Severance Hospital,Yonsei University College of Medicine,1,2,2
+Konkuk University School of Medicine,Severance Hospital,1,2,2
+AstraZeneca,The University of Texas MD Anderson Cancer Center,1,4,3
+Kanagawa Cardiovascular and Respiratory Center,Saitama Medical University International Medical Center,1,3,2
+Kanagawa Cancer Center,Saitama Medical University International Medical Center,1,3,2
+Saitama Medical University International Medical Center,Shizuoka Cancer Center,1,2,2
+Kanagawa Cancer Center,Kanagawa Cardiovascular and Respiratory Center,1,3,3
+Kanagawa Cardiovascular and Respiratory Center,Shizuoka Cancer Center,1,3,2
+Kanagawa Cancer Center,Shizuoka Cancer Center,1,3,2
+Korea University Guro Hospital,Seoul National University Hospital,1,6,3
+Korea University Guro Hospital,National Cancer Center,1,6,2
+Chungnam National University Hospital,Yeouido St. Mary's Hospital,1,3,5
+Konkuk University Medical Center,Yeouido St. Mary's Hospital,1,3,5
+Wonkwang University Hospital,Yeouido St. Mary's Hospital,1,3,5
+Kosin University Gospel Hospital,Severance Hospital,1,3,2
+Kosin University Gospel Hospital,Samsung Medical Center,1,3,7
+Chungnam National University Hospital,Kosin University Gospel Hospital,1,3,3
+Severance Hospital,Yonsei University Gangnam Severance Hospital,1,2,3
+Seoul St. Mary's Hospital,Yonsei University Gangnam Severance Hospital,1,4,3
+Asan Medical Center,Yonsei University Gangnam Severance Hospital,1,5,3
+Samsung Medical Center,Yonsei University Gangnam Severance Hospital,1,7,3
+Pusan National University Hospital,Yonsei University Gangnam Severance Hospital,1,3,3
+Seoul St. Mary's Hospital,Severance Hospital,1,4,2
+Samsung Medical Center,Severance Hospital,1,7,2
+Chungnam National University Hospital,Severance Hospital,1,3,2
+Konkuk University Medical Center,Severance Hospital,1,3,2
+Pusan National University Hospital,Severance Hospital,1,3,2
+Severance Hospital,Wonkwang University Hospital,1,2,3
+Chungnam National University Hospital,Seoul St. Mary's Hospital,1,3,4
+Konkuk University Medical Center,Seoul St. Mary's Hospital,1,3,4
+Seoul St. Mary's Hospital,Wonkwang University Hospital,1,4,3
+National Health Service,National Heart and Lung Institute,1,6,2
+Farber Cancer Institute,s Hospital,1,2,2
+Guangdong Lung Cancer Institute,s Hospital,1,5,2
+Netherlands Cancer Institute,s Hospital,1,2,2
+National Heart and Lung Institute,s Hospital,1,2,2
+Farber Cancer Institute,Guangdong Lung Cancer Institute,1,2,5
+Farber Cancer Institute,Netherlands Cancer Institute,1,2,2
+Farber Cancer Institute,National Heart and Lung Institute,1,2,2
+Guangdong Lung Cancer Institute,National Heart and Lung Institute,1,5,2
+National Heart and Lung Institute,Netherlands Cancer Institute,1,2,2
+Guangdong Lung Cancer Institute,Harbin Medical University Cancer Hospital,1,5,2
+Guangdong Lung Cancer Institute,Jilin Cancer Hospital,1,5,2
+Chonnam National University Hwasun Hospital,Yeouido St. Mary's Hospital,1,3,5
+Chonnam National University Hwasun Hospital,Kosin University Gospel Hospital,1,3,3
+Chonnam National University Hwasun Hospital,Severance Hospital,1,3,2
+Chonnam National University Hwasun Hospital,Seoul St. Mary's Hospital,1,3,4
+Asan Medical Center,Chonnam National University Hwasun Hospital,1,5,3
+Chonnam National University Hwasun Hospital,Pusan National University Hospital,1,3,3
+Yeouido St. Mary's Hospital,Yonsei University Gangnam Severance Hospital,1,5,3
+Chonnam National University Medical School,Pusan National University Hospital,1,2,3
+Daegu Catholic University Medical Center,Pusan National University Hospital,1,3,3
+Chonnam National University Medical School,Samsung Medical Center,1,2,7
+Daegu Catholic University Medical Center,Samsung Medical Center,1,3,7
+Chonnam National University Medical School,Seoul St. Mary's Hospital,1,2,4
+Daegu Catholic University Medical Center,Seoul St. Mary's Hospital,1,3,4
+Chonnam National University Medical School,Seoul National University Bundang Hospital,1,2,3
+Daegu Catholic University Medical Center,Seoul National University Bundang Hospital,1,3,3
+Asan Medical Center,Chungnam National University Hospital,1,5,3
+Asan Medical Center,Konkuk University Medical Center,1,5,3
+Asan Medical Center,Wonkwang University Hospital,1,5,3
+Pusan National University Yangsan Hospital,Samsung Medical Center,1,5,7
+Chungnam National University Hospital,Samsung Medical Center,1,3,7
+Konkuk University Medical Center,Samsung Medical Center,1,3,7
+Samsung Medical Center,Wonkwang University Hospital,1,7,3
+Chungnam National University Hospital,Pusan National University Hospital,1,3,3
+Konkuk University Medical Center,Pusan National University Hospital,1,3,3
+Pusan National University Hospital,Wonkwang University Hospital,1,3,3
+Pusan National University Hospital,Yonsei University College of Medicine,1,3,2
+Seoul St. Mary's Hospital,Yonsei University College of Medicine,1,4,2
+Lung Cancer Center,National Cancer Centre Singapore,1,2,2
+National Cancer Centre Singapore,Netherlands Cancer Institute,1,2,2
+National Cancer Centre Singapore,The University of Texas MD Anderson Cancer Center,1,2,3
+Kanagawa Cancer Center,National Cancer Centre Singapore,1,3,2
+Hospital Umum Sarawak,Seoul National University Hospital,1,2,3
+Hospital Umum Sarawak,University of Malaya,1,2,2
+Hospital Umum Sarawak,Lung Cancer Center,1,2,2
+Hospital Umum Sarawak,Netherlands Cancer Institute,1,2,2
+Hospital Umum Sarawak,The University of Texas MD Anderson Cancer Center,1,2,3
+Guangdong Lung Cancer Institute,Seoul National University Hospital,1,5,3
+Guangdong Lung Cancer Institute,University of Malaya,1,5,2
+Guangdong Lung Cancer Institute,Lung Cancer Center,1,5,2
+Guangdong Lung Cancer Institute,The University of Texas MD Anderson Cancer Center,1,5,3
+Seoul National University Hospital,University of Malaya,1,3,2
+Lung Cancer Center,Seoul National University Hospital,1,2,3
+Netherlands Cancer Institute,Seoul National University Hospital,1,2,3
+Seoul National University Hospital,The University of Texas MD Anderson Cancer Center,1,3,3
+Kanagawa Cancer Center,Seoul National University Hospital,1,3,3
+Lung Cancer Center,University of Malaya,1,2,2
+Netherlands Cancer Institute,University of Malaya,1,2,2
+The University of Texas MD Anderson Cancer Center,University of Malaya,1,3,2
+Kanagawa Cancer Center,University of Malaya,1,3,2
+Lung Cancer Center,Netherlands Cancer Institute,1,2,2
+Lung Cancer Center,The University of Texas MD Anderson Cancer Center,1,2,3
+Kanagawa Cancer Center,Lung Cancer Center,1,3,2
+Netherlands Cancer Institute,The University of Texas MD Anderson Cancer Center,1,2,3
+Kanagawa Cancer Center,Netherlands Cancer Institute,1,3,2
+Kanagawa Cancer Center,The University of Texas MD Anderson Cancer Center,1,3,3
+Pusan National University Hospital,Seoul National University Bundang Hospital,1,3,3
+Kosin University Gospel Hospital,Yonsei University College of Medicine,1,3,2
+Kyungpook National University,Pusan National University Hospital,1,3,3
+Chungnam National University,Pusan National University Hospital,1,5,3
+Konkuk University School of Medicine,Pusan National University Hospital,1,2,3
+Kyungpook National University,Seoul St. Mary's Hospital,1,3,4
+Kosin University Gospel Hospital,Kyungpook National University,1,3,3
+Chungnam National University,Seoul St. Mary's Hospital,1,5,4
+Konkuk University School of Medicine,Seoul St. Mary's Hospital,1,2,4
+Konkuk University School of Medicine,Kosin University Gospel Hospital,1,2,3
+Kanagawa Cardiovascular and Respiratory Center,Osaka International Cancer Institute,1,3,7
+Hyogo Prefectural Amagasaki General Medical Center,Kanagawa Cardiovascular and Respiratory Center,1,4,3
+Graduate School of Medicine,Kanagawa Cardiovascular and Respiratory Center,1,4,3
+Korea University Guro Hospital,s Hospital,1,6,2
+Yonsei University Gangnam Severance Hospital,s Hospital,1,3,2
+Chungnam National University,Yonsei University Gangnam Severance Hospital,1,5,3
+Daegu Catholic University Medical Center,Yonsei University Gangnam Severance Hospital,1,3,3
+Ulsan University Asan Medical Center,s Hospital,1,2,2
+Chungnam National University,Ulsan University Asan Medical Center,1,5,2
+Kosin University Gospel Hospital,Ulsan University Asan Medical Center,1,3,2
+Daegu Catholic University Medical Center,Ulsan University Asan Medical Center,1,3,2
+Hallym University Sacred Heart Hospital,s Hospital,1,8,2
+Yonsei University Severance Hospital,s Hospital,1,2,2
+Chungnam National University,Yonsei University Severance Hospital,1,5,2
+Hospital Umum Sarawak,Samsung Medical Center,1,2,7
+AstraZeneca,Kanagawa Cancer Center,1,4,3
+AstraZeneca,Guangdong Lung Cancer Institute,1,4,5
+AstraZeneca,Hospital Umum Sarawak,1,4,2
+AstraZeneca,Yonsei Cancer Center,1,4,3
+Kanagawa Cancer Center,Yonsei Cancer Center,1,3,3
+Guangdong Lung Cancer Institute,Yonsei Cancer Center,1,5,3
+Hospital Umum Sarawak,Yonsei Cancer Center,1,2,3
+Heart Vascular Stroke Institute,Inha University Hospital,1,2,6
+Chonnam National University Hwasun Hospital,Heart Vascular Stroke Institute,1,3,2
+National Institute for Physiological Sciences,National Institute of Health Sciences (NIHS),1,2,2
+Kyushu University Hospital,National Institute for Physiological Sciences,1,2,2
+Kyushu University Hospital,National Institute of Health Sciences (NIHS),1,2,2
+AstraZeneca,Farber Cancer Institute,1,4,2
+Kindai University Faculty of Medicine,National Cancer Centre Singapore,1,2,2
+Hospital Umum Sarawak,Kindai University Faculty of Medicine,1,2,2
+Guangdong Lung Cancer Institute,Kindai University Faculty of Medicine,1,5,2
+Kindai University Faculty of Medicine,Seoul National University Hospital,1,2,3
+Kindai University Faculty of Medicine,Lung Cancer Center,1,2,2
+Kindai University Faculty of Medicine,Netherlands Cancer Institute,1,2,2
+Kindai University Faculty of Medicine,The University of Texas MD Anderson Cancer Center,1,2,3
+Kanagawa Cancer Center,Kindai University Faculty of Medicine,1,3,2
+Hospital Umum Sarawak,National Cancer Centre Singapore,1,2,2
+Guangdong Lung Cancer Institute,National Cancer Centre Singapore,1,5,2
+National Cancer Centre Singapore,Seoul National University Hospital,1,2,3
+National Cancer Centre Singapore,University of Malaya,1,2,2
+AstraZeneca,Samsung Medical Center,1,4,7
+Kanagawa Cancer Center,Samsung Medical Center,1,3,7
+Guangdong Lung Cancer Institute,Samsung Medical Center,1,5,7
+Chung Shan Medical University Hospital,University of Malaya,1,2,2
+Harbin Medical University Cancer Hospital,Seoul National University Bundang Hospital,1,2,3
+Chung Shan Medical University Hospital,Harbin Medical University Cancer Hospital,1,2,2
+Chung Shan Medical University Hospital,Seoul National University Bundang Hospital,1,2,3
+Kosin University Gospel Hospital,Yonsei University Severance Hospital,1,3,2
+Daegu Catholic University Medical Center,Yonsei University Severance Hospital,1,3,2
+Chungnam National University,s Hospital,1,5,2
+Pusan National University Yangsan Hospital,s Hospital,1,5,2
+Inha University Hospital,s Hospital,1,6,2
+Konkuk University Medical Center,s Hospital,1,3,2
+Kosin University Gospel Hospital,s Hospital,1,3,2
+Daegu Catholic University Medical Center,s Hospital,1,3,2
+Kyungpook National University Chilgok Hospital,s Hospital,1,2,2
+Wonkwang University Hospital,s Hospital,1,3,2
+Chungnam National University,Konkuk University Medical Center,1,5,3
+Chungnam National University,Kyungpook National University Chilgok Hospital,1,5,2
+Chungnam National University,Wonkwang University Hospital,1,5,3
+Daegu Catholic University Medical Center,Konkuk University Medical Center,1,3,3
+Daegu Catholic University Medical Center,Kosin University Gospel Hospital,1,3,3
+Kosin University Gospel Hospital,Kyungpook National University Chilgok Hospital,1,3,2
+Daegu Catholic University Medical Center,Kyungpook National University Chilgok Hospital,1,3,2
+Daegu Catholic University Medical Center,Wonkwang University Hospital,1,3,3
+National Cancer Center,National Heart Centre Singapore,1,2,2
+National Cancer Centre Singapore,National Heart Centre Singapore,1,2,2
+NUS Medical School,National Cancer Centre Singapore,1,2,2
+NUS Medical School,National Heart Centre Singapore,1,2,2
+Korea University Guro Hospital,Yonsei Cancer Center,1,6,3
+Korea University Guro Hospital,Seoul National University Bundang Hospital,1,6,3
+Seoul National University Hospital,Yeouido St. Mary's Hospital,1,3,5
+National Cancer Center,Yeouido St. Mary's Hospital,1,2,5
+Yeouido St. Mary's Hospital,Yonsei Cancer Center,1,5,3
+Hallym University Sacred Heart Hospital,Seoul National University Hospital,1,8,3
+Hallym University Sacred Heart Hospital,National Cancer Center,1,8,2
+Hallym University Sacred Heart Hospital,Yonsei Cancer Center,1,8,3
+Asan Medical Center,Seoul National University Hospital,1,5,3
+Asan Medical Center,National Cancer Center,1,5,2
+Asan Medical Center,Yonsei Cancer Center,1,5,3
+National Cancer Center,Seoul National University Hospital,1,2,3
+Samsung Medical Center,Seoul National University Hospital,1,7,3
+Seoul National University Hospital,Yonsei Cancer Center,1,3,3
+Seoul National University Hospital,Seoul St. Mary's Hospital,1,3,4
+Seoul National University Bundang Hospital,Seoul National University Hospital,1,3,3
+National Cancer Center,Samsung Medical Center,1,2,7
+National Cancer Center,Yonsei Cancer Center,1,2,3
+National Cancer Center,Seoul St. Mary's Hospital,1,2,4
+National Cancer Center,Seoul National University Bundang Hospital,1,2,3
+Seoul St. Mary's Hospital,Yonsei Cancer Center,1,4,3

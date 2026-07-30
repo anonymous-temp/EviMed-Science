@@ -1,3 +1,0 @@
-id	label	x	y	cluster	weight<Occurrences>	weight<Total link strength>
-1	India	-1.000000	0.984899	1	2	1
-2	Japan	1.000000	-0.984899	1	7	1

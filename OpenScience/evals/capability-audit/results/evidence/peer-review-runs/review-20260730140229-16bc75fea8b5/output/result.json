@@ -1,0 +1,10 @@
+{
+  "status": "succeeded",
+  "title": "益生菌预防成人抗生素相关腹泻的系统综述与荟萃分析：基于随机对照试验的证据",
+  "recommendation": "major_revision",
+  "rubrics": [
+    "universal_rubric",
+    "prisma_2020"
+  ],
+  "report": "peer-review-report.md"
+}

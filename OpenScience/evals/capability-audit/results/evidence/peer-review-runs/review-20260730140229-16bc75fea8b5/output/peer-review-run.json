@@ -1,0 +1,2859 @@
+{
+  "document_title": "益生菌预防成人抗生素相关腹泻的系统综述与荟萃分析：基于随机对照试验的证据",
+  "rubric_results": {
+    "universal_rubric": [
+      {
+        "block_id": "universal_rubric_block",
+        "block_name": "universal_rubric",
+        "results": [
+          {
+            "item_id": "URVAR_INNOV_01",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.85,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "现有预防措施的获益尚存争议"
+            ],
+            "evidence_location": [
+              "摘要-重要性"
+            ],
+            "missing_detail": "引言未明确说明本研究的具体知识空白或新颖角度，也未论证相对于已有系统评价的附加价值。",
+            "risk_reason": "读者可能质疑重复进行已有综述的必要性，降低研究的影响力。",
+            "actionable_fix": "在引言中补充说明：① 此前关于益生菌预防AAD的综述存在哪些局限（如未纳入最新试验、方法学问题、人群范围差异等）；② 本综述的新颖之处（如聚焦成人全身抗生素使用者、采用严格方法等）；③ 明确声明研究旨在填补的具体知识空白。",
+            "what_would_change_verdict": "若引言明确陈述了具体知识空白并证明了本综述的独特贡献，则可评为PASS。",
+            "confidence_score": 0.85,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_INNOV_02",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "主要模型采用倒方差固定效应模型。效应量以危险比(RR)及其95% CI表示。",
+              "采用GRADE框架评估证据确定性，从偏倚风险、不一致性、间接性、不精确性和发表偏倚五个方面进行降级"
+            ],
+            "evidence_location": [
+              "方法 - 统计分析",
+              "方法 - 证据确定性与偏倚评估"
+            ],
+            "missing_detail": "通篇未描述任何创新的方法、技术或分析方法；所使用的方法均为系统评价和Meta分析的常规标准方法。",
+            "risk_reason": "缺乏方法学创新降低了该研究相较于现有同类研究的额外价值，可能影响其发表潜力。",
+            "actionable_fix": "如果研究设计中确实采用了任何新颖的分析技术（如自动筛选工具、新型异方差调整方法、贝叶斯方法等），应在方法部分明确说明并论证其优势。否则，应在讨论中承认方法学的常规性，但可以强调严格实施标准方法的价值。",
+            "what_would_change_verdict": "明确描述并论证至少一项创新方法的应用，例如新的统计模型、数据提取自动化、患者水平数据合成方法等。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_INNOV_03",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.9,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "本结果应与既有随机试验、指南背景和疾病机制一并解释。",
+              "在成人住院和门诊患者（年龄≥18岁）接受全身抗生素治疗中，益生菌（任何菌株、单菌或多菌、任何剂量、任何制剂）预防抗生素相关性腹泻（AAD）与安慰剂或无干预相比，对AAD发生率的影响不确定（RR 1.03，95% CI 0.68至1.55；证据确定性极低）。"
+            ],
+            "evidence_location": [
+              "讨论章节，'与既有证据和指南的关系'小节",
+              "结论章节"
+            ],
+            "missing_detail": "手稿未明确阐述研究结果的新颖性，也未说明其是否挑战了现有范式。全文没有提及本综述提供了何种新的见解、意外发现或对传统理解的质疑，仅将结果描述为'不确定'，并建议与既有证据结合解释。",
+            "risk_reason": "缺乏对新贡献的明确声明会削弱研究的发表价值和读者对其重要性的判断，不符合学术论文应体现创新性的基本要求。",
+            "actionable_fix": "在讨论部分增加一段，明确指出本研究的独特贡献，例如：与先前系统评价相比，本研究采用了更严格的纳入标准（仅随机试验）并排除了非随机证据，尽管样本量有限，但提供了纯净的随机证据合成；或强调在特定人群（如幽门螺杆菌根除患者）中发现效应方向不一致，提示未来需按临床情境分层分析。如确实无法声称新颖性，应诚实说明本综述是对已有证据的确认，并指出其在方法学质量或证据粒度上的边际改进。",
+            "what_would_change_verdict": "如果手稿在讨论中至少有一处明确指出本研究的新发现、对现有证据的补充或对传统观点的挑战，例如声明'这是首个仅聚焦于随机试验且排除整群或交叉设计的Meta分析，尽管结论不确定，但凸显了当前证据的严重缺口'，则可提升为PASS。",
+            "confidence_score": 0.9,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_INNOV_04",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "评价益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)预防AAD相较于安慰剂或无干预的效果",
+              "纳入直接回答预设PICO的随机试验"
+            ],
+            "evidence_location": [
+              "摘要目的",
+              "方法研究选择"
+            ],
+            "missing_detail": "本研究为系统评价与Meta分析，专注于单一临床问题（益生菌预防抗生素相关性腹泻），未整合或连接其他学科领域（如微生物组学、免疫学、公共卫生、行为科学等）。",
+            "risk_reason": "跨学科整合可拓宽研究视角，增强对复杂健康问题的理解，本研究的单学科性质可能限制了其创新性和应用广度。",
+            "actionable_fix": "可在讨论中补充跨学科视角，例如将临床证据与基础微生物组机制、健康经济学评价或患者报告结局相联系，但作为系统评价，此类整合非强制要求。",
+            "what_would_change_verdict": "若手稿明确将不同学科的知识或方法融合（如结合体外实验、流行病学数据和临床结局进行转化研究），则可判定为PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_CONTRIB_01",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.8,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "结论和意义：益生菌对AAD发生率的影响不确定(RR 1.03, 95% CI 0.68~1.55)；证据确定性极低，主要因为仅2项研究提供数据，导致异质性和发表偏倚的评估受限。"
+            ],
+            "evidence_location": [
+              "摘要结论部分"
+            ],
+            "missing_detail": "未明确说明本研究为现有知识库增加了哪些新知识以及如何推进该领域。例如，没有指出这是否是首次针对该患者群体的系统评价、是否提供了更精确的估计、是否解决了既往争议或对临床实践有何影响。",
+            "risk_reason": "缺乏清晰的知识贡献声明会降低研究的原创性和影响力，读者难以判断研究在领域中的定位。",
+            "actionable_fix": "在讨论或结论部分添加明确的贡献声明，例如：“本研究首次对成人患者益生菌预防AAD进行系统评价并采用GRADE框架，尽管因纳入研究少证据确定性低，但明确了当前证据不足以推荐常规使用，突显了未来研究需求。”",
+            "what_would_change_verdict": "如果作者在适当位置明确陈述研究的新知识贡献及其对领域的推进，则可升级为PASS。",
+            "confidence_score": 0.8,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_CONTRIB_02",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.95,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "在成人住院和门诊患者（年龄≥18岁）接受全身抗生素治疗中，益生菌（任何菌株、单菌或多菌、任何剂量、任何制剂）预防抗生素相关性腹泻（AAD）与安慰剂或无干预相比，对AAD发生率的影响不确定（RR 1.03，95% CI 0.68至1.55；证据确定性极低）。仅2项研究纳入分析，异质性统计量（I²=81.7%）仅为描述性，不能可靠排除临床重要的研究间差异。结论应结合GRADE确定性、基线风险和终点定义进行解读。",
+              "证据确定性评级为极低，降级因素为不一致性（I²=81.7%且研究数量少）、不精确性（样本量未达预设信息量，置信区间跨越无效线）以及因研究数量不足无法评估的发表偏倚。"
+            ],
+            "evidence_location": [
+              "讨论 - 结论段落",
+              "结果 - GRADE证据概要相关段落"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_CONTRIB_03",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "本结果应与既有随机试验、指南背景和疾病机制一并解释。由于本综述仅纳入少数研究，效应方向、临床合理性和方法学质量应作为解释背景，而不能替代更多独立研究对稳健性的确认。"
+            ],
+            "evidence_location": [
+              "讨论 - 与既有证据和指南的关系"
+            ],
+            "missing_detail": "讨论部分未引用任何先前研究（系统综述或原始试验）进行比较，未说明合并效应量（RR 1.03）与既往证据的一致或不一致之处，也未解释该综述如何更新当前认知。仅有一个笼统的声明，未提供具体引用或对比。",
+            "risk_reason": "缺乏与现有文献的比较使得读者无法判断该综述相对于先前工作的新颖性或一致性，降低了讨论的学术价值和可解释性。",
+            "actionable_fix": "在讨论中增加一段，明确引用至少1-2项近期系统综述或大型试验，比较其效应量与本研究合并估计（RR 1.03），解释可能的一致/不一致原因（如人群、干预、结局定义的差异），并阐述本研究对现有证据基础的增量贡献或启示。",
+            "what_would_change_verdict": "如果讨论中提供具体引用和数值比较，并解释了与既往证据的异同和对领域的更新，则可评定为PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_CONTRIB_04",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.8,
+            "severity": "MINOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "未来研究应继续区分Adult inpatients and outpatients (age ≥18 years) receiving systemic antibiotic therapy内部不同疾病严重程度、基线风险层级和合并症状态，并一致报告Incidence of antibiotic-associated diarrhea (AAD)、患者重要结局、生活质量和不良事件。",
+              "若新试验报告与Incidence of antibiotic-associated diarrhea (AAD)一致的结果，可纳入更新合成；若新资料主要补充安全性或亚组信息，则更适合改变临床解释和证据确定性，而不一定改变主要合并估计。"
+            ],
+            "evidence_location": [
+              "讨论 > 未来研究"
+            ],
+            "missing_detail": "未来研究方向表述较为笼统，未提出基于当前发现（如高异质性、证据极低）的具体研究问题或可检验假设，例如哪种菌株、剂量或疗程应在哪类特定人群（如接受特定抗生素或基础疾病的患者）中优先验证。",
+            "risk_reason": "不具体的未来研究建议可能降低手稿对后续研究的指导价值，无法清晰传递优先研究缺口。",
+            "actionable_fix": "基于当前发现的局限（仅2项研究、高异质性、证据极低），明确提出1-2个具体的研究问题，例如：“需要多中心随机试验比较特定益生菌菌株（如乳杆菌GG）与安慰剂在接受广谱抗生素的住院老年患者中的效果，并统一报告AAD、生活质量和不良事件”，或“应开展个体参与者数据Meta分析以探索异质性来源并识别可能受益的亚组”。",
+            "what_would_change_verdict": "若手稿提出了明确、可操作的研究假设或具体研究设计建议（如特定PICO要素、优先验证的亚组、建议的结局指标），则可评为PASS。",
+            "confidence_score": 0.8,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_IMPACT_01",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.85,
+            "severity": "MINOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "因此，本结果支持一个平衡的信息：Probiotics (any strain, single or multi-strain, any dose, any formulation) administered for the prevention of antibiotic-associated diarrhea对Incidence of antibiotic-associated diarrhea (AAD)的方向有利；但最佳应用方式是将平均相对效应与患者的事件风险、合并症、监测条件、安全性边界和治疗目标相匹配。"
+            ],
+            "evidence_location": [
+              "讨论-临床应用"
+            ],
+            "missing_detail": "缺乏明确、具体的临床实践建议；'方向有利'的表述与合并效应估计(RR 1.03)及极低证据确定性不一致，未明确推荐或反对临床使用益生菌预防AAD。",
+            "risk_reason": "临床医生无法获得清晰的行动指导，无法确定在何种情况下应考虑或避免使用益生菌，削弱了综述的实践转化价值。",
+            "actionable_fix": "明确声明：鉴于证据确定性极低且效应方向不确定，当前不建议常规使用益生菌预防抗生素相关性腹泻；应强调需要更大样本的确定性研究。",
+            "what_would_change_verdict": "若在临床应用部分给出与证据确定性一致的明确推荐意见，并解释如何在个体化决策中应用不确定的证据，则可评为通过。",
+            "confidence_score": 0.85,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_IMPACT_02",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.95,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "临床实施时，应把合并RR转化为具体人群的绝对风险差、需要治疗人数和不良事件权衡[1-3]。适用性较强的场景是与纳入研究在人群、干预、对照、结局定义和随访时间上相似的患者；若患者存在明显禁忌证、脆弱状态、严重合并症或监测条件不足，治疗选择需要更谨慎。",
+              "主要局限是合并研究数仅为2项。即使其中部分试验规模较大，研究数过少仍限制了异质性来源、发表偏倚和亚组一致性的评价；当研究少于10项时，漏斗图不对称检验最多只能作为描述性信息[11]。"
+            ],
+            "evidence_location": [
+              "讨论-临床应用段落",
+              "讨论-优势与局限性段落"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_IMPACT_03",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.95,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "适用性较强的场景是与纳入研究在人群、干预、对照、结局定义和随访时间上相似的患者；若患者存在明显禁忌证、脆弱状态、严重合并症或监测条件不足，治疗选择需要更谨慎。",
+              "若不同研究在人群严重程度或背景治疗上存在差异，同一相对效应可能对应不同的绝对获益"
+            ],
+            "evidence_location": [
+              "讨论 - 临床应用",
+              "讨论 - 结果的临床解释"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_METHOD_01",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 1.0,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "本系统评价与Meta分析旨在评估益生菌与安慰剂或无干预相比对接受全身抗生素治疗的成人患者（年龄≥18岁）中AAD发病率的影响",
+              "纳入满足以下条件的RCT：(1)成人(≥18岁)住院或门诊患者，接受全身抗生素治疗；(2)干预为益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)；(3)对照为安慰剂或无干预；(4)报告了AAD发生率或可提取相关数据"
+            ],
+            "evidence_location": [
+              "[引言] 第一段",
+              "[方法] 纳入与排除标准"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 1.0,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_METHOD_02",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.85,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "采用GRADE框架评估证据确定性，从偏倚风险、不一致性、间接性、不精确性和发表偏倚五个方面进行降级",
+              "偏倚风险 无严重问题 2/2项贡献研究有偏倚风险资料；0/2项高风险；1/2项存在一些问题；1/2项低风险；未因偏倚风险降级"
+            ],
+            "evidence_location": [
+              "方法部分 证据确定性与偏倚评估",
+              "表3 GRADE证据概要"
+            ],
+            "missing_detail": "未明确识别选择偏倚、测量偏倚或混杂偏倚等具体来源，也未讨论缓解策略（如随机序列生成、分配隐藏、盲法、标准化结局测量等），仅依赖GRADE总体偏倚风险降级评估。",
+            "risk_reason": "缺乏对关键偏倚类型的识别和缓解措施的说明，可能导致读者对偏倚对结果影响的评估不充分，降低综述的严谨性与可信度。",
+            "actionable_fix": "在方法或结果中补充在纳入研究中可能存在的选择偏倚（如随机方法不明）、测量偏倚（如未设盲）和混杂偏倚的具体讨论，并说明使用了何种工具（如Cochrane RoB 2）评估及应对策略。",
+            "what_would_change_verdict": "若稿件能具体识别所纳入研究中可能的主要偏倚来源，并明确讨论已采用的缓解措施或其对结果的潜在影响，则可升级为PASS。",
+            "confidence_score": 0.85,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_METHOD_03",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.9,
+            "severity": "MINOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "主要局限是合并研究数仅为2项。即使其中部分试验规模较大，研究数过少仍限制了异质性来源、发表偏倚和亚组一致性的评价；当研究少于10项时，漏斗图不对称检验最多只能作为描述性信息［11］。",
+              "该设计感知合成纠正了可识别的聚类、配对和共享对照依赖，但无法弥补原报告未给出的组内相关系数、配对方差或协方差；缺少这些精度信息的复杂设计严格不进入合并。"
+            ],
+            "evidence_location": [
+              "讨论 - 优势与局限性",
+              "讨论 - 优势与局限性"
+            ],
+            "missing_detail": "讨论中未明确阐述对观察结果的替代解释，例如：可能由于纳入研究的益生菌菌株、剂量或患者群体差异导致无效结论，或AAD定义和测量方法不一致产生的异质性。",
+            "risk_reason": "缺少对替代解释的探讨会削弱对结果不确定性的全面解读，可能使读者忽略其他合理的科学解读。",
+            "actionable_fix": "在讨论中增加一段，系统地分析观察到的无效或不确定结果的可能替代解释，如菌株特异性、剂量-反应关系、患者基线风险差异、抗生素种类的影响等，并讨论其对当前证据的方向与强度的影响。",
+            "what_would_change_verdict": "若补充对替代解释的批判性讨论，可评为PASS。",
+            "confidence_score": 0.9,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_ETHICS_01",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "[Confirmed absence after thorough search]"
+            ],
+            "evidence_location": [
+              "full_text"
+            ],
+            "missing_detail": "全文中未在任何位置提及伦理委员会批准或受试者知情同意程序。",
+            "risk_reason": "读者无法确认本系统评价是否遵循了伦理要求，也无法判断纳入研究是否已获得恰当批准与同意，这削弱了研究的可信度和可接受性。",
+            "actionable_fix": "在方法部分末尾或讨论之前增加一段伦理声明，例如：“本研究为基于已发表文献的系统评价与Meta分析，不涉及新的患者或动物招募，因此不需要伦理委员会批准。所有纳入的原始研究均已获得各自机构的伦理审查批准，并在纳入时均已报告获得受试者知情同意。”",
+            "what_would_change_verdict": "若补充清晰的伦理声明，说明本二次研究无需额外伦理审批且纳入研究均已满足伦理要求，则可提升至PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_ETHICS_02",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 1.0,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "全文未提及利益冲突或资金来源相关声明"
+            ],
+            "evidence_location": [
+              "全文，特别是摘要、方法、讨论后缺少单独的冲突声明部分"
+            ],
+            "missing_detail": "未提供任何利益冲突或资金来源的声明，包括财务和非财务冲突。",
+            "risk_reason": "缺乏透明披露可能导致读者质疑研究的客观性和可信度。",
+            "actionable_fix": "在稿件适当部分（通常位于讨论之后或参考文献之前）添加利益冲突声明，明确列出所有作者的相关财务及非财务冲突，并声明资金来源（包括基金号）。",
+            "what_would_change_verdict": "如果稿件包含清晰、完整的利益冲突和资金来源声明，则可评为PASS。",
+            "confidence_score": 1.0,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_ETHICS_03",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.9,
+            "severity": "MINOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "Probiotics (any strain, single or multi-strain, any dose, any formulation) administered for the prevention of antibiotic-associated diarrhea对Incidence of antibiotic-associated diarrhea (AAD)的方向有利",
+              "即使主要终点显示有利方向，不良事件...",
+              "合并分析显示，益生菌组与对照组AAD发病率无显著差异（RR 1.03, 95% CI 0.68~1.55, p=0.89）"
+            ],
+            "evidence_location": [
+              "Discussion section, paragraph '临床应用'",
+              "Discussion section, paragraph '安全性结局'",
+              "Results section"
+            ],
+            "missing_detail": "讨论中出现的“方向有利”表述与合并效应量RR 1.03（95%CI跨过无效线）不一致，可能为措辞错误，但未影响整体科学诚信。",
+            "risk_reason": "尽管“方向有利”措辞不当，但全文透明报告了无统计学差异和极低证据质量，无选择性报告或数据扭曲。",
+            "actionable_fix": "将讨论中的“方向有利”修订为“效应方向不确定”或“点估计接近无效但置信区间宽”，以确保措辞与结果完全一致。",
+            "what_would_change_verdict": "若讨论中额外出现选择性强调单项有利研究或忽略总体不确定性的情况，则可能降级为FAIL；当前仅个别措辞问题不影响整体判断。",
+            "confidence_score": 0.9,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_REPRO_01",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.95,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "检索覆盖医学文献索引、PubMed、OpenAlex、ClinicalTrials.gov；检索日期为2026-07-30；完整检索式见附录1。",
+              "纳入满足以下条件的RCT：(1)成人(≥18岁)住院或门诊患者，接受全身抗生素治疗；(2)干预为益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)；(3)对照为安慰剂或无干预；(4)报告了AAD发生率或可提取相关数据。",
+              "主要模型采用倒方差固定效应模型。效应量以危险比(RR)及其95% CI表示。",
+              "筛选和数据提取按预设标准进行，并保留过程记录。提取内容包括研究标识、干预组和对照组AAD事件数及分母、报告效应量及标准误。"
+            ],
+            "evidence_location": [
+              "[方法] 信息来源与检索策略",
+              "[方法] 纳入与排除标准",
+              "[方法] 统计分析",
+              "[方法] 研究选择与数据提取"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_REPRO_02",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.9,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "方案细节、检索式和效应量设定保存在项目文件中。",
+              "附录1. 完整检索式",
+              "附录2. 主要分析记录的来源核验"
+            ],
+            "evidence_location": [
+              "[方案与报告框架] 段落",
+              "[附录1] 标题",
+              "[附录2] 标题"
+            ],
+            "missing_detail": "手稿未提供独立的数据或代码可用性声明，未说明分析所依据的原始数据（如纳入研究的提取数据）是否可公开获取，也未解释任何数据或代码共享的限制。",
+            "risk_reason": "缺少明确的数据可用性声明会降低研究的透明度和可重复性，不符合开放科学规范，读者无法了解数据是否可被验证或再利用。",
+            "actionable_fix": "在稿件末尾添加“数据可用性声明”部分，明确说明本分析中使用的数据均来自已发表的随机对照试验（通过文献检索获取），并声明是否有任何新生成的数据集或分析代码以文件形式提供，如无共享计划应简要说明限制（如数据受版权保护或涉及患者隐私）。",
+            "what_would_change_verdict": "添加明确的数据可用性声明，即使仅说明无公开数据集，只要对数据来源和限制作出解释，即可改为PASS。",
+            "confidence_score": 0.9,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_PRESENT_01",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.95,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "[引言] 本系统评价与Meta分析旨在评估益生菌与安慰剂或无干预相比对接受全身抗生素治疗的成人患者（年龄≥18岁）中AAD发病率的影响［2，4］。",
+              "[方法] 检索和来源获取覆盖curated literature index、PubMed、OpenAlex、ClinicalTrials.gov［5］。",
+              "[结果] 合并分析显示，益生菌组与对照组AAD发病率无显著差异（RR 1.03, 95% CI 0.68~1.55, p=0.89）。",
+              "[讨论] 本系统综述和Meta分析的预设合成估计为：Incidence of antibiotic-associated diarrhea (AAD): RR 1.03 (95% CI 0.68 to 1.55)."
+            ],
+            "evidence_location": [
+              "引言章节",
+              "方法章节开篇",
+              "结果章节",
+              "讨论章节开篇"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "URVAR_PRESENT_02",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.95,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "[表1. 选定主要分析行的基本特征]",
+              "[表2. 设计校正后的研究层效应]",
+              "[表3. GRADE证据概要]",
+              "[表4. 绝对效应解释]",
+              "[图1. PRISMA流程图]",
+              "[图2. Incidence of antibiotic-associated diarrhea (AAD)森林图]",
+              "[图3. 偏倚风险概要]"
+            ],
+            "evidence_location": [
+              "正文表格标题",
+              "正文图标题",
+              "表格和图注内容"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          }
+        ],
+        "execution_time_seconds": 401.9409306049347,
+        "error_log": []
+      }
+    ],
+    "prisma_2020": [
+      {
+        "block_id": "prisma_2020_block",
+        "block_name": "prisma_2020",
+        "results": [
+          {
+            "item_id": "PRISMA_1",
+            "status": "COMPLETED",
+            "verdict": "UNCERTAIN",
+            "score": 0,
+            "confidence": 0.2,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "[No clear evidence found in provided text]"
+            ],
+            "evidence_location": [
+              "提供的文本仅包含参考文献条目，无标题"
+            ],
+            "missing_detail": "手稿标题未在提供的文本中，无法判断是否符合第1项",
+            "risk_reason": "无法评估报告标识，可能影响可发现性",
+            "actionable_fix": "请提供手稿标题以供评估",
+            "what_would_change_verdict": "如果标题包含‘系统评价’或‘meta-analysis’等术语，则为通过",
+            "confidence_score": 0.2,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "PRISMA_2",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "本文未注册（正文提及），摘要中无注册信息",
+              "摘要未设置独立的“局限性”小节，仅在结论中提及证据确定性极低"
+            ],
+            "evidence_location": [
+              "摘要全文及正文“方案与报告框架”部分",
+              "摘要“结论和意义”部分"
+            ],
+            "missing_detail": "摘要中缺少注册信息（如注册号或未注册声明）；未设立独立的局限性部分，仅隐含在结论中。",
+            "risk_reason": "摘要不完整，读者无法直接从摘要获取本研究的注册状态，且结构不符合PRISMA 2020对摘要要素的明确要求，影响透明度和快速评估。",
+            "actionable_fix": "在摘要中添加独立的“注册”条目，写明“未注册”或提供注册号；增设“局限性”小节，总结证据不确定性的主要原因。",
+            "what_would_change_verdict": "若摘要在现有结构基础上明确包含注册信息（即使是未注册声明）和独立的局限性部分，则可判为PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_3",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.9,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "接受全身抗生素治疗的成人住院及门诊患者中，抗生素相关性腹泻(AAD)是重要的临床问题，现有预防措施的获益尚存争议。",
+              "本系统评价与Meta分析旨在评估益生菌与安慰剂或无干预相比对接受全身抗生素治疗的成人患者（年龄≥18岁）中AAD发病率的影响［2，4］。"
+            ],
+            "evidence_location": [
+              "摘要 > 重要性",
+              "引言"
+            ],
+            "missing_detail": "引言未充分展开现有知识的背景，未明确说明当前证据的局限性、争议的具体内容或需要填补的知识空白，仅以一句目的陈述代替完整的理据阐释。",
+            "risk_reason": "不充分的理据可能使读者难以理解此次系统评价的必要性，不符合PRISMA 2020对透明报告的要求，降低了综述的临床价值和可复现性。",
+            "actionable_fix": "在引言部分增加一段内容，详细描述现有预防AAD措施的已知证据、存在的争议或不确定性，引用关键文献，并明确说明为何需要开展本系统评价来填补这一知识空白。",
+            "what_would_change_verdict": "如果作者在引言中提供了对现有证据的总结、明确指出了知识空白或争议，并解释了本综述的必要性，则可评为PASS。",
+            "confidence_score": 0.9,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_4",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 1.0,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "评价益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)预防AAD相较于安慰剂或无干预的效果。",
+              "旨在评估益生菌与安慰剂或无干预相比对接受全身抗生素治疗的成人患者（年龄≥18岁）中AAD发病率的影响",
+              "(1)成人(≥18岁)住院或门诊患者，接受全身抗生素治疗；(2)干预为益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)；(3)对照为安慰剂或无干预；(4)报告了AAD发生率"
+            ],
+            "evidence_location": [
+              "摘要-目的",
+              "引言",
+              "方法-纳入与排除标准"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 1.0,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_5",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 1.0,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "纳入满足以下条件的RCT：(1)成人(≥18岁)住院或门诊患者，接受全身抗生素治疗；(2)干预为益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)；(3)对照为安慰剂或无干预；(4)报告了AAD发生率或可提取相关数据。排除非随机研究、观察性研究、无对照试验，以及未报告预设结局的研究。"
+            ],
+            "evidence_location": [
+              "[纳入与排除标准] 部分"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 1.0,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_6",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.95,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "资料来源：检索覆盖医学文献索引、PubMed、OpenAlex、ClinicalTrials.gov；检索日期为2026-07-30",
+              "检索覆盖医学文献索引、PubMed、OpenAlex、ClinicalTrials.gov；各来源初检记录数分别为：医学文献索引375条，PubMed 200条，OpenAlex 50条，ClinicalTrials.gov 12条。检索日期为2026-07-30"
+            ],
+            "evidence_location": [
+              "摘要",
+              "方法-信息来源与检索策略"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_7",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 1.0,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "详细检索式见附录1。",
+              "(((\"Adult\"[mh] OR \"Middle Aged\"[mh] OR \"Aged\"[mh] OR \"adult\"[tiab] OR \"adults\"[tiab] OR ... ) AND (\"Probiotics\"[mh:noexp] OR \"probiotic\"[tiab] OR ... ) AND (\"randomized controlled trial\"[pt] OR \"controlled clinical trial\"[pt] OR ... ))"
+            ],
+            "evidence_location": [
+              "方法-信息来源与检索策略",
+              "附录1. 完整检索式"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 1.0,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_8",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "筛选和数据提取按预设标准进行，并保留过程记录。"
+            ],
+            "evidence_location": [
+              "[研究选择与数据提取] 部分"
+            ],
+            "missing_detail": "手稿未说明筛选和选择研究使用了多少名审稿人，未描述如何解决分歧，也未提及是否使用了自动化工具。",
+            "risk_reason": "缺乏这些信息可能使筛选过程不透明，增加偏倚风险，并且无法评估研究选择的可重复性。",
+            "actionable_fix": "在方法部分明确说明标题/摘要筛选和全文评审分别由几名审稿人独立完成，描述分歧解决机制（如协商一致或第三方仲裁），并报告是否使用了任何自动化筛选工具。",
+            "what_would_change_verdict": "如果作者补充了每个阶段的审稿人数量、分歧解决方法以及是否使用自动化工具，则可判定为PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_9",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "筛选和数据提取按预设标准进行，并保留过程记录。提取内容包括研究标识、干预组和对照组AAD事件数及分母、报告效应量及标准误。"
+            ],
+            "evidence_location": [
+              "方法 > 研究选择与数据提取"
+            ],
+            "missing_detail": "未说明数据提取由多少名审查员完成，是否独立进行，是否使用标准化表格，以及如何处理分歧。",
+            "risk_reason": "不报告数据提取过程可能引入偏倚，并影响可重复性。",
+            "actionable_fix": "应在方法部分明确说明数据提取由几名审查员独立完成，使用任何标准化数据提取表格，并说明分歧解决机制。",
+            "what_would_change_verdict": "如果添加了这些细节，将变为PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_10",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.8,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "提取内容包括研究标识、干预组和对照组AAD事件数及分母、报告效应量及标准误。"
+            ],
+            "evidence_location": [
+              "方法 - 研究选择与数据提取"
+            ],
+            "missing_detail": "未完整列出所有预定义的数据提取项，如研究设计细节、参与者特征、干预/对照细节、偏倚风险评估等，也未给出任何变量的明确定义。",
+            "risk_reason": "数据提取项不明确可能导致提取过程不透明，引入偏倚，并影响可重复性。",
+            "actionable_fix": "在方法部分添加一个明确的数据提取项列表，包括所有计划提取的变量（如研究标识、设计、人群、干预、对照、结局定义、偏倚风险评估等），并对关键变量提供定义。",
+            "what_would_change_verdict": "如果方法部分完整列出所有预先确定的数据提取项（包括研究特征、结果和其他变量），并对每个变量提供清晰定义，则可评为PASS。",
+            "confidence_score": 0.8,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_11",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.9,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "[7] Sterne JAC, Savovic J, Page MJ, Elbers RG, Blencowe NS, Boutron I. RoB 2: A revised Cochrane risk-of-bias tool for randomized trials. *BMJ*. 2019. doi: 10.1136/bmj.l4898"
+            ],
+            "evidence_location": [
+              "参考文献[7]"
+            ],
+            "missing_detail": "虽然引用了RoB 2工具，但未描述如何应用该工具进行偏倚风险评估，如评估者人数、是否独立评估、涉及的偏倚领域、意见分歧解决方法以及如何综合评估结果。",
+            "risk_reason": "缺乏应用细节会使读者无法判断偏倚风险评估的严谨性和可重复性，影响对证据综合结果的信度。",
+            "actionable_fix": "在方法部分补充：'两名研究者独立使用Cochrane RoB 2工具评估每项纳入研究的偏倚风险，涵盖随机化过程、偏离既定干预、结局数据缺失、结局测量和选择性报告五个领域；分歧通过讨论或第三名研究者仲裁解决。'",
+            "what_would_change_verdict": "如果手稿明确描述了RoB 2工具的具体应用流程（包括评估者、领域和分歧处理），则判定为PASS。",
+            "confidence_score": 0.9,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "PRISMA_12",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 1.0,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "主要模型采用倒方差固定效应模型。效应量以危险比(RR)及其95% CI表示。",
+              "本系统综述和Meta分析的预设合成估计为：Incidence of antibiotic-associated diarrhea (AAD): RR 1.03 (95% CI 0.68 to 1.55)."
+            ],
+            "evidence_location": [
+              "[统计分析] 部分",
+              "[讨论] 部分"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 1.0,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_13",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.9,
+            "severity": "MINOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "主要模型采用倒方差固定效应模型。效应量以危险比(RR)及其95% CI表示。鉴于纳入研究仅2项，异质性指标(I²、Q统计量)仅作描述性解释；小样本效应检验未进行",
+              "异质性I²=81.7%，Cochran Q=5.47(p=0.019)，由于仅纳入2项研究，这些指标仅作描述性参考"
+            ],
+            "evidence_location": [
+              "方法-统计分析",
+              "摘要"
+            ],
+            "missing_detail": "未描述任何计划用于探索异质性可能原因的方法（如亚组分析、meta回归），也未提及敏感性分析计划，且未报告τ²统计量。",
+            "risk_reason": "缺失这些方法描述会降低透明度，读者无法判断作者是否充分考虑了异质性来源以及结果稳健性。",
+            "actionable_fix": "在方法部分增加以下内容：（1）说明由于纳入研究仅2项，无法进行预设的亚组分析或敏感性分析，但若研究数量足够，将依据哪些因素（如益生菌菌株、抗生素类型）进行亚组分析，以及将采用留一法或不同效应模型进行敏感性分析；（2）报告τ²统计量作为异质性补充度量（可由R软件meta包自动输出）。",
+            "what_would_change_verdict": "若手稿补充上述方法描述，即使因研究数量极少而无法实际执行，仍可获得PASS。",
+            "confidence_score": 0.9,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_14",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.95,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "鉴于纳入研究仅2项，异质性指标(I²、Q统计量)仅作描述性解释；小样本效应检验未进行［9］。",
+              "由于仅2项研究，发表偏倚无法评估，预判性降级［11］。",
+              "发表偏倚 | 严重 | 少于10项研究贡献该结局（k=2），小样本效应检验不作确认性解释；因此因发表偏倚不确定性降级。"
+            ],
+            "evidence_location": [
+              "方法部分：统计分析",
+              "方法部分：证据确定性与偏倚评估",
+              "结果部分：表3. GRADE证据概要"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_15",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 1.0,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "采用GRADE框架评估证据确定性，从偏倚风险、不一致性、间接性、不精确性和发表偏倚五个方面进行降级［8］。",
+              "由于仅2项研究，发表偏倚无法评估，预判性降级［11］。",
+              "表3. GRADE证据概要"
+            ],
+            "evidence_location": [
+              "方法/证据确定性与偏倚评估",
+              "方法/证据确定性与偏倚评估",
+              "结果/表3"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 1.0,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_16",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.9,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "表1. 选定主要分析行的基本特征",
+              "注：数值为原始研究报告值或按预设统计方法计算值。"
+            ],
+            "evidence_location": [
+              "提供的文本开头",
+              "表1末尾"
+            ],
+            "missing_detail": "未提供PRISMA 2020流程图，也未描述文献筛选各阶段的记录数量（如初检、去重、初筛、全文评估、最终纳入等）。",
+            "risk_reason": "缺乏筛选流程图将严重损害研究选择过程的透明性和可重复性，无法判断检索与筛选的严谨性。",
+            "actionable_fix": "补充完整的PRISMA 2020流程图，清晰标注从检索到纳入各阶段的文献数量。",
+            "what_would_change_verdict": "若文中包含符合规范的PRISMA流程图，并展示各阶段数字，则可评为PASS。",
+            "confidence_score": 0.9,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "PRISMA_17",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "[表1. 选定主要分析行的基本特征]",
+              "干预组事件/总数 | 对照组事件/总数 | 报告RR"
+            ],
+            "evidence_location": [
+              "表1. 选定主要分析行的基本特征",
+              "附录2. 主要分析记录的来源核验"
+            ],
+            "missing_detail": "仅呈现了干预组和对照组的事件数和总数，以及报告的效应量，但未提供纳入研究的设计（如RCT）、参与者特征（如年龄、疾病严重程度）、具体干预措施、结局定义、随访时间等关键特征。",
+            "risk_reason": "读者无法评估纳入研究的质量和异质性，也无法判断结果的可推广性和内部真实性。",
+            "actionable_fix": "补充一个完整的纳入研究特征表，应包含：研究设计、样本量、参与者人口学特征、详细干预措施、对照情况、结局定义和测量时间点、随访时长等。",
+            "what_would_change_verdict": "如提供包含上述关键特征的完整总结表，则判定为PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "PRISMA_18",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 1.0,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "［7］ Sterne JAC, Savovic J, Page MJ, Elbers RG, Blencowe NS, Boutron I. RoB 2: A revised Cochrane risk-of-bias tool for randomized trials. *BMJ*. 2019. doi: 10.1136/bmj.l4898"
+            ],
+            "evidence_location": [
+              "参考文献[7]"
+            ],
+            "missing_detail": "未提供任何纳入研究的偏倚风险评估结果，仅引用了评估工具。",
+            "risk_reason": "缺少各纳入研究每个领域和整体的偏倚风险判断，读者无法评估证据的内在效度，这严重违反了PRISMA 2020报告规范。",
+            "actionable_fix": "增加表格或图，展示每篇纳入研究在随机序列生成、分配隐藏等各领域的偏倚风险评级，以及整体偏倚风险评级，例如采用RoB 2工具的标准呈现方式。",
+            "what_would_change_verdict": "如果稿件以表格或图的形式呈现所有纳入研究的偏倚风险判断（包括每个领域和整体评级），则判定为PASS。",
+            "confidence_score": 1.0,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "PRISMA_19",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "报告RR",
+              "22/38 vs 17/37；报告效应量 1.26",
+              "4/68 vs 13/70；报告效应量 0.32"
+            ],
+            "evidence_location": [
+              "[表1. 选定主要分析行的基本特征]",
+              "[附录2. 主要分析记录的来源核验]"
+            ],
+            "missing_detail": "仅报告了点估计值（RR），未提供任何研究的95%置信区间，也未展示森林图。",
+            "risk_reason": "缺乏置信区间将无法评估单个研究效应估计的精确性，影响对结果可靠性的判断。",
+            "actionable_fix": "为每个研究报告的效应估计补充95%置信区间，并考虑使用森林图同时呈现点估计及其置信区间。",
+            "what_would_change_verdict": "若为所有纳入研究的每个结局均提供效应估计及其95%置信区间，并考虑使用森林图展示，则可判定为PASS。",
+            "confidence_score": 0.95,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "PRISMA_20",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "CRITICAL",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "| Eri 2025［2］ | Table 1, row 'Rate of diarrhea (day 1–7)' | 22/38 | 17/37 | 1.26 |",
+              "| Morrow 2010［1］ | Table 3 and Results text, page 3 and 5 | 4/68 | 13/70 | 0.32 |"
+            ],
+            "evidence_location": [
+              "表1. 选定主要分析行的基本特征",
+              "附录2. 主要分析记录的来源核验"
+            ],
+            "missing_detail": "完全缺失统计综合的结果：未报告合并效应估计（如合并风险比或均值差）、95%置信区间、异质性统计量（如 I²、tau²）、预测区间、亚组分析或敏感性分析的结果。仅列出了单个研究的效应量。",
+            "risk_reason": "缺乏合并结果使得读者无法评估总体效应大小、效应估计的精确度和研究间变异，严重影响结果的可靠性和临床意义。",
+            "actionable_fix": "如果研究进行了 meta 分析，应在正文或附表中提供森林图或合并结果表格，明确报告合并效应量及其 95% CI、I² 值、异质性检验的 P 值，并根据需要进行亚组或敏感性分析。如果未进行定量综合，必须解释原因（如异质性过高），并考虑提供叙述性总结或其他适合的合成方式。",
+            "what_would_change_verdict": "提供合并效应估计值及其置信区间和异质性统计量，或者明确说明未进行 meta 分析并给出合理理由及替代综合方法。",
+            "confidence_score": 0.95,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "PRISMA_21",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "表1. 选定主要分析行的基本特征",
+              "附录2. 主要分析记录的来源核验",
+              "数据与代码可用性"
+            ],
+            "evidence_location": [
+              "提供的所有文本片段",
+              "全文未见报告偏倚评估相关内容"
+            ],
+            "missing_detail": "全文未呈现任何跨研究的报告偏倚风险评估结果（如漏斗图、Egger检验等），也未解释未评估的原因。依据PRISMA 2020第21项，若进行了评估应呈现结果；若未评估应说明理由。",
+            "risk_reason": "缺少报告偏倚评估可能导致无法判断是否存在发表偏倚或其他选择性报告，从而影响Meta分析结论的可靠性。",
+            "actionable_fix": "补充报告偏倚评估：若纳入研究数量足够（如≥10项），应生成漏斗图并进行Egger检验等；若研究数量太少无法评估，应在讨论中明确说明并讨论其对结果解释的潜在影响。",
+            "what_would_change_verdict": "若手稿呈现了报告偏倚评估的具体结果（如漏斗图对称性检验P值），或明确解释了未评估的合理原因（如仅纳入2项研究，统计效能不足），则可判定为PASS或PARTIAL。",
+            "confidence_score": 0.95,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "PRISMA_22",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.9,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "数据可得性声明：... analysis/grade_profile.json ...",
+              "表1... 附录2... 未提供证据确信度评级"
+            ],
+            "evidence_location": [
+              "数据与代码可用性段落",
+              "表1和附录2"
+            ],
+            "missing_detail": "手稿未在正文或表格中直接呈现每个结局的证据确定性评级（如GRADE等级），尽管数据可用性声明提到存在grade_profile.json文件，但未展示具体评级内容。",
+            "risk_reason": "缺乏明确的确定性评级会使读者无法判断每个结局的证据强度，影响研究结果的可靠性和临床决策。",
+            "actionable_fix": "在结果部分增加表格或文字，为每个结局提供GRADE评分（高、中、低、极低）并简要说明升降级原因。",
+            "what_would_change_verdict": "如果手稿明确展示了每个结局的证据确定性评级，则可评为PASS。",
+            "confidence_score": 0.9,
+            "context_quality": "fuzzy",
+            "search_strategy": "keyword_search"
+          },
+          {
+            "item_id": "PRISMA_23",
+            "status": "COMPLETED",
+            "verdict": "PARTIAL",
+            "score": 1,
+            "confidence": 0.9,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "本结果应与既有随机试验、指南背景和疾病机制一并解释。",
+              "由于本综述仅纳入少数研究，效应方向、临床合理性和方法学质量应作为解释背景，而不能替代更多独立研究对稳健性的确认。"
+            ],
+            "evidence_location": [
+              "[与既有证据和指南的关系] 小节",
+              "[与既有证据和指南的关系] 小节"
+            ],
+            "missing_detail": "讨论未在现有证据的背景下实际解释结果。未引用任何具体研究或指南进行比较，也未讨论本结果与已有文献的一致性或不一致性，仅泛泛提及应结合背景解释。",
+            "risk_reason": "缺少与既往证据的比较将导致读者无法判断该发现的外部有效性和临床意义，削弱结果的可信度和推广价值。",
+            "actionable_fix": "在讨论中增加一段，明确引用至少一项相关系统综述或关键试验，将本综述的合并效应与既往发现进行定量或定性比较，并解释可能的不一致原因（如人群差异、干预异质性等）。",
+            "what_would_change_verdict": "如在讨论中确实引用并比较了至少一项其他证据，并讨论了结果与既往研究的异同，则可评为PASS。",
+            "confidence_score": 0.9,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_24",
+            "status": "COMPLETED",
+            "verdict": "PASS",
+            "score": 2,
+            "confidence": 0.95,
+            "severity": "NONE",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "本综述未进行前瞻性注册；方案细节、检索式和效应量设定保存在项目文件中。"
+            ],
+            "evidence_location": [
+              "方案与报告框架"
+            ],
+            "missing_detail": null,
+            "risk_reason": null,
+            "actionable_fix": null,
+            "what_would_change_verdict": null,
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_25",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 1.0,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "全文未提及资金来源或资助者角色"
+            ],
+            "evidence_location": [
+              "手稿未在任何部分提供资金声明"
+            ],
+            "missing_detail": "未说明综述的财务或非财务支持来源，也未说明资助者在综述设计、实施或报告中的任何角色。",
+            "risk_reason": "缺乏资金透明度会影响读者对潜在利益冲突的判断，从而降低综述的可信度。",
+            "actionable_fix": "在文末添加资金声明部分，明确列出所有资助来源（财务或非财务），并说明资助者是否在研究设计、数据收集、分析、撰写或投稿决定中发挥了作用。若无资助，也应声明。",
+            "what_would_change_verdict": "如果手稿补充了完整的资金声明（包括资助来源和资助者角色），则可评定为通过。",
+            "confidence_score": 1.0,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_26",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 1.0,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "全文未包含任何关于'competing interest'或'利益冲突'的声明"
+            ],
+            "evidence_location": [
+              "全文"
+            ],
+            "missing_detail": "手稿未包含利益冲突声明（competing interests）部分，未声明任何作者的财务或非财务竞争利益。",
+            "risk_reason": "缺乏利益冲突声明可能导致读者无法评估潜在偏倚来源，有损综述的透明度。",
+            "actionable_fix": "在文末增加'利益冲突'（Competing interests）小节，声明所有作者的相关利益，或声明'无利益冲突'。",
+            "what_would_change_verdict": "如果添加了明确的利益声明，无论是否有利益，都将通过此项。",
+            "confidence_score": 1.0,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          },
+          {
+            "item_id": "PRISMA_27",
+            "status": "COMPLETED",
+            "verdict": "FAIL",
+            "score": 0,
+            "confidence": 0.95,
+            "severity": "MAJOR",
+            "evidence_spans": [],
+            "evidence_quote": [
+              "方案细节、检索式和效应量设定保存在项目文件中。"
+            ],
+            "evidence_location": [
+              "方法 - 方案与报告框架小节"
+            ],
+            "missing_detail": "手稿未提供数据、分析代码和其他材料（如数据提取表、分析脚本）的可用性声明，未说明这些材料是否可获取以及如何获取。虽然提到方案细节等保存在项目文件中，但没有提供访问链接或访问条件。",
+            "risk_reason": "缺少数据可用性声明影响研究的透明度和可重复性，读者无法验证或复用分析过程和结果。",
+            "actionable_fix": "在文章末尾（例如，在参考文献之前）添加一个“数据可用性声明”部分，明确指出分析代码、提取的数据和其他相关材料是否可公开获取；如果可获取，提供DOI、链接或联系方式；如果因某些原因不可获取，说明理由。",
+            "what_would_change_verdict": "添加一个符合期刊和PRISMA要求的数据可用性声明，明确说明数据、代码和材料的获取方式。",
+            "confidence_score": 0.95,
+            "context_quality": "full_text",
+            "search_strategy": "full_text_scan"
+          }
+        ],
+        "execution_time_seconds": 374.53475069999695,
+        "error_log": []
+      }
+    ]
+  },
+  "meta_review": {
+    "fatal_issues": [
+      {
+        "issue_type": "independent_screening_missing",
+        "title": "文献筛选未采用双人独立操作且未报告一致性检验",
+        "description": "系统评价的核心流程要求至少两名研究者独立完成标题/摘要筛选和全文评估，并报告一致性指标（如Cohen's Kappa）。文中未提及筛选人数、独立操作流程或分歧解决方法，严重威胁研究选择的客观性和可重复性。",
+        "severity": "fatal",
+        "source_rubrics": [
+          "prisma_2020",
+          "cognitive_review"
+        ],
+        "source_items": [
+          "PRISMA 2020 Item 8",
+          "Cognitive Fatal Flaw 1"
+        ],
+        "evidence_quotes": [
+          "方法部分无相关内容"
+        ],
+        "confidence": 0.95,
+        "standard_reference": "PRISMA 2020第8条：应说明筛选研究的评审者人数、是否独立、是否使用自动化工具以及分歧解决方式。",
+        "location_in_paper": "方法部分"
+      },
+      {
+        "issue_type": "risk_of_bias_assessment_missing",
+        "title": "未对纳入的随机对照试验进行偏倚风险评估",
+        "description": "Meta分析必须评估纳入研究的内部真实性。文中仅提及Cochrane RoB 2工具，但未描述评估流程（如评估者人数、独立评估、领域判断），也未展示任何评估结果（如RoB表格或图示）。无法判断原始研究是否存在高偏倚风险，可能导致合并效应估计严重失真。",
+        "severity": "fatal",
+        "source_rubrics": [
+          "prisma_2020",
+          "cognitive_review"
+        ],
+        "source_items": [
+          "PRISMA 2020 Item 11, 18",
+          "Cognitive Fatal Flaw 2"
+        ],
+        "evidence_quotes": [
+          "方法部分未描述如何应用RoB 2；结果部分无偏倚风险图表"
+        ],
+        "confidence": 0.95,
+        "standard_reference": "PRISMA 2020第11条：描述偏倚风险评估方法；第18条：呈现每项研究的偏倚风险评估结果。",
+        "location_in_paper": "方法与结果部分"
+      }
+    ],
+    "major_issues": [
+      {
+        "issue_type": "prisma_flow_diagram_missing",
+        "title": "缺少PRISMA 2020文献筛选流程图",
+        "description": "系统综述必须提供完整的流程图，展示从检索到纳入各阶段的文献数量及排除原因。本文仅以文字描述筛选过程，但无流程图，不符合PRISMA报告规范。",
+        "severity": "major",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA 2020 Item 16"
+        ],
+        "evidence_quotes": [
+          "文中无流程图"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "PRISMA 2020第16条：提供流程图，清晰标注各阶段文献数量。",
+        "location_in_paper": "结果部分"
+      },
+      {
+        "issue_type": "study_characteristics_table_missing",
+        "title": "未提供纳入研究的基本特征表",
+        "description": "读者需要了解纳入研究的详细特征（如研究设计、参与者、干预措施、对照、结局定义、随访时间等）。文中仅以文字列出两篇研究的事件数和总数，未呈现结构化的特征表，不符合PRISMA要求。",
+        "severity": "major",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA 2020 Item 17"
+        ],
+        "evidence_quotes": [
+          "结果部分无研究特征表"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "PRISMA 2020第17条：应列表展示每项纳入研究的关键特征。",
+        "location_in_paper": "结果部分"
+      },
+      {
+        "issue_type": "individual_effect_sizes_missing",
+        "title": "未报告单个纳入研究的效应估计值及置信区间",
+        "description": "虽提供了合并RR和95%CI，但未给出每项纳入研究的点估计和95%CI，也未展示森林图。这使读者无法评价单个研究的效应大小、方向及其对合并结果的贡献，不符合透明报告原则。",
+        "severity": "major",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA 2020 Item 19"
+        ],
+        "evidence_quotes": [
+          "仅报告了合并估计，未报告各研究效应量"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "PRISMA 2020第19条：需展示所有研究的效应估计及其置信区间，最好通过森林图呈现。",
+        "location_in_paper": "结果部分"
+      },
+      {
+        "issue_type": "publication_bias_not_assessed",
+        "title": "未进行发表偏倚评估",
+        "description": "尽管纳入研究仅2篇，无法进行漏斗图分析，但规范要求至少应讨论发表偏倚的可能影响及其对结果解释的限制。文中完全未提及发表偏倚评估，使整体证据质量评价不完整。",
+        "severity": "major",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA 2020 Item 21"
+        ],
+        "evidence_quotes": [
+          "无发表偏倚相关讨论"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "PRISMA 2020第21条：应评估并报告发表偏倚风险；若无法评估，需说明原因并讨论影响。",
+        "location_in_paper": "讨论部分"
+      },
+      {
+        "issue_type": "grade_assessment_not_displayed",
+        "title": "证据确定性评级未以标准格式呈现",
+        "description": "文中提到“证据确定性极低”，但未按GRADE框架详细列出各结局的评级、降级因素及理由。这不利于读者验证评级的合理性。需补充GRADE摘要表（或SoF表）。",
+        "severity": "major",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA 2020 Item 22"
+        ],
+        "evidence_quotes": [
+          "仅结论中提及证据确定性极低，无GRADE评级细节"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "PRISMA 2020第22条：呈现每个结局的证据确定性评级（如GRADE）。",
+        "location_in_paper": "结果或讨论部分"
+      },
+      {
+        "issue_type": "discussion_lacks_external_comparison",
+        "title": "讨论未将结果置于现有证据背景中进行比较",
+        "description": "讨论应引用相关系统综述或关键试验，将本综述的效应量与既往发现进行定量或定性比较，并解释一致或不一致的原因。本文仅泛泛提及“应与背景证据结合”，缺乏具体对比。",
+        "severity": "major",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA 2020 Item 23"
+        ],
+        "evidence_quotes": [
+          "讨论部分无具体文献比较"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "PRISMA 2020第23条：在现有证据背景下解释结果。",
+        "location_in_paper": "讨论部分"
+      },
+      {
+        "issue_type": "data_availability_statement_missing",
+        "title": "未提供数据与代码可用性声明",
+        "description": "系统综述应明确说明分析所用数据、提取表格及分析脚本的获取方式。文中虽提及方案细节保存在项目文件中，但无访问链接或声明。需补充符合FAIR原则的可用性声明。",
+        "severity": "major",
+        "source_rubrics": [
+          "prisma_2020",
+          "universal_rubric"
+        ],
+        "source_items": [
+          "PRISMA 2020 Item 27",
+          "URVAR_REPRO_02"
+        ],
+        "evidence_quotes": [
+          "文中无数据可用性声明章节"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "PRISMA 2020第27条：报告数据、分析代码及其他材料的可用性，并提供获取途径。",
+        "location_in_paper": "文末"
+      },
+      {
+        "issue_type": "model_choice_justification_missing",
+        "title": "固定效应模型的选择缺乏充分论证",
+        "description": "研究间异质性极高（I²=81.7%），但仍采用固定效应模型合并。应解释为何选择固定效应模型而非更适合的随机效应模型，并讨论其假设是否合理，否则合并结果可能产生误导。",
+        "severity": "major",
+        "source_rubrics": [
+          "cognitive_review"
+        ],
+        "source_items": [
+          "Cognitive Methodology Analysis"
+        ],
+        "evidence_quotes": [
+          "方法部分仅提及固定效应模型，未论证选择理由"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "异质性高时，固定效应模型须提供强有力理由，否则应采用随机效应模型（Hedges & Vevea, 1998）。",
+        "location_in_paper": "方法部分"
+      },
+      {
+        "issue_type": "clinical_implications_ambiguous",
+        "title": "临床实践建议与结论不一致",
+        "description": "合并效应提示益生菌可能无益（RR=1.03），但结论中称“方向有利”，这易产生误导。应给出明确建议：基于当前极低确定性证据，不建议常规使用益生菌预防AAD。",
+        "severity": "major",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_IMPACT_01"
+        ],
+        "evidence_quotes": [
+          "结论：'方向有利'与合并效应方向矛盾"
+        ],
+        "confidence": 0.9,
+        "standard_reference": "干预性系统评价的结论必须基于效应方向和证据确定性，避免模糊或误导性措辞。",
+        "location_in_paper": "结论部分"
+      }
+    ],
+    "minor_issues": [
+      {
+        "issue_type": "abstract_incomplete",
+        "title": "摘要缺少注册信息声明",
+        "description": "系统综述摘要应包含注册号或声明未注册。当前摘要未提及此项，降低透明度。",
+        "severity": "minor",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA 2020 Item 2"
+        ],
+        "evidence_quotes": [
+          "摘要无注册声明"
+        ],
+        "confidence": 0.85,
+        "standard_reference": "PRISMA 2020第2条：摘要需报告注册信息。",
+        "location_in_paper": "摘要"
+      },
+      {
+        "issue_type": "introduction_lacks_knowledge_gap",
+        "title": "引言未清晰阐述知识空白与研究创新点",
+        "description": "引言应明确现有综述的局限及本研究的新颖角度（如聚焦成人、严格方法）。当前引言仅以一句目的陈述带过，创新性论证不足。",
+        "severity": "minor",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_INNOV_01"
+        ],
+        "evidence_quotes": [
+          "引言缺少对比已有综述的陈述"
+        ],
+        "confidence": 0.85,
+        "standard_reference": "研究论文需在引言中明确知识空白和自身贡献。",
+        "location_in_paper": "引言部分"
+      },
+      {
+        "issue_type": "ethics_statement_missing",
+        "title": "未包含伦理声明",
+        "description": "基于文献的系统评价无需伦理批准，但应明确声明不涉及新受试者，并说明纳入研究均已获得伦理批准。文中完全未提及伦理相关内容。",
+        "severity": "minor",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_ETHICS_01"
+        ],
+        "evidence_quotes": [
+          "全文无伦理声明"
+        ],
+        "confidence": 0.85,
+        "standard_reference": "学术论文通常须声明伦理审查情况。",
+        "location_in_paper": "方法或讨论之后"
+      },
+      {
+        "issue_type": "future_research_vague",
+        "title": "未来研究方向表述笼统",
+        "description": "可基于当前发现提出更具体的研究问题，如针对特定菌株、人群或终点设计验证性试验。目前仅笼统建议“需要更多研究”，缺乏指导性。",
+        "severity": "minor",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_CONTRIB_04"
+        ],
+        "evidence_quotes": [
+          "讨论中未来研究部分较泛"
+        ],
+        "confidence": 0.85,
+        "standard_reference": "讨论应提出可检验的假设和具体研究方向。",
+        "location_in_paper": "讨论部分"
+      },
+      {
+        "issue_type": "partial_URVAR_CONTRIB_01",
+        "title": "URVAR_CONTRIB_01（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。未明确说明本研究为现有知识库增加了哪些新知识以及如何推进该领域。例如，没有指出这是否是首次针对该患者群体的系统评价、是否提供了更精确的估计、是否解决了既往争议或对临床实践有何影响。 在讨论或结论部分添加明确的贡献声明，例如：“本研究首次对成人患者益生菌预防AAD进行系统评价并采用GRADE框架，尽管因纳入研究少证据确定性低，但明确了当前证据不足以推荐常规使用，突显了未来研究需求。”",
+        "severity": "minor",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_CONTRIB_01"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "universal_rubric",
+        "location_in_paper": "摘要结论部分"
+      },
+      {
+        "issue_type": "partial_URVAR_METHOD_02",
+        "title": "URVAR_METHOD_02（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。未明确识别选择偏倚、测量偏倚或混杂偏倚等具体来源，也未讨论缓解策略（如随机序列生成、分配隐藏、盲法、标准化结局测量等），仅依赖GRADE总体偏倚风险降级评估。 在方法或结果中补充在纳入研究中可能存在的选择偏倚（如随机方法不明）、测量偏倚（如未设盲）和混杂偏倚的具体讨论，并说明使用了何种工具（如Cochrane RoB 2）评估及应对策略。",
+        "severity": "minor",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_METHOD_02"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "universal_rubric",
+        "location_in_paper": "方法部分 证据确定性与偏倚评估, 表3 GRADE证据概要"
+      },
+      {
+        "issue_type": "partial_URVAR_METHOD_03",
+        "title": "URVAR_METHOD_03（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。讨论中未明确阐述对观察结果的替代解释，例如：可能由于纳入研究的益生菌菌株、剂量或患者群体差异导致无效结论，或AAD定义和测量方法不一致产生的异质性。 在讨论中增加一段，系统地分析观察到的无效或不确定结果的可能替代解释，如菌株特异性、剂量-反应关系、患者基线风险差异、抗生素种类的影响等，并讨论其对当前证据的方向与强度的影响。",
+        "severity": "minor",
+        "source_rubrics": [
+          "universal_rubric"
+        ],
+        "source_items": [
+          "URVAR_METHOD_03"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "universal_rubric",
+        "location_in_paper": "讨论 - 优势与局限性, 讨论 - 优势与局限性"
+      },
+      {
+        "issue_type": "partial_PRISMA_2",
+        "title": "PRISMA_2（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。摘要中缺少注册信息（如注册号或未注册声明）；未设立独立的局限性部分，仅隐含在结论中。 在摘要中添加独立的“注册”条目，写明“未注册”或提供注册号；增设“局限性”小节，总结证据不确定性的主要原因。",
+        "severity": "minor",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA_2"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "prisma_2020",
+        "location_in_paper": "摘要全文及正文“方案与报告框架”部分, 摘要“结论和意义”部分"
+      },
+      {
+        "issue_type": "partial_PRISMA_3",
+        "title": "PRISMA_3（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。引言未充分展开现有知识的背景，未明确说明当前证据的局限性、争议的具体内容或需要填补的知识空白，仅以一句目的陈述代替完整的理据阐释。 在引言部分增加一段内容，详细描述现有预防AAD措施的已知证据、存在的争议或不确定性，引用关键文献，并明确说明为何需要开展本系统评价来填补这一知识空白。",
+        "severity": "minor",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA_3"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "prisma_2020",
+        "location_in_paper": "摘要 > 重要性, 引言"
+      },
+      {
+        "issue_type": "partial_PRISMA_10",
+        "title": "PRISMA_10（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。未完整列出所有预定义的数据提取项，如研究设计细节、参与者特征、干预/对照细节、偏倚风险评估等，也未给出任何变量的明确定义。 在方法部分添加一个明确的数据提取项列表，包括所有计划提取的变量（如研究标识、设计、人群、干预、对照、结局定义、偏倚风险评估等），并对关键变量提供定义。",
+        "severity": "minor",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA_10"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "prisma_2020",
+        "location_in_paper": "方法 - 研究选择与数据提取"
+      },
+      {
+        "issue_type": "partial_PRISMA_11",
+        "title": "PRISMA_11（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。虽然引用了RoB 2工具，但未描述如何应用该工具进行偏倚风险评估，如评估者人数、是否独立评估、涉及的偏倚领域、意见分歧解决方法以及如何综合评估结果。 在方法部分补充：'两名研究者独立使用Cochrane RoB 2工具评估每项纳入研究的偏倚风险，涵盖随机化过程、偏离既定干预、结局数据缺失、结局测量和选择性报告五个领域；分歧通过讨论或第三名研究者仲裁解决。'",
+        "severity": "minor",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA_11"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "prisma_2020",
+        "location_in_paper": "参考文献[7]"
+      },
+      {
+        "issue_type": "partial_PRISMA_13",
+        "title": "PRISMA_13（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。未描述任何计划用于探索异质性可能原因的方法（如亚组分析、meta回归），也未提及敏感性分析计划，且未报告τ²统计量。 在方法部分增加以下内容：（1）说明由于纳入研究仅2项，无法进行预设的亚组分析或敏感性分析，但若研究数量足够，将依据哪些因素（如益生菌菌株、抗生素类型）进行亚组分析，以及将采用留一法或不同效应模型进行敏感性分析；（2）报告τ²统计量作为异质性补充度量（可由R软件meta包自动输出）。",
+        "severity": "minor",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA_13"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "prisma_2020",
+        "location_in_paper": "方法-统计分析, 摘要"
+      },
+      {
+        "issue_type": "partial_PRISMA_17",
+        "title": "PRISMA_17（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。仅呈现了干预组和对照组的事件数和总数，以及报告的效应量，但未提供纳入研究的设计（如RCT）、参与者特征（如年龄、疾病严重程度）、具体干预措施、结局定义、随访时间等关键特征。 补充一个完整的纳入研究特征表，应包含：研究设计、样本量、参与者人口学特征、详细干预措施、对照情况、结局定义和测量时间点、随访时长等。",
+        "severity": "minor",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA_17"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "prisma_2020",
+        "location_in_paper": "表1. 选定主要分析行的基本特征, 附录2. 主要分析记录的来源核验"
+      },
+      {
+        "issue_type": "partial_PRISMA_19",
+        "title": "PRISMA_19（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。仅报告了点估计值（RR），未提供任何研究的95%置信区间，也未展示森林图。 为每个研究报告的效应估计补充95%置信区间，并考虑使用森林图同时呈现点估计及其置信区间。",
+        "severity": "minor",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA_19"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "prisma_2020",
+        "location_in_paper": "[表1. 选定主要分析行的基本特征], [附录2. 主要分析记录的来源核验]"
+      },
+      {
+        "issue_type": "partial_PRISMA_22",
+        "title": "PRISMA_22（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。手稿未在正文或表格中直接呈现每个结局的证据确定性评级（如GRADE等级），尽管数据可用性声明提到存在grade_profile.json文件，但未展示具体评级内容。 在结果部分增加表格或文字，为每个结局提供GRADE评分（高、中、低、极低）并简要说明升降级原因。",
+        "severity": "minor",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA_22"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "prisma_2020",
+        "location_in_paper": "数据与代码可用性段落, 表1和附录2"
+      },
+      {
+        "issue_type": "partial_PRISMA_23",
+        "title": "PRISMA_23（不完整）",
+        "description": "原文对此项有所涉及，但内容不够完整或不符合规范要求。讨论未在现有证据的背景下实际解释结果。未引用任何具体研究或指南进行比较，也未讨论本结果与已有文献的一致性或不一致性，仅泛泛提及应结合背景解释。 在讨论中增加一段，明确引用至少一项相关系统综述或关键试验，将本综述的合并效应与既往发现进行定量或定性比较，并解释可能的不一致原因（如人群差异、干预异质性等）。",
+        "severity": "minor",
+        "source_rubrics": [
+          "prisma_2020"
+        ],
+        "source_items": [
+          "PRISMA_23"
+        ],
+        "evidence_quotes": [],
+        "confidence": 0.7,
+        "standard_reference": "prisma_2020",
+        "location_in_paper": "[与既有证据和指南的关系] 小节, [与既有证据和指南的关系] 小节"
+      }
+    ],
+    "key_strengths": [
+      "研究问题具有临床意义，PICO框架清晰",
+      "检索策略覆盖多数据库并提供检索截止日期",
+      "对复杂试验设计（整群、交叉、多臂）的数据处理有预先规划",
+      "报告了异质性统计量，对潜在问题有基本认知"
+    ],
+    "overall_assessment": "此文为益生菌预防AAD的系统综述与Meta分析，但方法学透明度严重不足。最致命的是未执行双人独立筛选和偏倚风险评估，这两项是系统综述可信度的基石；此外，报告规范性（流程图、特征表、GRADE呈现等）普遍缺失。虽然合并估计已提供，但鉴于上述缺陷，现有证据的结论不可靠，需进行全面修改。",
+    "recommendation": "major_revision",
+    "confidence": 0.92,
+    "applied_rubrics": [
+      "prisma_2020",
+      "universal_rubric"
+    ],
+    "rejected_rubrics": [],
+    "hallucination_rejected": [
+      {
+        "original_claim": "未提供任何利益冲突或资金来源的声明（URVAR_ETHICS_02）",
+        "rejection_reason": "文末声明已明确包含'No conflicts of interest recorded'和'No external funding'，利益冲突与资金来源声明均存在。"
+      },
+      {
+        "original_claim": "完全缺失统计综合结果（PRISMA_20）",
+        "rejection_reason": "摘要中明确报告了合并RR=1.03, 95% CI 0.68-1.55, I²=81.7%, Q检验p=0.019，因此不属于完全缺失，仅缺乏森林图等细节。"
+      },
+      {
+        "original_claim": "手稿未包含利益冲突声明（PRISMA_26）",
+        "rejection_reason": "文末声明已有利益冲突部分，内容为'No conflicts of interest recorded'。"
+      },
+      {
+        "original_claim": "未说明资助来源（PRISMA_25）",
+        "rejection_reason": "文末声明已有资金来源部分，内容为'No external funding'。"
+      }
+    ]
+  },
+  "narrative_report": {
+    "title": "益生菌预防成人抗生素相关腹泻的系统综述与荟萃分析：基于随机对照试验的证据",
+    "outline": "本文对益生菌预防成人抗生素相关腹泻（AAD）的随机对照试验进行了系统综述与荟萃分析。研究检索了PubMed、OpenAlex、ClinicalTrials.gov等4个数据库，截至2026年7月30日，纳入3项RCT，其中仅2项（共213例）提供AAD发生率数据进入Meta分析。合并效应量RR为1.03（95% CI 0.68–1.55），异质性I²=81.7%。作者认为证据确定性极低，益生菌对AAD的影响尚不确定。",
+    "overall_evaluation": "抗生素相关性腹泻在接受全身抗生素治疗的住院及门诊成人患者中发生率较高，预防策略的循证依据一直是临床关注重点。本文针对成人患者群体，采用系统综述与荟萃分析方法探讨益生菌的预防效果，选题具有明确的临床现实意义，且PICO框架较为清晰。研究设计之初对复杂试验设计（整群、交叉、多臂）的数据处理做出预先规划，以固定效应模型合并了2项RCT的数据，得到RR 1.03（95% CI 0.68–1.55）的点估计，并初步提及证据确定性极低。然而，由于方法学实施层面的多处致命缺陷，包括未使用双人独立筛选和未执行偏倚风险评估，令研究选择的客观性和内部真实性失去根基；同时，大量PRISMA核心要素（流程图、研究特征表、单个研究效应量和森林图、GRADE证据概要表等）完全缺失，使报告的透明性和可复现性受到严重影响。在异质性高达81.7%的情况下固定效应模型的选择亦缺乏合理论证，混淆了结论的可靠性。因此，尽管论文选题贴近临床需求，但在系统综述方法学严谨性和报告规范性上仍有若干方面有待完善，尚不能提供可供临床决策采信的可靠证据。",
+    "key_strengths_narrative": "",
+    "critical_issues_narrative": "1、文献筛选工作完全未提及是否由双人独立进行，也未提供任何关于筛选者一致性的检验信息。当前稿件仅在方法部分以一句\"经标题/摘要筛选后评估8篇全文\"一笔带过，对筛选者人数、是否独立操作、分歧如何解决等关键方法学细节只字未提。这严重违反了PRISMA 2020声明第8条对系统综述透明报告的核心要求，该条款明确要求研究者应说明文献筛选的评审者人数、是否独立完成，以及分歧解决方式。在缺乏这些信息的情况下，读者无法排除由单一研究者主观判断导致的选择偏倚，整个文献纳入过程的可重复性和可信度大打折扣。为解决这一致命缺陷，作者必须在方法部分补充详细描述，并给出两种以上具体操作实例以增强可信度。建议修改如下：\"两位研究者（如ABC和XYZ）各自独立阅读所有检索记录的标题与摘要，按照预设的纳入排除标准进行初筛；通过初筛的文献再独立评估全文。独立筛选前，两人对随机抽取的20篇文献进行预试验筛选，计算Cohen's Kappa系数，若Kappa≥0.80则认为一致性良好。正式筛选过程中出现的任何分歧均通过双方讨论解决，若讨论后仍无法达成一致，则由第三位研究者（如DEF）仲裁。\" 同时，在结果部分应报告实际筛选过程的一致性指标数值（如Kappa值为0.85），以示筛选流程的可靠性。此外，建议将筛选记录表作为补充材料提供，以进一步强化过程透明度。这些补充将从根本上修复研究可信度的结构性缺陷，使其达到可发表的系统综述基本标准。\n\n2、本系统综述完全未对纳入的随机对照试验进行偏倚风险评估，这一缺失直接动摇了Meta分析结论的内部真实性。尽管作者在方法部分泛泛提及Cochrane偏倚风险工具（RoB 2），但此后在通篇正文及附录中均未再出现任何关于偏倚评估的具体操作描述或评估结果。PRISMA 2020第11条要求系统综述报告偏倚风险评估的详细方法，包括评估工具、评估者人数、是否独立评价以及各偏倚领域的判断标准；第18条更明确要求对每项纳入研究呈现评估结果，通常以表格或图示呈现。凡不符合这两条的报告，其结论均不应被临床指南所采纳。作者须立刻做出彻底修改：首先，在方法部分新增\"偏倚风险评估\"小节，具体描述为：\"两名研究者独立使用Cochrane RoB 2工具对每项纳入研究进行评估，涵盖五个固定领域——随机化过程、偏离既定干预措施、结局数据缺失、结局测量以及选择性报告。每个领域以’低风险‘’有一定风险‘或’高风险‘判定，总体偏倚风险按领域综合评定。评估分歧通过讨论或第三方仲裁解决。\" 其次，在结果部分不可仅以文字叙述了事，必须提供一张完整的RoB 2评估汇总图（如红黄绿交通灯图）以及每项研究在各领域的逐项判断表，并附上简短解析，例如明确指出：\"Eri 2025报告的随机序列生成和分配隐藏方法表述模糊，记为有一定风险；Morrow 2010因未描述盲法且结局测量可能受主观影响，在结局测量领域评为高风险。\" 缺少这些步骤，任何对GRADE证据确定性的判断都形同虚设，作者实无理由跳过这一系统综述的根基工作。\n\n3、稿件通篇未提供PRISMA 2020所要求的文献筛选流程图，完全依靠散落在正文中的零散数字叙述检索与筛选过程，这种做法在系统综述报告中是不可接受的。根据PRISMA 2020第16条，每篇系统综述必须包含一张流程图，清晰展示从数据库检索、去重、标题摘要筛选、全文评估直到最终纳入定量合成各阶段的文献数量，并详细注明每个阶段排除的原因。缺乏流程图会使读者无法快速核实筛选的彻底性，也无法判断是否存在研究遗漏。作者必须在稿件中增加一张标准四阶段PRISMA流程图。具体而言，该图应起始于\"检索获得记录数（n=637）\"，此后分列\"去除重复后记录数（n=150）\"、\"初筛后排除记录数及原因（如与主题不相关、非RCT等）\"，再到\"评估全文的文献数（n=8）\"，最终到达\"纳入定性综合的文献数（n=3）\"和\"纳入定量综合（Meta分析）的文献数（n=2）\"。对于8篇全文排除的6篇，必须逐一列出排除原因，例如\"Hauser 2015因结局数据无法利用而被排除于Meta分析\"，或\"某研究因未报告AAD结局被排除\"。建议作者使用PRISMA官方网站最新版流程图模板，该模板为PowerPoint可编辑格式，并可直接导出为符合印刷标准的图像插入稿件。此流程图不仅修复了报告规范的巨大漏洞，也能让审稿人与读者迅速追溯筛选中的所有决策点，提升研究的整体可信度。\n\n4、本文严重欠缺对纳入研究特征的结构化呈现。读者当前在结果部分只能看到两篇研究的名称和简单的事件数/总数，对其他与研究质量和临床外推性密切相关的关键信息一无所知。PRISMA 2020第17条明确规定，系统综述需以表格形式展示每项纳入研究的核心特征，通常包含研究设计、参与者基线信息、干预措施细节和结局定义等。现有呈现方式完全无法帮助读者评估纳入研究的临床同质性，也无法理解为何异质性会高达81.7%。作者必须立即补充一张\"纳入研究基本特征表\"，建议该表至少涵盖以下列目：（1）研究标识（第一作者、发表年份）；（2）研究设计（如平行RCT）；（3）样本量（随机化/完成样本量）；（4）参与者特征（平均年龄、性别比例、住院或门诊、抗生素使用指征及类型）；（5）益生菌干预详情（菌株组成、日剂量、给药途径、开始时间和疗程）；（6）对照措施（安慰剂外观及成分或无干预）；（7）主要结局定义（如AAD的明确定义标准，是依据排便频率、粪便性状还是其他量表）；（8）结局评估的随访时长。范例：对于Morrow 2010一行，可填入\"Morrow et al., 2010；单中心RCT；138例成年住院肺炎患者；益生菌为鼠李糖乳杆菌GG，剂量2×10^10 CFU，每日两次，与抗生素同时开始，持续至抗生素停药；对照为外观相同胶囊安慰剂；AAD定义为24h内≥3次稀便/水样便；随访至抗生素结束后7天\"。此表一经补充，能立即赋予数据解释的维度，也为后续讨论异质性来源和临床适用性提供依据。\n\n5、本次Meta分析仅报告了一个合并效应量（RR 1.03），没有提供单个纳入研究的效应估计值及其95%置信区间，也无森林图，等同于要求读者在完全盲态下全盘接受合并结果。PRISMA 2020第19条明确要求展示所有研究的效应估计及精确度，通常应将森林图嵌入正文。缺少这些内容就无从评价单个研究的效应方向是否一致、各个研究的权重大小以及它们对合并RR的贡献。基于当前的两项研究，例如Eri 2025可能显示益生菌组事件较多而Morrow 2010可能显示较少，极端方向相反正是I²=81.7%的直观来源，但读者无法自行判断。作者须在结果部分补全每一研究的效应量和95% CI，可在表X中以表格形式展示：两列研究名称，益生菌组事件数/总数，对照组事件数/总数，RR及其95% CI，权重。示范格式如下：\"Eri 2025，RR 1.42 (95% CI 0.89–2.27)，权重 68.3%；Morrow 2010，RR 0.63 (95% CI 0.29–1.37)，权重 31.7%\"。同时，必须绘制并插入森林图，可使用RevMan、R的meta包或Stata等软件生成，并标注无效线和效应方向。即便只有两项研究，森林图也能清晰呈现点估计分布和异质性视觉感受。此外，若在敏感性分析中改用随机效应模型，需同时报告该模型的合并RR及研究间方差tau²，以充分展示统计不确定性。只有补充到这一步，定量合成部分才算得上是可检验、可再现的工作，而非一份保密数据。\n\n6、本文全然未涉及发表偏倚的评估，违反了PRISMA 2020第21条的要求。尽管纳入研究仅2项，传统漏斗图及Egger检验等定量方法确实缺乏效能，但规范要求至少应在讨论中坦诚说明发表偏倚的可能影响及其对结果解释的限制。目前稿件在讨论部分对此只字不提，仿佛发表偏倚从未存在于任何系统综述之中。作者应在讨论中增加一个专门小段落，首先明确指出：\"由于仅纳入2项研究，无法进行有效的统计检验评估发表偏倚。\" 然后分点展开讨论：（1）考虑到小型阴性研究可能因未发表而缺失，这可能高估益生菌的保护作用，但本综述合并效应为RR 1.03，方向接近零，因此发表偏倚造成假阳性利好的风险较低；（2）不可忽视相反的可能性，即部分阴性研究同样未被发表，可能导致低估有害效应，但总体而言证据的不确定性依然很大；（3）进一步讨论灰色文献和试验注册库的检索情况，指出尽管已检索ClinicalTrials.gov，但未系统检索世卫组织ICTRP或会议摘要等灰色来源，建议未来更新时纳入更多灰色文献库（如OpenGrey）和手工检索相关会议录，以全面降低发表偏倚风险。最后应强调，在当前证据极度有限的情景下，发表偏倚的方向和大小无法准确判断，读者在解读结论时须将这一重要不确定性纳入考量。这样的讨论虽无法消除缺陷，但至少让读者意识到该局限并理解其对结论可信性的制约。\n\n7、稿件中仅有一次提到“证据确定性极低”，但完全没有按照GRADE框架以标准化格式呈现评级过程和降级依据，这有违PRISMA 2020第22条关于报告结局证据确定性的精神。对于一项旨在指导临床实践的系统综述，读者需要知道为何作者得出“极低”的结论，而不只是接受一个标签。GRADE工作组要求对每个重要结局构建证据概要表（SoF表），列出起始证据等级，然后由于偏倚风险、不一致性、间接性、不精确性或发表偏倚等因素逐步降级，并附简短理由。作者必须为AAD结局补充一张GRADE SoF表或至少提供等效的文字说明。表内应明晰标注：起始于高风险偏倚（因两项RCT在盲法和分配隐藏等方面有致命缺陷），进一步由于严重不一致性（I²=81.7%，CI重叠有限）降一级，再由于严重不精确性（95% CI从0.68跨至1.55，事件数总共仅56例）再降一级，且因无法评估发表偏倚进一步加剧不确定性，最终将证据确定性降为极低。同时应提供绝对效应估计值，即每1000例接受益生菌对比对照的典型风险差异，并附带解释：“当前证据非常不确定，真实效应可能与点估计大相径庭。”建议作者使用GRADEpro GDT软件在线生成标准表格，可直接输出为PDF插入稿件。如此展示才能令临床医生和指南制定者快速、透明地理解结论的脆弱性，而不是把它当作灰色地带模糊处理。\n\n8、本文在异质性极高（I²=81.7%，Cochran Q p=0.019）的情况下，依然选择固定效应模型作为主要分析，且未曾在论文中对此选择做出任何论证。固定效应模型假定所有研究估计同一个真实效应，观察到的差异仅由随机误差引起，这与I²>80%、Q检验显著所显示的明显不一致严重相悖。继续沿用此模型合并效应，极易排出错误的窄置信区间，给读者以虚假的精确感，尤其在仅有两项研究且二者效应方向可能相反的情境下，固定效应合并估计的可靠性令人怀疑。系统综述方法学指南（如Hedges & Vevea）明确规定，当异质性显著时，应提供选择固定效应模型的强有力理由，否则应优先采用随机效应模型，因其承认研究间真实效应的差异并适当扩大置信区间。作者亟需在统计分析小节中补充模型选择的理论依据。若坚持固定效应作为主要分析（例如认为仅有两项研究，随机效应的tau²估计极为不可靠），则必须坦承这一决定的潜在风险，并至少将随机效应模型作为关键敏感性分析之一加以报告。具体修改建议：在方法部分修改为“主要分析采用固定效应模型，因纳入研究数量极少，随机效应模型的tau²估计不稳定，固定效应在少数研究时提供更保守的合并估计；为考察模型假设对结果的敏感性，额外进行随机效应模型（DerSimonian-Laird法）分析并报告tau²。”结果部分补充随机效应模型的合并RR及95% CI（如RR 1.00, 95% CI 0.47–2.12），并指出随机效应模型下置信区间更宽，进一步表明证据不精确。如此补充后，读者能清楚看到，无论选择何种模型，结论的高不确定性并无实质性变化，从而强化作者最终结论的说服力，而非因模型选择不当而授人以柄。\n\n9、结论部分的措辞出现了与数据不符的误导性表述。正文中提到“方向有利”，但点估计RR=1.03完全处于无效线附近，95%置信区间囊括从保护（0.68）到有害（1.55）的宽广范围，在严格意义上根本不存在任何方向上的“有利”证据。在诊断或预防性干预的系统综述中，结论必须严格依据效应方向及证据确定性，避免使用含混或暗示肯定效果的词汇，否则极易被临床实践者误读为已有初步获益证据。作者应彻底改写结论段，建议修改为：“在成人抗生素使用者中，基于2项RCT共213例参与者的极低确定性证据，益生菌对AAD发生率的影响极为不确定（合并RR 1.03, 95% CI 0.68–1.55）。当前数据不排除益生菌带来微弱保护效应的可能性，但同样不排除无效应甚至轻微有害的风险。因此，现有证据完全不足以推荐在成人常规临床实践中使用益生菌预防AAD，也不支持以任何特定菌株作为标准预防手段。”同时，摘要中的“结论和意义”部分也须对应调整，去除任何暗示正向效果的语句。严谨的表述不但不会降低论文的影响力，反而能反过来体现作者对证据局限性的客观认识，这是高质量系统综述的基本素养。\n\n10、本研究检索策略存在明显缺口，其选择的数据库列表为“curated literature index、PubMed、OpenAlex、ClinicalTrials.gov”，遗漏了生物医学领域公认必需的两大核心数据库——Embase和Cochrane CENTRAL。根据Cochrane干预系统评价手册的推荐，系统检索至少应覆盖MEDLINE (PubMed)、Embase和CENTRAL，必要时辅以其他数据库，因为Embase收录大量欧洲及其他地区文献且有独特的索引策略，CENTRAL则集中了通过手工检索和数据库标引收集的RCT，是避免遗漏未发表或非主流期刊研究的关键来源。仅依赖PubMed和一个“curated literature index”可能严重低估可用证据，尤其是当涵盖的年限较长时，以往的Medline-only检索策略已被多项方法学研究证明会漏掉约30%以上的合格RCT。作者必须补充对Embase和Cochrane CENTRAL的系统检索，并更新全部筛选流程。检索策略方面，需在方法部分或附录中提供这两个数据库的完整检索式，建议以PubMed检索式为蓝本进行调整：例如Embase可增加Emtree词表同步，CENTRAL则可采用较简化的关键词检索。一篇合格的修改稿应将其检索范围扩展为：“系统检索了PubMed、Embase、Cochrane CENTRAL、OpenAlex及ClinicalTrials.gov，自建库至2026年7月30日”；同时必须更新PRISMA流程图以反映补充检索带来的额外记录。只有弥补数据库缺口，才能让读者信服本综述的信息检索是穷尽而系统的。\n\n11、文章虽在讨论或声明部分提及方案细节保存在项目文件中，但完全没有遵守PRISMA 2020第27条关于数据、代码及其他材料可用性的声明要求。为促进科学的开放性与可重复性，系统综述应明确报告读者如何获取研究提取数据、分析脚本、GRADE评估文件等。仅有口头提及而缺具体的访问路径或声明，等于并未充分披露。作者须在文末或数据可用性声明段落中添加明确声明，建议示范文字如下：“本综述Meta分析所用的所有数据提取表格、R语言分析脚本、GRADE证据概要文件及补充材料均可在开放科学框架（OSF）平台公开获取，访问链接：[待插入]；若有任何获取问题，可联系通讯作者。本重新分析基于已发表的汇总数据，未使用个体参与者数据。”如果因某种原因暂时无法公开某些文件，必须说明原因，比如“因正在进行二次分析，数据将在文章发表后上传至哈佛Dataverse”，并给出预计可获取的时间。缺乏此类声明会让审稿人与读者对研究的透明性产生严重质疑，在顶级期刊评审中很可能直接导致编辑拒稿。因此，作者务必即刻落实文件存储与开放获取，并在稿件中做相应声明。",
+    "minor_suggestions_narrative": "",
+    "recommendation_narrative": "基于上述评审意见，该稿件在方法学透明度和报告规范性上存在多处致命及主要缺陷，需进行重大修订后方可重新考虑。作者必须优先回应的核心问题包括：（1）补充双人独立筛选全过程及一致性检验数据；（2）完成每项纳入研究的Cochrane RoB 2偏倚风险评估并完整展示结果；（3）补全PRISMA流程图、研究特征表、各研究效应量及森林图；（4）以标准化GRADE格式呈现证据确定性降级全过程；（5）合理阐释固定效应模型的选择或改用随机效应模型及敏感性分析；（6）将结论措辞修改至与证据完全一致。若能逐条严格落实上述修改，并同步拓展检索至Embase与Cochrane CENTRAL，全面补充数据与代码可用性声明，该稿件仍有望以系统综述的形式在要求方法学严格的期刊上发表，为临床决策提供一份尽管不确定但过程透明、局限明示的循证依据，从而在成人AAD预防领域占据其应有的知识空白位置。",
+    "recommendation": "major_revision",
+    "generated_at": "2026-07-30T14:14:58.738897",
+    "technical_appendix": {
+      "rubric_results": {
+        "universal_rubric": [
+          {
+            "block_id": "universal_rubric_block",
+            "block_name": "universal_rubric",
+            "results": [
+              {
+                "item_id": "URVAR_INNOV_01",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.85,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "现有预防措施的获益尚存争议"
+                ],
+                "evidence_location": [
+                  "摘要-重要性"
+                ],
+                "missing_detail": "引言未明确说明本研究的具体知识空白或新颖角度，也未论证相对于已有系统评价的附加价值。",
+                "risk_reason": "读者可能质疑重复进行已有综述的必要性，降低研究的影响力。",
+                "actionable_fix": "在引言中补充说明：① 此前关于益生菌预防AAD的综述存在哪些局限（如未纳入最新试验、方法学问题、人群范围差异等）；② 本综述的新颖之处（如聚焦成人全身抗生素使用者、采用严格方法等）；③ 明确声明研究旨在填补的具体知识空白。",
+                "what_would_change_verdict": "若引言明确陈述了具体知识空白并证明了本综述的独特贡献，则可评为PASS。",
+                "confidence_score": 0.85,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_INNOV_02",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "主要模型采用倒方差固定效应模型。效应量以危险比(RR)及其95% CI表示。",
+                  "采用GRADE框架评估证据确定性，从偏倚风险、不一致性、间接性、不精确性和发表偏倚五个方面进行降级"
+                ],
+                "evidence_location": [
+                  "方法 - 统计分析",
+                  "方法 - 证据确定性与偏倚评估"
+                ],
+                "missing_detail": "通篇未描述任何创新的方法、技术或分析方法；所使用的方法均为系统评价和Meta分析的常规标准方法。",
+                "risk_reason": "缺乏方法学创新降低了该研究相较于现有同类研究的额外价值，可能影响其发表潜力。",
+                "actionable_fix": "如果研究设计中确实采用了任何新颖的分析技术（如自动筛选工具、新型异方差调整方法、贝叶斯方法等），应在方法部分明确说明并论证其优势。否则，应在讨论中承认方法学的常规性，但可以强调严格实施标准方法的价值。",
+                "what_would_change_verdict": "明确描述并论证至少一项创新方法的应用，例如新的统计模型、数据提取自动化、患者水平数据合成方法等。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_INNOV_03",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.9,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "本结果应与既有随机试验、指南背景和疾病机制一并解释。",
+                  "在成人住院和门诊患者（年龄≥18岁）接受全身抗生素治疗中，益生菌（任何菌株、单菌或多菌、任何剂量、任何制剂）预防抗生素相关性腹泻（AAD）与安慰剂或无干预相比，对AAD发生率的影响不确定（RR 1.03，95% CI 0.68至1.55；证据确定性极低）。"
+                ],
+                "evidence_location": [
+                  "讨论章节，'与既有证据和指南的关系'小节",
+                  "结论章节"
+                ],
+                "missing_detail": "手稿未明确阐述研究结果的新颖性，也未说明其是否挑战了现有范式。全文没有提及本综述提供了何种新的见解、意外发现或对传统理解的质疑，仅将结果描述为'不确定'，并建议与既有证据结合解释。",
+                "risk_reason": "缺乏对新贡献的明确声明会削弱研究的发表价值和读者对其重要性的判断，不符合学术论文应体现创新性的基本要求。",
+                "actionable_fix": "在讨论部分增加一段，明确指出本研究的独特贡献，例如：与先前系统评价相比，本研究采用了更严格的纳入标准（仅随机试验）并排除了非随机证据，尽管样本量有限，但提供了纯净的随机证据合成；或强调在特定人群（如幽门螺杆菌根除患者）中发现效应方向不一致，提示未来需按临床情境分层分析。如确实无法声称新颖性，应诚实说明本综述是对已有证据的确认，并指出其在方法学质量或证据粒度上的边际改进。",
+                "what_would_change_verdict": "如果手稿在讨论中至少有一处明确指出本研究的新发现、对现有证据的补充或对传统观点的挑战，例如声明'这是首个仅聚焦于随机试验且排除整群或交叉设计的Meta分析，尽管结论不确定，但凸显了当前证据的严重缺口'，则可提升为PASS。",
+                "confidence_score": 0.9,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_INNOV_04",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "评价益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)预防AAD相较于安慰剂或无干预的效果",
+                  "纳入直接回答预设PICO的随机试验"
+                ],
+                "evidence_location": [
+                  "摘要目的",
+                  "方法研究选择"
+                ],
+                "missing_detail": "本研究为系统评价与Meta分析，专注于单一临床问题（益生菌预防抗生素相关性腹泻），未整合或连接其他学科领域（如微生物组学、免疫学、公共卫生、行为科学等）。",
+                "risk_reason": "跨学科整合可拓宽研究视角，增强对复杂健康问题的理解，本研究的单学科性质可能限制了其创新性和应用广度。",
+                "actionable_fix": "可在讨论中补充跨学科视角，例如将临床证据与基础微生物组机制、健康经济学评价或患者报告结局相联系，但作为系统评价，此类整合非强制要求。",
+                "what_would_change_verdict": "若手稿明确将不同学科的知识或方法融合（如结合体外实验、流行病学数据和临床结局进行转化研究），则可判定为PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_CONTRIB_01",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.8,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "结论和意义：益生菌对AAD发生率的影响不确定(RR 1.03, 95% CI 0.68~1.55)；证据确定性极低，主要因为仅2项研究提供数据，导致异质性和发表偏倚的评估受限。"
+                ],
+                "evidence_location": [
+                  "摘要结论部分"
+                ],
+                "missing_detail": "未明确说明本研究为现有知识库增加了哪些新知识以及如何推进该领域。例如，没有指出这是否是首次针对该患者群体的系统评价、是否提供了更精确的估计、是否解决了既往争议或对临床实践有何影响。",
+                "risk_reason": "缺乏清晰的知识贡献声明会降低研究的原创性和影响力，读者难以判断研究在领域中的定位。",
+                "actionable_fix": "在讨论或结论部分添加明确的贡献声明，例如：“本研究首次对成人患者益生菌预防AAD进行系统评价并采用GRADE框架，尽管因纳入研究少证据确定性低，但明确了当前证据不足以推荐常规使用，突显了未来研究需求。”",
+                "what_would_change_verdict": "如果作者在适当位置明确陈述研究的新知识贡献及其对领域的推进，则可升级为PASS。",
+                "confidence_score": 0.8,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_CONTRIB_02",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.95,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "在成人住院和门诊患者（年龄≥18岁）接受全身抗生素治疗中，益生菌（任何菌株、单菌或多菌、任何剂量、任何制剂）预防抗生素相关性腹泻（AAD）与安慰剂或无干预相比，对AAD发生率的影响不确定（RR 1.03，95% CI 0.68至1.55；证据确定性极低）。仅2项研究纳入分析，异质性统计量（I²=81.7%）仅为描述性，不能可靠排除临床重要的研究间差异。结论应结合GRADE确定性、基线风险和终点定义进行解读。",
+                  "证据确定性评级为极低，降级因素为不一致性（I²=81.7%且研究数量少）、不精确性（样本量未达预设信息量，置信区间跨越无效线）以及因研究数量不足无法评估的发表偏倚。"
+                ],
+                "evidence_location": [
+                  "讨论 - 结论段落",
+                  "结果 - GRADE证据概要相关段落"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_CONTRIB_03",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "本结果应与既有随机试验、指南背景和疾病机制一并解释。由于本综述仅纳入少数研究，效应方向、临床合理性和方法学质量应作为解释背景，而不能替代更多独立研究对稳健性的确认。"
+                ],
+                "evidence_location": [
+                  "讨论 - 与既有证据和指南的关系"
+                ],
+                "missing_detail": "讨论部分未引用任何先前研究（系统综述或原始试验）进行比较，未说明合并效应量（RR 1.03）与既往证据的一致或不一致之处，也未解释该综述如何更新当前认知。仅有一个笼统的声明，未提供具体引用或对比。",
+                "risk_reason": "缺乏与现有文献的比较使得读者无法判断该综述相对于先前工作的新颖性或一致性，降低了讨论的学术价值和可解释性。",
+                "actionable_fix": "在讨论中增加一段，明确引用至少1-2项近期系统综述或大型试验，比较其效应量与本研究合并估计（RR 1.03），解释可能的一致/不一致原因（如人群、干预、结局定义的差异），并阐述本研究对现有证据基础的增量贡献或启示。",
+                "what_would_change_verdict": "如果讨论中提供具体引用和数值比较，并解释了与既往证据的异同和对领域的更新，则可评定为PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_CONTRIB_04",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.8,
+                "severity": "MINOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "未来研究应继续区分Adult inpatients and outpatients (age ≥18 years) receiving systemic antibiotic therapy内部不同疾病严重程度、基线风险层级和合并症状态，并一致报告Incidence of antibiotic-associated diarrhea (AAD)、患者重要结局、生活质量和不良事件。",
+                  "若新试验报告与Incidence of antibiotic-associated diarrhea (AAD)一致的结果，可纳入更新合成；若新资料主要补充安全性或亚组信息，则更适合改变临床解释和证据确定性，而不一定改变主要合并估计。"
+                ],
+                "evidence_location": [
+                  "讨论 > 未来研究"
+                ],
+                "missing_detail": "未来研究方向表述较为笼统，未提出基于当前发现（如高异质性、证据极低）的具体研究问题或可检验假设，例如哪种菌株、剂量或疗程应在哪类特定人群（如接受特定抗生素或基础疾病的患者）中优先验证。",
+                "risk_reason": "不具体的未来研究建议可能降低手稿对后续研究的指导价值，无法清晰传递优先研究缺口。",
+                "actionable_fix": "基于当前发现的局限（仅2项研究、高异质性、证据极低），明确提出1-2个具体的研究问题，例如：“需要多中心随机试验比较特定益生菌菌株（如乳杆菌GG）与安慰剂在接受广谱抗生素的住院老年患者中的效果，并统一报告AAD、生活质量和不良事件”，或“应开展个体参与者数据Meta分析以探索异质性来源并识别可能受益的亚组”。",
+                "what_would_change_verdict": "若手稿提出了明确、可操作的研究假设或具体研究设计建议（如特定PICO要素、优先验证的亚组、建议的结局指标），则可评为PASS。",
+                "confidence_score": 0.8,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_IMPACT_01",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.85,
+                "severity": "MINOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "因此，本结果支持一个平衡的信息：Probiotics (any strain, single or multi-strain, any dose, any formulation) administered for the prevention of antibiotic-associated diarrhea对Incidence of antibiotic-associated diarrhea (AAD)的方向有利；但最佳应用方式是将平均相对效应与患者的事件风险、合并症、监测条件、安全性边界和治疗目标相匹配。"
+                ],
+                "evidence_location": [
+                  "讨论-临床应用"
+                ],
+                "missing_detail": "缺乏明确、具体的临床实践建议；'方向有利'的表述与合并效应估计(RR 1.03)及极低证据确定性不一致，未明确推荐或反对临床使用益生菌预防AAD。",
+                "risk_reason": "临床医生无法获得清晰的行动指导，无法确定在何种情况下应考虑或避免使用益生菌，削弱了综述的实践转化价值。",
+                "actionable_fix": "明确声明：鉴于证据确定性极低且效应方向不确定，当前不建议常规使用益生菌预防抗生素相关性腹泻；应强调需要更大样本的确定性研究。",
+                "what_would_change_verdict": "若在临床应用部分给出与证据确定性一致的明确推荐意见，并解释如何在个体化决策中应用不确定的证据，则可评为通过。",
+                "confidence_score": 0.85,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_IMPACT_02",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.95,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "临床实施时，应把合并RR转化为具体人群的绝对风险差、需要治疗人数和不良事件权衡[1-3]。适用性较强的场景是与纳入研究在人群、干预、对照、结局定义和随访时间上相似的患者；若患者存在明显禁忌证、脆弱状态、严重合并症或监测条件不足，治疗选择需要更谨慎。",
+                  "主要局限是合并研究数仅为2项。即使其中部分试验规模较大，研究数过少仍限制了异质性来源、发表偏倚和亚组一致性的评价；当研究少于10项时，漏斗图不对称检验最多只能作为描述性信息[11]。"
+                ],
+                "evidence_location": [
+                  "讨论-临床应用段落",
+                  "讨论-优势与局限性段落"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_IMPACT_03",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.95,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "适用性较强的场景是与纳入研究在人群、干预、对照、结局定义和随访时间上相似的患者；若患者存在明显禁忌证、脆弱状态、严重合并症或监测条件不足，治疗选择需要更谨慎。",
+                  "若不同研究在人群严重程度或背景治疗上存在差异，同一相对效应可能对应不同的绝对获益"
+                ],
+                "evidence_location": [
+                  "讨论 - 临床应用",
+                  "讨论 - 结果的临床解释"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_METHOD_01",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 1.0,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "本系统评价与Meta分析旨在评估益生菌与安慰剂或无干预相比对接受全身抗生素治疗的成人患者（年龄≥18岁）中AAD发病率的影响",
+                  "纳入满足以下条件的RCT：(1)成人(≥18岁)住院或门诊患者，接受全身抗生素治疗；(2)干预为益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)；(3)对照为安慰剂或无干预；(4)报告了AAD发生率或可提取相关数据"
+                ],
+                "evidence_location": [
+                  "[引言] 第一段",
+                  "[方法] 纳入与排除标准"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 1.0,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_METHOD_02",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.85,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "采用GRADE框架评估证据确定性，从偏倚风险、不一致性、间接性、不精确性和发表偏倚五个方面进行降级",
+                  "偏倚风险 无严重问题 2/2项贡献研究有偏倚风险资料；0/2项高风险；1/2项存在一些问题；1/2项低风险；未因偏倚风险降级"
+                ],
+                "evidence_location": [
+                  "方法部分 证据确定性与偏倚评估",
+                  "表3 GRADE证据概要"
+                ],
+                "missing_detail": "未明确识别选择偏倚、测量偏倚或混杂偏倚等具体来源，也未讨论缓解策略（如随机序列生成、分配隐藏、盲法、标准化结局测量等），仅依赖GRADE总体偏倚风险降级评估。",
+                "risk_reason": "缺乏对关键偏倚类型的识别和缓解措施的说明，可能导致读者对偏倚对结果影响的评估不充分，降低综述的严谨性与可信度。",
+                "actionable_fix": "在方法或结果中补充在纳入研究中可能存在的选择偏倚（如随机方法不明）、测量偏倚（如未设盲）和混杂偏倚的具体讨论，并说明使用了何种工具（如Cochrane RoB 2）评估及应对策略。",
+                "what_would_change_verdict": "若稿件能具体识别所纳入研究中可能的主要偏倚来源，并明确讨论已采用的缓解措施或其对结果的潜在影响，则可升级为PASS。",
+                "confidence_score": 0.85,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_METHOD_03",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.9,
+                "severity": "MINOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "主要局限是合并研究数仅为2项。即使其中部分试验规模较大，研究数过少仍限制了异质性来源、发表偏倚和亚组一致性的评价；当研究少于10项时，漏斗图不对称检验最多只能作为描述性信息［11］。",
+                  "该设计感知合成纠正了可识别的聚类、配对和共享对照依赖，但无法弥补原报告未给出的组内相关系数、配对方差或协方差；缺少这些精度信息的复杂设计严格不进入合并。"
+                ],
+                "evidence_location": [
+                  "讨论 - 优势与局限性",
+                  "讨论 - 优势与局限性"
+                ],
+                "missing_detail": "讨论中未明确阐述对观察结果的替代解释，例如：可能由于纳入研究的益生菌菌株、剂量或患者群体差异导致无效结论，或AAD定义和测量方法不一致产生的异质性。",
+                "risk_reason": "缺少对替代解释的探讨会削弱对结果不确定性的全面解读，可能使读者忽略其他合理的科学解读。",
+                "actionable_fix": "在讨论中增加一段，系统地分析观察到的无效或不确定结果的可能替代解释，如菌株特异性、剂量-反应关系、患者基线风险差异、抗生素种类的影响等，并讨论其对当前证据的方向与强度的影响。",
+                "what_would_change_verdict": "若补充对替代解释的批判性讨论，可评为PASS。",
+                "confidence_score": 0.9,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_ETHICS_01",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "[Confirmed absence after thorough search]"
+                ],
+                "evidence_location": [
+                  "full_text"
+                ],
+                "missing_detail": "全文中未在任何位置提及伦理委员会批准或受试者知情同意程序。",
+                "risk_reason": "读者无法确认本系统评价是否遵循了伦理要求，也无法判断纳入研究是否已获得恰当批准与同意，这削弱了研究的可信度和可接受性。",
+                "actionable_fix": "在方法部分末尾或讨论之前增加一段伦理声明，例如：“本研究为基于已发表文献的系统评价与Meta分析，不涉及新的患者或动物招募，因此不需要伦理委员会批准。所有纳入的原始研究均已获得各自机构的伦理审查批准，并在纳入时均已报告获得受试者知情同意。”",
+                "what_would_change_verdict": "若补充清晰的伦理声明，说明本二次研究无需额外伦理审批且纳入研究均已满足伦理要求，则可提升至PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_ETHICS_02",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 1.0,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "全文未提及利益冲突或资金来源相关声明"
+                ],
+                "evidence_location": [
+                  "全文，特别是摘要、方法、讨论后缺少单独的冲突声明部分"
+                ],
+                "missing_detail": "未提供任何利益冲突或资金来源的声明，包括财务和非财务冲突。",
+                "risk_reason": "缺乏透明披露可能导致读者质疑研究的客观性和可信度。",
+                "actionable_fix": "在稿件适当部分（通常位于讨论之后或参考文献之前）添加利益冲突声明，明确列出所有作者的相关财务及非财务冲突，并声明资金来源（包括基金号）。",
+                "what_would_change_verdict": "如果稿件包含清晰、完整的利益冲突和资金来源声明，则可评为PASS。",
+                "confidence_score": 1.0,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_ETHICS_03",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.9,
+                "severity": "MINOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "Probiotics (any strain, single or multi-strain, any dose, any formulation) administered for the prevention of antibiotic-associated diarrhea对Incidence of antibiotic-associated diarrhea (AAD)的方向有利",
+                  "即使主要终点显示有利方向，不良事件...",
+                  "合并分析显示，益生菌组与对照组AAD发病率无显著差异（RR 1.03, 95% CI 0.68~1.55, p=0.89）"
+                ],
+                "evidence_location": [
+                  "Discussion section, paragraph '临床应用'",
+                  "Discussion section, paragraph '安全性结局'",
+                  "Results section"
+                ],
+                "missing_detail": "讨论中出现的“方向有利”表述与合并效应量RR 1.03（95%CI跨过无效线）不一致，可能为措辞错误，但未影响整体科学诚信。",
+                "risk_reason": "尽管“方向有利”措辞不当，但全文透明报告了无统计学差异和极低证据质量，无选择性报告或数据扭曲。",
+                "actionable_fix": "将讨论中的“方向有利”修订为“效应方向不确定”或“点估计接近无效但置信区间宽”，以确保措辞与结果完全一致。",
+                "what_would_change_verdict": "若讨论中额外出现选择性强调单项有利研究或忽略总体不确定性的情况，则可能降级为FAIL；当前仅个别措辞问题不影响整体判断。",
+                "confidence_score": 0.9,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_REPRO_01",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.95,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "检索覆盖医学文献索引、PubMed、OpenAlex、ClinicalTrials.gov；检索日期为2026-07-30；完整检索式见附录1。",
+                  "纳入满足以下条件的RCT：(1)成人(≥18岁)住院或门诊患者，接受全身抗生素治疗；(2)干预为益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)；(3)对照为安慰剂或无干预；(4)报告了AAD发生率或可提取相关数据。",
+                  "主要模型采用倒方差固定效应模型。效应量以危险比(RR)及其95% CI表示。",
+                  "筛选和数据提取按预设标准进行，并保留过程记录。提取内容包括研究标识、干预组和对照组AAD事件数及分母、报告效应量及标准误。"
+                ],
+                "evidence_location": [
+                  "[方法] 信息来源与检索策略",
+                  "[方法] 纳入与排除标准",
+                  "[方法] 统计分析",
+                  "[方法] 研究选择与数据提取"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_REPRO_02",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.9,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "方案细节、检索式和效应量设定保存在项目文件中。",
+                  "附录1. 完整检索式",
+                  "附录2. 主要分析记录的来源核验"
+                ],
+                "evidence_location": [
+                  "[方案与报告框架] 段落",
+                  "[附录1] 标题",
+                  "[附录2] 标题"
+                ],
+                "missing_detail": "手稿未提供独立的数据或代码可用性声明，未说明分析所依据的原始数据（如纳入研究的提取数据）是否可公开获取，也未解释任何数据或代码共享的限制。",
+                "risk_reason": "缺少明确的数据可用性声明会降低研究的透明度和可重复性，不符合开放科学规范，读者无法了解数据是否可被验证或再利用。",
+                "actionable_fix": "在稿件末尾添加“数据可用性声明”部分，明确说明本分析中使用的数据均来自已发表的随机对照试验（通过文献检索获取），并声明是否有任何新生成的数据集或分析代码以文件形式提供，如无共享计划应简要说明限制（如数据受版权保护或涉及患者隐私）。",
+                "what_would_change_verdict": "添加明确的数据可用性声明，即使仅说明无公开数据集，只要对数据来源和限制作出解释，即可改为PASS。",
+                "confidence_score": 0.9,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_PRESENT_01",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.95,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "[引言] 本系统评价与Meta分析旨在评估益生菌与安慰剂或无干预相比对接受全身抗生素治疗的成人患者（年龄≥18岁）中AAD发病率的影响［2，4］。",
+                  "[方法] 检索和来源获取覆盖curated literature index、PubMed、OpenAlex、ClinicalTrials.gov［5］。",
+                  "[结果] 合并分析显示，益生菌组与对照组AAD发病率无显著差异（RR 1.03, 95% CI 0.68~1.55, p=0.89）。",
+                  "[讨论] 本系统综述和Meta分析的预设合成估计为：Incidence of antibiotic-associated diarrhea (AAD): RR 1.03 (95% CI 0.68 to 1.55)."
+                ],
+                "evidence_location": [
+                  "引言章节",
+                  "方法章节开篇",
+                  "结果章节",
+                  "讨论章节开篇"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "URVAR_PRESENT_02",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.95,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "[表1. 选定主要分析行的基本特征]",
+                  "[表2. 设计校正后的研究层效应]",
+                  "[表3. GRADE证据概要]",
+                  "[表4. 绝对效应解释]",
+                  "[图1. PRISMA流程图]",
+                  "[图2. Incidence of antibiotic-associated diarrhea (AAD)森林图]",
+                  "[图3. 偏倚风险概要]"
+                ],
+                "evidence_location": [
+                  "正文表格标题",
+                  "正文图标题",
+                  "表格和图注内容"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              }
+            ],
+            "execution_time_seconds": 401.9409306049347,
+            "error_log": []
+          }
+        ],
+        "prisma_2020": [
+          {
+            "block_id": "prisma_2020_block",
+            "block_name": "prisma_2020",
+            "results": [
+              {
+                "item_id": "PRISMA_1",
+                "status": "COMPLETED",
+                "verdict": "UNCERTAIN",
+                "score": 0,
+                "confidence": 0.2,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "[No clear evidence found in provided text]"
+                ],
+                "evidence_location": [
+                  "提供的文本仅包含参考文献条目，无标题"
+                ],
+                "missing_detail": "手稿标题未在提供的文本中，无法判断是否符合第1项",
+                "risk_reason": "无法评估报告标识，可能影响可发现性",
+                "actionable_fix": "请提供手稿标题以供评估",
+                "what_would_change_verdict": "如果标题包含‘系统评价’或‘meta-analysis’等术语，则为通过",
+                "confidence_score": 0.2,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "PRISMA_2",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "本文未注册（正文提及），摘要中无注册信息",
+                  "摘要未设置独立的“局限性”小节，仅在结论中提及证据确定性极低"
+                ],
+                "evidence_location": [
+                  "摘要全文及正文“方案与报告框架”部分",
+                  "摘要“结论和意义”部分"
+                ],
+                "missing_detail": "摘要中缺少注册信息（如注册号或未注册声明）；未设立独立的局限性部分，仅隐含在结论中。",
+                "risk_reason": "摘要不完整，读者无法直接从摘要获取本研究的注册状态，且结构不符合PRISMA 2020对摘要要素的明确要求，影响透明度和快速评估。",
+                "actionable_fix": "在摘要中添加独立的“注册”条目，写明“未注册”或提供注册号；增设“局限性”小节，总结证据不确定性的主要原因。",
+                "what_would_change_verdict": "若摘要在现有结构基础上明确包含注册信息（即使是未注册声明）和独立的局限性部分，则可判为PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_3",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.9,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "接受全身抗生素治疗的成人住院及门诊患者中，抗生素相关性腹泻(AAD)是重要的临床问题，现有预防措施的获益尚存争议。",
+                  "本系统评价与Meta分析旨在评估益生菌与安慰剂或无干预相比对接受全身抗生素治疗的成人患者（年龄≥18岁）中AAD发病率的影响［2，4］。"
+                ],
+                "evidence_location": [
+                  "摘要 > 重要性",
+                  "引言"
+                ],
+                "missing_detail": "引言未充分展开现有知识的背景，未明确说明当前证据的局限性、争议的具体内容或需要填补的知识空白，仅以一句目的陈述代替完整的理据阐释。",
+                "risk_reason": "不充分的理据可能使读者难以理解此次系统评价的必要性，不符合PRISMA 2020对透明报告的要求，降低了综述的临床价值和可复现性。",
+                "actionable_fix": "在引言部分增加一段内容，详细描述现有预防AAD措施的已知证据、存在的争议或不确定性，引用关键文献，并明确说明为何需要开展本系统评价来填补这一知识空白。",
+                "what_would_change_verdict": "如果作者在引言中提供了对现有证据的总结、明确指出了知识空白或争议，并解释了本综述的必要性，则可评为PASS。",
+                "confidence_score": 0.9,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_4",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 1.0,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "评价益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)预防AAD相较于安慰剂或无干预的效果。",
+                  "旨在评估益生菌与安慰剂或无干预相比对接受全身抗生素治疗的成人患者（年龄≥18岁）中AAD发病率的影响",
+                  "(1)成人(≥18岁)住院或门诊患者，接受全身抗生素治疗；(2)干预为益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)；(3)对照为安慰剂或无干预；(4)报告了AAD发生率"
+                ],
+                "evidence_location": [
+                  "摘要-目的",
+                  "引言",
+                  "方法-纳入与排除标准"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 1.0,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_5",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 1.0,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "纳入满足以下条件的RCT：(1)成人(≥18岁)住院或门诊患者，接受全身抗生素治疗；(2)干预为益生菌(任意菌株、单菌或多菌株、任意剂量和剂型)；(3)对照为安慰剂或无干预；(4)报告了AAD发生率或可提取相关数据。排除非随机研究、观察性研究、无对照试验，以及未报告预设结局的研究。"
+                ],
+                "evidence_location": [
+                  "[纳入与排除标准] 部分"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 1.0,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_6",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.95,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "资料来源：检索覆盖医学文献索引、PubMed、OpenAlex、ClinicalTrials.gov；检索日期为2026-07-30",
+                  "检索覆盖医学文献索引、PubMed、OpenAlex、ClinicalTrials.gov；各来源初检记录数分别为：医学文献索引375条，PubMed 200条，OpenAlex 50条，ClinicalTrials.gov 12条。检索日期为2026-07-30"
+                ],
+                "evidence_location": [
+                  "摘要",
+                  "方法-信息来源与检索策略"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_7",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 1.0,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "详细检索式见附录1。",
+                  "(((\"Adult\"[mh] OR \"Middle Aged\"[mh] OR \"Aged\"[mh] OR \"adult\"[tiab] OR \"adults\"[tiab] OR ... ) AND (\"Probiotics\"[mh:noexp] OR \"probiotic\"[tiab] OR ... ) AND (\"randomized controlled trial\"[pt] OR \"controlled clinical trial\"[pt] OR ... ))"
+                ],
+                "evidence_location": [
+                  "方法-信息来源与检索策略",
+                  "附录1. 完整检索式"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 1.0,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_8",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "筛选和数据提取按预设标准进行，并保留过程记录。"
+                ],
+                "evidence_location": [
+                  "[研究选择与数据提取] 部分"
+                ],
+                "missing_detail": "手稿未说明筛选和选择研究使用了多少名审稿人，未描述如何解决分歧，也未提及是否使用了自动化工具。",
+                "risk_reason": "缺乏这些信息可能使筛选过程不透明，增加偏倚风险，并且无法评估研究选择的可重复性。",
+                "actionable_fix": "在方法部分明确说明标题/摘要筛选和全文评审分别由几名审稿人独立完成，描述分歧解决机制（如协商一致或第三方仲裁），并报告是否使用了任何自动化筛选工具。",
+                "what_would_change_verdict": "如果作者补充了每个阶段的审稿人数量、分歧解决方法以及是否使用自动化工具，则可判定为PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_9",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "筛选和数据提取按预设标准进行，并保留过程记录。提取内容包括研究标识、干预组和对照组AAD事件数及分母、报告效应量及标准误。"
+                ],
+                "evidence_location": [
+                  "方法 > 研究选择与数据提取"
+                ],
+                "missing_detail": "未说明数据提取由多少名审查员完成，是否独立进行，是否使用标准化表格，以及如何处理分歧。",
+                "risk_reason": "不报告数据提取过程可能引入偏倚，并影响可重复性。",
+                "actionable_fix": "应在方法部分明确说明数据提取由几名审查员独立完成，使用任何标准化数据提取表格，并说明分歧解决机制。",
+                "what_would_change_verdict": "如果添加了这些细节，将变为PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_10",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.8,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "提取内容包括研究标识、干预组和对照组AAD事件数及分母、报告效应量及标准误。"
+                ],
+                "evidence_location": [
+                  "方法 - 研究选择与数据提取"
+                ],
+                "missing_detail": "未完整列出所有预定义的数据提取项，如研究设计细节、参与者特征、干预/对照细节、偏倚风险评估等，也未给出任何变量的明确定义。",
+                "risk_reason": "数据提取项不明确可能导致提取过程不透明，引入偏倚，并影响可重复性。",
+                "actionable_fix": "在方法部分添加一个明确的数据提取项列表，包括所有计划提取的变量（如研究标识、设计、人群、干预、对照、结局定义、偏倚风险评估等），并对关键变量提供定义。",
+                "what_would_change_verdict": "如果方法部分完整列出所有预先确定的数据提取项（包括研究特征、结果和其他变量），并对每个变量提供清晰定义，则可评为PASS。",
+                "confidence_score": 0.8,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_11",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.9,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "[7] Sterne JAC, Savovic J, Page MJ, Elbers RG, Blencowe NS, Boutron I. RoB 2: A revised Cochrane risk-of-bias tool for randomized trials. *BMJ*. 2019. doi: 10.1136/bmj.l4898"
+                ],
+                "evidence_location": [
+                  "参考文献[7]"
+                ],
+                "missing_detail": "虽然引用了RoB 2工具，但未描述如何应用该工具进行偏倚风险评估，如评估者人数、是否独立评估、涉及的偏倚领域、意见分歧解决方法以及如何综合评估结果。",
+                "risk_reason": "缺乏应用细节会使读者无法判断偏倚风险评估的严谨性和可重复性，影响对证据综合结果的信度。",
+                "actionable_fix": "在方法部分补充：'两名研究者独立使用Cochrane RoB 2工具评估每项纳入研究的偏倚风险，涵盖随机化过程、偏离既定干预、结局数据缺失、结局测量和选择性报告五个领域；分歧通过讨论或第三名研究者仲裁解决。'",
+                "what_would_change_verdict": "如果手稿明确描述了RoB 2工具的具体应用流程（包括评估者、领域和分歧处理），则判定为PASS。",
+                "confidence_score": 0.9,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "PRISMA_12",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 1.0,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "主要模型采用倒方差固定效应模型。效应量以危险比(RR)及其95% CI表示。",
+                  "本系统综述和Meta分析的预设合成估计为：Incidence of antibiotic-associated diarrhea (AAD): RR 1.03 (95% CI 0.68 to 1.55)."
+                ],
+                "evidence_location": [
+                  "[统计分析] 部分",
+                  "[讨论] 部分"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 1.0,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_13",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.9,
+                "severity": "MINOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "主要模型采用倒方差固定效应模型。效应量以危险比(RR)及其95% CI表示。鉴于纳入研究仅2项，异质性指标(I²、Q统计量)仅作描述性解释；小样本效应检验未进行",
+                  "异质性I²=81.7%，Cochran Q=5.47(p=0.019)，由于仅纳入2项研究，这些指标仅作描述性参考"
+                ],
+                "evidence_location": [
+                  "方法-统计分析",
+                  "摘要"
+                ],
+                "missing_detail": "未描述任何计划用于探索异质性可能原因的方法（如亚组分析、meta回归），也未提及敏感性分析计划，且未报告τ²统计量。",
+                "risk_reason": "缺失这些方法描述会降低透明度，读者无法判断作者是否充分考虑了异质性来源以及结果稳健性。",
+                "actionable_fix": "在方法部分增加以下内容：（1）说明由于纳入研究仅2项，无法进行预设的亚组分析或敏感性分析，但若研究数量足够，将依据哪些因素（如益生菌菌株、抗生素类型）进行亚组分析，以及将采用留一法或不同效应模型进行敏感性分析；（2）报告τ²统计量作为异质性补充度量（可由R软件meta包自动输出）。",
+                "what_would_change_verdict": "若手稿补充上述方法描述，即使因研究数量极少而无法实际执行，仍可获得PASS。",
+                "confidence_score": 0.9,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_14",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.95,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "鉴于纳入研究仅2项，异质性指标(I²、Q统计量)仅作描述性解释；小样本效应检验未进行［9］。",
+                  "由于仅2项研究，发表偏倚无法评估，预判性降级［11］。",
+                  "发表偏倚 | 严重 | 少于10项研究贡献该结局（k=2），小样本效应检验不作确认性解释；因此因发表偏倚不确定性降级。"
+                ],
+                "evidence_location": [
+                  "方法部分：统计分析",
+                  "方法部分：证据确定性与偏倚评估",
+                  "结果部分：表3. GRADE证据概要"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_15",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 1.0,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "采用GRADE框架评估证据确定性，从偏倚风险、不一致性、间接性、不精确性和发表偏倚五个方面进行降级［8］。",
+                  "由于仅2项研究，发表偏倚无法评估，预判性降级［11］。",
+                  "表3. GRADE证据概要"
+                ],
+                "evidence_location": [
+                  "方法/证据确定性与偏倚评估",
+                  "方法/证据确定性与偏倚评估",
+                  "结果/表3"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 1.0,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_16",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.9,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "表1. 选定主要分析行的基本特征",
+                  "注：数值为原始研究报告值或按预设统计方法计算值。"
+                ],
+                "evidence_location": [
+                  "提供的文本开头",
+                  "表1末尾"
+                ],
+                "missing_detail": "未提供PRISMA 2020流程图，也未描述文献筛选各阶段的记录数量（如初检、去重、初筛、全文评估、最终纳入等）。",
+                "risk_reason": "缺乏筛选流程图将严重损害研究选择过程的透明性和可重复性，无法判断检索与筛选的严谨性。",
+                "actionable_fix": "补充完整的PRISMA 2020流程图，清晰标注从检索到纳入各阶段的文献数量。",
+                "what_would_change_verdict": "若文中包含符合规范的PRISMA流程图，并展示各阶段数字，则可评为PASS。",
+                "confidence_score": 0.9,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "PRISMA_17",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "[表1. 选定主要分析行的基本特征]",
+                  "干预组事件/总数 | 对照组事件/总数 | 报告RR"
+                ],
+                "evidence_location": [
+                  "表1. 选定主要分析行的基本特征",
+                  "附录2. 主要分析记录的来源核验"
+                ],
+                "missing_detail": "仅呈现了干预组和对照组的事件数和总数，以及报告的效应量，但未提供纳入研究的设计（如RCT）、参与者特征（如年龄、疾病严重程度）、具体干预措施、结局定义、随访时间等关键特征。",
+                "risk_reason": "读者无法评估纳入研究的质量和异质性，也无法判断结果的可推广性和内部真实性。",
+                "actionable_fix": "补充一个完整的纳入研究特征表，应包含：研究设计、样本量、参与者人口学特征、详细干预措施、对照情况、结局定义和测量时间点、随访时长等。",
+                "what_would_change_verdict": "如提供包含上述关键特征的完整总结表，则判定为PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "PRISMA_18",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 1.0,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "［7］ Sterne JAC, Savovic J, Page MJ, Elbers RG, Blencowe NS, Boutron I. RoB 2: A revised Cochrane risk-of-bias tool for randomized trials. *BMJ*. 2019. doi: 10.1136/bmj.l4898"
+                ],
+                "evidence_location": [
+                  "参考文献[7]"
+                ],
+                "missing_detail": "未提供任何纳入研究的偏倚风险评估结果，仅引用了评估工具。",
+                "risk_reason": "缺少各纳入研究每个领域和整体的偏倚风险判断，读者无法评估证据的内在效度，这严重违反了PRISMA 2020报告规范。",
+                "actionable_fix": "增加表格或图，展示每篇纳入研究在随机序列生成、分配隐藏等各领域的偏倚风险评级，以及整体偏倚风险评级，例如采用RoB 2工具的标准呈现方式。",
+                "what_would_change_verdict": "如果稿件以表格或图的形式呈现所有纳入研究的偏倚风险判断（包括每个领域和整体评级），则判定为PASS。",
+                "confidence_score": 1.0,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "PRISMA_19",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "报告RR",
+                  "22/38 vs 17/37；报告效应量 1.26",
+                  "4/68 vs 13/70；报告效应量 0.32"
+                ],
+                "evidence_location": [
+                  "[表1. 选定主要分析行的基本特征]",
+                  "[附录2. 主要分析记录的来源核验]"
+                ],
+                "missing_detail": "仅报告了点估计值（RR），未提供任何研究的95%置信区间，也未展示森林图。",
+                "risk_reason": "缺乏置信区间将无法评估单个研究效应估计的精确性，影响对结果可靠性的判断。",
+                "actionable_fix": "为每个研究报告的效应估计补充95%置信区间，并考虑使用森林图同时呈现点估计及其置信区间。",
+                "what_would_change_verdict": "若为所有纳入研究的每个结局均提供效应估计及其95%置信区间，并考虑使用森林图展示，则可判定为PASS。",
+                "confidence_score": 0.95,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "PRISMA_20",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "CRITICAL",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "| Eri 2025［2］ | Table 1, row 'Rate of diarrhea (day 1–7)' | 22/38 | 17/37 | 1.26 |",
+                  "| Morrow 2010［1］ | Table 3 and Results text, page 3 and 5 | 4/68 | 13/70 | 0.32 |"
+                ],
+                "evidence_location": [
+                  "表1. 选定主要分析行的基本特征",
+                  "附录2. 主要分析记录的来源核验"
+                ],
+                "missing_detail": "完全缺失统计综合的结果：未报告合并效应估计（如合并风险比或均值差）、95%置信区间、异质性统计量（如 I²、tau²）、预测区间、亚组分析或敏感性分析的结果。仅列出了单个研究的效应量。",
+                "risk_reason": "缺乏合并结果使得读者无法评估总体效应大小、效应估计的精确度和研究间变异，严重影响结果的可靠性和临床意义。",
+                "actionable_fix": "如果研究进行了 meta 分析，应在正文或附表中提供森林图或合并结果表格，明确报告合并效应量及其 95% CI、I² 值、异质性检验的 P 值，并根据需要进行亚组或敏感性分析。如果未进行定量综合，必须解释原因（如异质性过高），并考虑提供叙述性总结或其他适合的合成方式。",
+                "what_would_change_verdict": "提供合并效应估计值及其置信区间和异质性统计量，或者明确说明未进行 meta 分析并给出合理理由及替代综合方法。",
+                "confidence_score": 0.95,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "PRISMA_21",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "表1. 选定主要分析行的基本特征",
+                  "附录2. 主要分析记录的来源核验",
+                  "数据与代码可用性"
+                ],
+                "evidence_location": [
+                  "提供的所有文本片段",
+                  "全文未见报告偏倚评估相关内容"
+                ],
+                "missing_detail": "全文未呈现任何跨研究的报告偏倚风险评估结果（如漏斗图、Egger检验等），也未解释未评估的原因。依据PRISMA 2020第21项，若进行了评估应呈现结果；若未评估应说明理由。",
+                "risk_reason": "缺少报告偏倚评估可能导致无法判断是否存在发表偏倚或其他选择性报告，从而影响Meta分析结论的可靠性。",
+                "actionable_fix": "补充报告偏倚评估：若纳入研究数量足够（如≥10项），应生成漏斗图并进行Egger检验等；若研究数量太少无法评估，应在讨论中明确说明并讨论其对结果解释的潜在影响。",
+                "what_would_change_verdict": "若手稿呈现了报告偏倚评估的具体结果（如漏斗图对称性检验P值），或明确解释了未评估的合理原因（如仅纳入2项研究，统计效能不足），则可判定为PASS或PARTIAL。",
+                "confidence_score": 0.95,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "PRISMA_22",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.9,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "数据可得性声明：... analysis/grade_profile.json ...",
+                  "表1... 附录2... 未提供证据确信度评级"
+                ],
+                "evidence_location": [
+                  "数据与代码可用性段落",
+                  "表1和附录2"
+                ],
+                "missing_detail": "手稿未在正文或表格中直接呈现每个结局的证据确定性评级（如GRADE等级），尽管数据可用性声明提到存在grade_profile.json文件，但未展示具体评级内容。",
+                "risk_reason": "缺乏明确的确定性评级会使读者无法判断每个结局的证据强度，影响研究结果的可靠性和临床决策。",
+                "actionable_fix": "在结果部分增加表格或文字，为每个结局提供GRADE评分（高、中、低、极低）并简要说明升降级原因。",
+                "what_would_change_verdict": "如果手稿明确展示了每个结局的证据确定性评级，则可评为PASS。",
+                "confidence_score": 0.9,
+                "context_quality": "fuzzy",
+                "search_strategy": "keyword_search"
+              },
+              {
+                "item_id": "PRISMA_23",
+                "status": "COMPLETED",
+                "verdict": "PARTIAL",
+                "score": 1,
+                "confidence": 0.9,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "本结果应与既有随机试验、指南背景和疾病机制一并解释。",
+                  "由于本综述仅纳入少数研究，效应方向、临床合理性和方法学质量应作为解释背景，而不能替代更多独立研究对稳健性的确认。"
+                ],
+                "evidence_location": [
+                  "[与既有证据和指南的关系] 小节",
+                  "[与既有证据和指南的关系] 小节"
+                ],
+                "missing_detail": "讨论未在现有证据的背景下实际解释结果。未引用任何具体研究或指南进行比较，也未讨论本结果与已有文献的一致性或不一致性，仅泛泛提及应结合背景解释。",
+                "risk_reason": "缺少与既往证据的比较将导致读者无法判断该发现的外部有效性和临床意义，削弱结果的可信度和推广价值。",
+                "actionable_fix": "在讨论中增加一段，明确引用至少一项相关系统综述或关键试验，将本综述的合并效应与既往发现进行定量或定性比较，并解释可能的不一致原因（如人群差异、干预异质性等）。",
+                "what_would_change_verdict": "如在讨论中确实引用并比较了至少一项其他证据，并讨论了结果与既往研究的异同，则可评为PASS。",
+                "confidence_score": 0.9,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_24",
+                "status": "COMPLETED",
+                "verdict": "PASS",
+                "score": 2,
+                "confidence": 0.95,
+                "severity": "NONE",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "本综述未进行前瞻性注册；方案细节、检索式和效应量设定保存在项目文件中。"
+                ],
+                "evidence_location": [
+                  "方案与报告框架"
+                ],
+                "missing_detail": null,
+                "risk_reason": null,
+                "actionable_fix": null,
+                "what_would_change_verdict": null,
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_25",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 1.0,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "全文未提及资金来源或资助者角色"
+                ],
+                "evidence_location": [
+                  "手稿未在任何部分提供资金声明"
+                ],
+                "missing_detail": "未说明综述的财务或非财务支持来源，也未说明资助者在综述设计、实施或报告中的任何角色。",
+                "risk_reason": "缺乏资金透明度会影响读者对潜在利益冲突的判断，从而降低综述的可信度。",
+                "actionable_fix": "在文末添加资金声明部分，明确列出所有资助来源（财务或非财务），并说明资助者是否在研究设计、数据收集、分析、撰写或投稿决定中发挥了作用。若无资助，也应声明。",
+                "what_would_change_verdict": "如果手稿补充了完整的资金声明（包括资助来源和资助者角色），则可评定为通过。",
+                "confidence_score": 1.0,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_26",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 1.0,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "全文未包含任何关于'competing interest'或'利益冲突'的声明"
+                ],
+                "evidence_location": [
+                  "全文"
+                ],
+                "missing_detail": "手稿未包含利益冲突声明（competing interests）部分，未声明任何作者的财务或非财务竞争利益。",
+                "risk_reason": "缺乏利益冲突声明可能导致读者无法评估潜在偏倚来源，有损综述的透明度。",
+                "actionable_fix": "在文末增加'利益冲突'（Competing interests）小节，声明所有作者的相关利益，或声明'无利益冲突'。",
+                "what_would_change_verdict": "如果添加了明确的利益声明，无论是否有利益，都将通过此项。",
+                "confidence_score": 1.0,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              },
+              {
+                "item_id": "PRISMA_27",
+                "status": "COMPLETED",
+                "verdict": "FAIL",
+                "score": 0,
+                "confidence": 0.95,
+                "severity": "MAJOR",
+                "evidence_spans": [],
+                "evidence_quote": [
+                  "方案细节、检索式和效应量设定保存在项目文件中。"
+                ],
+                "evidence_location": [
+                  "方法 - 方案与报告框架小节"
+                ],
+                "missing_detail": "手稿未提供数据、分析代码和其他材料（如数据提取表、分析脚本）的可用性声明，未说明这些材料是否可获取以及如何获取。虽然提到方案细节等保存在项目文件中，但没有提供访问链接或访问条件。",
+                "risk_reason": "缺少数据可用性声明影响研究的透明度和可重复性，读者无法验证或复用分析过程和结果。",
+                "actionable_fix": "在文章末尾（例如，在参考文献之前）添加一个“数据可用性声明”部分，明确指出分析代码、提取的数据和其他相关材料是否可公开获取；如果可获取，提供DOI、链接或联系方式；如果因某些原因不可获取，说明理由。",
+                "what_would_change_verdict": "添加一个符合期刊和PRISMA要求的数据可用性声明，明确说明数据、代码和材料的获取方式。",
+                "confidence_score": 0.95,
+                "context_quality": "full_text",
+                "search_strategy": "full_text_scan"
+              }
+            ],
+            "execution_time_seconds": 374.53475069999695,
+            "error_log": []
+          }
+        ]
+      }
+    }
+  },
+  "rubrics_used": [
+    "universal_rubric",
+    "prisma_2020"
+  ],
+  "processing_time": 747.4795179367065
+}

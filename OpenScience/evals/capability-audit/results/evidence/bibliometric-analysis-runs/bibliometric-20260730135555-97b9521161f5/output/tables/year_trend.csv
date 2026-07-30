@@ -1,0 +1,8 @@
+year,count,is_partial,annualized_count
+2020,12,False,12
+2021,19,False,19
+2022,18,False,18
+2023,28,False,28
+2024,25,False,25
+2025,38,False,38
+2026,27,True,46

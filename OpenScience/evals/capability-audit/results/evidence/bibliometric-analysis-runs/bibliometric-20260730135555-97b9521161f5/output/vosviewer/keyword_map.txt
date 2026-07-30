@@ -1,0 +1,51 @@
+id	label	x	y	cluster	weight<Occurrences>	weight<Total link strength>
+1	Aged, 80 and over	0.056648	0.377872	1	17	266
+2	Pharmacovigilance	0.724742	0.238857	2	8	74
+3	adverse effects	0.060838	-0.101457	2	51	713
+4	Acrylamides	-0.032659	-0.052119	3	70	952
+5	chemically induced	0.275139	0.105891	2	26	375
+6	EGFR	-0.598114	-0.096148	2	11	91
+7	Long QT Syndrome	0.407025	-0.385506	2	5	82
+8	Cardiotoxicity	-0.054034	-0.177530	2	47	474
+9	pathology	-0.255420	0.041939	3	30	408
+10	Myocytes, Cardiac	0.286546	-0.542865	2	10	119
+11	Osimertinib	-0.154051	-0.070402	2	82	593
+12	metabolism	0.027617	-0.428372	2	16	189
+13	Induced Pluripotent Stem Cells	0.475405	0.409723	2	5	63
+14	Drug Resistance, Neoplasm	-0.516313	-0.287873	3	6	87
+15	Aniline Compounds	0.091119	0.042553	3	69	940
+16	Adverse Drug Reaction Reporting Systems	0.781132	-0.125887	2	6	71
+17	cardio-oncology	-0.301091	0.596083	2	11	79
+18	pharmacology	0.244913	-0.270568	3	18	224
+19	Indoles	-0.002516	0.016022	3	69	940
+20	lung cancer	0.080421	-0.510332	2	21	137
+21	drug effects	-0.097389	-0.435433	2	14	184
+22	epidemiology	-0.057749	0.377908	1	16	251
+23	QT prolongation	-0.650377	0.551081	2	7	49
+24	Neoplasm Recurrence, Local	-0.042405	0.769073	3	6	68
+25	targeted therapy	-0.338363	-0.541591	2	6	71
+26	Tyrosine Kinase Inhibitors	0.541266	0.171580	1	8	94
+27	diagnosis	0.256633	0.322188	2	15	198
+28	drug therapy	-0.052580	0.100012	3	65	884
+29	etiology	-0.258277	-0.166533	2	20	270
+30	EGFR mutation	-0.846253	0.083435	2	6	47
+31	therapeutic use	0.135462	-0.115821	3	36	522
+32	epidermal growth factor receptor	0.571703	-0.442965	2	10	57
+33	Case report	-1.000000	0.325885	2	7	27
+34	non-small cell lung cancer	-0.458478	0.366771	2	19	84
+35	administration & dosage	0.122494	0.553152	1	9	125
+36	Adenocarcinoma	0.134548	-0.973810	2	6	36
+37	NSCLC	-0.449045	0.111855	3	13	164
+38	Afatinib	0.586158	0.418875	3	7	82
+39	heart failure	-0.112638	-0.298983	2	31	238
+40	Carcinoma, Non-Small-Cell Lung	-0.112745	0.031890	3	59	826
+41	Protein Kinase Inhibitors	0.124677	0.131643	3	49	700
+42	Pyrimidines	0.066190	-0.025060	3	71	960
+43	Lung Neoplasms	0.011125	0.117945	3	66	883
+44	genetics	-0.154860	0.125474	3	44	606
+45	Antineoplastic Agents	0.194846	0.007982	2	36	540
+46	Mutation	-0.155041	0.222428	3	39	524
+47	antagonists & inhibitors	0.329955	-0.079107	1	18	275
+48	Heart Diseases	0.563812	-0.099408	2	9	115
+49	ErbB Receptors	0.034354	0.187962	3	53	745
+50	Tyrosine kinase inhibitor	-0.484370	-0.578309	2	8	72

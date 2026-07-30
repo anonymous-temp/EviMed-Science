@@ -1,0 +1,11 @@
+id	label	x	y	cluster	weight<Occurrences>	weight<Total link strength>
+1	South Korea	0.387065	0.557719	1	20	18
+2	United Kingdom	0.804123	0.213450	2	16	21
+3	Japan	-0.082629	0.212083	1	43	30
+4	France	-0.625821	0.190879	1	5	19
+5	United States	0.337225	-0.019254	2	24	27
+6	Canada	0.011945	0.781687	2	5	18
+7	China	-0.246800	-0.182726	1	44	29
+8	Singapore	0.010152	-0.667731	2	6	17
+9	Taiwan	-1.000000	-0.626892	1	5	8
+10	Germany	0.404739	-0.459216	1	7	21

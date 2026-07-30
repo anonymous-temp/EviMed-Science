@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "tool": "evimed_drug_safety_analysis",
+  "jobId": "safety-20260730141254-c95b0f8978e9",
+  "status": "succeeded",
+  "request": {
+    "drug": "atorvastatin",
+    "reactions": [
+      "rhabdomyolysis"
+    ],
+    "outputLanguage": "zh"
+  },
+  "createdAt": "2026-07-30T14:12:54.770380Z",
+  "updatedAt": "2026-07-30T14:14:16.773012Z",
+  "root": "/home/coder/workspace/EviMedScience/项目代码/药物安全分析agent",
+  "python": "/home/coder/workspace/EviMedScience/项目代码/药物安全分析agent/.venv/bin/python",
+  "executionEvidence": {
+    "schemaVersion": 1,
+    "agentSourceSha256": "3cf9a30ddcd83f438fbf0c7583d25c2c502a91d82e18ea04522dd8087b90c396",
+    "agentSourceFiles": 110,
+    "adapterSha256": "2ff825d3734a644b3fb347dbb2f6ee3e87e0ab780e56dd6e0ce39668e8be0121",
+    "evidenceModuleSha256": "4fea59024d5c7c3a9d6c7b40ba9bb4f58a6887d01292c91f9b4abbbdd8c0209f",
+    "model": "deepseek-v4-pro",
+    "thinking": true,
+    "reasoningEffort": "high"
+  },
+  "workspace": "/home/coder/workspace/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/specialist-sweep-20260730/workspace",
+  "outputRoot": "/home/coder/workspace/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/specialist-sweep-20260730/workspace/drug-safety-runs/safety-20260730141254-c95b0f8978e9/output",
+  "artifacts": [
+    {
+      "kind": "json",
+      "path": "drug-safety-runs/safety-20260730141254-c95b0f8978e9/output/request.json"
+    },
+    {
+      "kind": "json",
+      "path": "drug-safety-runs/safety-20260730141254-c95b0f8978e9/output/result.json"
+    },
+    {
+      "kind": "docx",
+      "path": "drug-safety-runs/safety-20260730141254-c95b0f8978e9/output/safety-report.docx"
+    },
+    {
+      "kind": "md",
+      "path": "drug-safety-runs/safety-20260730141254-c95b0f8978e9/output/safety-report.md"
+    },
+    {
+      "kind": "csv",
+      "path": "drug-safety-runs/safety-20260730141254-c95b0f8978e9/output/signals.csv"
+    }
+  ],
+  "workerPid": 662802,
+  "startedAt": "2026-07-30T14:12:55.989851Z",
+  "finishedAt": "2026-07-30T14:14:16.773024Z",
+  "returnCode": 0
+}

@@ -1,0 +1,43 @@
+{
+  "query": "osimertinib AND (cardiotoxicity OR cardiac OR cardiotoxic OR QT prolongation OR heart failure OR cardiomyopathy OR arrhythmia OR left ventricular)",
+  "date_from": "2020",
+  "date_to": "2026",
+  "max_records": 2000,
+  "total_found": 168,
+  "total_fetched": 167,
+  "search_strategy": {
+    "formal_query": "(\"Osimertinib\"[MeSH Terms] OR \"osimertinib\"[Title/Abstract] OR \"Tagrisso\"[Title/Abstract] OR \"AZD9291\"[Title/Abstract]) AND (\"(cardiotoxicity OR cardiac OR cardiotoxic OR QT prolongation OR heart failure OR cardiomyopathy OR arrhythmia OR left ventricular)\"[Title/Abstract]) AND (\"2020/01/01\"[Date - Publication] : \"2026/07/30\"[Date - Publication])",
+    "concepts": [
+      {
+        "label": "osimertinib",
+        "free_terms": [
+          "osimertinib",
+          "Tagrisso",
+          "AZD9291"
+        ],
+        "mesh_descriptor": "Osimertinib",
+        "mesh_ui": "D000077264",
+        "entry_terms_used": [
+          "Tagrisso",
+          "AZD9291"
+        ],
+        "mesh_lookup_failed": false
+      },
+      {
+        "label": "(cardiotoxicity OR cardiac OR cardiotoxic OR QT prolongation OR heart failure OR cardiomyopathy OR arrhythmia OR left ventricular)",
+        "free_terms": [
+          "(cardiotoxicity OR cardiac OR cardiotoxic OR QT prolongation OR heart failure OR cardiomyopathy OR arrhythmia OR left ventricular)"
+        ],
+        "mesh_descriptor": null,
+        "mesh_ui": null,
+        "entry_terms_used": [],
+        "mesh_lookup_failed": false
+      }
+    ],
+    "strategy_text": "**Concept 1: osimertinib**\n- MeSH descriptor: Osimertinib (D000077264)\n- Entry terms: Tagrisso, AZD9291\n- Free-text terms: \"osimertinib\", \"Tagrisso\", \"AZD9291\"\n\n**Concept 2: (cardiotoxicity OR cardiac OR cardiotoxic OR QT prolongation OR heart failure OR cardiomyopathy OR arrhythmia OR left ventricular)**\n- MeSH descriptor: no matching descriptor found (free-text search used)\n- Free-text terms: \"(cardiotoxicity OR cardiac OR cardiotoxic OR QT prolongation OR heart failure OR cardiomyopathy OR arrhythmia OR left ventricular)\"\n\n**Boolean combination:** Concept blocks combined with AND\n**Date filter:** 2020 to 2026\n\n**Full search string:**\n\n`(\"Osimertinib\"[MeSH Terms] OR \"osimertinib\"[Title/Abstract] OR \"Tagrisso\"[Title/Abstract] OR \"AZD9291\"[Title/Abstract]) AND (\"(cardiotoxicity OR cardiac OR cardiotoxic OR QT prolongation OR heart failure OR cardiomyopathy OR arrhythmia OR left ventricular)\"[Title/Abstract]) AND (\"2020/01/01\"[Date - Publication] : \"2026/07/30\"[Date - Publication])`",
+    "user_query": "osimertinib AND (cardiotoxicity OR cardiac OR cardiotoxic OR QT prolongation OR heart failure OR cardiomyopathy OR arrhythmia OR left ventricular)",
+    "fallback_query": "osimertinib AND (cardiotoxicity OR cardiac OR cardiotoxic OR QT prolongation OR heart failure OR cardiomyopathy OR arrhythmia OR left ventricular)",
+    "fallback_reason": "formal_query_zero_results"
+  },
+  "after_dedup": 167
+}

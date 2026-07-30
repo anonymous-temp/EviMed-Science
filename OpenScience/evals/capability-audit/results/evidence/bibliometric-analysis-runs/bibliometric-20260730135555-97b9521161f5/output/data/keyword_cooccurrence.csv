@@ -1,0 +1,3145 @@
+source,target,weight,source_freq,target_freq
+Aniline Compounds,Pyrimidines,69,69,71
+Acrylamides,Pyrimidines,69,70,71
+Indoles,Pyrimidines,69,69,71
+Aniline Compounds,Indoles,69,69,69
+Acrylamides,Aniline Compounds,68,70,69
+Acrylamides,Indoles,68,70,69
+Lung Neoplasms,drug therapy,60,66,65
+"Carcinoma, Non-Small-Cell Lung",Lung Neoplasms,59,59,66
+Lung Neoplasms,Pyrimidines,57,66,71
+Pyrimidines,drug therapy,57,71,65
+Acrylamides,drug therapy,57,70,65
+Acrylamides,Lung Neoplasms,56,70,66
+Indoles,drug therapy,56,69,65
+Aniline Compounds,drug therapy,56,69,65
+Indoles,Lung Neoplasms,55,69,66
+Aniline Compounds,Lung Neoplasms,55,69,66
+"Carcinoma, Non-Small-Cell Lung",drug therapy,54,59,65
+"Carcinoma, Non-Small-Cell Lung",Pyrimidines,52,59,71
+Acrylamides,"Carcinoma, Non-Small-Cell Lung",51,70,59
+Aniline Compounds,"Carcinoma, Non-Small-Cell Lung",50,69,59
+"Carcinoma, Non-Small-Cell Lung",Indoles,50,59,69
+ErbB Receptors,Lung Neoplasms,48,53,66
+ErbB Receptors,Pyrimidines,47,53,71
+Acrylamides,ErbB Receptors,46,70,53
+"Carcinoma, Non-Small-Cell Lung",ErbB Receptors,46,59,53
+Aniline Compounds,ErbB Receptors,45,69,53
+ErbB Receptors,Indoles,45,53,69
+ErbB Receptors,drug therapy,44,53,65
+Lung Neoplasms,Protein Kinase Inhibitors,44,66,49
+Protein Kinase Inhibitors,drug therapy,43,49,65
+Protein Kinase Inhibitors,Pyrimidines,43,49,71
+Pyrimidines,adverse effects,42,71,51
+Aniline Compounds,adverse effects,42,69,51
+Acrylamides,Protein Kinase Inhibitors,42,70,49
+Acrylamides,adverse effects,42,70,51
+Indoles,adverse effects,42,69,51
+Indoles,Protein Kinase Inhibitors,41,69,49
+adverse effects,drug therapy,41,51,65
+Aniline Compounds,Protein Kinase Inhibitors,41,69,49
+"Carcinoma, Non-Small-Cell Lung",Protein Kinase Inhibitors,40,59,49
+Lung Neoplasms,genetics,40,66,44
+Lung Neoplasms,Mutation,39,66,39
+ErbB Receptors,genetics,39,53,44
+"Carcinoma, Non-Small-Cell Lung",genetics,39,59,44
+ErbB Receptors,Protein Kinase Inhibitors,38,53,49
+Lung Neoplasms,adverse effects,38,66,51
+drug therapy,genetics,37,65,44
+Pyrimidines,genetics,37,71,44
+Indoles,genetics,36,69,44
+Acrylamides,genetics,36,70,44
+"Carcinoma, Non-Small-Cell Lung",Mutation,36,59,39
+Aniline Compounds,genetics,36,69,44
+Mutation,drug therapy,35,39,65
+Mutation,Pyrimidines,35,39,71
+"Carcinoma, Non-Small-Cell Lung",adverse effects,34,59,51
+drug therapy,therapeutic use,34,65,36
+ErbB Receptors,Mutation,34,53,39
+Indoles,Osimertinib,33,69,82
+Indoles,Mutation,33,69,39
+Aniline Compounds,Mutation,33,69,39
+Acrylamides,Osimertinib,33,70,82
+Aniline Compounds,Osimertinib,33,69,82
+Acrylamides,Mutation,33,70,39
+Protein Kinase Inhibitors,adverse effects,33,49,51
+Lung Neoplasms,therapeutic use,33,66,36
+Osimertinib,Pyrimidines,33,82,71
+Antineoplastic Agents,adverse effects,31,36,51
+"Carcinoma, Non-Small-Cell Lung",therapeutic use,31,59,36
+Pyrimidines,therapeutic use,31,71,36
+Mutation,genetics,30,39,44
+Aniline Compounds,therapeutic use,30,69,36
+Acrylamides,therapeutic use,30,70,36
+Acrylamides,Antineoplastic Agents,30,70,36
+Indoles,therapeutic use,30,69,36
+Mutation,Protein Kinase Inhibitors,30,39,49
+Aniline Compounds,Antineoplastic Agents,29,69,36
+ErbB Receptors,adverse effects,29,53,51
+ErbB Receptors,therapeutic use,29,53,36
+Antineoplastic Agents,Indoles,29,36,69
+Protein Kinase Inhibitors,therapeutic use,29,49,36
+Antineoplastic Agents,Pyrimidines,29,36,71
+Antineoplastic Agents,drug therapy,28,36,65
+Protein Kinase Inhibitors,genetics,27,49,44
+Cardiotoxicity,Osimertinib,27,47,82
+Osimertinib,drug therapy,27,82,65
+genetics,therapeutic use,27,44,36
+Pyrimidines,pathology,26,71,30
+Antineoplastic Agents,"Carcinoma, Non-Small-Cell Lung",26,36,59
+Antineoplastic Agents,Lung Neoplasms,26,36,66
+Lung Neoplasms,pathology,26,66,30
+Osimertinib,adverse effects,26,82,51
+Lung Neoplasms,Osimertinib,26,66,82
+Cardiotoxicity,Indoles,25,47,69
+Aniline Compounds,Cardiotoxicity,25,69,47
+"Carcinoma, Non-Small-Cell Lung",pathology,25,59,30
+Cardiotoxicity,adverse effects,25,47,51
+"Carcinoma, Non-Small-Cell Lung",Osimertinib,25,59,82
+Acrylamides,pathology,25,70,30
+Acrylamides,Cardiotoxicity,25,70,47
+Cardiotoxicity,Pyrimidines,25,47,71
+Antineoplastic Agents,Protein Kinase Inhibitors,25,36,49
+Aniline Compounds,pathology,25,69,30
+Indoles,pathology,25,69,30
+Osimertinib,Protein Kinase Inhibitors,24,82,49
+Antineoplastic Agents,ErbB Receptors,24,36,53
+drug therapy,pathology,23,65,30
+adverse effects,chemically induced,22,51,26
+chemically induced,drug therapy,22,26,65
+genetics,pathology,22,44,30
+adverse effects,genetics,22,51,44
+ErbB Receptors,Osimertinib,22,53,82
+adverse effects,therapeutic use,21,51,36
+Mutation,adverse effects,21,39,51
+Indoles,chemically induced,21,69,26
+Aniline Compounds,chemically induced,21,69,26
+Pyrimidines,chemically induced,21,71,26
+Acrylamides,chemically induced,21,70,26
+Cardiotoxicity,drug therapy,21,47,65
+ErbB Receptors,pathology,20,53,30
+Mutation,therapeutic use,20,39,36
+Osimertinib,genetics,20,82,44
+Cardiotoxicity,etiology,19,47,20
+Lung Neoplasms,chemically induced,19,66,26
+Antineoplastic Agents,Osimertinib,19,36,82
+Antineoplastic Agents,chemically induced,18,36,26
+Cardiotoxicity,Lung Neoplasms,18,47,66
+"Carcinoma, Non-Small-Cell Lung",chemically induced,18,59,26
+adverse effects,etiology,18,51,20
+Antineoplastic Agents,therapeutic use,18,36,36
+Antineoplastic Agents,Cardiotoxicity,18,36,47
+Mutation,Osimertinib,18,39,82
+Protein Kinase Inhibitors,chemically induced,17,49,26
+Antineoplastic Agents,genetics,17,36,44
+Osimertinib,heart failure,17,82,31
+Cardiotoxicity,heart failure,17,47,31
+"Carcinoma, Non-Small-Cell Lung",Cardiotoxicity,17,59,47
+Acrylamides,antagonists & inhibitors,17,70,18
+"Aged, 80 and over",Pyrimidines,16,17,71
+"Aged, 80 and over",Aniline Compounds,16,17,69
+ErbB Receptors,antagonists & inhibitors,16,53,18
+Acrylamides,"Aged, 80 and over",16,70,17
+Cardiotoxicity,Protein Kinase Inhibitors,16,47,49
+Pyrimidines,antagonists & inhibitors,16,71,18
+"Aged, 80 and over",Indoles,16,17,69
+Indoles,antagonists & inhibitors,15,69,18
+Indoles,etiology,15,69,20
+"Aged, 80 and over",Lung Neoplasms,15,17,66
+"Carcinoma, Non-Small-Cell Lung",epidemiology,15,59,16
+Acrylamides,etiology,15,70,20
+"Aged, 80 and over","Carcinoma, Non-Small-Cell Lung",15,17,59
+Aniline Compounds,etiology,15,69,20
+Pyrimidines,etiology,15,71,20
+Cardiotoxicity,chemically induced,15,47,26
+Lung Neoplasms,epidemiology,15,66,16
+Aniline Compounds,antagonists & inhibitors,15,69,18
+Acrylamides,pharmacology,15,70,18
+adverse effects,antagonists & inhibitors,15,51,18
+Osimertinib,therapeutic use,15,82,36
+Pyrimidines,pharmacology,14,71,18
+"Aged, 80 and over",ErbB Receptors,14,17,53
+Protein Kinase Inhibitors,pathology,14,49,30
+pathology,therapeutic use,14,30,36
+antagonists & inhibitors,drug therapy,14,18,65
+"Aged, 80 and over",drug therapy,14,17,65
+Osimertinib,pathology,14,82,30
+Mutation,pathology,14,39,30
+ErbB Receptors,chemically induced,14,53,26
+adverse effects,pathology,14,51,30
+drug therapy,epidemiology,14,65,16
+Indoles,metabolism,13,69,16
+Pyrimidines,metabolism,13,71,16
+Aniline Compounds,metabolism,13,69,16
+Aniline Compounds,heart failure,13,69,31
+Acrylamides,metabolism,13,70,16
+Indoles,heart failure,13,69,31
+Acrylamides,heart failure,13,70,31
+Pyrimidines,epidemiology,13,71,16
+Aniline Compounds,epidemiology,13,69,16
+drug therapy,etiology,13,65,20
+Pyrimidines,heart failure,13,71,31
+adverse effects,epidemiology,13,51,16
+Acrylamides,epidemiology,13,70,16
+Indoles,pharmacology,13,69,18
+"Carcinoma, Non-Small-Cell Lung",antagonists & inhibitors,13,59,18
+Cardiotoxicity,ErbB Receptors,13,47,53
+Lung Neoplasms,antagonists & inhibitors,13,66,18
+Indoles,epidemiology,13,69,16
+Aniline Compounds,pharmacology,13,69,18
+Osimertinib,non-small cell lung cancer,13,82,19
+chemically induced,therapeutic use,12,26,36
+Cardiotoxicity,genetics,12,47,44
+adverse effects,heart failure,12,51,31
+Antineoplastic Agents,etiology,12,36,20
+ErbB Receptors,epidemiology,12,53,16
+Antineoplastic Agents,Mutation,12,36,39
+"Aged, 80 and over",adverse effects,12,17,51
+Protein Kinase Inhibitors,antagonists & inhibitors,12,49,18
+Acrylamides,drug effects,12,70,14
+Antineoplastic Agents,epidemiology,12,36,16
+"Aged, 80 and over",genetics,11,17,44
+"Carcinoma, Non-Small-Cell Lung",pharmacology,11,59,18
+Cardiotoxicity,drug effects,11,47,14
+chemically induced,heart failure,11,26,31
+metabolism,pharmacology,11,16,18
+Lung Neoplasms,pharmacology,11,66,18
+Antineoplastic Agents,antagonists & inhibitors,11,36,18
+Osimertinib,chemically induced,11,82,26
+drug therapy,pharmacology,11,65,18
+adverse effects,diagnosis,11,51,15
+Aniline Compounds,drug effects,11,69,14
+Pyrimidines,drug effects,11,71,14
+Lung Neoplasms,NSCLC,11,66,13
+NSCLC,drug therapy,11,13,65
+Indoles,drug effects,11,69,14
+drug therapy,heart failure,11,65,31
+Lung Neoplasms,etiology,11,66,20
+"Aged, 80 and over",Antineoplastic Agents,10,17,36
+"Aged, 80 and over",therapeutic use,10,17,36
+"Carcinoma, Non-Small-Cell Lung",NSCLC,10,59,13
+"Carcinoma, Non-Small-Cell Lung",etiology,10,59,20
+diagnosis,drug therapy,10,15,65
+drug effects,metabolism,10,14,16
+"Carcinoma, Non-Small-Cell Lung",diagnosis,10,59,15
+Protein Kinase Inhibitors,etiology,10,49,20
+Cardiotoxicity,therapeutic use,10,47,36
+"Aged, 80 and over",Mutation,10,17,39
+ErbB Receptors,pharmacology,10,53,18
+Protein Kinase Inhibitors,pharmacology,10,49,18
+Lung Neoplasms,diagnosis,10,66,15
+Protein Kinase Inhibitors,diagnosis,10,49,15
+"Aged, 80 and over",pathology,10,17,30
+Lung Neoplasms,heart failure,10,66,31
+"Aged, 80 and over",Protein Kinase Inhibitors,9,17,49
+chemically induced,epidemiology,9,26,16
+antagonists & inhibitors,therapeutic use,9,18,36
+Cardiotoxicity,epidemiology,9,47,16
+epidemiology,therapeutic use,9,16,36
+Antineoplastic Agents,diagnosis,9,36,15
+Osimertinib,etiology,9,82,20
+pharmacology,therapeutic use,9,18,36
+Indoles,diagnosis,9,69,15
+chemically induced,diagnosis,9,26,15
+Lung Neoplasms,lung cancer,9,66,21
+Aniline Compounds,diagnosis,9,69,15
+"Myocytes, Cardiac",metabolism,9,10,16
+Acrylamides,NSCLC,9,70,13
+chemically induced,genetics,9,26,44
+Protein Kinase Inhibitors,epidemiology,9,49,16
+"Carcinoma, Non-Small-Cell Lung",heart failure,9,59,31
+adverse effects,drug effects,9,51,14
+Pyrimidines,diagnosis,9,71,15
+pathology,pharmacology,9,30,18
+Mutation,chemically induced,9,39,26
+"Aged, 80 and over",Osimertinib,9,17,82
+Antineoplastic Agents,heart failure,9,36,31
+drug effects,pharmacology,9,14,18
+Cardiotoxicity,metabolism,9,47,16
+genetics,pharmacology,9,44,18
+NSCLC,Osimertinib,9,13,82
+Antineoplastic Agents,pathology,9,36,30
+Indoles,administration & dosage,8,69,9
+Osimertinib,drug effects,8,82,14
+antagonists & inhibitors,chemically induced,8,18,26
+ErbB Receptors,etiology,8,53,20
+NSCLC,Protein Kinase Inhibitors,8,13,49
+Acrylamides,diagnosis,8,70,15
+Cardiotoxicity,pathology,8,47,30
+epidemiology,genetics,8,16,44
+Acrylamides,administration & dosage,8,70,9
+administration & dosage,drug therapy,8,9,65
+Indoles,NSCLC,8,69,13
+administration & dosage,adverse effects,8,9,51
+Pyrimidines,administration & dosage,8,71,9
+Antineoplastic Agents,drug effects,8,36,14
+Aniline Compounds,administration & dosage,8,69,9
+NSCLC,Pyrimidines,8,13,71
+Cardiotoxicity,pharmacology,8,47,18
+Osimertinib,lung cancer,8,82,21
+"Myocytes, Cardiac",drug effects,8,10,14
+antagonists & inhibitors,genetics,8,18,44
+epidemiology,pathology,8,16,30
+ErbB Receptors,NSCLC,8,53,13
+ErbB Receptors,diagnosis,8,53,15
+NSCLC,genetics,8,13,44
+Cardiotoxicity,"Myocytes, Cardiac",8,47,10
+Aniline Compounds,NSCLC,8,69,13
+Cardiotoxicity,antagonists & inhibitors,8,47,18
+EGFR,Osimertinib,7,11,82
+Osimertinib,epidermal growth factor receptor,7,82,10
+"Aged, 80 and over",antagonists & inhibitors,7,17,18
+"Carcinoma, Non-Small-Cell Lung",lung cancer,7,59,21
+"Myocytes, Cardiac",Pyrimidines,7,10,71
+Osimertinib,QT prolongation,7,82,7
+drug therapy,lung cancer,7,65,21
+Acrylamides,lung cancer,7,70,21
+Aniline Compounds,"Myocytes, Cardiac",7,69,10
+Heart Diseases,drug therapy,7,9,65
+ErbB Receptors,heart failure,7,53,31
+Osimertinib,metabolism,7,82,16
+metabolism,pathology,7,16,30
+Cardiotoxicity,diagnosis,7,47,15
+Osimertinib,pharmacology,7,82,18
+"Aged, 80 and over",epidemiology,7,17,16
+Acrylamides,"Myocytes, Cardiac",7,70,10
+etiology,genetics,7,20,44
+Heart Diseases,adverse effects,7,9,51
+Cardiotoxicity,Mutation,7,47,39
+Osimertinib,diagnosis,7,82,15
+adverse effects,metabolism,7,51,16
+"Aged, 80 and over",administration & dosage,7,17,9
+Indoles,"Myocytes, Cardiac",7,69,10
+Heart Diseases,chemically induced,7,9,26
+etiology,therapeutic use,7,20,36
+Acrylamides,Heart Diseases,6,70,9
+Heart Diseases,Indoles,6,9,69
+ErbB Receptors,metabolism,6,53,16
+Aniline Compounds,Heart Diseases,6,69,9
+drug therapy,metabolism,6,65,16
+genetics,metabolism,6,44,16
+Lung Neoplasms,administration & dosage,6,66,9
+"Carcinoma, Non-Small-Cell Lung",administration & dosage,6,59,9
+Mutation,diagnosis,6,39,15
+Antineoplastic Agents,NSCLC,6,36,13
+Cardiotoxicity,lung cancer,6,47,21
+antagonists & inhibitors,drug effects,6,18,14
+"Aged, 80 and over",chemically induced,6,17,26
+Antineoplastic Agents,metabolism,6,36,16
+Cardiotoxicity,cardio-oncology,6,47,11
+chemically induced,etiology,6,26,20
+epidemiology,etiology,6,16,20
+EGFR,genetics,6,11,44
+Indoles,lung cancer,6,69,21
+NSCLC,therapeutic use,6,13,36
+antagonists & inhibitors,epidemiology,6,18,16
+Afatinib,Pyrimidines,6,7,71
+Afatinib,Indoles,6,7,69
+Acrylamides,Afatinib,6,70,7
+Afatinib,Aniline Compounds,6,7,69
+Pyrimidines,lung cancer,6,71,21
+Mutation,antagonists & inhibitors,6,39,18
+Protein Kinase Inhibitors,lung cancer,6,49,21
+diagnosis,genetics,6,15,44
+Mutation,pharmacology,6,39,18
+diagnosis,therapeutic use,6,15,36
+chemically induced,pathology,6,26,30
+"Myocytes, Cardiac",pharmacology,6,10,18
+"Drug Resistance, Neoplasm",drug therapy,6,6,65
+Osimertinib,antagonists & inhibitors,6,82,18
+Osimertinib,epidemiology,6,82,16
+"Carcinoma, Non-Small-Cell Lung",metabolism,6,59,16
+Aniline Compounds,lung cancer,6,69,21
+Heart Diseases,Pyrimidines,6,9,71
+Antineoplastic Agents,Heart Diseases,6,36,9
+ErbB Receptors,lung cancer,6,53,21
+"Myocytes, Cardiac",adverse effects,6,10,51
+Lung Neoplasms,metabolism,6,66,16
+Protein Kinase Inhibitors,heart failure,6,49,31
+Induced Pluripotent Stem Cells,"Myocytes, Cardiac",5,5,10
+drug effects,etiology,5,14,20
+Antineoplastic Agents,"Myocytes, Cardiac",5,36,10
+Adverse Drug Reaction Reporting Systems,Antineoplastic Agents,5,6,36
+Afatinib,ErbB Receptors,5,7,53
+Protein Kinase Inhibitors,drug effects,5,49,14
+Afatinib,Protein Kinase Inhibitors,5,7,49
+Protein Kinase Inhibitors,metabolism,5,49,16
+antagonists & inhibitors,pathology,5,18,30
+Lung Neoplasms,targeted therapy,5,66,6
+"Carcinoma, Non-Small-Cell Lung",targeted therapy,5,59,6
+Heart Diseases,diagnosis,5,9,15
+Heart Diseases,Protein Kinase Inhibitors,5,9,49
+Tyrosine Kinase Inhibitors,drug therapy,5,8,65
+Protein Kinase Inhibitors,Tyrosine Kinase Inhibitors,5,49,8
+Acrylamides,Tyrosine Kinase Inhibitors,5,70,8
+Lung Neoplasms,Tyrosine Kinase Inhibitors,5,66,8
+drug effects,drug therapy,5,14,65
+Adverse Drug Reaction Reporting Systems,Pharmacovigilance,5,6,8
+EGFR,Lung Neoplasms,5,11,66
+Pharmacovigilance,adverse effects,5,8,51
+Adverse Drug Reaction Reporting Systems,adverse effects,5,6,51
+Afatinib,adverse effects,5,7,51
+"Carcinoma, Non-Small-Cell Lung",Tyrosine Kinase Inhibitors,5,59,8
+ErbB Receptors,Tyrosine Kinase Inhibitors,5,53,8
+Cardiotoxicity,Induced Pluripotent Stem Cells,5,47,5
+antagonists & inhibitors,etiology,5,18,20
+Mutation,NSCLC,5,39,13
+etiology,heart failure,5,20,31
+"Carcinoma, Non-Small-Cell Lung",EGFR,5,59,11
+adverse effects,lung cancer,5,51,21
+Long QT Syndrome,adverse effects,5,5,51
+Adenocarcinoma of Lung,Lung Neoplasms,5,5,66
+"Myocytes, Cardiac",etiology,5,10,20
+"Myocytes, Cardiac",Osimertinib,5,10,82
+Heart Diseases,therapeutic use,5,9,36
+Osimertinib,Tyrosine kinase inhibitor,5,82,8
+Induced Pluripotent Stem Cells,drug effects,5,5,14
+EGFR,ErbB Receptors,5,11,53
+"Drug Resistance, Neoplasm",Pyrimidines,5,6,71
+adverse effects,pharmacology,5,51,18
+heart failure,lung cancer,5,31,21
+drug therapy,mortality,5,65,5
+drug effects,pathology,5,14,30
+Lung Neoplasms,"Neoplasm Recurrence, Local",5,66,6
+ErbB Receptors,"Neoplasm Recurrence, Local",5,53,6
+genetics,heart failure,5,44,31
+Osimertinib,cardio-oncology,5,82,11
+Mutation,epidemiology,5,39,16
+"Drug Resistance, Neoplasm",Indoles,5,6,69
+Aniline Compounds,"Drug Resistance, Neoplasm",5,69,6
+Cardiotoxicity,Heart Diseases,5,47,9
+ErbB Receptors,administration & dosage,5,53,9
+NSCLC,pathology,5,13,30
+epidermal growth factor receptor,non-small cell lung cancer,5,10,19
+"Drug Resistance, Neoplasm",Lung Neoplasms,5,6,66
+Antineoplastic Agents,pharmacology,5,36,18
+cardio-oncology,drug therapy,5,11,65
+adverse effects,cardio-oncology,5,51,11
+Acrylamides,"Drug Resistance, Neoplasm",5,70,6
+administration & dosage,pathology,5,9,30
+"Carcinoma, Non-Small-Cell Lung","Drug Resistance, Neoplasm",5,59,6
+EGFR mutation,Osimertinib,5,6,82
+Mutation,heart failure,5,39,31
+Heart Diseases,Lung Neoplasms,5,9,66
+Osimertinib,administration & dosage,4,82,9
+Indoles,Induced Pluripotent Stem Cells,4,69,5
+Induced Pluripotent Stem Cells,Pyrimidines,4,5,71
+Pyrimidines,toxicity,4,71,4
+"Drug Resistance, Neoplasm",Protein Kinase Inhibitors,4,6,49
+"Drug Resistance, Neoplasm",therapeutic use,4,6,36
+diagnosis,pathology,4,15,30
+etiology,metabolism,4,20,16
+Induced Pluripotent Stem Cells,metabolism,4,5,16
+Induced Pluripotent Stem Cells,etiology,4,5,20
+Aniline Compounds,Tyrosine Kinase Inhibitors,4,69,8
+"Drug Resistance, Neoplasm",ErbB Receptors,4,6,53
+Cardiotoxicity,non-small cell lung cancer,4,47,19
+Tyrosine Kinase Inhibitors,adverse effects,4,8,51
+"Carcinoma, Non-Small-Cell Lung",Molecular Targeted Therapy,4,59,5
+Antineoplastic Agents,lung cancer,4,36,21
+administration & dosage,therapeutic use,4,9,36
+Antineoplastic Combined Chemotherapy Protocols,administration & dosage,4,4,9
+Acrylamides,"Cell Line, Tumor",4,70,4
+Molecular Targeted Therapy,targeted therapy,4,5,6
+Antineoplastic Combined Chemotherapy Protocols,Pyrimidines,4,4,71
+Aniline Compounds,"Neoplasm Recurrence, Local",4,69,6
+administration & dosage,antagonists & inhibitors,4,9,18
+Acrylamides,"Neoplasm Recurrence, Local",4,70,6
+"Neoplasm Recurrence, Local",Pyrimidines,4,6,71
+Acrylamides,Antineoplastic Combined Chemotherapy Protocols,4,70,4
+Aniline Compounds,Antineoplastic Combined Chemotherapy Protocols,4,69,4
+Antineoplastic Combined Chemotherapy Protocols,Indoles,4,4,69
+genetics,lung cancer,4,44,21
+administration & dosage,genetics,4,9,44
+Acrylamides,Induced Pluripotent Stem Cells,4,70,5
+Indoles,Tyrosine kinase inhibitor,4,69,8
+Long QT Syndrome,Lung Neoplasms,4,5,66
+Aniline Compounds,Long QT Syndrome,4,69,5
+"Carcinoma, Non-Small-Cell Lung",Long QT Syndrome,4,59,5
+"Cell Line, Tumor",Lung Neoplasms,4,4,66
+Antineoplastic Agents,administration & dosage,4,36,9
+NSCLC,pharmacology,4,13,18
+"Drug Resistance, Neoplasm",pharmacology,4,6,18
+adverse effects,targeted therapy,4,51,6
+drug therapy,targeted therapy,4,65,6
+Cardiotoxicity,toxicity,4,47,4
+diagnosis,epidemiology,4,15,16
+etiology,pathology,4,20,30
+Tyrosine Kinase Inhibitors,antagonists & inhibitors,4,8,18
+"Myocytes, Cardiac",pathology,4,10,30
+Acrylamides,toxicity,4,70,4
+drug effects,toxicity,4,14,4
+Acrylamides,Long QT Syndrome,4,70,5
+Long QT Syndrome,drug therapy,4,5,65
+Aniline Compounds,Tyrosine kinase inhibitor,4,69,8
+Cardiotoxicity,Tyrosine kinase inhibitor,4,47,8
+Lung Neoplasms,Molecular Targeted Therapy,4,66,5
+diagnosis,etiology,4,15,20
+EGFR,lung cancer,4,11,21
+Lung Neoplasms,drug effects,4,66,14
+"Carcinoma, Non-Small-Cell Lung",drug effects,4,59,14
+Indoles,Tyrosine Kinase Inhibitors,4,69,8
+Pyrimidines,Tyrosine Kinase Inhibitors,4,71,8
+Protein Kinase Inhibitors,mortality,4,49,5
+Antineoplastic Agents,mortality,4,36,5
+"Aged, 80 and over",Cardiotoxicity,4,17,47
+EGFR,Pyrimidines,4,11,71
+NSCLC,adverse effects,4,13,51
+mortality,therapeutic use,4,5,36
+Acrylamides,mortality,4,70,5
+"Carcinoma, Non-Small-Cell Lung",non-small cell lung cancer,4,59,19
+Indoles,mortality,4,69,5
+EGFR,drug therapy,4,11,65
+Pyrimidines,mortality,4,71,5
+Lung Neoplasms,cardio-oncology,4,66,11
+ErbB Receptors,non-small cell lung cancer,4,53,19
+Protein Kinase Inhibitors,non-small cell lung cancer,4,49,19
+"Carcinoma, Non-Small-Cell Lung","Cell Line, Tumor",4,59,4
+"Cell Line, Tumor",drug therapy,4,4,65
+"Carcinoma, Non-Small-Cell Lung",Survival Rate,4,59,4
+Pyrimidines,Survival Rate,4,71,4
+Survival Rate,drug therapy,4,4,65
+Survival Rate,genetics,4,4,44
+Aniline Compounds,Survival Rate,4,69,4
+ErbB Receptors,Survival Rate,4,53,4
+Mutation,Survival Rate,4,39,4
+Indoles,Survival Rate,4,69,4
+Antineoplastic Agents,Cardiovascular Diseases,4,36,4
+Indoles,"Neoplasm Recurrence, Local",4,69,6
+Protein Kinase Inhibitors,cardio-oncology,4,49,11
+Pyrimidines,non-small cell lung cancer,4,71,19
+Afatinib,drug therapy,4,7,65
+metabolism,therapeutic use,4,16,36
+Acrylamides,Pharmacovigilance,4,70,8
+Afatinib,Lung Neoplasms,4,7,66
+Adverse Drug Reaction Reporting Systems,Osimertinib,4,6,82
+Osimertinib,Pharmacovigilance,4,82,8
+Long QT Syndrome,Osimertinib,4,5,82
+Adverse Drug Reaction Reporting Systems,Pyrimidines,4,6,71
+Pharmacovigilance,Pyrimidines,4,8,71
+Lung Neoplasms,non-small cell lung cancer,4,66,19
+Acrylamides,Adverse Drug Reaction Reporting Systems,4,70,6
+Incidence,drug therapy,4,4,65
+Incidence,Lung Neoplasms,4,4,66
+diagnosis,heart failure,4,15,31
+Heart Diseases,Osimertinib,4,9,82
+heart failure,metabolism,4,31,16
+Lung Neoplasms,mortality,4,66,5
+ErbB Receptors,Republic of Korea,4,53,4
+EGFR,pathology,4,11,30
+"Carcinoma, Non-Small-Cell Lung",Republic of Korea,4,59,4
+"Carcinoma, Non-Small-Cell Lung","Neoplasm Recurrence, Local",4,59,6
+Republic of Korea,genetics,4,4,44
+Cardiovascular Diseases,drug therapy,4,4,65
+ErbB Receptors,mortality,4,53,5
+Aniline Compounds,mortality,4,69,5
+"Carcinoma, Non-Small-Cell Lung",mortality,4,59,5
+Cardiotoxicity,Risk Assessment,4,47,4
+Adenocarcinoma,Osimertinib,4,6,82
+chemically induced,physiopathology,4,26,4
+antagonists & inhibitors,pharmacology,4,18,18
+Adenocarcinoma of Lung,adverse effects,4,5,51
+Antineoplastic Agents,Pharmacovigilance,4,36,8
+chemically induced,metabolism,4,26,16
+Antineoplastic Agents,Risk Assessment,4,36,4
+Adverse Drug Reaction Reporting Systems,Indoles,4,6,69
+Indoles,Pharmacovigilance,4,69,8
+Aniline Compounds,Pharmacovigilance,4,69,8
+Cardiotoxicity,NSCLC,4,47,13
+Aniline Compounds,EGFR,4,69,11
+Acrylamides,EGFR,4,70,11
+EGFR,Indoles,4,11,69
+Lung Neoplasms,Survival Rate,4,66,4
+"Neoplasm Recurrence, Local",genetics,4,6,44
+Incidence,Pyrimidines,4,4,71
+Incidence,Indoles,4,4,69
+Adverse Drug Reaction Reporting Systems,Aniline Compounds,4,6,69
+Acrylamides,Survival Rate,4,70,4
+Lung Neoplasms,Republic of Korea,4,66,4
+Mutation,Republic of Korea,4,39,4
+Mutation,"Neoplasm Recurrence, Local",4,39,6
+Risk Assessment,adverse effects,4,4,51
+antagonists & inhibitors,diagnosis,4,18,15
+ErbB Receptors,drug effects,4,53,14
+"Carcinoma, Non-Small-Cell Lung",Incidence,4,59,4
+Aniline Compounds,Incidence,4,69,4
+Cardiovascular Diseases,adverse effects,4,4,51
+Incidence,adverse effects,4,4,51
+Acrylamides,Incidence,4,70,4
+Cardiovascular Diseases,chemically induced,4,4,26
+Incidence,epidemiology,4,4,16
+"Drug Resistance, Neoplasm",drug effects,4,6,14
+NSCLC,heart failure,4,13,31
+Osimertinib,cardiomyopathy,4,82,5
+Indoles,toxicity,4,69,4
+Antineoplastic Combined Chemotherapy Protocols,drug therapy,4,4,65
+Antineoplastic Agents,Induced Pluripotent Stem Cells,4,36,5
+Non–small cell lung cancer,Osimertinib,4,4,82
+metabolism,toxicity,4,16,4
+Induced Pluripotent Stem Cells,adverse effects,4,5,51
+Acrylamides,Tyrosine kinase inhibitor,4,70,8
+Cardiotoxicity,Pharmacovigilance,4,47,8
+Pyrimidines,Tyrosine kinase inhibitor,4,71,8
+Aniline Compounds,Induced Pluripotent Stem Cells,4,69,5
+Aniline Compounds,toxicity,4,69,4
+drug effects,genetics,4,14,44
+Long QT Syndrome,Protein Kinase Inhibitors,4,5,49
+Long QT Syndrome,chemically induced,4,5,26
+Indoles,Long QT Syndrome,4,69,5
+Long QT Syndrome,Pyrimidines,4,5,71
+Adverse Drug Reaction Reporting Systems,drug therapy,4,6,65
+Pharmacovigilance,drug therapy,4,8,65
+"Drug Resistance, Neoplasm",genetics,3,6,44
+Indoles,Non–small cell lung cancer,3,69,4
+Non–small cell lung cancer,Pyrimidines,3,4,71
+Protein Kinase Inhibitors,targeted therapy,3,49,6
+Osimertinib,cardiac toxicity,3,82,4
+"Aged, 80 and over",NSCLC,3,17,13
+"Carcinoma, Non-Small-Cell Lung",Disease Progression,3,59,3
+Disease Progression,drug therapy,3,3,65
+"Aged, 80 and over",Antineoplastic Combined Chemotherapy Protocols,3,17,4
+Antineoplastic Combined Chemotherapy Protocols,adverse effects,3,4,51
+"Neoplasm Recurrence, Local",therapeutic use,3,6,36
+Incidence,Protein Kinase Inhibitors,3,4,49
+ErbB Receptors,Incidence,3,53,4
+"Cell Line, Tumor",NSCLC,3,4,13
+Molecular Targeted Therapy,adverse effects,3,5,51
+Antineoplastic Agents,Molecular Targeted Therapy,3,36,5
+Pyrimidines,Republic of Korea,3,71,4
+Antineoplastic Agents,Neoplasms,3,36,3
+Molecular Targeted Therapy,drug therapy,3,5,65
+Chemotherapy,Pyrimidines,3,4,71
+Drug-Related Side Effects and Adverse Reactions,drug therapy,3,3,65
+Indoles,Stroke Volume,3,69,3
+antagonists & inhibitors,heart failure,3,18,31
+Cardiotoxicity,physiopathology,3,47,4
+administration & dosage,chemically induced,3,9,26
+Neoplasms,drug therapy,3,3,65
+Neoplasms,chemically induced,3,3,26
+cardio-oncology,chemically induced,3,11,26
+Antineoplastic Agents,targeted therapy,3,36,6
+cardio-oncology,etiology,3,11,20
+Cardiotoxicity,targeted therapy,3,47,6
+Cardiotoxicity,Molecular Targeted Therapy,3,47,5
+Aniline Compounds,"Cell Line, Tumor",3,69,4
+"Drug Resistance, Neoplasm",NSCLC,3,6,13
+Chemotherapy,Indoles,3,4,69
+Republic of Korea,pathology,3,4,30
+Afatinib,Antineoplastic Agents,3,7,36
+Adenocarcinoma of Lung,Indoles,3,5,69
+Adenocarcinoma of Lung,Pyrimidines,3,5,71
+adverse effects,physiopathology,3,51,4
+Cardiotoxicity,Chemotherapy,3,47,4
+Chemotherapy,drug therapy,3,4,65
+Chemotherapy,genetics,3,4,44
+Cardiovascular Diseases,Lung Neoplasms,3,4,66
+Antineoplastic Agents,Gefitinib,3,36,4
+"Cell Line, Tumor",ErbB Receptors,3,4,53
+Acrylamides,physiopathology,3,70,4
+Acrylamides,Stroke Volume,3,70,3
+ErbB Receptors,Heart Diseases,3,53,9
+"Carcinoma, Non-Small-Cell Lung",Lazertinib,3,59,4
+ErbB Receptors,Lazertinib,3,53,4
+Aniline Compounds,physiopathology,3,69,4
+Aniline Compounds,Stroke Volume,3,69,3
+Cardiovascular Diseases,epidemiology,3,4,16
+Cardiovascular Diseases,genetics,3,4,44
+Lazertinib,Lung Neoplasms,3,4,66
+Antineoplastic Agents,Tyrosine Kinase Inhibitors,3,36,8
+Lazertinib,Mutation,3,4,39
+Tyrosine kinase inhibitor,lung cancer,3,8,21
+Mitochondria,etiology,3,3,20
+Cardiotoxicity,Mitochondria,3,47,3
+Osimertinib,Torsade de Pointes,3,82,3
+"Myocytes, Cardiac",Protein Kinase Inhibitors,3,10,49
+"Databases, Factual",adverse effects,3,3,51
+Induced Pluripotent Stem Cells,pharmacology,3,5,18
+Antineoplastic Agents,"Drug Resistance, Neoplasm",3,36,6
+Case report,Osimertinib,3,7,82
+Exons,genetics,3,3,44
+Adenocarcinoma of Lung,pathology,3,5,30
+Exons,Lung Neoplasms,3,3,66
+Adenocarcinoma of Lung,"Carcinoma, Non-Small-Cell Lung",3,5,59
+"Carcinoma, Non-Small-Cell Lung",Exons,3,59,3
+chemically induced,drug effects,3,26,14
+Stroke Volume,chemically induced,3,3,26
+Adenocarcinoma of Lung,Aniline Compounds,3,5,69
+Adverse Drug Reaction Reporting Systems,Protein Kinase Inhibitors,3,6,49
+Pharmacovigilance,Protein Kinase Inhibitors,3,8,49
+Gefitinib,Protein Kinase Inhibitors,3,4,49
+Pyrimidines,physiopathology,3,71,4
+Pyrimidines,Stroke Volume,3,71,3
+"Neoplasm Recurrence, Local",Protein Kinase Inhibitors,3,6,49
+Mutation,lung cancer,3,39,21
+Adenocarcinoma of Lung,genetics,3,5,44
+Adverse events,"Aged, 80 and over",3,5,17
+Adverse events,Indoles,3,5,69
+Heart Diseases,Risk Assessment,3,9,4
+Acrylamides,Exons,3,70,3
+Exons,Indoles,3,3,69
+Exons,Pyrimidines,3,3,71
+Afatinib,Gefitinib,3,7,4
+ErbB Receptors,Gefitinib,3,53,4
+Aniline Compounds,Chemotherapy,3,69,4
+Acrylamides,Chemotherapy,3,70,4
+Adverse events,Pyrimidines,3,5,71
+Incidence,Osimertinib,3,4,82
+Gefitinib,Indoles,3,4,69
+Aniline Compounds,Gefitinib,3,69,4
+EGFR,adverse effects,3,11,51
+Acrylamides,Adverse events,3,70,5
+Risk Assessment,chemically induced,3,4,26
+Gefitinib,adverse effects,3,4,51
+Gefitinib,Pyrimidines,3,4,71
+Acrylamides,Gefitinib,3,70,4
+Afatinib,Osimertinib,3,7,82
+Afatinib,therapeutic use,3,7,36
+Lung,drug therapy,3,3,65
+Acrylamides,cardio-oncology,3,70,11
+"Carcinoma, Non-Small-Cell Lung",Cardiovascular Diseases,3,59,4
+genetics,mortality,3,44,5
+Chemotherapy,ErbB Receptors,3,4,53
+Incidence,etiology,3,4,20
+drug effects,heart failure,3,14,31
+Stroke Volume,heart failure,3,3,31
+Indoles,physiopathology,3,69,4
+Exons,drug therapy,3,3,65
+"Drug Resistance, Neoplasm",antagonists & inhibitors,3,6,18
+Protein Kinase Inhibitors,Tyrosine kinase inhibitor,3,49,8
+Cardiotoxicity,Stroke Volume,3,47,3
+heart failure,pathology,3,31,30
+Antineoplastic Combined Chemotherapy Protocols,pathology,3,4,30
+ErbB Receptors,"Myocytes, Cardiac",3,53,10
+Antineoplastic Combined Chemotherapy Protocols,Lung Neoplasms,3,4,66
+Antineoplastic Combined Chemotherapy Protocols,ErbB Receptors,3,4,53
+Aniline Compounds,Exons,3,69,3
+Risk Assessment,diagnosis,3,4,15
+Adenocarcinoma of Lung,Mutation,3,5,39
+Exons,Mutation,3,3,39
+Acrylamides,Adenocarcinoma of Lung,3,70,5
+Adenocarcinoma of Lung,ErbB Receptors,3,5,53
+ErbB Receptors,Exons,3,53,3
+Adenocarcinoma of Lung,Protein Kinase Inhibitors,3,5,49
+Antineoplastic Combined Chemotherapy Protocols,"Carcinoma, Non-Small-Cell Lung",3,4,59
+Antineoplastic Combined Chemotherapy Protocols,genetics,3,4,44
+Lazertinib,Protein Kinase Inhibitors,3,4,49
+Antineoplastic Combined Chemotherapy Protocols,Mutation,3,4,39
+Mutation,administration & dosage,3,39,9
+Lazertinib,Pyrimidines,3,4,71
+"Carcinoma, Non-Small-Cell Lung",cardio-oncology,3,59,11
+Pyrimidines,cardio-oncology,3,71,11
+Indoles,Republic of Korea,3,69,4
+Neoplasms,adverse effects,3,3,51
+etiology,targeted therapy,3,20,6
+Protein Kinase Inhibitors,Survival Rate,3,49,4
+Cardiovascular Diseases,ErbB Receptors,3,4,53
+Survival Rate,pathology,3,4,30
+Survival Rate,therapeutic use,3,4,36
+Adverse events,Aniline Compounds,3,5,69
+Indoles,cardio-oncology,3,69,11
+Indoles,non-small cell lung cancer,3,69,19
+Molecular Targeted Therapy,etiology,3,5,20
+Osimertinib,real-world data,3,82,3
+Osimertinib,Republic of Korea,3,82,4
+Republic of Korea,drug therapy,3,4,65
+Acrylamides,Republic of Korea,3,70,4
+Aniline Compounds,Republic of Korea,3,69,4
+ErbB Receptors,T790M,3,53,3
+Lung Neoplasms,T790M,3,66,3
+Pyrimidines,epidermal growth factor receptor,3,71,10
+Mutation,non-small cell lung cancer,3,39,19
+Mutation,T790M,3,39,3
+Afatinib,"Carcinoma, Non-Small-Cell Lung",3,7,59
+drug therapy,non-small cell lung cancer,3,65,19
+Aniline Compounds,cardio-oncology,3,69,11
+Cardiotoxicity,Incidence,3,47,4
+Lazertinib,Osimertinib,3,4,82
+Cardiotoxicity,Cardiovascular Diseases,3,47,4
+Molecular Targeted Therapy,genetics,3,5,44
+Molecular Targeted Therapy,Protein Kinase Inhibitors,3,5,49
+Lung,Pyrimidines,3,3,71
+Adverse events,Osimertinib,3,5,82
+ErbB Receptors,Lung,3,53,3
+ErbB Receptors,Neoplasm Staging,3,53,3
+"Aged, 80 and over",Neoplasm Staging,3,17,3
+Long QT Syndrome,diagnosis,3,5,15
+Electrocardiography,Long QT Syndrome,3,3,5
+Electrocardiography,etiology,3,3,20
+Neoplasm Staging,epidemiology,3,3,16
+ErbB Receptors,targeted therapy,3,53,6
+Pyrimidines,targeted therapy,3,71,6
+Long QT Syndrome,etiology,3,5,20
+NSCLC,etiology,3,13,20
+Mutation,mortality,3,39,5
+chemically induced,lung cancer,3,26,21
+Cardiotoxicity,Long QT Syndrome,3,47,5
+"Carcinoma, Non-Small-Cell Lung",Neoplasm Staging,3,59,3
+Lung Neoplasms,Neoplasm Staging,3,66,3
+Meta-analysis,Osimertinib,3,3,82
+Adenocarcinoma of Lung,drug therapy,3,5,65
+Acrylamides,non-small cell lung cancer,3,70,19
+adverse effects,non-small cell lung cancer,3,51,19
+Aniline Compounds,non-small cell lung cancer,3,69,19
+Atrial Fibrillation,diagnosis,3,3,15
+Atrial Fibrillation,adverse effects,3,3,51
+Electrocardiography,diagnosis,3,3,15
+Electrocardiography,adverse effects,3,3,51
+Acrylamides,Lung,3,70,3
+Aniline Compounds,Lung,3,69,3
+Tyrosine Kinase Inhibitors,etiology,3,8,20
+Tyrosine Kinase Inhibitors,therapeutic use,3,8,36
+etiology,pharmacology,3,20,18
+Tyrosine Kinase Inhibitors,pharmacology,3,8,18
+"Cell Line, Tumor",pharmacology,3,4,18
+"Aged, 80 and over","Neoplasm Recurrence, Local",3,17,6
+Non–small cell lung cancer,Protein Kinase Inhibitors,3,4,49
+"Aged, 80 and over",etiology,3,17,20
+"Aged, 80 and over",diagnosis,3,17,15
+Cardiotoxicity,Tyrosine Kinase Inhibitors,3,47,8
+Tyrosine kinase inhibitor,heart failure,3,8,31
+"Myocytes, Cardiac",heart failure,3,10,31
+Tyrosine Kinase Inhibitors,epidemiology,3,8,16
+pathology,toxicity,3,30,4
+Protein Kinase Inhibitors,epidermal growth factor receptor,3,49,10
+Indoles,Lung,3,69,3
+Osimertinib,toxicity,3,82,4
+Induced Pluripotent Stem Cells,Osimertinib,3,5,82
+"Myocytes, Cardiac",chemically induced,3,10,26
+drug effects,therapeutic use,3,14,36
+Signal Transduction,pathology,3,3,30
+Signal Transduction,genetics,3,3,44
+"Aged, 80 and over",Disease Progression,3,17,3
+EGFR,Mutation,3,11,39
+cardio-oncology,heart failure,3,11,31
+"Myocytes, Cardiac",genetics,3,10,44
+"Carcinoma, Non-Small-Cell Lung",epidermal growth factor receptor,3,59,10
+ErbB Receptors,epidermal growth factor receptor,3,53,10
+Lung Neoplasms,epidermal growth factor receptor,3,66,10
+Mutation,epidermal growth factor receptor,3,39,10
+Erlotinib Hydrochloride,Pyrimidines,3,3,71
+Erlotinib Hydrochloride,Indoles,3,3,69
+Aniline Compounds,Erlotinib Hydrochloride,3,69,3
+Adverse Drug Reaction Reporting Systems,epidemiology,3,6,16
+Pharmacovigilance,epidemiology,3,8,16
+epidemiology,heart failure,3,16,31
+ErbB Receptors,Erlotinib Hydrochloride,3,53,3
+"Carcinoma, Non-Small-Cell Lung",Heart Diseases,3,59,9
+Disease Progression,Lung Neoplasms,3,3,66
+Disease Progression,Mutation,3,3,39
+"Disease Models, Animal",metabolism,3,3,16
+"Drug Resistance, Neoplasm",Mutation,3,6,39
+"Myocytes, Cardiac",toxicity,3,10,4
+Adenocarcinoma,Cardiotoxicity,3,6,47
+Osimertinib,Survival Rate,3,82,4
+Mitochondria,adverse effects,3,3,51
+antagonists & inhibitors,lung cancer,3,18,21
+Disease Progression,Indoles,3,3,69
+Disease Progression,Pyrimidines,3,3,71
+Osimertinib,"TKI, tyrosine kinase inhibitor",3,82,3
+adverse effects,mortality,3,51,5
+Antineoplastic Agents,"Databases, Factual",3,36,3
+Cardiotoxicity,Case report,3,47,7
+Case report,heart failure,3,7,31
+Antineoplastic Combined Chemotherapy Protocols,therapeutic use,3,4,36
+"Cell Line, Tumor",metabolism,3,4,16
+"Cell Line, Tumor",Pyrimidines,3,4,71
+"Cell Line, Tumor",Indoles,3,4,69
+"Cell Line, Tumor","Drug Resistance, Neoplasm",3,4,6
+Incidence,pathology,3,4,30
+genetics,targeted therapy,3,44,6
+lung cancer,therapeutic use,3,21,36
+Acrylamides,United States Food and Drug Administration,3,70,3
+Indoles,United States Food and Drug Administration,3,69,3
+Pyrimidines,United States Food and Drug Administration,3,71,3
+Cardiotoxicity,prevention & control,3,47,3
+Antineoplastic Agents,cardio-oncology,3,36,11
+Mitochondria,drug effects,3,3,14
+Mitochondria,"Myocytes, Cardiac",3,3,10
+Mitochondria,metabolism,3,3,16
+Aniline Compounds,Disease Progression,3,69,3
+"Carcinoma, Non-Small-Cell Lung",Non–small cell lung cancer,3,59,4
+Non–small cell lung cancer,drug therapy,3,4,65
+Acrylamides,Non–small cell lung cancer,3,70,4
+Aniline Compounds,Non–small cell lung cancer,3,69,4
+Erlotinib Hydrochloride,Protein Kinase Inhibitors,3,3,49
+"Neoplasm Recurrence, Local",drug therapy,3,6,65
+Aniline Compounds,United States Food and Drug Administration,3,69,3
+"Disease Models, Animal","Myocytes, Cardiac",3,3,10
+adverse effects,toxicity,3,51,4
+Adverse Drug Reaction Reporting Systems,"Databases, Factual",3,6,3
+ErbB Receptors,Long QT Syndrome,3,53,5
+Disease Progression,pathology,3,3,30
+Disease Progression,ErbB Receptors,3,3,53
+Disease Progression,genetics,3,3,44
+Acrylamides,Disease Progression,3,70,3
+Adverse Drug Reaction Reporting Systems,diagnosis,3,6,15
+Lung Neoplasms,Pharmacovigilance,3,66,8
+Heart Diseases,epidemiology,3,9,16
+Adverse Drug Reaction Reporting Systems,Heart Diseases,3,6,9
+Adverse Drug Reaction Reporting Systems,chemically induced,3,6,26
+Antineoplastic Agents,Long QT Syndrome,3,36,5
+Lung Neoplasms,Non–small cell lung cancer,3,66,4
+Antineoplastic Agents,Non–small cell lung cancer,3,36,4
+"EGFR, epidermal growth factor receptor","TKI, tyrosine kinase inhibitor",2,2,3
+Erlotinib Hydrochloride,genetics,2,3,44
+adverse effects,anticancer drugs,2,51,2
+anticancer drugs,chemically induced,2,2,26
+"LVEF, left ventricular ejection fraction",Osimertinib,2,2,82
+"LVEF, left ventricular ejection fraction","TKI, tyrosine kinase inhibitor",2,2,3
+"NSCLC, non–small cell lung cancer",Osimertinib,2,2,82
+Cardiotoxicity,"TKI, tyrosine kinase inhibitor",2,47,3
+"TKI, tyrosine kinase inhibitor",heart failure,2,3,31
+Osimertinib,disproportionality analysis,2,82,3
+Osimertinib,network pharmacology,2,82,4
+FAERS database,disproportionality analysis,2,2,3
+FAERS database,epidermal growth factor receptor,2,2,10
+disproportionality analysis,epidermal growth factor receptor,2,3,10
+EGFR‐TKI,Mutation,2,2,39
+EGFR‐TKI,ErbB Receptors,2,2,53
+EGFR‐TKI,Protein Kinase Inhibitors,2,2,49
+EGFR‐TKI,Indoles,2,2,69
+EGFR‐TKI,Pyrimidines,2,2,71
+EGFR‐TKI,drug therapy,2,2,65
+EGFR‐TKI,genetics,2,2,44
+Acrylamides,EGFR‐TKI,2,70,2
+EGFR‐TKI,therapeutic use,2,2,36
+EGFR‐TKI,pharmacology,2,2,18
+Aniline Compounds,EGFR‐TKI,2,69,2
+EGFR‐TKI,Lung Neoplasms,2,2,66
+"Disease Models, Animal",Indoles,2,3,69
+"Disease Models, Animal",Pyrimidines,2,3,71
+EGFR‐TKI,Osimertinib,2,2,82
+"Carcinoma, Non-Small-Cell Lung",EGFR‐TKI,2,59,2
+Progression-Free Survival,Pyrimidines,2,2,71
+Osimertinib,Progression-Free Survival,2,82,2
+Acrylamides,Progression-Free Survival,2,70,2
+Progression-Free Survival,therapeutic use,2,2,36
+Apoptosis,Indoles,2,3,69
+Indoles,Tumor Suppressor Protein p53,2,69,2
+Apoptosis,pharmacology,2,3,18
+pharmacology,toxicity,2,18,4
+Tumor Suppressor Protein p53,genetics,2,2,44
+Aniline Compounds,Apoptosis,2,69,3
+Aniline Compounds,Tumor Suppressor Protein p53,2,69,2
+ErbB Receptors,Progression-Free Survival,2,53,2
+Lung Neoplasms,Progression-Free Survival,2,66,2
+Mutation,Progression-Free Survival,2,39,2
+Progression-Free Survival,Protein Kinase Inhibitors,2,2,49
+Indoles,Progression-Free Survival,2,69,2
+drug therapy,physiopathology,2,65,4
+"Databases, Factual",Neoplasms,2,3,3
+"Databases, Factual",Heart Diseases,2,3,9
+"Databases, Factual",chemically induced,2,3,26
+Neoplasms,diagnosis,2,3,15
+Apoptosis,metabolism,2,3,16
+Tumor Suppressor Protein p53,adverse effects,2,2,51
+genetics,toxicity,2,44,4
+Long QT Syndrome,genetics,2,5,44
+Antineoplastic Agents,Electrocardiography,2,36,3
+Electrocardiography,Protein Kinase Inhibitors,2,3,49
+Electrocardiography,chemically induced,2,3,26
+Electrocardiography,Indoles,2,3,69
+Adverse Drug Reaction Reporting Systems,Neoplasms,2,6,3
+"Databases, Factual",drug therapy,2,3,65
+"Databases, Factual",Pharmacovigilance,2,3,8
+"Myocytes, Cardiac",Signal Transduction,2,10,3
+Cardiotoxicity,Contractility,2,47,2
+"Myocytes, Cardiac",prevention & control,2,10,3
+"Myocytes, Cardiac",therapeutic use,2,10,36
+drug effects,prevention & control,2,14,3
+Heart Diseases,pathology,2,9,30
+Heart Diseases,genetics,2,9,44
+"Disease Models, Animal",Osimertinib,2,3,82
+Incidence,antagonists & inhibitors,2,4,18
+Incidence,Tyrosine Kinase Inhibitors,2,4,8
+Adverse events,adverse effects,2,5,51
+Lung,Protein Kinase Inhibitors,2,3,49
+Atrial Fibrillation,Long QT Syndrome,2,3,5
+drug therapy,epidermal growth factor receptor,2,65,10
+epidermal growth factor receptor,genetics,2,10,44
+Acrylamides,epidermal growth factor receptor,2,70,10
+QT prolongation,delayed conduction,2,7,2
+QT prolongation,ion channel,2,7,2
+cardiac electrophysiology,delayed conduction,2,2,2
+cardiac electrophysiology,ion channel,2,2,2
+Osimertinib,cardiac electrophysiology,2,82,2
+delayed conduction,ion channel,2,2,2
+Adenocarcinoma,drug therapy,2,6,65
+Adenocarcinoma,ErbB Receptors,2,6,53
+Aniline Compounds,Contractility,2,69,2
+Contractility,adverse effects,2,2,51
+Osimertinib,delayed conduction,2,82,2
+Osimertinib,ion channel,2,82,2
+Aniline Compounds,epidermal growth factor receptor,2,69,10
+adverse effects,epidermal growth factor receptor,2,51,10
+Lung,genetics,2,3,44
+QT prolongation,cardiac electrophysiology,2,7,2
+Acrylamides,T790M,2,70,3
+Indoles,T790M,2,69,3
+Pyrimidines,T790M,2,71,3
+Afatinib,genetics,2,7,44
+Afatinib,Mutation,2,7,39
+Aniline Compounds,T790M,2,69,3
+T790M,adverse effects,2,3,51
+T790M,drug therapy,2,3,65
+chemistry,pharmacology,2,2,18
+chemically induced,pharmacology,2,26,18
+pharmacology,prevention & control,2,18,3
+Signal Transduction,pharmacology,2,3,18
+Molecular Docking Simulation,pharmacology,2,2,18
+Molecular Docking Simulation,chemistry,2,2,2
+Molecular Docking Simulation,drug effects,2,2,14
+Protein Kinase Inhibitors,T790M,2,49,3
+Lung,therapeutic use,2,3,36
+Afatinib,chemically induced,2,7,26
+Lung,Lung Neoplasms,2,3,66
+lung cancer,pathology,2,21,30
+Osimertinib,statistics & numerical data,2,82,2
+metabolism,prevention & control,2,16,3
+Signal Transduction,metabolism,2,3,16
+chemistry,drug effects,2,2,14
+Tyrosine kinase inhibitor,adverse effects,2,8,51
+Atrial Fibrillation,etiology,2,3,20
+diagnosis,therapy,2,15,3
+Atrial Fibrillation,Electrocardiography,2,3,3
+Torsades de Pointes,diagnosis,2,2,15
+Torsades de Pointes,adverse effects,2,2,51
+Osimertinib,Torsades de Pointes,2,82,2
+Electrocardiography,Osimertinib,2,3,82
+Molecular docking,network pharmacology,2,2,4
+Long QT Syndrome,heart failure,2,5,31
+Indoles,anti-cancer treatment,2,69,2
+Pyrimidines,anti-cancer treatment,2,71,2
+Protein Kinase Inhibitors,anti-cancer treatment,2,49,2
+"Carcinoma, Non-Small-Cell Lung",anti-cancer treatment,2,59,2
+Acrylamides,anti-cancer treatment,2,70,2
+adverse effects,anti-cancer treatment,2,51,2
+drug resistance,metabolism,2,2,16
+Osimertinib,Pericardial effusion,2,82,2
+ErbB Receptors,cardio-oncology,2,53,11
+Antineoplastic Agents,non-small cell lung cancer,2,36,19
+drug effects,network pharmacology,2,14,4
+Molecular Docking Simulation,network pharmacology,2,2,4
+network pharmacology,pharmacology,2,4,18
+chemistry,network pharmacology,2,2,4
+"Cell Line, Tumor",genetics,2,4,44
+Lung Neoplasms,drug resistance,2,66,2
+ErbB Receptors,drug resistance,2,53,2
+"Cell Line, Tumor",drug resistance,2,4,2
+Osimertinib,Ventricular tachycardia,2,82,2
+"Carcinoma, Non-Small-Cell Lung",drug resistance,2,59,2
+drug resistance,drug therapy,2,2,65
+drug resistance,genetics,2,2,44
+T790M,genetics,2,3,44
+Indoles,epidermal growth factor receptor,2,69,10
+genetics,non-small cell lung cancer,2,44,19
+Osimertinib,T790M,2,82,3
+Acrylamides,drug resistance,2,70,2
+Aniline Compounds,drug resistance,2,69,2
+Indoles,drug resistance,2,69,2
+Pyrimidines,drug resistance,2,71,2
+Stroke Volume,drug therapy,2,3,65
+Antineoplastic Agents,Stroke Volume,2,36,3
+Heart Diseases,physiopathology,2,9,4
+Heart Diseases,drug effects,2,9,14
+Protein Kinase Inhibitors,Risk Assessment,2,49,4
+Protein Kinase Inhibitors,Stroke Volume,2,49,3
+Antineoplastic Agents,physiopathology,2,36,4
+Pyrimidines,Risk Assessment,2,71,4
+Acrylamides,Erlotinib Hydrochloride,2,70,3
+adverse effects,statistics & numerical data,2,51,2
+Pyrimidines,statistics & numerical data,2,71,2
+Aniline Compounds,statistics & numerical data,2,69,2
+Indoles,statistics & numerical data,2,69,2
+Antineoplastic Agents,statistics & numerical data,2,36,2
+Adverse Drug Reaction Reporting Systems,statistics & numerical data,2,6,2
+Lung Neoplasms,Stroke Volume,2,66,3
+Stroke Volume,"Ventricular Function, Left",2,3,2
+Risk Assessment,physiopathology,2,4,4
+drug effects,physiopathology,2,14,4
+diagnosis,drug effects,2,15,14
+"Ventricular Function, Left",chemically induced,2,2,26
+diagnosis,physiopathology,2,15,4
+Exons,Protein Kinase Inhibitors,2,3,49
+Acrylamides,statistics & numerical data,2,70,2
+Aniline Compounds,anti-cancer treatment,2,69,2
+anti-cancer treatment,etiology,2,2,20
+Lung Neoplasms,anti-cancer treatment,2,66,2
+anti-cancer treatment,drug therapy,2,2,65
+diagnosis,lung cancer,2,15,21
+Cardiotoxicity,anti-cancer treatment,2,47,2
+T790M,lung cancer,2,3,21
+Risk Assessment,drug effects,2,4,14
+ErbB Receptors,Stroke Volume,2,53,3
+antagonists & inhibitors,metabolism,2,18,16
+Acrylamides,Risk Assessment,2,70,4
+Acrylamides,"Ventricular Function, Left",2,70,2
+Stroke Volume,adverse effects,2,3,51
+diagnosis,methods,2,15,4
+methods,therapeutic use,2,4,36
+Lung Neoplasms,methods,2,66,4
+"Cell Line, Tumor",Tyrosine Kinase Inhibitors,2,4,8
+Epidermal growth factor receptor-tyrosine kinase inhibitor,lung cancer,2,2,21
+Epidermal growth factor receptor-tyrosine kinase inhibitor,Osimertinib,2,2,82
+"Drug Resistance, Neoplasm",Tyrosine Kinase Inhibitors,2,6,8
+"Cell Line, Tumor",Protein Kinase Inhibitors,2,4,49
+"Cell Line, Tumor",lung cancer,2,4,21
+Lazertinib,drug therapy,2,4,65
+Lazertinib,genetics,2,4,44
+Adverse Drug Reaction Reporting Systems,ErbB Receptors,2,6,53
+ErbB Receptors,Pharmacovigilance,2,53,8
+Adverse Drug Reaction Reporting Systems,antagonists & inhibitors,2,6,18
+Pharmacovigilance,antagonists & inhibitors,2,8,18
+Tyrosine kinase inhibitor,epidermal growth factor receptor,2,8,10
+EGFR mutation,non-small cell lung cancer,2,6,19
+Protein Kinase Inhibitors,methods,2,49,4
+Osimertinib,methods,2,82,4
+Pyrimidines,"Ventricular Function, Left",2,71,2
+Protein Kinase Inhibitors,physiopathology,2,49,4
+Heart Diseases,metabolism,2,9,16
+metabolism,physiopathology,2,16,4
+Risk Assessment,metabolism,2,4,16
+Pharmacovigilance,statistics & numerical data,2,8,2
+Gefitinib,antagonists & inhibitors,2,4,18
+Afatinib,antagonists & inhibitors,2,7,18
+Osimertinib,Stroke Volume,2,82,3
+Indoles,Risk Assessment,2,69,4
+Indoles,"Ventricular Function, Left",2,69,2
+Risk Assessment,heart failure,2,4,31
+"Ventricular Function, Left",heart failure,2,2,31
+Osimertinib,physiopathology,2,82,4
+Heart Diseases,heart failure,2,9,31
+heart failure,physiopathology,2,31,4
+Adenocarcinoma,lung cancer,2,6,21
+ErbB Receptors,surgery,2,53,2
+Recurrence,pathology,2,3,30
+Mutation,Tyrosine Kinase Inhibitors,2,39,8
+Aniline Compounds,Risk Assessment,2,69,4
+Aniline Compounds,"Ventricular Function, Left",2,69,2
+Osimertinib,Risk Assessment,2,82,4
+Osimertinib,"Ventricular Function, Left",2,82,2
+"Neoplasm Recurrence, Local",Neoplasm Staging,2,6,3
+"Neoplasm Recurrence, Local",epidemiology,2,6,16
+"Neoplasm Recurrence, Local",pathology,2,6,30
+Neoplasm Staging,pathology,2,3,30
+Lung Neoplasms,surgery,2,66,2
+Mutation,surgery,2,39,2
+Neoplasm Staging,genetics,2,3,44
+Lung Neoplasms,Recurrence,2,66,3
+drug therapy,methods,2,65,4
+"Carcinoma, Non-Small-Cell Lung",Stroke Volume,2,59,3
+Mutation,Stroke Volume,2,39,3
+Adverse Drug Reaction Reporting Systems,Drug-Related Side Effects and Adverse Reactions,2,6,3
+heart failure,pharmacotherapy,2,31,2
+lung cancer,pharmacotherapy,2,21,2
+NSCLC,Tyrosine Kinase Inhibitors,2,13,8
+"Aged, 80 and over",Republic of Korea,2,17,4
+EGFR,Signal Transduction,2,11,3
+Piperazines,Pyrimidines,2,2,71
+Lung Neoplasms,Piperazines,2,66,2
+Piperazines,Protein Kinase Inhibitors,2,2,49
+Antineoplastic Agents,Piperazines,2,36,2
+Piperazines,chemically induced,2,2,26
+Indoles,Piperazines,2,69,2
+"Carcinoma, Non-Small-Cell Lung",Piperazines,2,59,2
+Aniline Compounds,Piperidines,2,69,2
+Acrylamides,Piperidines,2,70,2
+"Disease Models, Animal",pharmacology,2,3,18
+"Mice, Inbred C57BL","Myocytes, Cardiac",2,2,10
+"Mice, Inbred C57BL",pharmacology,2,2,18
+heart failure,pharmacology,2,31,18
+"Mice, Inbred C57BL",metabolism,2,2,16
+"Mice, Inbred C57BL",pathology,2,2,30
+Lazertinib,therapeutic use,2,4,36
+Aniline Compounds,Lazertinib,2,69,4
+Disease Progression,administration & dosage,2,3,9
+Indoles,Piperidines,2,69,2
+EGFR-TKIs,Osimertinib,2,2,82
+Disease Progression,adverse effects,2,3,51
+Antineoplastic Combined Chemotherapy Protocols,Disease Progression,2,4,3
+Piperidines,Pyrimidines,2,2,71
+Heart Diseases,antagonists & inhibitors,2,9,18
+"Drug Resistance, Neoplasm",adverse effects,2,6,51
+Tyrosine Kinase Inhibitors,genetics,2,8,44
+Cardiovascular Diseases,antagonists & inhibitors,2,4,18
+Cardiovascular Diseases,Mutation,2,4,39
+Indoles,Lazertinib,2,69,4
+Acrylamides,Lazertinib,2,70,4
+Lazertinib,pharmacology,2,4,18
+Hypertension,drug therapy,2,2,65
+Cardiovascular Diseases,Hypertension,2,4,2
+chemically induced,prevention & control,2,26,3
+administration & dosage,etiology,2,9,20
+adverse effects,prevention & control,2,51,3
+Hypertension,adverse effects,2,2,51
+Antineoplastic Agents,prevention & control,2,36,3
+Antineoplastic Agents,Hypertension,2,36,2
+Adenocarcinoma,epidermal growth factor receptor,2,6,10
+Adenocarcinoma,heart failure,2,6,31
+Cardiotoxicity,epidermal growth factor receptor,2,47,10
+Cardiotoxicity,"Ventricular Function, Left",2,47,2
+Tyrosine Kinase Inhibitors,non-small cell lung cancer,2,8,19
+Osimertinib,Tyrosine Kinase Inhibitors,2,82,8
+Hypertension,chemically induced,2,2,26
+etiology,prevention & control,2,20,3
+FAERS,United States Food and Drug Administration,2,2,3
+Antineoplastic Agents,FAERS,2,36,2
+epidermal growth factor receptor,heart failure,2,10,31
+epidermal growth factor receptor,lung cancer,2,10,21
+Non–small cell lung cancer,genetics,2,4,44
+ErbB Receptors,Non–small cell lung cancer,2,53,4
+Mutation,Non–small cell lung cancer,2,39,4
+Non–small cell lung cancer,Republic of Korea,2,4,4
+Piperazines,drug therapy,2,2,65
+Aniline Compounds,Piperazines,2,69,2
+Protein Kinase Inhibitors,administration & dosage,2,49,9
+Aniline Compounds,FAERS,2,69,2
+Acrylamides,FAERS,2,70,2
+FAERS,Indoles,2,2,69
+FAERS,Pyrimidines,2,2,71
+FAERS,adverse effects,2,2,51
+administration & dosage,targeted therapy,2,9,6
+Cardiotoxicity,administration & dosage,2,47,9
+Cardiotoxicity,Neoplasms,2,47,3
+administration & dosage,cardio-oncology,2,9,11
+non-small cell lung cancer,real-world data,2,19,3
+ErbB Receptors,United States Food and Drug Administration,2,53,3
+United States Food and Drug Administration,antagonists & inhibitors,2,3,18
+United States Food and Drug Administration,adverse effects,2,3,51
+"Neoplasm Recurrence, Local",adverse effects,2,6,51
+antagonists & inhibitors,pharmacokinetics,2,18,2
+Antineoplastic Combined Chemotherapy Protocols,antagonists & inhibitors,2,4,18
+Antineoplastic Agents,United States Food and Drug Administration,2,36,3
+Antineoplastic Agents,"Cell Line, Tumor",2,36,4
+"Cell Line, Tumor",drug effects,2,4,14
+"Drug Resistance, Neoplasm",metabolism,2,6,16
+Cardiotoxicity,Hypertension,2,47,2
+Piperazines,adverse effects,2,2,51
+Acrylamides,pharmacokinetics,2,70,2
+Aniline Compounds,pharmacokinetics,2,69,2
+Indoles,pharmacokinetics,2,69,2
+Pyrimidines,pharmacokinetics,2,71,2
+pharmacokinetics,therapeutic use,2,2,36
+administration & dosage,pharmacokinetics,2,9,2
+adverse effects,pharmacokinetics,2,51,2
+Molecular Targeted Therapy,chemically induced,2,5,26
+chemically induced,targeted therapy,2,26,6
+Mutation,targeted therapy,2,39,6
+Acrylamides,Circulating Tumor DNA,2,70,2
+Antineoplastic Agents,Republic of Korea,2,36,4
+Protein Kinase Inhibitors,Republic of Korea,2,49,4
+Piperazines,lung cancer,2,2,21
+Acrylamides,Piperazines,2,70,2
+Arrhythmia,Cardiotoxicity,2,2,47
+Aniline Compounds,Mitochondria,2,69,3
+Mitochondria,Osimertinib,2,3,82
+Acrylamides,Mitochondria,2,70,3
+Acrylamides,secondary,2,70,2
+administration & dosage,secondary,2,9,2
+administration & dosage,epidemiology,2,9,16
+Incidence,administration & dosage,2,4,9
+Indoles,secondary,2,69,2
+Pyrimidines,secondary,2,71,2
+Aniline Compounds,secondary,2,69,2
+"Carcinoma, Non-Small-Cell Lung",secondary,2,59,2
+drug therapy,secondary,2,65,2
+Indoles,Mitochondria,2,69,3
+Mitochondria,Pyrimidines,2,3,71
+cardiomyopathy,heart failure,2,5,31
+Aniline Compounds,Onco-cardiology,2,69,2
+Onco-cardiology,adverse effects,2,2,51
+Acrylamides,Onco-cardiology,2,70,2
+Onco-cardiology,heart failure,2,2,31
+Osimertinib,QT interval,2,82,2
+Japanese Adverse Drug Event Report database,Osimertinib,2,2,82
+pathology,secondary,2,30,2
+Lung Neoplasms,secondary,2,66,2
+"Myocytes, Cardiac",antagonists & inhibitors,2,10,18
+Gefitinib,"Myocytes, Cardiac",2,4,10
+Afatinib,"Myocytes, Cardiac",2,7,10
+Tyrosine Kinase Inhibitors,drug effects,2,8,14
+drug therapy,pharmacokinetics,2,65,2
+"Aged, 80 and over",pharmacokinetics,2,17,2
+Indoles,Onco-cardiology,2,69,2
+Onco-cardiology,Pyrimidines,2,2,71
+"Carcinoma, Non-Small-Cell Lung",Circulating Tumor DNA,2,59,2
+"Carcinoma, Non-Small-Cell Lung",Genotype,2,59,2
+"Carcinoma, Non-Small-Cell Lung",Real-Time Polymerase Chain Reaction,2,59,2
+cardio-oncology,non-small cell lung cancer,2,11,19
+Gefitinib,epidermal growth factor receptor tyrosine kinase inhibitor,2,4,3
+epidermal growth factor receptor tyrosine kinase inhibitor,heart failure,2,3,31
+Osimertinib,epidermal growth factor receptor tyrosine kinase inhibitor,2,82,3
+Gefitinib,Osimertinib,2,4,82
+Real-Time Polymerase Chain Reaction,genetics,2,2,44
+Circulating Tumor DNA,ErbB Receptors,2,2,53
+Circulating Tumor DNA,Exons,2,2,3
+Acrylamides,Genotype,2,70,2
+Acrylamides,Real-Time Polymerase Chain Reaction,2,70,2
+Aniline Compounds,Circulating Tumor DNA,2,69,2
+Aniline Compounds,Genotype,2,69,2
+Aniline Compounds,Real-Time Polymerase Chain Reaction,2,69,2
+Circulating Tumor DNA,Real-Time Polymerase Chain Reaction,2,2,2
+ErbB Receptors,Genotype,2,53,2
+ErbB Receptors,Real-Time Polymerase Chain Reaction,2,53,2
+Circulating Tumor DNA,drug therapy,2,2,65
+Genotype,drug therapy,2,2,65
+Real-Time Polymerase Chain Reaction,drug therapy,2,2,65
+Circulating Tumor DNA,genetics,2,2,44
+Genotype,genetics,2,2,44
+"Aged, 80 and over",Incidence,2,17,4
+"Carcinoma, Non-Small-Cell Lung",Tyrosine kinase inhibitor,2,59,8
+Tyrosine kinase inhibitor,drug therapy,2,8,65
+Tyrosine kinase inhibitor,pathology,2,8,30
+Circulating Tumor DNA,Indoles,2,2,69
+Circulating Tumor DNA,Lung Neoplasms,2,2,66
+Circulating Tumor DNA,Mutation,2,2,39
+Circulating Tumor DNA,Pyrimidines,2,2,71
+Aniline Compounds,Drug-Related Side Effects and Adverse Reactions,2,69,3
+NSCLC,drug effects,2,13,14
+NSCLC,metabolism,2,13,16
+Exons,Genotype,2,3,2
+Exons,Real-Time Polymerase Chain Reaction,2,3,2
+Genotype,Indoles,2,2,69
+Genotype,Lung Neoplasms,2,2,66
+Genotype,Mutation,2,2,39
+Drug-Related Side Effects and Adverse Reactions,Pyrimidines,2,3,71
+Drug-Related Side Effects and Adverse Reactions,adverse effects,2,3,51
+Acrylamides,Drug-Related Side Effects and Adverse Reactions,2,70,3
+Drug-Related Side Effects and Adverse Reactions,Lung Neoplasms,2,3,66
+Drug-Related Side Effects and Adverse Reactions,ErbB Receptors,2,3,53
+Drug-Related Side Effects and Adverse Reactions,antagonists & inhibitors,2,3,18
+Antineoplastic Agents,Drug-Related Side Effects and Adverse Reactions,2,36,3
+"Carcinoma, Non-Small-Cell Lung",Drug-Related Side Effects and Adverse Reactions,2,59,3
+Cardiotoxicity,"Cells, Cultured",2,47,2
+"Cells, Cultured",Osimertinib,2,2,82
+Aniline Compounds,"Cells, Cultured",2,69,2
+"Cells, Cultured",pharmacology,2,2,18
+Drug-Related Side Effects and Adverse Reactions,epidemiology,2,3,16
+Drug-Related Side Effects and Adverse Reactions,diagnosis,2,3,15
+Drug-Related Side Effects and Adverse Reactions,chemically induced,2,3,26
+Drug-Related Side Effects and Adverse Reactions,Indoles,2,3,69
+Tyrosine kinase inhibitor,genetics,2,8,44
+"Cells, Cultured",Induced Pluripotent Stem Cells,2,2,5
+"Cells, Cultured",Indoles,2,2,69
+"Cells, Cultured",Pyrimidines,2,2,71
+Acrylamides,"Cells, Cultured",2,70,2
+"Cells, Cultured","Myocytes, Cardiac",2,2,10
+"Cells, Cultured",drug effects,2,2,14
+"Cells, Cultured",metabolism,2,2,16
+Atrial Fibrillation,Pyrimidines,2,3,71
+Chemotherapy,heart failure,2,4,31
+"Carcinoma, Non-Small-Cell Lung",Chemotherapy,2,59,4
+Atrial Fibrillation,Lung Neoplasms,2,3,66
+Antineoplastic Agents,Atrial Fibrillation,2,36,3
+Atrial Fibrillation,Cardiotoxicity,2,3,47
+EGFR mutation,Pyrimidines,2,6,71
+mortality,pathology,2,5,30
+Lung Neoplasms,Tyrosine kinase inhibitor,2,66,8
+ErbB Receptors,Tyrosine kinase inhibitor,2,53,8
+Chemotherapy,Mutation,2,4,39
+"Aged, 80 and over",Chemotherapy,2,17,4
+Chemotherapy,adverse effects,2,4,51
+Chemotherapy,Lung Neoplasms,2,4,66
+Atrial Fibrillation,chemically induced,2,3,26
+Atrial Fibrillation,Indoles,2,3,69
+"Drug Resistance, Neoplasm",Osimertinib,2,6,82
+"Cell Line, Tumor",pathology,2,4,30
+Adverse events,drug therapy,2,5,65
+Adverse events,Lung Neoplasms,2,5,66
+Adverse events,ErbB Receptors,2,5,53
+Adverse events,"Carcinoma, Non-Small-Cell Lung",2,5,59
+Tyrosine kinase inhibitor,therapeutic use,2,8,36
+Tyrosine kinase inhibitor,pharmacology,2,8,18
+Genotype,Pyrimidines,2,2,71
+Genotype,Real-Time Polymerase Chain Reaction,2,2,2
+Indoles,Real-Time Polymerase Chain Reaction,2,69,2
+Circulating Tumor DNA,Genotype,2,2,2
+Antineoplastic Agents,Incidence,2,36,4
+Incidence,chemically induced,2,4,26
+Cardiovascular Diseases,etiology,2,4,20
+Cardiovascular Diseases,Protein Kinase Inhibitors,2,4,49
+Mutation,Real-Time Polymerase Chain Reaction,2,39,2
+Pyrimidines,Real-Time Polymerase Chain Reaction,2,71,2
+QT prolongation,Torsade de Pointes,2,7,3
+Incidence,therapeutic use,2,4,36
+Pyrimidines,complications,2,71,2
+Cardiovascular Diseases,Pyrimidines,2,4,71
+complications,therapeutic use,2,2,36
+Cardiovascular Diseases,therapeutic use,2,4,36
+complications,genetics,2,2,44
+Acrylamides,complications,2,70,2
+complications,drug therapy,2,2,65
+Adenocarcinoma of Lung,chemically induced,2,5,26
+Cardiotoxicity,Crizotinib,2,47,2
+Mutation,cardio-oncology,2,39,11
+Osimertinib,cardiac failure,2,82,2
+Lung Neoplasms,Real-Time Polymerase Chain Reaction,2,66,2
+EGFR mutation,drug therapy,2,6,65
+EGFR mutation,genetics,2,6,44
+EGFR mutation,pathology,2,6,30
+EGFR mutation,Lung Neoplasms,2,6,66
+EGFR mutation,ErbB Receptors,2,6,53
+Aniline Compounds,EGFR mutation,2,69,6
+Protein Kinase Inhibitors,complications,2,49,2
+ErbB Receptors,complications,2,53,2
+EGFR mutation,therapeutic use,2,6,36
+EGFR mutation,Mutation,2,6,39
+Acrylamides,EGFR mutation,2,70,6
+"Aged, 80 and over",EGFR mutation,2,17,6
+EGFR mutation,Protein Kinase Inhibitors,2,6,49
+Antineoplastic Agents,EGFR mutation,2,36,6
+EGFR mutation,Indoles,2,6,69
+"Carcinoma, Non-Small-Cell Lung",EGFR mutation,2,59,6
+Acrylamides,QT prolongation,2,70,7
+Protein Kinase Inhibitors,QT prolongation,2,49,7
+Antineoplastic Agents,QT prolongation,2,36,7
+ErbB Receptors,QT prolongation,2,53,7
+QT prolongation,genetics,2,7,44
+"Carcinoma, Non-Small-Cell Lung",QT prolongation,2,59,7
+QT prolongation,drug therapy,2,7,65
+QT prolongation,epidemiology,2,7,16
+Cardiotoxicity,QT prolongation,2,47,7
+"Aged, 80 and over",mortality,2,17,5
+Indoles,QT prolongation,2,69,7
+Pyrimidines,QT prolongation,2,71,7
+Cardiac dysfunction,Osimertinib,2,2,82
+Aniline Compounds,QT prolongation,2,69,7
+QT prolongation,adverse effects,2,7,51
+QT prolongation,therapeutic use,2,7,36
+Adverse events,Protein Kinase Inhibitors,2,5,49
+Adverse events,Antineoplastic Agents,2,5,36
+EGFR,therapeutic use,2,11,36
+EGFR,Protein Kinase Inhibitors,2,11,49
+Antineoplastic Agents,EGFR,2,36,11
+EGFR,NSCLC,2,11,13
+"Aged, 80 and over",Survival Rate,2,17,4
+Cardiotoxicity,EGFR,2,47,11
+Acrylamides,Cardiovascular Diseases,2,70,4
+Aniline Compounds,complications,2,69,2
+Aniline Compounds,Cardiovascular Diseases,2,69,4
+Indoles,complications,2,69,2
+Cardiovascular Diseases,Indoles,2,4,69
+Osimertinib,complications,2,82,2
+Lung Neoplasms,complications,2,66,2
+Adverse events,Mutation,2,5,39
+EGFR-mutated NSCLC,drug therapy,2,2,65
+"Carcinoma, Non-Small-Cell Lung",EGFR-mutated NSCLC,2,59,2
+Acrylamides,EGFR-mutated NSCLC,2,70,2
+EGFR-mutated NSCLC,epidemiology,2,2,16
+EGFR-mutated NSCLC,etiology,2,2,20
+pathology,targeted therapy,2,30,6
+EGFR,targeted therapy,2,11,6
+EGFR,diagnosis,2,11,15
+Meta-analysis,Pyrimidines,2,3,71
+Lung Neoplasms,Meta-analysis,2,66,3
+Meta-analysis,drug therapy,2,3,65
+"Carcinoma, Non-Small-Cell Lung",Meta-analysis,2,59,3
+Acrylamides,Meta-analysis,2,70,3
+EGFR-mutated NSCLC,Incidence,2,2,4
+Indoles,Meta-analysis,2,69,3
+Aniline Compounds,Meta-analysis,2,69,3
+Indoles,Neoplasm Staging,2,69,3
+Neoplasm Staging,Pyrimidines,2,3,71
+Neoplasm Staging,therapeutic use,2,3,36
+Meta-analysis,Protein Kinase Inhibitors,2,3,49
+ErbB Receptors,Meta-analysis,2,53,3
+Meta-analysis,genetics,2,3,44
+Meta-analysis,adverse effects,2,3,51
+Meta-analysis,therapeutic use,2,3,36
+QT prolongation,etiology,2,7,20
+Lung Neoplasms,QT prolongation,2,66,7
+Atrial Fibrillation,heart failure,2,3,31
+Atrial Fibrillation,"Carcinoma, Non-Small-Cell Lung",2,3,59
+Atrial Fibrillation,drug therapy,2,3,65
+Aniline Compounds,Atrial Fibrillation,2,69,3
+Acrylamides,Atrial Fibrillation,2,70,3
+Aniline Compounds,Neoplasm Staging,2,69,3
+"Carcinoma, Non-Small-Cell Lung",Real-world,2,59,3
+Real-world,drug therapy,2,3,65
+Acrylamides,Real-world,2,70,3
+Real-world,adverse effects,2,3,51
+Osimertinib,Real-world,2,82,3
+lung cancer,targeted therapy,2,21,6
+etiology,lung cancer,2,20,21
+Molecular Targeted Therapy,lung cancer,2,5,21
+"Aged, 80 and over",lung cancer,2,17,21
+Lung Neoplasms,Real-world,2,66,3
+Mutation,Real-world,2,39,3
+ErbB Receptors,Real-world,2,53,3
+Real-world,genetics,2,3,44
+Antineoplastic Agents,Real-world,2,36,3
+Protein Kinase Inhibitors,Real-world,2,49,3
+Aniline Compounds,Real-world,2,69,3
+Antineoplastic Agents,Neoplasm Staging,2,36,3
+Acrylamides,Neoplasm Staging,2,70,3
+ErbB Receptors,Molecular Targeted Therapy,2,53,5
+Cardiotoxicity,Electrocardiography,2,47,3
+"Aged, 80 and over",targeted therapy,2,17,6
+Acrylamides,targeted therapy,2,70,6
+Aniline Compounds,targeted therapy,2,69,6
+Indoles,targeted therapy,2,69,6
+Adenocarcinoma of Lung,lung cancer,2,5,21
+Antineoplastic Agents,"Neoplasm Recurrence, Local",2,36,6
+"Neoplasm Recurrence, Local",therapy,2,6,3
+Molecular Targeted Therapy,diagnosis,2,5,15
+"Carcinoma, Non-Small-Cell Lung",therapy,2,59,3
+genetics,therapy,2,44,3
+Lung Neoplasms,therapy,2,66,3
+ErbB Receptors,therapy,2,53,3
+NSCLC,Republic of Korea,2,13,4
+Afatinib,pathology,2,7,30
+NSCLC,cardio-oncology,2,13,11
+Meta-analysis,epidemiology,2,3,16
+Meta-analysis,etiology,2,3,20
+Antineoplastic Agents,Meta-analysis,2,36,3
+targeted therapy,therapeutic use,2,6,36
+EGFR mutations,Osimertinib,2,3,82
+Cardiotoxicity,EGFR-mutated NSCLC,2,47,2
+Cardiotoxicity,Meta-analysis,2,47,3
+Apoptosis,drug effects,2,3,14
+Apoptosis,Lung Neoplasms,2,3,66
+Lung Neoplasms,Tumor Suppressor Protein p53,2,66,2
+Apoptosis,"Carcinoma, Non-Small-Cell Lung",2,3,59
+adverse effects,methods,2,51,4
+Survival Rate,adverse effects,2,4,51
+Induced Pluripotent Stem Cells,Mitochondria,2,5,3
+Antineoplastic Agents,Mitochondria,2,36,3
+Molecular Targeted Therapy,therapeutic use,2,5,36
+Osimertinib,targeted therapy,2,82,6
+EGFR-mutated NSCLC,Pyrimidines,2,2,71
+EGFR-mutated NSCLC,Lung Neoplasms,2,2,66
+"Carcinoma, Non-Small-Cell Lung",Tumor Suppressor Protein p53,2,59,2
+Cardiotoxicity,Lazertinib,2,47,4
+echocardiogram,lung cancer,2,2,21
+Osimertinib,echocardiogram,2,82,2
+Mitochondria,pharmacology,2,3,18
+"Mitochondria, Heart",pharmacology,2,2,18
+Cardiotoxicity,"Mitochondria, Heart",2,47,2
+"Mitochondria, Heart","Myocytes, Cardiac",2,2,10
+"Mitochondria, Heart",drug effects,2,2,14
+"Mitochondria, Heart",metabolism,2,2,16
+EGFR-mutated NSCLC,Osimertinib,2,2,82
+EGFR-mutated NSCLC,Indoles,2,2,69
+Aniline Compounds,EGFR-mutated NSCLC,2,69,2
+EGFR-mutated NSCLC,adverse effects,2,2,51
+Non–small cell lung cancer,pathology,2,4,30
+Non–small cell lung cancer,adverse effects,2,4,51
+Electrocardiography,Pyrimidines,2,3,71
+Adverse Drug Reaction Reporting Systems,Cardiotoxicity,2,6,47
+Progression-Free Survival,drug therapy,2,2,65
+Progression-Free Survival,genetics,2,2,44
+Acrylamides,Apoptosis,2,70,3
+Acrylamides,Tumor Suppressor Protein p53,2,70,2
+Apoptosis,pathology,2,3,30
+Tumor Suppressor Protein p53,pathology,2,2,30
+Apoptosis,drug therapy,2,3,65
+Tumor Suppressor Protein p53,drug therapy,2,2,65
+Mutation,etiology,2,39,20
+Long QT Syndrome,epidemiology,2,5,16
+Indoles,Real-world,2,69,3
+Pyrimidines,Real-world,2,71,3
+Acrylamides,Electrocardiography,2,70,3
+Non–small cell lung cancer,therapeutic use,2,4,36
+Aniline Compounds,Progression-Free Survival,2,69,2
+"Carcinoma, Non-Small-Cell Lung",Progression-Free Survival,2,59,2
+EGFR mutations,non-small cell lung cancer,2,3,19
+Electrocardiography,Lung Neoplasms,2,3,66
+Long QT Syndrome,Mutation,2,5,39
+"Aged, 80 and over",Long QT Syndrome,2,17,5
+Aniline Compounds,Electrocardiography,2,69,3
+"Carcinoma, Non-Small-Cell Lung",Electrocardiography,2,59,3
+Electrocardiography,drug therapy,2,3,65
+Long QT Syndrome,pathology,2,5,30
+Antineoplastic Agents,anticancer drugs,2,36,2
+"Carcinoma, Non-Small-Cell Lung",Erlotinib Hydrochloride,2,59,3
+"NSCLC, non–small cell lung cancer","TKI, tyrosine kinase inhibitor",2,2,3
+"EGFR, epidermal growth factor receptor",Osimertinib,2,2,82
+"EGFR, epidermal growth factor receptor",heart failure,2,2,31
+Cardiotoxicity,"EGFR, epidermal growth factor receptor",2,47,2
+Case report,non-small cell lung cancer,2,7,19
+"Disease Models, Animal",drug effects,2,3,14
+Risk Assessment,epidemiology,2,4,16
+Adverse Drug Reaction Reporting Systems,Risk Assessment,2,6,4
+Risk Assessment,drug therapy,2,4,65
+Adverse Drug Reaction Reporting Systems,"Carcinoma, Non-Small-Cell Lung",2,6,59
+"Carcinoma, Non-Small-Cell Lung",Pharmacovigilance,2,59,8
+Heart Diseases,Neoplasms,2,9,3
+anticancer drugs,drug therapy,2,2,65
+Pharmacovigilance,heart failure,2,8,31
+"Databases, Factual",diagnosis,2,3,15
+epidemiology,mortality,2,16,5
+Pharmacovigilance,Risk Assessment,2,8,4
+Heart Diseases,Pharmacovigilance,2,9,8
+Pharmacovigilance,chemically induced,2,8,26
+Pharmacovigilance,diagnosis,2,8,15
+Adverse Drug Reaction Reporting Systems,Lung Neoplasms,2,6,66
+Adverse Drug Reaction Reporting Systems,therapeutic use,2,6,36
+Erlotinib Hydrochloride,Mutation,2,3,39
+"Drug Resistance, Neoplasm",Erlotinib Hydrochloride,2,6,3
+Erlotinib Hydrochloride,therapeutic use,2,3,36
+Erlotinib Hydrochloride,Lung Neoplasms,2,3,66
+Apoptosis,Pyrimidines,2,3,71
+Pyrimidines,Tumor Suppressor Protein p53,2,71,2
+"Drug Resistance, Neoplasm",pathology,2,6,30
+Erlotinib Hydrochloride,drug therapy,2,3,65
+"Disease Models, Animal",heart failure,2,3,31
+Acrylamides,Contractility,2,70,2
+Contractility,"Myocytes, Cardiac",2,2,10
+Contractility,drug effects,2,2,14
+Contractility,etiology,2,2,20
+Contractility,Induced Pluripotent Stem Cells,2,2,5
+Antineoplastic Agents,Contractility,2,36,2
+Cardiotoxicity,"Disease Models, Animal",2,47,3
+Pharmacovigilance,United States Food and Drug Administration,2,8,3
+Adverse Drug Reaction Reporting Systems,United States Food and Drug Administration,2,6,3
+"Databases, Factual",Osimertinib,2,3,82
+Tyrosine Kinase Inhibitors,pathology,2,8,30
+Tyrosine kinase inhibitor,toxicity,2,8,4
+Contractility,Indoles,2,2,69
+Contractility,Pyrimidines,2,2,71
+Induced Pluripotent Stem Cells,heart failure,2,5,31
+Aniline Compounds,"Disease Models, Animal",2,69,3
+"Myocytes, Cardiac",Tyrosine kinase inhibitor,2,10,8
+Tyrosine kinase inhibitor,drug effects,2,8,14
+Tyrosine kinase inhibitor,metabolism,2,8,16
+Tyrosine kinase inhibitor,etiology,2,8,20
+Antineoplastic Agents,Tyrosine kinase inhibitor,2,36,8
+Disease Progression,therapeutic use,2,3,36
+Disease Progression,Osimertinib,2,3,82
+"Disease Models, Animal",Induced Pluripotent Stem Cells,2,3,5
+Adenocarcinoma,genetics,2,6,44
+Acrylamides,Adenocarcinoma,2,70,6
+Adenocarcinoma,Aniline Compounds,2,6,69
+Adenocarcinoma,Indoles,2,6,69
+Adenocarcinoma,Pyrimidines,2,6,71
+etiology,toxicity,2,20,4
+Acrylamides,"Disease Models, Animal",2,70,3
+Progression-Free Survival,Republic of Korea,1,2,4
+heart failure,non-small cell lung cancer,1,31,19
+FAERS database,network pharmacology,1,2,4
+FAERS database,Osimertinib,1,2,82
+disproportionality analysis,network pharmacology,1,3,4
+epidermal growth factor receptor,network pharmacology,1,10,4
+"NSCLC, non–small cell lung cancer",cardio-oncology,1,2,11
+Cardiotoxicity,"NSCLC, non–small cell lung cancer",1,47,2
+"NSCLC, non–small cell lung cancer",heart failure,1,2,31
+"TKI, tyrosine kinase inhibitor",cardio-oncology,1,3,11
+"EGFR, epidermal growth factor receptor","LVEF, left ventricular ejection fraction",1,2,2
+"EGFR, epidermal growth factor receptor",epidermal growth factor receptor,1,2,10
+"EGFR, epidermal growth factor receptor",lung cancer,1,2,21
+Cardiotoxicity,"LVEF, left ventricular ejection fraction",1,47,2
+"LVEF, left ventricular ejection fraction",epidermal growth factor receptor,1,2,10
+"LVEF, left ventricular ejection fraction",heart failure,1,2,31
+"LVEF, left ventricular ejection fraction",lung cancer,1,2,21
+"TKI, tyrosine kinase inhibitor",epidermal growth factor receptor,1,3,10
+"TKI, tyrosine kinase inhibitor",lung cancer,1,3,21
+EGFR mutations,"LVEF, left ventricular ejection fraction",1,3,2
+EGFR mutations,"NSCLC, non–small cell lung cancer",1,3,2
+EGFR mutations,"TKI, tyrosine kinase inhibitor",1,3,3
+Cardiac dysfunction,EGFR mutations,1,2,3
+EGFR mutations,Non–small cell lung cancer,1,3,4
+"LVEF, left ventricular ejection fraction","NSCLC, non–small cell lung cancer",1,2,2
+Apoptosis,genetics,1,3,44
+Tumor Suppressor Protein p53,pharmacology,1,2,18
+"Drug Resistance, Neoplasm",diagnosis,1,6,15
+Erlotinib Hydrochloride,diagnosis,1,3,15
+Erlotinib Hydrochloride,pathology,1,3,30
+"Databases, Factual",therapeutic use,1,3,36
+Drug-Related Side Effects and Adverse Reactions,therapeutic use,1,3,36
+Neoplasms,therapeutic use,1,3,36
+Japanese Adverse Drug Event Report database,Neoplasms,1,2,3
+Japanese Adverse Drug Event Report database,drug therapy,1,2,65
+Japanese Adverse Drug Event Report database,Protein Kinase Inhibitors,1,2,49
+Drug-Related Side Effects and Adverse Reactions,Osimertinib,1,3,82
+Neoplasms,Osimertinib,1,3,82
+Adverse Drug Reaction Reporting Systems,methods,1,6,4
+Antineoplastic Agents,methods,1,36,4
+Apoptosis,adverse effects,1,3,51
+Japanese Adverse Drug Event Report database,adverse effects,1,2,51
+Japanese Adverse Drug Event Report database,therapeutic use,1,2,36
+"Databases, Factual",Japanese Adverse Drug Event Report database,1,3,2
+Drug-Related Side Effects and Adverse Reactions,Japanese Adverse Drug Event Report database,1,3,2
+Japanese Adverse Drug Event Report database,methods,1,2,4
+Heart Diseases,Japanese Adverse Drug Event Report database,1,9,2
+Japanese Adverse Drug Event Report database,chemically induced,1,2,26
+Japanese Adverse Drug Event Report database,diagnosis,1,2,15
+Lung Neoplasms,toxicity,1,66,4
+Apoptosis,toxicity,1,3,4
+"Carcinoma, Non-Small-Cell Lung",toxicity,1,59,4
+Tumor Suppressor Protein p53,toxicity,1,2,4
+Progression-Free Survival,adverse effects,1,2,51
+Progression-Free Survival,Survival Rate,1,2,4
+Adverse Drug Reaction Reporting Systems,Japanese Adverse Drug Event Report database,1,6,2
+Antineoplastic Agents,Japanese Adverse Drug Event Report database,1,36,2
+Cardiotoxicity,Non–small cell lung cancer,1,47,4
+Non–small cell lung cancer,Risk Assessment,1,4,4
+Heart Diseases,Non–small cell lung cancer,1,9,4
+Non–small cell lung cancer,chemically induced,1,4,26
+Non–small cell lung cancer,diagnosis,1,4,15
+Non–small cell lung cancer,epidemiology,1,4,16
+Long QT Syndrome,Real-world,1,5,3
+Real-world,chemically induced,1,3,26
+Adverse Drug Reaction Reporting Systems,physiopathology,1,6,4
+Neoplasms,Risk Assessment,1,3,4
+Neoplasms,Pharmacovigilance,1,3,8
+"Databases, Factual",Risk Assessment,1,3,4
+EGFR,FAERS database,1,11,2
+EGFR,disproportionality analysis,1,11,3
+EGFR,epidermal growth factor receptor,1,11,10
+Electrocardiography,genetics,1,3,44
+Pharmacovigilance,mortality,1,8,5
+Adverse Drug Reaction Reporting Systems,mortality,1,6,5
+epidemiology,physiopathology,1,16,4
+Neoplasms,epidemiology,1,3,16
+"Databases, Factual",epidemiology,1,3,16
+Neoplasms,physiopathology,1,3,4
+"Databases, Factual",physiopathology,1,3,4
+Pharmacovigilance,physiopathology,1,8,4
+Risk Assessment,therapeutic use,1,4,36
+Pharmacovigilance,therapeutic use,1,8,36
+chemically induced,mortality,1,26,5
+diagnosis,mortality,1,15,5
+mortality,physiopathology,1,5,4
+Neoplasms,mortality,1,3,5
+Risk Assessment,mortality,1,4,5
+"Databases, Factual",mortality,1,3,5
+Induced Pluripotent Stem Cells,"Mitochondria, Heart",1,5,2
+Antineoplastic Agents,"Mitochondria, Heart",1,36,2
+Risk Assessment,pharmacology,1,4,18
+"Mitochondria, Heart",adverse effects,1,2,51
+Risk Assessment,etiology,1,4,20
+"Mitochondria, Heart",etiology,1,2,20
+Mitochondria,Risk Assessment,1,3,4
+Mitochondria,"Mitochondria, Heart",1,3,2
+Osimertinib,mortality,1,82,5
+NSCLC,targeted therapy,1,13,6
+Molecular Targeted Therapy,NSCLC,1,5,13
+Molecular Targeted Therapy,Osimertinib,1,5,82
+Cardiotoxicity,Pharmacoepidemiology,1,47,2
+Pharmacoepidemiology,non-small cell lung cancer,1,2,19
+"Myocytes, Cardiac",Risk Assessment,1,10,4
+Induced Pluripotent Stem Cells,Risk Assessment,1,5,4
+FAERS database,pharmacovigilance analysis,1,2,2
+disproportionality analysis,pharmacovigilance analysis,1,3,2
+epidermal growth factor receptor,pharmacovigilance analysis,1,10,2
+EGFR mutations,cardiac toxicity,1,3,4
+EGFR mutations,real-world data,1,3,3
+cardiac toxicity,non-small cell lung cancer,1,4,19
+cardiac toxicity,real-world data,1,4,3
+NSCLC,mortality,1,13,5
+Electrocardiography,therapeutic use,1,3,36
+Long QT Syndrome,therapeutic use,1,5,36
+Electrocardiography,epidemiology,1,3,16
+Electrocardiography,pathology,1,3,30
+Electrocardiography,Mutation,1,3,39
+"Aged, 80 and over",Electrocardiography,1,17,3
+Electrocardiography,ErbB Receptors,1,3,53
+EGFR,pharmacovigilance analysis,1,11,2
+Real-world,pathology,1,3,30
+"Aged, 80 and over",Real-world,1,17,3
+Electrocardiography,Real-world,1,3,3
+Neoplasm Staging,lung cancer,1,3,21
+Heart Diseases,lung cancer,1,9,21
+epidemiology,targeted therapy,1,16,6
+Neoplasm Staging,targeted therapy,1,3,6
+Heart Diseases,targeted therapy,1,9,6
+"Aged, 80 and over",QT prolongation,1,17,7
+Electrocardiography,QT prolongation,1,3,7
+Long QT Syndrome,QT prolongation,1,5,7
+QT prolongation,chemically induced,1,7,26
+Real-world,therapeutic use,1,3,36
+Real-world,etiology,1,3,20
+Real-world,diagnosis,1,3,15
+Real-world,epidemiology,1,3,16
+EGFR mutation,epidemiology,1,6,16
+EGFR mutation,Electrocardiography,1,6,3
+EGFR mutation,Long QT Syndrome,1,6,5
+EGFR mutation,chemically induced,1,6,26
+QT prolongation,Real-world,1,7,3
+QT prolongation,diagnosis,1,7,15
+QT prolongation,pathology,1,7,30
+Mutation,QT prolongation,1,39,7
+"Mitochondria, Heart",Risk Assessment,1,2,4
+EGFR,cardiac toxicity,1,11,4
+EGFR,echocardiogram,1,11,2
+cardiac toxicity,echocardiogram,1,4,2
+cardiac toxicity,lung cancer,1,4,21
+Cardiotoxicity,Neoplasm Staging,1,47,3
+epidemiology,lung cancer,1,16,21
+EGFR mutation,diagnosis,1,6,15
+Cardiac dysfunction,Protein Kinase Inhibitors,1,2,49
+Cardiac dysfunction,Long QT Syndrome,1,2,5
+Cardiac dysfunction,chemically induced,1,2,26
+Cardiac dysfunction,Indoles,1,2,69
+Cardiac dysfunction,Pyrimidines,1,2,71
+Cardiotoxicity,EGFR mutation,1,47,6
+Cardiotoxicity,Real-world,1,47,3
+EGFR mutation,QT prolongation,1,6,7
+Cardiac dysfunction,pathology,1,2,30
+Cardiac dysfunction,Lung Neoplasms,1,2,66
+Cardiac dysfunction,Mutation,1,2,39
+"Aged, 80 and over",Cardiac dysfunction,1,17,2
+Cardiac dysfunction,ErbB Receptors,1,2,53
+Cardiac dysfunction,genetics,1,2,44
+Antineoplastic Agents,Cardiac dysfunction,1,36,2
+Cardiac dysfunction,Electrocardiography,1,2,3
+Cardiac dysfunction,adverse effects,1,2,51
+Cardiac dysfunction,therapeutic use,1,2,36
+Cardiac dysfunction,etiology,1,2,20
+Cardiac dysfunction,diagnosis,1,2,15
+Cardiac dysfunction,epidemiology,1,2,16
+Aniline Compounds,Cardiac dysfunction,1,69,2
+"Carcinoma, Non-Small-Cell Lung",Cardiac dysfunction,1,59,2
+Cardiac dysfunction,drug therapy,1,2,65
+antagonists & inhibitors,targeted therapy,1,18,6
+Neoplasm Staging,drug therapy,1,3,65
+Neoplasm Staging,etiology,1,3,20
+Heart Diseases,etiology,1,9,20
+Molecular Targeted Therapy,epidemiology,1,5,16
+Molecular Targeted Therapy,Neoplasm Staging,1,5,3
+Cardiac dysfunction,Real-world,1,2,3
+Acrylamides,Cardiac dysfunction,1,70,2
+NSCLC,Tyrosine kinase inhibitor,1,13,8
+NSCLC,epidemiology,1,13,16
+QT prolongation,Tyrosine kinase inhibitor,1,7,8
+Tyrosine kinase inhibitor,epidemiology,1,8,16
+Molecular docking,Osimertinib,1,2,82
+Cardiac dysfunction,Cardiotoxicity,1,2,47
+Cardiac dysfunction,EGFR mutation,1,2,6
+Cardiac dysfunction,QT prolongation,1,2,7
+Atrial Fibrillation,Chemotherapy,1,3,4
+Atrial Fibrillation,Drug-Related Side Effects and Adverse Reactions,1,3,3
+Atrial Fibrillation,Hypertension,1,3,2
+Atrial Fibrillation,genetics,1,3,44
+Meta-analysis,NSCLC,1,3,13
+Meta-analysis,QT prolongation,1,3,7
+Meta-analysis,Tyrosine kinase inhibitor,1,3,8
+NSCLC,QT prolongation,1,13,7
+Indoles,Molecular Targeted Therapy,1,69,5
+Molecular Targeted Therapy,Pyrimidines,1,5,71
+Neoplasm Staging,adverse effects,1,3,51
+Neoplasm Staging,Protein Kinase Inhibitors,1,3,49
+Heart Diseases,Neoplasm Staging,1,9,3
+Neoplasm Staging,chemically induced,1,3,26
+Neoplasm Staging,antagonists & inhibitors,1,3,18
+"Aged, 80 and over",Heart Diseases,1,17,9
+EGFR mutation,Real-world,1,6,3
+EGFR mutation,adverse effects,1,6,51
+EGFR mutation,etiology,1,6,20
+"Aged, 80 and over",Molecular Targeted Therapy,1,17,5
+Acrylamides,Molecular Targeted Therapy,1,70,5
+Heart Diseases,Molecular Targeted Therapy,1,9,5
+Aniline Compounds,Molecular Targeted Therapy,1,69,5
+Molecular Targeted Therapy,antagonists & inhibitors,1,5,18
+Mutation,Tyrosine kinase inhibitor,1,39,8
+Survival Rate,Tyrosine kinase inhibitor,1,4,8
+Survival Rate,pharmacology,1,4,18
+Adverse events,EGFR mutation,1,5,6
+Adverse events,mortality,1,5,5
+Adverse events,genetics,1,5,44
+Adverse events,pathology,1,5,30
+Adverse events,therapeutic use,1,5,36
+Chemotherapy,Drug-Related Side Effects and Adverse Reactions,1,4,3
+Chemotherapy,Hypertension,1,4,2
+Chemotherapy,antagonists & inhibitors,1,4,18
+Antineoplastic Agents,Chemotherapy,1,36,4
+Chemotherapy,epidemiology,1,4,16
+Chemotherapy,diagnosis,1,4,15
+Cardiovascular Diseases,Chemotherapy,1,4,4
+Chemotherapy,chemically induced,1,4,26
+EGFR mutation,mortality,1,6,5
+EGFR mutation,Survival Rate,1,6,4
+Atrial Fibrillation,ErbB Receptors,1,3,53
+Atrial Fibrillation,antagonists & inhibitors,1,3,18
+Atrial Fibrillation,Mutation,1,3,39
+"Aged, 80 and over",Atrial Fibrillation,1,17,3
+Atrial Fibrillation,epidemiology,1,3,16
+Atrial Fibrillation,Cardiovascular Diseases,1,3,4
+Survival Rate,mortality,1,4,5
+Antineoplastic Agents,Survival Rate,1,36,4
+EGFR,Meta-analysis,1,11,3
+EGFR,QT prolongation,1,11,7
+EGFR,Tyrosine kinase inhibitor,1,11,8
+EGFR,epidemiology,1,11,16
+EGFR,etiology,1,11,20
+Adverse events,Survival Rate,1,5,4
+"Cells, Cultured","Disease Models, Animal",1,2,3
+Lazertinib,Tyrosine kinase inhibitor,1,4,8
+Lazertinib,pathology,1,4,30
+Lazertinib,Survival Rate,1,4,4
+Acrylamides,Hypertension,1,70,2
+Hypertension,Lung Neoplasms,1,2,66
+ErbB Receptors,Hypertension,1,53,2
+Hypertension,antagonists & inhibitors,1,2,18
+pharmacology,physiopathology,1,18,4
+"Myocytes, Cardiac",physiopathology,1,10,4
+"Cells, Cultured",chemically induced,1,2,26
+Induced Pluripotent Stem Cells,chemically induced,1,5,26
+"Disease Models, Animal",chemically induced,1,3,26
+"Cells, Cultured",physiopathology,1,2,4
+Induced Pluripotent Stem Cells,physiopathology,1,5,4
+"Disease Models, Animal",physiopathology,1,3,4
+"Aged, 80 and over",heart failure,1,17,31
+Cardiovascular Diseases,heart failure,1,4,31
+"Carcinoma, Non-Small-Cell Lung",Hypertension,1,59,2
+Hypertension,genetics,1,2,44
+Aniline Compounds,Hypertension,1,69,2
+Arrhythmia,"Disease Models, Animal",1,2,3
+Arrhythmia,Indoles,1,2,69
+Arrhythmia,Pyrimidines,1,2,71
+Drug-Related Side Effects and Adverse Reactions,heart failure,1,3,31
+Drug-Related Side Effects and Adverse Reactions,Hypertension,1,3,2
+Drug-Related Side Effects and Adverse Reactions,genetics,1,3,44
+Drug-Related Side Effects and Adverse Reactions,Mutation,1,3,39
+"Aged, 80 and over",Drug-Related Side Effects and Adverse Reactions,1,17,3
+Cardiotoxicity,Drug-Related Side Effects and Adverse Reactions,1,47,3
+Cardiovascular Diseases,Drug-Related Side Effects and Adverse Reactions,1,4,3
+Hypertension,heart failure,1,2,31
+Arrhythmia,Osimertinib,1,2,82
+Aniline Compounds,Arrhythmia,1,69,2
+Arrhythmia,pharmacology,1,2,18
+Acrylamides,Arrhythmia,1,70,2
+Arrhythmia,"Myocytes, Cardiac",1,2,10
+Arrhythmia,drug effects,1,2,14
+Arrhythmia,metabolism,1,2,16
+Arrhythmia,chemically induced,1,2,26
+"Aged, 80 and over",Tyrosine Kinase Inhibitors,1,17,8
+Gefitinib,Tyrosine Kinase Inhibitors,1,4,8
+Afatinib,Tyrosine Kinase Inhibitors,1,7,8
+antagonists & inhibitors,toxicity,1,18,4
+Mitochondria,toxicity,1,3,4
+Mitochondria,pathology,1,3,30
+Mitochondria,genetics,1,3,44
+Mitochondria,antagonists & inhibitors,1,3,18
+Cardiotoxicity,secondary,1,47,2
+"Aged, 80 and over",EGFR-mutated NSCLC,1,17,2
+EGFR-mutated NSCLC,administration & dosage,1,2,9
+EGFR-mutated NSCLC,secondary,1,2,2
+EGFR-mutated NSCLC,pathology,1,2,30
+EGFR-mutated NSCLC,Tyrosine Kinase Inhibitors,1,2,8
+Osimertinib,secondary,1,82,2
+"Aged, 80 and over",secondary,1,17,2
+Hypertension,Mutation,1,2,39
+"Aged, 80 and over",Hypertension,1,17,2
+Hypertension,epidemiology,1,2,16
+Hypertension,diagnosis,1,2,15
+Hypertension,Indoles,1,2,69
+Hypertension,Pyrimidines,1,2,71
+"Aged, 80 and over",Cardiovascular Diseases,1,17,4
+Cardiovascular Diseases,diagnosis,1,4,15
+Onco-cardiology,pharmacology,1,2,18
+"Myocytes, Cardiac",Onco-cardiology,1,10,2
+Onco-cardiology,drug effects,1,2,14
+Onco-cardiology,metabolism,1,2,16
+Induced Pluripotent Stem Cells,Onco-cardiology,1,5,2
+Antineoplastic Agents,Onco-cardiology,1,36,2
+Cardiotoxicity,Onco-cardiology,1,47,2
+Onco-cardiology,prevention & control,1,2,3
+cardiomyopathy,disproportionality analysis,1,5,3
+Mitochondria,heart failure,1,3,31
+heart failure,prevention & control,1,31,3
+"Cells, Cultured",heart failure,1,2,31
+Mitochondria,Onco-cardiology,1,3,2
+Mitochondria,prevention & control,1,3,3
+"Cells, Cultured",Mitochondria,1,2,3
+Onco-cardiology,Osimertinib,1,2,82
+Tyrosine Kinase Inhibitors,secondary,1,8,2
+QT interval,Torsade de Pointes,1,2,3
+Case report,QT interval,1,7,2
+QT interval,heart failure,1,2,31
+Case report,Torsade de Pointes,1,7,3
+Torsade de Pointes,heart failure,1,3,31
+Japanese Adverse Drug Event Report database,cardiomyopathy,1,2,5
+Japanese Adverse Drug Event Report database,disproportionality analysis,1,2,3
+Arrhythmia,physiopathology,1,2,4
+Arrhythmia,"Cells, Cultured",1,2,2
+Arrhythmia,Induced Pluripotent Stem Cells,1,2,5
+Tyrosine Kinase Inhibitors,administration & dosage,1,8,9
+adverse effects,secondary,1,51,2
+epidemiology,secondary,1,16,2
+etiology,secondary,1,20,2
+Incidence,secondary,1,4,2
+United States Food and Drug Administration,diagnosis,1,3,15
+Gefitinib,diagnosis,1,4,15
+Afatinib,diagnosis,1,7,15
+Tyrosine Kinase Inhibitors,diagnosis,1,8,15
+Gefitinib,United States Food and Drug Administration,1,4,3
+Afatinib,United States Food and Drug Administration,1,7,3
+Tyrosine Kinase Inhibitors,United States Food and Drug Administration,1,8,3
+"Aged, 80 and over","Drug Resistance, Neoplasm",1,17,6
+Afatinib,drug effects,1,7,14
+Protein Kinase Inhibitors,United States Food and Drug Administration,1,49,3
+"Myocytes, Cardiac",diagnosis,1,10,15
+"Myocytes, Cardiac",United States Food and Drug Administration,1,10,3
+"Myocytes, Cardiac",Tyrosine Kinase Inhibitors,1,10,8
+United States Food and Drug Administration,etiology,1,3,20
+Gefitinib,etiology,1,4,20
+Afatinib,etiology,1,7,20
+"Cells, Cultured",prevention & control,1,2,3
+Indoles,prevention & control,1,69,3
+Pyrimidines,prevention & control,1,71,3
+"Cells, Cultured",etiology,1,2,20
+Afatinib,Induced Pluripotent Stem Cells,1,7,5
+Induced Pluripotent Stem Cells,Tyrosine Kinase Inhibitors,1,5,8
+United States Food and Drug Administration,drug effects,1,3,14
+Gefitinib,drug effects,1,4,14
+Onco-cardiology,etiology,1,2,20
+"Cells, Cultured",Onco-cardiology,1,2,2
+Osimertinib,prevention & control,1,82,3
+Acrylamides,prevention & control,1,70,3
+Aniline Compounds,prevention & control,1,69,3
+Induced Pluripotent Stem Cells,prevention & control,1,5,3
+Antineoplastic Agents,"Cells, Cultured",1,36,2
+"Cells, Cultured",adverse effects,1,2,51
+ErbB Receptors,anticancer drugs,1,53,2
+antagonists & inhibitors,anticancer drugs,1,18,2
+"Aged, 80 and over",anticancer drugs,1,17,2
+Piperazines,anticancer drugs,1,2,2
+Indoles,anticancer drugs,1,69,2
+Pyrimidines,anticancer drugs,1,71,2
+administration & dosage,lung cancer,1,9,21
+lung cancer,pharmacokinetics,1,21,2
+administration & dosage,anticancer drugs,1,9,2
+anticancer drugs,pharmacokinetics,1,2,2
+"Carcinoma, Non-Small-Cell Lung",anticancer drugs,1,59,2
+anticancer drugs,genetics,1,2,44
+Aniline Compounds,anticancer drugs,1,69,2
+anticancer drugs,therapeutic use,1,2,36
+Lung Neoplasms,anticancer drugs,1,66,2
+Protein Kinase Inhibitors,anticancer drugs,1,49,2
+drug effects,pharmacokinetics,1,14,2
+Antineoplastic Combined Chemotherapy Protocols,"Neoplasm Recurrence, Local",1,4,6
+"Drug Resistance, Neoplasm","Neoplasm Recurrence, Local",1,6,6
+"Neoplasm Recurrence, Local",drug effects,1,6,14
+Antineoplastic Combined Chemotherapy Protocols,"Drug Resistance, Neoplasm",1,4,6
+Antineoplastic Combined Chemotherapy Protocols,drug effects,1,4,14
+anticancer drugs,lung cancer,1,2,21
+Acrylamides,anticancer drugs,1,70,2
+"Aged, 80 and over",drug effects,1,17,14
+"Neoplasm Recurrence, Local",antagonists & inhibitors,1,6,18
+"Neoplasm Recurrence, Local",administration & dosage,1,6,9
+"Drug Resistance, Neoplasm",administration & dosage,1,6,9
+administration & dosage,drug effects,1,9,14
+"Neoplasm Recurrence, Local",pharmacokinetics,1,6,2
+Antineoplastic Combined Chemotherapy Protocols,pharmacokinetics,1,4,2
+"Drug Resistance, Neoplasm",pharmacokinetics,1,6,2
+Gefitinib,Induced Pluripotent Stem Cells,1,4,5
+Piperazines,administration & dosage,1,2,9
+"Carcinoma, Non-Small-Cell Lung",pharmacokinetics,1,59,2
+genetics,pharmacokinetics,1,44,2
+Lung Neoplasms,pharmacokinetics,1,66,2
+Protein Kinase Inhibitors,pharmacokinetics,1,49,2
+ErbB Receptors,pharmacokinetics,1,53,2
+Antineoplastic Agents,pharmacokinetics,1,36,2
+Contractility,Gefitinib,1,2,4
+Afatinib,Contractility,1,7,2
+Contractility,Tyrosine Kinase Inhibitors,1,2,8
+Induced Pluripotent Stem Cells,Protein Kinase Inhibitors,1,5,49
+Induced Pluripotent Stem Cells,diagnosis,1,5,15
+ErbB Receptors,Induced Pluripotent Stem Cells,1,53,5
+Induced Pluripotent Stem Cells,antagonists & inhibitors,1,5,18
+Induced Pluripotent Stem Cells,United States Food and Drug Administration,1,5,3
+Cardiotoxicity,United States Food and Drug Administration,1,47,3
+Cardiotoxicity,Gefitinib,1,47,4
+Afatinib,Cardiotoxicity,1,7,47
+Contractility,Protein Kinase Inhibitors,1,2,49
+Contractility,diagnosis,1,2,15
+Contractility,ErbB Receptors,1,2,53
+Contractility,antagonists & inhibitors,1,2,18
+Contractility,United States Food and Drug Administration,1,2,3
+FAERS,"Myocytes, Cardiac",1,2,10
+FAERS,etiology,1,2,20
+FAERS,diagnosis,1,2,15
+ErbB Receptors,FAERS,1,53,2
+FAERS,antagonists & inhibitors,1,2,18
+FAERS,Gefitinib,1,2,4
+Afatinib,FAERS,1,7,2
+FAERS,Tyrosine Kinase Inhibitors,1,2,8
+ErbB Receptors,Signal Transduction,1,53,3
+"Disease Models, Animal","Mice, Inbred C57BL",1,3,2
+"Mice, Inbred C57BL",Signal Transduction,1,2,3
+"Disease Models, Animal",Signal Transduction,1,3,3
+Cardiotoxicity,FAERS,1,47,2
+Contractility,FAERS,1,2,2
+FAERS,Induced Pluripotent Stem Cells,1,2,5
+FAERS,drug effects,1,2,14
+EGFR,pharmacology,1,11,18
+"Mice, Inbred C57BL",heart failure,1,2,31
+Signal Transduction,heart failure,1,3,31
+"Disease Models, Animal",pathology,1,3,30
+"Mice, Inbred C57BL",genetics,1,2,44
+"Disease Models, Animal",genetics,1,3,44
+ErbB Receptors,"Mice, Inbred C57BL",1,53,2
+"Disease Models, Animal",ErbB Receptors,1,3,53
+cardio-oncology,immune checkpoint inhibitors,1,11,3
+Takotsubo syndrome,cardio-oncology,1,2,11
+Case report,immune checkpoint inhibitors,1,7,3
+Case report,Takotsubo syndrome,1,7,2
+Takotsubo syndrome,immune checkpoint inhibitors,1,2,3
+EGFR,"Myocytes, Cardiac",1,11,10
+EGFR,"Mice, Inbred C57BL",1,11,2
+"Disease Models, Animal",EGFR,1,3,11
+Piperazines,pharmacokinetics,1,2,2
+chemically induced,pharmacokinetics,1,26,2
+Piperazines,genetics,1,2,44
+Piperazines,therapeutic use,1,2,36
+ErbB Receptors,Piperazines,1,53,2
+Piperazines,antagonists & inhibitors,1,2,18
+"Aged, 80 and over",Piperazines,1,17,2
+Case report,cardio-oncology,1,7,11
+Cardiovascular Diseases,Tyrosine Kinase Inhibitors,1,4,8
+Tyrosine Kinase Inhibitors,chemically induced,1,8,26
+EGFR,heart failure,1,11,31
+EGFR,metabolism,1,11,16
+ErbB Receptors,Recurrence,1,53,3
+"Carcinoma, Non-Small-Cell Lung",Recurrence,1,59,3
+Recurrence,genetics,1,3,44
+Recurrence,surgery,1,3,2
+Cardiotoxicity,EGFR-TKIs,1,47,2
+EGFR-TKIs,non-small cell lung cancer,1,2,19
+Lazertinib,adverse effects,1,4,51
+"Drug Resistance, Neoplasm",Lazertinib,1,6,4
+Lazertinib,drug effects,1,4,14
+Antineoplastic Agents,Lazertinib,1,36,4
+Cardiotoxicity,"Drug Resistance, Neoplasm",1,47,6
+Mutation,drug effects,1,39,14
+Disease Progression,antagonists & inhibitors,1,3,18
+Piperidines,antagonists & inhibitors,1,2,18
+Piperidines,adverse effects,1,2,51
+Mutation,Piperidines,1,39,2
+Antineoplastic Combined Chemotherapy Protocols,Piperidines,1,4,2
+Piperidines,administration & dosage,1,2,9
+Disease Progression,Piperidines,1,3,2
+"Aged, 80 and over",Piperidines,1,17,2
+FAERS,Protein Kinase Inhibitors,1,2,49
+Piperidines,therapeutic use,1,2,36
+"Carcinoma, Non-Small-Cell Lung",Piperidines,1,59,2
+Piperidines,drug therapy,1,2,65
+Piperidines,genetics,1,2,44
+Piperidines,pathology,1,2,30
+Lung Neoplasms,Piperidines,1,66,2
+ErbB Receptors,Piperidines,1,53,2
+anticancer,lung cancer,1,2,21
+Molecular Docking Simulation,anticancer,1,2,2
+"Carcinoma, Non-Small-Cell Lung",anticancer,1,59,2
+anticancer,drug therapy,1,2,65
+Lung Neoplasms,anticancer,1,66,2
+Protein Kinase Inhibitors,anticancer,1,49,2
+anticancer,pharmacology,1,2,18
+anticancer,chemistry,1,2,2
+Neoplasm Staging,Republic of Korea,1,3,4
+Mutation,Neoplasm Staging,1,39,3
+NSCLC,anticancer,1,13,2
+NSCLC,lung cancer,1,13,21
+Molecular Docking Simulation,NSCLC,1,2,13
+NSCLC,chemistry,1,13,2
+NSCLC,network pharmacology,1,13,4
+NSCLC,antagonists & inhibitors,1,13,18
+pathology,surgery,1,30,2
+epidemiology,surgery,1,16,2
+Republic of Korea,surgery,1,4,2
+"Neoplasm Recurrence, Local",surgery,1,6,2
+Neoplasm Staging,surgery,1,3,2
+"Aged, 80 and over",surgery,1,17,2
+Republic of Korea,epidemiology,1,4,16
+"Neoplasm Recurrence, Local",Republic of Korea,1,6,4
+Recurrence,epidemiology,1,3,16
+Recurrence,Republic of Korea,1,3,4
+Mutation,Recurrence,1,39,3
+"Neoplasm Recurrence, Local",Recurrence,1,6,3
+Neoplasm Staging,Recurrence,1,3,3
+"Aged, 80 and over",Recurrence,1,17,3
+"Carcinoma, Non-Small-Cell Lung",surgery,1,59,2
+genetics,surgery,1,44,2
+Lazertinib,antagonists & inhibitors,1,4,18
+Antineoplastic Agents,anticancer,1,36,2
+ErbB Receptors,anticancer,1,53,2
+antagonists & inhibitors,anticancer,1,18,2
+Acrylamides,anticancer,1,70,2
+Tyrosine Kinase Inhibitors,anticancer,1,8,2
+Molecular Docking Simulation,lung cancer,1,2,21
+lung cancer,pharmacology,1,21,18
+epidermal growth factor receptor tyrosine kinase inhibitor,pharmacotherapy,1,3,2
+EGFR‐TKI,Lazertinib,1,2,4
+Cardiotoxicity,EGFR‐TKI,1,47,2
+EGFR‐TKI,antagonists & inhibitors,1,2,18
+EGFR‐TKI,adverse effects,1,2,51
+"Drug Resistance, Neoplasm",EGFR‐TKI,1,6,2
+EGFR‐TKI,drug effects,1,2,14
+Antineoplastic Agents,EGFR‐TKI,1,36,2
+Adverse events,Cardiotoxicity,1,5,47
+Adverse events,epidermal growth factor receptor tyrosine kinase inhibitor,1,5,3
+Adverse events,heart failure,1,5,31
+Adverse events,lung cancer,1,5,21
+Adverse events,pharmacotherapy,1,5,2
+Cardiotoxicity,epidermal growth factor receptor tyrosine kinase inhibitor,1,47,3
+Cardiotoxicity,pharmacotherapy,1,47,2
+epidermal growth factor receptor tyrosine kinase inhibitor,lung cancer,1,3,21
+"Drug Resistance, Neoplasm",anticancer,1,6,2
+anticancer,drug effects,1,2,14
+anticancer,network pharmacology,1,2,4
+"Cell Line, Tumor",anticancer,1,4,2
+Erlotinib Hydrochloride,Gefitinib,1,3,4
+Afatinib,Erlotinib Hydrochloride,1,7,3
+Antineoplastic Agents,Erlotinib Hydrochloride,1,36,3
+Tyrosine kinase inhibitor,pharmacotherapy,1,8,2
+"Drug Resistance, Neoplasm",chemistry,1,6,2
+"Cell Line, Tumor",chemistry,1,4,2
+Antineoplastic Agents,chemistry,1,36,2
+ErbB Receptors,chemistry,1,53,2
+antagonists & inhibitors,chemistry,1,18,2
+Acrylamides,chemistry,1,70,2
+Tyrosine Kinase Inhibitors,chemistry,1,8,2
+"Drug Resistance, Neoplasm",network pharmacology,1,6,4
+"Carcinoma, Non-Small-Cell Lung",chemistry,1,59,2
+"Carcinoma, Non-Small-Cell Lung",network pharmacology,1,59,4
+chemistry,drug therapy,1,2,65
+drug therapy,network pharmacology,1,65,4
+Lung Neoplasms,chemistry,1,66,2
+Lung Neoplasms,network pharmacology,1,66,4
+Protein Kinase Inhibitors,chemistry,1,49,2
+Protein Kinase Inhibitors,network pharmacology,1,49,4
+Molecular Docking Simulation,Protein Kinase Inhibitors,1,2,49
+"Drug Resistance, Neoplasm",Molecular Docking Simulation,1,6,2
+"Cell Line, Tumor",Molecular Docking Simulation,1,4,2
+Antineoplastic Agents,Molecular Docking Simulation,1,36,2
+ErbB Receptors,Molecular Docking Simulation,1,53,2
+Molecular Docking Simulation,antagonists & inhibitors,1,2,18
+Acrylamides,Molecular Docking Simulation,1,70,2
+Molecular Docking Simulation,Tyrosine Kinase Inhibitors,1,2,8
+chemistry,lung cancer,1,2,21
+"Drug Resistance, Neoplasm",lung cancer,1,6,21
+drug effects,lung cancer,1,14,21
+lung cancer,network pharmacology,1,21,4
+Tyrosine Kinase Inhibitors,lung cancer,1,8,21
+"Carcinoma, Non-Small-Cell Lung",Molecular Docking Simulation,1,59,2
+Molecular Docking Simulation,drug therapy,1,2,65
+Lung Neoplasms,Molecular Docking Simulation,1,66,2
+Indoles,cardiac toxicity,1,69,4
+Pyrimidines,cardiac toxicity,1,71,4
+"Mitochondria, Heart",Osimertinib,1,2,82
+"Mice, Inbred C57BL",Osimertinib,1,2,82
+"Mitochondria, Heart",Tyrosine kinase inhibitor,1,2,8
+Tyrosine kinase inhibitor,methods,1,8,4
+"Mice, Inbred C57BL",Tyrosine kinase inhibitor,1,2,8
+Acrylamides,"Mitochondria, Heart",1,70,2
+cardiac toxicity,metabolism,1,4,16
+cardiac toxicity,pathology,1,4,30
+"Mitochondria, Heart",cardiac toxicity,1,2,4
+cardiac toxicity,methods,1,4,4
+Cardiotoxicity,cardiac toxicity,1,47,4
+"Mice, Inbred C57BL",cardiac toxicity,1,2,4
+Protein Kinase Inhibitors,cardiac toxicity,1,49,4
+cardiac toxicity,pharmacology,1,4,18
+Takotsubo syndrome,lung cancer,1,2,21
+Osimertinib,Takotsubo syndrome,1,82,2
+Tyrosine kinase inhibitor,cardiac toxicity,1,8,4
+Acrylamides,cardiac toxicity,1,70,4
+cardiac toxicity,toxicity,1,4,4
+Aniline Compounds,cardiac toxicity,1,69,4
+"Myocytes, Cardiac",cardiac toxicity,1,10,4
+cardiac toxicity,drug effects,1,4,14
+"Cell Line, Tumor",network pharmacology,1,4,4
+Antineoplastic Agents,network pharmacology,1,36,4
+ErbB Receptors,network pharmacology,1,53,4
+antagonists & inhibitors,network pharmacology,1,18,4
+Acrylamides,network pharmacology,1,70,4
+Tyrosine Kinase Inhibitors,network pharmacology,1,8,4
+"Cell Line, Tumor",antagonists & inhibitors,1,4,18
+Epidermal growth factor receptor-tyrosine kinase inhibitor,Takotsubo syndrome,1,2,2
+Pyrimidines,methods,1,71,4
+Cardiotoxicity,"Mice, Inbred C57BL",1,47,2
+"Mice, Inbred C57BL",Protein Kinase Inhibitors,1,2,49
+Indoles,"Mice, Inbred C57BL",1,69,2
+"Mice, Inbred C57BL",Pyrimidines,1,2,71
+cardiac toxicity,heart failure,1,4,31
+genetics,secondary,1,44,2
+secondary,therapeutic use,1,2,36
+"Mice, Inbred C57BL","Mitochondria, Heart",1,2,2
+"Mitochondria, Heart",Protein Kinase Inhibitors,1,2,49
+Indoles,"Mitochondria, Heart",1,69,2
+"Mitochondria, Heart",Pyrimidines,1,2,71
+Cardiotoxicity,methods,1,47,4
+"Mice, Inbred C57BL",methods,1,2,4
+methods,pharmacology,1,4,18
+Indoles,methods,1,69,4
+Aniline Compounds,"Mice, Inbred C57BL",1,69,2
+"Myocytes, Cardiac",methods,1,10,4
+drug effects,methods,1,14,4
+"Mice, Inbred C57BL",drug effects,1,2,14
+metabolism,methods,1,16,4
+"Mitochondria, Heart",pathology,1,2,30
+methods,pathology,1,4,30
+"Mitochondria, Heart",methods,1,2,4
+Acrylamides,methods,1,70,4
+Acrylamides,"Mice, Inbred C57BL",1,70,2
+"Mitochondria, Heart",toxicity,1,2,4
+methods,toxicity,1,4,4
+"Mice, Inbred C57BL",toxicity,1,2,4
+Protein Kinase Inhibitors,toxicity,1,49,4
+Aniline Compounds,"Mitochondria, Heart",1,69,2
+Aniline Compounds,methods,1,69,4
+Gefitinib,Pharmacovigilance,1,4,8
+Afatinib,Pharmacovigilance,1,7,8
+Erlotinib Hydrochloride,Pharmacovigilance,1,3,8
+Pharmacoepidemiology,Pharmacovigilance,1,2,8
+Gefitinib,Pharmacoepidemiology,1,4,2
+Afatinib,Pharmacoepidemiology,1,7,2
+Erlotinib Hydrochloride,Pharmacoepidemiology,1,3,2
+Antineoplastic Agents,Pharmacoepidemiology,1,36,2
+Erlotinib Hydrochloride,antagonists & inhibitors,1,3,18
+Protein Kinase Inhibitors,statistics & numerical data,1,49,2
+Adverse Drug Reaction Reporting Systems,Gefitinib,1,6,4
+Adverse Drug Reaction Reporting Systems,Afatinib,1,6,7
+Adverse Drug Reaction Reporting Systems,Erlotinib Hydrochloride,1,6,3
+Gefitinib,statistics & numerical data,1,4,2
+Afatinib,statistics & numerical data,1,7,2
+Erlotinib Hydrochloride,statistics & numerical data,1,3,2
+brain metastases,non-small cell lung cancer,1,2,19
+Tyrosine kinase inhibitor,brain metastases,1,8,2
+Tyrosine kinase inhibitor,non-small cell lung cancer,1,8,19
+Long QT Syndrome,non-small cell lung cancer,1,5,19
+Long QT Syndrome,cardio-oncology,1,5,11
+Long QT Syndrome,administration & dosage,1,5,9
+ErbB Receptors,statistics & numerical data,1,53,2
+antagonists & inhibitors,statistics & numerical data,1,18,2
+ErbB Receptors,secondary,1,53,2
+Mutation,secondary,1,39,2
+Antineoplastic Combined Chemotherapy Protocols,secondary,1,4,2
+heart failure,therapeutic use,1,31,36
+EGFR mutation,Recurrence,1,6,3
+Recurrence,non-small cell lung cancer,1,3,19
+Osimertinib,Recurrence,1,82,3
+brain metastases,epidermal growth factor receptor,1,2,10
+Erlotinib Hydrochloride,drug resistance,1,3,2
+drug resistance,therapeutic use,1,2,36
+Protein Kinase Inhibitors,drug resistance,1,49,2
+drug resistance,pharmacology,1,2,18
+"Drug Resistance, Neoplasm",drug resistance,1,6,2
+Mutation,drug resistance,1,39,2
+Tyrosine Kinase Inhibitors,metabolism,1,8,16
+Erlotinib Hydrochloride,metabolism,1,3,16
+cardio-oncology,cardiomyopathy,1,11,5
+Pericardial effusion,cardio-oncology,1,2,11
+Pericardial effusion,cardiomyopathy,1,2,5
+Cardiotoxicity,Ventricular tachycardia,1,47,2
+Ventricular tachycardia,lung cancer,1,2,21
+NSCLC,drug resistance,1,13,2
+Erlotinib Hydrochloride,NSCLC,1,3,13
+Tyrosine Kinase Inhibitors,drug resistance,1,8,2
+"Aged, 80 and over",non-small cell lung cancer,1,17,19
+Incidence,non-small cell lung cancer,1,4,19
+cardio-oncology,pathology,1,11,30
+cardio-oncology,epidemiology,1,11,16
+antagonists & inhibitors,cardio-oncology,1,18,11
+"Aged, 80 and over",cardio-oncology,1,17,11
+Incidence,cardio-oncology,1,4,11
+Adjuvant therapy,Osimertinib,1,2,82
+Erlotinib Hydrochloride,adverse effects,1,3,51
+Long QT Syndrome,antagonists & inhibitors,1,5,18
+Incidence,Long QT Syndrome,1,4,5
+non-small cell lung cancer,pathology,1,19,30
+chemically induced,non-small cell lung cancer,1,26,19
+epidemiology,non-small cell lung cancer,1,16,19
+administration & dosage,non-small cell lung cancer,1,9,19
+antagonists & inhibitors,non-small cell lung cancer,1,18,19
+Pharmacoepidemiology,antagonists & inhibitors,1,2,18
+Pharmacoepidemiology,Protein Kinase Inhibitors,1,2,49
+Adverse Drug Reaction Reporting Systems,Pharmacoepidemiology,1,6,2
+Pharmacoepidemiology,statistics & numerical data,1,2,2
+Mutation,metabolism,1,39,16
+Erlotinib Hydrochloride,Tyrosine Kinase Inhibitors,1,3,8
+Erlotinib Hydrochloride,pharmacology,1,3,18
+"Cell Line, Tumor",Erlotinib Hydrochloride,1,4,3
+Osimertinib,Pharmacoepidemiology,1,82,2
+Erlotinib Hydrochloride,Osimertinib,1,3,82
+Indoles,Pharmacoepidemiology,1,69,2
+Aniline Compounds,Pharmacoepidemiology,1,69,2
+Pharmacoepidemiology,adverse effects,1,2,51
+Pharmacoepidemiology,Pyrimidines,1,2,71
+Acrylamides,Pharmacoepidemiology,1,70,2
+ErbB Receptors,Pharmacoepidemiology,1,53,2
+antagonists & inhibitors,epidermal growth factor receptor tyrosine kinase inhibitor,1,18,3
+Protein Kinase Inhibitors,epidermal growth factor receptor tyrosine kinase inhibitor,1,49,3
+Adverse Drug Reaction Reporting Systems,epidermal growth factor receptor tyrosine kinase inhibitor,1,6,3
+epidermal growth factor receptor tyrosine kinase inhibitor,statistics & numerical data,1,3,2
+Pharmacovigilance,epidermal growth factor receptor tyrosine kinase inhibitor,1,8,3
+Afatinib,epidermal growth factor receptor tyrosine kinase inhibitor,1,7,3
+Erlotinib Hydrochloride,epidermal growth factor receptor tyrosine kinase inhibitor,1,3,3
+Antineoplastic Agents,epidermal growth factor receptor tyrosine kinase inhibitor,1,36,3
+Atrial Fibrillation,therapy,1,3,3
+Pharmacoepidemiology,epidermal growth factor receptor tyrosine kinase inhibitor,1,2,3
+Indoles,epidermal growth factor receptor tyrosine kinase inhibitor,1,69,3
+Aniline Compounds,epidermal growth factor receptor tyrosine kinase inhibitor,1,69,3
+adverse effects,epidermal growth factor receptor tyrosine kinase inhibitor,1,51,3
+Pyrimidines,epidermal growth factor receptor tyrosine kinase inhibitor,1,71,3
+Acrylamides,epidermal growth factor receptor tyrosine kinase inhibitor,1,70,3
+ErbB Receptors,epidermal growth factor receptor tyrosine kinase inhibitor,1,53,3
+Torsades de Pointes,therapy,1,2,3
+Atrial Fibrillation,Torsades de Pointes,1,3,2
+Electrocardiography,therapy,1,3,3
+Long QT Syndrome,therapy,1,5,3
+etiology,therapy,1,20,3
+adverse effects,therapy,1,51,3
+Gefitinib,metabolism,1,4,16
+Gefitinib,Lung,1,4,3
+Afatinib,metabolism,1,7,16
+Afatinib,Lung,1,7,3
+Gefitinib,therapeutic use,1,4,36
+Osimertinib,therapy,1,82,3
+Atrial Fibrillation,Osimertinib,1,3,82
+Electrocardiography,Torsades de Pointes,1,3,2
+Long QT Syndrome,Torsades de Pointes,1,5,2
+Torsades de Pointes,etiology,1,2,20
+Lung Neoplasms,"Myocytes, Cardiac",1,66,10
+Gefitinib,drug therapy,1,4,65
+"Myocytes, Cardiac",drug therapy,1,10,65
+Gefitinib,chemically induced,1,4,26
+Lung,chemically induced,1,3,26
+"Carcinoma, Non-Small-Cell Lung",Gefitinib,1,59,4
+"Carcinoma, Non-Small-Cell Lung","Myocytes, Cardiac",1,59,10
+"Carcinoma, Non-Small-Cell Lung",Lung,1,59,3
+"Cell Line, Tumor",therapeutic use,1,4,36
+"Cell Line, Tumor",Mutation,1,4,39
+lung cancer,metabolism,1,21,16
+drug resistance,lung cancer,1,2,21
+drug resistance,pathology,1,2,30
+cardiomyopathy,lung cancer,1,5,21
+Tyrosine kinase inhibitor,cardiomyopathy,1,8,5
+Gefitinib,Lung Neoplasms,1,4,66
+Incidence,pharmacology,1,4,18
+epidemiology,pharmacology,1,16,18
+Acrylamides,pharmacovigilance analysis,1,70,2
+adverse effects,pharmacovigilance analysis,1,51,2
+administration & dosage,pharmacovigilance analysis,1,9,2
+Pharmacovigilance,pharmacovigilance analysis,1,8,2
+Aniline Compounds,pharmacovigilance analysis,1,69,2
+Adverse Drug Reaction Reporting Systems,pharmacovigilance analysis,1,6,2
+Adverse Drug Reaction Reporting Systems,FAERS,1,6,2
+FAERS,statistics & numerical data,1,2,2
+"Databases, Factual",FAERS,1,3,2
+"Aged, 80 and over",FAERS,1,17,2
+Osimertinib,pharmacovigilance analysis,1,82,2
+Osimertinib,United States Food and Drug Administration,1,82,3
+Disease Progression,Protein Kinase Inhibitors,1,3,49
+Takotsubo cardiomyopathy,immune checkpoint inhibitors,1,2,3
+Adverse Drug Reaction Reporting Systems,Adverse events,1,6,5
+Adverse events,statistics & numerical data,1,5,2
+Adverse events,United States Food and Drug Administration,1,5,3
+Adverse events,"Databases, Factual",1,5,3
+FAERS,Osimertinib,1,2,82
+FAERS,pharmacovigilance analysis,1,2,2
+FAERS,administration & dosage,1,2,9
+FAERS,Pharmacovigilance,1,2,8
+Lung,"Myocytes, Cardiac",1,3,10
+Lung,metabolism,1,3,16
+Lung,adverse effects,1,3,51
+Antineoplastic Agents,Lung,1,36,3
+Adverse events,FAERS,1,5,2
+Adverse events,pharmacovigilance analysis,1,5,2
+Adverse events,administration & dosage,1,5,9
+Adverse events,Pharmacovigilance,1,5,8
+"Aged, 80 and over",pharmacology,1,17,18
+Disease Progression,pharmacology,1,3,18
+"Disease Models, Animal",etiology,1,3,20
+Antineoplastic Agents,"Disease Models, Animal",1,36,3
+EGFR‐TKI,NSCLC,1,2,13
+EGFR‐TKI,pathology,1,2,30
+"Aged, 80 and over",EGFR‐TKI,1,17,2
+Disease Progression,EGFR‐TKI,1,3,2
+United States Food and Drug Administration,statistics & numerical data,1,3,2
+"Databases, Factual",statistics & numerical data,1,3,2
+"Aged, 80 and over",statistics & numerical data,1,17,2
+"Databases, Factual",United States Food and Drug Administration,1,3,3
+"Aged, 80 and over",United States Food and Drug Administration,1,17,3
+"Aged, 80 and over","Databases, Factual",1,17,3
+"Databases, Factual",Indoles,1,3,69
+Disease Progression,NSCLC,1,3,13
+Pharmacovigilance,administration & dosage,1,8,9
+Adverse Drug Reaction Reporting Systems,administration & dosage,1,6,9
+administration & dosage,statistics & numerical data,1,9,2
+United States Food and Drug Administration,administration & dosage,1,3,9
+"Databases, Factual",administration & dosage,1,3,9
+"Aged, 80 and over",Pharmacovigilance,1,17,8
+Aniline Compounds,"Databases, Factual",1,69,3
+Adverse Drug Reaction Reporting Systems,"Aged, 80 and over",1,6,17
+pharmacovigilance analysis,statistics & numerical data,1,2,2
+United States Food and Drug Administration,pharmacovigilance analysis,1,3,2
+"Databases, Factual",pharmacovigilance analysis,1,3,2
+Antineoplastic Agents,pharmacovigilance analysis,1,36,2
+"Aged, 80 and over",pharmacovigilance analysis,1,17,2
+Indoles,pharmacovigilance analysis,1,69,2
+Pyrimidines,pharmacovigilance analysis,1,71,2
+Acrylamides,"Databases, Factual",1,70,3
+heart failure,toxicity,1,31,4
+chemistry,pathology,1,2,30
+chemistry,genetics,1,2,44
+Signal Transduction,chemistry,1,3,2
+"Myocytes, Cardiac",chemistry,1,10,2
+prevention & control,therapeutic use,1,3,36
+Signal Transduction,therapeutic use,1,3,36
+Signal Transduction,drug effects,1,3,14
+T790M,epidermal growth factor receptor,1,3,10
+Antineoplastic Agents,epidermal growth factor receptor,1,36,10
+Contractility,heart failure,1,2,31
+Contractility,Osimertinib,1,2,82
+Contractility,Tyrosine kinase inhibitor,1,2,8
+Contractility,toxicity,1,2,4
+Contractility,metabolism,1,2,16
+Contractility,"Disease Models, Animal",1,2,3
+Adenocarcinoma,Chemotherapy,1,6,4
+Chemotherapy,Lung,1,4,3
+Cardiotoxicity,Lung,1,47,3
+Adenocarcinoma,etiology,1,6,20
+Lung,etiology,1,3,20
+Adenocarcinoma,Lung,1,6,3
+EGFR mutations,Tyrosine Kinase Inhibitors,1,3,8
+Real-world,epidermal growth factor receptor,1,3,10
+Induced Pluripotent Stem Cells,Tyrosine kinase inhibitor,1,5,8
+"Disease Models, Animal",Tyrosine kinase inhibitor,1,3,8
+"Disease Models, Animal",adverse effects,1,3,51
+Induced Pluripotent Stem Cells,toxicity,1,5,4
+Antineoplastic Agents,toxicity,1,36,4
+"Disease Models, Animal",toxicity,1,3,4
+"Databases, Factual",Pyrimidines,1,3,71
+Chemotherapy,etiology,1,4,20
+Cardiotoxicity,chemistry,1,47,2
+Cardiotoxicity,Signal Transduction,1,47,3
+Heart Diseases,pharmacology,1,9,18
+chemistry,metabolism,1,2,16
+chemistry,therapeutic use,1,2,36
+Heart Diseases,chemistry,1,9,2
+chemically induced,chemistry,1,26,2
+chemistry,prevention & control,1,2,3
+Molecular Docking Simulation,therapeutic use,1,2,36
+Heart Diseases,Molecular Docking Simulation,1,9,2
+Molecular Docking Simulation,chemically induced,1,2,26
+Molecular Docking Simulation,prevention & control,1,2,3
+Molecular Docking Simulation,pathology,1,2,30
+Molecular Docking Simulation,genetics,1,2,44
+Molecular Docking Simulation,Signal Transduction,1,2,3
+Molecular Docking Simulation,"Myocytes, Cardiac",1,2,10
+Real-world,non-small cell lung cancer,1,3,19
+T790M,non-small cell lung cancer,1,3,19
+Real-world,T790M,1,3,3
+Antineoplastic Agents,T790M,1,36,3
+"Carcinoma, Non-Small-Cell Lung",T790M,1,59,3
+"Neoplasm Recurrence, Local",Osimertinib,1,6,82
+Cardiotoxicity,Molecular Docking Simulation,1,47,2
+Molecular Docking Simulation,metabolism,1,2,16
+Heart Diseases,prevention & control,1,9,3
+Heart Diseases,Signal Transduction,1,9,3
+Heart Diseases,"Myocytes, Cardiac",1,9,10
+Signal Transduction,chemically induced,1,3,26
+pathology,prevention & control,1,30,3
+genetics,prevention & control,1,44,3
+Signal Transduction,prevention & control,1,3,3
+Pharmacovigilance,non-small cell lung cancer,1,8,19
+Atrial Fibrillation,anti-cancer treatment,1,3,2
+Piperazines,anti-cancer treatment,1,2,2
+anti-cancer treatment,heart failure,1,2,31
+Cardiotoxicity,Piperazines,1,47,2
+Acrylamides,Case report,1,70,7
+Case report,adverse effects,1,7,51
+Aniline Compounds,Case report,1,69,7
+Case report,etiology,1,7,20
+Electrocardiography,lung cancer,1,3,21
+Atrial Fibrillation,lung cancer,1,3,21
+Case report,anti-cancer treatment,1,7,2
+anti-cancer treatment,diagnosis,1,2,15
+Antineoplastic Agents,anti-cancer treatment,1,36,2
+Long QT Syndrome,anti-cancer treatment,1,5,2
+anti-cancer treatment,chemically induced,1,2,26
+Electrocardiography,anti-cancer treatment,1,3,2
+Mutation,complications,1,39,2
+Lung,Mutation,1,3,39
+"Neoplasm Recurrence, Local",complications,1,6,2
+Lung,complications,1,3,2
+Lung,"Neoplasm Recurrence, Local",1,3,6
+anti-cancer treatment,lung cancer,1,2,21
+Case report,lung cancer,1,7,21
+Long QT Syndrome,lung cancer,1,5,21
+Lung,Osimertinib,1,3,82
+T790M,complications,1,3,2
+T790M,therapeutic use,1,3,36
+"Neoplasm Recurrence, Local",T790M,1,6,3
+Lung,T790M,1,3,3
+complications,lung cancer,1,2,21
+"Neoplasm Recurrence, Local",lung cancer,1,6,21
+Lung,lung cancer,1,3,21
+Molecular docking,chemically induced,1,2,26
+Molecular docking,prevention & control,1,2,3
+Molecular docking,pathology,1,2,30
+Molecular docking,genetics,1,2,44
+Molecular docking,Signal Transduction,1,2,3
+Molecular docking,"Myocytes, Cardiac",1,2,10
+Cardiotoxicity,network pharmacology,1,47,4
+metabolism,network pharmacology,1,16,4
+Molecular Docking Simulation,Molecular docking,1,2,2
+Cardiotoxicity,Molecular docking,1,47,2
+Molecular docking,pharmacology,1,2,18
+Molecular docking,metabolism,1,2,16
+Molecular docking,chemistry,1,2,2
+Molecular docking,therapeutic use,1,2,36
+Molecular docking,drug effects,1,2,14
+Heart Diseases,Molecular docking,1,9,2
+Atrial Fibrillation,Case report,1,3,7
+Case report,Piperazines,1,7,2
+"Carcinoma, Non-Small-Cell Lung",Case report,1,59,7
+Case report,Indoles,1,7,69
+Case report,Pyrimidines,1,7,71
+Piperazines,etiology,1,2,20
+Piperazines,diagnosis,1,2,15
+Long QT Syndrome,Piperazines,1,5,2
+Case report,diagnosis,1,7,15
+Case report,Lung Neoplasms,1,7,66
+Case report,drug therapy,1,7,65
+Antineoplastic Agents,Case report,1,36,7
+Case report,Long QT Syndrome,1,7,5
+Case report,chemically induced,1,7,26
+Case report,Electrocardiography,1,7,3
+Case report,Protein Kinase Inhibitors,1,7,49
+"Ventricular Function, Left",diagnosis,1,2,15
+Stroke Volume,diagnosis,1,3,15
+Risk Assessment,"Ventricular Function, Left",1,4,2
+Risk Assessment,Stroke Volume,1,4,3
+"Ventricular Function, Left",drug effects,1,2,14
+Stroke Volume,drug effects,1,3,14
+Stroke Volume,antagonists & inhibitors,1,3,18
+diagnosis,metabolism,1,15,16
+Mutation,Tumor Suppressor Protein p53,1,39,2
+Adenocarcinoma of Lung,Tumor Suppressor Protein p53,1,5,2
+Exons,Tumor Suppressor Protein p53,1,3,2
+Exons,adverse effects,1,3,51
+Adenocarcinoma of Lung,Exons,1,5,3
+Heart Diseases,Stroke Volume,1,9,3
+"Ventricular Function, Left",physiopathology,1,2,4
+Stroke Volume,physiopathology,1,3,4
+Electrocardiography,Piperazines,1,3,2
+Electrocardiography,heart failure,1,3,31
+Atrial Fibrillation,Protein Kinase Inhibitors,1,3,49
+Atrial Fibrillation,Piperazines,1,3,2
+Piperazines,heart failure,1,2,31
+Exons,pathology,1,3,30
+ErbB Receptors,Tumor Suppressor Protein p53,1,53,2
+Protein Kinase Inhibitors,Tumor Suppressor Protein p53,1,49,2
+network pharmacology,therapeutic use,1,4,36
+Heart Diseases,network pharmacology,1,9,4
+chemically induced,network pharmacology,1,26,4
+network pharmacology,prevention & control,1,4,3
+network pharmacology,pathology,1,4,30
+genetics,network pharmacology,1,44,4
+Signal Transduction,network pharmacology,1,3,4
+"Myocytes, Cardiac",network pharmacology,1,10,4
+ErbB Receptors,physiopathology,1,53,4
+ErbB Receptors,Risk Assessment,1,53,4
+ErbB Receptors,"Ventricular Function, Left",1,53,2
+antagonists & inhibitors,physiopathology,1,18,4
+Risk Assessment,antagonists & inhibitors,1,4,18
+"Ventricular Function, Left",antagonists & inhibitors,1,2,18
+Neoplasms,prevention & control,1,3,3
+Hypertension,Neoplasms,1,2,3
+drug therapy,immune checkpoint inhibitors,1,65,3
+diagnosis,immune checkpoint inhibitors,1,15,3
+immune checkpoint inhibitors,therapeutic use,1,3,36
+immune checkpoint inhibitors,methods,1,3,4
+"Carcinoma, Non-Small-Cell Lung",immune checkpoint inhibitors,1,59,3
+"Carcinoma, Non-Small-Cell Lung",methods,1,59,4
+Takotsubo cardiomyopathy,heart failure,1,2,31
+"Ventricular Function, Left",adverse effects,1,2,51
+Mutation,"Ventricular Function, Left",1,39,2
+"Carcinoma, Non-Small-Cell Lung",United States Food and Drug Administration,1,59,3
+United States Food and Drug Administration,drug therapy,1,3,65
+Drug-Related Side Effects and Adverse Reactions,Pharmacovigilance,1,3,8
+Drug-Related Side Effects and Adverse Reactions,United States Food and Drug Administration,1,3,3
+United States Food and Drug Administration,epidemiology,1,3,16
+Lung Neoplasms,United States Food and Drug Administration,1,66,3
+Lung Neoplasms,immune checkpoint inhibitors,1,66,3
+"Ventricular Function, Left",metabolism,1,2,16
+Stroke Volume,metabolism,1,3,16
+Protein Kinase Inhibitors,"Ventricular Function, Left",1,49,2
+Antineoplastic Agents,"Ventricular Function, Left",1,36,2
+Heart Diseases,"Ventricular Function, Left",1,9,2
+Lung Neoplasms,"Ventricular Function, Left",1,66,2
+"Ventricular Function, Left",drug therapy,1,2,65
+"Carcinoma, Non-Small-Cell Lung","Ventricular Function, Left",1,59,2
+Molecular Targeted Therapy,administration & dosage,1,5,9
+Molecular Targeted Therapy,Neoplasms,1,5,3
+Cardiovascular Diseases,Molecular Targeted Therapy,1,4,5
+Molecular Targeted Therapy,prevention & control,1,5,3
+Hypertension,Molecular Targeted Therapy,1,2,5
+Neoplasms,administration & dosage,1,3,9
+Cardiovascular Diseases,administration & dosage,1,4,9
+administration & dosage,prevention & control,1,9,3
+Republic of Korea,adverse effects,1,4,51
+Lazertinib,epidermal growth factor receptor,1,4,10
+Lazertinib,non-small cell lung cancer,1,4,19
+Lazertinib,targeted therapy,1,4,6
+epidermal growth factor receptor,targeted therapy,1,10,6
+non-small cell lung cancer,targeted therapy,1,19,6
+prevention & control,targeted therapy,1,3,6
+Hypertension,targeted therapy,1,2,6
+Meta-analysis,Tyrosine Kinase Inhibitors,1,3,8
+Osimertinib,Takotsubo cardiomyopathy,1,82,2
+Adenocarcinoma,echocardiogram,1,6,2
+Adenocarcinoma,Tyrosine kinase inhibitor,1,6,8
+Cardiotoxicity,echocardiogram,1,47,2
+echocardiogram,epidermal growth factor receptor,1,2,10
+echocardiogram,heart failure,1,2,31
+Tyrosine kinase inhibitor,echocardiogram,1,8,2
+Neoplasms,etiology,1,3,20
+drug therapy,prevention & control,1,65,3
+Cardiovascular Diseases,prevention & control,1,4,3
+Hypertension,prevention & control,1,2,3
+Hypertension,etiology,1,2,20
+Meta-analysis,epidermal growth factor receptor,1,3,10
+Tyrosine Kinase Inhibitors,epidermal growth factor receptor,1,8,10
+Meta-analysis,non-small cell lung cancer,1,3,19
+Apoptosis,NSCLC,1,3,13
+"Cell Line, Tumor",Osimertinib,1,4,82
+Apoptosis,Osimertinib,1,3,82
+Cardiovascular Diseases,Incidence,1,4,4
+Apoptosis,anticancer,1,3,2
+Piperidines,metabolism,1,2,16
+Piperidines,pharmacology,1,2,18
+Adverse events,QT prolongation,1,5,7
+Apoptosis,"Drug Resistance, Neoplasm",1,3,6
+EGFR mutation,heart failure,1,6,31
+EGFR mutation,NSCLC,1,6,13
+Malignant pericardial effusion,cardio-oncology,1,2,11
+Malignant pericardial effusion,non-small cell lung cancer,1,2,19
+Gefitinib,heart failure,1,4,31
+Cardiotoxicity,EGFR-TKI,1,47,2
+Incidence,genetics,1,4,44
+Neoplasms,cardio-oncology,1,3,11
+Cardiovascular Diseases,cardio-oncology,1,4,11
+cardio-oncology,prevention & control,1,11,3
+Hypertension,cardio-oncology,1,2,11
+Neoplasms,targeted therapy,1,3,6
+Cardiovascular Diseases,targeted therapy,1,4,6
+Apoptosis,"Cell Line, Tumor",1,3,4
+Antineoplastic Agents,Apoptosis,1,36,3
+Hypertension,administration & dosage,1,2,9
+Cardiovascular Diseases,Neoplasms,1,4,3
+EGFR-TKI,non-small cell lung cancer,1,2,19
+EGFR-TKI,Osimertinib,1,2,82
+EGFR-TKI,real-world data,1,2,3
+Cardiotoxicity,real-world data,1,47,3
+cardio-oncology,targeted therapy,1,11,6
+Molecular Targeted Therapy,cardio-oncology,1,5,11
+adverse effects,cancer,1,51,2
+Aniline Compounds,cancer,1,69,2
+"Carcinoma, Non-Small-Cell Lung",cancer,1,59,2
+cancer,drug therapy,1,2,65
+cancer,chemically induced,1,2,26
+Lung Neoplasms,cancer,1,66,2
+Mutation,cancer,1,39,2
+Protein Kinase Inhibitors,cancer,1,49,2
+Genotype,therapeutic use,1,2,36
+Real-Time Polymerase Chain Reaction,therapeutic use,1,2,36
+Circulating Tumor DNA,Protein Kinase Inhibitors,1,2,49
+Genotype,Protein Kinase Inhibitors,1,2,49
+Protein Kinase Inhibitors,Real-Time Polymerase Chain Reaction,1,49,2
+cancer,heart failure,1,2,31
+Onco-cardiology,cancer,1,2,2
+Acrylamides,cancer,1,70,2
+cardiac failure,heart failure,1,2,31
+Indoles,cardiac failure,1,69,2
+Lung Neoplasms,cardiac failure,1,66,2
+cardiac failure,pathology,1,2,30
+Pyrimidines,cardiac failure,1,71,2
+Myocarditis,Osimertinib,1,2,82
+Circulating Tumor DNA,therapeutic use,1,2,36
+Exons,therapeutic use,1,3,36
+Adverse events,Torsade de Pointes,1,5,3
+NSCLC,cardiac failure,1,13,2
+Acrylamides,cardiac failure,1,70,2
+Aniline Compounds,cardiac failure,1,69,2
+"Carcinoma, Non-Small-Cell Lung",cardiac failure,1,59,2
+cardiac failure,drug therapy,1,2,65
+cardiac failure,genetics,1,2,44
+ErbB Receptors,cardiac failure,1,53,2
+Afatinib,Real-world,1,7,3
+Real-world,epidermal growth factor receptor (EGFR),1,3,2
+Adenocarcinoma of Lung,Osimertinib,1,5,82
+Adenocarcinoma of Lung,heart failure,1,5,31
+Adenocarcinoma,chemically induced,1,6,26
+Adenocarcinoma,Adenocarcinoma of Lung,1,6,5
+Adenocarcinoma,adverse effects,1,6,51
+Adenocarcinoma,"Carcinoma, Non-Small-Cell Lung",1,6,59
+Crizotinib,etiology,1,2,20
+Aniline Compounds,Crizotinib,1,69,2
+Crizotinib,Protein Kinase Inhibitors,1,2,49
+Crizotinib,Mutation,1,2,39
+Acrylamides,Crizotinib,1,70,2
+Crizotinib,Indoles,1,2,69
+Crizotinib,Pyrimidines,1,2,71
+Afatinib,epidermal growth factor receptor (EGFR),1,7,2
+anti-cancer treatment,cardio-oncology,1,2,11
+Crizotinib,anti-cancer treatment,1,2,2
+Mutation,anti-cancer treatment,1,39,2
+Crizotinib,cardio-oncology,1,2,11
+Crizotinib,adverse effects,1,2,51
+"Carcinoma, Non-Small-Cell Lung",Crizotinib,1,59,2
+Crizotinib,drug therapy,1,2,65
+Crizotinib,Lung Neoplasms,1,2,66
+Indoles,cancer,1,69,2
+Pyrimidines,cancer,1,71,2
+"Carcinoma, Non-Small-Cell Lung",Onco-cardiology,1,59,2
+Onco-cardiology,drug therapy,1,2,65
+Onco-cardiology,chemically induced,1,2,26
+Lung Neoplasms,Onco-cardiology,1,66,2
+Mutation,Onco-cardiology,1,39,2
+Onco-cardiology,Protein Kinase Inhibitors,1,2,49
+complications,etiology,1,2,20
+Antineoplastic Agents,complications,1,36,2
+Incidence,complications,1,4,2
+adverse effects,complications,1,51,2
+Incidence,Meta-analysis,1,4,3
+Cardiovascular Diseases,Osimertinib,1,4,82
+Biomarker,diagnosis,1,2,15
+Biomarker,genetics,1,2,44
+Adjuvant therapy,Protein Kinase Inhibitors,1,2,49
+Biomarker,ErbB Receptors,1,2,53
+Biomarker,Molecular Targeted Therapy,1,2,5
+Biomarker,"Carcinoma, Non-Small-Cell Lung",1,2,59
+"Carcinoma, Non-Small-Cell Lung",complications,1,59,2
+Cardiovascular Diseases,complications,1,4,2
+chemically induced,complications,1,26,2
+complications,epidemiology,1,2,16
+Adjuvant therapy,Molecular Targeted Therapy,1,2,5
+Adjuvant therapy,"Carcinoma, Non-Small-Cell Lung",1,2,59
+Adjuvant therapy,diagnosis,1,2,15
+Adjuvant therapy,genetics,1,2,44
+Adjuvant therapy,therapy,1,2,3
+Adjuvant therapy,Lung Neoplasms,1,2,66
+Adjuvant therapy,Mutation,1,2,39
+Adjuvant therapy,"Neoplasm Recurrence, Local",1,2,6
+Adenocarcinoma,Long QT Syndrome,1,6,5
+Adenocarcinoma,Lung Neoplasms,1,6,66
+Adenocarcinoma,Mutation,1,6,39
+Adenocarcinoma,Protein Kinase Inhibitors,1,6,49
+Adenocarcinoma of Lung,Cardiotoxicity,1,5,47
+Adenocarcinoma of Lung,Long QT Syndrome,1,5,5
+Adjuvant therapy,Biomarker,1,2,2
+Adjuvant therapy,ErbB Receptors,1,2,53
+Epidermal growth factor receptor-tyrosine kinase inhibitor,Lung Neoplasms,1,2,66
+Epidermal growth factor receptor-tyrosine kinase inhibitor,drug therapy,1,2,65
+Epidermal growth factor receptor-tyrosine kinase inhibitor,Mutation,1,2,39
+Epidermal growth factor receptor-tyrosine kinase inhibitor,Protein Kinase Inhibitors,1,2,49
+Epidermal growth factor receptor-tyrosine kinase inhibitor,adverse effects,1,2,51
+Epidermal growth factor receptor-tyrosine kinase inhibitor,Indoles,1,2,69
+Epidermal growth factor receptor-tyrosine kinase inhibitor,Pyrimidines,1,2,71
+Adenocarcinoma of Lung,EGFR,1,5,11
+epidemiology,therapy,1,16,3
+pathology,therapy,1,30,3
+Neoplasm Staging,therapy,1,3,3
+Indoles,therapy,1,69,3
+Pyrimidines,therapy,1,71,3
+Acrylamides,Epidermal growth factor receptor-tyrosine kinase inhibitor,1,70,2
+Aniline Compounds,Epidermal growth factor receptor-tyrosine kinase inhibitor,1,69,2
+"Carcinoma, Non-Small-Cell Lung",Epidermal growth factor receptor-tyrosine kinase inhibitor,1,59,2
+"Neoplasm Recurrence, Local",diagnosis,1,6,15
+Mutation,therapy,1,39,3
+Protein Kinase Inhibitors,therapy,1,49,3
+Acrylamides,therapy,1,70,3
+therapeutic use,therapy,1,36,3
+"Aged, 80 and over",therapy,1,17,3
+Aniline Compounds,therapy,1,69,3
+Antineoplastic Agents,therapy,1,36,3
+Biomarker,therapy,1,2,3
+Biomarker,Lung Neoplasms,1,2,66
+Biomarker,Mutation,1,2,39
+Biomarker,"Neoplasm Recurrence, Local",1,2,6
+Biomarker,Protein Kinase Inhibitors,1,2,49
+Molecular Targeted Therapy,therapy,1,5,3
+Molecular Targeted Therapy,Mutation,1,5,39
+Molecular Targeted Therapy,"Neoplasm Recurrence, Local",1,5,6
+EGFR-mutated NSCLC,ErbB Receptors,1,2,53
+EGFR-mutated NSCLC,genetics,1,2,44
+Meta-analysis,complications,1,3,2
+Cardiovascular Diseases,Meta-analysis,1,4,3
+Meta-analysis,chemically induced,1,3,26
+Arrhythmia,Pharmacovigilance,1,2,8
+Arrhythmia,Protein Kinase Inhibitors,1,2,49
+Arrhythmia,adverse effects,1,2,51
+Arrhythmia,etiology,1,2,20
+Arrhythmia,Lung Neoplasms,1,2,66
+Arrhythmia,drug therapy,1,2,65
+EGFR-mutated NSCLC,complications,1,2,2
+Cardiovascular Diseases,EGFR-mutated NSCLC,1,4,2
+EGFR-mutated NSCLC,chemically induced,1,2,26
+Antineoplastic Agents,EGFR-mutated NSCLC,1,36,2
+EGFR-mutated NSCLC,Protein Kinase Inhibitors,1,2,49
+Signal Transduction,diagnosis,1,3,15
+Molecular Targeted Therapy,pathology,1,5,30
+"Carcinoma, Non-Small-Cell Lung",Signal Transduction,1,59,3
+Lung Neoplasms,Signal Transduction,1,66,3
+Molecular Targeted Therapy,Signal Transduction,1,5,3
+Arrhythmia,cardio-oncology,1,2,11
+Arrhythmia,heart failure,1,2,31
+Arrhythmia,NSCLC,1,2,13
+EGFR,Molecular Targeted Therapy,1,11,5
+Signal Transduction,lung cancer,1,3,21
+Adenocarcinoma of Lung,targeted therapy,1,5,6
+diagnosis,targeted therapy,1,15,6
+Signal Transduction,targeted therapy,1,3,6
+Adenocarcinoma of Lung,diagnosis,1,5,15
+Adenocarcinoma of Lung,Molecular Targeted Therapy,1,5,5
+Adenocarcinoma of Lung,Signal Transduction,1,5,3
+QT prolongation,cancer,1,7,2
+Osimertinib,cancer,1,82,2
+mortality,pharmacology,1,5,18
+metabolism,mortality,1,16,5
+Chemotherapy,brain metastases,1,4,2
+EGFR,brain metastases,1,11,2
+Osimertinib,brain metastases,1,82,2
+brain metastases,targeted therapy,1,2,6
+pathology,real-world data,1,30,3
+ErbB Receptors,real-world data,1,53,3
+genetics,real-world data,1,44,3
+Lung Neoplasms,real-world data,1,66,3
+Mutation,real-world data,1,39,3
+Republic of Korea,real-world data,1,4,3
+Indoles,real-world data,1,69,3
+Pyrimidines,real-world data,1,71,3
+Afatinib,NSCLC,1,7,13
+NSCLC,real-world data,1,13,3
+Afatinib,real-world data,1,7,3
+Afatinib,Republic of Korea,1,7,4
+Acrylamides,real-world data,1,70,3
+Aniline Compounds,real-world data,1,69,3
+"Carcinoma, Non-Small-Cell Lung",real-world data,1,59,3
+drug therapy,real-world data,1,65,3
+Pharmacovigilance,cardio-oncology,1,8,11
+NSCLC,Pharmacovigilance,1,13,8
+Pharmacovigilance,etiology,1,8,20
+Crizotinib,Osimertinib,1,2,82
+Crizotinib,Pharmacovigilance,1,2,8
+Afatinib,EGFR,1,7,11
+EGFR,real-world data,1,11,3
+EGFR,Republic of Korea,1,11,4
+Chemotherapy,Survival Rate,1,4,4
+EGFR,administration & dosage,1,11,9
+"Aged, 80 and over",EGFR,1,17,11
+Antineoplastic Combined Chemotherapy Protocols,EGFR,1,4,11
+Disease Progression,EGFR,1,3,11
+EGFR,Survival Rate,1,11,4
+Antineoplastic Combined Chemotherapy Protocols,Osimertinib,1,4,82
+Antineoplastic Combined Chemotherapy Protocols,targeted therapy,1,4,6
+Pyrimidines,brain metastases,1,71,2
+Chemotherapy,EGFR,1,4,11
+Chemotherapy,Osimertinib,1,4,82
+Chemotherapy,targeted therapy,1,4,6
+Chemotherapy,administration & dosage,1,4,9
+Antineoplastic Combined Chemotherapy Protocols,Chemotherapy,1,4,4
+Chemotherapy,pathology,1,4,30
+Chemotherapy,Disease Progression,1,4,3
+brain metastases,genetics,1,2,44
+brain metastases,pathology,1,2,30
+Disease Progression,brain metastases,1,3,2
+ErbB Receptors,brain metastases,1,53,2
+Lung Neoplasms,brain metastases,1,66,2
+Mutation,brain metastases,1,39,2
+Survival Rate,brain metastases,1,4,2
+Indoles,brain metastases,1,69,2
+Acrylamides,brain metastases,1,70,2
+administration & dosage,brain metastases,1,9,2
+"Aged, 80 and over",brain metastases,1,17,2
+Aniline Compounds,brain metastases,1,69,2
+Antineoplastic Combined Chemotherapy Protocols,brain metastases,1,4,2
+adverse effects,brain metastases,1,51,2
+"Carcinoma, Non-Small-Cell Lung",brain metastases,1,59,2
+brain metastases,drug therapy,1,2,65
+Mutation,methods,1,39,4
+cardiac failure,epidermal growth factor receptor (EGFR),1,2,2
+QT prolongation,cardiac failure,1,7,2
+Torsade de Pointes,cardiac failure,1,3,2
+Osimertinib,epidermal growth factor receptor (EGFR),1,82,2
+QT prolongation,epidermal growth factor receptor (EGFR),1,7,2
+Torsade de Pointes,epidermal growth factor receptor (EGFR),1,3,2
+EGFR,cardio-oncology,1,11,11
+T790M,methods,1,3,4
+lung cancer,surgery,1,21,2
+lung cancer,methods,1,21,4
+Adenocarcinoma of Lung,surgery,1,5,2
+Adenocarcinoma of Lung,methods,1,5,4
+methods,surgery,1,4,2
+adverse effects,surgery,1,51,2
+ErbB Receptors,methods,1,53,4
+EGFR-TKI,surgery,1,2,2
+EGFR-TKI,methods,1,2,4
+EGFR-TKI,ErbB Receptors,1,2,53
+EGFR-TKI,adverse effects,1,2,51
+EGFR-TKI,Lung Neoplasms,1,2,66
+EGFR-TKI,Mutation,1,2,39
+Adenocarcinoma of Lung,T790M,1,5,3
+T790M,surgery,1,3,2
+Disease Progression,targeted therapy,1,3,6
+Survival Rate,targeted therapy,1,4,6
+Survival Rate,administration & dosage,1,4,9
+Antineoplastic Combined Chemotherapy Protocols,Survival Rate,1,4,4
+Disease Progression,Survival Rate,1,3,4
+EGFR-TKI,T790M,1,2,3
+EGFR-TKI,lung cancer,1,2,21
+Adenocarcinoma of Lung,EGFR-TKI,1,5,2
+Indoles,Recurrence,1,69,3
+Pyrimidines,Recurrence,1,71,3
+Adenocarcinoma,Pericardial effusion,1,6,2
+Pericardial effusion,epidermal growth factor receptor,1,2,10
+Adverse events,EGFR-TKIs,1,5,2
+Adverse events,QT interval,1,5,2
+Adverse events,antagonists & inhibitors,1,5,18
+Adverse events,Torsades de Pointes,1,5,2
+Afatinib,physiopathology,1,7,4
+Afatinib,Recurrence,1,7,3
+Aniline Compounds,Recurrence,1,69,3
+Recurrence,chemically induced,1,3,26
+Lung Neoplasms,physiopathology,1,66,4
+pathology,physiopathology,1,30,4
+Recurrence,physiopathology,1,3,4
+Protein Kinase Inhibitors,Recurrence,1,49,3
+Recurrence,adverse effects,1,3,51
+Adenocarcinoma of Lung,therapeutic use,1,5,36
+physiopathology,therapeutic use,1,4,36
+Recurrence,therapeutic use,1,3,36
+Adenocarcinoma of Lung,Afatinib,1,5,7
+Adenocarcinoma of Lung,physiopathology,1,5,4
+Adenocarcinoma of Lung,Recurrence,1,5,3
+Recurrence,drug therapy,1,3,65
+EGFR,Heart Diseases,1,11,9
+EGFR,chemically induced,1,11,26
+cardio-oncology,therapeutic use,1,11,36
+cardio-oncology,genetics,1,11,44
+Heart Diseases,cardio-oncology,1,9,11
+cardio-oncology,diagnosis,1,11,15
+Heart Diseases,Mutation,1,9,39
+Acrylamides,Recurrence,1,70,3
+QT interval,drug therapy,1,2,65
+ErbB Receptors,QT interval,1,53,2
+QT interval,antagonists & inhibitors,1,2,18
+Lung Neoplasms,QT interval,1,66,2
+Mutation,QT interval,1,39,2
+Protein Kinase Inhibitors,QT interval,1,49,2
+QT interval,Torsades de Pointes,1,2,2
+QT interval,chemically induced,1,2,26
+EGFR-TKIs,diagnosis,1,2,15
+EGFR-TKIs,Indoles,1,2,69
+EGFR-TKIs,Pyrimidines,1,2,71
+Acrylamides,QT interval,1,70,2
+QT interval,adverse effects,1,2,51
+"Aged, 80 and over",QT interval,1,17,2
+Aniline Compounds,QT interval,1,69,2
+"Carcinoma, Non-Small-Cell Lung",QT interval,1,59,2
+EGFR-TKIs,drug therapy,1,2,65
+EGFR-TKIs,ErbB Receptors,1,2,53
+EGFR-TKIs,antagonists & inhibitors,1,2,18
+EGFR-TKIs,Lung Neoplasms,1,2,66
+EGFR-TKIs,Mutation,1,2,39
+EGFR-TKIs,Protein Kinase Inhibitors,1,2,49
+EGFR-TKIs,Torsades de Pointes,1,2,2
+EGFR-TKIs,chemically induced,1,2,26
+Adverse events,chemically induced,1,5,26
+Adverse events,diagnosis,1,5,15
+EGFR-TKIs,QT interval,1,2,2
+Acrylamides,EGFR-TKIs,1,70,2
+EGFR-TKIs,adverse effects,1,2,51
+"Aged, 80 and over",EGFR-TKIs,1,17,2
+Aniline Compounds,EGFR-TKIs,1,69,2
+"Carcinoma, Non-Small-Cell Lung",EGFR-TKIs,1,59,2
+Case report,Malignant pericardial effusion,1,7,2
+Cardiotoxicity,complications,1,47,2
+EGFR-mutated NSCLC,Meta-analysis,1,2,3
+EGFR-mutated NSCLC,therapeutic use,1,2,36
+Tumor Suppressor Protein p53,metabolism,1,2,16
+Apoptosis,Cardiotoxicity,1,3,47
+Cardiotoxicity,Tumor Suppressor Protein p53,1,47,2
+drug therapy,toxicity,1,65,4
+epidermal growth factor receptor,therapeutic use,1,10,36
+Progression-Free Survival,epidermal growth factor receptor,1,2,10
+Survival Rate,epidermal growth factor receptor,1,4,10
+non-small cell lung cancer,therapeutic use,1,19,36
+Progression-Free Survival,non-small cell lung cancer,1,2,19
+Survival Rate,non-small cell lung cancer,1,4,19
+Tumor Suppressor Protein p53,drug effects,1,2,14
+Apoptosis,Tumor Suppressor Protein p53,1,3,2
+ErbB Receptors,Torsades de Pointes,1,53,2
+Torsades de Pointes,antagonists & inhibitors,1,2,18
+Lung Neoplasms,Torsades de Pointes,1,66,2
+Mutation,Torsades de Pointes,1,39,2
+Protein Kinase Inhibitors,Torsades de Pointes,1,49,2
+Torsades de Pointes,chemically induced,1,2,26
+Indoles,Torsades de Pointes,1,69,2
+Pyrimidines,Torsades de Pointes,1,71,2
+QT interval,diagnosis,1,2,15
+Indoles,QT interval,1,69,2
+Pyrimidines,QT interval,1,71,2
+Acrylamides,Torsades de Pointes,1,70,2
+"Aged, 80 and over",Torsades de Pointes,1,17,2
+Aniline Compounds,Torsades de Pointes,1,69,2
+"Carcinoma, Non-Small-Cell Lung",Torsades de Pointes,1,59,2
+Torsades de Pointes,drug therapy,1,2,65
+NSCLC,Non–small cell lung cancer,1,13,4
+NSCLC,Progression-Free Survival,1,13,2
+"Aged, 80 and over",Non–small cell lung cancer,1,17,4
+Non–small cell lung cancer,Progression-Free Survival,1,4,2
+Republic of Korea,therapeutic use,1,4,36
+"Aged, 80 and over",Progression-Free Survival,1,17,2
+Antineoplastic Agents,Progression-Free Survival,1,36,2
+Cardiac dysfunction,"LVEF, left ventricular ejection fraction",1,2,2
+Myocarditis,NSCLC,1,2,13
+Chemotherapy,cardio-oncology,1,4,11
+Myocarditis,cardio-oncology,1,2,11
+Cardiotoxicity,Myocarditis,1,47,2
+Chemotherapy,Myocarditis,1,4,2
+Myocarditis,heart failure,1,2,31
+"EGFR, epidermal growth factor receptor","NSCLC, non–small cell lung cancer",1,2,2
+"EGFR, epidermal growth factor receptor",cardio-oncology,1,2,11
+chemically induced,methods,1,26,4
+Neoplasms,methods,1,3,4
+Neoplasms,Protein Kinase Inhibitors,1,3,49
+Cardiotoxicity,"Neoplasm Recurrence, Local",1,47,6
+"Neoplasm Recurrence, Local",heart failure,1,6,31
+"Neoplasm Recurrence, Local",chemically induced,1,6,26
+"Neoplasm Recurrence, Local",Stroke Volume,1,6,3
+Chemotherapy,NSCLC,1,4,13
+"Databases, Factual",Drug-Related Side Effects and Adverse Reactions,1,3,3
+"Databases, Factual",methods,1,3,4
+"Databases, Factual",Protein Kinase Inhibitors,1,3,49
+Drug-Related Side Effects and Adverse Reactions,methods,1,3,4
+Drug-Related Side Effects and Adverse Reactions,Heart Diseases,1,3,9
+Drug-Related Side Effects and Adverse Reactions,Neoplasms,1,3,3
+Drug-Related Side Effects and Adverse Reactions,Protein Kinase Inhibitors,1,3,49
+Heart Diseases,methods,1,9,4
+Heart Diseases,mortality,1,9,5
+Adverse Drug Reaction Reporting Systems,Non–small cell lung cancer,1,6,4
+Non–small cell lung cancer,Pharmacovigilance,1,4,8
+"Carcinoma, Non-Small-Cell Lung",Risk Assessment,1,59,4
+Risk Assessment,pathology,1,4,30
+Adverse Drug Reaction Reporting Systems,pathology,1,6,30
+Pharmacovigilance,pathology,1,8,30
+Lung Neoplasms,Risk Assessment,1,66,4
+anticancer drugs,physiopathology,1,2,4
+Neoplasms,anticancer drugs,1,3,2
+Risk Assessment,anticancer drugs,1,4,2
+"Databases, Factual",anticancer drugs,1,3,2
+Pharmacovigilance,anticancer drugs,1,8,2
+Adverse Drug Reaction Reporting Systems,anticancer drugs,1,6,2
+Cardiotoxicity,mortality,1,47,5
+Cardiotoxicity,"Databases, Factual",1,47,3
+Neoplasms,heart failure,1,3,31
+"Databases, Factual",heart failure,1,3,31
+Adverse Drug Reaction Reporting Systems,heart failure,1,6,31
+Cardiotoxicity,anticancer drugs,1,47,2
+Heart Diseases,anticancer drugs,1,9,2
+anticancer drugs,diagnosis,1,2,15
+anticancer drugs,mortality,1,2,5
+anticancer drugs,epidemiology,1,2,16
+"LVEF, left ventricular ejection fraction",Non–small cell lung cancer,1,2,4
+Cardiac dysfunction,"NSCLC, non–small cell lung cancer",1,2,2
+"NSCLC, non–small cell lung cancer",Non–small cell lung cancer,1,2,4
+Cardiac dysfunction,"TKI, tyrosine kinase inhibitor",1,2,3
+Non–small cell lung cancer,"TKI, tyrosine kinase inhibitor",1,4,3
+Cardiac dysfunction,Non–small cell lung cancer,1,2,4
+anticancer drugs,heart failure,1,2,31
+heart failure,mortality,1,31,5
