@@ -9,12 +9,23 @@ from __future__ import annotations
 
 from datetime import date
 from functools import lru_cache
+import logging
 import os
 from pathlib import Path
 import stat
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+
+class CredentialFileUnavailable(ValueError):
+    """The credential file is not present or cannot be opened.
+
+    Distinct from an insecure or malformed file, which stays fatal: an operator
+    who left a group-readable key on disk must fix it, not have it ignored.
+    """
 
 # Project root = the directory that contains the ``safety_agent`` package.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -125,7 +136,19 @@ class Settings(BaseSettings):
             return SecretStr(configured)
         if self.evimed_evidence_search_key_file is None:
             return SecretStr("")
-        return SecretStr(_read_private_secret(self.evimed_evidence_search_key_file))
+        try:
+            return SecretStr(_read_private_secret(self.evimed_evidence_search_key_file))
+        except CredentialFileUnavailable as error:
+            # Guideline retrieval enriches the analysis; openFDA carries it. A
+            # deployment whose optional credential file is missing or unreadable
+            # still has to produce the safety analysis, so disable the
+            # enrichment loudly instead of failing service construction.
+            logger.warning(
+                "EviMed evidence key file %s is unavailable (%s); guideline enrichment is disabled",
+                self.evimed_evidence_search_key_file,
+                error,
+            )
+            return SecretStr("")
 
 
 def _read_private_secret(path: Path, *, max_bytes: int = 4096) -> str:
@@ -144,7 +167,7 @@ def _read_private_secret(path: Path, *, max_bytes: int = 4096) -> str:
             raise ValueError("EviMed evidence API key file must use owner-only permissions")
         payload = os.read(descriptor, max_bytes + 1)
     except OSError as error:
-        raise ValueError("EviMed evidence API key file is unavailable") from error
+        raise CredentialFileUnavailable("EviMed evidence API key file is unavailable") from error
     finally:
         if descriptor is not None:
             os.close(descriptor)
