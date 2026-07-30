@@ -202,15 +202,24 @@ def message_texts(messages: list[dict[str, Any]], role: str) -> list[str]:
     return texts
 
 
+SUBSTANTIVE_TEXT_SHARE = 0.25
+
+
 def message_text(messages: list[dict[str, Any]], role: str) -> str:
     """The reply a user reads.
 
     An agent narrates between tool calls, and every one of those turns is an
-    assistant message. Joining them all judges the transcript rather than the
-    answer, so take the last message the agent produced.
+    assistant message, so joining them all judges the transcript. Taking only
+    the last one is wrong the other way: an agent that delivers its report and
+    then adds a short wrap-up would be judged on the wrap-up. Start from the
+    last substantive message and keep everything after it.
     """
     texts = message_texts(messages, role)
-    return texts[-1] if texts else ""
+    if not texts:
+        return ""
+    threshold = max(len(text) for text in texts) * SUBSTANTIVE_TEXT_SHARE
+    start = max(index for index, text in enumerate(texts) if len(text) >= threshold)
+    return "\n\n".join(texts[start:])
 
 
 def tool_call_count(messages: list[dict[str, Any]]) -> int:
