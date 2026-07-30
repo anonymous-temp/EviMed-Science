@@ -21,10 +21,20 @@ HERE = Path(__file__).resolve().parent
 WORKSPACE_ROOT = HERE.parents[2]
 DEEPSEEK_KEY_FILE = WORKSPACE_ROOT / ".evimed-local" / "secrets" / "deepseek.api-key"
 DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
+GROUP_SEPARATORS = ",    "
+UNIT_SUFFIX = r"(?:\s*(?:[%％]|万|亿|thousand|million|billion))?"
+# Grouped thousands come first so "6 609" reads as one number. Splitting it
+# would score the halves as two claims the source never makes.
+# A sign only counts when nothing numeric precedes it, so "4-6" stays a range
+# and an ISO date stays three fields rather than becoming negative values.
+SIGN = r"(?:[-+](?<![\d][-+]))?"
 NUMBER_PATTERN = re.compile(
-    r"(?<![A-Za-z])[-+]?\d+(?:[.,·]\d+)?(?:\s*(?:[%％]|万|亿|thousand|million|billion))?",
+    rf"(?<![A-Za-z]){SIGN}\d{{1,3}}(?:[{GROUP_SEPARATORS}]\d{{3}})+(?:[.·]\d+)?{UNIT_SUFFIX}"
+    rf"|(?<![A-Za-z]){SIGN}\d+(?:[.,·]\d+)?{UNIT_SUFFIX}",
     re.I,
 )
+# A heading's own "2.1" numbers the section, not the evidence.
+HEADING_ORDINAL_PATTERN = re.compile(r"^(#{1,6}\s*)\d+(?:\.\d+)*\.?(?=\s)", re.M)
 WORD_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9'-]*|[\u4e00-\u9fff]")
 SECTION_PATTERNS = {
     "abstract": re.compile(r"^#{1,4}\s*(?:abstract\b|摘要(?=\s|$|[:：与及(（]))", re.I | re.M),
@@ -39,14 +49,9 @@ MIN_COMPLETE_OUTPUT_CHARS = 1_000
 
 
 def normalize_number(value: str) -> str:
-    clean = (
-        value.replace("％", "%")
-        .replace("·", ".")
-        .replace(" ", "")
-        .replace("\u202f", "")
-        .replace("\u00a0", "")
-        .lower()
-    )
+    clean = value.replace("％", "%").replace("·", ".").lower()
+    for separator in GROUP_SEPARATORS + " ":
+        clean = clean.replace(separator, "")
     percent = clean.endswith("%")
     multiplier = 1.0
     for suffix, factor in (
@@ -72,6 +77,7 @@ def normalize_number(value: str) -> str:
 
 
 def numbers(text: str) -> set[str]:
+    text = HEADING_ORDINAL_PATTERN.sub(r"\1", text)
     return {value for match in NUMBER_PATTERN.findall(text) if (value := normalize_number(match))}
 
 
