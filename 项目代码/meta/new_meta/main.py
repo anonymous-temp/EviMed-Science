@@ -42,6 +42,7 @@ from new_meta.core.evidence_gate import (
     EvidenceGate,
     GateDecision,
     GateResult,
+    assess_poolability,
     build_report_state,
     outcome_matches as _outcome_matches,
 )
@@ -2635,7 +2636,9 @@ def _evaluate_evidence_gate_for_report(
 ):
     """Evaluate evidence readiness and persist the manuscript fact-state audit."""
     gate_result = EvidenceGate(protocol).evaluate(extracted_studies)
-    gate_result = _reconcile_gate_result_with_final_effect_sizes(project, gate_result)
+    gate_result = _reconcile_gate_result_with_final_effect_sizes(
+        project, gate_result, protocol, extracted_studies
+    )
     report_state = build_report_state(
         gate_result,
         extracted_studies,
@@ -2660,7 +2663,12 @@ def _final_effect_size_study_ids(project: Project) -> list[str]:
     return ids
 
 
-def _reconcile_gate_result_with_final_effect_sizes(project: Project, gate_result: GateResult) -> GateResult:
+def _reconcile_gate_result_with_final_effect_sizes(
+    project: Project,
+    gate_result: GateResult,
+    protocol: ResearchProtocol,
+    extracted_studies: list[ExtractedStudy],
+) -> GateResult:
     """Use final selected effect-size rows as the manuscript-stage meta-eligible set."""
     final_ids = _final_effect_size_study_ids(project)
     if not final_ids:
@@ -2696,11 +2704,32 @@ def _reconcile_gate_result_with_final_effect_sizes(project: Project, gate_result
         "outcome_tiers": outcome_tiers,
         "prisma_counts": prisma_counts,
     })
-    if len(final_ids) >= 2:
+    # Having two effect rows is not the same as being poolable. Reassess the
+    # final set: promoting on count alone once pooled two probiotic genera the
+    # gate had already refused to combine.
+    final_studies = [
+        study for study in extracted_studies
+        if str(study.characteristics.pmid or study.characteristics.study_id or "") in final_set
+    ]
+    can_pool, pool_notes = assess_poolability(final_studies, evidence_classes, protocol)
+    payload["poolability_notes"] = pool_notes
+    if len(final_ids) >= 2 and can_pool:
         payload["decision"] = GateDecision.META
         payload["summary"] = (
             f"纳入 {prisma_counts.get('full_text_assessed') or prisma_counts.get('search_results') or len(final_ids)} "
             f"项研究，{len(final_ids)} 项满足Meta分析条件，进入定量合并分析。"
+        )
+    elif len(final_ids) >= 1:
+        payload["decision"] = GateDecision.NARRATIVE
+        reasons = list(payload.get("reasons") or [])
+        for note in pool_notes:
+            if note not in reasons:
+                reasons.append(note)
+        payload["reasons"] = reasons
+        payload["summary"] = (
+            f"纳入 {prisma_counts.get('full_text_assessed') or prisma_counts.get('search_results') or len(final_ids)} "
+            f"项研究，{len(final_ids)} 项直接证据不满足定量合并条件"
+            f"（{'; '.join(pool_notes) if pool_notes else '合并前提未满足'}），转为叙述性系统评价。"
         )
     return GateResult.model_validate(payload)
 
