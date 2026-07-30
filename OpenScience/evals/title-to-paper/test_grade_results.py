@@ -14,6 +14,19 @@ class NumericNormalizationTests(unittest.TestCase):
         self.assertEqual(grade_results.normalize_number("27.6%"), "27.6%")
         self.assertEqual(grade_results.normalize_number("27.6 million"), "27600000")
 
+    def test_grouped_thousands_stay_one_number(self):
+        # A narrow no-break space is what the writer emits between groups.
+        self.assertEqual(grade_results.numbers("6\u202f609 adults"), {"6609"})
+        self.assertEqual(grade_results.numbers("8,544 screened"), {"8544"})
+
+    def test_heading_ordinals_are_not_evidence(self):
+        self.assertEqual(grade_results.numbers("### 2.1 Trial Design"), set())
+        self.assertEqual(grade_results.numbers("## 3 Results"), set())
+
+    def test_ranges_and_dates_do_not_become_negative_values(self):
+        self.assertEqual(grade_results.numbers("4-6 weeks"), {"4", "6"})
+        self.assertEqual(grade_results.numbers("a change of -2.4 points"), {"-2.4"})
+
     def test_model_payload_includes_nonstandard_full_text_sections(self):
         full_text = "Case presentation: baseline HAMD was 21 and improved to 9."
         payload = grade_results.model_payload(
