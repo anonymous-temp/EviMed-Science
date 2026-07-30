@@ -4698,7 +4698,11 @@ def test_clinical_review_prompt_does_not_recommend_automation_as_method_fix() ->
 
 
 def test_zh_generic_methods_template_uses_publication_language_for_source_checks() -> None:
-    source = Path("new_meta/agents/writing_agent.py").read_text()
+    agent = Path("new_meta/agents")
+    source = "\n".join(
+        path.read_text()
+        for path in [agent / "writing_agent.py", *sorted((agent / "writing").glob("*.py"))]
+    )
 
     assert "经来源核对后需要修订" in source
     assert "进一步来源核实前" in source
@@ -5641,7 +5645,7 @@ def test_claim_map_authoring_rewrites_only_open_argument_sections() -> None:
     assert "unsupported_claims_not_used" in audit
 
 
-def test_claim_map_authoring_guard_uses_claim_map_not_old_template(monkeypatch) -> None:
+def test_claim_map_authoring_guard_uses_claim_map_not_old_template(monkeypatch, patch_writing_helper) -> None:
     writer = WritingAgent()
     manuscript = "\n".join([
         "# Title",
@@ -5671,8 +5675,7 @@ def test_claim_map_authoring_guard_uses_claim_map_not_old_template(monkeypatch) 
         raise AssertionError(f"Unexpected structured schema: {schema}")
 
     writer.call_llm_structured = fake_structured
-    monkeypatch.setattr(
-        writing_module,
+    patch_writing_helper(
         "preservation_guard_issues",
         lambda original, replacement, heading: [
             {"code": "rewrite_overcompressed", "message": "Candidate is shorter than old template."},
@@ -5768,7 +5771,7 @@ def test_claim_map_authoring_judge_does_not_receive_old_template_guard_noise() -
     assert "Do not compare the candidate against the old section" in seen_prompt["text"]
 
 
-def test_claim_map_authoring_repairs_rejected_section_with_claim_map_feedback(monkeypatch) -> None:
+def test_claim_map_authoring_repairs_rejected_section_with_claim_map_feedback(monkeypatch, patch_writing_helper) -> None:
     writer = WritingAgent()
     manuscript = "\n".join([
         "# Title",
@@ -5814,8 +5817,7 @@ def test_claim_map_authoring_repairs_rejected_section_with_claim_map_feedback(mo
         raise AssertionError(f"Unexpected structured schema: {schema}")
 
     writer.call_llm_structured = fake_structured
-    monkeypatch.setattr(
-        writing_module,
+    patch_writing_helper(
         "preservation_guard_issues",
         lambda original, replacement, heading: (
             [{"code": "unsupported_source_characterization", "message": "Guideline claim is unsupported."}]
@@ -5872,7 +5874,7 @@ def test_claim_map_authoring_repairs_rejected_section_with_claim_map_feedback(mo
     assert "evaluates treatment for mortality" in repaired
 
 
-def test_claim_map_authoring_audit_records_rejected_repair(monkeypatch) -> None:
+def test_claim_map_authoring_audit_records_rejected_repair(monkeypatch, patch_writing_helper) -> None:
     writer = WritingAgent()
     manuscript = "\n".join([
         "# Title",
@@ -5905,8 +5907,7 @@ def test_claim_map_authoring_audit_records_rejected_repair(monkeypatch) -> None:
         raise AssertionError(f"Unexpected structured schema: {schema}")
 
     writer.call_llm_structured = fake_structured
-    monkeypatch.setattr(
-        writing_module,
+    patch_writing_helper(
         "preservation_guard_issues",
         lambda original, replacement, heading: [
             {"code": "unsupported_source_characterization", "message": "Claim strength is too strong."}
