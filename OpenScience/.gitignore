@@ -67,3 +67,6 @@ videos/
 # Local video-production tooling (fetched hyperframes skill packs)
 .agents/
 skills-lock.json
+
+# Capability audit probe workspace (regenerated per run)
+evals/capability-audit/tool-probe-workspace/

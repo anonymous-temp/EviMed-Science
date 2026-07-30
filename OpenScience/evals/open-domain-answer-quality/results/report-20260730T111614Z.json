@@ -1,0 +1,298 @@
+{
+  "schemaVersion": 1,
+  "judgePromptVersion": 1,
+  "judgeModel": "deepseek-v4-pro",
+  "answersFile": "/home/coder/workspace/EviMedScience/OpenScience/evals/open-domain-answer-quality/results/answers-20260730T111533Z.json",
+  "generatedAt": "2026-07-30T11:16:14Z",
+  "cases": [
+    {
+      "id": "q-direct-01",
+      "tier": "direct",
+      "domain": "endocrinology",
+      "question": "二甲双胍治疗2型糖尿病的主要作用机制是什么？",
+      "run": {
+        "runId": "run_c3590863e574862d1f26e6930d043f33",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 58225,
+        "model": "deepseek/deepseek-v4-pro",
+        "errorCode": null,
+        "qualityNotices": [],
+        "sessionId": "ses_04d445a84ffeZjSzIhxvFmLH6M",
+        "toolCalls": 4,
+        "artifacts": [],
+        "assistantChars": 1715,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 3,
+        "readability": 5,
+        "usefulness": 3,
+        "correctness": 5,
+        "uncertainty_calibration": 5
+      },
+      "overall": 4.2,
+      "issues": [
+        "第一段为检索过程叙述而非直接答案，结论被推迟到后续段落",
+        "对直接层级问题回答过于冗长，包含详细机制扩展和参考文献，不够简洁精准",
+        "未明确提及二甲双胍不刺激胰岛素分泌和单独使用低血糖风险小这一重要临床特性"
+      ],
+      "rationale": "答案科学准确，结构清晰，不确定性校准良好。但开头未直接给出结论（先声明检索），不符合直接性要求；回答篇幅过大，更适合综述而非直接问答，降低了有用性。同时遗漏了期望中关于不刺激胰岛素分泌和低血糖风险的明确说明。"
+    },
+    {
+      "id": "q-direct-02",
+      "tier": "direct",
+      "domain": "gastroenterology",
+      "question": "质子泵抑制剂（如奥美拉唑）是如何发挥抑酸作用的？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-direct-03",
+      "tier": "direct",
+      "domain": "ebm-methodology",
+      "question": "循证医学中的GRADE分级是什么？它如何评价证据质量？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-direct-04",
+      "tier": "direct",
+      "domain": "hematology",
+      "question": "普通肝素和低分子肝素有什么区别？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-direct-05",
+      "tier": "direct",
+      "domain": "oncology",
+      "question": "奥希替尼（osimertinib）的作用靶点是什么？主要用于哪类患者？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-direct-06",
+      "tier": "direct",
+      "domain": "respiratory",
+      "question": "布地奈德吸入剂治疗哮喘的作用机制是什么？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-direct-07",
+      "tier": "direct",
+      "domain": "clinical-pharmacology",
+      "question": "什么是药物半衰期？它对临床用药有什么意义？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-direct-08",
+      "tier": "direct",
+      "domain": "psychiatry",
+      "question": "SSRI类抗抑郁药（如舍曲林）的起效机制和起效时间特点是什么？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-direct-09",
+      "tier": "direct",
+      "domain": "nephrology",
+      "question": "ACEI类药物（如贝那普利）为什么可能引起血肌酐升高？何时需要警惕？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-direct-10",
+      "tier": "direct",
+      "domain": "endocrinology",
+      "question": "What is the mechanism of action of SGLT2 inhibitors, and why do they increase the risk of genital mycotic infections?",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-01",
+      "tier": "synthesis",
+      "domain": "endocrinology",
+      "question": "2型糖尿病患者合并动脉粥样硬化性心血管疾病时，SGLT2抑制剂和DPP-4抑制剂应如何选择？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-02",
+      "tier": "synthesis",
+      "domain": "gastroenterology",
+      "question": "长期服用质子泵抑制剂有哪些已证实和仅属关联的安全性问题？临床应如何权衡？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-03",
+      "tier": "synthesis",
+      "domain": "oncology",
+      "question": "PD-1抑制剂单药对比含铂化疗一线治疗PD-L1高表达晚期非小细胞肺癌，疗效如何？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-04",
+      "tier": "synthesis",
+      "domain": "cardiology",
+      "question": "非瓣膜性房颤患者抗凝应选NOAC还是华法林？各自的适用场景是什么？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-05",
+      "tier": "synthesis",
+      "domain": "endocrinology",
+      "question": "二甲双胍引起乳酸酸中毒的风险到底有多大？肾功能不全患者能否使用？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-06",
+      "tier": "synthesis",
+      "domain": "tcm-cardiovascular",
+      "question": "速效救心丸可以长期服用吗？冠心病患者日常应如何正确使用？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-07",
+      "tier": "synthesis",
+      "domain": "neurology",
+      "question": "donanemab在中国开展的III期临床试验目前登记的设计、主要终点和样本量是什么？有没有已公布的中国人群结果？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-08",
+      "tier": "synthesis",
+      "domain": "endocrinology",
+      "question": "降糖新药「格列美净」的III期临床试验结果怎么样？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-09",
+      "tier": "synthesis",
+      "domain": "infectious-disease",
+      "question": "碳青霉烯耐药肺炎克雷伯菌（CRKP）感染目前有哪些有证据支持的治疗选择？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-10",
+      "tier": "synthesis",
+      "domain": "rheumatology",
+      "question": "确诊类风湿关节炎后，应先用甲氨蝶呤还是直接使用生物制剂？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-11",
+      "tier": "synthesis",
+      "domain": "nephrology",
+      "question": "SGLT2抑制剂用于慢性肾脏病患者能延缓肾功能恶化吗？证据强度如何？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-synthesis-12",
+      "tier": "synthesis",
+      "domain": "respiratory",
+      "question": "慢阻肺（COPD）频繁急性加重患者，三联吸入治疗相比双联治疗是否更值得用？",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-report-01",
+      "tier": "report",
+      "domain": "cardiology",
+      "question": "请帮我生成一份关于SGLT2抑制剂治疗心力衰竭的系统综述与Meta分析报告，要求包含文献检索策略、纳入研究和森林图结果解读。",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-report-02",
+      "tier": "report",
+      "domain": "gastroenterology",
+      "question": "请出具一份布洛芬胃肠道安全性的循证评价报告。",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-report-03",
+      "tier": "report",
+      "domain": "endocrinology",
+      "question": "写一份GLP-1受体激动剂用于肥胖症减重的循证综合评价报告，包括疗效、安全性和指南推荐意见。",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-report-04",
+      "tier": "report",
+      "domain": "oncology",
+      "question": "请生成一份肿瘤免疫检查点抑制剂近五年研究进展与文献计量分析报告。",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-report-05",
+      "tier": "report",
+      "domain": "infectious-disease",
+      "question": "帮我写一份ICU重症患者抗菌药物精准用药的研究进展报告。",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-report-06",
+      "tier": "report",
+      "domain": "cardiology",
+      "question": "请生成一份他汀类药物用于心血管疾病一级预防的Meta分析报告，重点讨论获益与风险的权衡。",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-report-07",
+      "tier": "report",
+      "domain": "oncology",
+      "question": "写一份二甲双胍抗肿瘤潜力的循证评估报告，说明目前证据到了什么程度。",
+      "missingAnswer": true
+    },
+    {
+      "id": "q-report-08",
+      "tier": "report",
+      "domain": "hematology",
+      "question": "请出具一份利妥昔单抗超说明书用药（如免疫性血小板减少症、肾病综合征）的循证评价报告。",
+      "missingAnswer": true
+    }
+  ],
+  "summary": {
+    "expectedQuestions": 30,
+    "judgedCases": 1,
+    "failedCases": 0,
+    "missingAnswers": 29,
+    "dimensions": {
+      "directness": 3.0,
+      "readability": 5.0,
+      "usefulness": 3.0,
+      "correctness": 5.0,
+      "uncertainty_calibration": 5.0
+    },
+    "overallMean": 4.2,
+    "byTier": {
+      "direct": {
+        "cases": 10,
+        "judged": 1,
+        "dimensions": {
+          "directness": 3.0,
+          "readability": 5.0,
+          "usefulness": 3.0,
+          "correctness": 5.0,
+          "uncertainty_calibration": 5.0
+        },
+        "overallMean": 4.2
+      },
+      "synthesis": {
+        "cases": 12,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      },
+      "report": {
+        "cases": 8,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      }
+    }
+  }
+}
