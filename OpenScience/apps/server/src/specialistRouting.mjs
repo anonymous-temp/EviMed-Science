@@ -22,7 +22,7 @@ function loadClinicalRoutingPattern() {
 const clinicalRoutingMedicinePattern = loadClinicalRoutingPattern();
 
 const routeRules = Object.freeze([
-  ["adr-analysis", /(?:药物警戒|药品安全性分析|药物安全性分析|不良反应信号|\bfaers\b|pharmacovigilance)/i],
+  ["adr-analysis", /(?:药物警戒|(?:药物|药品)安全性(?:信号)?分析|不良(?:反应|事件).{0,4}(?:信号|监测)|\bfaers\b|\bopenfda\b|(?:\bROR\b|\bPRR\b|\bEBGM\b).{0,20}(?:信号|不良|disproportional)|pharmacovigilance|disproportionality analysis)/i],
   ["bibliometric-analysis", /(?:文献计量|科学计量|citespace|vosviewer|bibliometric)/i],
   ["comprehensive-drug-evaluation", /(?:药品综合评价|药物综合评价|综合评价.{0,20}(?:药|临床价值)|comprehensive drug evaluation)/i],
   ["drug-selection", /(?:药品遴选|药物遴选|院内目录.{0,12}(?:选择|评分)|formulary.{0,12}(?:selection|decision))/i],

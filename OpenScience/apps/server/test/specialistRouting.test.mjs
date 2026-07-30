@@ -66,3 +66,16 @@ test("generic conversation stays in the open-domain agent", async () => {
   // research request and stays open-domain, exactly as before this change.
   assert.equal(routeOpenDomainSpecialist("速效救心丸一次吃几粒", agents), null);
 });
+
+test("a pharmacovigilance report reaches the ADR specialist however it is phrased", async () => {
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+  for (const text of [
+    "请出具一份阿托伐他汀横纹肌溶解的药物安全性信号分析报告，基于 openFDA 计算 ROR 与 PRR",
+    "帮我做不良事件信号监测",
+    "run a disproportionality analysis on this drug",
+  ]) {
+    assert.equal(routeOpenDomainSpecialist(text, agents)?.agentId, "adr-analysis", text);
+  }
+  // A plain safety question is still a conversation, not a signal-analysis package.
+  assert.equal(routeOpenDomainSpecialist("二甲双胍的安全性怎么样？", agents), null);
+});
