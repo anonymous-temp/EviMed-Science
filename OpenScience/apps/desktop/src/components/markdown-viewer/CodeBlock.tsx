@@ -36,7 +36,7 @@ export const CodeBlock = memo(function CodeBlock({
   }, [code, language]);
 
   const [copied, setCopied] = useState(false);
-  const resetTimer = useRef<number>();
+  const resetTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(resetTimer.current), []);
   const copy = async () => {
     try {

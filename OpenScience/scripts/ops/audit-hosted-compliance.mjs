@@ -688,6 +688,21 @@ async function checkDependencySecurity() {
   } else {
     fail("production_dependency_audit_gate_missing", "Web CI must run a production dependency vulnerability audit.");
   }
+  // Every accepted advisory needs a standing reason, so pin the list here and
+  // make any addition fail this gate until it is reviewed the same way.
+  // CVE-2026-14257 (brace-expansion) reaches only exceljs's Node archive
+  // dependencies. The hosted bundle carries exceljs's browser build, which uses
+  // JSZip, so archiver, unzipper, glob, minimatch, and brace-expansion are
+  // absent from the shipped assets, and the app only ever calls xlsx.load.
+  // exceljs 4.4.0 and its maintained fork both pin archiver ^5, and every
+  // minimatch release that depends on the patched brace-expansion 5 line
+  // exports an object where glob 7 requires a callable, so no override fixes it.
+  const acceptedAdvisories = pkg.pnpm?.auditConfig?.ignoreCves ?? [];
+  if (acceptedAdvisories.length === 1 && acceptedAdvisories[0] === "CVE-2026-14257") {
+    pass("production_dependency_audit_exceptions", "The only accepted production advisory is the unbundled brace-expansion chain under exceljs.");
+  } else {
+    fail("production_dependency_audit_exceptions_unreviewed", "Accepted production dependency advisories changed and need review.");
+  }
 }
 
 async function checkMonitoringBaseline() {
