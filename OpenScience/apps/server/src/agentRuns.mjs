@@ -440,13 +440,16 @@ function terminalFromMessages(messages) {
   const toolParts = messages.flatMap((message) => message?.parts ?? []).filter((part) => part?.type === "tool");
   for (const [index, part] of toolParts.entries()) {
     if (!failedToolPart(part)) continue;
+    // A run's verdict is about the EviMed research work. Editor and shell tools
+    // fail routinely while an agent explores — one `read` past end of file
+    // failed an otherwise complete peer review — and whether the deliverables
+    // exist is checked separately against the declared outputs.
+    if (typeof part.tool !== "string" || !part.tool.includes("evimed_")) continue;
     const errorCode = parsedToolErrorCode(part);
     if (evidenceSourceTool(part.tool) && recoverableEvidenceSourceErrorCodes.has(errorCode)) continue;
-    const correctedByLaterSuccess = typeof part.tool === "string"
-      && part.tool.includes("evimed_")
-      && toolParts.slice(index + 1).some((candidate) => (
-        candidate.tool === part.tool && successfulToolPart(candidate)
-      ));
+    const correctedByLaterSuccess = toolParts.slice(index + 1).some((candidate) => (
+      candidate.tool === part.tool && successfulToolPart(candidate)
+    ));
     if (!correctedByLaterSuccess) return { status: "failed", errorCode: "runtime_tool_error" };
   }
   return { status: "succeeded", errorCode: null };
