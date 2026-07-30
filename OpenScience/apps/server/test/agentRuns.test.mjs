@@ -1099,7 +1099,7 @@ test("a completed tool step cannot finish a busy multi-step run and artifacts ar
       info: { id: "msg_tool_step", role: "assistant", time: { completed: Date.now() } },
       parts: [
         { type: "tool", tool: "write", state: { status: "completed", input: { filePath: "reports/final.md" } } },
-        { type: "tool", tool: "search", state: { status: "error", input: {} } },
+        { type: "tool", tool: "evimed-research_evimed_literature_search", state: { status: "error", input: {} } },
       ],
     }];
     const whileBusy = await store.reconcileSession(project, binding.sessionId);
@@ -1862,6 +1862,52 @@ test("delivers a quality-only clinical failure as an unverified package instead 
     assert.ok(finished.qualityNotices.length > 0);
     assert.match(finished.qualityNotices.join("\n"), /citation-audit\.md must document/);
     assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an editor tool slip does not fail a run whose EviMed work completed", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-editor-slip-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(path.join(project.workspaceDir, "reports"), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    await writeFile(path.join(project.workspaceDir, "reports", "review.md"), "review", "utf8");
+    const binding = { sessionId: "ses_slip", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let history = [];
+    let sessionStatus = "busy";
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 100,
+      readSessionStatus: async () => sessionStatus,
+      readSessionHistory: async () => history,
+    });
+    await store.start(project, { sessionId: binding.sessionId });
+    sessionStatus = "idle";
+    history = [({
+      info: { id: "msg_work", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        { type: "tool", tool: "evimed-research_evimed_peer_review", state: { status: "completed", input: {} } },
+        // Reading past the end of a file is an ordinary agent slip, not a
+        // failure of the research work.
+        { type: "tool", tool: "read", state: { status: "error", error: "Offset 824 is out of range for this file (41 lines)" } },
+        { type: "tool", tool: "write", state: { status: "completed", input: { filePath: "reports/review.md" } } },
+        { type: "text", text: "Review complete." },
+      ],
+    })];
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.errorCode, null);
+    assert.deepEqual(finished.artifacts, ["reports/review.md"]);
     await store.closeProject(project, "canceled");
   } finally {
     await rm(root, { recursive: true, force: true });
