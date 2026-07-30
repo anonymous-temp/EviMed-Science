@@ -480,16 +480,42 @@ def _has_publication_section_shape(text: str) -> bool:
     return required.issubset(headings)
 
 
+def _pooled_study_count(facts: dict[str, Any]) -> int:
+    """How many studies the primary synthesis actually rests on."""
+    if not isinstance(facts, dict):
+        return 0
+    readiness = facts.get("evidence_readiness") or {}
+    primary = facts.get("primary_effect") or {}
+    selected_rows = readiness.get("selected_primary_rows") or []
+    return _coerce_int(primary.get("n_studies")) or len(selected_rows)
+
+
+def _publication_min_references(facts: dict[str, Any]) -> int:
+    """Scale the reference requirement to the evidence the review actually has.
+
+    A review that pooled three trials cannot reach a flat twenty references
+    without padding its background, which is how a citation counter turns into
+    an instruction to pad. Ask for the general floor plus one per included
+    study, and never more than the full publication target.
+    """
+    pooled = _pooled_study_count(facts)
+    if pooled <= 0:
+        # No visible evidence base: a formal draft of this length still has to
+        # meet the full target rather than benefit from what we cannot see.
+        return CITATION_AUDIT_PUBLICATION_MIN_REFERENCES
+    return max(
+        CITATION_AUDIT_MIN_REFERENCES,
+        min(CITATION_AUDIT_PUBLICATION_MIN_REFERENCES, CITATION_AUDIT_MIN_REFERENCES + pooled),
+    )
+
+
 def _requires_publication_length_gate(facts: dict[str, Any]) -> bool:
     if not isinstance(facts, dict) or facts.get("report_type") != "meta":
         return False
     readiness = facts.get("evidence_readiness") or {}
     if readiness.get("blockers"):
         return False
-    primary = facts.get("primary_effect") or {}
-    selected_rows = readiness.get("selected_primary_rows") or []
-    primary_n = _coerce_int(primary.get("n_studies")) or len(selected_rows)
-    return primary_n >= 2
+    return _pooled_study_count(facts) >= 2
 
 
 def _requires_publication_reference_depth_gate(facts: dict[str, Any], draft_text: str, main_word_count: int) -> bool:
@@ -658,7 +684,7 @@ def build_citation_audit_review(project: Project) -> dict | None:
         main_word_count,
     )
     publication_min_references = (
-        CITATION_AUDIT_PUBLICATION_MIN_REFERENCES
+        _publication_min_references(facts if isinstance(facts, dict) else {})
         if publication_reference_depth_required
         else CITATION_AUDIT_MIN_REFERENCES
     )
@@ -1080,16 +1106,16 @@ def build_citation_audit_review(project: Project) -> dict | None:
                     "reference markers after nearly every sentence."
                 ),
             })
-        if publication_reference_depth_required and reference_entries < CITATION_AUDIT_PUBLICATION_MIN_REFERENCES:
+        if publication_reference_depth_required and reference_entries < publication_min_references:
             issues.append({
                 "code": "publication_reference_count_below_target",
                 "severity": "warn",
                 "section": "References",
                 "reference_entries": reference_entries,
-                "minimum_reference_entries": CITATION_AUDIT_PUBLICATION_MIN_REFERENCES,
+                "minimum_reference_entries": publication_min_references,
                 "message": (
                     "This is a publication-style meta-analysis draft, but the reference list remains shallow "
-                    f"({reference_entries}/{CITATION_AUDIT_PUBLICATION_MIN_REFERENCES})."
+                    f"({reference_entries}/{publication_min_references})."
                 ),
             })
     failed_issues = sum(1 for issue in issues if issue.get("severity") == "fail")

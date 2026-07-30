@@ -4845,8 +4845,8 @@ def test_citation_audit_blocks_repeated_large_citation_clusters(tmp_path: Path) 
 
 def test_citation_audit_warns_when_meta_publication_reference_depth_is_low(tmp_path: Path) -> None:
     project = Project("publication reference depth", output_dir=tmp_path / uuid4().hex)
-    references = "\n".join(f"[{i}] Reference {i}." for i in range(1, 18))
-    cited_numbers = ", ".join(str(i) for i in range(1, 18))
+    references = "\n".join(f"[{i}] Reference {i}." for i in range(1, 14))
+    cited_numbers = ", ".join(str(i) for i in range(1, 14))
     paragraph = " ".join(["Formal submission text with topic-specific citations"] * 90)
     project.save_text(
         "draft.md",
@@ -4885,11 +4885,12 @@ def test_citation_audit_warns_when_meta_publication_reference_depth_is_low(tmp_p
 
     issue_codes = {issue["code"] for issue in audit["issues"]}
     citation_gate = next(gate for gate in readiness["gates"] if gate["id"] == "citation_coverage")
-    assert audit["summary"]["reference_entries"] == 17
-    assert audit["summary"]["publication_minimum_reference_entries"] == 20
+    assert audit["summary"]["reference_entries"] == 13
+    # Two pooled studies: the general floor plus one per included study.
+    assert audit["summary"]["publication_minimum_reference_entries"] == 14
     assert "publication_reference_count_below_target" in issue_codes
     assert citation_gate["status"] == "warn"
-    assert "publication_min_references=20" in citation_gate["detail"]
+    assert "publication_min_references=14" in citation_gate["detail"]
 
 
 def test_citation_audit_warns_when_formal_long_draft_lacks_publication_reference_depth_without_facts(tmp_path: Path) -> None:
