@@ -1872,8 +1872,9 @@ def test_generic_chinese_meta_introduction_avoids_repeated_conclusion_openings_w
     assert "本研究旨在合成SGLT2抑制剂" in introduction
 
 
-def test_fact_locked_writer_saves_validation_for_final_backfilled_manuscript(monkeypatch, tmp_path: Path) -> None:
-    import new_meta.agents.writing_agent as writing_module
+def test_fact_locked_writer_saves_validation_for_final_backfilled_manuscript(
+    monkeypatch, tmp_path: Path, patch_writing_helper
+) -> None:
 
     project = Project("final validation", output_dir=tmp_path)
     writer = WritingAgent()
@@ -1908,7 +1909,7 @@ def test_fact_locked_writer_saves_validation_for_final_backfilled_manuscript(mon
 
     monkeypatch.setattr(writer, "_write_meta_fallback_report", fake_writer)
     monkeypatch.setattr(writer, "_backfill_after_fact_repair", fake_backfill)
-    monkeypatch.setattr(writing_module, "validate_and_repair_manuscript", fake_validate)
+    patch_writing_helper("validate_and_repair_manuscript", fake_validate)
 
     manuscript = writer._write_fact_locked_meta_and_save(
         protocol=_protocol(),
