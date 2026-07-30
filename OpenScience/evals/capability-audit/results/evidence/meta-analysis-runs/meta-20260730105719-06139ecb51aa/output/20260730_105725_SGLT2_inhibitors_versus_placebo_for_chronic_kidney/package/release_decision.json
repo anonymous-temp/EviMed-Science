@@ -11,7 +11,7 @@
   "artifacts": [
     {
       "kind": "review_package",
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace/meta-analysis-runs/meta-20260722233537-91040dcc219c/output/20260722_233541_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip"
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/quality-review-20260730/workspace/meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip"
     }
   ],
   "blocker_codes": [
@@ -22,11 +22,10 @@
     "publication_tone",
     "clinical_interpretation",
     "evidence_readiness",
-    "declarations",
-    "risk_of_bias_completeness"
+    "primary_source_context",
+    "declarations"
   ],
   "warning_codes": [
-    "llm_reliability",
     "benchmark"
   ],
   "failed_gates": [
@@ -35,7 +34,7 @@
       "label": "Hard manuscript validation",
       "status": "fail",
       "passed": false,
-      "detail": "passed=False; blocking=1; warnings=3; fixed=1; info=0; total=5.",
+      "detail": "passed=False; blocking=2; warnings=2; fixed=1; info=0; total=5.",
       "label_localized": "稿件硬校验"
     },
     {
@@ -43,7 +42,7 @@
       "label": "Project-level submission quality gate",
       "status": "fail",
       "passed": false,
-      "detail": "status=fail; failed=3; warnings=1; failed_checks=citation_contract, claim_map_authoring, real_llm_pdf_web_smoke.",
+      "detail": "status=fail; failed=3; warnings=2; failed_checks=citation_contract, claim_map_authoring, real_llm_pdf_web_smoke.",
       "label_localized": "项目级投稿质量闸"
     },
     {
@@ -67,7 +66,7 @@
       "label": "Publication tone",
       "status": "fail",
       "passed": false,
-      "detail": "scanned_words=288; forbidden_phrases=1; failed_issues=1.",
+      "detail": "scanned_words=280; forbidden_phrases=1; failed_issues=1.",
       "label_localized": "投稿语气"
     },
     {
@@ -83,8 +82,16 @@
       "label": "Evidence readiness",
       "status": "fail",
       "passed": false,
-      "detail": "Status=blocked; blockers=1; warnings=1; submission-relevant warnings=0.",
+      "detail": "Status=blocked; blockers=2; warnings=1; submission-relevant warnings=0.",
       "label_localized": "证据就绪性"
+    },
+    {
+      "id": "primary_source_context",
+      "label": "Primary-analysis source context",
+      "status": "fail",
+      "passed": false,
+      "detail": "0/0 primary source card(s) have source context.",
+      "label_localized": "主要分析来源语境"
     },
     {
       "id": "declarations",
@@ -93,25 +100,9 @@
       "passed": false,
       "detail": "Ethics, data/code availability, funding, and competing-interest statements are present.",
       "label_localized": "声明"
-    },
-    {
-      "id": "risk_of_bias_completeness",
-      "label": "Primary-study risk-of-bias completeness",
-      "status": "fail",
-      "passed": false,
-      "detail": "primary_studies=2; formal_rob=0; missing_formal_rob=0; synthetic_rob=0; incomplete_rob=2; failed_issues=2. Every primary-analysis contributing study needs a formal risk-of-bias assessment.",
-      "label_localized": "主要研究偏倚风险完整性"
     }
   ],
   "warning_gates": [
-    {
-      "id": "llm_reliability",
-      "label": "LLM output reliability",
-      "status": "warn",
-      "passed": true,
-      "detail": "calls=61; retryable_output_issues=1; near_truncation_events=1; failed_issues=0.",
-      "label_localized": "LLM输出可靠性"
-    },
     {
       "id": "benchmark",
       "label": "Published benchmark comparison",

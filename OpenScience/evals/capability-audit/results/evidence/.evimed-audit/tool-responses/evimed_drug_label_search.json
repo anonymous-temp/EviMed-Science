@@ -46,7 +46,7 @@
         "tenantId": "",
         "userId": "",
         "projectId": "",
-        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -55,7 +55,7 @@
       "id": "0098dec4-f0e5-45d5-8aa4-5d0faf9ab142",
       "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=0098dec4-f0e5-45d5-8aa4-5d0faf9ab142",
       "source": "openfda-label",
-      "retrievedAt": "2026-07-22T16:03:44.982154Z",
+      "retrievedAt": "2026-07-30T11:10:05.033839Z",
       "title": "ZITUVIMET"
     }
   ],

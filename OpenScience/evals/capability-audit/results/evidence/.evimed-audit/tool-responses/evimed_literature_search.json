@@ -70,7 +70,7 @@
         "tenantId": "",
         "userId": "",
         "projectId": "",
-        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -79,14 +79,14 @@
       "id": "PMID:30158069",
       "url": "https://pubmed.ncbi.nlm.nih.gov/30158069/",
       "source": "pubmed",
-      "retrievedAt": "2026-07-22T16:03:28.780748Z",
+      "retrievedAt": "2026-07-30T11:09:55.949383Z",
       "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial."
     },
     {
       "id": "PMID:40902613",
       "url": "https://pubmed.ncbi.nlm.nih.gov/40902613/",
       "source": "pubmed",
-      "retrievedAt": "2026-07-22T16:03:28.780796Z",
+      "retrievedAt": "2026-07-30T11:09:55.949401Z",
       "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis."
     }
   ],

@@ -38,7 +38,7 @@
         "tenantId": "",
         "userId": "",
         "projectId": "",
-        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -47,14 +47,14 @@
       "id": "EVIMED-GUIDE:0",
       "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide",
       "source": "evimed-guideline",
-      "retrievedAt": "2026-07-22T16:03:32.749378Z",
+      "retrievedAt": "2026-07-30T11:09:59.849643Z",
       "title": "2020 International Society of Hypertension global hypertension practice guidelines."
     },
     {
       "id": "EVIMED-GUIDE:1",
       "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide",
       "source": "evimed-guideline",
-      "retrievedAt": "2026-07-22T16:03:32.749421Z",
+      "retrievedAt": "2026-07-30T11:09:59.849663Z",
       "title": "Variation in hypertension clinical practice guidelines: a global comparison."
     }
   ],

@@ -8,13 +8,17 @@
         "id": "30158069",
         "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
         "url": "https://www.ncbi.nlm.nih.gov/pubmed/30158069/",
-        "description": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial."
+        "description": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
+        "evidenceLevel": "abstract",
+        "abstract": "BACKGROUND: The use of aspirin in the primary prevention of cardiovascular events remains controversial. We aimed to assess the efficacy and safety of aspirin versus placebo in patients with a moderate estimated risk of a first cardiovascular event. METHODS: ARRIVE is a randomised, double-blind, placebo-controlled, multicentre study done in seven countries. Eligible patients were aged 55 years (men) or 60 years (women) and older and had an average cardiovascular risk, deemed to be moderate on the basis of the number of specific risk factors. We excluded patients at high risk of gastrointestinal bleeding or other bleeding, or diabetes. Patients were randomly assigned (1:1) with a computer-generated randomisation code to receive enteric-coated aspirin tablets (100 mg) or placebo tablets, once daily. Patients, investigators, and others involved in treatment or data analysis were masked to treatment allocation. The primary efficacy endpoint was a composite outcome of time to first occurrence of cardiovascular death, myocardial infarction, unstable angina, stroke, or transient ischaemic attack. Safety endpoints were haemorrhagic events and incidence of other adverse events, and were analysed in the intention-to-treat population. This study is registered with ClinicalTrials.gov, number NCT00501059. FINDINGS: Between July 5, 2007, and Nov 15, 2016, 12 546 patients were enrolled and randomly assigned to receive aspirin (n=6270) or placebo (n=6276) at 501 study sites. Median follow-up was 60 months. In the intention-to-treat analysis, the primary endpoint occurred in 269 (4·29%) patients in the aspirin group versus 281 (4·48%) patients in the placebo group (hazard ratio [HR] 0·96; 95% CI 0·81-1·13; p=0·6038). Gastrointestinal bleeding events (mostly mild) occurred in 61 (0·97%) patients in the aspirin group versus 29 (0·46%) in the placebo group (HR 2·11; 95% CI 1·36-3·28; p=0·0007). The overall incidence rate of serious adverse events was similar in both treatment groups (n=1266 [20·19%] in the aspirin group vs n=1311 [20·89%] in the placebo group. The overall incidence of adverse events was similar in both treatment groups (n=5142 [82·01%] vs n=5129 [81·72%] in the placebo group). The overall incidence of treatment-related adverse events was low (n=1050 [16·75%] vs n=850 [13·54%] in the placebo group; p<0·0001). There were 321 documented deaths in the intention-to-treat population (n=160 [2·55%] vs n=161 [2·57%] of 6276 patients in the placebo group). INTERPRETATION: The event rate was much lower than expected, which is probably reflective of contemporary risk management strategies, making the study more representative of a low-risk population. The role of aspirin in primary prevention among patients at moderate risk could therefore not be addressed. Nonetheless, the findings with respect to aspirin's effects are consistent with those observed in the previously published low-risk primary prevention studies. FUNDING: Bayer."
       },
       {
         "id": "40902613",
         "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis.",
         "url": "https://www.ncbi.nlm.nih.gov/pubmed/40902613/",
-        "description": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis."
+        "description": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis.",
+        "evidenceLevel": "abstract",
+        "abstract": "BACKGROUND: Aspirin monotherapy is recommended indefinitely for patients with established coronary artery disease (CAD). The aim of this individual patient level meta-analysis was to provide a comprehensive evaluation of the comparative efficacy and safety of clopidogrel versus aspirin monotherapy in patients with established CAD, most of whom had undergone percutaneous coronary intervention or had acute coronary syndrome. METHODS: We conducted a systematic search in PubMed, Scopus, Web of Science, and Embase to identify randomised trials published from database inception to April 12, 2025, comparing clopidogrel monotherapy with aspirin monotherapy in patients with established CAD who had discontinued or never started dual antiplatelet therapy. Randomised trials featuring an initial phase of dual antiplatelet therapy were eligible for inclusion in this individual patient data meta-analysis. In the main analysis, we used semi-parametric shared log-normal frailty models (one-stage analysis), including a random intercept to account for differences in the baseline hazard across trials, and a random slope to account for between-trial differences in treatment effects. The primary efficacy endpoint was a composite of cardiovascular death, myocardial infarction, or stroke (major adverse cardiovascular or cerebrovascular events [MACCE]); the primary safety endpoint was major bleeding. This study is registered with PROSPERO (CRD42025645594). FINDINGS: Seven randomised trials including 28 982 patients (14 507 assigned to clopidogrel; 14 475 assigned to aspirin) with a median follow-up of 2·3 years (IQR 1·1-4·0) were eligible and included. At 5·5 years, MACCE was less common in patients assigned to clopidogrel than in patients assigned to aspirin (929 events [2·61 per 100 patient-years] vs 1062 events [2·99 per 100 patient-years]; hazard ratio 0·86 [95% CI 0·77-0·96]; p=0·0082). Mortality and major bleeding (256 events [0·71 per 100 patient-years] with clopidogrel vs 279 events [0·77 per 100 patient-years] with aspirin; 0·94 [0·74-1·21]; p=0·64) did not differ. INTERPRETATION: These findings add to the evidence that clopidogrel monotherapy is superior to aspirin monotherapy for MACCE prevention with no increase in the risk of bleeding, and support the preferential use of clopidogrel over aspirin for secondary prevention in patients with established CAD. FUNDING: Cardiocentro Ticino Institute, Ente Ospedaliero Cantonale, Switzerland."
       }
     ],
     "provenance": {
@@ -28,7 +32,7 @@
         "tenantId": "",
         "userId": "",
         "projectId": "",
-        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -37,14 +41,14 @@
       "id": "30158069",
       "url": "https://www.ncbi.nlm.nih.gov/pubmed/30158069/",
       "source": "pubmed",
-      "retrievedAt": "2026-07-22T16:03:20.257206Z",
+      "retrievedAt": "2026-07-30T11:09:47.974353Z",
       "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial."
     },
     {
       "id": "40902613",
       "url": "https://www.ncbi.nlm.nih.gov/pubmed/40902613/",
       "source": "pubmed",
-      "retrievedAt": "2026-07-22T16:03:20.257247Z",
+      "retrievedAt": "2026-07-30T11:09:47.974376Z",
       "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis."
     }
   ],

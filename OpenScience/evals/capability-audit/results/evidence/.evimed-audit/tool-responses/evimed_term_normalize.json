@@ -1,6 +1,6 @@
 {
   "status": "success",
-  "summary": "Normalized the supplied term.",
+  "summary": "Normalized the supplied term against the curated vocabulary.",
   "data": {
     "input": "心肌梗死",
     "preferred": "myocardial infarction",
@@ -20,7 +20,7 @@
         "tenantId": "",
         "userId": "",
         "projectId": "",
-        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   }

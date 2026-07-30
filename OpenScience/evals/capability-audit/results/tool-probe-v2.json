@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "probedAt": "2026-07-22T16:04:08.995204Z",
+  "probedAt": "2026-07-30T11:11:00.733387Z",
   "registered": 25,
   "executionCertified": 25,
   "unverified": 0,
@@ -21,12 +21,12 @@
       "errorCode": null,
       "elapsedMs": 1,
       "sourceCount": 0,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_health.json",
-        "bytes": 6460,
-        "sha256": "a98e8e395706253923d01f13de82dff291912a15813ed7131fd7eebd72c954a3"
+        "bytes": 6438,
+        "sha256": "2c8df76e9800ca3684f7ff279ea8bdbd052bea1a73457f38704b8691b11005c1"
       },
       "artifacts": [],
       "artifactError": null,
@@ -44,12 +44,12 @@
       "errorCode": null,
       "elapsedMs": 2,
       "sourceCount": 0,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_data_source_catalog.json",
-        "bytes": 65278,
-        "sha256": "7a8a711e81df7d9b338ca9b9fad9b431d191410167d832541860f8e081c0cdb6"
+        "bytes": 65256,
+        "sha256": "0cd84bd7aca331d24cc1304b2fa7a7cef79c2eee6c849adb7e434bf5763a21ca"
       },
       "artifacts": [],
       "artifactError": null,
@@ -65,14 +65,14 @@
       "operational": true,
       "summary": "Retrieved 2 traceable records from pubmed.",
       "errorCode": null,
-      "elapsedMs": 5792,
+      "elapsedMs": 2076,
       "sourceCount": 2,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_biomedical_source_search.json",
-        "bytes": 2537,
-        "sha256": "f55f068170f4b3cd69a5ae954c780cb31d587fb53ae4638abac623be4464c357"
+        "bytes": 8107,
+        "sha256": "6a286d4634b00c4fa2439b9d4691c40777cbc5ff5b015857e467afb0d8242188"
       },
       "artifacts": [],
       "artifactError": null,
@@ -88,21 +88,21 @@
       "operational": true,
       "summary": "Retrieved and preserved an approved official document.",
       "errorCode": null,
-      "elapsedMs": 2044,
+      "elapsedMs": 1271,
       "sourceCount": 1,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_official_page_fetch.json",
-        "bytes": 3885,
-        "sha256": "c55e87075427030708deb84958c4b2c3596e52ccfe368acabab2b76258300652"
+        "bytes": 3863,
+        "sha256": "7a229b7b34a5dda6d56d25ebd1bf7bfbaa133c970bb95687f70de6dad443a939"
       },
       "artifacts": [
         {
           "kind": "md",
-          "path": ".evimed-sources/official-pages/84a4f414b5b75d30/page.md",
+          "path": ".evimed-sources/official-pages/6fe98a389b9cf835/page.md",
           "bytes": 2699,
-          "sha256": "1ac5772bef0aa2931946855f6b0afcdbd8371281b79a2381b5c820650c28d9f3"
+          "sha256": "c26593dbfc5a1dbc2632dbaa2a3c5f9019ffa2fe3425a5a96b4ff04dbfbba736"
         }
       ],
       "artifactError": null,
@@ -118,21 +118,21 @@
       "operational": true,
       "summary": "Retrieved the complete open-access article into the managed workspace.",
       "errorCode": null,
-      "elapsedMs": 3457,
+      "elapsedMs": 2865,
       "sourceCount": 1,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_open_access_full_text.json",
-        "bytes": 1586,
-        "sha256": "4687f34da913a9f48671dd9843e7160e1945bc1bec32b21629477aaa840f6cbf"
+        "bytes": 1564,
+        "sha256": "6d87feb33c680bb9acb8bdf0fe652e1f122ff479b3bd9e004f30d1b5cec18ba8"
       },
       "artifacts": [
         {
           "kind": "md",
           "path": ".evimed-sources/PMC8010506/fulltext.md",
           "bytes": 239804,
-          "sha256": "35f4c0b6622d39dbe1a20312cef6e1d01ea2a83d615df668a40294a947252e1f"
+          "sha256": "fb3de55847141293ca5004c3ecaf5030399e0cace37c5b8d372f77f8edeb517b"
         },
         {
           "kind": "xml",
@@ -152,16 +152,16 @@
       "operation": "task",
       "status": "success",
       "operational": true,
-      "summary": "Normalized the supplied term.",
+      "summary": "Normalized the supplied term against the curated vocabulary.",
       "errorCode": null,
       "elapsedMs": 0,
       "sourceCount": 0,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_term_normalize.json",
-        "bytes": 675,
-        "sha256": "2d95e07c17a86597ff2ecdf73b804fcfc64c4ea81748de5acacbd19a2baf595c"
+        "bytes": 684,
+        "sha256": "98df9594d3202bb7469a8250d804f23c1d34f2ce0300a2fa6341af0fb37eae41"
       },
       "artifacts": [],
       "artifactError": null,
@@ -175,16 +175,16 @@
       "operation": "task",
       "status": "success",
       "operational": true,
-      "summary": "Normalized the supplied term.",
+      "summary": "Normalized the supplied term against the RxNorm vocabulary.",
       "errorCode": null,
-      "elapsedMs": 0,
+      "elapsedMs": 1598,
       "sourceCount": 0,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_drug_term_normalize.json",
-        "bytes": 637,
-        "sha256": "1a2c2a64e213fba23ef75ae8694545691ae550620e1e4a82f5a13a811ec2586a"
+        "bytes": 5818,
+        "sha256": "104cba6f90d9cc6dc9cd00221bebbcc86bf239f6734dec4ea99cf1b00a3c69fd"
       },
       "artifacts": [],
       "artifactError": null,
@@ -202,12 +202,12 @@
       "errorCode": null,
       "elapsedMs": 0,
       "sourceCount": 0,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_evidence_deduplicate.json",
-        "bytes": 1007,
-        "sha256": "8494206ee0c7dcc9c46ab113aaa035e180975d01fbc7a582a9fc81fd80ea42f2"
+        "bytes": 985,
+        "sha256": "def427b0ba6a38f77b4abb1933fc721b4908ee40379760b4a03677c42aa6358f"
       },
       "artifacts": [],
       "artifactError": null,
@@ -223,14 +223,14 @@
       "operational": true,
       "summary": "Retrieved 2 traceable PubMed records.",
       "errorCode": null,
-      "elapsedMs": 3020,
+      "elapsedMs": 1672,
       "sourceCount": 2,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_literature_search.json",
-        "bytes": 3347,
-        "sha256": "1a593367d53f65a598340d7b00679a499f16f24c9465ddcec5256739c330f850"
+        "bytes": 3325,
+        "sha256": "675a69307956a34c359b3ecdede5bdf38e40d706202b7c6a8c6a0c69ca8ca463"
       },
       "artifacts": [],
       "artifactError": null,
@@ -246,14 +246,14 @@
       "operational": true,
       "summary": "Retrieved 2 traceable EviMed guideline candidates.",
       "errorCode": null,
-      "elapsedMs": 3967,
+      "elapsedMs": 3900,
       "sourceCount": 2,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_guideline_search.json",
-        "bytes": 6017,
-        "sha256": "c24a1f57654fe2fbf4fa3d0b48d6e0eacdfd3c770a64b4a2425fac2c94887d81"
+        "bytes": 5995,
+        "sha256": "a67afb887e715fd0822dd199309b6de4719b9d84694b1d8b498861f51336b417"
       },
       "artifacts": [],
       "artifactError": null,
@@ -269,14 +269,14 @@
       "operational": true,
       "summary": "Retrieved 2 traceable EviMed trial records.",
       "errorCode": null,
-      "elapsedMs": 2547,
+      "elapsedMs": 1101,
       "sourceCount": 2,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_clinical_trial_search.json",
-        "bytes": 4468,
-        "sha256": "5d93d51bf67d3f847c7632524eb819561d42e36842a9f904978caf9bb1d14c22"
+        "bytes": 4446,
+        "sha256": "e3a0fbb620840bdd11303fef51a72f1ac5bfec137f83987f770164e8c2ad4f40"
       },
       "artifacts": [],
       "artifactError": null,
@@ -292,14 +292,14 @@
       "operational": true,
       "summary": "Retrieved 2 traceable EviMed patent records.",
       "errorCode": null,
-      "elapsedMs": 3040,
+      "elapsedMs": 998,
       "sourceCount": 2,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_patent_search.json",
-        "bytes": 3847,
-        "sha256": "09b4efdcf37a3253dc188fe4e8a5355aff2796d18e934f85bb94e763058ffcd5"
+        "bytes": 3825,
+        "sha256": "69af865214d6b7906bbcd176393c36397fd4a01cdee6151192e312b49416e692"
       },
       "artifacts": [],
       "artifactError": null,
@@ -315,14 +315,14 @@
       "operational": true,
       "summary": "Retrieved 2 private pharmacy reference rows.",
       "errorCode": null,
-      "elapsedMs": 5,
+      "elapsedMs": 4,
       "sourceCount": 2,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_pharmacy_reference_search.json",
-        "bytes": 3398,
-        "sha256": "166883b539d86301309610ce178f2f3f894c008ceeb6ee185b698c04576aeb77"
+        "bytes": 3376,
+        "sha256": "c07700e7a4e38abc66a9854ecd17d85669fd9412a137d45cf52c517cd02545e5"
       },
       "artifacts": [],
       "artifactError": null,
@@ -338,14 +338,14 @@
       "operational": true,
       "summary": "Retrieved 1 FDA label records.",
       "errorCode": null,
-      "elapsedMs": 6636,
+      "elapsedMs": 3079,
       "sourceCount": 1,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_drug_label_search.json",
-        "bytes": 8189,
-        "sha256": "824d203f9f611cdacf1ef24c21a2c53e286087ed3bf0adeaeb67a86da33297fa"
+        "bytes": 8167,
+        "sha256": "a8de2f56209ef35e83ada1d442fcb4beaf3f190badd8356de6aa73438ade6f0c"
       },
       "artifacts": [],
       "artifactError": null,
@@ -361,14 +361,14 @@
       "operational": true,
       "summary": "Retrieved 2 de-identified FAERS reports.",
       "errorCode": null,
-      "elapsedMs": 2522,
+      "elapsedMs": 1290,
       "sourceCount": 2,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_adr_case_query.json",
-        "bytes": 2200,
-        "sha256": "d27fcf9aaf1ff2d12feb56863bb72a23171a4be4e9b31f98309ec4d588949e4f"
+        "bytes": 2178,
+        "sha256": "a0e102dac054b7d69fb842c5b6a1bd185d06c0581c199df5034132b8602ea7ef"
       },
       "artifacts": [],
       "artifactError": null,
@@ -384,14 +384,14 @@
       "operational": true,
       "summary": "Calculated traceable FAERS disproportionality screening metrics.",
       "errorCode": null,
-      "elapsedMs": 10983,
+      "elapsedMs": 7907,
       "sourceCount": 4,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_adr_signal_analysis.json",
-        "bytes": 2264,
-        "sha256": "5cc06c258a6ae3e727cf222d4120c8414d0cf56b0510ad290820201245c5bad3"
+        "bytes": 2395,
+        "sha256": "26cb11d84b2bb9df46ec108357ff7a0a43740cb364cca3a8101c3494dc53e7dc"
       },
       "artifacts": [],
       "artifactError": null,
@@ -409,12 +409,12 @@
       "errorCode": null,
       "elapsedMs": 0,
       "sourceCount": 1,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_offlabel_evidence_packet.json",
-        "bytes": 4011,
-        "sha256": "9bfc39b283e56db342cb161a8861abac3ba9df15e5a1e5b589b05c83bfcfc001"
+        "bytes": 3989,
+        "sha256": "a059aa45e0aca6f18d4cca25c4638af9eaf6a86e0005f88ac65e72b5de2c8bb2"
       },
       "artifacts": [],
       "artifactError": null,
@@ -432,12 +432,12 @@
       "errorCode": null,
       "elapsedMs": 0,
       "sourceCount": 1,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_comprehensive_drug_evaluation.json",
-        "bytes": 3963,
-        "sha256": "6435deff5efd632ff51413069e03d4625c85128df2d6bcc9743f40cc8c6def6f"
+        "bytes": 3941,
+        "sha256": "7292d73a321f823d93e3aaac3c1b6bdea4505b4de75c09fc69eaa23ebf094fde"
       },
       "artifacts": [],
       "artifactError": null,
@@ -455,12 +455,12 @@
       "errorCode": null,
       "elapsedMs": 0,
       "sourceCount": 1,
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "workspace": "evals/capability-audit/tool-probe-workspace",
       "responseReceipt": {
         "kind": "json",
         "path": ".evimed-audit/tool-responses/evimed_drug_selection_evaluation.json",
-        "bytes": 7766,
-        "sha256": "eaf3f68bec09fa182bef210a53069c7790f507d365c5307c7fe9160f32237201"
+        "bytes": 7744,
+        "sha256": "7176d152d87070597e2550d2aef8b820c1c43a3adf17b82347d7ccd4931d56d0"
       },
       "artifacts": [],
       "artifactError": null,
@@ -475,16 +475,16 @@
       "status": "warning",
       "operational": true,
       "summary": "A managed specialist task completed, produced verified non-empty diagnostic artifacts, and was blocked by its release gate.",
-      "jobId": "meta-20260722233537-91040dcc219c",
+      "jobId": "meta-20260730105719-06139ecb51aa",
       "jobStatus": "blocked",
       "releaseStatus": "blocked",
       "publicationReady": false,
-      "executedAt": "2026-07-22T15:55:44.825026Z",
-      "workspace": ".openscience-web-data/users/evimed/projects/default/workspace",
+      "executedAt": "2026-07-30T11:04:52.262969Z",
+      "workspace": ".openscience-web-data/users/evimed/projects/quality-review-20260730/workspace",
       "executionEvidence": {
         "schemaVersion": 1,
-        "agentSourceSha256": "42856466d95b8c7c1c2a3cff105de132d2ab69c44f0023f67445fb6c4e59b477",
-        "agentSourceFiles": 324,
+        "agentSourceSha256": "fc4fc322aa5a0f2e31220e4fcb06a56d41a5fd06ac5d36b89ab1c5f229352caa",
+        "agentSourceFiles": 341,
         "adapterSha256": "186cf07483f83e5ba02c3762f4839df67fcc30ba97297552fb00231501d2f422",
         "evidenceModuleSha256": "4fea59024d5c7c3a9d6c7b40ba9bb4f58a6887d01292c91f9b4abbbdd8c0209f",
         "model": "deepseek-v4-pro",
@@ -494,33 +494,33 @@
       "artifacts": [
         {
           "kind": "manuscript",
-          "path": "meta-analysis-runs/meta-20260722233537-91040dcc219c/output/20260722_233541_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.md",
-          "bytes": 3073,
-          "sha256": "034ed5622ed5d6f06587819dded9586ca2ec72188b683fe29e821a346ce9e1c0"
+          "path": "meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.md",
+          "bytes": 2860,
+          "sha256": "39cc1847a5ed1246c8a3cb5b98ab71ed2d99d50205e1a473688cc6831ea97033"
         },
         {
           "kind": "manuscript_pdf",
-          "path": "meta-analysis-runs/meta-20260722233537-91040dcc219c/output/20260722_233541_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.pdf",
-          "bytes": 4798,
-          "sha256": "ac171a62a3a836c428e154e27c262e9cec4db306769aa66055c259d25266b623"
+          "path": "meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.pdf",
+          "bytes": 4514,
+          "sha256": "c6cae9069a169cf3f1f35e76f0c4c2e78e6e87bc55a0f802a4459449e61b31b8"
         },
         {
           "kind": "manuscript_docx",
-          "path": "meta-analysis-runs/meta-20260722233537-91040dcc219c/output/20260722_233541_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.docx",
-          "bytes": 38691,
-          "sha256": "4e0b0c2b9f36612c6ee2a7b147fb7a56647d5732308265b6c04a4ac0cbf16982"
+          "path": "meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/manuscript/draft.docx",
+          "bytes": 38364,
+          "sha256": "04e930b3a914b87227fabef0fb7758d8fa91ea61d0643261b870117f2e4e9a75"
         },
         {
           "kind": "release_decision",
-          "path": "meta-analysis-runs/meta-20260722233537-91040dcc219c/output/20260722_233541_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/release_decision.json",
-          "bytes": 4446,
-          "sha256": "57455ae955d405852dc256a7776d94c413aa759e65a6d4b3405c53a5e0792508"
+          "path": "meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/release_decision.json",
+          "bytes": 3995,
+          "sha256": "51689a63f614944492f4724f2f3a9b73a0e4312da10ce73328ab7baa3e61b3c1"
         },
         {
           "kind": "review_package",
-          "path": "meta-analysis-runs/meta-20260722233537-91040dcc219c/output/20260722_233541_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip",
-          "bytes": 1051420,
-          "sha256": "683c03773a067fd169c62ecb33204016ab8fd96a2688631a67357816511026ce"
+          "path": "meta-analysis-runs/meta-20260730105719-06139ecb51aa/output/20260730_105725_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip",
+          "bytes": 240671,
+          "sha256": "fa67d2cf8b7af88427e270708c343904ec7a432ee04da7511874f345f8cbc290"
         }
       ],
       "artifactCount": 5

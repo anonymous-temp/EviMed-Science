@@ -9,7 +9,7 @@
     "markdownPath": ".evimed-sources/PMC8010506/fulltext.md",
     "xmlPath": ".evimed-sources/PMC8010506/fulltext.xml",
     "artifactSha256s": {
-      ".evimed-sources/PMC8010506/fulltext.md": "35f4c0b6622d39dbe1a20312cef6e1d01ea2a83d615df668a40294a947252e1f",
+      ".evimed-sources/PMC8010506/fulltext.md": "fb3de55847141293ca5004c3ecaf5030399e0cace37c5b8d372f77f8edeb517b",
       ".evimed-sources/PMC8010506/fulltext.xml": "02aac151853ff9d5bb2ace17f90cf3efb70f30d42d158293659c8cdd9c1abb1b"
     },
     "markdownCharacters": 238730,
@@ -23,7 +23,7 @@
         "tenantId": "",
         "userId": "",
         "projectId": "",
-        "workspaceDir": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/default/workspace"
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -33,7 +33,7 @@
       "title": "Review of deep learning: concepts, CNN architectures, challenges, applications, future directions",
       "url": "https://europepmc.org/articles/PMC8010506",
       "source": "europe-pmc-fulltext",
-      "retrievedAt": "2026-07-22T16:03:25.759292Z"
+      "retrievedAt": "2026-07-30T11:09:52.676751Z"
     }
   ],
   "artifacts": [
