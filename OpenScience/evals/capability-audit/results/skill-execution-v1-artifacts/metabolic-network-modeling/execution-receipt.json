@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 210,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/metabolic-network-modeling/results.json",
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/metabolic-network-modeling/results.json",
       "sha256": "a56c8ce3140e9766ceea58f65be101b0fbbd16dcb3e25e40dee629be38e084a8"
     },
     {
       "bytes": 767,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/metabolic-network-modeling/metabolic-network-modeling-report.md",
-      "sha256": "dcee2b1e265054a9335d8ad7ac9890ecf54f4c491333e42a5757b1e6ea60055a"
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/metabolic-network-modeling/metabolic-network-modeling-report.md",
+      "sha256": "169f97b2bb71e4f4eb17bf23ed426e1ac9fbbbf90359cdba6391f71b7c563d91"
     }
   ],
-  "finishedAt": "2026-07-19T19:31:39.280996Z",
+  "finishedAt": "2026-07-30T06:49:02.382097Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "metabolic-network-modeling",
-  "startedAt": "2026-07-19T19:31:39.274928Z",
+  "startedAt": "2026-07-30T06:49:02.380321Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for metabolic-network-modeling and wrote 2 verified artifacts.",
   "warnings": [

@@ -1,17 +1,17 @@
 {
   "artifacts": [
     {
-      "bytes": 1425,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/single-cell-analysis/results.json",
-      "sha256": "3ff3dd8c0c9ce252d255610567d0fb1b7df97478454214d90f0e0ee5f270fd3d"
+      "bytes": 1426,
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/single-cell-analysis/results.json",
+      "sha256": "33a22972189aa09060ef4b2d08f23877161027011b303647e5ef31e9d8c1b5d4"
     },
     {
-      "bytes": 2006,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/single-cell-analysis/single-cell-analysis-report.md",
-      "sha256": "9fbde420349cbde1374b59df26a475a55659ecccdc7bc7e3a7d12a00b818260d"
+      "bytes": 2007,
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/single-cell-analysis/single-cell-analysis-report.md",
+      "sha256": "58e2f056d627d390c3a293f09752513b927c08b5d6f57bb01063eeb7419d641e"
     }
   ],
-  "finishedAt": "2026-07-19T19:31:46.640330Z",
+  "finishedAt": "2026-07-30T06:49:08.525694Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "single-cell-analysis",
-  "startedAt": "2026-07-19T19:31:46.634067Z",
+  "startedAt": "2026-07-30T06:49:08.521510Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for single-cell-analysis and wrote 2 verified artifacts.",
   "warnings": [

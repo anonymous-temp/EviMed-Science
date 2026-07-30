@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 887,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/experimental-design/results.json",
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/experimental-design/results.json",
       "sha256": "6ed51253893591cf803f6d94141931edea705b693157ecdf374a59fd288a222a"
     },
     {
       "bytes": 1307,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/experimental-design/experimental-design-report.md",
-      "sha256": "206712d54535e45aaa097f8a31d6e1fb029b3eab0aaabe29bf26f567b382c1d3"
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/experimental-design/experimental-design-report.md",
+      "sha256": "91deaecd8ffac6e1734ef9c34d243c166d3a3f3a4507370d9d465150261a7bee"
     }
   ],
-  "finishedAt": "2026-07-19T19:31:31.058399Z",
+  "finishedAt": "2026-07-30T06:48:55.180880Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "experimental-design",
-  "startedAt": "2026-07-19T19:31:31.057974Z",
+  "startedAt": "2026-07-30T06:48:55.180592Z",
   "status": "success",
   "summary": "Executed the bounded deterministic baseline for experimental-design and wrote 2 verified artifacts.",
   "warnings": []

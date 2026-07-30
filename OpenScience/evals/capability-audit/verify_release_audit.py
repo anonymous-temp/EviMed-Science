@@ -264,9 +264,9 @@ def verify_skills():
     global_installed = sorted(package for root in global_roots for package in enabled(root))
     specialist_installed = sorted(enabled(skill_root / "evimed"))
     installed = sorted(global_installed + specialist_installed)
-    require(len(global_installed) == 57 and summary.get("freshWebGlobalSkillPackages") == 57, "clean Web global Skill count is not 57")
-    require(len(specialist_installed) == 10 and summary.get("freshWebSpecialistSkillPackages") == 10, "clean Web specialist Skill count is not 10")
-    require(len(installed) == 67 and summary.get("freshWebOpenCodeSkillPackages") == 67, "clean Web OpenCode Skill count is not 67")
+    require(len(global_installed) == 58 and summary.get("freshWebGlobalSkillPackages") == 58, "clean Web global Skill count is not 58")
+    require(len(specialist_installed) == 11 and summary.get("freshWebSpecialistSkillPackages") == 11, "clean Web specialist Skill count is not 11")
+    require(len(installed) == 69 and summary.get("freshWebOpenCodeSkillPackages") == 69, "clean Web OpenCode Skill count is not 69")
     require(summary.get("freshWebInstalledPackageIds") == installed, "skill audit does not match the clean runtime delivery contract")
 
     execution = read("skill-execution-v1.json")

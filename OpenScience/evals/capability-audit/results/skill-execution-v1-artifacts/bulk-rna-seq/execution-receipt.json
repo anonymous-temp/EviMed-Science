@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1257,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bulk-rna-seq/results.json",
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bulk-rna-seq/results.json",
       "sha256": "b0f70bffd8426ec41313cf24fea3f6fa262fad916c55f750d10e9241b180aa42"
     },
     {
       "bytes": 1828,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bulk-rna-seq/bulk-rna-seq-report.md",
-      "sha256": "74e7b869f2f03d46b7cef0ed1ecffb13bac1222cf27addbd1cf4567ec3a58c0d"
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/bulk-rna-seq/bulk-rna-seq-report.md",
+      "sha256": "34476a792e12f77c2dde9f12f9a21187b65c1fce85df99c729131dc2b8ee2677"
     }
   ],
-  "finishedAt": "2026-07-19T19:31:25.763635Z",
+  "finishedAt": "2026-07-30T06:48:50.783586Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "bulk-rna-seq",
-  "startedAt": "2026-07-19T19:31:25.758680Z",
+  "startedAt": "2026-07-30T06:48:50.779476Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for bulk-rna-seq and wrote 2 verified artifacts.",
   "warnings": [

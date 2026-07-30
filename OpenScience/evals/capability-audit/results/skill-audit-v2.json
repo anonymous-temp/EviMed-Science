@@ -2,10 +2,11 @@
   "summary": {
     "schemaVersion": 4,
     "incomingSkillsReviewed": 149,
-    "freshWebOpenCodeSkillPackages": 67,
-    "freshWebGlobalSkillPackages": 57,
-    "freshWebSpecialistSkillPackages": 10,
+    "freshWebOpenCodeSkillPackages": 69,
+    "freshWebGlobalSkillPackages": 58,
+    "freshWebSpecialistSkillPackages": 11,
     "freshWebInstalledPackageIds": [
+      "core/deep-research",
       "core/domain-check",
       "core/hpc-slurm",
       "core/large-file",
@@ -60,6 +61,7 @@
       "evimed/mendelian-randomization",
       "evimed/meta-analysis",
       "evimed/off-label-analysis",
+      "evimed/open-domain-answer",
       "evimed/peer-review",
       "evimed/research-topic-selection",
       "external/ai4s-skills/ai4s-agent",
@@ -124,11 +126,15 @@
         "skillPackages": 66
       },
       {
+        "runtime": ".openscience-web-data/users/evimed/projects/eval-open-domain-quality-v1/runtime/xdg-config/opencode/skills",
+        "skillPackages": 69
+      },
+      {
         "runtime": ".openscience-web-data/users/evimed/projects/eval-title-to-paper-v1/runtime/xdg-config/opencode/skills",
         "skillPackages": 62
       }
     ],
-    "desktopRepositorySkillPackages": 71,
+    "desktopRepositorySkillPackages": 73,
     "webExecutionCertifiedSkillPackages": 61,
     "webExecutionCertifiedPackageIds": [
       "core/domain-check",
@@ -211,7 +217,7 @@
     "sourceCapabilitiesMappedToFreshRuntime": 122,
     "sourceCapabilitiesBackedByExecutedRuntime": 119,
     "sourcePackagesPublished": 0,
-    "note": "A clean Web runtime currently receives 57 global executable-tier Skills plus 10 EviMed specialist packages. Existing local runtimes may still show 62 packages created before the executable-tier delivery inventory was added; that observation is not the clean-deployment contract. Mapping one of 149 reviewed source capabilities does not install or publish that source package. Execution certification applies only to packages with retained task artifacts and matching dependency evidence."
+    "note": "A clean Web runtime currently receives 58 global executable-tier Skills plus 11 EviMed specialist packages. Existing local runtimes may still show 62 packages created before the executable-tier delivery inventory was added; that observation is not the clean-deployment contract. Mapping one of 149 reviewed source capabilities does not install or publish that source package. Execution certification applies only to packages with retained task artifacts and matching dependency evidence."
   },
   "items": [
     {

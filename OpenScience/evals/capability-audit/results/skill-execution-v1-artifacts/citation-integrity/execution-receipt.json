@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 200,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/citation-integrity/results.json",
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/citation-integrity/results.json",
       "sha256": "a0be2c6cd7f15c343e8ea33d0a292dc7ae9bda2f07bfac490e16b78df35314d4"
     },
     {
       "bytes": 777,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/citation-integrity/citation-integrity-report.md",
-      "sha256": "ea4752cf07a011ffaa75202464bc642d23e1c89ec19b279f5c712a766c7f7f6f"
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/citation-integrity/citation-integrity-report.md",
+      "sha256": "866c0594bf86e92a338e570c0af83ab000e19955111b66ce7a792393d08ba5f0"
     }
   ],
-  "finishedAt": "2026-07-19T19:31:28.037615Z",
+  "finishedAt": "2026-07-30T06:48:52.659342Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "citation-integrity",
-  "startedAt": "2026-07-19T19:31:28.036758Z",
+  "startedAt": "2026-07-30T06:48:52.658716Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for citation-integrity and wrote 2 verified artifacts.",
   "warnings": [

@@ -1,6 +1,6 @@
 # simulation-optimization execution report
 
-- Generated: 2026-07-19T19:31:45.883949Z
+- Generated: 2026-07-30T06:49:07.853592Z
 - Engine schema: 1
 
 ## Executed result
@@ -8,13 +8,13 @@
 ```json
 {
   "optimization": {
-    "iterations": 32,
+    "iterations": 31,
     "message": "Optimization terminated successfully.",
-    "objective": 2.0488413879144732e-11,
+    "objective": 4.5135493373514266e-11,
     "success": true,
     "x": [
-      0.999995474774316,
-      0.9999909392026308
+      0.999993282482023,
+      0.999986554788798
     ]
   }
 }

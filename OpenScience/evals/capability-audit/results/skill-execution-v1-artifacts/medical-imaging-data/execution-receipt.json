@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1321,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/medical-imaging-data/results.json",
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/medical-imaging-data/results.json",
       "sha256": "345c358bf9587875557bc61ec6dcc3c67047ddc51bb43dcb2d5c32687122c1ba"
     },
     {
       "bytes": 1881,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/medical-imaging-data/medical-imaging-data-report.md",
-      "sha256": "f0d539be1c2bd70bdb1ed5f521701d07b3bd9efeed7f6de78fe745dd35d2299c"
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/medical-imaging-data/medical-imaging-data-report.md",
+      "sha256": "84a2653dc91e7a93e6bb5202cfe3bacb05c1939028a92d31a83a423313ace973"
     }
   ],
-  "finishedAt": "2026-07-19T19:31:38.550856Z",
+  "finishedAt": "2026-07-30T06:49:01.764103Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "medical-imaging-data",
-  "startedAt": "2026-07-19T19:31:38.547590Z",
+  "startedAt": "2026-07-30T06:49:01.758517Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for medical-imaging-data and wrote 2 verified artifacts.",
   "warnings": [

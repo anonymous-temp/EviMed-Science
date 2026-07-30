@@ -2,16 +2,16 @@
   "artifacts": [
     {
       "bytes": 1162,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/geospatial-analysis/results.json",
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/geospatial-analysis/results.json",
       "sha256": "45e39be3403dea707d21b249b92c72e919e78cc02c99a443f242bd1b93b7bef6"
     },
     {
       "bytes": 1697,
-      "path": "/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/geospatial-analysis/geospatial-analysis-report.md",
-      "sha256": "6d40287c0ac838f92b09c45ae9977d2af792b39add6fbd9e6f965c1b820f68c0"
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/geospatial-analysis/geospatial-analysis-report.md",
+      "sha256": "4b3dadf252259b534efaaff526ae1a2f8d66b10daf36b86b45c0680314290570"
     }
   ],
-  "finishedAt": "2026-07-19T19:31:33.982900Z",
+  "finishedAt": "2026-07-30T06:48:57.712863Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "geospatial-analysis",
-  "startedAt": "2026-07-19T19:31:33.979707Z",
+  "startedAt": "2026-07-30T06:48:57.710116Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for geospatial-analysis and wrote 2 verified artifacts.",
   "warnings": [
