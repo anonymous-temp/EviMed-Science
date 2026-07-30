@@ -18,6 +18,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 MCP_ROOT = REPO / "runtime" / "mcp" / "evimed-research"
 RESULTS = HERE / "results"
+SPECIALIST_SOURCES = REPO.parent / "项目代码"
 SPECIALISTS = {
     "evimed_meta_analysis": ("meta-analysis-runs", "meta-"),
     "evimed_mendelian_randomization": ("mendelian-randomization-runs", "mr-"),
@@ -220,7 +221,10 @@ def latest_specialist_receipt(tool, roots, max_age_days):
                 if state.get("status") not in {"succeeded", "blocked"}:
                     continue
                 root_value = state.get("metaRoot") if tool == "evimed_meta_analysis" else state.get("root")
-                root = Path(str(root_value or "")).resolve(strict=True)
+                # Job state records the absolute path of the host that ran it,
+                # so rebase onto the layout every host shares before hashing.
+                name = Path(str(root_value or "").replace("\\", "/")).name
+                root = (SPECIALIST_SOURCES / name).resolve(strict=True)
                 adapter = MCP_ROOT / ("meta_agent.py" if tool == "evimed_meta_analysis" else "specialist_jobs.py")
                 expected_evidence = load_execution_evidence().execution_evidence(root, adapter)
                 if state.get("executionEvidence") != expected_evidence:
