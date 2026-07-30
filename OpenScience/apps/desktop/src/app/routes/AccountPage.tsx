@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ShieldCheck, UserRound } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { fetchWebMe } from "@/lib/apiClient";
 import { ThemeSegmentedControl } from "@/app/routes/SettingsPage";
 import { DataFlowCard } from "@/components/settings/DataFlowCard";
