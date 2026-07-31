@@ -1524,10 +1524,44 @@ def _clean_abstract(value):
     return text[:MAX_ABSTRACT_CHARS]
 
 
+# What each of these connectors actually indexes, for the ones where the answer
+# is not what the source's name suggests. A caller that phrases a question the
+# way a paper would gets nothing back from them, so the empty result has to say
+# which shape would have worked.
+SOURCE_QUERY_HINTS = {
+    "cbioportal": "searches study names in the study catalogue, not mutations; query a cancer type such as 'glioma' rather than a gene symbol.",
+    "gdc-tcga": "matches project and case identifiers; query a project id such as 'TCGA-LGG' on its own.",
+    "string": "resolves protein identifiers; pass gene symbols only, and several are fine ('APP PSEN1 APOE').",
+    "uniprot": "matches indexed protein text; use a gene or protein name ('IDH1 human'), not variant notation such as 'R132H'.",
+    "ena": "matches study titles literally; use a short phrase rather than a full question.",
+    "gwas-catalog-ebi": "indexes traits and variants separately; query either a trait ('idiopathic pulmonary fibrosis') or an rsID, not both together.",
+    "jaspar": "matches transcription factor names; pass the factor symbol alone.",
+    "dbsnp": "expects an rsID such as 'rs429358'.",
+    "myvariant": "expects an rsID or HGVS identifier, not a gene name.",
+    "ncbi-taxonomy": "expects an organism name such as 'Homo sapiens'.",
+    "who-gho": "matches indicator names by substring; use a short indicator phrase.",
+}
+
+
 def _metadata_result(source_id, items, sources, limitation=None):
     warning_text = limitation or (
         "This connector returns source metadata and selected public fields; verify the primary record before scientific interpretation."
     )
+    if not items:
+        hint = SOURCE_QUERY_HINTS.get(source_id)
+        return {
+            "status": "warning",
+            "summary": "No records in %s matched this query." % source_id,
+            "data": {"source": source_id, "items": []},
+            "sources": sources,
+            "warnings": [
+                "An empty result means this query matched nothing, not that the subject has no evidence."
+                + (" This connector %s" % hint if hint else "")
+            ],
+            "next_actions": [
+                "Retry with the query shape this connector indexes, or record that the source returned nothing before relying on another source.",
+            ],
+        }
     return {
         "status": "warning",
         "summary": "Retrieved %d traceable records from %s." % (len(items), source_id),
@@ -1880,7 +1914,12 @@ def _simple_json_source(source_id, query, limit):
         get_url = lambda r, i: "https://reactome.org/content/detail/%s" % urllib.parse.quote(str(i))
     elif source_id == "string":
         base = _base("EVIMED_STRING_BASE_URL", "https://string-db.org/api")
-        url = _url(base, "json/resolve", {"identifiers": query, "species": 9606, "limit": limit})
+        # STRING separates multiple identifiers with a carriage return. A gene
+        # list joined by spaces or commas is read as one unknown identifier and
+        # resolves to nothing, which is how a network query silently comes back
+        # empty instead of returning the proteins it named.
+        identifiers = "\r".join(part for part in re.split(r"[\s,;]+", query.strip()) if part)
+        url = _url(base, "json/resolve", {"identifiers": identifiers or query, "species": 9606, "limit": limit})
         records = _list(_get_json_value(url))
         get_id = lambda r: r.get("stringId")
         get_title = lambda r: r.get("preferredName")
