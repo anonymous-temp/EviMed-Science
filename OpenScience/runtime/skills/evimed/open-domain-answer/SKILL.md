@@ -41,6 +41,10 @@ Retrieve, read, refine — do not stop at one query:
 - When retrieval only reached bibliographic metadata (titles, journals, years) for a claim, say so plainly: 「目前仅能检索到题录级证据」and give your best judgment labeled as uncertain. Never present a metadata-only record as if you read its abstract or full text.
 - When tools fail, are unconfigured, or return zero results, state the gap and answer from established knowledge with lowered confidence. Never turn an empty search into negative evidence.
 - Distinguish established knowledge from retrieved evidence; mark emerging or contested findings as such.
+- When an analysis drops records, every count you report must say which set it describes. A table headed with the
+  analysed sample size but filled with the full cohort's events gives the reader a rate over the wrong denominator.
+  State both — records loaded, records analysed, and the reason for the difference — and take each event count,
+  person-time total, and rate from the set the model actually used.
 
 ## Citation style (reader-friendly)
 
