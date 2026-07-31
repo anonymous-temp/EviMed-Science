@@ -35,6 +35,43 @@ function messageText(message) {
     .trim();
 }
 
+// Tools whose result is durable research knowledge rather than a transient
+// lookup: a search strategy that worked, a resolved term, a computed estimate.
+// Reconstructing these from the assistant's prose loses the numbers; this is
+// the one place they exist exactly as produced.
+const KNOWLEDGE_TOOL_PATTERN = /evimed_(?:.*search|.*normalize|.*analysis|meta_analysis|mendelian_randomization|adr_signal_analysis|evidence_deduplicate|.*evaluation|open_access_full_text)/;
+
+function toolMemorySources(message, sessionId, messageId) {
+  const sources = [];
+  for (const [index, part] of (message?.parts ?? []).entries()) {
+    if (part?.type !== "tool" || typeof part.tool !== "string") continue;
+    if (!KNOWLEDGE_TOOL_PATTERN.test(part.tool)) continue;
+    if (part?.state?.status !== "completed") continue;
+    let result = null;
+    try {
+      const output = part?.state?.output;
+      result = typeof output === "string" && output.trim().startsWith("{") ? JSON.parse(output) : null;
+    } catch {
+      continue;
+    }
+    if (!result || result.status === "error") continue;
+    // Carry the call and its outcome, not the whole payload: the record has to
+    // stay quotable, and a full result set is neither durable nor legible.
+    const text = [
+      `tool: ${part.tool}`,
+      `arguments: ${JSON.stringify(part?.state?.input ?? {}).slice(0, 1_200)}`,
+      `summary: ${String(result.summary ?? "").slice(0, 1_200)}`,
+      `data: ${JSON.stringify(result.data ?? {}).slice(0, 4_000)}`,
+    ].join("\n");
+    sources.push({
+      sourceRef: `sessions/${sessionId}/messages/${messageId}/tools/${index}`,
+      role: "tool",
+      text,
+    });
+  }
+  return sources;
+}
+
 export function conversationMemorySources(messages, sessionId) {
   if (!Array.isArray(messages)) return [];
   const sources = [];
@@ -42,17 +79,19 @@ export function conversationMemorySources(messages, sessionId) {
     const message = messages[index];
     const role = message?.info?.role ?? message?.role;
     if (!["user", "assistant"].includes(role)) continue;
-    const text = messageText(message);
-    if (!text) continue;
     const rawId = message?.info?.id ?? message?.id ?? String(index + 1);
     const safeId = String(rawId).replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80) || String(index + 1);
-    sources.push({
-      sourceRef: `sessions/${sessionId}/messages/${safeId}`,
-      role,
-      text: text.slice(0, 12_000),
-    });
+    const text = messageText(message);
+    if (text) {
+      sources.push({
+        sourceRef: `sessions/${sessionId}/messages/${safeId}`,
+        role,
+        text: text.slice(0, 12_000),
+      });
+    }
+    sources.push(...toolMemorySources(message, sessionId, safeId));
   }
-  return sources.slice(-12);
+  return sources.slice(-20);
 }
 
 function extractionUrl(baseUrl, production = false) {
@@ -110,8 +149,12 @@ function candidateScopeId(candidate, project, run) {
   return "";
 }
 
-function validateCandidate(candidate, sourceMap, project, run) {
-  if (!candidate || typeof candidate !== "object") return null;
+function validateCandidate(candidate, sourceMap, project, run, rejections = null) {
+  const reject = (reason) => {
+    if (rejections) rejections.push(reason);
+    return null;
+  };
+  if (!candidate || typeof candidate !== "object") return reject("not an object");
   const kind = boundedText(candidate.kind, 64).toLowerCase();
   const scope = boundedText(candidate.scope, 32).toLowerCase();
   const origin = boundedText(candidate.origin, 32).toLowerCase();
@@ -121,11 +164,28 @@ function validateCandidate(candidate, sourceMap, project, run) {
   const sourceRef = boundedText(candidate.sourceRef, 500);
   const quote = boundedText(candidate.evidenceQuote, 4_000);
   const source = sourceMap.get(sourceRef);
-  if (!candidateKinds.has(kind) || !candidateScopes.has(scope) || !candidateOrigins.has(origin)) return null;
-  if (!memoryKeyPattern.test(key) || !value || !source || !quote || !source.text.includes(quote)) return null;
-  if (["profile", "preference", "behavior"].includes(kind) && (scope !== "user" || source.role !== "user")) return null;
-  if (["explicit", "inferred"].includes(origin) && source.role !== "user") return null;
-  if (origin === "system" && source.role !== "assistant") return null;
+  if (!candidateKinds.has(kind)) return reject(`unknown kind "${kind}"`);
+  if (!candidateScopes.has(scope)) return reject(`unknown scope "${scope}"`);
+  if (!candidateOrigins.has(origin)) return reject(`unknown origin "${origin}"`);
+  if (!memoryKeyPattern.test(key)) return reject(`malformed key "${key}"`);
+  if (!value) return reject(`empty value for "${key}"`);
+  if (!source) return reject(`sourceRef "${sourceRef}" matches no supplied source`);
+  if (!quote) return reject(`no evidence quote for "${key}"`);
+  // The most common rejection by far: the model paraphrases instead of copying,
+  // so the quote is true but not verbatim.
+  if (!source.text.includes(quote)) return reject(`evidence quote for "${key}" is not verbatim in ${sourceRef}`);
+  if (["profile", "preference", "behavior"].includes(kind) && (scope !== "user" || source.role !== "user")) {
+    return reject(`${kind} must be user-scoped and cite a user message (got scope "${scope}", role "${source.role}")`);
+  }
+  if (["explicit", "inferred"].includes(origin) && source.role !== "user") {
+    return reject(`origin "${origin}" must cite a user message (got role "${source.role}")`);
+  }
+  // A tool result is machine-grounded, which is exactly what system origin
+  // means. It is also the only place a computed estimate or a search strategy
+  // exists verbatim, so it must be allowed to ground a memory.
+  if (origin === "system" && !["assistant", "tool"].includes(source.role)) {
+    return reject(`origin "system" must cite an assistant or tool source (got role "${source.role}")`);
+  }
   const sensitive = Boolean(candidate.sensitive) || sensitivePattern.test(`${value}\n${summary}\n${quote}`);
   return {
     scope,
@@ -203,7 +263,10 @@ export class MemoryIntelligence {
     const sources = conversationMemorySources(messages, run.sessionId);
     const runSummary = await this.#recordRunSummary(project, run, sources);
     if (sources.length === 0) {
-      return { runSummary, extracted: 0, activated: 0, source: "none", proposed: 0, rejected: 0, extractionError: null };
+      return {
+        runSummary, extracted: 0, activated: 0, source: "none", proposed: 0, rejected: 0,
+        rejectionReasons: [], extractionError: null,
+      };
     }
 
     // Read what is already known before extracting, not after. Left to itself
@@ -218,10 +281,11 @@ export class MemoryIntelligence {
     let candidates = [];
     let source = "deterministic";
     let proposed = 0;
+    let rejections = [];
     let extractionError = null;
     if (this.enabled && this.config.deepseekProviderEnabled && this.config.deepseekApiKey) {
       try {
-        ({ candidates, proposed } = await this.#extractWithModel(sources, project, run, existing));
+        ({ candidates, proposed, rejections } = await this.#extractWithModel(sources, project, run, existing));
         source = "model";
       } catch (error) {
         extractionError = boundedText(error?.message ?? "memory extraction failed", 200);
@@ -274,7 +338,12 @@ export class MemoryIntelligence {
       }
       known.set(canonicalKey(stored), stored);
     }
-    return { runSummary, extracted, activated, source, proposed, rejected: proposed - candidates.length, extractionError };
+    return {
+      runSummary, extracted, activated, source, proposed,
+      rejected: proposed - candidates.length,
+      rejectionReasons: rejections.slice(0, 12),
+      extractionError,
+    };
   }
 
   async #recordRunSummary(project, run, sources) {
@@ -369,6 +438,7 @@ export class MemoryIntelligence {
                 "project_fact, analysis and decision belong to one project and use scope \"project\". follow_up uses scope \"project\" or \"session\". correction records something the user told you was wrong and uses scope \"user\" for a general rule or \"project\" for a local one.",
                 "Allowed origins: explicit, inferred, system. explicit and inferred must cite a user message; system must cite an assistant message and is only for assistant-grounded analysis, decisions, follow-ups, or corrections.",
                 "Use explicit when the user stated it outright, inferred when it follows from what they did; an inferred candidate stays provisional until three independent observations agree, so record it rather than withholding it.",
+                "Sources with role \"tool\" are results the platform computed or retrieved. They hold what prose loses: the search that worked, the identifier a term resolved to, the effect estimate and its interval. Record those as analysis or project_fact with origin \"system\", quoting the tool source exactly, and keep the numbers rather than describing them.",
                 "evidenceQuote must be a short exact substring of the referenced source, copied character for character. Do not infer identity, health, beliefs, demographics, or preferences without direct evidence.",
                 "Store durable facts and compact analytical essentials: dataset or artifact reference, population/filter, parameter, unit, method, result, decision, and unresolved follow-up.",
                 "Do not store greetings, transient requests, chain-of-thought, secrets, full documents, or unsupported conclusions.",
@@ -403,12 +473,13 @@ export class MemoryIntelligence {
       const body = await boundedJsonResponse(response);
       const parsed = parseModelJson(body?.choices?.[0]?.message?.content);
       const sourceMap = new Map(sources.map((item) => [item.sourceRef, item]));
-      const validated = parsed.candidates.map((candidate) => validateCandidate(candidate, sourceMap, project, run));
+      const rejections = [];
+      const validated = parsed.candidates.map((candidate) => validateCandidate(candidate, sourceMap, project, run, rejections));
       // Report what the model offered as well as what survived. Evidence quotes
       // must reproduce the source byte for byte, so a run where every candidate
       // was rejected is a common failure — and without this count it looks
       // exactly like a run where the model proposed nothing.
-      return { candidates: validated.filter(Boolean), proposed: parsed.candidates.length };
+      return { candidates: validated.filter(Boolean), proposed: parsed.candidates.length, rejections };
     } finally {
       clearTimeout(timeout);
     }

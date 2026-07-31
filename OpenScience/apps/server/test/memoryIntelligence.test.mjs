@@ -90,6 +90,60 @@ function modelFetch(candidateFactory) {
   };
 }
 
+test("a computed tool result can ground a memory, and a paraphrase of one cannot", async () => {
+  // The platform's real knowledge — the estimate, the interval, the query that
+  // worked — exists exactly once, in the tool result. Reconstructing it from
+  // the assistant's prose loses the numbers.
+  const client = new MemoryStoreDouble();
+  const toolPart = {
+    type: "tool",
+    tool: "evimed_adr_signal_analysis",
+    state: {
+      status: "completed",
+      input: { drug: "metformin", event: "lactic acidosis" },
+      output: JSON.stringify({
+        status: "success",
+        summary: "Disproportionality computed.",
+        data: { drug: "metformin", event: "lactic acidosis", ror: 3.42, cases: 1843 },
+      }),
+    },
+  };
+  const messages = [
+    { info: { id: "u1", role: "user" }, parts: [{ type: "text", text: "分析二甲双胍的乳酸酸中毒信号。" }] },
+    { info: { id: "a1", role: "assistant" }, parts: [toolPart, { type: "text", text: "ROR 为 3.42。" }] },
+  ];
+
+  let sourcesSeen = null;
+  const intelligence = new MemoryIntelligence(config, client, {
+    fetchImpl: async (_input, init) => {
+      const payload = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
+      sourcesSeen = payload.sources;
+      const toolSource = payload.sources.find((source) => source.role === "tool");
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [
+        {
+          scope: "project", kind: "analysis", key: "project.analysis.adr_signal.metformin",
+          value: "ROR 3.42 over 1843 cases", summary: "metformin / lactic acidosis disproportionality",
+          origin: "system", confidence: 1, importance: 0.8, sensitive: false,
+          sourceRef: toolSource.sourceRef, evidenceQuote: '"ror":3.42',
+        },
+        {
+          scope: "project", kind: "analysis", key: "project.analysis.paraphrased",
+          value: "ROR was about 3.4", summary: "paraphrase", origin: "system",
+          confidence: 1, importance: 0.8, sensitive: false,
+          sourceRef: toolSource.sourceRef, evidenceQuote: "ROR was approximately 3.4",
+        },
+      ] }) } }] });
+    },
+  });
+
+  const result = await intelligence.recordRun(project(), run("run_tool_memory"), messages);
+  assert.ok(sourcesSeen.some((source) => source.role === "tool" && source.text.includes('"ror":3.42')),
+    "the tool result must reach the extractor verbatim");
+  assert.equal(result.extracted, 1, "the verbatim candidate is stored");
+  assert.equal(result.rejected, 1, "the paraphrased candidate is refused");
+  assert.match(result.rejectionReasons.join(" "), /not verbatim/);
+});
+
 test("extraction is shown the keys already in use so a repeat reinforces one memory", async () => {
   // Without this the model mints a fresh key each time — one run produced
   // user.specialty, profile.specialty, profile.work.area and
