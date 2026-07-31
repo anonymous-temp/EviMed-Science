@@ -760,6 +760,16 @@ export function loadConfig(overrides = {}) {
     memoryExtractionTimeoutMs: Number(
       overrides.memoryExtractionTimeoutMs ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS ?? 120_000,
     ),
+    // Structured extraction rather than reasoning, so the flash tier fits: it
+    // measures ~22s against the pro model's ~38s on the same prompt.
+    memoryExtractionModel: String(
+      overrides.memoryExtractionModel ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_MODEL ?? "deepseek-v4-flash",
+    ),
+    // How long a per-run episodic memory stays recallable. The profile
+    // extracted from those runs has no expiry.
+    memoryRunSummaryTtlDays: Number(
+      overrides.memoryRunSummaryTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_RUN_SUMMARY_TTL_DAYS ?? 90,
+    ),
     requireMemos:
       overrides.requireMemos ?? boolEnv("OPEN_SCIENCE_REQUIRE_MEMOS", false),
     knowledgeChunkChars: Number(

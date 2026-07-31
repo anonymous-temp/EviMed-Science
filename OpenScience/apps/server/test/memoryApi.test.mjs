@@ -57,7 +57,16 @@ function fakeMemosService() {
         && (scopes.size === 0 || scopes.has(record.scope))
         && (!scopeId || record.scopeId === scopeId)
         && (!query || `${record.key} ${record.summary} ${record.value}`.toLowerCase().includes(query))
-      );
+      )
+        // Order and truncate the way the Go store does — importance, then
+        // confidence, then recency, capped at pageSize. Without this the fake
+        // hands back every record and no test can observe a record being
+        // crowded off the page, which is the failure that matters here.
+        .sort((left, right) =>
+          right.importance - left.importance
+          || right.confidence - left.confidence
+          || String(right.updateTime).localeCompare(String(left.updateTime)))
+        .slice(0, Math.max(1, Math.min(100, Number(url.searchParams.get("pageSize")) || 100)));
       return Response.json({ memoryRecords });
     }
     if (url.pathname === "/api/v1/memoryRecords:upsert" && method === "POST") {
@@ -232,6 +241,57 @@ test("run summaries are recalled only when they match the question", async () =>
     ["preference", "run_summary"],
     "a question that names the drug should still reach the earlier run",
   );
+});
+
+test("the long-term profile survives a store full of run summaries", async () => {
+  const fake = fakeMemosService();
+  const client = new MemosClient(clientConfig(), { fetchImpl: fake.fetchImpl });
+  const projectId = "project-crowding";
+  // One record per run, and a failed run outranks a preference on importance,
+  // so a single ordered page eventually contains nothing but episodes.
+  for (let index = 0; index < 120; index += 1) {
+    await client.upsertRecord("alpha", {
+      scope: "project", scopeId: projectId, kind: "run_summary", key: `run.${index}`,
+      value: JSON.stringify({ runId: `run-${index}`, question: `问题 ${index}`, answer: `回答 ${index}` }),
+      summary: `Conversation about: 问题 ${index}`, origin: "system", status: "active",
+      confidence: 1, importance: 0.7, sensitive: false,
+    });
+  }
+  await client.upsertRecord("alpha", {
+    scope: "user", scopeId: null, kind: "profile", key: "profile.role",
+    value: "临床药师，主要做药物评价", summary: "临床药师，主要做药物评价",
+    origin: "explicit", status: "active", confidence: 1, importance: 0.6, sensitive: false,
+  });
+
+  const recalled = await client.relevant("alpha", "hello", { projectId });
+  assert.ok(
+    recalled.some((memo) => memo.kind === "profile"),
+    "the profile must stay reachable however many runs have accumulated",
+  );
+});
+
+test("a recalled run summary carries the exchange, not its internal record", async () => {
+  const fake = fakeMemosService();
+  const client = new MemosClient(clientConfig(), { fetchImpl: fake.fetchImpl });
+  const projectId = "project-projection";
+  await client.upsertRecord("alpha", {
+    scope: "project", scopeId: projectId, kind: "run_summary", key: "run.metformin",
+    value: JSON.stringify({
+      runId: "run_abc", sessionId: "ses_abc", model: "deepseek/deepseek-v4-pro",
+      errorCode: "specialist_citation_invalid", durationMs: 23794,
+      question: "二甲双胍的作用机制是什么", answer: "核心是抑制肝脏糖异生。",
+    }),
+    summary: "Conversation about: 二甲双胍的作用机制是什么",
+    origin: "system", status: "active", confidence: 1, importance: 0.7, sensitive: false,
+  });
+
+  const [recalled] = await client.relevant("alpha", "二甲双胍还有哪些副作用", { projectId });
+  assert.ok(recalled, "the matching run summary should be recalled");
+  assert.match(recalled.content, /二甲双胍的作用机制是什么/);
+  assert.match(recalled.content, /抑制肝脏糖异生/);
+  for (const internal of ["run_abc", "ses_abc", "specialist_citation_invalid", "23794"]) {
+    assert.ok(!recalled.content.includes(internal), `${internal} must not reach the prompt`);
+  }
 });
 
 test("Memos adapter exports and purges every memory surface without crossing user namespaces", async () => {
