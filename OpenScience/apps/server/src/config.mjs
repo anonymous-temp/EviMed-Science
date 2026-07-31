@@ -754,8 +754,11 @@ export function loadConfig(overrides = {}) {
     ),
     memoryExtractionEnabled:
       overrides.memoryExtractionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED", true),
+    // Extraction runs after the reply is already delivered, so a generous budget
+    // costs the user nothing. The measured request takes 40-46s against
+    // deepseek-v4-pro, so the old 30s ceiling aborted every single one.
     memoryExtractionTimeoutMs: Number(
-      overrides.memoryExtractionTimeoutMs ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS ?? 30_000,
+      overrides.memoryExtractionTimeoutMs ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS ?? 120_000,
     ),
     requireMemos:
       overrides.requireMemos ?? boolEnv("OPEN_SCIENCE_REQUIRE_MEMOS", false),
