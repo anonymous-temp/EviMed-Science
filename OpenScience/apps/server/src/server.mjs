@@ -371,6 +371,9 @@ export function createWebApiApp(overrides = {}) {
         extracted: memoryResult.extracted,
         activated: memoryResult.activated,
         extractionSource: memoryResult.source,
+        proposed: memoryResult.proposed,
+        rejected: memoryResult.rejected,
+        extractionError: memoryResult.extractionError,
       }).catch(() => {});
     },
     onRunFinishedError: async (error, project, run) => {

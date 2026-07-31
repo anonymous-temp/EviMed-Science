@@ -186,6 +186,54 @@ test("Memos adapter keeps internal tenancy tags private and enforces ownership",
   assert.ok(fake.requests.every((request) => request.authorization === "Bearer memos_pat_test"));
 });
 
+test("run summaries are recalled only when they match the question", async () => {
+  const fake = fakeMemosService();
+  const client = new MemosClient(clientConfig(), { fetchImpl: fake.fetchImpl });
+  const projectId = "project-recall";
+  const record = (key, question) => client.upsertRecord("alpha", {
+    scope: "project",
+    scopeId: projectId,
+    kind: "run_summary",
+    key,
+    value: JSON.stringify({ runId: key, question, answer: `关于${question}的长篇回答` }),
+    summary: `Conversation about: ${question}`,
+    origin: "system",
+    status: "active",
+    // A finished run is stored with full confidence, and a failed one is stored
+    // as more important than a successful one. Those two numbers alone put the
+    // relevance score above zero, which is what used to make every summary
+    // unconditionally recallable.
+    confidence: 1,
+    importance: 0.7,
+    sensitive: false,
+  });
+  await record("run.metformin", "二甲双胍的作用机制是什么");
+  await record("run.rituximab", "利妥昔单抗的感染风险");
+  await client.upsertRecord("alpha", {
+    scope: "user",
+    scopeId: null,
+    kind: "preference",
+    key: "pref.language",
+    value: "回答请用中文",
+    summary: "回答请用中文",
+    origin: "explicit",
+    status: "active",
+    confidence: 1,
+    importance: 0.6,
+    sensitive: false,
+  });
+
+  const greeting = await client.relevant("alpha", "hello", { projectId });
+  assert.deepEqual(greeting.map((memo) => memo.kind), ["preference"]);
+
+  const onTopic = await client.relevant("alpha", "二甲双胍还有哪些副作用", { projectId });
+  assert.deepEqual(
+    onTopic.map((memo) => memo.kind).sort(),
+    ["preference", "run_summary"],
+    "a question that names the drug should still reach the earlier run",
+  );
+});
+
 test("Memos adapter exports and purges every memory surface without crossing user namespaces", async () => {
   const fake = fakeMemosService();
   const client = new MemosClient(clientConfig(), { fetchImpl: fake.fetchImpl });
