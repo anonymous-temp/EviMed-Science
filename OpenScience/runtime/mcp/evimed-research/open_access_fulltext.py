@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
@@ -17,6 +18,8 @@ import public_sources
 
 
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+# Below this, a PDF has effectively no text layer and is a scan.
+MIN_PDF_TEXT_CHARS = 2_000
 EUROPE_PMC_API = "https://www.ebi.ac.uk/europepmc/webservices/rest"
 USER_AGENT = "EviMed-Research/1.2 open-access-fulltext"
 
@@ -98,10 +101,72 @@ def _resolve(identifier: str) -> dict:
     for result in results:
         if isinstance(result, dict) and isinstance(result.get("pmcid"), str):
             return result
+    # No PMC copy. Keep whatever Europe PMC does know — above all the DOI — so
+    # the caller can still try the open-access PDF route instead of stopping at
+    # the PMC subset, which is what left syntheses with more eligible records
+    # than readable ones.
+    for result in results:
+        if isinstance(result, dict) and result.get("doi"):
+            return result
+    if query.startswith("DOI:"):
+        return {"pmcid": "", "doi": query[5:-1], "id": "", "title": ""}
     raise FullTextError(
         "full_text_not_available",
-        "No Europe PMC open-access full text was found for this identifier.",
+        "No Europe PMC record was found for this identifier.",
     )
+
+
+def _pdf_markdown(payload: bytes, metadata: dict, provenance: dict) -> tuple[str, dict]:
+    """Extract the text layer of an open-access PDF into the same markdown shape
+    the Europe PMC XML path produces, so downstream consumers see one format."""
+    try:
+        import pypdf
+    except ImportError as error:  # pragma: no cover - depends on the runtime image
+        raise FullTextError(
+            "full_text_pdf_reader_missing",
+            "No PDF text extractor is installed in this runtime.",
+        ) from error
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(payload))
+        if getattr(reader, "is_encrypted", False):
+            raise FullTextError("full_text_pdf_encrypted", "The open-access PDF is encrypted and cannot be read.")
+        pages = [(page.extract_text() or "").strip() for page in reader.pages]
+    except FullTextError:
+        raise
+    except Exception as error:
+        raise FullTextError("full_text_pdf_unreadable", "The open-access PDF could not be parsed.") from error
+
+    body = "\n\n".join(page for page in pages if page)
+    # A scanned article parses without error and yields almost nothing. Saying so
+    # is the difference between an honest gap and a silently empty evidence base.
+    if len(body) < MIN_PDF_TEXT_CHARS:
+        raise FullTextError(
+            "full_text_pdf_not_machine_readable",
+            "The open-access PDF carries %d characters of extractable text over %d page(s); it is most likely a scan."
+            % (len(body), len(pages)),
+        )
+    doi = str(metadata.get("doi") or "")
+    title = str(metadata.get("title") or "").strip() or doi or "Open-access article"
+    header = [
+        "# " + title,
+        "",
+        "- DOI: " + doi,
+        "- Retrieved from: " + (provenance.get("origin") or "the registered open-access location"),
+        "- Open-access version: " + (provenance.get("version") or "unspecified"),
+        "- License: " + (provenance.get("license") or "unspecified"),
+        "- Extracted from PDF text layer (%d pages)" % len(pages),
+        "",
+        "> Text below is the PDF's own text layer. Page order is preserved; "
+        "tables and figures are not reconstructed, so verify any number against the page it came from.",
+        "",
+    ]
+    return "\n".join(header) + "\n" + body, {
+        "title": title,
+        "doi": doi,
+        "pmcid": "",
+        "pages": len(pages),
+        "references": 0,
+    }
 
 
 def _tag(node: ET.Element) -> str:
@@ -236,17 +301,85 @@ def _atomic_write(path: Path, payload: bytes) -> None:
     os.replace(temporary, path)
 
 
+def _doi_slug(doi: str) -> str:
+    """A filesystem-safe directory name that still identifies the article."""
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", doi).strip("-.")[:96]
+    return slug or "open-access-article"
+
+
+def _fetch_open_access_pdf(metadata: dict, workspace: Path) -> dict:
+    doi = str(metadata.get("doi") or "").strip()
+    if not doi:
+        raise FullTextError(
+            "full_text_not_available",
+            "The record has no PMC full text and no DOI to resolve an open-access copy.",
+        )
+    try:
+        payload, provenance = public_sources.open_access_pdf_bytes(doi, MAX_RESPONSE_BYTES)
+    except public_sources.PublicSourceError as error:
+        raise FullTextError(getattr(error, "code", "full_text_not_available"), str(error)) from error
+    except Exception as error:
+        raise FullTextError("full_text_upstream_unavailable", "Open-access PDF retrieval failed.", True) from error
+
+    markdown, details = _pdf_markdown(payload, metadata, provenance)
+    relative_root = Path(".evimed-sources") / _doi_slug(doi)
+    output_root = _safe_directory(workspace, relative_root)
+    markdown_path = output_root / "fulltext.md"
+    pdf_path = output_root / "fulltext.pdf"
+    markdown_payload = markdown.encode("utf-8")
+    _atomic_write(markdown_path, markdown_payload)
+    _atomic_write(pdf_path, payload)
+    markdown_relative = markdown_path.relative_to(workspace).as_posix()
+    pdf_relative = pdf_path.relative_to(workspace).as_posix()
+    return {
+        "status": "success",
+        "summary": "Retrieved the open-access PDF and extracted its text into the managed workspace.",
+        "data": {
+            **details,
+            "route": "open-access-pdf",
+            "openAccessOrigin": provenance.get("origin", ""),
+            "openAccessVersion": provenance.get("version", ""),
+            "license": provenance.get("license", ""),
+            "markdownPath": markdown_relative,
+            "pdfPath": pdf_relative,
+            "artifactSha256s": {
+                markdown_relative: hashlib.sha256(markdown_payload).hexdigest(),
+                pdf_relative: hashlib.sha256(payload).hexdigest(),
+            },
+            "markdownCharacters": len(markdown),
+            "pdfBytes": len(payload),
+        },
+        "sources": [{
+            "id": doi,
+            "title": details["title"],
+            "url": "https://doi.org/" + doi,
+            "source": "open-access-pdf",
+            "retrievedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }],
+        "artifacts": [markdown_relative, pdf_relative],
+    }
+
+
 def fetch(arguments: dict) -> dict:
     identifier = str(arguments.get("identifier") or "").strip()
     try:
         metadata = _resolve(identifier)
         pmcid = str(metadata.get("pmcid") or "").upper()
-        if not re.fullmatch(r"PMC\d{3,12}", pmcid):
-            raise FullTextError("full_text_not_available", "The resolved record has no PMCID full text.")
-        url = "%s/%s/fullTextXML" % (EUROPE_PMC_API, pmcid)
-        xml_payload = _request_bytes(url, "application/xml")
-        markdown, details = _render_markdown(xml_payload, {**metadata, "pmcid": pmcid})
         workspace = _workspace()
+        if not re.fullmatch(r"PMC\d{3,12}", pmcid):
+            return _fetch_open_access_pdf(metadata, workspace)
+        url = "%s/%s/fullTextXML" % (EUROPE_PMC_API, pmcid)
+        try:
+            xml_payload = _request_bytes(url, "application/xml")
+        except FullTextError:
+            # A PMCID only means Europe PMC indexes the record, not that it may
+            # serve the text: subscription articles have one and refuse the XML.
+            # Those are exactly the records worth trying the open-access route
+            # for, so a refusal here is a reason to continue, not to stop.
+            if metadata.get("doi"):
+                return _fetch_open_access_pdf(metadata, workspace)
+            raise
+        markdown, details = _render_markdown(xml_payload, {**metadata, "pmcid": pmcid})
         relative_root = Path(".evimed-sources") / pmcid
         output_root = _safe_directory(workspace, relative_root)
         markdown_path = output_root / "fulltext.md"
@@ -268,6 +401,7 @@ def fetch(arguments: dict) -> dict:
             "summary": "Retrieved the complete open-access article into the managed workspace.",
             "data": {
                 **details,
+                "route": "europe-pmc-xml",
                 "markdownPath": markdown_relative,
                 "xmlPath": xml_relative,
                 "artifactSha256s": {

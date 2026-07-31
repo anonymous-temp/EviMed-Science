@@ -207,6 +207,57 @@ def _open_remote(url, accepted, method="GET", json_body=None, timeout_seconds=No
     return _OPENER.open(request, timeout=timeout)
 
 
+def open_access_pdf_bytes(doi, max_bytes, timeout_seconds=60):
+    """Ask the server gateway for the open-access PDF registered against a DOI.
+
+    Only the DOI crosses the boundary. Open-access PDFs live on the publisher's
+    own domain, so the server resolves the location and fetches it; the runtime
+    never names a host and so cannot use this to reach anywhere it chooses.
+    """
+    gateway = _gateway_settings()
+    if gateway is None:
+        raise PublicSourceError(
+            "public_source_managed_gateway_required",
+            "Open-access PDF retrieval requires the EviMed server gateway.",
+        )
+    gateway_url, token = gateway
+    request = urllib.request.Request(
+        gateway_url,
+        data=json.dumps({"openAccessPdfDoi": str(doi)}).encode("utf-8"),
+        headers={
+            "accept": "application/pdf",
+            "authorization": "Bearer %s" % token,
+            "content-type": "application/json",
+            "user-agent": "EviMed-Research/1.2 (runtime connector)",
+        },
+        method="POST",
+    )
+    try:
+        response_context = _OPENER.open(request, timeout=min(max(float(timeout_seconds), 1), 120))
+    except urllib.error.HTTPError as error:
+        # The gateway names every location it tried. Passing that through is the
+        # difference between "no full text" and "no full text, and here is why".
+        detail = ""
+        try:
+            body = json.loads(error.read(64 * 1024).decode("utf-8"))
+            detail = str(_dict(body.get("error")).get("message") or "")
+            code = str(_dict(body.get("error")).get("code") or "public_source_pdf_unavailable")
+        except Exception:
+            code = "public_source_pdf_unavailable"
+        raise PublicSourceError(code, detail or "No open-access PDF could be retrieved.") from error
+    with response_context as response:
+        if response.headers.get_content_type() != "application/pdf":
+            raise PublicSourceError("public_source_pdf_unavailable", "The gateway did not return a PDF.")
+        payload = response.read(max_bytes + 1)
+        if len(payload) > max_bytes:
+            raise PublicSourceError("public_source_pdf_too_large", "The open-access PDF exceeds the managed size limit.")
+        return payload, {
+            "origin": urllib.parse.unquote(response.headers.get("x-evimed-oa-source", "")),
+            "version": urllib.parse.unquote(response.headers.get("x-evimed-oa-version", "")),
+            "license": urllib.parse.unquote(response.headers.get("x-evimed-oa-license", "")),
+        }
+
+
 def _get_json_value(
     url, allow_not_found=False, accepted=("application/json", "text/json"), method="GET", json_body=None,
     credential_profile=None, strict_json=True,

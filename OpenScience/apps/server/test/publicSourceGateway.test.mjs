@@ -37,6 +37,85 @@ async function gatewayRequest(base, body, token = "runtime-token") {
   });
 }
 
+test("open-access PDF requests carry only a DOI and the server picks the host", async (t) => {
+  // The runtime must not be able to name a destination: open-access PDFs live
+  // on the publisher's own domain, so no host allowlist can cover them and the
+  // resolution has to happen here.
+  const seen = [];
+  const server = createServer(createPublicSourceGatewayHandler(
+    { publicSourceCredentials: { unpaywall: "contact@example.test" } },
+    runtimeManager(),
+    {
+      fetchImpl: async (url) => {
+        seen.push(String(url));
+        if (String(url).startsWith("https://api.unpaywall.org/")) {
+          return Response.json({
+            best_oa_location: { url_for_pdf: "http://publisher.example/a.pdf", host_type: "publisher" },
+            oa_locations: [
+              { url_for_pdf: "https://blocked.example/a.pdf", host_type: "repository" },
+              { url_for_pdf: "https://repo.example/a.pdf", host_type: "repository", version: "publishedVersion", license: "cc-by" },
+            ],
+          });
+        }
+        if (String(url).startsWith("https://blocked.example/")) return new Response("denied", { status: 403 });
+        return new Response(Buffer.from("%PDF-1.7 body"), { status: 200, headers: { "content-type": "application/pdf" } });
+      },
+    },
+  ));
+  t.after(() => close(server));
+  const base = await listen(server);
+
+  const response = await gatewayRequest(base, { openAccessPdfDoi: "10.1016/j.jclinepi.2021.03.001" });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/pdf");
+  assert.equal(decodeURIComponent(response.headers.get("x-evimed-oa-source")), "https://repo.example");
+  assert.equal(decodeURIComponent(response.headers.get("x-evimed-oa-license")), "cc-by");
+  // http was skipped, the refusing host was tried and abandoned, the next one served it.
+  assert.ok(!seen.some((url) => url.startsWith("http://")), "a plain-http location must never be fetched");
+  assert.ok(seen.some((url) => url.startsWith("https://blocked.example/")), "a refusing host must not end the search");
+  assert.ok(seen.some((url) => url.startsWith("https://repo.example/")));
+});
+
+test("an open-access PDF request cannot be used to reach a private address", async (t) => {
+  const server = createServer(createPublicSourceGatewayHandler(
+    { publicSourceCredentials: { unpaywall: "contact@example.test" } },
+    runtimeManager(),
+    {
+      fetchImpl: async (url) => {
+        if (String(url).startsWith("https://api.unpaywall.org/")) {
+          return Response.json({
+            best_oa_location: { url_for_pdf: "https://127.0.0.1/internal.pdf", host_type: "repository" },
+            oa_locations: [{ url_for_pdf: "https://169.254.169.254/latest/meta-data", host_type: "repository" }],
+          });
+        }
+        throw new Error("a private address must never be fetched");
+      },
+    },
+  ));
+  t.after(() => close(server));
+  const base = await listen(server);
+
+  const response = await gatewayRequest(base, { openAccessPdfDoi: "10.1234/private" });
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).error.code, "public_source_pdf_not_open_access");
+});
+
+test("an open-access PDF request rejects anything other than a DOI", async (t) => {
+  const server = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), {
+    fetchImpl: async () => { throw new Error("must not reach upstream"); },
+  }));
+  t.after(() => close(server));
+  const base = await listen(server);
+
+  for (const body of [
+    { openAccessPdfDoi: "not-a-doi" },
+    { openAccessPdfDoi: "10.1234/ok", url: "https://api.crossref.org/works" },
+  ]) {
+    const response = await gatewayRequest(base, body);
+    assert.equal(response.status, 400, `expected rejection for ${JSON.stringify(body)}`);
+  }
+});
+
 test("public-source gateway authenticates the runtime and forwards bounded official GET requests", async (t) => {
   let observed;
   const fetchImpl = async (url, options) => {
