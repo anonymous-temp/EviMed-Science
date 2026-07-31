@@ -192,6 +192,11 @@ export class MemoryIntelligence {
     this.fetchImpl = fetchImpl;
     this.enabled = config.memoryExtractionEnabled !== false;
     this.timeoutMs = Math.max(1_000, Math.min(120_000, Number(config.memoryExtractionTimeoutMs ?? 30_000)));
+    // Extraction is a short structured-output task, not a reasoning one, and it
+    // runs after the reply is already delivered. Flash answers it in about half
+    // the time the pro model takes.
+    this.model = String(config.memoryExtractionModel || config.deepseekModel || "");
+    this.runSummaryTtlMs = Math.max(0, Number(config.memoryRunSummaryTtlDays ?? 90)) * 24 * 60 * 60 * 1_000;
   }
 
   async recordRun(project, run, messages = []) {
@@ -201,13 +206,22 @@ export class MemoryIntelligence {
       return { runSummary, extracted: 0, activated: 0, source: "none", proposed: 0, rejected: 0, extractionError: null };
     }
 
+    // Read what is already known before extracting, not after. Left to itself
+    // the model invents a fresh key each time — one pass produced
+    // user.specialty, profile.specialty, profile.work.area and
+    // user.profile.work_domain for the same fact — so the profile accumulates
+    // near-duplicates that each stay at one observation instead of one memory
+    // that gets reinforced.
+    const existing = await this.memosClient.listRecords(project.userId, { pageSize: 100 });
+    const known = new Map(existing.map((record) => [canonicalKey(record), record]));
+
     let candidates = [];
     let source = "deterministic";
     let proposed = 0;
     let extractionError = null;
     if (this.enabled && this.config.deepseekProviderEnabled && this.config.deepseekApiKey) {
       try {
-        ({ candidates, proposed } = await this.#extractWithModel(sources, project, run));
+        ({ candidates, proposed } = await this.#extractWithModel(sources, project, run, existing));
         source = "model";
       } catch (error) {
         extractionError = boundedText(error?.message ?? "memory extraction failed", 200);
@@ -218,9 +232,6 @@ export class MemoryIntelligence {
       candidates = deterministicCandidates(sources, project, run);
       proposed = candidates.length;
     }
-
-    const existing = await this.memosClient.listRecords(project.userId, { pageSize: 100 });
-    const known = new Map(existing.map((record) => [canonicalKey(record), record]));
     let extracted = 0;
     let activated = 0;
     for (const candidate of candidates.slice(0, 12)) {
@@ -307,6 +318,13 @@ export class MemoryIntelligence {
       importance: run.status === "succeeded" ? 0.55 : 0.7,
       sensitive,
       lastConfirmedAt: run.finishedAt,
+      // Episodic memory ages out; the profile extracted from it does not. One
+      // run summary is written per run and nothing ever removed them, so
+      // without an expiry they grow without bound and eventually crowd the
+      // durable memories out of every query.
+      expiresAt: this.runSummaryTtlMs > 0
+        ? new Date(Date.parse(run.finishedAt ?? new Date().toISOString()) + this.runSummaryTtlMs).toISOString()
+        : null,
     }, {
       sourceType: lastUser ? "conversation_message" : "agent_run",
       sourceRef: lastUser?.sourceRef ?? `runs/${run.id}`,
@@ -316,7 +334,7 @@ export class MemoryIntelligence {
     }, { reason: "agent run reached a terminal state" });
   }
 
-  async #extractWithModel(sources, project, run) {
+  async #extractWithModel(sources, project, run, existing = []) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -328,7 +346,7 @@ export class MemoryIntelligence {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: this.config.deepseekModel,
+          model: this.model,
           stream: false,
           temperature: 0,
           // Twelve candidates carrying a value, a summary and an evidence quote
@@ -343,16 +361,39 @@ export class MemoryIntelligence {
                 "Extract durable memory candidates from the supplied conversation sources.",
                 "Return JSON only: {\"candidates\":[...]}. Maximum 12 candidates.",
                 "Each candidate must contain scope, kind, key, value, summary, origin, confidence, importance, sensitive, sourceRef, evidenceQuote.",
-                "Allowed scopes: user, project, session. Allowed kinds: profile, preference, behavior, project_fact, analysis, decision, correction, follow_up.",
-                "Allowed origins: explicit, inferred, system. Use system only for assistant-grounded analysis, decisions, follow-ups, or corrections.",
-                "evidenceQuote must be a short exact substring of the referenced source. Do not infer identity, health, beliefs, demographics, or preferences without direct evidence.",
+                "You are building a long-term picture of this user across many sessions, so prefer what will still be true next month over what only matters in this conversation.",
+                // The scope a kind must carry is enforced on the way in. Saying
+                // so here is the difference between a candidate being stored and
+                // being silently dropped for a mismatch the model could not see.
+                "profile, preference and behavior describe the person and MUST use scope \"user\" and cite a user message: profile is who they are and what they work on, preference is how they want work done, behavior is how they habitually work.",
+                "project_fact, analysis and decision belong to one project and use scope \"project\". follow_up uses scope \"project\" or \"session\". correction records something the user told you was wrong and uses scope \"user\" for a general rule or \"project\" for a local one.",
+                "Allowed origins: explicit, inferred, system. explicit and inferred must cite a user message; system must cite an assistant message and is only for assistant-grounded analysis, decisions, follow-ups, or corrections.",
+                "Use explicit when the user stated it outright, inferred when it follows from what they did; an inferred candidate stays provisional until three independent observations agree, so record it rather than withholding it.",
+                "evidenceQuote must be a short exact substring of the referenced source, copied character for character. Do not infer identity, health, beliefs, demographics, or preferences without direct evidence.",
                 "Store durable facts and compact analytical essentials: dataset or artifact reference, population/filter, parameter, unit, method, result, decision, and unresolved follow-up.",
-                "Do not store greetings, transient requests, chain-of-thought, secrets, full documents, or unsupported conclusions. Use stable lowercase dotted keys.",
+                "Do not store greetings, transient requests, chain-of-thought, secrets, full documents, or unsupported conclusions.",
+                "Keys must be stable lowercase dotted paths that a later session would choose again for the same fact, so that repeat observations reinforce one memory instead of creating near-duplicates: prefer preference.output_language over preference.user_wants_chinese.",
+                "existingMemories lists what is already stored. When this conversation restates or refines one of them, reuse its exact scope, kind and key so the observation reinforces that memory; only mint a new key for a fact none of them covers.",
               ].join(" "),
             },
             {
               role: "user",
-              content: JSON.stringify({ projectId: project.id, sessionId: run.sessionId, sources }),
+              content: JSON.stringify({
+                projectId: project.id,
+                sessionId: run.sessionId,
+                // Keys already in use, so a recurring fact reinforces the memory
+                // that holds it instead of creating a synonym beside it.
+                existingMemories: existing
+                  .filter((record) => record.kind !== "run_summary")
+                  .slice(0, 60)
+                  .map((record) => ({
+                    scope: record.scope,
+                    kind: record.kind,
+                    key: record.key,
+                    summary: boundedText(record.summary, 160),
+                  })),
+                sources,
+              }),
             },
           ],
         }),

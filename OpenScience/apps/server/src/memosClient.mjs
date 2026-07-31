@@ -38,9 +38,42 @@ const memoryEnums = {
   },
 };
 
-// Memories that describe the user rather than a past task. These stay relevant
-// whatever the question is; every other kind is episodic and must match the query.
-const DURABLE_RECALL_KINDS = new Set(["profile", "preference"]);
+// Memories that describe the user rather than a past task: who they are, how
+// they want work done, how they work, and what they have already corrected.
+// Together these are the long-term profile, so they stay relevant whatever the
+// question is. Every other kind is episodic and must match the query. A
+// correction belongs here because repeating a mistake the user already fixed
+// costs more than carrying it into an unrelated question.
+const DURABLE_RECALL_KINDS = new Set(["profile", "preference", "behavior", "correction"]);
+
+// The profile must not crowd out memories that are relevant to this particular
+// question, so it gets at most half the recall budget and episodic matches keep
+// the rest.
+const DURABLE_RECALL_BUDGET_SHARE = 0.5;
+
+/** What a recalled memory contributes to the prompt.
+ *
+ * A run summary stores the whole run as JSON — run and session ids, model,
+ * error code, timings, and the full previous answer. That is the right record
+ * to keep, and the wrong thing to paste into a prompt: the model reads internal
+ * identifiers as content. Project it back to the exchange it describes. */
+function recallContent(record) {
+  if (record.kind !== "run_summary") {
+    return [record.summary, record.value].filter(Boolean).join("\n");
+  }
+  let parsed = null;
+  try {
+    parsed = JSON.parse(record.value);
+  } catch {
+    return record.summary ?? "";
+  }
+  const question = typeof parsed?.question === "string" ? parsed.question.trim() : "";
+  const answer = typeof parsed?.answer === "string" ? parsed.answer.trim() : "";
+  if (!question && !answer) return record.summary ?? "";
+  return [question && `Earlier question: ${question}`, answer && `Earlier answer: ${answer}`]
+    .filter(Boolean)
+    .join("\n");
+}
 
 const reverseMemoryEnums = Object.fromEntries(
   Object.entries(memoryEnums).map(([group, values]) => [
@@ -287,10 +320,22 @@ export class MemosClient {
   async relevant(userId, query, { projectId = null, sessionId = null } = {}) {
     if (!this.configured || this.contextLimit === 0 || this.contextMaxChars === 0) return [];
     const terms = searchTokens(query);
-    const [memos, records] = await Promise.all([
+    // Durable memories are fetched in their own query. A single page ordered by
+    // importance cannot hold both: run summaries arrive one per run and a failed
+    // one carries importance 0.7 against a preference's 0.6, so past a hundred
+    // runs the page is all episodes and the user's long-term picture becomes
+    // permanently unreachable — silently, because a full page still looks fine.
+    const [memos, durableRecords, episodicRecords] = await Promise.all([
       this.list(userId, { pageSize: 100 }),
+      this.listRecords(userId, { statuses: ["active"], kinds: [...DURABLE_RECALL_KINDS], pageSize: 100 }),
       this.listRecords(userId, { statuses: ["active"], pageSize: 100 }),
     ]);
+    const seenRecordIds = new Set();
+    const records = [...durableRecords, ...episodicRecords].filter((record) => {
+      if (seenRecordIds.has(record.id)) return false;
+      seenRecordIds.add(record.id);
+      return true;
+    });
     const now = Date.now();
     const structured = records
       .filter((record) => !record.sensitive)
@@ -299,7 +344,7 @@ export class MemosClient {
         || (record.scope === "project" && record.scopeId === projectId)
         || (record.scope === "session" && record.scopeId === sessionId))
       .map((record) => {
-        const content = [record.summary, record.value].filter(Boolean).join("\n");
+        const content = recallContent(record);
         const haystack = `${record.key} ${content}`.toLowerCase();
         const matches = terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
         const durable = DURABLE_RECALL_KINDS.has(record.kind);
@@ -331,18 +376,35 @@ export class MemosClient {
         return { memo: { ...memo, memoryType: "manual" }, score: matches + (memo.pinned ? 0.25 : 0) };
       })
       .filter((row) => row.score > 0);
-    const ranked = [...structured, ...legacy]
-      .sort((left, right) => right.score - left.score || String(right.memo.updatedAt).localeCompare(String(left.memo.updatedAt)));
+    const byScore = (left, right) =>
+      right.score - left.score || String(right.memo.updatedAt).localeCompare(String(left.memo.updatedAt));
+    const isDurable = (row) => DURABLE_RECALL_KINDS.has(row.memo.kind);
+    const ranked = [...structured, ...legacy].sort(byScore);
+    const durableSlots = Math.max(1, Math.floor(this.contextLimit * DURABLE_RECALL_BUDGET_SHARE));
+    const durableChars = Math.floor(this.contextMaxChars * DURABLE_RECALL_BUDGET_SHARE);
+
     const selected = [];
     let total = 0;
+    let durableCount = 0;
+    let durableTotal = 0;
     for (const row of ranked) {
       if (selected.length >= this.contextLimit) break;
-      const remaining = this.contextMaxChars - total;
-      if (remaining <= 0) break;
+      const durable = isDurable(row);
+      // Cap the profile's share so a question-specific memory still fits.
+      if (durable && (durableCount >= durableSlots || durableTotal >= durableChars)) continue;
+      const remaining = Math.min(
+        this.contextMaxChars - total,
+        durable ? durableChars - durableTotal : this.contextMaxChars,
+      );
+      if (remaining <= 0) continue;
       const content = row.memo.content.slice(0, remaining);
       if (!content) continue;
       selected.push({ ...row.memo, content });
       total += content.length;
+      if (durable) {
+        durableCount += 1;
+        durableTotal += content.length;
+      }
     }
     return selected;
   }

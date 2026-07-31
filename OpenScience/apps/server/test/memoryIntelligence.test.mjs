@@ -90,6 +90,39 @@ function modelFetch(candidateFactory) {
   };
 }
 
+test("extraction is shown the keys already in use so a repeat reinforces one memory", async () => {
+  // Without this the model mints a fresh key each time — one run produced
+  // user.specialty, profile.specialty, profile.work.area and
+  // user.profile.work_domain for the same fact — and the profile fills with
+  // synonyms that each stay at a single observation.
+  const client = new MemoryStoreDouble();
+  await client.upsertRecord("user_1", {
+    scope: "user", scopeId: null, kind: "profile", key: "user.profile.job_title",
+    value: "临床药师", summary: "临床药师", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.7, sensitive: false,
+  }, null, {});
+
+  let seenExisting = null;
+  const intelligence = new MemoryIntelligence(config, client, {
+    fetchImpl: async (_input, init) => {
+      const payload = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
+      seenExisting = payload.existingMemories;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] });
+    },
+  });
+  await intelligence.recordRun(project(), run("run_reuse"), [message("m1", "我是临床药师。")]);
+
+  assert.ok(Array.isArray(seenExisting), "existing memories must reach the extraction prompt");
+  assert.ok(
+    seenExisting.some((record) => record.key === "user.profile.job_title" && record.kind === "profile"),
+    "the stored profile key must be offered for reuse",
+  );
+  assert.ok(
+    seenExisting.every((record) => record.kind !== "run_summary"),
+    "run summaries are episodic and must not be offered as profile keys",
+  );
+});
+
 test("memory extraction accepts only candidates backed by an exact source quote", async () => {
   const store = new MemoryStoreDouble();
   const text = "以后回答请优先引用原始研究，并明确说明证据不确定性。";
