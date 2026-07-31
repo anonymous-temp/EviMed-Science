@@ -38,3 +38,24 @@ def test_r_resolves_every_package_the_analysis_needs():
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return  # R is not installed on this host
     assert result.stdout.strip() == "", f"unreachable R packages: {result.stdout.strip()}"
+
+
+def test_a_package_that_is_present_but_unloadable_names_its_real_gap():
+    """TwoSampleMR sat on disk unusable for want of data.table, and the check
+    said to install TwoSampleMR. The remedy has to name what is actually
+    missing, so the R error travels back with the package name."""
+    import subprocess
+    from unittest import mock
+
+    from mr_agent.tools import mr_executor
+
+    completed = subprocess.CompletedProcess(
+        args=["Rscript"], returncode=0,
+        stdout="TwoSampleMR: there is no package called 'data.table'", stderr="",
+    )
+    with mock.patch.object(mr_executor.subprocess, "run", return_value=completed):
+        ok, message = mr_executor.check_r_environment()
+
+    assert ok is False
+    assert "data.table" in message, "the message must name the dependency that is actually missing"
+    assert "fails to load" in message, "it must distinguish absent from unloadable"
