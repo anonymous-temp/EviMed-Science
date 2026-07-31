@@ -2181,13 +2181,6 @@ class ClaimMapMixin:
             }
         ]
 
-    @staticmethod
-    def _append_citation_to_sentence(sentence: str, citation: str) -> str:
-        raw = str(sentence or "")
-        match = re.search(r"(\s*[。！？.!?]\s*)$", raw)
-        if match:
-            return raw[:match.start()] + str(citation or "") + match.group(1)
-        return raw.rstrip() + str(citation or "")
 
     def _apply_claim_section_citations(self, heading: str, body: str, facts: dict) -> str:
         """Apply the current claim citation plan to a candidate section body."""
