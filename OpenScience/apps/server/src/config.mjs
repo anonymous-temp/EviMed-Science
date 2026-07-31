@@ -752,6 +752,12 @@ export function loadConfig(overrides = {}) {
     memosContextMaxChars: Number(
       overrides.memosContextMaxChars ?? process.env.OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS ?? 20_000,
     ),
+    // Consecutive monitor polls with no new message and no new tool call before
+    // a run is treated as stalled. A ledger of start/dispatch/finish cannot tell
+    // a working run from a dead one, so both used to wait out the full timeout.
+    agentRunMonitorStallPolls: Number(
+      overrides.agentRunMonitorStallPolls ?? process.env.OPEN_SCIENCE_AGENT_RUN_MONITOR_STALL_POLLS ?? 240,
+    ),
     memoryExtractionEnabled:
       overrides.memoryExtractionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED", true),
     // Extraction runs after the reply is already delivered, so a generous budget

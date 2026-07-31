@@ -208,6 +208,9 @@ function foldEvents(events) {
         artifacts: [],
         verification: null,
         qualityNotices: [],
+        observedMessages: 0,
+        observedToolCalls: 0,
+        lastProgressAt: null,
       }));
       continue;
     }
@@ -221,6 +224,22 @@ function foldEvents(events) {
         throw corrupt("Agent run dispatch event is invalid.");
       }
       runs.set(id, Object.freeze({ ...current, dispatchStatus: event.status }));
+      continue;
+    }
+    if (event.event === "progress") {
+      const id = safeStoredId(event.id, "id");
+      const current = runs.get(id);
+      // Progress is observational: it never changes a run's status, so a
+      // malformed or late one is dropped rather than corrupting the ledger.
+      if (!current || current.status !== "running") continue;
+      if (!Number.isSafeInteger(event.messages) || event.messages < 0) continue;
+      if (!Number.isSafeInteger(event.toolCalls) || event.toolCalls < 0) continue;
+      runs.set(id, Object.freeze({
+        ...current,
+        observedMessages: event.messages,
+        observedToolCalls: event.toolCalls,
+        lastProgressAt: storedTimestamp(event.at, "at"),
+      }));
       continue;
     }
     if (event.event === "finished") {
@@ -773,6 +792,9 @@ export class AgentRunStore {
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
     this.monitorIntervalMs = options.monitorIntervalMs ?? 500;
     this.monitorMaxPolls = options.monitorMaxPolls ?? 3600;
+    // Consecutive polls with no new message and no new tool call before a run
+    // is called stalled. Zero disables the check and waits out the timeout.
+    this.monitorStallPolls = options.monitorStallPolls ?? 0;
     this.onRunFinished = options.onRunFinished ?? (async () => {});
     this.onRunFinishedError = options.onRunFinishedError ?? (async () => {});
     this.maxClinicalRepairAttempts = options.maxClinicalRepairAttempts ?? 2;
@@ -1129,10 +1151,41 @@ export class AgentRunStore {
     return this.finishInternal(project, run.id, { ...terminal, artifacts });
   }
 
+  /** Append what is observably happening, when it changes.
+   *
+   * Returns whether the run moved since the last observation, which is what
+   * separates a long run from a dead one. Only a change is written, so the
+   * ledger does not grow with every poll of a quiet run. */
+  async recordProgress(project, run) {
+    let history;
+    try {
+      history = await this.readSessionHistory(project, run.sessionId, { wake: false });
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(history)) return false;
+    const messages = history.length;
+    const toolCalls = history.reduce(
+      (total, message) => total + (message?.parts ?? []).filter((part) => part?.type === "tool").length,
+      0,
+    );
+    if (messages === (run.observedMessages ?? 0) && toolCalls === (run.observedToolCalls ?? 0)) return false;
+    await withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const current = foldEvents(events).get(run.id);
+      if (!current || current.status !== "running") return;
+      const event = { event: "progress", id: run.id, at: this.now().toISOString(), messages, toolCalls };
+      const text = serializeNext(events, event, this.maxBytes);
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+    });
+    return true;
+  }
+
   scheduleMonitor(project, runId) {
     if (this.monitors.has(runId)) return;
     let canceled = false;
     const promise = (async () => {
+      let idlePolls = 0;
       // eslint-disable-next-line no-unmodified-loop-condition -- set by the cancel closure registered below
       for (let poll = 0; poll < this.monitorMaxPolls && !canceled; poll += 1) {
         const runs = await this.list(project);
@@ -1140,6 +1193,20 @@ export class AgentRunStore {
         if (!run || run.status !== "running") return;
         const reconciled = await this.reconcileSession(project, run.sessionId);
         if (reconciled?.status !== "running") return;
+        // A ledger of started/dispatch/finished cannot tell a run that is
+        // working from one that died an hour ago, so both wait out the full
+        // timeout. Record what is observably happening, and stop early once
+        // nothing has happened for long enough that nothing will.
+        const moved = await this.recordProgress(project, run).catch(() => false);
+        idlePolls = moved ? 0 : idlePolls + 1;
+        if (this.monitorStallPolls > 0 && idlePolls >= this.monitorStallPolls) {
+          await this.finishInternal(project, runId, {
+            status: "failed",
+            errorCode: "runtime_monitor_stalled",
+            artifacts: [],
+          });
+          return;
+        }
         await new Promise((resolve) => {
           const timer = setTimeout(resolve, this.monitorIntervalMs);
           timer.unref?.();

@@ -959,6 +959,45 @@ function managedAgentMarker(skill, agent) {
   return `<!-- evimed-managed-agent: ${agent}; skill: ${skill} -->`;
 }
 
+/** The delegate form of a package.
+ *
+ * The same capability, reachable from another agent's `task` tool instead of
+ * from the router. It returns its findings as text rather than owning the
+ * user's reply, and it may not delegate further: one level keeps the fan-out
+ * countable, and every request a delegate makes still crosses the same metered
+ * model gateway as its parent's. */
+export function generatedRuntimeSubagent(manifest) {
+  const tools = [...manifest.requiredTools, ...manifest.optionalTools];
+  const skills = [...(manifest.companionSkills ?? []), manifest.skill];
+  return `---
+description: ${JSON.stringify(`EviMed ${manifest.title} (delegate): ${manifest.description}`)}
+mode: subagent
+permission:
+  bash: allow
+  edit: allow
+  write: allow
+---
+
+You are handling one bounded piece of work delegated by another EviMed agent.
+
+Load and follow every required skill below, in order:
+${skills.map((skill, index) => `${index + 1}. \`${skill}\``).join("\n")}
+
+Use only these declared EviMed research tools:
+${tools.map((tool) => `- \`${tool}\``).join("\n")}
+
+Do not delegate any part of this work further; you are the last step in the chain.
+
+Answer the question you were given and nothing beyond it. Your reply is read by
+the agent that called you, not by the user, so return the findings themselves —
+the numbers, the sources, and what you could not establish. State what you were
+unable to determine rather than filling the gap, because the caller cannot see
+your tool results and has no way to check an inference you present as a finding.
+
+${managedAgentMarker(manifest.skill, `${manifest.runtimeAgent}-delegate`)}
+`;
+}
+
 export function generatedRuntimeAgent(manifest) {
   const description = `EviMed ${manifest.title}: ${manifest.description}`;
   const skills = [...(manifest.companionSkills ?? []), manifest.skill];
@@ -1262,7 +1301,7 @@ async function replaceManagedSkill(project, skillRoot, loadedPackage, manifest) 
 }
 
 export async function syncRuntimeAgentPackages(project, plan, agentRegistry) {
-  if (!agentRegistry || !plan.xdgConfigDir) return { skills: 0, agents: 0 };
+  if (!agentRegistry || !plan.xdgConfigDir) return { skills: 0, agents: 0, delegates: 0 };
   if (typeof agentRegistry.list !== "function" || typeof agentRegistry.getPackage !== "function") {
     throw new TypeError("Runtime agent bootstrap requires a loaded AgentRegistry.");
   }
@@ -1306,11 +1345,20 @@ export async function syncRuntimeAgentPackages(project, plan, agentRegistry) {
         managedAgentMatches,
       );
       if (target) agentsToPrune.push(target);
+      // Its delegate goes with it; otherwise a removed package stays callable.
+      const delegate = await preflightManagedPrune(
+        project,
+        path.join(agentRoot, `${entry.agent}-delegate.md`),
+        { ...entry, agent: `${entry.agent}-delegate` },
+        managedAgentMatches,
+      );
+      if (delegate) agentsToPrune.push(delegate);
     }
   }
 
   let skills = 0;
   let agents = 0;
+  let delegates = 0;
   for (const manifest of agentRegistry.list()) {
     const loadedPackage = agentRegistry.getPackage(manifest.id);
     if (!loadedPackage?.packageDir) {
@@ -1336,6 +1384,30 @@ export async function syncRuntimeAgentPackages(project, plan, agentRegistry) {
       mode: 0o600,
     });
     agents += 1;
+
+    // The same package, reachable as a delegate. Emitting it is what makes the
+    // capability available to another agent's task tool at all; without it the
+    // runtime has subagent support and nothing to call.
+    const targetDelegate = path.join(agentRoot, `${manifest.runtimeAgent}-delegate.md`);
+    const delegateStat = await fs.lstat(targetDelegate).catch((error) => {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    });
+    if (delegateStat && !(await managedAgentMatches(project, targetDelegate, {
+      skill: manifest.skill,
+      agent: `${manifest.runtimeAgent}-delegate`,
+    }))) {
+      throw new HttpError(
+        409,
+        "runtime_agent_definition_collision",
+        `Runtime agent "${manifest.runtimeAgent}-delegate" is not EviMed-managed.`,
+      );
+    }
+    await writeFileAtomicNoFollow(project.rootDir, targetDelegate, generatedRuntimeSubagent(manifest), {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    delegates += 1;
   }
 
   for (const target of skillsToPrune) await fs.rm(target, { recursive: true, force: true });
@@ -1346,7 +1418,7 @@ export async function syncRuntimeAgentPackages(project, plan, agentRegistry) {
     packages: currentInventory,
   });
 
-  return { skills, agents };
+  return { skills, agents, delegates };
 }
 
 const evimedMcpName = "evimed-research";

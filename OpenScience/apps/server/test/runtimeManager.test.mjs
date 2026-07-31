@@ -989,7 +989,7 @@ test("syncRuntimeAgentPackages materializes deterministic skills and primary age
     const second = await syncRuntimeAgentPackages(runtimeProject, { xdgConfigDir }, registry);
     const secondAgent = await readFile(agentPath, "utf8");
 
-    assert.deepEqual(first, { skills: 1, agents: 1 });
+    assert.deepEqual(first, { skills: 1, agents: 1, delegates: 1 });
     assert.deepEqual(second, first);
     assert.equal(secondAgent, firstAgent);
     assert.match(firstAgent, /^---\ndescription: /);
@@ -1076,7 +1076,7 @@ test("syncRuntimeAgentPackages prunes only previously managed packages", async (
 
     assert.deepEqual(
       await syncRuntimeAgentPackages(runtimeProject, { xdgConfigDir }, emptyRegistry),
-      { skills: 0, agents: 0 },
+      { skills: 0, agents: 0, delegates: 0 },
     );
     await assert.rejects(
       () => readFile(path.join(xdgConfigDir, "opencode", "skills", "test-analysis", "SKILL.md")),

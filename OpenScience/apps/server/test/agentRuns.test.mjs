@@ -955,6 +955,45 @@ test("enforces bounded run count and ledger bytes without partial mutation", asy
   });
 });
 
+test("a run that stops making progress is failed instead of waiting out the timeout", async () => {
+  // start/dispatch/finish cannot distinguish a long run from a dead one, so a
+  // run that died early still held its slot for the whole monitor window.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-stall-"));
+  try {
+    const project = {
+      id: "project-1", userId: "user-1", rootDir: root,
+      metaDir: path.join(root, ".openscience"), workspaceDir: root,
+    };
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_stall", mode: "open-domain",
+      agentId: null, agentVersion: null, runtimeAgent: null,
+    };
+    let history = [{ info: { id: "m1", role: "user" }, parts: [{ type: "text", text: "go" }] }];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 1,
+      monitorMaxPolls: 500,
+      monitorStallPolls: 3,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "running",
+      runtimeWorkspaceRoot: () => root,
+    });
+    const run = await store.start(project, { sessionId: "ses_stall" });
+
+    // Move once, then go quiet: the run must be failed for stalling, not for timing out.
+    history = [...history, { info: { id: "m2", role: "assistant" }, parts: [{ type: "tool", tool: "evimed_health" }] }];
+    await store.monitors.get(run.id)?.promise;
+
+    const [finished] = await store.list(project);
+    assert.equal(finished.status, "failed");
+    assert.equal(finished.errorCode, "runtime_monitor_stalled");
+    assert.ok(finished.observedToolCalls >= 1, "the progress it did make is recorded");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("keeps identical session and run ids project-scoped", async () => {
   await withApp(async ({ base }) => {
     const created = await fetch(`${base}/api/projects`, {
@@ -1394,7 +1433,10 @@ test("fails baseline history closed and uses a persisted message cursor instead 
     const started = await store.start(project, { sessionId: binding.sessionId });
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.equal((await store.list(project))[0].status, "running");
-    const startedEvent = JSON.parse((await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8")).trim());
+    // The ledger is JSONL and now carries progress events too, so take the
+    // start event rather than parsing the whole file as one object.
+    const startedEvent = (await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8"))
+      .trim().split("\n").map((line) => JSON.parse(line)).find((event) => event.event === "started");
     assert.equal(startedEvent.baselineCursor, "msg_old");
 
     history = [
