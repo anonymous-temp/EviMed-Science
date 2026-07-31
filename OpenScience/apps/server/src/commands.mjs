@@ -1015,6 +1015,8 @@ export function buildDockerKernelLaunchPlan(project, config, language = "python"
   };
 }
 
+/** @param {any} code @param {any} project @param {any} signal
+ *  @param {Record<string, any>} config @param {any} language */
 function runDockerKernel(code, project, signal, config, language) {
   assertDockerDataVolumeSupport(config, "kernel_volume_subpath_unsupported");
   const plan = buildDockerKernelLaunchPlan(project, config, language);
@@ -1043,6 +1045,7 @@ function runHostKernel(code, cwd, signal, executable, language, maxOutputBytes, 
   });
 }
 
+/** @param {Record<string, any>} options */
 export function runLimitedProcess({ command, args, cwd, stdin, signal, maxOutputBytes, timeoutMs, onAbort, onError, onSpawn }) {
   return new Promise((resolve) => {
     const outputLimit = Math.max(0, Math.floor(Number.isFinite(maxOutputBytes) ? maxOutputBytes : 1024 * 1024));

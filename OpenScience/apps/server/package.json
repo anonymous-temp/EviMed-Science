@@ -15,7 +15,8 @@
     "test:unit": "node --test test/runtimeManager.test.mjs test/security.test.mjs test/server.test.mjs",
     "test:contract": "node --test test/hosted-web.e2e.test.mjs",
     "test:e2e": "node ../../scripts/ops/hosted-production-e2e.mjs",
-    "lint": "eslint src test --ext .mjs --max-warnings 0"
+    "lint": "eslint src test --ext .mjs --max-warnings 0",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "engines": {
     "node": ">=20"
@@ -26,6 +27,7 @@
     "yaml": "2.8.3"
   },
   "devDependencies": {
-    "eslint": "^8.57.1"
+    "eslint": "^8.57.1",
+    "typescript": "^5.6.3"
   }
 }

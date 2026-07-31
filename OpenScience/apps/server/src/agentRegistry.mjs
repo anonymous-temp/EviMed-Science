@@ -85,7 +85,10 @@ export const EVIMED_AGENT_COMPLETION_CHECKS = new Set([
   "skillsLoaded",
 ]);
 
+/** @returns {Error & Record<string, any>} An Error carrying the extra fields its
+ *  callers read; a bare Error type rejects every one of them. */
 function registryError(message, code = "agent_package_invalid") {
+  /** @type {Error & Record<string, any>} */
   const error = new Error(message);
   error.code = code;
   return error;
@@ -342,6 +345,10 @@ class AgentRegistry {
   }
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {Record<string, any>} options0
+ */
 export async function loadAgentRegistry({
   packageDirs,
   allowedToolIds = EVIMED_AGENT_TOOL_IDS,

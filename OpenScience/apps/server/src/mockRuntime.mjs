@@ -246,7 +246,7 @@ export function startMockOpenCodeRuntime() {
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       resolve({
-        url: `http://127.0.0.1:${address.port}`,
+        url: `http://127.0.0.1:${/** @type {import("node:net").AddressInfo} */ (address).port}`,
         close: () => new Promise((done) => {
           for (const res of clients) res.end();
           clients.clear();

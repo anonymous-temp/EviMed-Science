@@ -323,6 +323,10 @@ function clientAddress(req, config) {
   return direct;
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {any} overrides
+ */
 export function createWebApiApp(overrides = {}) {
   const config = loadConfig(overrides);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs });
@@ -353,6 +357,7 @@ export function createWebApiApp(overrides = {}) {
     onRunFinished: async (project, run) => {
       if (!memosClient.configured) {
         if (config.requireMemos) {
+          /** @type {Error & Record<string, any>} */
           const error = new Error("Required Memos run recording is unavailable.");
           error.code = "memory_required_unavailable";
           throw error;
@@ -2184,7 +2189,10 @@ async function readinessCheck(fn) {
   }
 }
 
+/** @returns {Error & Record<string, any>} An Error carrying the extra fields its
+ *  callers read; a bare Error type rejects every one of them. */
 function readinessFailure(code, details = null) {
+  /** @type {Error & Record<string, any>} */
   const err = new Error(code);
   err.code = code;
   if (details && typeof details === "object") err.details = details;

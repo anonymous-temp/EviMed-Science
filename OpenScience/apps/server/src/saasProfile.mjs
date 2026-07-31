@@ -1,12 +1,16 @@
 const deploymentProfiles = new Set(["controlled-pilot", "individual-saas"]);
 
+/** @returns {Error & Record<string, any>} An Error carrying the extra fields its
+ *  callers read; a bare Error type rejects every one of them. */
 function profileFailure(code, details = null) {
+  /** @type {Error & Record<string, any>} */
   const error = new Error(code);
   error.code = code;
   if (details && typeof details === "object") error.details = details;
   return error;
 }
 
+/** @param {any} check @param {(check: any) => boolean} predicate */
 function checkMatches(check, predicate = () => true) {
   return check?.ok === true && predicate(check);
 }

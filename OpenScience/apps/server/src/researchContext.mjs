@@ -120,6 +120,9 @@ function boundedInteger(value, fallback, minimum, maximum) {
 
 function knowledgeTerms(value) {
   const normalized = String(value ?? "").normalize("NFKC").toLowerCase();
+  // `?? []` makes an empty array whose element type TypeScript infers as never,
+  // so the CJK bigrams pushed below have nowhere to go.
+  /** @type {string[]} */
   const terms = normalized.match(/[\p{L}\p{N}]{2,}/gu) ?? [];
   const cjkRuns = normalized.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu) ?? [];
   for (const run of cjkRuns) {
@@ -233,7 +236,8 @@ export async function indexKnowledgeBase(project, config, synchronized) {
   const metaDir = project.metaDir ?? path.join(project.rootDir, ".openscience");
   await fs.mkdir(metaDir, { recursive: true, mode: 0o700 });
   const target = path.join(metaDir, KNOWLEDGE_INDEX_FILE);
-  await writeJsonFileAtomicNoFollow(project.rootDir, target, index, { mode: 0o600 });
+  // The writer always uses mode 0o600; the fourth argument was never read.
+  await writeJsonFileAtomicNoFollow(project.rootDir, target, index);
   return index;
 }
 

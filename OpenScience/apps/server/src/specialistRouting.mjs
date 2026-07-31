@@ -51,11 +51,16 @@ function selection(agent, reason) {
   });
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {any} query
+ *  @param {any} agents
+ */
 export function routeOpenDomainSpecialist(query, agents) {
   if (typeof query !== "string" || !query.trim() || !Array.isArray(agents)) return null;
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
   for (const [id, pattern] of routeRules) {
-    if (pattern.test(query)) return selection(byId.get(id), `matched:${id}`);
+    if (/** @type {RegExp} */ (pattern).test(query)) return selection(byId.get(id), `matched:${id}`);
   }
   if (positiveMetaIntent.test(query) && !negatedMetaIntent.test(query)) {
     return selection(byId.get("meta-analysis"), "matched:meta-analysis");

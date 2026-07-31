@@ -591,6 +591,10 @@ function validateSynthesizedClaim(
   }
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {Record<string, any>} options0
+ */
 export function validateClinicalEvidencePackage({
   reportText,
   matrix,

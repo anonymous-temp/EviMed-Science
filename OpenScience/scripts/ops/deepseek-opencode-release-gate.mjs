@@ -49,9 +49,14 @@ export function resolveArtifactProvenanceTool(artifactData) {
 }
 
 class ReleaseGateError extends Error {
+  /** @param {string} code */
   constructor(code) {
     super(`DeepSeek OpenCode release gate failed: ${code}`);
+    /** @type {string} */
     this.code = code;
+    /** Attached by the caller that knows why the gate failed.
+     *  @type {any} */
+    this.diagnostic = undefined;
   }
 }
 
@@ -59,6 +64,7 @@ function failure(code) {
   return new ReleaseGateError(code);
 }
 
+/** @param {Record<string, any>} options */
 export function resolveOpenCodeBinary({ repoRoot = defaultRepoRoot, opencodeBin = process.env.OPEN_SCIENCE_OPENCODE_BIN } = {}) {
   if (opencodeBin) return path.resolve(opencodeBin);
   const target = process.platform === "darwin"
@@ -256,26 +262,27 @@ async function startFakeProvider(workspaceDir) {
     server.once("error", reject);
   });
   return {
-    baseUrl: `http://127.0.0.1:${server.address().port}`,
+    baseUrl: `http://127.0.0.1:${/** @type {import("node:net").AddressInfo} */ (server.address()).port}`,
     state,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
 }
 
+/** @param {Record<string, any>} config @param {any} manager */
 async function startGateway(config, manager) {
   const handler = createModelGatewayHandler(config, manager);
   const state = { requests: 0, sseResponses: 0 };
   const server = http.createServer((req, res) => {
     state.requests += 1;
     const writeHead = res.writeHead.bind(res);
-    res.writeHead = (statusCode, statusMessage, headers) => {
+    res.writeHead = /** @type {any} */ ((statusCode, statusMessage, headers) => {
       const supplied = typeof statusMessage === "object" ? statusMessage : headers;
       const contentType = supplied?.["content-type"] ?? supplied?.["Content-Type"] ?? res.getHeader("content-type");
       if (String(contentType ?? "").includes("text/event-stream")) state.sseResponses += 1;
       return typeof statusMessage === "string"
         ? writeHead(statusCode, statusMessage, headers)
         : writeHead(statusCode, statusMessage);
-    };
+    });
     void handler(req, res);
   });
   server.listen(0, "127.0.0.1");
@@ -284,7 +291,7 @@ async function startGateway(config, manager) {
     server.once("error", reject);
   });
   return {
-    baseUrl: `http://127.0.0.1:${server.address().port}`,
+    baseUrl: `http://127.0.0.1:${/** @type {import("node:net").AddressInfo} */ (server.address()).port}`,
     state,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
@@ -628,6 +635,7 @@ function unsignedReceiptFields(receipt) {
   return unsigned;
 }
 
+/** @param {Record<string, any>} receipt @param {Record<string, any>} options */
 export function signDeepSeekReleaseReceipt(receipt, { signingSecret } = {}) {
   if (receipt == null || typeof receipt !== "object" || Array.isArray(receipt)) {
     throw failure("deepseek_release_receipt_invalid");
@@ -648,6 +656,7 @@ export function signDeepSeekReleaseReceipt(receipt, { signingSecret } = {}) {
   };
 }
 
+/** @param {Record<string, any>} receipt @param {Record<string, any>} options */
 export function validateDeepSeekReleaseReceipt(receipt, {
   requireProduction = false,
   signingSecret,
@@ -713,6 +722,7 @@ export function validateDeepSeekReleaseReceipt(receipt, {
   return receipt;
 }
 
+/** @param {string} file @param {Record<string, any>} options */
 export function readDeepSeekReleaseReceiptFile(file, options = {}) {
   if (typeof file !== "string" || !file.trim()) throw failure("deepseek_release_receipt_path_missing");
   const target = path.resolve(file);
@@ -755,6 +765,7 @@ async function writeReceipt(receiptPath, receipt) {
   }
 }
 
+/** @param {Record<string, any>} options */
 async function runOpenCodeChain({
   mode,
   repoRoot,
@@ -960,6 +971,7 @@ async function runOpenCodeChain({
   }
 }
 
+/** @param {Record<string, any>} options */
 export async function runDeepSeekOpenCodeReleaseGate({
   mode = "production",
   repoRoot = defaultRepoRoot,

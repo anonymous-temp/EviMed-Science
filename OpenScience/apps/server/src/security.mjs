@@ -5,10 +5,20 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 export class HttpError extends Error {
+  /** @param {number} status @param {string} code @param {string} message @param {Record<string, any>} options */
   constructor(status, code, message, options = {}) {
     super(message);
+    /** @type {number} */
     this.status = status;
+    /** @type {string} */
     this.code = code;
+    /** Set by the dispatch path when an upstream refusal is final rather than
+     *  worth retrying. Declared here so the property has one definition
+     *  instead of appearing by assignment at the call sites.
+     *  @type {boolean | undefined} */
+    this.definitivelyRejected = undefined;
+    /** @type {number | undefined} */
+    this.retryAfterSeconds = undefined;
     if (Number.isFinite(options.retryAfterSeconds)) this.retryAfterSeconds = options.retryAfterSeconds;
   }
 }
@@ -582,15 +592,20 @@ export async function writeFileExclusiveNoFollow(rootDir, file, data, options = 
   }
 }
 
+/** Reads the file as text. readFileNoFollow is typed by its options argument,
+ *  which TypeScript cannot narrow through a variable, so state the result here
+ *  rather than at every call site.
+ *  @returns {Promise<string>} */
 export async function readTextFileNoFollow(rootDir, file, fallback = "") {
   try {
-    return await readFileNoFollow(rootDir, file, "utf8");
+    return /** @type {string} */ (/** @type {unknown} */ (await readFileNoFollow(rootDir, file, "utf8")));
   } catch (err) {
     if (err?.code === "ENOENT") return fallback;
     throw err;
   }
 }
 
+/** @param {string} rootDir @param {string} file @param {any} value */
 export async function writeJsonFileAtomicNoFollow(rootDir, file, value) {
   await writeFileAtomicNoFollow(rootDir, file, `${JSON.stringify(value, null, 2)}\n`, {
     encoding: "utf8",
