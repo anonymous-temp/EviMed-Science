@@ -9,7 +9,7 @@ import {
   withProjectStorageMutation,
   writeFileAtomicNoFollow,
 } from "./security.mjs";
-import { validateClinicalEvidencePackage } from "./clinicalEvidenceQuality.mjs";
+import { citationIntegrityIssues, validateClinicalEvidencePackage } from "./clinicalEvidenceQuality.mjs";
 
 const ledgerFileName = "runs.jsonl";
 const terminalStatuses = new Set(["succeeded", "failed", "canceled"]);
@@ -605,6 +605,17 @@ async function requiredSpecialistArtifacts(
         };
       }
     }
+    if (agent.completionChecks.includes("citationIntegrity")) {
+      const issues = citationIntegrityIssues(assistantProse(assistantMessages));
+      if (issues.length > 0) {
+        return {
+          artifacts: [],
+          errorCode: "specialist_citation_integrity_failed",
+          qualityDegradable: true,
+          qualityIssues: issues,
+        };
+      }
+    }
     return { artifacts: [], errorCode: null };
   }
   if (agent.completionChecks.includes("skillsLoaded")) {
@@ -632,6 +643,13 @@ async function requiredSpecialistArtifacts(
     const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
     if (markdown.some((text) => !validExplicitCitations(text))) {
       return { artifacts, errorCode: "specialist_citation_invalid" };
+    }
+  }
+  if (agent.completionChecks.includes("citationIntegrity")) {
+    const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
+    const issues = markdown.flatMap((text) => citationIntegrityIssues(text));
+    if (issues.length > 0) {
+      return { artifacts, errorCode: "specialist_citation_integrity_failed", qualityDegradable: true, qualityIssues: issues };
     }
   }
   // Generalized "sources recorded" check (the reusable part of clinical

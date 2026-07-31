@@ -293,6 +293,115 @@ function bibliographyEntryCount(value) {
   return [...String(value ?? "").matchAll(/^@[A-Za-z]+\s*\{/gm)].length;
 }
 
+const referenceEntryPattern = /^\s*(?:\[(\d{1,3})\]|(\d{1,3})[.、])\s+(\S.*)$/;
+
+/** Every identifier an entry carries, normalised so the same work matches
+ *  itself across schemes. A DOI, a PMID and a Europe PMC URL are three names
+ *  for one article, and a bibliography that lists it under two of them is
+ *  citing it twice. */
+function referenceIdentifiers(text) {
+  const found = new Set();
+  for (const [, doi] of text.matchAll(/\b(10\.\d{4,9}\/[^\s)\],;"']+)/gi)) {
+    found.add(`doi:${doi.toLowerCase().replace(/[.,;)]+$/, "")}`);
+  }
+  for (const [, pmid] of text.matchAll(/\bpmid:?\s*(\d{5,9})\b/gi)) found.add(`pmid:${pmid}`);
+  for (const [, pmid] of text.matchAll(/pubmed\.ncbi\.nlm\.nih\.gov\/(\d{5,9})/gi)) found.add(`pmid:${pmid}`);
+  for (const [, pmid] of text.matchAll(/europepmc\.org\/(?:article|abstract)\/[a-z]+\/(\d{5,9})/gi)) found.add(`pmid:${pmid}`);
+  for (const [, pmcid] of text.matchAll(/\b(PMC\d{5,9})\b/gi)) found.add(`pmcid:${pmcid.toUpperCase()}`);
+  for (const [, nct] of text.matchAll(/\b(NCT\d{8})\b/gi)) found.add(`nct:${nct.toUpperCase()}`);
+  return found;
+}
+
+/** A four-digit number is only a year if it could be one. Bibliographies are
+ *  full of look-alikes — "J Clin Oncol. 2018;36(15_suppl):2035" carries a page
+ *  number that outranks the real year on a plain maximum. */
+function plausibleYears(text) {
+  const ceiling = new Date().getUTCFullYear() + 1;
+  return [...text.matchAll(/\b(1[89]\d{2}|20\d{2})\b/g)]
+    .map((match) => Number(match[1]))
+    .filter((year) => year >= 1800 && year <= ceiling);
+}
+
+function referenceYear(text) {
+  const years = plausibleYears(text);
+  return years.length ? Math.max(...years) : null;
+}
+
+/** Deterministic integrity checks over a reply's own citations.
+ *
+ * These are the failures a URL-hygiene check cannot see: a marker pointing at
+ * no entry, an entry nobody cites, one article listed twice under two
+ * identifier schemes, an entry that declares itself a copy of another, and a
+ * sentence resting a dated claim on a source that predates it. */
+export function citationIntegrityIssues(reportText) {
+  const text = String(reportText ?? "");
+  const section = reportSection(text, "参考文献|参考来源|References?");
+  const prose = section ? text.slice(0, text.indexOf(section)) : text;
+
+  const entries = new Map();
+  for (const line of section.split("\n")) {
+    const match = referenceEntryPattern.exec(line);
+    if (!match) continue;
+    const number = Number(match[1] ?? match[2]);
+    if (!Number.isInteger(number) || entries.has(number)) continue;
+    entries.set(number, { number, body: match[3].trim() });
+  }
+  if (entries.size === 0) return [];
+
+  const issues = [];
+  const cited = new Set();
+  for (const [, group] of prose.matchAll(/\[((?:\d{1,3})(?:\s*[,，、]\s*\d{1,3})*)\]/g)) {
+    for (const part of group.split(/[,，、]/)) {
+      const number = Number(part.trim());
+      if (Number.isInteger(number)) cited.add(number);
+    }
+  }
+  for (const number of [...cited].sort((left, right) => left - right)) {
+    if (!entries.has(number)) issues.push(`Citation [${number}] has no matching entry in the reference list.`);
+  }
+  for (const number of [...entries.keys()].sort((left, right) => left - right)) {
+    if (!cited.has(number)) issues.push(`Reference [${number}] is listed but never cited in the text.`);
+  }
+
+  const owner = new Map();
+  for (const entry of entries.values()) {
+    if (backReferenceOpener.test(`${entry.number}. ${entry.body}`) && pointsAtAnotherEntry.test(entry.body)) {
+      issues.push(
+        `Reference [${entry.number}] states that it is the same as another entry; give it its own source or remove it.`,
+      );
+    }
+    for (const identifier of referenceIdentifiers(entry.body)) {
+      const first = owner.get(identifier);
+      if (first !== undefined && first !== entry.number) {
+        issues.push(
+          `References [${first}] and [${entry.number}] are the same work under different identifiers (${identifier}).`,
+        );
+      } else if (first === undefined) {
+        owner.set(identifier, entry.number);
+      }
+    }
+  }
+
+  // A source cannot support a claim about something that came after it.
+  for (const sentence of prose.split(/(?<=[。.!?！？\n])/)) {
+    const markers = [...sentence.matchAll(/\[(\d{1,3})\]/g)].map((match) => Number(match[1]));
+    if (markers.length === 0) continue;
+    const claimed = plausibleYears(sentence);
+    if (claimed.length === 0) continue;
+    const latestClaim = Math.max(...claimed);
+    // Only complain when no cited source is recent enough. A sentence citing
+    // several sources may well name the year of one of them, and blaming the
+    // older one for that would flag ordinary correct prose.
+    const years = markers.map((number) => referenceYear(entries.get(number)?.body ?? "")).filter((year) => year !== null);
+    if (years.length !== markers.length || years.some((year) => year >= latestClaim)) continue;
+    issues.push(
+      `A claim dated ${latestClaim} cites only ${markers.map((number) => `[${number}]`).join(", ")}, `
+      + `dated ${years.join(", ")}; a source cannot describe something that came after it.`,
+    );
+  }
+  return [...new Set(issues)];
+}
+
 // "5. 同 [1]", "12. See [3]", "7. Ibid. 3" point at another entry instead of
 // naming a source, and counting them lets a bibliography clear a reference
 // floor it does not meet. What separates a cross-reference from a real entry is
