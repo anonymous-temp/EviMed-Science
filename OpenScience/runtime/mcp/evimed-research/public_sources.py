@@ -2190,8 +2190,12 @@ def _human_protein_atlas(query, limit):
     return _metadata_result("human-protein-atlas-hpa", items, sources)
 
 
-def _mousemine(query, limit):
-    base = _base("EVIMED_MOUSEMINE_BASE_URL", "https://www.mousemine.org/mousemine/service")
+def _alliancemine(query, limit):
+    # MouseMine was retired: www.mousemine.org still redirects port 80 to HTTPS
+    # but its TLS listener resets, and the InterMine registry no longer lists it.
+    # MGI's model-organism data now lives in the Alliance of Genome Resources'
+    # AllianceMine, which serves the same InterMine search API.
+    base = _base("EVIMED_ALLIANCEMINE_BASE_URL", "https://alliancemine.alliancegenome.org/alliancemine/service")
     url = _url(base, "search", {"q": query, "format": "json"})
     records = _list(_get_json(url).get("results"))
     items, sources = [], []
@@ -2199,10 +2203,13 @@ def _mousemine(query, limit):
         record = _dict(record); fields = _dict(record.get("fields"))
         identifier = _first_text(fields.get("primaryIdentifier"), record.get("id"))
         title = _first_text(fields.get("symbol"), fields.get("name"), identifier)
-        record_url = "https://www.mousemine.org/mousemine/report.do?id=%s" % urllib.parse.quote(str(record.get("id") or identifier))
-        items.append({"id": identifier, "title": title, "url": record_url, "type": record.get("type"), "organism": fields.get("organism.commonName")})
-        sources.append(_source(identifier, title, record_url, "mousemine-mouse-genome-informatics-intermine-based"))
-    return _metadata_result("mousemine-mouse-genome-informatics-intermine-based", items, sources)
+        record_url = "https://alliancemine.alliancegenome.org/alliancemine/report.do?id=%s" % urllib.parse.quote(str(record.get("id") or identifier))
+        # AllianceMine spans several model organisms, so the organism belongs on
+        # every record; its search returns shortName where MouseMine gave commonName.
+        organism = _first_text(fields.get("organism.shortName"), fields.get("organism.commonName"))
+        items.append({"id": identifier, "title": title, "url": record_url, "type": record.get("type"), "organism": organism})
+        sources.append(_source(identifier, title, record_url, "alliancemine-alliance-of-genome-resources-intermine-based"))
+    return _metadata_result("alliancemine-alliance-of-genome-resources-intermine-based", items, sources)
 
 
 def _metabolomics_workbench(query, limit):
@@ -2910,7 +2917,7 @@ BIOMEDICAL_SOURCE_IDS = (
     "chembl", "clinpgx-pharmgkb", "gwas-catalog-ebi", "alphafold-db-predicted-protein-structures",
     "emdb-electron-microscopy-data-bank", "encode-encyclopedia-of-dna-elements", "ensembl",
     "gtex-genotype-tissue-expression", "human-protein-atlas-hpa",
-    "mousemine-mouse-genome-informatics-intermine-based", "metabolomics-workbench",
+    "alliancemine-alliance-of-genome-resources-intermine-based", "metabolomics-workbench",
     "rcsb-protein-data-bank-pdb", "ucsc-genome-browser", "wikipathways",
     "iuphar-bps-guide-to-pharmacology",
     "open-targets", "dgidb", "gnomad", "openneuro", "civic",
@@ -2994,8 +3001,8 @@ def biomedical_search(arguments):
         return _gtex(query, limit)
     if source_id == "human-protein-atlas-hpa":
         return _human_protein_atlas(query, limit)
-    if source_id == "mousemine-mouse-genome-informatics-intermine-based":
-        return _mousemine(query, limit)
+    if source_id == "alliancemine-alliance-of-genome-resources-intermine-based":
+        return _alliancemine(query, limit)
     if source_id == "metabolomics-workbench":
         return _metabolomics_workbench(query, limit)
     if source_id == "rcsb-protein-data-bank-pdb":

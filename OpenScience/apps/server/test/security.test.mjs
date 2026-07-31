@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -14,6 +15,45 @@ import {
   writeFileAtomicNoFollow,
   writeFileExclusiveNoFollow,
 } from "../src/security.mjs";
+
+test("a hard link cannot read a file that lives outside the workspace", async () => {
+  // Every other containment check is path-based, and the link's path is
+  // genuinely inside the root — only the inode gives it away.
+  const base = await mkdtemp(path.join(tmpdir(), "os-web-hardlink-"));
+  const root = path.join(base, "workspace");
+  await mkdir(root, { recursive: true });
+  const outside = path.join(base, "outside.txt");
+  await writeFile(outside, "content the workspace must not reach", "utf8");
+  const planted = path.join(root, "innocent.txt");
+  await link(outside, planted);
+
+  await assert.rejects(
+    () => readFileNoFollow(root, planted),
+    (error) => error instanceof HttpError && error.status === 403 && error.code === "path_forbidden",
+  );
+
+  const ordinary = path.join(root, "ordinary.txt");
+  await writeFile(ordinary, "ordinary content", "utf8");
+  assert.equal(String(await readFileNoFollow(root, ordinary)), "ordinary content");
+  await rm(base, { recursive: true, force: true });
+});
+
+test("a FIFO in the workspace is refused instead of blocking the request", async () => {
+  // mkfifo needs no privilege, so without O_NONBLOCK any workspace occupant
+  // could park a reader in open() forever and the type check below would never
+  // be reached.
+  const root = await mkdtemp(path.join(tmpdir(), "os-web-fifo-"));
+  const fifo = path.join(root, "pipe.txt");
+  execFileSync("mkfifo", [fifo]);
+
+  const outcome = await Promise.race([
+    readFileNoFollow(root, fifo).then(() => "returned").catch((error) => error),
+    new Promise((resolve) => setTimeout(() => resolve("blocked"), 5_000)),
+  ]);
+  assert.notEqual(outcome, "blocked", "opening a FIFO must not wait for a writer");
+  assert.ok(outcome instanceof HttpError && outcome.code === "not_a_file", `unexpected outcome: ${outcome}`);
+  await rm(root, { recursive: true, force: true });
+});
 
 test("resolveScopedPath keeps relative paths inside the workspace", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-web-security-"));

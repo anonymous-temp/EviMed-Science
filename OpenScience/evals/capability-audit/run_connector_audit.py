@@ -65,7 +65,7 @@ QUERY_CASES = {
     "ensembl": ("BRCA1", "TP53"),
     "gtex-genotype-tissue-expression": ("BRCA1", "TP53"),
     "human-protein-atlas-hpa": ("BRCA1", "TP53"),
-    "mousemine-mouse-genome-informatics-intermine-based": ("BRCA1", "TP53"),
+    "alliancemine-alliance-of-genome-resources-intermine-based": ("Pax6", "Brca1"),
     "metabolomics-workbench": ("ST000001", "ST000002"),
     "rcsb-protein-data-bank-pdb": ("4HHB", "1TUP"),
     "ucsc-genome-browser": ("BRCA1", "TP53"),
