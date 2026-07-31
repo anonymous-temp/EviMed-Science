@@ -197,19 +197,26 @@ export class MemoryIntelligence {
   async recordRun(project, run, messages = []) {
     const sources = conversationMemorySources(messages, run.sessionId);
     const runSummary = await this.#recordRunSummary(project, run, sources);
-    if (sources.length === 0) return { runSummary, extracted: 0, activated: 0, source: "none" };
+    if (sources.length === 0) {
+      return { runSummary, extracted: 0, activated: 0, source: "none", proposed: 0, rejected: 0, extractionError: null };
+    }
 
     let candidates = [];
     let source = "deterministic";
+    let proposed = 0;
+    let extractionError = null;
     if (this.enabled && this.config.deepseekProviderEnabled && this.config.deepseekApiKey) {
       try {
-        candidates = await this.#extractWithModel(sources, project, run);
+        ({ candidates, proposed } = await this.#extractWithModel(sources, project, run));
         source = "model";
-      } catch {
+      } catch (error) {
+        extractionError = boundedText(error?.message ?? "memory extraction failed", 200);
         candidates = deterministicCandidates(sources, project, run);
+        proposed = candidates.length;
       }
     } else {
       candidates = deterministicCandidates(sources, project, run);
+      proposed = candidates.length;
     }
 
     const existing = await this.memosClient.listRecords(project.userId, { pageSize: 100 });
@@ -256,7 +263,7 @@ export class MemoryIntelligence {
       }
       known.set(canonicalKey(stored), stored);
     }
-    return { runSummary, extracted, activated, source };
+    return { runSummary, extracted, activated, source, proposed, rejected: proposed - candidates.length, extractionError };
   }
 
   async #recordRunSummary(project, run, sources) {
@@ -352,7 +359,12 @@ export class MemoryIntelligence {
       const body = await boundedJsonResponse(response);
       const parsed = parseModelJson(body?.choices?.[0]?.message?.content);
       const sourceMap = new Map(sources.map((item) => [item.sourceRef, item]));
-      return parsed.candidates.map((candidate) => validateCandidate(candidate, sourceMap, project, run)).filter(Boolean);
+      const validated = parsed.candidates.map((candidate) => validateCandidate(candidate, sourceMap, project, run));
+      // Report what the model offered as well as what survived. Evidence quotes
+      // must reproduce the source byte for byte, so a run where every candidate
+      // was rejected is a common failure — and without this count it looks
+      // exactly like a run where the model proposed nothing.
+      return { candidates: validated.filter(Boolean), proposed: parsed.candidates.length };
     } finally {
       clearTimeout(timeout);
     }

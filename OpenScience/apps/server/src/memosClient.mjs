@@ -38,6 +38,10 @@ const memoryEnums = {
   },
 };
 
+// Memories that describe the user rather than a past task. These stay relevant
+// whatever the question is; every other kind is episodic and must match the query.
+const DURABLE_RECALL_KINDS = new Set(["profile", "preference"]);
+
 const reverseMemoryEnums = Object.fromEntries(
   Object.entries(memoryEnums).map(([group, values]) => [
     group,
@@ -298,9 +302,14 @@ export class MemosClient {
         const content = [record.summary, record.value].filter(Boolean).join("\n");
         const haystack = `${record.key} ${content}`.toLowerCase();
         const matches = terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
-        const durableContext = ["profile", "preference"].includes(record.kind) ? 0.75 : 0;
-        const score = matches + durableContext + record.importance + record.confidence * 0.5;
+        const durable = DURABLE_RECALL_KINDS.has(record.kind);
+        const score = matches + (durable ? 0.75 : 0) + record.importance + record.confidence * 0.5;
         return {
+          // Only durable identity memories apply to every question. Everything
+          // else has to earn recall with a query-term match: importance and
+          // confidence alone put the score above zero, so without this a
+          // greeting would pull every stored run summary into the prompt.
+          recallable: durable || matches > 0,
           memo: {
             id: `record:${record.id}`,
             content,
@@ -314,7 +323,7 @@ export class MemosClient {
           score,
         };
       })
-      .filter((row) => row.score > 0);
+      .filter((row) => row.recallable);
     const legacy = memos
       .map((memo) => {
         const haystack = memo.content.toLowerCase();
