@@ -1,10 +1,10 @@
 {
   "schemaVersion": 3,
-  "probedAt": "2026-07-30T06:37:35.191574Z",
+  "probedAt": "2026-07-31T05:37:15.678419Z",
   "summary": {
     "registered": 64,
     "registrySha256": "8cf3ee7871def20a9072d5495576a1e5c2f36f3199e84167e20cdedf7dbf4491",
-    "registrySourceSha256": "15a6e4cf5dcf2e5f6b0319e09b03af31c6c673b3a45ddc972e4940d7248e70b7",
+    "registrySourceSha256": "9847422fe485fb3fb74123f9a74633ecec9e05c8f1df7e6801da0cd435e438e1",
     "qualityPass": 63,
     "qualityFail": 1,
     "queriesExecuted": 128,
@@ -102,7 +102,7 @@
             "http://arxiv.org/abs/2006.16189v4",
             "http://arxiv.org/abs/2306.04338v1"
           ],
-          "elapsedMs": 2160,
+          "elapsedMs": 133,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -129,7 +129,7 @@
             "http://arxiv.org/abs/1503.07557v1",
             "http://arxiv.org/abs/2008.01035v1"
           ],
-          "elapsedMs": 432,
+          "elapsedMs": 35,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -153,7 +153,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 2592
+      "elapsedMs": 168
     },
     {
       "source": "cbioportal",
@@ -170,7 +170,7 @@
             "egc_msk_tp53_ccr_2022",
             "https://www.cbioportal.org/study/summary?id=egc_msk_tp53_ccr_2022"
           ],
-          "elapsedMs": 721,
+          "elapsedMs": 787,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -197,7 +197,7 @@
             "https://www.cbioportal.org/study/summary?id=luad_broad",
             "luad_broad"
           ],
-          "elapsedMs": 286,
+          "elapsedMs": 274,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -221,7 +221,7 @@
       },
       "records": 3,
       "sources": 3,
-      "elapsedMs": 1007
+      "elapsedMs": 1061
     },
     {
       "source": "chebi",
@@ -240,7 +240,7 @@
             "http://purl.obolibrary.org/obo/CHEBI_138614",
             "http://purl.obolibrary.org/obo/CHEBI_747596"
           ],
-          "elapsedMs": 1440,
+          "elapsedMs": 1180,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -267,7 +267,7 @@
             "http://purl.obolibrary.org/obo/CHEBI_17234",
             "http://purl.obolibrary.org/obo/CHEBI_176594"
           ],
-          "elapsedMs": 1136,
+          "elapsedMs": 2168,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -291,7 +291,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 2576
+      "elapsedMs": 3348
     },
     {
       "source": "clinvar",
@@ -310,7 +310,7 @@
             "https://www.ncbi.nlm.nih.gov/clinvar/3344405/",
             "https://www.ncbi.nlm.nih.gov/clinvar/3350129/"
           ],
-          "elapsedMs": 831,
+          "elapsedMs": 895,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -337,7 +337,7 @@
             "https://www.ncbi.nlm.nih.gov/clinvar/818150/",
             "https://www.ncbi.nlm.nih.gov/clinvar/818151/"
           ],
-          "elapsedMs": 1363,
+          "elapsedMs": 947,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -361,7 +361,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 2194
+      "elapsedMs": 1842
     },
     {
       "source": "crossref",
@@ -380,7 +380,7 @@
             "https://doi.org/10.1016/j.phymed.2025.157500",
             "https://doi.org/10.1080/14017430410024324"
           ],
-          "elapsedMs": 945,
+          "elapsedMs": 669,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -407,8 +407,8 @@
             "https://doi.org/10.1111/jan.16423/v1/review2",
             "https://doi.org/10.1111/jan.16423/v2/review1"
           ],
-          "elapsedMs": 547,
-          "attempts": 1,
+          "elapsedMs": 3715,
+          "attempts": 3,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
             "toolResult": true,
@@ -431,7 +431,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1492
+      "elapsedMs": 4384
     },
     {
       "source": "dailymed",
@@ -450,7 +450,7 @@
             "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=1503bbe4-0ac5-479b-9900-d38e49236bf0",
             "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=e22a8545-86a6-439e-a758-29c4d6ed8bfe"
           ],
-          "elapsedMs": 1055,
+          "elapsedMs": 1075,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -477,7 +477,7 @@
             "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=86841382-4229-4e03-958e-3ac22639efd4",
             "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=aaf960d1-8bf9-64c6-1e70-8aa33b0ce549"
           ],
-          "elapsedMs": 577,
+          "elapsedMs": 602,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -501,7 +501,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1632
+      "elapsedMs": 1677
     },
     {
       "source": "dbsnp",
@@ -520,7 +520,7 @@
             "https://www.ncbi.nlm.nih.gov/snp/61228756/",
             "https://www.ncbi.nlm.nih.gov/snp/630496/"
           ],
-          "elapsedMs": 1140,
+          "elapsedMs": 896,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -547,7 +547,7 @@
             "https://www.ncbi.nlm.nih.gov/snp/60693287/",
             "https://www.ncbi.nlm.nih.gov/snp/7903146/"
           ],
-          "elapsedMs": 829,
+          "elapsedMs": 904,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -571,7 +571,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1969
+      "elapsedMs": 1800
     },
     {
       "source": "ena",
@@ -590,7 +590,7 @@
             "https://www.ebi.ac.uk/ena/browser/view/PRJNA454751",
             "https://www.ebi.ac.uk/ena/browser/view/PRJNA454752"
           ],
-          "elapsedMs": 1208,
+          "elapsedMs": 1138,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -617,7 +617,7 @@
             "https://www.ebi.ac.uk/ena/browser/view/PRJNA268369",
             "https://www.ebi.ac.uk/ena/browser/view/PRJNA268370"
           ],
-          "elapsedMs": 318,
+          "elapsedMs": 303,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -641,7 +641,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1526
+      "elapsedMs": 1441
     },
     {
       "source": "europe-pmc",
@@ -660,7 +660,7 @@
             "https://europepmc.org/article/MED/42241004",
             "https://europepmc.org/article/MED/42359632"
           ],
-          "elapsedMs": 443,
+          "elapsedMs": 455,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -687,7 +687,7 @@
             "https://europepmc.org/article/MED/39308915",
             "https://europepmc.org/article/PPR/PPR719282"
           ],
-          "elapsedMs": 532,
+          "elapsedMs": 639,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -711,7 +711,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 975
+      "elapsedMs": 1094
     },
     {
       "source": "gdc-tcga",
@@ -728,7 +728,7 @@
             "TCGA-BRCA",
             "https://portal.gdc.cancer.gov/projects/TCGA-BRCA"
           ],
-          "elapsedMs": 1706,
+          "elapsedMs": 749,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -753,7 +753,7 @@
             "TCGA-LUAD",
             "https://portal.gdc.cancer.gov/projects/TCGA-LUAD"
           ],
-          "elapsedMs": 240,
+          "elapsedMs": 218,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -777,7 +777,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 1946
+      "elapsedMs": 967
     },
     {
       "source": "hpo",
@@ -823,7 +823,7 @@
             "http://purl.obolibrary.org/obo/HP_0032662",
             "http://purl.obolibrary.org/obo/HP_0033052"
           ],
-          "elapsedMs": 415,
+          "elapsedMs": 347,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -847,7 +847,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 820
+      "elapsedMs": 752
     },
     {
       "source": "interpro",
@@ -866,7 +866,7 @@
             "https://www.ebi.ac.uk/interpro/entry/InterPro/cd00029/",
             "https://www.ebi.ac.uk/interpro/entry/InterPro/cd00089/"
           ],
-          "elapsedMs": 293,
+          "elapsedMs": 286,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -893,7 +893,7 @@
             "https://www.ebi.ac.uk/interpro/entry/InterPro/cd01121/",
             "https://www.ebi.ac.uk/interpro/entry/InterPro/cd06444/"
           ],
-          "elapsedMs": 292,
+          "elapsedMs": 285,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -917,7 +917,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 585
+      "elapsedMs": 571
     },
     {
       "source": "jaspar",
@@ -936,7 +936,7 @@
             "https://jaspar.elixir.no/matrix/MA0106.1/",
             "https://jaspar.elixir.no/matrix/MA0106.2/"
           ],
-          "elapsedMs": 5343,
+          "elapsedMs": 4732,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -963,7 +963,7 @@
             "https://jaspar.elixir.no/matrix/MA0144.2/",
             "https://jaspar.elixir.no/matrix/MA0144.3/"
           ],
-          "elapsedMs": 3099,
+          "elapsedMs": 3088,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -987,7 +987,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 8442
+      "elapsedMs": 7820
     },
     {
       "source": "mesh",
@@ -1006,7 +1006,7 @@
             "https://www.ncbi.nlm.nih.gov/mesh/68003920/",
             "https://www.ncbi.nlm.nih.gov/mesh/68003924/"
           ],
-          "elapsedMs": 1491,
+          "elapsedMs": 540,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1031,7 +1031,7 @@
             "2023415",
             "https://www.ncbi.nlm.nih.gov/mesh/2023415/"
           ],
-          "elapsedMs": 753,
+          "elapsedMs": 900,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1055,7 +1055,7 @@
       },
       "records": 3,
       "sources": 3,
-      "elapsedMs": 2244
+      "elapsedMs": 1440
     },
     {
       "source": "monarch",
@@ -1074,7 +1074,7 @@
             "https://monarchinitiative.org/MONDO:0005015",
             "https://monarchinitiative.org/MONDO:0016391"
           ],
-          "elapsedMs": 663,
+          "elapsedMs": 598,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1101,7 +1101,7 @@
             "https://monarchinitiative.org/HP:0011097",
             "https://monarchinitiative.org/HP:0033052"
           ],
-          "elapsedMs": 222,
+          "elapsedMs": 208,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1125,7 +1125,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 885
+      "elapsedMs": 806
     },
     {
       "source": "mygene",
@@ -1144,7 +1144,7 @@
             "https://mygene.info/v3/gene/12189",
             "https://mygene.info/v3/gene/672"
           ],
-          "elapsedMs": 775,
+          "elapsedMs": 774,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1171,7 +1171,7 @@
             "https://mygene.info/v3/gene/24842",
             "https://mygene.info/v3/gene/7157"
           ],
-          "elapsedMs": 185,
+          "elapsedMs": 214,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1195,7 +1195,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 960
+      "elapsedMs": 988
     },
     {
       "source": "myvariant",
@@ -1214,7 +1214,7 @@
             "https://myvariant.info/v1/variant/chr19:g.45411941T>C",
             "https://myvariant.info/v1/variant/chr19:g.45411941T>T"
           ],
-          "elapsedMs": 898,
+          "elapsedMs": 669,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1241,7 +1241,7 @@
             "https://myvariant.info/v1/variant/chr10:g.114758349C>G",
             "https://myvariant.info/v1/variant/chr10:g.114758349C>T"
           ],
-          "elapsedMs": 191,
+          "elapsedMs": 180,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1265,7 +1265,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1089
+      "elapsedMs": 849
     },
     {
       "source": "ncbi-gene",
@@ -1284,7 +1284,7 @@
             "https://www.ncbi.nlm.nih.gov/gene/12189/",
             "https://www.ncbi.nlm.nih.gov/gene/672/"
           ],
-          "elapsedMs": 542,
+          "elapsedMs": 1063,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1311,7 +1311,7 @@
             "https://www.ncbi.nlm.nih.gov/gene/24842/",
             "https://www.ncbi.nlm.nih.gov/gene/7157/"
           ],
-          "elapsedMs": 680,
+          "elapsedMs": 896,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1335,7 +1335,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1222
+      "elapsedMs": 1959
     },
     {
       "source": "ncbi-geo",
@@ -1349,12 +1349,12 @@
           "records": 2,
           "sources": 2,
           "identifiers": [
-            "200253035",
+            "200298760",
             "200341147",
-            "https://www.ncbi.nlm.nih.gov/gds/200253035/",
+            "https://www.ncbi.nlm.nih.gov/gds/200298760/",
             "https://www.ncbi.nlm.nih.gov/gds/200341147/"
           ],
-          "elapsedMs": 679,
+          "elapsedMs": 2255,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1377,11 +1377,11 @@
           "sources": 2,
           "identifiers": [
             "200326582",
-            "200332732",
+            "200327462",
             "https://www.ncbi.nlm.nih.gov/gds/200326582/",
-            "https://www.ncbi.nlm.nih.gov/gds/200332732/"
+            "https://www.ncbi.nlm.nih.gov/gds/200327462/"
           ],
-          "elapsedMs": 1061,
+          "elapsedMs": 668,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1405,7 +1405,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1740
+      "elapsedMs": 2923
     },
     {
       "source": "ncbi-protein",
@@ -1424,7 +1424,7 @@
             "https://www.ncbi.nlm.nih.gov/protein/1698399/",
             "https://www.ncbi.nlm.nih.gov/protein/2616260805/"
           ],
-          "elapsedMs": 572,
+          "elapsedMs": 2120,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1451,7 +1451,7 @@
             "https://www.ncbi.nlm.nih.gov/protein/1472901974/",
             "https://www.ncbi.nlm.nih.gov/protein/1486783307/"
           ],
-          "elapsedMs": 2772,
+          "elapsedMs": 702,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1475,7 +1475,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 3344
+      "elapsedMs": 2822
     },
     {
       "source": "ncbi-taxonomy",
@@ -1492,7 +1492,7 @@
             "9606",
             "https://www.ncbi.nlm.nih.gov/taxonomy/9606/"
           ],
-          "elapsedMs": 1136,
+          "elapsedMs": 642,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1517,7 +1517,7 @@
             "10090",
             "https://www.ncbi.nlm.nih.gov/taxonomy/10090/"
           ],
-          "elapsedMs": 809,
+          "elapsedMs": 681,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1541,7 +1541,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 1945
+      "elapsedMs": 1323
     },
     {
       "source": "openalex",
@@ -1560,7 +1560,7 @@
             "https://openalex.org/W2025039880",
             "https://openalex.org/W2138597449"
           ],
-          "elapsedMs": 1548,
+          "elapsedMs": 1022,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1587,7 +1587,7 @@
             "https://openalex.org/W2569214105",
             "https://openalex.org/W2900329012"
           ],
-          "elapsedMs": 683,
+          "elapsedMs": 636,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1611,7 +1611,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 2231
+      "elapsedMs": 1658
     },
     {
       "source": "openfda",
@@ -1628,7 +1628,7 @@
             "0098dec4-f0e5-45d5-8aa4-5d0faf9ab142",
             "011de1a5-1ac0-4831-9e8d-26ec79ba2205"
           ],
-          "elapsedMs": 1048,
+          "elapsedMs": 1132,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1653,7 +1653,7 @@
             "00afce9b-48c9-487a-a738-e359c005c707",
             "01eadde8-37f3-4474-995f-22c1a65adf12"
           ],
-          "elapsedMs": 478,
+          "elapsedMs": 423,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1677,7 +1677,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1526
+      "elapsedMs": 1555
     },
     {
       "source": "pmc",
@@ -1696,7 +1696,7 @@
             "https://www.ncbi.nlm.nih.gov/pmc/6741347/",
             "https://www.ncbi.nlm.nih.gov/pmc/7729916/"
           ],
-          "elapsedMs": 1371,
+          "elapsedMs": 1056,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1723,7 +1723,7 @@
             "https://www.ncbi.nlm.nih.gov/pmc/6293289/",
             "https://www.ncbi.nlm.nih.gov/pmc/7843214/"
           ],
-          "elapsedMs": 1443,
+          "elapsedMs": 1313,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1747,7 +1747,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 2814
+      "elapsedMs": 2369
     },
     {
       "source": "pride",
@@ -1766,7 +1766,7 @@
             "https://www.ebi.ac.uk/pride/archive/projects/PXD038543",
             "https://www.ebi.ac.uk/pride/archive/projects/PXD059920"
           ],
-          "elapsedMs": 1343,
+          "elapsedMs": 1548,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1793,7 +1793,7 @@
             "https://www.ebi.ac.uk/pride/archive/projects/PXD015101",
             "https://www.ebi.ac.uk/pride/archive/projects/PXD020055"
           ],
-          "elapsedMs": 475,
+          "elapsedMs": 459,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1817,7 +1817,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1818
+      "elapsedMs": 2007
     },
     {
       "source": "pubchem",
@@ -1834,7 +1834,7 @@
             "2244",
             "https://pubchem.ncbi.nlm.nih.gov/compound/2244"
           ],
-          "elapsedMs": 891,
+          "elapsedMs": 911,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1859,7 +1859,7 @@
             "4091",
             "https://pubchem.ncbi.nlm.nih.gov/compound/4091"
           ],
-          "elapsedMs": 651,
+          "elapsedMs": 670,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1883,7 +1883,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 1542
+      "elapsedMs": 1581
     },
     {
       "source": "pubmed",
@@ -1902,7 +1902,7 @@
             "https://www.ncbi.nlm.nih.gov/pubmed/32580960/",
             "https://www.ncbi.nlm.nih.gov/pubmed/38839268/"
           ],
-          "elapsedMs": 1945,
+          "elapsedMs": 1971,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1929,7 +1929,7 @@
             "https://www.ncbi.nlm.nih.gov/pubmed/33529164/",
             "https://www.ncbi.nlm.nih.gov/pubmed/35994083/"
           ],
-          "elapsedMs": 2074,
+          "elapsedMs": 1446,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1953,7 +1953,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 4019
+      "elapsedMs": 3417
     },
     {
       "source": "quickgo",
@@ -1970,7 +1970,7 @@
             "GO:0030330",
             "https://www.ebi.ac.uk/QuickGO/term/GO:0030330"
           ],
-          "elapsedMs": 1176,
+          "elapsedMs": 1147,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -1997,7 +1997,7 @@
             "https://www.ebi.ac.uk/QuickGO/term/GO:0070531",
             "https://www.ebi.ac.uk/QuickGO/term/GO:0070533"
           ],
-          "elapsedMs": 317,
+          "elapsedMs": 289,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2021,7 +2021,7 @@
       },
       "records": 3,
       "sources": 3,
-      "elapsedMs": 1493
+      "elapsedMs": 1436
     },
     {
       "source": "reactome",
@@ -2040,7 +2040,7 @@
             "https://reactome.org/content/detail/R-HSA-73894",
             "https://reactome.org/content/detail/R-HSA-9675135"
           ],
-          "elapsedMs": 1736,
+          "elapsedMs": 1713,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2067,7 +2067,7 @@
             "https://reactome.org/content/detail/R-HSA-264876",
             "https://reactome.org/content/detail/R-HSA-74752"
           ],
-          "elapsedMs": 522,
+          "elapsedMs": 527,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2091,7 +2091,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 2258
+      "elapsedMs": 2240
     },
     {
       "source": "rxnorm",
@@ -2110,7 +2110,7 @@
             "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=1043567",
             "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=1043574"
           ],
-          "elapsedMs": 1231,
+          "elapsedMs": 1012,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2137,7 +2137,7 @@
             "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=262095",
             "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=2631867"
           ],
-          "elapsedMs": 207,
+          "elapsedMs": 203,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2161,7 +2161,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1438
+      "elapsedMs": 1215
     },
     {
       "source": "sra",
@@ -2180,7 +2180,7 @@
             "https://www.ncbi.nlm.nih.gov/sra/45730394/",
             "https://www.ncbi.nlm.nih.gov/sra/45730395/"
           ],
-          "elapsedMs": 1175,
+          "elapsedMs": 1380,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2207,7 +2207,7 @@
             "https://www.ncbi.nlm.nih.gov/sra/45616403/",
             "https://www.ncbi.nlm.nih.gov/sra/45616404/"
           ],
-          "elapsedMs": 1182,
+          "elapsedMs": 934,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2231,7 +2231,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 2357
+      "elapsedMs": 2314
     },
     {
       "source": "string",
@@ -2248,7 +2248,7 @@
             "9606.ENSP00000269305",
             "https://string-db.org/network/9606.ENSP00000269305"
           ],
-          "elapsedMs": 843,
+          "elapsedMs": 828,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2273,7 +2273,7 @@
             "9606.ENSP00000418960",
             "https://string-db.org/network/9606.ENSP00000418960"
           ],
-          "elapsedMs": 421,
+          "elapsedMs": 418,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2297,7 +2297,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 1264
+      "elapsedMs": 1246
     },
     {
       "source": "uniprot",
@@ -2316,7 +2316,7 @@
             "https://www.uniprot.org/uniprotkb/P04637/entry",
             "https://www.uniprot.org/uniprotkb/Q9Y2B4/entry"
           ],
-          "elapsedMs": 2151,
+          "elapsedMs": 2111,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2343,7 +2343,7 @@
             "https://www.uniprot.org/uniprotkb/P38398/entry",
             "https://www.uniprot.org/uniprotkb/Q9BX63/entry"
           ],
-          "elapsedMs": 437,
+          "elapsedMs": 421,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2367,7 +2367,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 2588
+      "elapsedMs": 2532
     },
     {
       "source": "who-gho",
@@ -2386,7 +2386,7 @@
             "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000026",
             "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/MDG_0000000032"
           ],
-          "elapsedMs": 1970,
+          "elapsedMs": 2074,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2413,7 +2413,7 @@
             "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000001",
             "https://www.who.int/data/gho/indicator-metadata-registry/imr-details/WHOSIS_000002"
           ],
-          "elapsedMs": 1620,
+          "elapsedMs": 1415,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2437,7 +2437,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 3590
+      "elapsedMs": 3489
     },
     {
       "source": "clinicaltrials-gov",
@@ -2451,12 +2451,12 @@
           "records": 2,
           "sources": 2,
           "identifiers": [
-            "NCT02014740",
-            "NCT06424860",
-            "https://clinicaltrials.gov/study/NCT02014740",
-            "https://clinicaltrials.gov/study/NCT06424860"
+            "NCT05159882",
+            "NCT07074379",
+            "https://clinicaltrials.gov/study/NCT05159882",
+            "https://clinicaltrials.gov/study/NCT07074379"
           ],
-          "elapsedMs": 256,
+          "elapsedMs": 252,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2478,12 +2478,12 @@
           "records": 2,
           "sources": 2,
           "identifiers": [
-            "NCT03459560",
-            "NCT05773989",
-            "https://clinicaltrials.gov/study/NCT03459560",
-            "https://clinicaltrials.gov/study/NCT05773989"
+            "NCT02239120",
+            "NCT05899582",
+            "https://clinicaltrials.gov/study/NCT02239120",
+            "https://clinicaltrials.gov/study/NCT05899582"
           ],
-          "elapsedMs": 237,
+          "elapsedMs": 352,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2507,7 +2507,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 493
+      "elapsedMs": 604
     },
     {
       "source": "isrctn",
@@ -2521,12 +2521,12 @@
           "records": 2,
           "sources": 2,
           "identifiers": [
-            "ISRCTN12780992",
-            "ISRCTN17701271",
-            "https://www.isrctn.com/ISRCTN12780992",
-            "https://www.isrctn.com/ISRCTN17701271"
+            "ISRCTN16868733",
+            "ISRCTN73563399",
+            "https://www.isrctn.com/ISRCTN16868733",
+            "https://www.isrctn.com/ISRCTN73563399"
           ],
-          "elapsedMs": 490,
+          "elapsedMs": 649,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2553,7 +2553,7 @@
             "https://www.isrctn.com/ISRCTN14887674",
             "https://www.isrctn.com/ISRCTN17701271"
           ],
-          "elapsedMs": 566,
+          "elapsedMs": 410,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2577,7 +2577,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1056
+      "elapsedMs": 1059
     },
     {
       "source": "biorxiv",
@@ -2594,7 +2594,7 @@
             "10.64898/2026.06.26.734908",
             "https://doi.org/10.64898/2026.06.26.734908"
           ],
-          "elapsedMs": 4434,
+          "elapsedMs": 805,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2619,7 +2619,7 @@
             "10.64898/2026.01.24.701325",
             "https://doi.org/10.64898/2026.01.24.701325"
           ],
-          "elapsedMs": 2270,
+          "elapsedMs": 419,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2643,7 +2643,7 @@
       },
       "records": 3,
       "sources": 3,
-      "elapsedMs": 6704
+      "elapsedMs": 1224
     },
     {
       "source": "medrxiv",
@@ -2660,7 +2660,7 @@
             "10.1101/2025.08.29.25334726",
             "https://doi.org/10.1101/2025.08.29.25334726"
           ],
-          "elapsedMs": 4343,
+          "elapsedMs": 260,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2685,7 +2685,7 @@
             "10.1101/2025.10.19.25337876",
             "https://doi.org/10.1101/2025.10.19.25337876"
           ],
-          "elapsedMs": 1429,
+          "elapsedMs": 233,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2709,7 +2709,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 5772
+      "elapsedMs": 493
     },
     {
       "source": "bindingdb",
@@ -2728,7 +2728,7 @@
             "https://www.bindingdb.org/rwd/bind/chemsearch/marvin/MolStructure.jsp?monomerid=50174201",
             "https://www.bindingdb.org/rwd/bind/chemsearch/marvin/MolStructure.jsp?monomerid=85511"
           ],
-          "elapsedMs": 920,
+          "elapsedMs": 548,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2755,7 +2755,7 @@
             "https://www.bindingdb.org/rwd/bind/chemsearch/marvin/MolStructure.jsp?monomerid=50089653",
             "https://www.bindingdb.org/rwd/bind/chemsearch/marvin/MolStructure.jsp?monomerid=50174201"
           ],
-          "elapsedMs": 5906,
+          "elapsedMs": 3228,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2779,7 +2779,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 6826
+      "elapsedMs": 3776
     },
     {
       "source": "chembl",
@@ -2798,7 +2798,7 @@
             "https://www.ebi.ac.uk/chembl/explore/compound/CHEMBL25",
             "https://www.ebi.ac.uk/chembl/explore/compound/CHEMBL5314595"
           ],
-          "elapsedMs": 1518,
+          "elapsedMs": 1247,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2825,7 +2825,7 @@
             "https://www.ebi.ac.uk/chembl/explore/compound/CHEMBL1431",
             "https://www.ebi.ac.uk/chembl/explore/compound/CHEMBL1703"
           ],
-          "elapsedMs": 390,
+          "elapsedMs": 376,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2849,7 +2849,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1908
+      "elapsedMs": 1623
     },
     {
       "source": "clinpgx-pharmgkb",
@@ -2866,7 +2866,7 @@
             "PA451906",
             "https://www.clinpgx.org/chemical/PA451906"
           ],
-          "elapsedMs": 914,
+          "elapsedMs": 804,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2891,7 +2891,7 @@
             "PA449053",
             "https://www.clinpgx.org/chemical/PA449053"
           ],
-          "elapsedMs": 399,
+          "elapsedMs": 384,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2915,7 +2915,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 1313
+      "elapsedMs": 1188
     },
     {
       "source": "gwas-catalog-ebi",
@@ -2934,7 +2934,7 @@
             "https://www.ebi.ac.uk/gwas/studies/GCST90077724",
             "https://www.ebi.ac.uk/gwas/studies/GCST90837510"
           ],
-          "elapsedMs": 554,
+          "elapsedMs": 539,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2961,7 +2961,7 @@
             "https://www.ebi.ac.uk/gwas/studies/GCST90837512",
             "https://www.ebi.ac.uk/gwas/studies/GCST90840648"
           ],
-          "elapsedMs": 586,
+          "elapsedMs": 580,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -2985,7 +2985,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1140
+      "elapsedMs": 1119
     },
     {
       "source": "alphafold-db-predicted-protein-structures",
@@ -3003,7 +3003,7 @@
             "AF-P38398-F1",
             "https://alphafold.ebi.ac.uk/entry/P38398"
           ],
-          "elapsedMs": 372,
+          "elapsedMs": 106,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3029,7 +3029,7 @@
             "AF-P04637-F1",
             "https://alphafold.ebi.ac.uk/entry/P04637"
           ],
-          "elapsedMs": 105,
+          "elapsedMs": 76,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3053,7 +3053,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 477
+      "elapsedMs": 182
     },
     {
       "source": "emdb-electron-microscopy-data-bank",
@@ -3072,7 +3072,7 @@
             "https://www.ebi.ac.uk/emdb/EMD-66247",
             "https://www.ebi.ac.uk/emdb/EMD-66250"
           ],
-          "elapsedMs": 627,
+          "elapsedMs": 606,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3099,7 +3099,7 @@
             "https://www.ebi.ac.uk/emdb/EMD-67393",
             "https://www.ebi.ac.uk/emdb/EMD-76807"
           ],
-          "elapsedMs": 436,
+          "elapsedMs": 421,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3123,7 +3123,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1063
+      "elapsedMs": 1027
     },
     {
       "source": "encode-encyclopedia-of-dna-elements",
@@ -3142,7 +3142,7 @@
             "https://www.encodeproject.org/experiments/ENCSR000EBX/",
             "https://www.encodeproject.org/experiments/ENCSR857KDI/"
           ],
-          "elapsedMs": 600,
+          "elapsedMs": 551,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3169,7 +3169,7 @@
             "https://www.encodeproject.org/experiments/ENCSR760GZL/",
             "https://www.encodeproject.org/experiments/ENCSR980EGJ/"
           ],
-          "elapsedMs": 185,
+          "elapsedMs": 183,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3193,7 +3193,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 785
+      "elapsedMs": 734
     },
     {
       "source": "ensembl",
@@ -3210,7 +3210,7 @@
             "ENSG00000012048",
             "https://www.ensembl.org/Homo_sapiens/Gene/Summary?g=ENSG00000012048"
           ],
-          "elapsedMs": 1456,
+          "elapsedMs": 1135,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3235,7 +3235,7 @@
             "ENSG00000141510",
             "https://www.ensembl.org/Homo_sapiens/Gene/Summary?g=ENSG00000141510"
           ],
-          "elapsedMs": 350,
+          "elapsedMs": 289,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3259,7 +3259,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 1806
+      "elapsedMs": 1424
     },
     {
       "source": "gtex-genotype-tissue-expression",
@@ -3276,7 +3276,7 @@
             "ENSG00000012048.20",
             "https://gtexportal.org/home/gene/BRCA1"
           ],
-          "elapsedMs": 242,
+          "elapsedMs": 229,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3301,7 +3301,7 @@
             "ENSG00000141510.16",
             "https://gtexportal.org/home/gene/TP53"
           ],
-          "elapsedMs": 785,
+          "elapsedMs": 222,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3325,7 +3325,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 1027
+      "elapsedMs": 451
     },
     {
       "source": "human-protein-atlas-hpa",
@@ -3344,7 +3344,7 @@
             "https://www.proteinatlas.org/BARD1",
             "https://www.proteinatlas.org/BRCA1"
           ],
-          "elapsedMs": 924,
+          "elapsedMs": 867,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3371,7 +3371,7 @@
             "https://www.proteinatlas.org/TP53",
             "https://www.proteinatlas.org/TP53INP1"
           ],
-          "elapsedMs": 452,
+          "elapsedMs": 407,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3395,7 +3395,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1376
+      "elapsedMs": 1274
     },
     {
       "source": "mousemine-mouse-genome-informatics-intermine-based",
@@ -3409,7 +3409,7 @@
           "records": 0,
           "sources": 0,
           "identifiers": [],
-          "elapsedMs": 34513,
+          "elapsedMs": 34080,
           "attempts": 3,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3431,7 +3431,7 @@
           "records": 0,
           "sources": 0,
           "identifiers": [],
-          "elapsedMs": 3002,
+          "elapsedMs": 3000,
           "attempts": 3,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3455,7 +3455,7 @@
       },
       "records": 0,
       "sources": 0,
-      "elapsedMs": 37515
+      "elapsedMs": 37080
     },
     {
       "source": "metabolomics-workbench",
@@ -3472,7 +3472,7 @@
             "ST000001",
             "https://www.metabolomicsworkbench.org/data/DRCCMetadata.php?StudyID=ST000001"
           ],
-          "elapsedMs": 1196,
+          "elapsedMs": 833,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3497,7 +3497,7 @@
             "ST000002",
             "https://www.metabolomicsworkbench.org/data/DRCCMetadata.php?StudyID=ST000002"
           ],
-          "elapsedMs": 149,
+          "elapsedMs": 147,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3521,7 +3521,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 1345
+      "elapsedMs": 980
     },
     {
       "source": "rcsb-protein-data-bank-pdb",
@@ -3538,7 +3538,7 @@
             "4HHB",
             "https://www.rcsb.org/structure/4HHB"
           ],
-          "elapsedMs": 491,
+          "elapsedMs": 422,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3563,7 +3563,7 @@
             "1TUP",
             "https://www.rcsb.org/structure/1TUP"
           ],
-          "elapsedMs": 135,
+          "elapsedMs": 134,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3587,7 +3587,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 626
+      "elapsedMs": 556
     },
     {
       "source": "ucsc-genome-browser",
@@ -3606,7 +3606,7 @@
             "https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=chr17%3A43044295-43125364",
             "https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=chr17%3A43044295-43170245"
           ],
-          "elapsedMs": 2140,
+          "elapsedMs": 1450,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3633,7 +3633,7 @@
             "https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=chr17%3A7668421-7687490",
             "https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=chr2%3A24077433-24084834"
           ],
-          "elapsedMs": 2664,
+          "elapsedMs": 2894,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3657,7 +3657,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 4804
+      "elapsedMs": 4344
     },
     {
       "source": "wikipathways",
@@ -3674,7 +3674,7 @@
             "https://identifiers.org/wikipathways/WP3850_r141685",
             "https://identifiers.org/wikipathways/WP3855_r128795"
           ],
-          "elapsedMs": 1005,
+          "elapsedMs": 951,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3699,7 +3699,7 @@
             "https://identifiers.org/wikipathways/WP2036_r137884",
             "https://identifiers.org/wikipathways/WP2864_r140956"
           ],
-          "elapsedMs": 320,
+          "elapsedMs": 319,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3723,7 +3723,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1325
+      "elapsedMs": 1270
     },
     {
       "source": "iuphar-bps-guide-to-pharmacology",
@@ -3740,7 +3740,7 @@
             "2332",
             "https://www.guidetopharmacology.org/GRAC/ObjectDisplayForward?objectId=2332"
           ],
-          "elapsedMs": 1490,
+          "elapsedMs": 1441,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3765,7 +3765,7 @@
             "1797",
             "https://www.guidetopharmacology.org/GRAC/ObjectDisplayForward?objectId=1797"
           ],
-          "elapsedMs": 368,
+          "elapsedMs": 362,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3789,7 +3789,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 1858
+      "elapsedMs": 1803
     },
     {
       "source": "open-targets",
@@ -3808,7 +3808,7 @@
             "https://platform.opentargets.org/disease/MONDO_0700268",
             "https://platform.opentargets.org/target/ENSG00000012048"
           ],
-          "elapsedMs": 1188,
+          "elapsedMs": 309,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3835,7 +3835,7 @@
             "https://platform.opentargets.org/disease/MONDO_0013876",
             "https://platform.opentargets.org/target/ENSG00000141510"
           ],
-          "elapsedMs": 455,
+          "elapsedMs": 280,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3859,7 +3859,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1643
+      "elapsedMs": 589
     },
     {
       "source": "dgidb",
@@ -3877,7 +3877,7 @@
             "hgnc:11998|rxcui:33764",
             "https://dgidb.org/results?genes=TP53"
           ],
-          "elapsedMs": 871,
+          "elapsedMs": 857,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3903,7 +3903,7 @@
             "hgnc:3236|rxcui:1430438",
             "https://dgidb.org/results?genes=EGFR"
           ],
-          "elapsedMs": 214,
+          "elapsedMs": 212,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3927,7 +3927,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 1085
+      "elapsedMs": 1069
     },
     {
       "source": "gnomad",
@@ -3944,7 +3944,7 @@
             "ENSG00000012048",
             "https://gnomad.broadinstitute.org/gene/ENSG00000012048?dataset=gnomad_r4"
           ],
-          "elapsedMs": 1725,
+          "elapsedMs": 249,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3969,7 +3969,7 @@
             "ENSG00000141510",
             "https://gnomad.broadinstitute.org/gene/ENSG00000141510?dataset=gnomad_r4"
           ],
-          "elapsedMs": 3116,
+          "elapsedMs": 209,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -3993,7 +3993,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 4841
+      "elapsedMs": 458
     },
     {
       "source": "openneuro",
@@ -4010,7 +4010,7 @@
             "ds000224",
             "https://openneuro.org/datasets/ds000224"
           ],
-          "elapsedMs": 314,
+          "elapsedMs": 197,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -4035,7 +4035,7 @@
             "ds000001",
             "https://openneuro.org/datasets/ds000001"
           ],
-          "elapsedMs": 228,
+          "elapsedMs": 175,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -4059,7 +4059,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 542
+      "elapsedMs": 372
     },
     {
       "source": "civic",
@@ -4076,7 +4076,7 @@
             "5",
             "https://civicdb.org/genes/5/summary"
           ],
-          "elapsedMs": 587,
+          "elapsedMs": 498,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -4125,7 +4125,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 759
+      "elapsedMs": 670
     },
     {
       "source": "human-cell-atlas",
@@ -4142,7 +4142,7 @@
             "74b6d569-3b11-42ef-b6b1-a0454522b4a0",
             "https://explore.data.humancellatlas.org/projects/74b6d569-3b11-42ef-b6b1-a0454522b4a0"
           ],
-          "elapsedMs": 289,
+          "elapsedMs": 1194,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -4167,7 +4167,7 @@
             "53c53cd4-8127-4e12-bc7f-8fe1610a715c",
             "https://explore.data.humancellatlas.org/projects/53c53cd4-8127-4e12-bc7f-8fe1610a715c"
           ],
-          "elapsedMs": 483,
+          "elapsedMs": 475,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -4191,7 +4191,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 772
+      "elapsedMs": 1669
     },
     {
       "source": "1000-genomes-project",
@@ -4208,7 +4208,7 @@
             "PRJEB31736",
             "https://www.ebi.ac.uk/ena/browser/view/PRJEB31736"
           ],
-          "elapsedMs": 1393,
+          "elapsedMs": 1357,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -4233,7 +4233,7 @@
             "PRJNA262923",
             "https://www.ebi.ac.uk/ena/browser/view/PRJNA262923"
           ],
-          "elapsedMs": 300,
+          "elapsedMs": 298,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -4257,7 +4257,7 @@
       },
       "records": 2,
       "sources": 2,
-      "elapsedMs": 1693
+      "elapsedMs": 1655
     },
     {
       "source": "archs4",
@@ -4276,7 +4276,7 @@
             "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM1095127",
             "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM1095131"
           ],
-          "elapsedMs": 5107,
+          "elapsedMs": 4695,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -4303,7 +4303,7 @@
             "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM1185877",
             "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM1185879"
           ],
-          "elapsedMs": 4022,
+          "elapsedMs": 3899,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -4327,7 +4327,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 9129
+      "elapsedMs": 8594
     },
     {
       "source": "rummageo-geo-gene-set-enrichment-search",
@@ -4345,7 +4345,7 @@
             "000ad9ea-3317-4103-8846-5fb6f6fc4fe2",
             "https://rummageo.com/term-search?terms=kidney"
           ],
-          "elapsedMs": 1406,
+          "elapsedMs": 1224,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -4371,7 +4371,7 @@
             "002c435c-679d-4c96-a72b-049e0f407335",
             "https://rummageo.com/term-search?terms=glioblastoma"
           ],
-          "elapsedMs": 762,
+          "elapsedMs": 764,
           "attempts": 1,
           "executionRoute": "server_allowlisted_gateway",
           "checks": {
@@ -4395,7 +4395,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 2168
+      "elapsedMs": 1988
     },
     {
       "source": "sider",
@@ -4413,7 +4413,7 @@
             "CID100002244|C0268030",
             "https://sideeffects.embl.de/drugs/CID100002244/"
           ],
-          "elapsedMs": 20,
+          "elapsedMs": 1,
           "attempts": 1,
           "executionRoute": "bundled_verified_dataset",
           "checks": {
@@ -4439,7 +4439,7 @@
             "CID100004091|C1291077",
             "https://sideeffects.embl.de/drugs/CID100004091/"
           ],
-          "elapsedMs": 3,
+          "elapsedMs": 0,
           "attempts": 1,
           "executionRoute": "bundled_verified_dataset",
           "checks": {
@@ -4463,7 +4463,7 @@
       },
       "records": 4,
       "sources": 4,
-      "elapsedMs": 23
+      "elapsedMs": 1
     }
   ]
 }
