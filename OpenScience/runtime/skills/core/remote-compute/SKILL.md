@@ -11,24 +11,21 @@ A machine may be a plain server (CPU or GPU, no scheduler) or a Slurm cluster.
 
 ## 1 · Pick the machine
 
-1. `cat .openscience/compute.json` in the workspace (the app keeps this file in
-   sync from the user's settings — read it directly; the directory is hidden).
-   It looks like:
-   `{"machines":[{"host":"home-3090","label":"8x3090",
-     "caps":{"cores":16,"mem_total_bytes":...,"gpus":["RTX 3090",...],"slurm":null}}]}`
-   The directory is hidden — read the file directly.
-2. If the file is missing or has no machines, ask the user to add one in
-   **Settings → Remote compute**, or give you a `user@host`. Do not guess.
-3. Choose by the task's needs and each machine's `caps`: a GPU job → a machine
-   whose `caps.gpus` is non-empty; a CPU job → any reachable machine. If several
-   fit, or none clearly does, ask the user which to use.
-4. Confirm it's reachable and check live headroom before launching:
-   `ssh -o BatchMode=yes -o ConnectTimeout=8 <host> "nproc; free -h; nvidia-smi 2>/dev/null | head -15"`.
+1. `cat .openscience/hpc.json` in the workspace — the app writes it from the
+   user's settings and it looks like `{"host":"login-a"}`. The directory is
+   hidden, so read the file directly instead of relying on `ls`.
+2. If the file is missing, ask the user to connect a machine in
+   **Settings → Cluster (HPC)** or to give you a `user@host`. Do not guess.
+3. The saved config records one host and no capability data, so establish what
+   the machine actually offers rather than assuming it. Confirm it is reachable
+   and read its live headroom before launching anything:
+   `ssh -o BatchMode=yes -o ConnectTimeout=8 <host> "nproc; free -h; nvidia-smi 2>/dev/null | head -15; command -v sbatch"`.
    On "Permission denied", tell the user their key doesn't reach the host — do
    not retry with passwords.
+4. If the job needs a GPU and `nvidia-smi` reported none, say so and stop
+   instead of running it somewhere it cannot succeed.
 
-If the chosen machine's `caps.slurm` is set, use **§2-Slurm**. Otherwise use
-**§2-Direct**.
+If that probe found `sbatch`, use **§2-Slurm**. Otherwise use **§2-Direct**.
 
 ## 2-Direct · Run on a plain server (no Slurm)
 
