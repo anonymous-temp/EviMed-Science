@@ -331,7 +331,10 @@ export class MemoryIntelligence {
           model: this.config.deepseekModel,
           stream: false,
           temperature: 0,
-          max_tokens: 2_400,
+          // Twelve candidates carrying a value, a summary and an evidence quote
+          // do not fit in 2,400 tokens. The reply then stops mid-object and the
+          // whole batch is lost to a parse error rather than a partial result.
+          max_tokens: 8_000,
           response_format: { type: "json_object" },
           messages: [
             {

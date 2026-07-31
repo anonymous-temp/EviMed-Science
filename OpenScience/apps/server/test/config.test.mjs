@@ -34,6 +34,18 @@ test("hosted development defaults to the bundled OpenCode runtime", async () => 
   });
 });
 
+test("memory extraction is given longer than one extraction actually takes", () => {
+  // Measured against deepseek-v4-pro, one extraction request takes 40-46s. At
+  // the previous 30s budget every request aborted, so the store only ever held
+  // raw run summaries and never a single extracted memory. The failure was
+  // silent because an aborted extraction and an empty one both reported zero.
+  const config = loadConfig({ rootDir: repoRoot });
+  assert.ok(
+    config.memoryExtractionTimeoutMs >= 60_000,
+    `memory extraction budget ${config.memoryExtractionTimeoutMs}ms is below one measured request`,
+  );
+});
+
 test("a missing bundled binary remains a visible OpenCode startup failure", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "evimed-config-"));
   try {
