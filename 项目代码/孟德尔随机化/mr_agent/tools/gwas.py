@@ -25,6 +25,31 @@ OPENGWAS_TIMEOUT = 10
 _OPENGWAS_RETRIES = 3
 _OPENGWAS_RETRY_DELAY = 3
 
+
+class OpenGwasAuthError(RuntimeError):
+    """OpenGWAS refused the credential rather than the query.
+
+    Since 1 May 2024 OpenGWAS requires a JWT, and they expire. A refused token
+    used to travel the same path as an empty result set: retried three times,
+    logged as a warning, and finally reported to the user as "no GWAS data
+    matched your exposure or outcome" — which points at the research question
+    when the problem is the credential. Retrying an expired token cannot help,
+    so this is raised immediately and carries its own instruction.
+    """
+
+    def __init__(self, status: int):
+        super().__init__(
+            "OpenGWAS rejected the request (HTTP %d): the OPENGWAS_JWT token is missing, "
+            "expired, or not accepted. Issue a new one at https://api.opengwas.io/ and set "
+            "OPENGWAS_JWT before retrying. No GWAS data can be read until then." % status
+        )
+        self.status = status
+
+
+def _raise_if_unauthorized(resp) -> None:
+    if resp.status_code in (401, 403):
+        raise OpenGwasAuthError(resp.status_code)
+
 # 全量 GWAS 数据库内存缓存（首次拉取后所有搜索直接过滤）
 _gwas_db_cache: dict | None = None
 _gwas_db_lock = threading.Lock()
@@ -76,12 +101,15 @@ def _get_gwas_db() -> dict | None:
                     headers=headers,
                     timeout=30,
                 )
+                _raise_if_unauthorized(resp)
                 resp.raise_for_status()
                 data = resp.json()
                 if isinstance(data, dict) and data:
                     _gwas_db_cache = data
                     logger.info(f"OpenGWAS 数据库已缓存，共 {len(data)} 条记录")
                     return _gwas_db_cache
+            except OpenGwasAuthError:
+                raise
             except Exception as e:
                 logger.warning(
                     f"OpenGWAS 全量拉取失败 ({attempt}/{_OPENGWAS_RETRIES}): {e}"
@@ -131,6 +159,7 @@ def _search_by_get(keyword: str, max_results: int) -> list[GWASEntry]:
             url, params={"query": keyword},
             headers=_auth_headers(), timeout=OPENGWAS_TIMEOUT,
         )
+        _raise_if_unauthorized(resp)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, list) and data:

@@ -378,6 +378,11 @@ class MRPipeline:
                 results = gwas.search_gwas_ids(term, max_pages=3)
                 logger.info(f"GWAS搜索 '{term}' → {len(results)} 条")
                 return term, results
+            except gwas.OpenGwasAuthError:
+                # A refused credential is not a search that found nothing, and
+                # every other term will be refused too. Let it out so the run
+                # reports the token rather than the research question.
+                raise
             except Exception as e:
                 logger.warning(f"GWAS search failed for '{term}': {e}")
                 return term, []
@@ -385,7 +390,11 @@ class MRPipeline:
         with ThreadPoolExecutor(max_workers=5) as pool:
             futures = {pool.submit(_search_one, t): t for t in valid_terms}
             for future in as_completed(futures):
-                term, entries = future.result()
+                try:
+                    term, entries = future.result()
+                except gwas.OpenGwasAuthError as error:
+                    self.state.errors.append(str(error))
+                    raise
                 self.on_progress(f"正在搜索 {term} 的GWAS数据...", 0.30)
                 if entries:
                     gwas_map[term] = entries

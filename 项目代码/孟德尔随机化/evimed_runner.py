@@ -11,6 +11,12 @@ import tempfile
 import traceback
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load environment from .env and deploy.env for API tokens
+load_dotenv(Path(__file__).parent / ".env", override=False)
+load_dotenv(Path(__file__).parent / "deploy.env", override=True)
+
 ROOT = Path(__file__).resolve().parent
 SECTION_ORDER = (
     "abstract", "introduction", "methods", "results", "discussion",
