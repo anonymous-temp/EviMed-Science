@@ -102,10 +102,19 @@ def _check_r_environment_impl() -> tuple[bool, str]:
     except subprocess.TimeoutExpired:
         return (False, "Rscript check timed out.")
     # Check required packages
+    # A package that is installed but cannot load reports the same as one that
+    # was never installed, and the advice to install it is then wrong: what is
+    # actually missing is a dependency. TwoSampleMR sat on disk unusable for
+    # want of data.table and the message said to install TwoSampleMR. Report the
+    # load error, which names the real gap.
     check_script = (
         'pkgs <- c("TwoSampleMR", "ieugwasr", "jsonlite", "MRPRESSO"); '
-        'missing <- pkgs[!sapply(pkgs, requireNamespace, quietly=TRUE)]; '
-        'if(length(missing)>0) cat(paste(missing,collapse=",")) else cat("OK")'
+        'bad <- character(0); '
+        'for (p in pkgs) { '
+        '  err <- tryCatch({ loadNamespace(p); NULL }, error = function(e) conditionMessage(e)); '
+        '  if (!is.null(err)) bad <- c(bad, paste0(p, ": ", gsub("[\r\n]+", " ", err))) '
+        '}; '
+        'if (length(bad) > 0) cat(paste(bad, collapse=" | ")) else cat("OK")'
     )
     try:
         result = subprocess.run(
@@ -114,11 +123,14 @@ def _check_r_environment_impl() -> tuple[bool, str]:
         )
         output = result.stdout.strip()
         if output != "OK":
-            missing = output.split(",")
-            install_cmd = ", ".join(f'"{p}"' for p in missing)
+            failures = [item.strip() for item in output.split("|") if item.strip()]
+            names = [item.split(":", 1)[0].strip() for item in failures]
+            install_cmd = ", ".join(f'"{p}"' for p in names)
+            detail = "\n".join(f"  - {item}" for item in failures)
             return (False, (
-                f"Missing R packages: {', '.join(missing)}\n"
-                f"Install with: Rscript -e 'install.packages(c({install_cmd}))'"
+                f"R packages unusable: {', '.join(names)}\n{detail}\n"
+                f"If a package is absent, install it: Rscript -e 'install.packages(c({install_cmd}))'\n"
+                f"If it is present but fails to load, install the dependency its error names instead."
             ))
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return (False, "Failed to check R packages.")
