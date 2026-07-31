@@ -373,6 +373,7 @@ export function createWebApiApp(overrides = {}) {
         extractionSource: memoryResult.source,
         proposed: memoryResult.proposed,
         rejected: memoryResult.rejected,
+        rejectionReasons: memoryResult.rejectionReasons,
         extractionError: memoryResult.extractionError,
       }).catch(() => {});
     },
