@@ -1601,6 +1601,27 @@ test("buildOpenCodeLaunchPlan requires matching release provenance in production
   );
 });
 
+test("buildOpenCodeLaunchPlan refuses a host runtime in production despite the opt-in", () => {
+  // The host launch plan hands the child the server's own environment, which
+  // holds the upstream API key, so production must refuse it whatever the
+  // operator set. This mirrors the kernel guard in commands.mjs.
+  assert.throws(
+    () =>
+      buildOpenCodeLaunchPlan(
+        {
+          production: true,
+          runtimeSandboxMode: "host",
+          opencodeBin: "/usr/local/bin/opencode",
+          allowUnsandboxedRuntime: true,
+        },
+        project,
+        49152,
+        "pw-test",
+      ),
+    /requires OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker/,
+  );
+});
+
 test("buildOpenCodeLaunchPlan rejects unsandboxed host runtime without opt-in", () => {
   assert.throws(
     () =>
