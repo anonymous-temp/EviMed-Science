@@ -234,10 +234,64 @@ function validEvimedEnumArray(value, allowed) {
   return Array.isArray(value) && value.length > 0 && value.length <= 20 && value.every((item) => allowed.has(item));
 }
 
+const doiPattern = /^10\.\d{4,9}\/[\x21-\x7e]{1,180}$/;
+
+// Open-access PDFs sit on the publisher's own domain — a sample of twelve
+// open-access papers resolved to twelve different hosts — so no host allowlist
+// can reach them. The runtime therefore never names a host for these: it sends
+// a DOI, and the server resolves it against Unpaywall and fetches whatever
+// Unpaywall vouches for. Arbitrary egress stays impossible because the runtime
+// cannot choose the destination.
+function validatedOpenAccessPdfRequest(value) {
+  if (Object.keys(value).some((key) => key !== "openAccessPdfDoi")) {
+    throw gatewayError(
+      400,
+      "public_source_gateway_field_invalid",
+      "An open-access PDF request carries only a DOI.",
+    );
+  }
+  const doi = String(value.openAccessPdfDoi ?? "").trim().replace(/^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi:)/i, "");
+  if (!doiPattern.test(doi)) {
+    throw gatewayError(400, "public_source_gateway_doi_invalid", "The open-access DOI is invalid.");
+  }
+  return { mode: "open-access-pdf", doi };
+}
+
+/** Reject anything that is not a routable public name before we fetch it.
+ *
+ * Unpaywall is trusted to name a publisher, not to be an oracle: a poisoned
+ * record naming localhost or a link-local address would otherwise turn this
+ * into a request forgery against the server's own network. */
+function assertPublicHostname(hostname) {
+  const host = String(hostname ?? "").toLowerCase();
+  const privateName = !host
+    || host === "localhost"
+    || host.endsWith(".localhost")
+    || host.endsWith(".local")
+    || host.endsWith(".internal")
+    || host.endsWith(".arpa")
+    || !host.includes(".");
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  const octets = ipv4 ? ipv4.slice(1, 5).map(Number) : null;
+  const privateIpv4 = octets && (
+    octets.some((part) => !Number.isInteger(part) || part > 255)
+    || octets[0] === 0 || octets[0] === 10 || octets[0] === 127
+    || (octets[0] === 169 && octets[1] === 254)
+    || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+    || (octets[0] === 192 && octets[1] === 168)
+    || (octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127)
+    || octets[0] >= 224
+  );
+  if (privateName || privateIpv4 || host.includes(":")) {
+    throw gatewayError(403, "public_source_pdf_host_forbidden", "The open-access PDF host is not publicly routable.");
+  }
+}
+
 function validatedRequest(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     throw gatewayError(400, "public_source_gateway_body_invalid", "The public-source request must be an object.");
   }
+  if (value.openAccessPdfDoi !== undefined) return validatedOpenAccessPdfRequest(value);
   if (Object.keys(value).some((key) => !["url", "accept", "method", "body", "credentialProfile"].includes(key))) {
     throw gatewayError(400, "public_source_gateway_field_invalid", "The public-source request contains an unsupported field.");
   }
@@ -472,6 +526,118 @@ async function readBoundedBody(body, maxBytes) {
   }
 }
 
+/** Resolve a DOI to its open-access PDF and stream it back.
+ *
+ * Europe PMC only serves full text for the PMC subset, which is why syntheses
+ * kept ending with more eligible records than readable ones. Unpaywall knows
+ * where the rest are, but on the publisher's own domain, so the resolution has
+ * to happen here rather than in the runtime. */
+async function serveOpenAccessPdf(request, { config, res, fetchImpl, signal }) {
+  const email = String(config.publicSourceCredentials?.unpaywall ?? "").trim();
+  if (!email || email.length > 8 * 1024 || /[\r\n\0]/.test(email)) {
+    throw gatewayError(503, "public_source_unpaywall_credential_missing", "The server-managed unpaywall credential is unavailable.");
+  }
+  const lookup = new URL(`https://api.unpaywall.org/v2/${encodeURIComponent(request.doi)}`);
+  lookup.searchParams.set("email", email);
+
+  let record;
+  try {
+    const response = await fetchImpl(lookup, {
+      headers: { accept: "application/json", "user-agent": "EviMed-Research/1.2 (server public-source gateway)" },
+      redirect: "error",
+      signal,
+    });
+    if (!response.ok) {
+      throw gatewayError(
+        mappedUpstreamStatus(response.status),
+        response.status === 404 ? "public_source_pdf_not_open_access" : "public_source_gateway_upstream_error",
+        `Unpaywall returned HTTP ${response.status} for this DOI.`,
+      );
+    }
+    record = JSON.parse(new TextDecoder().decode(await readBoundedBody(response.body, 2 * 1024 * 1024)));
+  } catch (error) {
+    if (error instanceof PublicSourceGatewayError) throw error;
+    throw gatewayError(502, "public_source_gateway_upstream_unavailable", "The open-access index is temporarily unavailable.");
+  }
+
+  // Unpaywall usually lists the same article in several places, and the first
+  // one is routinely unusable: publishers are recorded over plain http and many
+  // answer a non-browser request with 403. Repository copies are https and
+  // serve the file, so try every location rather than judging the article by
+  // whichever one happens to be listed first.
+  const candidates = [record?.best_oa_location, ...(Array.isArray(record?.oa_locations) ? record.oa_locations : [])]
+    .filter((location) => typeof location?.url_for_pdf === "string" && location.url_for_pdf.startsWith("https://"))
+    .sort((left, right) => Number(right.host_type === "repository") - Number(left.host_type === "repository"));
+  const seen = new Set();
+  const attempts = [];
+  const maxBytes = Math.max(1024, Number(config.publicSourceGatewayMaxResponseBytes) || 16 * 1024 * 1024);
+
+  for (const candidate of candidates) {
+    if (seen.has(candidate.url_for_pdf) || seen.size >= 4) continue;
+    seen.add(candidate.url_for_pdf);
+    let target;
+    try {
+      target = new URL(candidate.url_for_pdf);
+    } catch {
+      attempts.push("unusable location");
+      continue;
+    }
+    if (target.username || target.password || target.port) {
+      attempts.push(`${target.hostname}: not an approved URL`);
+      continue;
+    }
+    try {
+      assertPublicHostname(target.hostname);
+    } catch {
+      attempts.push(`${target.hostname}: not publicly routable`);
+      continue;
+    }
+    let upstream;
+    try {
+      upstream = await fetchImpl(target, {
+        headers: { accept: "application/pdf", "user-agent": "EviMed-Research/1.2 (server public-source gateway)" },
+        redirect: "error",
+        signal,
+      });
+    } catch {
+      attempts.push(`${target.hostname}: unreachable`);
+      continue;
+    }
+    if (!upstream.ok) {
+      await upstream.body?.cancel().catch(() => {});
+      attempts.push(`${target.hostname}: HTTP ${upstream.status}`);
+      continue;
+    }
+    const contentType = String(upstream.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
+    if (contentType !== "application/pdf") {
+      await upstream.body?.cancel().catch(() => {});
+      // A login wall or cookie interstitial answers with HTML and HTTP 200.
+      attempts.push(`${target.hostname}: served ${contentType || "no"} content`);
+      continue;
+    }
+    const buffer = await readBoundedBody(upstream.body, maxBytes);
+    res.writeHead(200, {
+      "content-type": "application/pdf",
+      "content-length": String(buffer.length),
+      "cache-control": "no-store",
+      "x-evimed-oa-source": encodeURIComponent(target.origin),
+      "x-evimed-oa-version": encodeURIComponent(String(candidate.version ?? "")),
+      "x-evimed-oa-license": encodeURIComponent(String(candidate.license ?? "")),
+    });
+    res.end(buffer);
+    return;
+  }
+
+  // Name every location that was tried, so an empty evidence base is a
+  // reported outcome rather than a silent one.
+  const detail = attempts.length ? ` Tried: ${attempts.join("; ")}.` : "";
+  throw gatewayError(
+    404,
+    "public_source_pdf_not_open_access",
+    `No open-access PDF could be retrieved for this DOI.${detail}`,
+  );
+}
+
 export function createPublicSourceGatewayHandler(config, runtimeManager, { fetchImpl = fetch } = {}) {
   return async function publicSourceGatewayHandler(req, res) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
@@ -493,6 +659,10 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
         throw gatewayError(401, "public_source_gateway_token_invalid", "Public-source gateway authentication failed.");
       }
       const request = validatedRequest(await readJsonBody(req, 16 * 1024));
+      if (request.mode === "open-access-pdf") {
+        await serveOpenAccessPdf(request, { config, res, fetchImpl, signal: controller.signal });
+        return;
+      }
       let upstream;
       try {
         const upstreamHeaders = {
