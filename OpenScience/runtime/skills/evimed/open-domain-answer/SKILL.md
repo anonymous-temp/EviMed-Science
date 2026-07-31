@@ -45,6 +45,11 @@ Retrieve, read, refine — do not stop at one query:
   analysed sample size but filled with the full cohort's events gives the reader a rate over the wrong denominator.
   State both — records loaded, records analysed, and the reason for the difference — and take each event count,
   person-time total, and rate from the set the model actually used.
+- The reason an input went missing has to be verified, never inferred. When you submit N items and get back fewer,
+  check each missing one directly before you explain its absence. Do not reason from the absence to a cause: a
+  well-argued subject-matter explanation for a dropped record is the most convincing way to publish a retrieval bug,
+  because it reads as a finding and nothing contradicts it. If you cannot confirm why an item is missing, report it
+  as unexplained and carry it as a limitation.
 
 ## Citation style (reader-friendly)
 

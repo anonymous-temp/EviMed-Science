@@ -459,6 +459,27 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertEqual(result["data"]["items"][0]["title"], "TP53")
         self.assertEqual(result["sources"][0]["source"], "string")
 
+    def test_an_empty_connector_result_says_so_and_names_the_query_shape(self):
+        with mock.patch.object(sources, "_get_json_value", return_value=[]):
+            result = sources.biomedical_search({"source": "cbioportal", "query": "IDH1", "limit": 5})
+        self.assertIn("matched", result["summary"])
+        self.assertNotIn("Retrieved 0", result["summary"])
+        warning = " ".join(result["warnings"])
+        self.assertIn("matched nothing", warning)
+        self.assertIn("study catalogue", warning)
+        # The follow-up for an empty result cannot be "verify the cited record".
+        self.assertNotIn("Open and verify", " ".join(result["next_actions"]))
+
+    def test_string_sends_a_gene_list_as_separate_identifiers(self):
+        # STRING reads space- or comma-joined text as a single identifier and
+        # returns nothing for it, so a network query naming several genes has
+        # to arrive carriage-return separated.
+        payload = [{"stringId": "9606.ENSP0001", "preferredName": "APP"}]
+        with mock.patch.object(sources, "_get_json_value", return_value=payload) as request:
+            sources.biomedical_search({"source": "string", "query": "APP, PSEN1 APOE", "limit": 5})
+        url = request.call_args.args[0]
+        self.assertIn("identifiers=APP%0DPSEN1%0DAPOE", url)
+
     def test_ena_search_uses_bounded_title_matching(self):
         with mock.patch.object(sources, "_get_json_value", return_value=[]) as request:
             result = sources.biomedical_search({"source": "ena", "query": "breast cancer", "limit": 2})
