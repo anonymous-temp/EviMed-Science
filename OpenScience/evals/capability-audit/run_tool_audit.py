@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import shutil
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -277,9 +278,14 @@ def snapshot_evidence(results, evidence_root: Path) -> None:
     state here, workspace-relative, and the release gate becomes reproducible
     from a clean clone.
     """
-    if evidence_root.exists():
-        shutil.rmtree(evidence_root)
-    job_state_root = evidence_root / "job-state"
+    # Build beside the live directory and swap at the end. Clearing first means
+    # a run that certifies less than the last one — a specialist whose job did
+    # not start, an upstream that was down — deletes evidence it cannot replace,
+    # and the loss is silent because the document it writes looks complete.
+    staging_root = evidence_root.with_name(evidence_root.name + ".staging")
+    if staging_root.exists():
+        shutil.rmtree(staging_root)
+    job_state_root = staging_root / "job-state"
     job_state_root.mkdir(parents=True, exist_ok=True)
     for item in results:
         workspace = REPO / str(item.get("workspace", ""))
@@ -290,7 +296,7 @@ def snapshot_evidence(results, evidence_root: Path) -> None:
         for receipt in receipts:
             source = (workspace / str(receipt["path"])).resolve()
             source.relative_to(workspace.resolve())
-            target = evidence_root / str(receipt["path"])
+            target = staging_root / str(receipt["path"])
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
         job_id = item.get("jobId")
@@ -301,6 +307,10 @@ def snapshot_evidence(results, evidence_root: Path) -> None:
             workspace / directory / ".jobs" / ("%s.json" % job_id),
             job_state_root / ("%s.json" % job_id),
         )
+    # Everything copied, so the swap is safe.
+    if evidence_root.exists():
+        shutil.rmtree(evidence_root)
+    staging_root.rename(evidence_root)
 
 
 def run_task_probes(server, workspace):
@@ -396,10 +406,19 @@ def main():
         "results": ordered,
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    snapshot_evidence(ordered, args.output_dir / "evidence")
-    payload = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
-    for filename in ("tool-probe-v2.json", "tool-probe-v3.json"):
-        (args.output_dir / filename).write_text(payload, encoding="utf-8")
+    complete = certified == len(declared)
+    # A partial run publishes a document and an evidence tree that look whole
+    # while covering less than the last one. Report it and leave the recorded
+    # evidence alone rather than replacing certification with its absence.
+    if complete:
+        snapshot_evidence(ordered, args.output_dir / "evidence")
+        payload = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
+        for filename in ("tool-probe-v2.json", "tool-probe-v3.json"):
+            (args.output_dir / filename).write_text(payload, encoding="utf-8")
+    else:
+        uncertified = [item["tool"] for item in ordered if not item.get("operational")]
+        print("not written: %d of %d tools uncertified (%s)" % (
+            len(uncertified), len(declared), ", ".join(uncertified[:8])), file=sys.stderr)
     print(json.dumps({
         "registered": len(declared),
         "executionCertified": certified,
