@@ -943,7 +943,7 @@ test("enforces bounded run count and ledger bytes without partial mutation", asy
     }));
     await writeFile(ledgerFile, `${events.map((event) => JSON.stringify(event)).join("\n")}\n`, "utf8");
     const before = await readFile(ledgerFile, "utf8");
-    let result = await startRun(base, "ses_open");
+    const result = await startRun(base, "ses_open");
     assert.equal(result.response.status, 409);
     assert.equal(result.body.code, "agent_run_limit_reached");
     assert.equal(await readFile(ledgerFile, "utf8"), before);
@@ -967,9 +967,23 @@ test("keeps identical session and run ids project-scoped", async () => {
     await bind(base, "ses_shared", { mode: "open-domain" }, "second");
     const first = await startRun(base, "ses_shared");
     const second = await startRun(base, "ses_shared", "second");
+    assert.equal(first.response.status, 202);
+    assert.equal(second.response.status, 202);
 
-    assert.equal((await listRuns(base)).body.data.length, 1);
-    assert.equal((await listRuns(base, "second")).body.data.length, 1);
+    // The name of this test is the assertion: both projects must really be
+    // holding the same session id, and each must see only its own run. Without
+    // checking the ids the test passes even when the collision never happens,
+    // which is the case it exists to cover.
+    assert.equal(first.body.data.sessionId, "ses_shared");
+    assert.equal(second.body.data.sessionId, "ses_shared");
+
+    const firstRuns = (await listRuns(base)).body.data;
+    const secondRuns = (await listRuns(base, "second")).body.data;
+    assert.equal(firstRuns.length, 1);
+    assert.equal(secondRuns.length, 1);
+    assert.equal(firstRuns[0].id, first.body.data.id);
+    assert.equal(secondRuns[0].id, second.body.data.id);
+    assert.notEqual(firstRuns[0].id, secondRuns[0].id);
   });
 });
 

@@ -8,7 +8,6 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  assertDockerDataVolumeSupport,
   dockerRuntimeMount,
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
@@ -2241,7 +2240,7 @@ function assertReservedMcpOwnership(existing, targetExists, config, project, pla
     "EVIMED_META_AGENT_PYTHON",
     "EVIMED_MODEL_CONFIG_FILE",
     "EVIMED_PHARMACY_REFERENCE_DB",
-    ...Object.values(evimedSpecialistEnvironment).flatMap((entry) => [entry.root, entry.python]),
+    ...Object.values(evimedSpecialistEnvironment).flatMap((specialist) => [specialist.root, specialist.python]),
     ...Object.values(evimedAdapterEnvironment),
   ]);
   if (
@@ -3948,7 +3947,7 @@ export class RuntimeManager {
         try {
           await this.stopRuntimeIfProjectQuotaExceeded(project);
           postResponseQuotaChecked = true;
-        } catch {}
+        } catch { /* a quota probe must not break a response already in flight */ }
         res.writeHead(upstreamRes.status, responseHeaders);
         responseEnded = true;
         res.end();
@@ -3974,7 +3973,7 @@ export class RuntimeManager {
             try {
               await this.stopRuntimeIfProjectQuotaExceeded(project);
               postResponseQuotaChecked = true;
-            } catch {}
+            } catch { /* a quota probe must not break a response already in flight */ }
             res.writeHead(upstreamRes.status, responseHeaders);
             responseEnded = true;
             res.end(method === "HEAD" ? undefined : payload);
@@ -4005,13 +4004,13 @@ export class RuntimeManager {
                 resolve();
                 return;
               }
-              const done = () => {
-                res.off("close", done);
-                res.off("drain", done);
+              const finish = () => {
+                res.off("close", finish);
+                res.off("drain", finish);
                 resolve();
               };
-              res.once("close", done);
-              res.once("drain", done);
+              res.once("close", finish);
+              res.once("drain", finish);
             });
           }
         }

@@ -3198,7 +3198,7 @@ test("project roots reject symbolic links", async () => {
     await mkdir(outsideProject, { recursive: true });
     await symlink(outsideProject, path.join(projectsRoot, "escape"));
 
-    let out = await commandWithHeaders(base, "list_dir", {}, { "X-Open-Science-Project": "escape" });
+    const out = await commandWithHeaders(base, "list_dir", {}, { "X-Open-Science-Project": "escape" });
     assert.equal(out.res.status, 403);
     assert.equal(out.json.code, "path_forbidden");
 
@@ -5283,7 +5283,7 @@ test("runtime state files reject symbolic links", async () => {
 
 test("runtime_status persists stopped runtime state across server restarts", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-web-runtime-state-"));
-  let first = await startAppWithDataDir(dataDir);
+  const first = await startAppWithDataDir(dataDir);
   try {
     let out = await command(first.base, "start_runtime");
     assert.equal(out.res.status, 200);
@@ -5309,7 +5309,7 @@ test("runtime_status persists stopped runtime state across server restarts", asy
 
 test("runtime_status marks previously running runtime state as stale after server restart", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-web-runtime-stale-"));
-  let first = await startAppWithDataDir(dataDir);
+  const first = await startAppWithDataDir(dataDir);
   try {
     const started = await command(first.base, "start_runtime");
     assert.equal(started.res.status, 200);

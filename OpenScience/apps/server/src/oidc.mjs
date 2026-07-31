@@ -257,6 +257,7 @@ function authorizeClaims(claims, settings) {
 function displayName(claims) {
   for (const key of ["name", "preferred_username", "email"]) {
     if (typeof claims?.[key] !== "string") continue;
+    // eslint-disable-next-line no-control-regex -- stripping control characters is the intent
     const value = claims[key].replace(/[\0-\x1f\x7f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 128);
     if (value) return value;
   }

@@ -14,7 +14,8 @@
     "test": "node --test test/*.test.mjs",
     "test:unit": "node --test test/runtimeManager.test.mjs test/security.test.mjs test/server.test.mjs",
     "test:contract": "node --test test/hosted-web.e2e.test.mjs",
-    "test:e2e": "node ../../scripts/ops/hosted-production-e2e.mjs"
+    "test:e2e": "node ../../scripts/ops/hosted-production-e2e.mjs",
+    "lint": "eslint src test --ext .mjs --max-warnings 0"
   },
   "engines": {
     "node": ">=20"
@@ -23,5 +24,8 @@
     "openid-client": "6.8.4",
     "pg": "8.16.3",
     "yaml": "2.8.3"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1"
   }
 }

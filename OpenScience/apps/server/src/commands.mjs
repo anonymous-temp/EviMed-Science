@@ -433,7 +433,7 @@ export function createCommandRegistry({ config, runtimeManager }) {
     },
 
     async runtime_status(_args, ctx) {
-      return await runtimeManager.status(ctx.project);
+      return runtimeManager.status(ctx.project);
     },
 
     async workspace_path(_args, ctx) {
