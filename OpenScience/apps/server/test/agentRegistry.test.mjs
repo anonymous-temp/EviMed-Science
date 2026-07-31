@@ -139,8 +139,8 @@ test("official specialist packages preserve domain-specific evidence and release
       expectedChecks = ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable", "skillsLoaded"];
     } else if (agent.id === "open-domain-answer") {
       // Answer-mode contract: the reply is the deliverable, so the floor is
-      // skill loading + citation hygiene instead of file outputs.
-      expectedChecks = ["skillsLoaded", "citationsResolvable"];
+      // skill loading plus citation hygiene and integrity, instead of file outputs.
+      expectedChecks = ["skillsLoaded", "citationsResolvable", "citationIntegrity"];
     } else if (evidenceSnapshotAgents.has(agent.id)) {
       expectedChecks = ["requiredOutputsExist", "citationsResolvable", "citedSourcesRecorded"];
     }

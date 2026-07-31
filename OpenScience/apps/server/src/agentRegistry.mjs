@@ -79,6 +79,7 @@ export const EVIMED_AGENT_DATA_SOURCES = new Set([
 export const EVIMED_AGENT_COMPLETION_CHECKS = new Set([
   "requiredOutputsExist",
   "citationsResolvable",
+  "citationIntegrity",
   "citedSourcesRecorded",
   "evidenceClaimsTraceable",
   "skillsLoaded",

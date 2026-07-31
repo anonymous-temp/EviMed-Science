@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { numberedReferenceCount, validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
+import { citationIntegrityIssues, numberedReferenceCount, validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
 
@@ -61,6 +61,47 @@ function validPackage() {
     },
   };
 }
+
+test("citation integrity catches what URL hygiene cannot see", () => {
+  // Every case here was produced by a real run whose citations all passed the
+  // URL check: two entries for one paper under different identifier schemes, an
+  // entry declaring itself a copy of another, a marker with no entry, an entry
+  // nobody cites, and a claim resting on a source that predates it.
+  const report = [
+    "WHO 2021 分类已将 IDH 突变列为核心标志 [3]。",
+    "另有研究支持这一点 [1][2]，并被后续工作引用 [9]。",
+    "",
+    "## 参考文献",
+    "",
+    "[1] Cancer Genome Atlas. N Engl J Med. 2015. https://doi.org/10.1056/NEJMoa1402121",
+    "[2] 同 [1] — 同一项分析",
+    "[3] Albacker LA, et al. J Clin Oncol. 2018;36(15_suppl):2035. https://doi.org/10.1200/jco.2018.36",
+    "[4] Draaisma K, et al. 2015. https://pubmed.ncbi.nlm.nih.gov/26699864/",
+    "[5] Draaisma K, et al. Acta Neuropathol Commun. 2015;3:88. PMID: 26699864",
+  ].join("\n");
+
+  const issues = citationIntegrityIssues(report);
+  const joined = issues.join(" | ");
+  assert.match(joined, /\[9\] has no matching entry/);
+  assert.match(joined, /Reference \[2\] states that it is the same as another entry/);
+  assert.match(joined, /\[4\] and \[5\] are the same work/);
+  assert.match(joined, /claim dated 2021 cites only \[3\]/);
+  // 2035 is a page number, not a year, and must not be read as one.
+  assert.ok(!/2035/.test(joined), `a page number was read as a year: ${joined}`);
+});
+
+test("citation integrity stays quiet on a sound bibliography", () => {
+  const report = [
+    "阿司匹林可降低心血管事件风险 [1]。",
+    "一项 2018 年的分析支持这一结论 [2]。",
+    "",
+    "## 参考文献",
+    "",
+    "[1] Baigent C, et al. Lancet. 2009;373:1849. https://doi.org/10.1016/S0140-6736(09)60503-1",
+    "[2] Zheng SL, Roddick AJ. JAMA. 2019;321(3):277. https://pubmed.ncbi.nlm.nih.gov/30667501/",
+  ].join("\n");
+  assert.deepEqual(citationIntegrityIssues(report), []);
+});
 
 test("a reference floor counts sources, not cross-references to other entries", () => {
   const report = [
