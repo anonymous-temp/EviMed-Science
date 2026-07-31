@@ -1287,23 +1287,23 @@
       }
     },
     {
-      "id": "mousemine-mouse-genome-informatics-intermine-based",
+      "id": "alliancemine-alliance-of-genome-resources-intermine-based",
       "index": 65,
-      "name": "MouseMine (Mouse Genome Informatics, InterMine-based)",
+      "name": "AllianceMine (Alliance of Genome Resources, InterMine-based)",
       "domain": "生物与组学",
       "priority": "P1 医学核心/扩展",
       "status": "active_tool",
       "accessClass": "public_api",
-      "connector": "mousemine-mouse-genome-informatics-intermine-based",
+      "connector": "alliancemine-alliance-of-genome-resources-intermine-based",
       "skill": null,
       "credential": "通常无需 key/按源条款",
       "license": "需按官方条款核验",
-      "officialUrl": "https://www.mousemine.org/mousemine/service",
+      "officialUrl": "https://alliancemine.alliancegenome.org/alliancemine/service",
       "blocker": "",
       "validation": {
         "contractTests": "pass",
         "liveProbe": "pass",
-        "verifiedAt": "2026-07-19",
+        "verifiedAt": "2026-07-31",
         "productionRoute": "server_allowlisted_gateway",
         "queryMode": "free_text"
       }

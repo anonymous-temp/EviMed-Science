@@ -352,7 +352,11 @@ async function ensureScopedFileParent(rootDir, file) {
 }
 
 function noFollowFlags(flags) {
-  return flags | (fsConstants.O_NOFOLLOW ?? 0);
+  // O_NONBLOCK so opening a FIFO returns instead of waiting for a writer.
+  // Without it the type check below is unreachable: open() itself blocks, and
+  // anyone who can run mkfifo in their own workspace can hang a request
+  // indefinitely. On Linux the flag has no effect on regular files.
+  return flags | (fsConstants.O_NOFOLLOW ?? 0) | (fsConstants.O_NONBLOCK ?? 0);
 }
 
 function normalizeNoFollowError(err) {
@@ -417,6 +421,14 @@ async function assertHandleWithinRoot(rootDir, handle) {
       throw new HttpError(403, "path_forbidden", "opened file escapes the workspace.");
     }
   }
+  // A second name for the same inode defeats every path-based check above: the
+  // link inside the workspace resolves cleanly while the content belongs to a
+  // file outside it. Containment is a property of the inode, not of the path we
+  // happened to open it through, and a workspace has no legitimate hardlinks.
+  // Directories are exempt — their nlink counts subdirectories.
+  if (stat.isFile() && stat.nlink > 1) {
+    throw new HttpError(403, "path_forbidden", "hard-linked files are not allowed in hosted workspaces.");
+  }
   return stat;
 }
 
@@ -477,6 +489,10 @@ export async function openScopedFileNoFollow(
   try {
     handle = await openNoFollow(path.join(parent.path, path.basename(target)), flags, mode);
     const stat = await assertHandleWithinRoot(root, handle);
+    // Every caller here wants a regular file. A device node, socket or FIFO
+    // reaching a reader would either block it or feed it something that is not
+    // workspace content, so refuse it once here rather than in each caller.
+    if (!stat.isFile()) throw new HttpError(400, "not_a_file", "path is not a regular file.");
     return { handle, stat };
   } catch (err) {
     await handle?.close().catch(() => {});
@@ -629,12 +645,17 @@ export async function appendJsonLineNoFollow(rootDir, file, record, options = {}
   await assertNoSymlinkPath(rootDir, file, { allowMissingTail: true });
   const line = `${JSON.stringify(record)}\n`;
   await rotateJsonLineFileIfNeeded(rootDir, file, Buffer.byteLength(line), options.maxBytes);
-  let handle;
+  // Open through the scoped opener rather than the raw path string. Checking
+  // the path and then opening it by name is a check-then-use on every
+  // intermediate directory; the scoped opener walks the tree by descriptor and
+  // re-asserts containment on the handle it actually got.
+  const opened = await openScopedFileNoFollow(rootDir, file, {
+    flags: fsConstants.O_APPEND | fsConstants.O_CREAT | fsConstants.O_WRONLY,
+  });
   try {
-    handle = await openNoFollow(file, fsConstants.O_APPEND | fsConstants.O_CREAT | fsConstants.O_WRONLY, 0o600);
-    await handle.writeFile(line);
+    await opened.handle.writeFile(line);
   } finally {
-    await handle?.close();
+    await opened.handle.close();
   }
 }
 

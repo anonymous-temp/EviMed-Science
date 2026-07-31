@@ -53,7 +53,7 @@ const allowedHosts = new Set([
   "www.guidetopharmacology.org",
   "www.isrctn.com",
   "www.metabolomicsworkbench.org",
-  "www.mousemine.org",
+  "alliancemine.alliancegenome.org",
   "www.proteinatlas.org",
   "www.cbioportal.org",
   "www.ebi.ac.uk",
