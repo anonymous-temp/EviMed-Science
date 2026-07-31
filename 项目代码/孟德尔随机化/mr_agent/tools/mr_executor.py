@@ -37,6 +37,31 @@ _R_TIMEOUT_SEC = int(os.getenv("MR_R_TIMEOUT_SEC", "900"))
 _r_env_cache: tuple[bool, str] | None = None
 _r_env_lock = threading.Lock()
 
+# TwoSampleMR and friends are vendored into .r-lib beside this agent rather than
+# installed system-wide, and nothing ever told R where they were: both Rscript
+# calls inherited an environment with no R_LIBS_USER in it. Every run therefore
+# failed reporting the packages as missing while they sat on disk.
+# (--vanilla is not the culprit — it skips .Renviron files but still honours a
+# process-environment R_LIBS_USER, which is why it is kept below.)
+_BUNDLED_R_LIBRARY = Path(__file__).resolve().parents[2] / ".r-lib"
+
+
+def _r_subprocess_env() -> dict[str, str]:
+    """Environment for an Rscript call, with the bundled library on the path."""
+    env = dict(os.environ)
+    if _BUNDLED_R_LIBRARY.is_dir():
+        existing = env.get("R_LIBS_USER", "")
+        env["R_LIBS_USER"] = (
+            f"{_BUNDLED_R_LIBRARY}{os.pathsep}{existing}" if existing else str(_BUNDLED_R_LIBRARY)
+        )
+    return env
+
+
+# --vanilla keeps a run reproducible: no saved workspace, no user or site
+# profile, no stray .Renviron. The library path is supplied through the
+# subprocess environment instead, which --vanilla does not discard.
+_R_ISOLATION_FLAGS = ["--vanilla"]
+
 _R_NOT_FOUND_MSG = (
     "Rscript not found. Please install R:\n"
     "  Windows: https://cran.r-project.org/bin/windows/base/\n"
@@ -84,8 +109,8 @@ def _check_r_environment_impl() -> tuple[bool, str]:
     )
     try:
         result = subprocess.run(
-            ["Rscript", "-e", check_script],
-            capture_output=True, text=True, timeout=30,
+            ["Rscript", *_R_ISOLATION_FLAGS, "-e", check_script],
+            capture_output=True, text=True, timeout=30, env=_r_subprocess_env(),
         )
         output = result.stdout.strip()
         if output != "OK":
@@ -187,9 +212,9 @@ def _execute_r_script(script: str, work_dir: Path) -> bool:
         script_path = f.name
     try:
         result = subprocess.run(
-            ["Rscript", "--vanilla", script_path],
+            ["Rscript", *_R_ISOLATION_FLAGS, script_path],
             cwd=str(work_dir), capture_output=True,
-            text=True, timeout=_R_TIMEOUT_SEC,
+            text=True, timeout=_R_TIMEOUT_SEC, env=_r_subprocess_env(),
         )
         if result.returncode != 0:
             # Strip TwoSampleMR startup banner (first ~500 chars) to surface real error
