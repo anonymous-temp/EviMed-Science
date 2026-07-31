@@ -293,9 +293,36 @@ function bibliographyEntryCount(value) {
   return [...String(value ?? "").matchAll(/^@[A-Za-z]+\s*\{/gm)].length;
 }
 
-function numberedReferenceCount(reportText) {
+// "5. 同 [1]", "12. See [3]", "7. Ibid. 3" point at another entry instead of
+// naming a source, and counting them lets a bibliography clear a reference
+// floor it does not meet. What separates a cross-reference from a real entry is
+// that it carries no identifier of its own, so an entry opening with a
+// back-reference marker that still gives a DOI, PMID or URL keeps its place: it
+// is a distinct source that happens to be labelled sloppily.
+// No \b after the Chinese markers — CJK characters are not word characters, so
+// a word boundary never matches beside them.
+const backReferenceOpener = /^\s*\d+[.、]\s*(?:同上|参见|同|见|(?:ibid|idem|see|as|cf)\b\.?)/i;
+const pointsAtAnotherEntry = /\[\s*\d+\s*\]|\b\d{1,3}\b/;
+const sourceIdentifier = /\b(?:10\.\d{4,9}\/\S+|pmid:?\s*\d+|https?:\/\/\S+)/i;
+
+export function numberedReferenceCount(reportText) {
   const references = reportSection(reportText, "参考文献|参考来源|References?");
-  return references.split("\n").filter((line) => /^\s*\d+\.\s+\S/.test(line)).length;
+  const entries = references.split("\n").filter((line) => /^\s*\d+[.、]\s+\S/.test(line));
+  const distinct = new Set();
+  let counted = 0;
+  for (const entry of entries) {
+    const body = entry.replace(/^\s*\d+[.、]\s*/, "");
+    const identity = entry.match(sourceIdentifier)?.[0]?.toLowerCase().replace(/[.,;)]+$/, "");
+    if (!identity && backReferenceOpener.test(entry) && pointsAtAnotherEntry.test(body)) continue;
+    // Two entries carrying the same DOI, PMID or URL are one source listed
+    // twice, however differently the rest of the line is written.
+    if (identity) {
+      if (distinct.has(identity)) continue;
+      distinct.add(identity);
+    }
+    counted += 1;
+  }
+  return counted;
 }
 
 function parseJsonObject(value) {

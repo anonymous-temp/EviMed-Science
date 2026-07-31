@@ -2861,7 +2861,7 @@ async function readinessRuntime(config, runtimeManager) {
     };
   }
   if (config.runtimeSandboxMode === "host") {
-    if (!config.allowUnsandboxedRuntime) throw readinessFailure("runtime_sandbox_required");
+    if (config.production || !config.allowUnsandboxedRuntime) throw readinessFailure("runtime_sandbox_required");
     if (!config.opencodeBin) throw readinessFailure("opencode_bin_missing");
     await fsp.access(config.opencodeBin, fs.constants.X_OK);
     return { mode: "opencode", sandboxMode: "host" };

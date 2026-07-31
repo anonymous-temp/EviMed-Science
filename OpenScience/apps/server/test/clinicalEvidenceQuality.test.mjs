@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
+import { numberedReferenceCount, validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
 
@@ -61,6 +61,24 @@ function validPackage() {
     },
   };
 }
+
+test("a reference floor counts sources, not cross-references to other entries", () => {
+  const report = [
+    "## 参考文献",
+    "",
+    "1. Cancer Genome Atlas Research Network. N Engl J Med. 2015. https://doi.org/10.1056/NEJMoa1402121",
+    "2. Draaisma K, et al. Acta Neuropathol Commun. 2015;3:88. https://pubmed.ncbi.nlm.nih.gov/26699864/",
+    "3. Sanson M, et al. J Clin Oncol. 2009. https://pubmed.ncbi.nlm.nih.gov/19636000/",
+    "4. 同 [1] — TCGA LGG 多平台分析",
+    "5. See [2] for the cohort detail",
+    "6. Ibid. 3",
+    "7. 同一篇的重复条目. https://doi.org/10.1056/NEJMoa1402121",
+    "8. Mellinghoff IK, et al. N Engl J Med. 2023. https://doi.org/10.1056/NEJMoa2304194",
+  ].join("\n");
+  // Eight numbered lines, four real sources: three are cross-references to an
+  // earlier entry and one repeats entry 1's DOI under different wording.
+  assert.equal(numberedReferenceCount(report), 4);
+});
 
 test("accepts an academic report only when every material claim is source traceable", () => {
   const result = validateClinicalEvidencePackage(validPackage());

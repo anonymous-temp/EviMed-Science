@@ -2736,7 +2736,11 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
   if (sandboxMode !== "host") {
     throw new HttpError(400, "invalid_runtime_sandbox", "Unsupported runtime sandbox mode.");
   }
-  if (!config.allowUnsandboxedRuntime) {
+  // Production refuses the host runtime whatever the opt-in says, matching the
+  // kernel guard in commands.mjs. A host runtime is handed the server's own
+  // environment below, so the opt-in would surrender the workspace boundary and
+  // the upstream API key together.
+  if (config.production || !config.allowUnsandboxedRuntime) {
     throw new HttpError(
       403,
       "runtime_sandbox_required",
