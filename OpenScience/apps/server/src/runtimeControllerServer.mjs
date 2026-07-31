@@ -331,14 +331,14 @@ async function prepareControllerSocket(socketPath) {
     if (active) {
       throw controllerFailure(409, "runtime_controller_already_running", "A runtime controller is already listening on this socket.");
     }
-    const current = await fs.lstat(socketPath).catch((error) => {
+    const socketStat = await fs.lstat(socketPath).catch((error) => {
       if (error?.code === "ENOENT") return null;
       throw error;
     });
-    if (current && (current.dev !== existing.dev || current.ino !== existing.ino)) {
+    if (socketStat && (socketStat.dev !== existing.dev || socketStat.ino !== existing.ino)) {
       throw controllerFailure(409, "runtime_controller_socket_changed", "Runtime controller socket changed during startup.");
     }
-    if (current) await fs.rm(socketPath, { force: true });
+    if (socketStat) await fs.rm(socketPath, { force: true });
   }
 }
 

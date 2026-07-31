@@ -965,7 +965,7 @@ export function createWebApiApp(overrides = {}) {
           code: "command_rate_limited",
           label: "command requests",
         });
-        const data = await withCommandSlot(config, async () => {
+        const data = await withCommandSlot(async () => {
           await audit(ctx, `command.${commandKey}`, "started", { command: commandKey });
           try {
             const result = await invokeWithTimeout(command, args, ctx);
@@ -1133,7 +1133,7 @@ export function createWebApiApp(overrides = {}) {
     }
   }
 
-  async function withCommandSlot(config, fn) {
+  async function withCommandSlot(fn) {
     if (activeCommands >= config.maxConcurrentCommands) {
       throw new HttpError(429, "too_many_commands", "Too many commands are running.");
     }
@@ -1606,6 +1606,7 @@ function previewSandboxCsp() {
 }
 
 function safeDownloadFilename(name) {
+  // eslint-disable-next-line no-control-regex -- stripping control characters is the intent
   const cleaned = name.replace(/[\x00-\x1f\x7f"\\]/g, "_").trim();
   return cleaned || "download";
 }

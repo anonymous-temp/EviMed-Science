@@ -994,7 +994,7 @@ test("syncRuntimeAgentPackages materializes deterministic skills and primary age
     assert.equal(secondAgent, firstAgent);
     assert.match(firstAgent, /^---\ndescription: /);
     assert.match(firstAgent, /\nmode: primary\n/);
-    assert.match(firstAgent, /permission:\n  bash: allow\n  edit: allow\n  write: allow/);
+    assert.match(firstAgent, /permission:\n {2}bash: allow\n {2}edit: allow\n {2}write: allow/);
     assert.match(firstAgent, /1\. `deep-research`/);
     assert.match(firstAgent, /2\. `citation-integrity`/);
     assert.match(firstAgent, /3\. `test-analysis`/);

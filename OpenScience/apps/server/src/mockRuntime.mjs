@@ -58,12 +58,12 @@ export function startMockOpenCodeRuntime() {
     }
     if (req.method === "GET" && pathname === "/experimental/session") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify([...sessions.values()].map(({ messages, ...s }) => s)));
+      res.end(JSON.stringify([...sessions.values()].map(({ messages: _messages, ...s }) => s)));
       return;
     }
     if (req.method === "GET" && pathname === "/session") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify([...sessions.values()].map(({ messages, ...s }) => s)));
+      res.end(JSON.stringify([...sessions.values()].map(({ messages: _messages, ...s }) => s)));
       return;
     }
     if (req.method === "GET" && pathname === "/session/status") {

@@ -17,7 +17,7 @@
     "eval:drug-evidence": "python3 evals/drug-evidence-quality/run_benchmark.py",
     "eval:open-domain": "python3 evals/open-domain-answer-quality/run_eval.py && python3 evals/open-domain-answer-quality/judge.py",
     "test:server": "pnpm --filter @ai4s/server test",
-    "test:web": "pnpm test:mcp && pnpm test:server && pnpm typecheck && pnpm test",
+    "test:web": "pnpm test:mcp && pnpm test:server && pnpm lint:server && pnpm typecheck && pnpm test",
     "test:web:e2e": "pnpm --filter @ai4s/server test:e2e",
     "audit:hosted-compliance": "node scripts/ops/audit-hosted-compliance.mjs",
     "audit:saas-alignment": "node scripts/ops/audit-saas-alignment.mjs",
@@ -50,7 +50,8 @@
     "typecheck": "pnpm --filter @ai4s/desktop typecheck",
     "check:tauri": "cd apps/desktop/src-tauri && cargo check",
     "ci:web": "pnpm test:web && pnpm audit:source-secrets && pnpm audit:hosted-compliance && pnpm audit:saas-alignment && pnpm audit:capabilities && pnpm audit:dependencies && pnpm build:web",
-    "lint": "pnpm --filter @ai4s/desktop lint"
+    "lint": "pnpm --filter @ai4s/desktop lint && pnpm lint:server",
+    "lint:server": "pnpm --filter @ai4s/server lint"
   },
   "engines": {
     "node": ">=22.22.0"

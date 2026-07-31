@@ -1115,6 +1115,7 @@ export class AgentRunStore {
     if (this.monitors.has(runId)) return;
     let canceled = false;
     const promise = (async () => {
+      // eslint-disable-next-line no-unmodified-loop-condition -- set by the cancel closure registered below
       for (let poll = 0; poll < this.monitorMaxPolls && !canceled; poll += 1) {
         const runs = await this.list(project);
         const run = runs.find((item) => item.id === runId);
