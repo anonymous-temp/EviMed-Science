@@ -50,28 +50,28 @@
       "id": "openfda-faers-joint",
       "url": "https://api.fda.gov/drug/event.json?limit=1&search=patient.drug.medicinalproduct%3A%22aspirin%22+AND+patient.reaction.reactionmeddrapt%3A%22nausea%22",
       "source": "openfda-faers",
-      "retrievedAt": "2026-07-30T17:25:20.123789Z",
+      "retrievedAt": "2026-07-31T03:02:26.713353Z",
       "title": "Joint drug-event FAERS count"
     },
     {
       "id": "openfda-faers-drug",
       "url": "https://api.fda.gov/drug/event.json?limit=1&search=patient.drug.medicinalproduct%3A%22aspirin%22",
       "source": "openfda-faers",
-      "retrievedAt": "2026-07-30T17:25:20.123810Z",
+      "retrievedAt": "2026-07-31T03:02:26.713374Z",
       "title": "Drug FAERS count"
     },
     {
       "id": "openfda-faers-event",
       "url": "https://api.fda.gov/drug/event.json?limit=1&search=patient.reaction.reactionmeddrapt%3A%22nausea%22",
       "source": "openfda-faers",
-      "retrievedAt": "2026-07-30T17:25:20.123813Z",
+      "retrievedAt": "2026-07-31T03:02:26.713376Z",
       "title": "Event FAERS count"
     },
     {
       "id": "openfda-faers-total",
       "url": "https://api.fda.gov/drug/event.json?limit=1",
       "source": "openfda-faers",
-      "retrievedAt": "2026-07-30T17:25:20.123815Z",
+      "retrievedAt": "2026-07-31T03:02:26.713378Z",
       "title": "Total FAERS count"
     }
   ],

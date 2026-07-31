@@ -11,12 +11,11 @@
   "artifacts": [
     {
       "kind": "review_package",
-      "path": "/home/coder/workspace/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/cohort-sweep-20260730/workspace/meta-analysis-runs/meta-20260730165159-569ac3847926/output/20260730_165205_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip"
+      "path": "/home/coder/workspace/EviMedScience/OpenScience/.openscience-web-data/users/evimed/projects/cohort-sweep-20260730/workspace/meta-analysis-runs/meta-20260731022805-836a11ae8d91/output/20260731_022810_SGLT2_inhibitors_versus_placebo_for_chronic_kidney/package/metaagent_export.zip"
     }
   ],
   "blocker_codes": [
     "project_submission_quality_gate",
-    "manuscript_language",
     "readability",
     "primary_source_context"
   ],
@@ -35,19 +34,11 @@
       "label_localized": "项目级投稿质量闸"
     },
     {
-      "id": "manuscript_language",
-      "label": "Requested output language",
-      "status": "fail",
-      "passed": false,
-      "detail": "expected=zh; detected=mixed.",
-      "label_localized": "输出语言"
-    },
-    {
       "id": "readability",
       "label": "Readability",
       "status": "fail",
       "passed": false,
-      "detail": "scanned_sections=6; scanned_words=6217; verbose_pico_fragments=0; overlong_sentences=1; failed_issues=1.",
+      "detail": "scanned_sections=6; scanned_words=6409; verbose_pico_fragments=0; overlong_sentences=1; failed_issues=1.",
       "label_localized": "可读性"
     },
     {
@@ -65,7 +56,7 @@
       "label": "Main-text citation coverage",
       "status": "warn",
       "passed": true,
-      "detail": "required=False; references=35; publication_min_references=12; main_text_citations=46; Introduction=14; Introduction_background=8/2; Introduction_paragraphs=5/5; Methods=7; Methods_methodology=4/2; Results=2; Discussion=21; Discussion_context=7/2; Discussion_paragraphs=8/8; uncited_discussion_results=0; uncited_discussion_mechanisms=0; undefined=0; failed_issues=0; warning_issues=5; density=7.33 per 1000 words.",
+      "detail": "required=False; references=34; publication_min_references=12; main_text_citations=54; Introduction=8; Introduction_background=7/2; Introduction_paragraphs=2/5; Methods=9; Methods_methodology=6/2; Results=1; Discussion=32; Discussion_context=5/2; Discussion_paragraphs=9/10; uncited_discussion_results=2; uncited_discussion_mechanisms=0; undefined=0; failed_issues=0; warning_issues=16; density=8.44 per 1000 words.",
       "label_localized": "正文引用覆盖"
     },
     {
@@ -73,7 +64,7 @@
       "label": "LLM output reliability",
       "status": "warn",
       "passed": true,
-      "detail": "calls=69; retryable_output_issues=6; near_truncation_events=1; failed_issues=0.",
+      "detail": "calls=77; retryable_output_issues=11; near_truncation_events=1; failed_issues=0.",
       "label_localized": "LLM输出可靠性"
     },
     {
