@@ -9,7 +9,10 @@ const versionPattern = /^[0-9][0-9A-Za-z.+_-]{0,63}$/;
 const releaseIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const revisionPattern = /^[a-f0-9]{40,64}$/;
 
+/** @returns {Error & Record<string, any>} An Error carrying the extra fields its
+ *  callers read; a bare Error type rejects every one of them. */
 function failure(code, message = code) {
+  /** @type {Error & Record<string, any>} */
   const err = new Error(message);
   err.code = code;
   return err;

@@ -576,6 +576,14 @@ function assistantProse(messages) {
     .join("\n");
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {any} project
+ *  @param {any} run
+ *  @param {any} agentRegistry
+ *  @param {any} sourceArtifactProvenance
+ *  @param {any} assistantMessages
+ */
 async function requiredSpecialistArtifacts(
   project,
   run,
@@ -828,6 +836,7 @@ export class AgentRunStore {
     return runs;
   }
 
+  /** @param {Record<string, any>} project @param {Record<string, any>} input */
   async start(project, input) {
     const { sessionId } = normalizeStartInput(input);
     const session = await this.researchSessions.get(project, sessionId);
@@ -851,10 +860,14 @@ export class AgentRunStore {
     return historyCursor(history);
   }
 
+  /** @param {Record<string, any>} project @param {Record<string, any>} session
+   *  @param {Record<string, any>} options */
   async createRun(project, session, { baselineCursor, dispatchId = null } = {}) {
     return (await this.reserveRun(project, session, { baselineCursor, dispatchId })).run;
   }
 
+  /** @param {Record<string, any>} project @param {Record<string, any>} session
+   *  @param {Record<string, any>} options */
   async reserveRun(project, session, {
     baselineCursor,
     dispatchId = null,

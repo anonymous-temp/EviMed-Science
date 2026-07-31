@@ -73,11 +73,14 @@ INSERT INTO ${schema}.schema_migrations(version) VALUES (1)
 ON CONFLICT (version) DO NOTHING;
 `;
 
+/** @returns {Error & Record<string, any>} An Error carrying the extra fields its
+ *  callers read; a bare Error type rejects every one of them. */
 function configurationError(code, message) {
   return new HttpError(503, code, message);
 }
 
 export class ControlPlaneDatabase {
+  /** @param {Record<string, any>} config @param {Record<string, any>} options */
   constructor(config, { pool } = {}) {
     if (config.databaseUrlError) {
       throw configurationError(config.databaseUrlError, "The control-plane database secret is unavailable.");

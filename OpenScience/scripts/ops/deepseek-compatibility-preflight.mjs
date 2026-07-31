@@ -259,6 +259,7 @@ async function structuredOutput(context) {
   }
 }
 
+/** @param {Record<string, any>} options */
 export async function runDeepSeekCompatibility({
   keyFile,
   baseUrl = OFFICIAL_BASE,

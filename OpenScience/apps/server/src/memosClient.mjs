@@ -211,6 +211,10 @@ function upstreamMessage(body) {
   return "";
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {any} value
+ */
 function searchTokens(value) {
   const normalized = String(value ?? "").toLowerCase();
   const tokens = new Set(normalized.match(/[a-z0-9][a-z0-9._-]{1,}|[\u3400-\u9fff]{2,}/g) ?? []);
@@ -671,6 +675,8 @@ export class MemosClient {
     if (code) throw new HttpError(503, code, "The research memory service is not configured.");
   }
 
+  /** @param {string} relative @param {Record<string, any>} options
+   *  Options are narrowed to their defaults without this, which rejects `body`. */
   async #request(relative, { method = "GET", body } = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);

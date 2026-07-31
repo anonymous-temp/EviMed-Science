@@ -34,7 +34,7 @@ async function freePort() {
     const server = createServer();
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
-      const port = server.address().port;
+      const port = /** @type {import("node:net").AddressInfo} */ (server.address()).port;
       server.close(() => resolve(port));
     });
   });
@@ -162,6 +162,12 @@ function incomingResponseBody(response) {
   });
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {any} runtime
+ *  @param {any} target
+ *  @param {Record<string, any>} options2
+ */
 export function requestRuntime(runtime, target, { method = "GET", headers = {}, body, signal } = {}) {
   const url = target instanceof URL ? target : new URL(target, runtime.url);
   if (url.protocol !== "http:") {
@@ -1205,6 +1211,12 @@ async function managedSkillMatches(project, target, entry) {
   return marker?.skill === entry.skill && marker?.agent === entry.agent;
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {any} project
+ *  @param {any} target
+ *  @param {any} entry
+ */
 async function managedAgentMatches(project, target, entry) {
   const stat = await fs.lstat(target).catch((error) => {
     if (error?.code === "ENOENT") return null;
@@ -1559,6 +1571,11 @@ export function issueEviMedWorkloadToken({
   return `${signed}.${workloadSignature(signed, signingSecret)}`;
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {any} token
+ *  @param {Record<string, any>} options1
+ */
 export function verifyEviMedWorkloadToken(token, {
   secret,
   audience = evimedWorkloadAudience,
@@ -1659,6 +1676,11 @@ export function issueModelGatewayRuntimeToken({
   return `${signed}.${workloadSignature(signed, signingSecret)}`;
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {any} token
+ *  @param {Record<string, any>} options1
+ */
 export function verifyModelGatewayRuntimeToken(token, {
   secret,
   userId,
@@ -1717,6 +1739,13 @@ export function evimedWorkloadRefreshIntervalMs(config) {
   return Math.floor(ttl * 1000 / 2);
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {any} config
+ *  @param {any} project
+ *  @param {any} tokenFile
+ *  @param {Record<string, any>} options3
+ */
 export async function refreshEviMedWorkloadToken(
   config,
   project,
@@ -2035,6 +2064,13 @@ function modelGatewayProviderUrl(config) {
   return url.toString().replace(/\/$/, "");
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {any} config
+ *  @param {any} project
+ *  @param {any} plan
+ *  @param {Record<string, any>} options3
+ */
 export async function syncRuntimeModelProvider(
   config,
   project,
@@ -2846,6 +2882,11 @@ export function runtimeNetworkUsesHostOrContainer(mode) {
   return value === "host" || value.startsWith("container:");
 }
 
+/** TypeScript infers a destructured parameter as exactly the shape its
+ *  defaults name, which rejects every other property a caller passes.
+ *  @param {any} mode
+ *  @param {any} internalNetworkName
+ */
 export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = "") {
   const value = String(mode ?? "").trim().toLowerCase();
   if (!value || value === "none") return false;
@@ -2879,7 +2920,9 @@ export class RuntimeManager {
     this.workloadTokenWriter = workloadTokenWriter;
     this.setWorkloadTimer = setWorkloadTimer;
     this.clearWorkloadTimer = clearWorkloadTimer;
+    /** @type {(project: any, status: any) => any} */
     this.onRuntimeStop = onRuntimeStop;
+    /** @type {(project: any, sessionId: any) => any} */
     this.onSessionAbort = onSessionAbort;
     this.lastOrphanCleanup = null;
   }
@@ -3322,7 +3365,7 @@ export class RuntimeManager {
       project,
       close: async () => {
         if (plan.sandboxMode === "docker" && this.runtimeController) {
-          await child.stop();
+          await /** @type {any} */ (child).stop();
         } else {
           if (plan.sandboxMode === "docker") await cleanupDockerContainer(plan);
           await terminateChild(child);
@@ -3330,7 +3373,7 @@ export class RuntimeManager {
         if (plan.socketPath) await fs.rm(plan.socketPath, { force: true }).catch(() => {});
       },
     };
-    child.once("error", (err) => {
+    /** @type {any} */ (child).once("error", (err) => {
       runtime.spawnError = err;
       runtime.exitedAt = new Date().toISOString();
       const current = this.runtimes.get(key);
@@ -3356,7 +3399,7 @@ export class RuntimeManager {
         error: err instanceof Error ? err.message : String(err),
       });
     });
-    child.once("exit", () => {
+    /** @type {any} */ (child).once("exit", () => {
       runtime.exitedAt = new Date().toISOString();
       const current = this.runtimes.get(key);
       if (current === runtime) this.runtimes.delete(key);
@@ -3591,6 +3634,8 @@ export class RuntimeManager {
     }
   }
 
+  /** @param {Record<string, any>} project @param {string} sessionId
+   *  @param {Record<string, any>} options */
   async dispatchPrompt(project, sessionId, { text, system = null, agent = null, model = null } = {}) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
