@@ -537,6 +537,30 @@ def _evimed_post(path, body):
     return payload["data"], url
 
 
+def _citable_url(value):
+    """A record URL in the only form a report may cite, or nothing.
+
+    Citations must be credential-free HTTPS links, so an http:// record URL is
+    handed to the caller only to be rejected: a run once cited two of them and
+    the whole package was refused, with the agent given no way to tell which of
+    its sources were citable. Of 164 records returned in that run, 158 were
+    already https and 3 were http on a host that serves https perfectly well.
+
+    Upgrade the scheme rather than dropping the record. A source that genuinely
+    cannot be served over https cannot be cited under this contract either way,
+    and an https link that fails is visible, where a forbidden http link fails
+    the entire report instead.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.startswith("https://"):
+        return text
+    if text.startswith("http://"):
+        return "https://" + text[len("http://"):]
+    return None
+
+
 def _evimed_record_url(value, fallback=None):
     """The record's own public URL, or nothing.
 
@@ -550,14 +574,17 @@ def _evimed_record_url(value, fallback=None):
     if isinstance(value, dict):
         for key in ("Pubmed", "pubmed", "evimed", "Semantic Scholar", "Google Scholar", "url"):
             if isinstance(value.get(key), str) and value[key].strip():
-                return value[key].strip()
-        return next((str(item).strip() for item in value.values() if str(item).strip()), fallback)
+                return _citable_url(value[key])
+        return next(
+            (_citable_url(item) for item in value.values() if _citable_url(item)),
+            fallback,
+        )
     if isinstance(value, str) and value.strip():
         text = value.strip()
         try:
             decoded = json.loads(text)
         except json.JSONDecodeError:
-            return text
+            return _citable_url(text)
         return _evimed_record_url(decoded, fallback)
     return fallback
 
@@ -868,7 +895,7 @@ def _evimed_trial_records(arguments):
         record = _dict(value)
         title = _first_text(record.get("title"))
         identifier = str(record.get("registrationNo") or record.get("cochraneId") or index).strip()
-        record_url = _first_text(record.get("url"))
+        record_url = _citable_url(_first_text(record.get("url")))
         item = {
             "id": identifier,
             "title": title,
@@ -911,7 +938,7 @@ def patent(arguments):
         record = _dict(value)
         title = _first_text(record.get("title"), record.get("patentNumber"))
         identifier = str(record.get("id") or record.get("patentNumber") or index).strip()
-        record_url = _first_text(record.get("url"))
+        record_url = _citable_url(_first_text(record.get("url")))
         item = {
             "id": "EVIMED-PATENT:%s" % identifier,
             "title": title,
@@ -994,7 +1021,7 @@ def _evimed_instruction_records(arguments):
                 break
             record = _dict(value)
             title = _first_text(record.get("tradeNames"), record.get("genericNames"), record.get("englishName"), arguments["drug"])
-            record_url = _first_text(record.get("url"), record.get("pdfUrl"))
+            record_url = _citable_url(_first_text(record.get("url"), record.get("pdfUrl")))
             identifier = str(record.get("id") or "%s-%d" % (registry, index)).strip()
             item = {
                 "id": "EVIMED-LABEL:%s" % identifier,

@@ -531,8 +531,9 @@ function clinicalEvidenceRepairPrompt(issues) {
     "Revise the named files in the existing academic package in place: clinical-evidence-report.md, clinical-evidence-matrix.json, clinical-evidence-search.json, citation-ledger.csv, references.bib, citation-audit.md, or clinical-evidence-run.json.",
     "Only rewrite a file when an issue below names or requires it; preserve already valid evidence and source metadata.",
     "Every JSON deliverable must remain strict JSON. Escape embedded quotation marks correctly instead of changing scientific wording to work around JSON syntax.",
-    "Never create or modify a .evimed-sources artifact. If a material claim lacks usable support, retrieve an additional verified source with the approved evidence tools or remove the claim; never patch around missing evidence.",
-    "Treat repeated numeric-fact messages as one report-wide audit task: remove nonessential numbers or place each retained quantitative proposition on a line with the correct numbered citation and matching hidden matrix claim marker.",
+    "Never create or modify a .evimed-sources artifact. When a material claim lacks usable support, go and retrieve one with the approved evidence tools. Deleting the claim is the last resort, not the first: it satisfies the gate while making the analysis smaller, and a report that answers the question is worth more than a shorter one that passes. If you do drop a claim, say in your reply which claim went and why no source could support it.",
+    "Treat repeated numeric-fact messages as one report-wide audit task. For each number, first attach it to the citation and hidden matrix claim marker that support it; drop only the numbers that are genuinely incidental to the argument. Do not resolve this by stripping the report of its quantitative content — effect estimates, sample sizes and confidence intervals are the analysis, not decoration.",
+    "This revision must not leave the report thinner than it was. You are repairing traceability, not trimming to fit; if the corrected report is materially shorter, you have removed evidence instead of grounding it.",
     "The search log must exactly match successful evidence-search calls from this run. Never invent, duplicate, or omit completed searches.",
     "Improve scientific synthesis, comparison, clinical reasoning, evidence appraisal, and applicability where the issues identify a substantive gap. A weighed cross-source conclusion (a synthesized claim backed by at least two supporting sources) is preferable to a chain of single-source restatements, and the report must state its bottom line early in readable prose. Do not pad the report, repeat conclusions, or add claims merely to increase counts.",
     "Every evidence-matrix claim must appear in the report on a line with its exact numbered citation and hidden claim marker. Emergency-call support quotes must include both the call action and the qualifying symptom condition.",
@@ -892,6 +893,9 @@ export class AgentRunStore {
     this.clinicalRepairAttempts = new Map();
     this.clinicalRepairBaselineCursors = new Map();
     this.clinicalRepairSenders = new Map();
+    // Report size when repair first began, so a shrinking revision is measured
+    // against where it started rather than against the previous attempt only.
+    this.clinicalRepairReportSizes = new Map();
     if (!this.model) throw new Error("AgentRunStore requires a configured model.");
   }
 
@@ -1106,6 +1110,7 @@ export class AgentRunStore {
       this.clinicalRepairAttempts.delete(runId);
       this.clinicalRepairBaselineCursors.delete(runId);
       this.clinicalRepairSenders.delete(runId);
+      this.clinicalRepairReportSizes.delete(runId);
     }
     if (outcome.transitioned) {
       try {
@@ -1215,6 +1220,21 @@ export class AgentRunStore {
         if (canRepair) {
           this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
           this.clinicalRepairBaselineCursors.set(run.id, messageId(assistants.at(-1)));
+          // Deleting the offending sentence always satisfies a traceability
+          // complaint, so a repaired report tends to come back smaller. Two
+          // runs of one question differed by nothing else: no repairs gave
+          // 15,897 characters, two repairs gave 9,099. Record the size going
+          // in so the shrinkage is measured rather than inferred from the
+          // length of the final report.
+          const beforeRepair = (await readRequiredFile(project, "clinical-evidence-report.md"))?.text?.length ?? 0;
+          const priorSize = this.clinicalRepairReportSizes.get(run.id) ?? beforeRepair;
+          this.clinicalRepairReportSizes.set(run.id, priorSize);
+          if (beforeRepair > 0 && priorSize > 0 && beforeRepair < priorSize * 0.8) {
+            terminal.qualityNotices = [
+              ...(terminal.qualityNotices ?? []),
+              `Repair shrank the report from ${priorSize} to ${beforeRepair} characters; traceability was restored by removing analysis rather than by grounding it.`,
+            ];
+          }
           try {
             const repair = await repairSender(clinicalEvidenceRepairPrompt(completion.qualityIssues));
             if (repair?.accepted !== false) return run;
