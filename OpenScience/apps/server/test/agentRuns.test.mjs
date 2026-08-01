@@ -680,6 +680,11 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
     assert.match(prompts[1], /retrieve one with the approved evidence tools/i);
     assert.match(prompts[1], /last resort, not the first/i);
     assert.match(prompts[1], /must not leave the report thinner/i);
+    // The determinant is the tool. A whole-file write regenerates the report
+    // from a compressed recollection and silently loses content; two production
+    // repairs cost 1,863 and 4,125 characters that way.
+    assert.match(prompts[1], /Patch clinical-evidence-report\.md with the edit tool/i);
+    assert.match(prompts[1], /Do not rewrite it with the write tool/i);
     assert.doesNotMatch(prompts[1], /at least (?:8|12|18|30)|10000/);
     const stillRepairing = await store.reconcileSession(project, binding.sessionId);
     assert.equal(stillRepairing.status, "running");
@@ -2082,4 +2087,39 @@ test("delegating the reading of retrieved evidence is named as the fault, not le
 
   assert.equal(flagged.length, 1, "the delegated document read must be flagged");
   assert.match(flagged[0].state.input.prompt, /tool-output/);
+});
+
+test("replacing the report during repair is named, not just its shrinkage", async () => {
+  // Two production runs of one question went through repair. The one that
+  // patched with edit ended at 15,387 characters; the one that answered each
+  // round with a whole-file write went 12,191 -> 10,328 -> 6,230. A rewrite
+  // regenerates the report from context rather than from the evidence on disk,
+  // so the loss is invisible in the file itself.
+  const history = [
+    { info: { role: "assistant" }, parts: [
+      { type: "tool", tool: "write", state: { input: { filePath: "clinical-evidence-report.md", content: "x" } } },
+    ] },
+    { info: { role: "user" }, parts: [
+      { type: "text", text: "The server-side clinical evidence gate rejected the current package." },
+    ] },
+    { info: { role: "assistant" }, parts: [
+      { type: "tool", tool: "write", state: { input: { filePath: "clinical-evidence-report.md", content: "y" } } },
+      { type: "tool", tool: "edit", state: { input: { filePath: "clinical-evidence-report.md" } } },
+      { type: "tool", tool: "write", state: { input: { filePath: "citation-ledger.csv", content: "z" } } },
+    ] },
+  ];
+
+  let repairing = false;
+  const rewrites = [];
+  for (const message of history) {
+    for (const part of message.parts) {
+      if (message.info.role === "user" && part.type === "text"
+          && part.text.includes("clinical evidence gate rejected")) { repairing = true; continue; }
+      if (!repairing || part.type !== "tool" || part.tool !== "write") continue;
+      if (/clinical-evidence-report\.md$/.test(String(part.state.input.filePath ?? ""))) rewrites.push(part);
+    }
+  }
+
+  // The write before the repair prompt is the original authoring, not a rewrite.
+  assert.equal(rewrites.length, 1, "only the rewrite that answered the repair counts");
 });
