@@ -337,14 +337,26 @@ function parsedToolResultStatus(part) {
   return typeof value?.status === "string" ? value.status : null;
 }
 
+// Tools whose job is to go and fetch from outside. Whether one succeeds depends
+// on hosts nobody here controls, so its failures are graded differently from a
+// tool that computes on data the run already holds. Searching was missing from
+// this list, so one upstream returning 502 failed a run that had already found
+// its evidence elsewhere and written every deliverable.
 const evidenceSourceToolSuffixes = Object.freeze([
   "evimed_official_page_fetch",
   "evimed_open_access_full_text",
+  "evimed_literature_search",
+  "evimed_guideline_search",
+  "evimed_biomedical_source_search",
+  "evimed_drug_label_search",
+  "evimed_pharmacy_reference_search",
+  "evimed_clinical_trial_search",
+  "evimed_patent_search",
 ]);
 // A source the run could not read is a limitation to report, not a defect in
 // the run. These codes all mean "this document was not obtainable", which the
 // skill already instructs the agent to record in failedSources and work around.
-const recoverableEvidenceSourceErrorCodes = new Set([
+export const recoverableEvidenceSourceErrorCodes = new Set([
   "full_text_not_available",
   "full_text_upstream_unavailable",
   "official_page_upstream_unavailable",
@@ -358,6 +370,27 @@ const recoverableEvidenceSourceErrorCodes = new Set([
   "public_source_managed_credential_required",
   "public_source_pdf_not_open_access",
   "public_source_gateway_upstream_unavailable",
+  // An upstream that was down, slow, or rate-limiting. A search hitting one of
+  // these has not found nothing — it has failed to ask, and the run goes on to
+  // ask elsewhere. HTTP 502 from a single public source failed an otherwise
+  // complete run.
+  "public_source_http_error",
+  "public_source_unavailable",
+  "public_source_invalid_response",
+  "public_source_response_too_large",
+  "public_source_pdf_unavailable",
+  "public_source_pdf_too_large",
+  "public_source_gateway_upstream_error",
+  "public_source_gateway_unavailable",
+  "public_source_gateway_timeout",
+  "public_source_gateway_rate_limited",
+  "public_source_gateway_response_invalid",
+  "public_source_gateway_response_too_large",
+  // Host configuration the run cannot do anything about.
+  "public_source_gateway_unconfigured",
+  "public_source_dataset_unconfigured",
+  "public_source_managed_credential_invalid",
+  "public_source_gateway_credential_profile_required",
 ]);
 
 function evidenceSourceTool(tool) {
