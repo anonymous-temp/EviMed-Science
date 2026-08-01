@@ -1272,8 +1272,44 @@ async function checkBuildMirrorSources() {
   }
 }
 
+// A credential the server knows how to read but compose never hands to the
+// container is configuration that silently does nothing: the operator sets it in
+// .env, the connector still reports its key as missing, and every fetch through
+// it fails. Same failure shape as an unwired build arg, one layer up.
+async function checkPublicSourceCredentialsWired() {
+  const config = await read("apps/server/src/config.mjs");
+  const compose = await read("deploy/web/docker-compose.yml");
+  const specs = /const publicSourceCredentialSpecs = \{([\s\S]*?)\n {2}\};/.exec(config);
+  if (!specs) {
+    fail("public_source_credentials_unreadable", "The public-source credential list could not be located in config.mjs.");
+    return;
+  }
+
+  const service = /\n {2}open-science-web:\n([\s\S]*?)(?=\n {2}[a-z][a-z0-9-]*:\n)/.exec(compose);
+  const passed = new Set(
+    [...(service?.[1] ?? "").matchAll(/^ {6}([A-Z_][A-Z0-9_]*):/gm)].map((match) => match[1]),
+  );
+
+  const unwired = [];
+  // The second capture is the environment variable; the first is the profile
+  // name, and reading that instead compares against names compose never uses.
+  for (const [, , name] of specs[1].matchAll(/^\s*(\w+):\s*\["[^"]*",\s*"([A-Z_]+)"/gm)) {
+    // Either form reaches the server: the value itself, or a file it reads.
+    if (!passed.has(name) && !passed.has(`${name}_FILE`)) unwired.push(name);
+  }
+
+  if (unwired.length === 0) {
+    pass("public_source_credentials_wired", "Every public-source credential the server reads is passed through by compose.");
+  } else {
+    fail("public_source_credentials_unwired", "Compose never passes these public-source credentials, so configuring them has no effect.", {
+      variables: unwired.sort(),
+    });
+  }
+}
+
 async function main() {
   await checkBuildMirrorSources();
+  await checkPublicSourceCredentialsWired();
   await checkRootLicense();
   await checkRuntimePins();
   await checkHostedPackaging();

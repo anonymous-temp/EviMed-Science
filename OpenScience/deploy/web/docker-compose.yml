@@ -191,6 +191,20 @@ services:
       OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-deepseek-v4-pro}
       OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-key
       OPEN_SCIENCE_EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
+      # The remaining public-source credentials the server resolves. Without
+      # these lines the values sit in .env doing nothing: the connector reports
+      # "managed key: missing" and every full-text fetch through it fails, which
+      # is how a run came back with one of nine sources at full-text level.
+      # Unpaywall takes a contact address rather than a key — its public tier is
+      # identified by email.
+      OPEN_SCIENCE_UNPAYWALL_EMAIL: ${OPEN_SCIENCE_UNPAYWALL_EMAIL:-}
+      OPEN_SCIENCE_SEMANTIC_SCHOLAR_API_KEY: ${OPEN_SCIENCE_SEMANTIC_SCHOLAR_API_KEY:-}
+      OPEN_SCIENCE_CORE_API_KEY: ${OPEN_SCIENCE_CORE_API_KEY:-}
+      OPEN_SCIENCE_UMLS_API_KEY: ${OPEN_SCIENCE_UMLS_API_KEY:-}
+      OPEN_SCIENCE_OMIM_API_KEY: ${OPEN_SCIENCE_OMIM_API_KEY:-}
+      OPEN_SCIENCE_ADDGENE_API_KEY: ${OPEN_SCIENCE_ADDGENE_API_KEY:-}
+      OPEN_SCIENCE_BIOGRID_API_KEY: ${OPEN_SCIENCE_BIOGRID_API_KEY:-}
+      OPEN_SCIENCE_OPENGWAS_JWT: ${OPEN_SCIENCE_OPENGWAS_JWT:-}
       OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_FILE: /run/secrets/materials-project-api-key
       OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT: ${OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT:-true}
       OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/model/v1}
