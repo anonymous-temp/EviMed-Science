@@ -341,10 +341,23 @@ const evidenceSourceToolSuffixes = Object.freeze([
   "evimed_official_page_fetch",
   "evimed_open_access_full_text",
 ]);
+// A source the run could not read is a limitation to report, not a defect in
+// the run. These codes all mean "this document was not obtainable", which the
+// skill already instructs the agent to record in failedSources and work around.
 const recoverableEvidenceSourceErrorCodes = new Set([
   "full_text_not_available",
   "full_text_upstream_unavailable",
   "official_page_upstream_unavailable",
+  // The deployment simply has no Unpaywall address configured, or no gateway to
+  // reach it through. That is host configuration, and failing the run for it
+  // punished an agent that had handled the gap exactly as instructed: it
+  // recorded the three unreadable sources, declared the limitation, and wrote
+  // every required deliverable.
+  "public_source_unpaywall_credential_missing",
+  "public_source_managed_gateway_required",
+  "public_source_managed_credential_required",
+  "public_source_pdf_not_open_access",
+  "public_source_gateway_upstream_unavailable",
 ]);
 
 function evidenceSourceTool(tool) {

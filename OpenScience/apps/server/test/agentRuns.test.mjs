@@ -1195,6 +1195,45 @@ test("deep research tolerates documented source misses but requires invalid EviM
       ],
     },
     {
+      // A deployment with no Unpaywall address configured cannot read closed
+      // sources. That is a host gap the agent is told to record and work
+      // around, and it was failing otherwise complete runs.
+      name: "unpaywall credential missing on the host",
+      expectedStatus: "succeeded",
+      expectedErrorCode: null,
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_open_access_full_text",
+          state: {
+            status: "error",
+            error: JSON.stringify({
+              status: "error",
+              error: { code: "public_source_unpaywall_credential_missing" },
+            }),
+          },
+        },
+      ],
+    },
+    {
+      name: "source that is simply not open access",
+      expectedStatus: "succeeded",
+      expectedErrorCode: null,
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_open_access_full_text",
+          state: {
+            status: "error",
+            error: JSON.stringify({
+              status: "error",
+              error: { code: "public_source_pdf_not_open_access" },
+            }),
+          },
+        },
+      ],
+    },
+    {
       name: "uncorrected invalid deduplication input",
       expectedStatus: "failed",
       expectedErrorCode: "runtime_tool_error",
