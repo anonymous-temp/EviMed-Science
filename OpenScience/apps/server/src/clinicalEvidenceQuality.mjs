@@ -39,12 +39,23 @@ const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(
 // live in clinical-safety-rules.json so pharmacists can maintain them as data.
 const exclusiveSafetyPattern = /(?:唯一.{0,24}(?:安全|可靠|正确|一致|策略|方法|途径)|(?:安全|可靠|正确).{0,24}唯一)/i;
 const deepResearchProfile = "academic_deep_research_v1";
-// Process-documentation and presentation gaps that cannot mask a clinical error:
-// the evidence content itself (sections, claims, numbers, quotes, source
-// integrity) is validated separately and stays blocking. When a package fails
-// ONLY on issues in this allowlist, the run may be delivered marked "unverified"
-// instead of discarded (see requiredSpecialistArtifacts). Anything not listed
-// here is blocking by default.
+// What separates a package that must be withheld from one that may be delivered
+// with its gaps declared is whether a reader could tell.
+//
+// A quotation that is not in the source it names, a source that was never
+// retrieved, a link that goes somewhere else, a claim that cites a paper
+// published after it: none of these are visible from the document, so a reader
+// has no way to discount them. Those stay blocking however inconvenient.
+//
+// A number that is not wired to its claim marker, a bibliography entry that is
+// missing, a section that is thin: these are bookkeeping between the report and
+// its apparatus. Withholding the whole analysis over them delivers nothing,
+// which is the worse outcome for a reader who can see exactly what is flagged.
+// Those are delivered with the run marked "unverified" and every gap named.
+//
+// The exact-string set below is the original allowlist. Interpolated messages
+// carry claim indices and line numbers, so they can never appear in it; they are
+// classified by shape in degradableIssue().
 const degradableQualityIssues = new Set([
   "references.bib must contain a bibliography entry for every numbered report reference.",
   "references.bib must contain a bibliography entry for every cited source URL.",
@@ -54,6 +65,31 @@ const degradableQualityIssues = new Set([
   "citation-audit.md must reference at least one real audited source identifier from the evidence matrix.",
   "Deep-research reports must hide internal claim IDs in HTML comments and show standard numbered citations to readers.",
 ]);
+// Gaps a reader can see, or that sit between the report and its apparatus rather
+// than between a claim and its evidence. Everything else blocks.
+const bookkeepingIssuePatterns = Object.freeze([
+  // A figure in the prose that is not wired to the claim carrying it. The claim
+  // and its quote are validated on their own; this is the cross-reference.
+  /^Report line \d+ numeric facts .+ have no evidence-matrix claim reference\./,
+  // A figure whose claim exists and whose quote was found in the real source,
+  // but which does not appear inside that particular quoted span. It is named
+  // in the delivered notice so a reader knows exactly which number to check.
+  /^Report line \d+ numeric facts .+ are not present in the cited claim evidence\./,
+  /^claims\[\d+\]\.claim numeric fact .+ is not present in its direct support/,
+  /^claims\[\d+\]\.claim numeric fact .+ is not present in any supporting source/,
+  // Report-to-matrix pairing and presentation.
+  /^claims\[\d+\] is not paired with its standard numbered in-text citation\.$/,
+  /^The academic report is missing a required section matching /,
+  /^The academic report contains (?:runtime or retrieval-process|operational failure) prose/,
+]);
+
+/** @param {any} issue */
+function degradableIssue(issue) {
+  const text = String(issue ?? "");
+  if (degradableQualityIssues.has(text)) return true;
+  return bookkeepingIssuePatterns.some((pattern) => pattern.test(text));
+}
+
 const visibleClaimMarkerPattern = /\[claim:(CLM-[0-9]{3,6})\]/g;
 const hiddenClaimMarkerPattern = /<!--\s*claim:(CLM-[0-9]{3,6})\s*-->/g;
 
@@ -580,7 +616,7 @@ function validateSynthesizedClaim(
       && asCount >= 1
       && asCount <= sources.length;
     if (!verifiableCount) {
-      issues.push(`${label}.claim numeric fact ${token} is not present in any supporting source and is not a verifiable source count.`);
+      issues.push(`${label}.claim numeric fact ${token} is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.`);
     }
   }
   if (
@@ -733,7 +769,7 @@ export function validateClinicalEvidencePackage({
     ].join(" ")));
     for (const token of new Set(numericTokens(value.claim))) {
       if (!directSupportNumbers.has(token)) {
-        issues.push(`${label}.claim numeric fact ${token} is not present in its direct support.`);
+        issues.push(`${label}.claim numeric fact ${token} is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.`);
       }
     }
     if (!validSourceArtifactPath(value.artifactPath)) {
@@ -782,7 +818,7 @@ export function validateClinicalEvidencePackage({
     const referencedIds = reportClaimIds(rawLine);
     if (!referencedIds.length) {
       issues.push(
-        `Report line ${lineIndex + 1} numeric facts ${[...reportNumbers].join(", ")} have no evidence-matrix claim reference.`,
+        `Report line ${lineIndex + 1} numeric facts ${[...reportNumbers].join(", ")} have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.`,
       );
       continue;
     }
@@ -796,7 +832,7 @@ export function validateClinicalEvidencePackage({
     const unsupportedNumbers = [...reportNumbers].filter((token) => !supportedNumbers.has(token));
     if (unsupportedNumbers.length) {
       issues.push(
-        `Report line ${lineIndex + 1} numeric facts ${unsupportedNumbers.join(", ")} are not present in the cited claim evidence.`,
+        `Report line ${lineIndex + 1} numeric facts ${unsupportedNumbers.join(", ")} are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.`,
       );
     }
   }
@@ -1003,7 +1039,7 @@ export function validateClinicalEvidencePackage({
   return Object.freeze({
     valid: issues.length === 0,
     issues: Object.freeze(issues),
-    blockingIssues: Object.freeze(issues.filter((issue) => !degradableQualityIssues.has(issue))),
+    blockingIssues: Object.freeze(issues.filter((issue) => !degradableIssue(issue))),
     claimIds: Object.freeze(claimIds),
     sourceDomains: Object.freeze([...sourceDomains].sort()),
   });
