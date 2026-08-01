@@ -614,6 +614,20 @@ function validExplicitCitations(text) {
   });
 }
 
+// Subagent calls that were asked to read a retrieved-evidence file rather than
+// to answer a question. The runtime writes an oversized tool result to
+// tool-output/<id>, so a delegation prompt naming that path is by definition a
+// delegated read of evidence the caller will go on to quote.
+function delegatedDocumentReads(messages) {
+  return messages
+    .flatMap((message) => message?.parts ?? [])
+    .filter((part) => part?.type === "tool" && part.tool === "task")
+    .filter((part) => {
+      const prompt = String(part?.state?.input?.prompt ?? "");
+      return /tool-output\//.test(prompt) || /\.evimed-sources\//.test(prompt);
+    });
+}
+
 function assistantProse(messages) {
   return messages
     .flatMap((message) => message?.parts ?? [])
@@ -755,6 +769,23 @@ async function requiredSpecialistArtifacts(
     }
   }
   if (agent.completionChecks.includes("evidenceClaimsTraceable")) {
+    // A delegated read is where verbatim quotation dies. Search results too
+    // large for the conversation are written to a tool-output file, and handing
+    // that file to a subagent returns prose about the records instead of the
+    // records: abstracts paraphrased, identifiers dropped. Quotes taken from
+    // that reply cannot be found in the source, which the matrix check below
+    // eventually catches — but only as "this quote does not match", long after
+    // the cause. Name the cause instead.
+    const delegatedReads = delegatedDocumentReads(assistantMessages);
+    if (delegatedReads.length > 0) {
+      return {
+        artifacts,
+        errorCode: "specialist_delegated_evidence_read",
+        qualityIssues: [
+          `Reading retrieved evidence was delegated to a subagent ${delegatedReads.length} time(s); a subagent replies in prose, so quotations taken from it are not the source's wording. Read tool-output files with the read tool. Delegate a question, never a document.`,
+        ],
+      };
+    }
     let matrix;
     try {
       matrix = JSON.parse(files.get("clinical-evidence-matrix.json") ?? "");
