@@ -53,6 +53,26 @@ guidance, and any named medicine's indication, efficacy, safety, and regulatory
 scope. Combine or split concepts according to the results rather than following
 a fixed query list.
 
+**A query that returns nothing has failed; it has not answered anything.** Long
+conjunctive queries are the usual cause — seven concepts joined together match no
+record even when the literature on the question is substantial. Before writing
+that evidence on a point is absent:
+
+1. Re-run the concept with at least two shorter queries, phrased the way a paper
+   on that question would be titled, and drop the qualifiers rather than the
+   subject.
+2. Search a second source class, not only the one that came back empty.
+3. Only after those come back empty may you write that you did not retrieve
+   evidence — and write exactly that. **Never write that a study, trial, or body
+   of evidence does not exist.** Your searches bound what you found; they do not
+   bound what exists.
+
+This is not a style preference. A report once stated that no prospective study
+had examined the diagnostic value of symptom relief after sublingual
+nitroglycerin. One exists, it is the central study on the question, and a
+seven-concept query had returned zero records; two shorter queries return it as
+the first hit.
+
 Use `evimed_literature_search`, `evimed_guideline_search`, and selected audited sources from `evimed_data_source_catalog` or `evimed_biomedical_source_search`. Deduplicate candidate records with `evimed_evidence_deduplicate`.
 
 When calling `evimed_evidence_deduplicate`, omit absent identifier keys instead of sending empty `doi`, `pmid`, `pmcid`, or URL strings. If input validation fails, correct the full batch and obtain a successful deduplication result before continuing.
