@@ -674,7 +674,12 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
     assert.equal(prompts.length, 2);
     assert.match(prompts[1], /server-side clinical evidence gate rejected/);
     assert.match(prompts[1], /evidence matrix must contain the report's material claims/i);
-    assert.match(prompts[1], /retrieve an additional verified source/i);
+    // Repairing traceability must send the run back to the sources, not invite
+    // it to delete the claim: two runs of one question differed only in repair
+    // rounds, and the repaired one came back 43% shorter.
+    assert.match(prompts[1], /retrieve one with the approved evidence tools/i);
+    assert.match(prompts[1], /last resort, not the first/i);
+    assert.match(prompts[1], /must not leave the report thinner/i);
     assert.doesNotMatch(prompts[1], /at least (?:8|12|18|30)|10000/);
     const stillRepairing = await store.reconcileSession(project, binding.sessionId);
     assert.equal(stillRepairing.status, "running");

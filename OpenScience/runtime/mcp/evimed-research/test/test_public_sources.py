@@ -941,3 +941,35 @@ class RecordUrlNeverPointsAtTheApi(unittest.TestCase):
         source = pathlib.Path(sources.__file__).read_text(encoding="utf-8")
         self.assertNotIn('record.get("url"), endpoint', source)
         self.assertNotIn('record.get("pdfUrl"), endpoint', source)
+
+
+class RecordUrlIsCitableOrAbsent(unittest.TestCase):
+    """Citations must be HTTPS, so an http:// record URL exists only to be
+    rejected. A run cited two of them and the whole package was refused; the
+    agent had no way to tell which of its sources were citable."""
+
+    def test_http_is_upgraded(self):
+        self.assertEqual(
+            sources._citable_url("http://qikan.cqvip.com/Qikan/Article/Detail?id=7104224078"),
+            "https://qikan.cqvip.com/Qikan/Article/Detail?id=7104224078",
+        )
+
+    def test_https_is_left_alone(self):
+        url = "https://pubmed.ncbi.nlm.nih.gov/14678917/"
+        self.assertEqual(sources._citable_url(url), url)
+
+    def test_anything_else_yields_nothing(self):
+        for value in ("", None, "ftp://example.org/paper.pdf", "not a url", "   "):
+            self.assertIsNone(sources._citable_url(value), value)
+
+    def test_record_urls_go_through_the_same_normalisation(self):
+        self.assertEqual(
+            sources._evimed_record_url({"Pubmed": "http://pubmed.ncbi.nlm.nih.gov/1/"}),
+            "https://pubmed.ncbi.nlm.nih.gov/1/",
+        )
+        self.assertIsNone(sources._evimed_record_url({"url": "ftp://example.org/x"}))
+
+    def test_no_caller_emits_an_unnormalised_record_url(self):
+        source = pathlib.Path(sources.__file__).read_text(encoding="utf-8")
+        self.assertNotIn('record_url = _first_text(record.get("url"))', source)
+        self.assertNotIn('record.get("url"), endpoint', source)
