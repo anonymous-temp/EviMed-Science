@@ -710,7 +710,17 @@ export class PostgresStore extends InMemoryStore {
       `SELECT id, name, password_hash, auth_type FROM ${CONTROL_PLANE_SCHEMA}.users ORDER BY id`,
     );
     const bootstrapId = this.config.bootstrapUser ? safeId(this.config.bootstrapUser, "username") : "";
-    if (result.rowCount === 0 && bootstrapId && this.config.bootstrapPassword) {
+    // Seed the configured account whenever it is absent, not only when the table
+    // is empty. Gating on an empty table meant that once any other account
+    // existed — an access grant issued for a neighbouring service, say — the
+    // configured administrator was never created: the user, the password file
+    // and the environment were all in place, login failed with
+    // invalid_credentials, and nothing anywhere reported a problem. The INSERT
+    // below already refuses to resurrect a deliberately deleted id, which is
+    // what makes creating-when-absent safe rather than a way back in.
+    const bootstrapMissing = Boolean(bootstrapId)
+      && !result.rows.some((row) => row.id === bootstrapId);
+    if (bootstrapMissing && this.config.bootstrapPassword) {
       await this.database.transaction(async (client) => {
         await lockUserIdentity(client, bootstrapId);
         await client.query(
