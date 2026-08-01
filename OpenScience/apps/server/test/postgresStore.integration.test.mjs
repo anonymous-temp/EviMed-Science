@@ -228,3 +228,64 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("the configured bootstrap account is created even when other accounts already exist", {
+  skip: databaseUrl ? false : "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  assertTestDatabase(databaseUrl);
+  const admin = new Pool({ connectionString: databaseUrl, max: 1 });
+  await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+  const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-bootstrap-seed-"));
+  let app;
+  try {
+    // Seed an unrelated account first, the way an access grant for a
+    // neighbouring service would. Gating bootstrap creation on an empty table
+    // meant the configured administrator was then never created: the user, the
+    // password file and the environment were all present, login returned
+    // invalid_credentials, and nothing reported a problem.
+    const seeding = await start(dataDir);
+    await seeding.app.close();
+    await admin.query(
+      "INSERT INTO evimed_control.users(id, name, password_hash, auth_type) VALUES ($1, $2, $3, 'local') ON CONFLICT (id) DO NOTHING",
+      ["other-service", "other-service", "not-a-real-hash"],
+    );
+    await admin.query("DELETE FROM evimed_control.users WHERE id = $1", ["alice"]);
+
+    app = await start(dataDir);
+    const alice = await login(app.base, "alice", "correct horse battery staple");
+    assert.equal(alice.response.status, 200, "the configured bootstrap account must be able to log in");
+
+    const rows = await admin.query("SELECT id FROM evimed_control.users ORDER BY id");
+    assert.deepEqual(rows.rows.map((row) => row.id), ["alice", "other-service"]);
+  } finally {
+    await app?.app.close();
+    await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+    await admin.end();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("a deliberately deleted bootstrap account is not resurrected", {
+  skip: databaseUrl ? false : "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  assertTestDatabase(databaseUrl);
+  const admin = new Pool({ connectionString: databaseUrl, max: 1 });
+  await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+  const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-bootstrap-deleted-"));
+  let app;
+  try {
+    const seeding = await start(dataDir);
+    await seeding.app.close();
+    await admin.query("DELETE FROM evimed_control.users WHERE id = $1", ["alice"]);
+    await admin.query("INSERT INTO evimed_control.deleted_users(id) VALUES ($1) ON CONFLICT (id) DO NOTHING", ["alice"]);
+
+    app = await start(dataDir);
+    const alice = await login(app.base, "alice", "correct horse battery staple");
+    assert.equal(alice.response.status, 401, "creating-when-absent must not undo a deliberate deletion");
+  } finally {
+    await app?.app.close();
+    await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+    await admin.end();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
