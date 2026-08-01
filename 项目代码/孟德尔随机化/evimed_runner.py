@@ -107,12 +107,31 @@ def _validate_release(paper: str, results: list) -> None:
             )
             if any(claim in lowered_paper for claim in unsupported_overlap_claims):
                 raise RuntimeError("MR paper made an unsupported non-overlap claim")
-        if result.presso_global_pval is None and re.search(
-            r"MR-PRESSO[^\n。.]{0,80}(?:未发现|无证据|no evidence|negative)",
-            paper,
-            flags=re.IGNORECASE,
-        ):
-            raise RuntimeError("MR paper treated an unavailable MR-PRESSO global test as negative")
+        # A sensitivity analysis that did not run must not be written up as a
+        # clean result. Each of these has a value only when the analysis produced
+        # one, so an absent value plus a reassuring sentence is a fabrication.
+        unavailable_tests = (
+            (result.presso_global_pval, r"MR-PRESSO", "MR-PRESSO global test"),
+            (result.radial_pval, r"(?:radial(?:[ -]?MR)?|径向)", "radial MR test"),
+            (
+                result.conmix_pval,
+                r"(?:contamination[ -]?mixture|conmix|污染混合)",
+                "contamination-mixture test",
+            ),
+        )
+        # Stay inside one sentence, but a period that belongs to a number is not
+        # a sentence end: excluding "." outright let "p = 0.31, no evidence of
+        # outliers" past the check, which is the exact sentence being guarded.
+        within_sentence = r"(?:(?!\.[\s　])[^\n。])"
+        for value, token, label in unavailable_tests:
+            if value is not None:
+                continue
+            if re.search(
+                rf"{token}{within_sentence}{{0,80}}(?:未发现|无证据|no evidence|negative)",
+                paper,
+                flags=re.IGNORECASE,
+            ):
+                raise RuntimeError(f"MR paper treated an unavailable {label} as negative")
 
 
 def _copy_release_artifacts(output_dir: Path, state, results: list) -> list[str]:

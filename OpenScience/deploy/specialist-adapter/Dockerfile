@@ -6,6 +6,7 @@ ARG APT_MIRROR=http://deb.debian.org/debian
 ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG GITHUB_DOWNLOAD_PREFIX=
+ARG CRAN_MIRROR=https://cloud.r-project.org
 
 LABEL org.opencontainers.image.title="EviMed Specialist Adapter" \
       org.opencontainers.image.version="${APP_VERSION}"
@@ -39,7 +40,12 @@ RUN set -eux; \
         build-essential git libcurl4-openssl-dev libfontconfig1-dev libssl-dev libuv1-dev libxml2-dev \
         r-base-core r-recommended r-cran-cowplot r-cran-data.table r-cran-dplyr \
         r-cran-ggplot2 r-cran-glmnet r-cran-httr r-cran-jsonlite r-cran-magrittr \
-        r-cran-mnormt r-cran-psych r-cran-remotes r-cran-reshape2; \
+        r-cran-mnormt r-cran-psych r-cran-remotes r-cran-reshape2 \
+        libgmp-dev gfortran libblas-dev liblapack-dev \
+        r-cran-rcpparmadillo r-cran-quantreg r-cran-robustbase r-cran-sparsem \
+        r-cran-matrixmodels r-cran-gmp r-cran-plotly r-cran-boot \
+        r-cran-lavaan r-cran-gdata r-cran-stringr r-cran-tidyr r-cran-tibble \
+        r-cran-tidyselect r-cran-rlang r-cran-matrix; \
     fi; \
     if [ "${AGENT_KIND}" = "peer-review" ]; then \
       apt-get install -y --no-install-recommends poppler-utils; \
@@ -57,12 +63,24 @@ RUN pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r /tmp/agent-requ
     && pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r /tmp/adapter-requirements.txt \
     && rm -f /tmp/adapter-requirements.txt /tmp/agent-requirements.txt
 
+COPY ${AGENT_DIR} /agent
+
+# The agent's own installer is the single source of truth for the R environment,
+# and it verifies every package loads and that the TwoSampleMR pin survived
+# before it exits. A second list here is what let the image ship three GitHub
+# packages while the analysis templates called seven, so the modes that needed
+# the other four failed only at run time.
+#
+# This runs after the agent source is copied, so any change to that source
+# rebuilds the R layer. Keeping the list in one place is worth more than the
+# cache: the two lists silently diverged for as long as they both existed.
 RUN if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \
-      GITHUB_DOWNLOAD_PREFIX="${GITHUB_DOWNLOAD_PREFIX}" Rscript -e 'options(repos=c(CRAN="https://cloud.r-project.org")); prefix <- Sys.getenv("GITHUB_DOWNLOAD_PREFIX"); install <- function(repository, revision) remotes::install_url(paste0(prefix, "https://github.com/", repository, "/archive/", revision, ".tar.gz"), upgrade="never", dependencies=NA); install("MRCIEU/ieugwasr", "cc35329751ebb3d69226d3a6a238dd0cb7709a25"); install("MRCIEU/TwoSampleMR", "3d119f20d6fc164b0c7f710f5590fee9580f2c7b"); install("rondolab/MR-PRESSO", "3e3c92d7eda6dce0d1d66077373ec0f7ff4f7e87")' \
-      && Rscript -e 'stopifnot(all(vapply(c("TwoSampleMR","ieugwasr","jsonlite","MRPRESSO"), requireNamespace, quietly=TRUE, FUN.VALUE=logical(1))))'; \
+      R_LIB_TARGET=/usr/local/lib/R/site-library \
+      CRAN_MIRROR="${CRAN_MIRROR}" \
+      GITHUB_DOWNLOAD_PREFIX="${GITHUB_DOWNLOAD_PREFIX}" \
+      Rscript /agent/install_r_packages.R; \
     fi
 
-COPY ${AGENT_DIR} /agent
 COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter ./evimed_specialist_adapter
 
 RUN python -m compileall -q /adapter/evimed_specialist_adapter /agent \

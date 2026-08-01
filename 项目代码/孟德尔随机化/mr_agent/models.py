@@ -181,6 +181,10 @@ class MRAnalysisResult(BaseModel):
     presso_n_outliers: int | None = None
     radial_pval: float | None = None
     conmix_pval: float | None = None
+    # Optional analyses that did not run, each as "name: reason". An empty list
+    # means every optional analysis ran; it is not the same as a list that was
+    # never populated, which is why the R side always writes this field.
+    skipped_analyses: list[str] = Field(default_factory=list)
     sample_overlap_warning: bool = False
     sample_size_exposure: int | None = None
     sample_size_outcome: int | None = None

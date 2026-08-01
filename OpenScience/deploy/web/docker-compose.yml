@@ -418,6 +418,7 @@ services:
         DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
         PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
         GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
+        CRAN_MIRROR: ${OPEN_SCIENCE_CRAN_MIRROR:-https://cloud.r-project.org}
     environment:
       EVIMED_SPECIALIST_KIND: mendelian-randomization
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
@@ -464,6 +465,7 @@ services:
         DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
         PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
         GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
+        CRAN_MIRROR: ${OPEN_SCIENCE_CRAN_MIRROR:-https://cloud.r-project.org}
     environment:
       EVIMED_SPECIALIST_KIND: bibliometric-analysis
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
@@ -509,6 +511,7 @@ services:
         DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
         PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
         GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
+        CRAN_MIRROR: ${OPEN_SCIENCE_CRAN_MIRROR:-https://cloud.r-project.org}
     environment:
       EVIMED_SPECIALIST_KIND: research-topic-selection
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
@@ -554,6 +557,7 @@ services:
         DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
         PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
         GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
+        CRAN_MIRROR: ${OPEN_SCIENCE_CRAN_MIRROR:-https://cloud.r-project.org}
     environment:
       EVIMED_SPECIALIST_KIND: peer-review
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
@@ -599,6 +603,7 @@ services:
         DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
         PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
         GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
+        CRAN_MIRROR: ${OPEN_SCIENCE_CRAN_MIRROR:-https://cloud.r-project.org}
     environment:
       EVIMED_SPECIALIST_KIND: drug-safety-analysis
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key

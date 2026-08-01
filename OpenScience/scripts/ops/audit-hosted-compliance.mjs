@@ -1189,6 +1189,7 @@ const MIRROR_BUILD_ARGS = new Set([
   "NPM_REGISTRY",
   "APK_MIRROR",
   "GOPROXY",
+  "CRAN_MIRROR",
 ]);
 
 // Services whose build block declares a context, a dockerfile and the args it

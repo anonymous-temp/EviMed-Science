@@ -122,6 +122,36 @@ def test_release_validator_rejects_false_overlap_and_presso_claims():
         _validate_release(base + " 完整代码已存档于GitHub。", [result])
 
 
+def test_release_validator_rejects_negative_claims_for_analyses_that_did_not_run():
+    """Radial MR and the contamination mixture produce a value only when they
+    ran, so a reassuring sentence about either without one is a fabrication."""
+    result = _result()
+    base = "437068 547261 ebi-a-exposure ebi-a-outcome 异质性"
+    assert result.radial_pval is None and result.conmix_pval is None
+
+    with pytest.raises(RuntimeError, match="radial MR test"):
+        _validate_release(base + " Radial MR found no evidence of outliers", [result])
+    with pytest.raises(RuntimeError, match="radial MR test"):
+        _validate_release(base + " 径向MR未发现异常工具变量", [result])
+    with pytest.raises(RuntimeError, match="contamination-mixture test"):
+        _validate_release(
+            base + " The contamination mixture test showed no evidence of invalid instruments",
+            [result],
+        )
+    # A p-value ahead of the claim must not hide it: excluding "." to stay inside
+    # one sentence used to let exactly this sentence through.
+    with pytest.raises(RuntimeError, match="MR-PRESSO"):
+        _validate_release(base + " MR-PRESSO global test p = 0.31, no evidence of outliers", [result])
+
+    # Once the analysis has a value the same sentence is a legitimate report,
+    # and a claim about a different test two sentences away is not this test's.
+    result.radial_pval = 0.42
+    result.conmix_pval = 0.30
+    _validate_release(base + " Radial MR found no evidence of outliers", [result])
+    _validate_release(base + " 污染混合模型未发现显著偏倚", [result])
+    _validate_release(base + " MR-PRESSO could not be run. 异质性 showed no evidence of bias", [result])
+
+
 def test_release_artifacts_are_copied_and_paths_become_portable(tmp_path: Path):
     runtime = tmp_path / "runtime"
     runtime.mkdir()
