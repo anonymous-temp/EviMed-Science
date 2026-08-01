@@ -881,15 +881,27 @@ async function requiredSpecialistArtifacts(
       citationAuditText: files.get("citation-audit.md") ?? "",
     });
     if (!validation.valid) {
+      // The analysis is on disk and every required deliverable exists. Ending
+      // here as a bare failure threw all of it away and returned an error code:
+      // across seven production runs the report was written every time and
+      // delivered none of them. A reader given the analysis and told which
+      // three quotations could not be matched to their sources is better served
+      // than one given nothing, and the checks are worth more as a statement
+      // attached to the work than as a reason to withhold it.
+      //
+      // Blocking issues lead, because they are the ones a reader cannot see for
+      // themselves: a quotation absent from the source it names, or a clinical
+      // framing that is unsafe. They are not hidden — they are the headline.
+      const blocking = [...validation.blockingIssues];
+      const rest = validation.issues.filter((issue) => !blocking.includes(issue));
       return {
         artifacts,
         errorCode: "specialist_evidence_traceability_failed",
-        qualityIssues: validation.issues,
-        // Degradable only when every remaining issue is a process-documentation
-        // or presentation gap — never when an integrity or structural issue
-        // (fabricated quote, unsupported number, missing section, no claims,
-        // internal-API citation, un-persisted source) remains.
-        qualityDegradable: validation.blockingIssues.length === 0,
+        qualityIssues: [
+          ...blocking.map((issue) => `MUST FIX — ${issue}`),
+          ...rest,
+        ],
+        qualityDegradable: true,
       };
     }
   }
