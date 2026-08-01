@@ -697,12 +697,17 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
     });
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.id, run.id);
-    assert.equal(finished.status, "failed");
-    assert.equal(finished.errorCode, "specialist_evidence_traceability_failed");
-    // A structural/blocking failure stays failed, but the gate reasons are now
-    // attached so the user sees why instead of an opaque failure.
-    assert.equal(finished.verification, null);
+    // Repairs are exhausted and issues remain, but every required deliverable
+    // was written. Withholding returned an error code and nothing else: across
+    // seven production runs the report was written every time and delivered
+    // none of them. Deliver it, mark it unverified, and lead the notices with
+    // what a reader cannot check for themselves.
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.errorCode, null);
+    assert.equal(finished.verification, "unverified");
+    assert.ok(finished.artifacts.length > 0, "the deliverables must reach the reader");
     assert.ok(finished.qualityNotices.length > 0);
+    assert.match(finished.qualityNotices[0], /^MUST FIX — /, "an unverifiable claim leads the notices");
     assert.match(finished.qualityNotices.join("\n"), /evidence matrix must contain the report's material claims/i);
 
     const malformed = await store.dispatch(project, {
