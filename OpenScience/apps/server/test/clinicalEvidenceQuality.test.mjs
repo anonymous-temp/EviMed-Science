@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import { citationIntegrityIssues, numberedReferenceCount, validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
@@ -724,4 +725,31 @@ test("rejects a synthesized claim whose primary reference is not among its refer
   );
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /referenceNumber must be one of its referenceNumbers/);
+});
+
+test("every bookkeeping pattern still matches a message the module actually emits", async () => {
+  // The classification is by message shape, so rewording a message silently
+  // stops it being classified — which is what happened when the gate messages
+  // gained an instruction and two patterns were still anchored to the old ends.
+  const source = await readFile(new URL("../src/clinicalEvidenceQuality.mjs", import.meta.url), "utf8");
+  const block = /const bookkeepingIssuePatterns = Object\.freeze\(\[([\s\S]*?)\n\]\);/.exec(source);
+  assert.ok(block, "the pattern list moved");
+
+  // Message templates as the module writes them, with interpolations filled in.
+  const emitted = [
+    ...[...source.matchAll(/`([^`]*\$\{[^`]*)`/g)].map(([, template]) => template),
+    // Messages with nothing to interpolate are plain string literals.
+    ...[...source.matchAll(/"([A-Z][^"]{25,200})"/g)].map(([, literal]) => literal),
+  ]
+    .map((template) => template
+      .replaceAll(/\$\{label\}/g, "claims[1]")
+      .replaceAll(/\$\{sourceLabel\}/g, "claims[1].supportingSources[0]")
+      .replaceAll(/\$\{lineIndex \+ 1\}/g, "26")
+      .replaceAll(/\$\{[^}]*\}/g, "459"));
+
+  const patterns = [...block[1].matchAll(/^\s*\/(.+)\/,\s*$/gm)].map(([, body]) => new RegExp(body));
+  assert.ok(patterns.length >= 5, `expected the real pattern list, found ${patterns.length}`);
+
+  const dead = patterns.filter((pattern) => !emitted.some((message) => pattern.test(message)));
+  assert.deepEqual(dead.map(String), [], "these patterns match no message the module emits");
 });

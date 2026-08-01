@@ -520,14 +520,19 @@ function terminalFromMessages(messages) {
   return { status: "succeeded", errorCode: null };
 }
 
-function clinicalEvidenceRepairPrompt(issues) {
+/** @param {any} issues @param {any} shrinkage */
+function clinicalEvidenceRepairPrompt(issues, shrinkage = null) {
   const bounded = issues
     .filter((issue) => typeof issue === "string" && issue.trim())
     .slice(0, 40)
     .map((issue) => `- ${issue.slice(0, 300)}`)
     .join("\n");
+  const measured = shrinkage
+    ? [`Your last revision removed ${shrinkage.lost} characters from clinical-evidence-report.md (${shrinkage.startSize} down to ${shrinkage.currentSize}). Restore that material with the support it was missing. Deleting a further line to clear a remaining issue is not an acceptable resolution.`]
+    : [];
   return [
     "The server-side clinical evidence gate rejected the current package.",
+    ...measured,
     "Revise the named files in the existing academic package in place: clinical-evidence-report.md, clinical-evidence-matrix.json, clinical-evidence-search.json, citation-ledger.csv, references.bib, citation-audit.md, or clinical-evidence-run.json.",
     "Patch clinical-evidence-report.md with the edit tool, changing only the lines the issues name. Do not rewrite it with the write tool: replacing the whole file regenerates it from what you still hold in context, which after a long run is a compressed recollection, so the report comes back shorter and you cannot tell that it did. Measured across four production repairs, every whole-file rewrite lost content — one shed 1,863 characters and the next 4,125 — while targeted edits held the report steady and ended slightly longer.",
     "The same applies to the other deliverables: change what an issue names and leave the rest alone, preserving already valid evidence and source metadata. Rewriting a whole file is warranted only when its structure is what the issue rejects, such as a JSON deliverable that no longer parses.",
@@ -1261,7 +1266,10 @@ export class AgentRunStore {
           const sizes = this.clinicalRepairReportSizes.get(run.id) ?? [];
           if (beforeRepair > 0) this.clinicalRepairReportSizes.set(run.id, [...sizes, beforeRepair]);
           try {
-            const repair = await repairSender(clinicalEvidenceRepairPrompt(completion.qualityIssues));
+            const previous = sizes.length > 0 && beforeRepair > 0 && beforeRepair < sizes[0]
+              ? { startSize: sizes[0], currentSize: beforeRepair, lost: sizes[0] - beforeRepair }
+              : null;
+            const repair = await repairSender(clinicalEvidenceRepairPrompt(completion.qualityIssues, previous));
             if (repair?.accepted !== false) return run;
           } catch { /* a rejected repair remains a terminal, fail-closed outcome */ }
           terminal.status = "failed";
