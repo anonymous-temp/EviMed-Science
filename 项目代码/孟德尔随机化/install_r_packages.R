@@ -27,7 +27,14 @@ gh_prefix <- Sys.getenv("GITHUB_DOWNLOAD_PREFIX", unset = "")
 
 dir.create(lib, showWarnings = FALSE, recursive = TRUE)
 .libPaths(c(lib, .libPaths()))
-options(repos = c(CRAN = cran), Ncpus = max(1L, parallel::detectCores() - 1L))
+# download.file defaults to a 60-second timeout, which is not enough for MRlap:
+# it ships its LDSC reference data, so the tarball is over 120 MB and the
+# download aborted at exactly 60s every time.
+options(
+  repos = c(CRAN = cran),
+  Ncpus = max(1L, parallel::detectCores() - 1L),
+  timeout = max(3600, getOption("timeout"))
+)
 
 # The two-sample analysis cannot run without these.
 cran_required <- c(
@@ -40,18 +47,41 @@ cran_required <- c(
 )
 
 # repository and revision for each; none of these is on CRAN.
+#
+# Order matters. TwoSampleMR declares `Remotes: ... MRPRESSO=rondolab/MR-PRESSO`,
+# so installing it first makes remotes fetch MRPRESSO from GitHub HEAD, and the
+# same happens to RadialMR. Installing the leaves first means the pinned copy is
+# already there and nothing resolves a Remote.
 github_required <- list(
-  ieugwasr    = c("MRCIEU/ieugwasr", "cc35329751ebb3d69226d3a6a238dd0cb7709a25"),
-  TwoSampleMR = c("MRCIEU/TwoSampleMR", "3d119f20d6fc164b0c7f710f5590fee9580f2c7b"),
   MRPRESSO    = c("rondolab/MR-PRESSO", "3e3c92d7eda6dce0d1d66077373ec0f7ff4f7e87"),
   RadialMR    = c("WSpiller/RadialMR", "ac6093932abcd607d8bb0cd4c097447b2155fc9f"),
+  ieugwasr    = c("MRCIEU/ieugwasr", "cc35329751ebb3d69226d3a6a238dd0cb7709a25"),
   # Multivariable MR and the sample-overlap correction are separate analysis
   # templates; without these two those modes fail at R execution time.
   MVMR        = c("WSpiller/MVMR", "bceaa38088d093a5d30c713afb016e7fbc7ed2be"),
+  TwoSampleMR = c("MRCIEU/TwoSampleMR", "3d119f20d6fc164b0c7f710f5590fee9580f2c7b"),
   # MRlap's LDSC step calls GenomicSEM, so it is a hard dependency, not optional.
   GenomicSEM  = c("GenomicSEM/GenomicSEM", "0a63ac0ea01b61d28bd17e4a204e0fa561ce5040"),
   MRlap       = c("n-mounier/MRlap", "660f026864f8bfbbad5a8206bdff7d58f5d5d05b")
 )
+
+# Which revision each GitHub package was actually installed from. remotes records
+# RemoteType "url" and no RemoteSha for install_url, so the revision cannot be
+# read back off the package; without this record, a copy pulled from GitHub HEAD
+# as somebody else's transitive dependency is indistinguishable from the pin.
+pins_file <- file.path(lib, ".evimed-r-pins")
+read_pins <- function() {
+  if (!file.exists(pins_file)) return(character(0))
+  rows <- utils::read.table(pins_file, header = FALSE, stringsAsFactors = FALSE,
+                            col.names = c("package", "revision"))
+  stats::setNames(rows$revision, rows$package)
+}
+write_pin <- function(name, revision) {
+  pins <- read_pins()
+  pins[[name]] <- revision
+  utils::write.table(data.frame(names(pins), unname(pins)), pins_file,
+                     row.names = FALSE, col.names = FALSE, quote = FALSE)
+}
 
 # MRlap must not resolve its own Remotes: doing so reaches api.github.com, which
 # some networks block, and pulls TwoSampleMR@HEAD over the pinned revision.
@@ -97,9 +127,27 @@ for (name in names(github_required)) {
     spec <- github_required[[n]]
     deps <- if (is.null(github_dependencies[[n]])) NA else github_dependencies[[n]]
     url <- paste0(gh_prefix, "https://github.com/", spec[1], "/archive/", spec[2], ".tar.gz")
-    install_missing(n, function() {
+    # "already usable" is not enough here: a copy another package dragged in from
+    # HEAD loads perfectly well and is the wrong revision. Only a recorded pin
+    # matching this revision means the installed copy is the one asked for.
+    if (loads(n) && identical(unname(read_pins()[n]), spec[2])) {
+      cat(sprintf("  %-24s already at %s\n", n, substr(spec[2], 1, 8)))
+      return(invisible(NULL))
+    }
+    stale <- file.path(lib, n)
+    if (dir.exists(stale)) {
+      cat(sprintf("  %-24s replacing unpinned copy\n", n))
+      unlink(stale, recursive = TRUE, force = TRUE)
+    }
+    cat(sprintf("  %-24s installing %s...\n", n, substr(spec[2], 1, 8)))
+    ok <- tryCatch({
       remotes::install_url(url, lib = lib, upgrade = "never", dependencies = deps)
+      TRUE
+    }, error = function(e) {
+      cat(sprintf("  %-24s install failed: %s\n", n, conditionMessage(e)))
+      FALSE
     })
+    if (ok && loads(n)) write_pin(n, spec[2])
   })
 }
 
@@ -121,25 +169,19 @@ for (pkg in wanted) {
 # A pin that did not survive is worse than a missing package: every name still
 # reports as usable while the analysis engine quietly changed version.
 #
-# install_url records RemoteType "url" and no RemoteSha, so the revision cannot
-# be read back. What can be read back is how the package arrived: anything that
-# resolved MRlap's `Remotes: MRCIEU/TwoSampleMR` would have installed it from
-# GitHub at HEAD, leaving RemoteType "github". That is the failure being guarded.
-remote_field <- function(pkg, field) {
-  tryCatch({
-    description <- read.dcf(system.file("DESCRIPTION", package = pkg))
-    if (field %in% colnames(description)) unname(description[1, field]) else NA_character_
-  }, error = function(e) NA_character_)
-}
+# Every GitHub package must carry the revision it was asked for. Without this,
+# TwoSampleMR's Remotes field quietly supplied MRPRESSO and RadialMR from HEAD
+# and both still reported as usable.
+pins <- read_pins()
 for (pkg in names(github_required)) {
-  remote_type <- remote_field(pkg, "RemoteType")
-  if (identical(remote_type, "url")) {
-    cat(sprintf("  %-24s from the pinned tarball\n", pkg))
+  wanted <- github_required[[pkg]][2]
+  actual <- unname(pins[pkg])
+  if (identical(actual, wanted)) {
+    cat(sprintf("  %-24s pinned at %s\n", pkg, substr(wanted, 1, 8)))
   } else {
-    broken <- c(broken, sprintf(
-      "%s was not installed from its pinned tarball (RemoteType=%s); a transitive Remotes entry replaced it",
-      pkg, remote_type))
-    cat(sprintf("  %-24s PIN LOST (RemoteType=%s)\n", pkg, remote_type))
+    broken <- c(broken, sprintf("%s is at %s, not the pinned %s",
+                                pkg, if (is.na(actual)) "an unrecorded revision" else actual, wanted))
+    cat(sprintf("  %-24s PIN LOST\n", pkg))
   }
 }
 
