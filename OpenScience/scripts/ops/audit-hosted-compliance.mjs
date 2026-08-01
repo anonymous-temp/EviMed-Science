@@ -1178,7 +1178,101 @@ async function checkReleaseProvenance() {
   }
 }
 
+// Package sources a Dockerfile exposes as build args so an operator can point
+// them somewhere reachable. Every one of these has an upstream default that is
+// slow or blocked from some networks, which is the whole reason it is a knob.
+const MIRROR_BUILD_ARGS = new Set([
+  "APT_MIRROR",
+  "DEBIAN_SECURITY_MIRROR",
+  "PIP_INDEX_URL",
+  "GITHUB_DOWNLOAD_PREFIX",
+  "NPM_REGISTRY",
+  "APK_MIRROR",
+  "GOPROXY",
+]);
+
+// Services whose build block declares a context, a dockerfile and the args it
+// passes. Parsed positionally rather than with a YAML dependency, matching how
+// the rest of this audit reads the compose files.
+function composeBuildServices(compose) {
+  const services = [];
+  let current = null;
+  let section = null;
+  for (const line of compose.split("\n")) {
+    const service = /^ {2}([A-Za-z0-9._-]+):\s*$/.exec(line);
+    if (service) {
+      current = { name: service[1], context: null, dockerfile: null, args: [] };
+      services.push(current);
+      section = null;
+      continue;
+    }
+    if (!current) continue;
+    if (/^ {4}build:\s*$/.test(line)) {
+      section = "build";
+      continue;
+    }
+    if (/^ {4}\S/.test(line)) {
+      section = null;
+      continue;
+    }
+    if (section !== "build" && section !== "args") continue;
+    if (/^ {6}args:\s*$/.test(line)) {
+      section = "args";
+      continue;
+    }
+    if (/^ {6}\S/.test(line)) section = "build";
+    const field = /^ {6}(context|dockerfile):\s*(\S+)\s*$/.exec(line);
+    if (field) {
+      current[field[1]] = field[2];
+      continue;
+    }
+    const arg = /^ {8}([A-Z][A-Z0-9_]*):/.exec(line);
+    if (section === "args" && arg) current.args.push(arg[1]);
+  }
+  return services.filter((service) => service.context && service.dockerfile);
+}
+
+function declaredBuildArgs(dockerfile) {
+  return [...dockerfile.matchAll(/^ARG\s+([A-Z][A-Z0-9_]*)/gm)].map((match) => match[1]);
+}
+
+// A build arg a Dockerfile declares but compose never passes is silently dead:
+// the .env value is set, the operator believes it applies, and the build goes to
+// the upstream host anyway. That is not visible in any log — it only shows up as
+// a build that takes hours — so it has to be caught here.
+async function checkBuildMirrorSources() {
+  const composeDir = path.join(repoRoot, "deploy/web");
+  const compose = await read("deploy/web/docker-compose.yml");
+  const unwired = [];
+  const skipped = [];
+
+  for (const service of composeBuildServices(compose)) {
+    const dockerfilePath = path.resolve(composeDir, service.context, service.dockerfile);
+    if (!existsSync(dockerfilePath)) {
+      skipped.push(service.name);
+      continue;
+    }
+    const declared = declaredBuildArgs(await fs.readFile(dockerfilePath, "utf8"));
+    const missing = declared.filter((name) => MIRROR_BUILD_ARGS.has(name) && !service.args.includes(name));
+    if (missing.length > 0) unwired.push(`${service.name}: ${missing.join(", ")}`);
+  }
+
+  if (skipped.length > 0) {
+    warn("build_mirror_sources_unverified", "Some build contexts are absent from this checkout, so their build args were not checked.", {
+      services: skipped,
+    });
+  }
+  if (unwired.length === 0) {
+    pass("build_mirror_sources_wired", "Every package source a Dockerfile exposes is passed through by compose.");
+  } else {
+    fail("build_mirror_sources_unwired", "Dockerfiles declare package-source build args that compose never passes, so configuring them has no effect.", {
+      services: unwired,
+    });
+  }
+}
+
 async function main() {
+  await checkBuildMirrorSources();
   await checkRootLicense();
   await checkRuntimePins();
   await checkHostedPackaging();

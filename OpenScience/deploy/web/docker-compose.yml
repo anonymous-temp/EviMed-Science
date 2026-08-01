@@ -29,6 +29,7 @@ services:
       args:
         VERSION: 0.31.1-evimed
         COMMIT: ${OPEN_SCIENCE_SOURCE_REVISION:?set OPEN_SCIENCE_SOURCE_REVISION}
+        GOPROXY: ${OPEN_SCIENCE_GOPROXY:-https://goproxy.cn,direct}
     environment:
       MEMOS_ADDR: 0.0.0.0
       MEMOS_PORT: 5230
@@ -359,6 +360,7 @@ services:
       dockerfile: Dockerfile.evimed
       args:
         APP_VERSION: ${EVIMED_META_AGENT_VERSION:-0.9.0}
+        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
     environment:
       EVIMED_DATA_ROOT: /data
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
@@ -412,6 +414,10 @@ services:
         AGENT_DIR: 项目代码/孟德尔随机化
         AGENT_KIND: mendelian-randomization
         APP_VERSION: ${EVIMED_MR_AGENT_VERSION:-1.0.0}
+        APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
+        GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
     environment:
       EVIMED_SPECIALIST_KIND: mendelian-randomization
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
@@ -454,6 +460,10 @@ services:
         AGENT_DIR: 项目代码/文献剂量分析
         AGENT_KIND: bibliometric-analysis
         APP_VERSION: ${EVIMED_BIBLIOMETRIC_AGENT_VERSION:-1.0.0}
+        APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
+        GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
     environment:
       EVIMED_SPECIALIST_KIND: bibliometric-analysis
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
@@ -495,6 +505,10 @@ services:
         AGENT_DIR: 项目代码/科研选题
         AGENT_KIND: research-topic-selection
         APP_VERSION: ${EVIMED_RESEARCH_TOPIC_AGENT_VERSION:-1.0.0}
+        APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
+        GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
     environment:
       EVIMED_SPECIALIST_KIND: research-topic-selection
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
@@ -536,6 +550,10 @@ services:
         AGENT_DIR: 项目代码/论文审稿
         AGENT_KIND: peer-review
         APP_VERSION: ${EVIMED_PEER_REVIEW_AGENT_VERSION:-1.0.0}
+        APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
+        GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
     environment:
       EVIMED_SPECIALIST_KIND: peer-review
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
@@ -577,6 +595,10 @@ services:
         AGENT_DIR: 项目代码/药物安全分析agent
         AGENT_KIND: drug-safety-analysis
         APP_VERSION: ${EVIMED_DRUG_SAFETY_AGENT_VERSION:-1.0.0}
+        APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
+        GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
     environment:
       EVIMED_SPECIALIST_KIND: drug-safety-analysis
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
@@ -623,6 +645,7 @@ services:
       dockerfile: OpenScience/deploy/specialist-adapter/Dockerfile.evidence
       args:
         APP_VERSION: ${EVIMED_DRUG_EVIDENCE_ADAPTER_VERSION:-1.0.0}
+        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
     environment:
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_EVIDENCE_SEARCH_KEY_FILE: /run/secrets/evimed-api-key
