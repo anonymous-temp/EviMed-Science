@@ -906,3 +906,38 @@ class PublicSourceConnectorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecordUrlNeverPointsAtTheApi(unittest.TestCase):
+    """A record with no public link must carry no link.
+
+    The endpoint that returned the record is an internal API route. Using it as
+    the record's URL handed callers something they are forbidden to cite, and a
+    clinical evidence report was rejected for citing it with no alternative
+    available.
+    """
+
+    def test_a_record_without_a_url_gets_none(self):
+        self.assertIsNone(sources._evimed_record_url(None))
+        self.assertIsNone(sources._evimed_record_url(""))
+        self.assertIsNone(sources._evimed_record_url({}))
+
+    def test_a_record_with_a_public_url_keeps_it(self):
+        self.assertEqual(
+            sources._evimed_record_url("https://pubmed.ncbi.nlm.nih.gov/14678917/"),
+            "https://pubmed.ncbi.nlm.nih.gov/14678917/",
+        )
+        self.assertEqual(
+            sources._evimed_record_url({"Pubmed": "https://pubmed.ncbi.nlm.nih.gov/16440063/"}),
+            "https://pubmed.ncbi.nlm.nih.gov/16440063/",
+        )
+
+    def test_a_source_entry_omits_an_absent_url(self):
+        entry = sources._source("EVIMED-GUIDE:7", "A guideline", None, "evimed-guideline")
+        self.assertNotIn("url", entry)
+        self.assertEqual(entry["id"], "EVIMED-GUIDE:7")
+
+    def test_no_caller_can_fall_back_to_the_internal_base_url(self):
+        source = pathlib.Path(sources.__file__).read_text(encoding="utf-8")
+        self.assertNotIn('record.get("url"), endpoint', source)
+        self.assertNotIn('record.get("pdfUrl"), endpoint', source)

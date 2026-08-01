@@ -425,10 +425,13 @@ def _ncbi_get_text(url):
 def _source(source_id, title, url, source):
     value = {
         "id": str(source_id),
-        "url": url,
         "source": source,
         "retrievedAt": _now(),
     }
+    # A record without a public link carries no url at all. Emitting an empty or
+    # null one invites a citation to a link that leads nowhere.
+    if url:
+        value["url"] = str(url)
     if title:
         value["title"] = str(title)[:2048]
     return value
@@ -534,7 +537,16 @@ def _evimed_post(path, body):
     return payload["data"], url
 
 
-def _evimed_record_url(value, fallback):
+def _evimed_record_url(value, fallback=None):
+    """The record's own public URL, or nothing.
+
+    This used to fall back to the API endpoint that returned the record. That
+    endpoint is an internal route, so a record without a public link was handed
+    to the caller wearing a URL nobody may cite: the reports that quoted it were
+    rejected for citing an internal API, and the agent had been given no
+    alternative. A record with no public link is better described by its
+    identifier than by a link that does not lead to it.
+    """
     if isinstance(value, dict):
         for key in ("Pubmed", "pubmed", "evimed", "Semantic Scholar", "Google Scholar", "url"):
             if isinstance(value.get(key), str) and value[key].strip():
@@ -683,7 +695,7 @@ def _evimed_evidence_records(query, limit):
         record = _dict(value)
         title = _first_text(record.get("title"), record.get("literatureTitle"))
         identifier = str(record.get("id") or record.get("paperId") or record.get("pmid") or record.get("doi") or index).strip()
-        record_url = _evimed_record_url(record.get("url"), endpoint)
+        record_url = _evimed_record_url(record.get("url"))
         item = {
             "id": "EVIMED-PAPER:%s" % identifier,
             "title": title,
@@ -741,7 +753,7 @@ def _evimed_literature_records(arguments):
         record = _dict(value)
         title = _first_text(record.get("title"))
         identifier = str(record.get("id") or index).strip()
-        record_url = _evimed_record_url(record.get("url"), endpoint)
+        record_url = _evimed_record_url(record.get("url"))
         item = {
             "id": "EVIMED-LITERATURE:%s" % identifier,
             "title": title,
@@ -798,7 +810,7 @@ def _evimed_guidelines(arguments):
         record = _dict(value)
         title = _first_text(record.get("title"))
         identifier = str(record.get("guideId") or record.get("id") or index).strip()
-        record_url = _evimed_record_url(record.get("url"), endpoint)
+        record_url = _evimed_record_url(record.get("url"))
         item = {
             "id": "EVIMED-GUIDE:%s" % identifier,
             "title": title,
@@ -856,7 +868,7 @@ def _evimed_trial_records(arguments):
         record = _dict(value)
         title = _first_text(record.get("title"))
         identifier = str(record.get("registrationNo") or record.get("cochraneId") or index).strip()
-        record_url = _first_text(record.get("url"), endpoint)
+        record_url = _first_text(record.get("url"))
         item = {
             "id": identifier,
             "title": title,
@@ -899,7 +911,7 @@ def patent(arguments):
         record = _dict(value)
         title = _first_text(record.get("title"), record.get("patentNumber"))
         identifier = str(record.get("id") or record.get("patentNumber") or index).strip()
-        record_url = _first_text(record.get("url"), endpoint)
+        record_url = _first_text(record.get("url"))
         item = {
             "id": "EVIMED-PATENT:%s" % identifier,
             "title": title,
@@ -982,7 +994,7 @@ def _evimed_instruction_records(arguments):
                 break
             record = _dict(value)
             title = _first_text(record.get("tradeNames"), record.get("genericNames"), record.get("englishName"), arguments["drug"])
-            record_url = _first_text(record.get("url"), record.get("pdfUrl"), endpoint)
+            record_url = _first_text(record.get("url"), record.get("pdfUrl"))
             identifier = str(record.get("id") or "%s-%d" % (registry, index)).strip()
             item = {
                 "id": "EVIMED-LABEL:%s" % identifier,
