@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
-import { AgentRunStore } from "../src/agentRuns.mjs";
+import { AgentRunStore, recoverableEvidenceSourceErrorCodes } from "../src/agentRuns.mjs";
 import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
 async function withApp(fn, overrides = {}) {
@@ -2007,4 +2007,33 @@ test("an editor tool slip does not fail a run whose EviMed work completed", asyn
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("tolerated source error codes are real codes, not typos", async () => {
+  // A misspelled entry here forgives nothing and looks identical to a correct
+  // one: the run keeps failing on the code it was meant to tolerate. Every
+  // public_source_* entry has to match a code the code base actually emits.
+  const roots = [
+    new URL("../../../runtime/mcp/evimed-research/", import.meta.url),
+    new URL("../src/", import.meta.url),
+  ];
+  const emitted = new Set();
+  for (const root of roots) {
+    for (const name of await readdir(root)) {
+      if (!/\.(py|mjs)$/.test(name)) continue;
+      const text = await readFile(new URL(name, root), "utf8");
+      for (const [, code] of text.matchAll(/"(public_source_[a-z_]+)"/g)) emitted.add(code);
+    }
+  }
+  assert.ok(emitted.size > 20, `expected the real code set, found ${emitted.size}`);
+
+  const tolerated = [...recoverableEvidenceSourceErrorCodes].filter((code) => code.startsWith("public_source_"));
+  const unknown = tolerated.filter((code) => !emitted.has(code));
+  assert.deepEqual(unknown, [], `tolerated but never emitted (typo?): ${unknown.join(", ")}`);
+
+  // The failure that reached production: one public source returning 502.
+  assert.ok(recoverableEvidenceSourceErrorCodes.has("public_source_http_error"));
+  // A malformed request is still the run's own problem.
+  assert.ok(!recoverableEvidenceSourceErrorCodes.has("public_source_query_invalid"));
+  assert.ok(!recoverableEvidenceSourceErrorCodes.has("invalid_input"));
 });
