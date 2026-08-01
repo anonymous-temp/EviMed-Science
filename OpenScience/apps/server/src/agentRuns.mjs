@@ -529,7 +529,8 @@ function clinicalEvidenceRepairPrompt(issues) {
   return [
     "The server-side clinical evidence gate rejected the current package.",
     "Revise the named files in the existing academic package in place: clinical-evidence-report.md, clinical-evidence-matrix.json, clinical-evidence-search.json, citation-ledger.csv, references.bib, citation-audit.md, or clinical-evidence-run.json.",
-    "Only rewrite a file when an issue below names or requires it; preserve already valid evidence and source metadata.",
+    "Patch clinical-evidence-report.md with the edit tool, changing only the lines the issues name. Do not rewrite it with the write tool: replacing the whole file regenerates it from what you still hold in context, which after a long run is a compressed recollection, so the report comes back shorter and you cannot tell that it did. Measured across four production repairs, every whole-file rewrite lost content — one shed 1,863 characters and the next 4,125 — while targeted edits held the report steady and ended slightly longer.",
+    "The same applies to the other deliverables: change what an issue names and leave the rest alone, preserving already valid evidence and source metadata. Rewriting a whole file is warranted only when its structure is what the issue rejects, such as a JSON deliverable that no longer parses.",
     "Every JSON deliverable must remain strict JSON. Escape embedded quotation marks correctly instead of changing scientific wording to work around JSON syntax.",
     "Never create or modify a .evimed-sources artifact. When a material claim lacks usable support, go and retrieve one with the approved evidence tools. Deleting the claim is the last resort, not the first: it satisfies the gate while making the analysis smaller, and a report that answers the question is worth more than a shorter one that passes. If you do drop a claim, say in your reply which claim went and why no source could support it.",
     "Treat repeated numeric-fact messages as one report-wide audit task. For each number, first attach it to the citation and hidden matrix claim marker that support it; drop only the numbers that are genuinely incidental to the argument. Do not resolve this by stripping the report of its quantitative content — effect estimates, sample sizes and confidence intervals are the analysis, not decoration.",
@@ -613,6 +614,32 @@ function validExplicitCitations(text) {
       return false;
     }
   });
+}
+
+// Deliverables replaced wholesale after a repair was asked for. Patching with
+// edit keeps everything the issues did not name; replacing the file regenerates
+// it from what the run still holds in context, which late in a long run is a
+// compressed recollection of its own evidence. The size notice reports that the
+// report ended smaller; this reports why, and catches a rewrite that happens to
+// come back the same length while having lost its detail.
+function wholeFileRewritesDuringRepair(messages) {
+  const rewrites = [];
+  let repairing = false;
+  for (const message of messages) {
+    for (const part of message?.parts ?? []) {
+      if (
+        message?.info?.role === "user" && part?.type === "text"
+        && String(part.text ?? "").includes("clinical evidence gate rejected")
+      ) {
+        repairing = true;
+        continue;
+      }
+      if (!repairing || part?.type !== "tool" || part.tool !== "write") continue;
+      const target = String(part?.state?.input?.filePath ?? part?.state?.input?.path ?? "");
+      if (/clinical-evidence-report\.md$/.test(target)) rewrites.push(target);
+    }
+  }
+  return rewrites;
 }
 
 // Subagent calls that were asked to read a retrieved-evidence file rather than
@@ -1220,21 +1247,19 @@ export class AgentRunStore {
         if (canRepair) {
           this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
           this.clinicalRepairBaselineCursors.set(run.id, messageId(assistants.at(-1)));
-          // Deleting the offending sentence always satisfies a traceability
-          // complaint, so a repaired report tends to come back smaller. Two
-          // runs of one question differed by nothing else: no repairs gave
-          // 15,897 characters, two repairs gave 9,099. Record the size going
-          // in so the shrinkage is measured rather than inferred from the
-          // length of the final report.
+          // Record the report's size on the way into each repair. A repair that
+          // answers with a whole-file write regenerates the report from what is
+          // still in context — a compressed recollection after a long run — and
+          // it comes back shorter without the run noticing. Two production
+          // repairs cost 1,863 and 4,125 characters that way, while a run that
+          // patched with edit ended slightly longer than it started.
+          //
+          // The notice has to survive the repair being accepted: this branch
+          // returns early on success, so anything written to `terminal` here is
+          // discarded. Keep it on the run and attach it when the run finishes.
           const beforeRepair = (await readRequiredFile(project, "clinical-evidence-report.md"))?.text?.length ?? 0;
-          const priorSize = this.clinicalRepairReportSizes.get(run.id) ?? beforeRepair;
-          this.clinicalRepairReportSizes.set(run.id, priorSize);
-          if (beforeRepair > 0 && priorSize > 0 && beforeRepair < priorSize * 0.8) {
-            terminal.qualityNotices = [
-              ...(terminal.qualityNotices ?? []),
-              `Repair shrank the report from ${priorSize} to ${beforeRepair} characters; traceability was restored by removing analysis rather than by grounding it.`,
-            ];
-          }
+          const sizes = this.clinicalRepairReportSizes.get(run.id) ?? [];
+          if (beforeRepair > 0) this.clinicalRepairReportSizes.set(run.id, [...sizes, beforeRepair]);
           try {
             const repair = await repairSender(clinicalEvidenceRepairPrompt(completion.qualityIssues));
             if (repair?.accepted !== false) return run;
@@ -1256,6 +1281,31 @@ export class AgentRunStore {
           terminal.errorCode = completion.errorCode;
           if (Array.isArray(completion.qualityIssues)) terminal.qualityNotices = completion.qualityIssues;
         }
+      }
+    }
+    // Whatever the verdict, say if repair cost the report its substance. The
+    // sizes were captured on the way into each repair round, so this compares
+    // where the report started against where it ended rather than comparing two
+    // different runs to each other.
+    // The full history: `assistants` is filtered to assistant messages, so the
+    // repair prompt that marks the start of a repair round is not in it.
+    const rewrites = wholeFileRewritesDuringRepair(history);
+    if (rewrites.length > 0) {
+      terminal.qualityNotices = [
+        ...(terminal.qualityNotices ?? []),
+        `The report was replaced with the write tool ${rewrites.length} time(s) while repairing, instead of being patched with edit; a rewrite regenerates the report from context rather than from the evidence on disk.`,
+      ];
+    }
+    const repairSizes = this.clinicalRepairReportSizes.get(run.id) ?? [];
+    if (repairSizes.length > 0) {
+      const finalSize = (await readRequiredFile(project, "clinical-evidence-report.md"))?.text?.length ?? 0;
+      const startSize = repairSizes[0];
+      if (finalSize > 0 && startSize > 0 && finalSize < startSize * 0.8) {
+        const lost = Math.round(((startSize - finalSize) / startSize) * 100);
+        terminal.qualityNotices = [
+          ...(terminal.qualityNotices ?? []),
+          `Repair reduced the report from ${startSize} to ${finalSize} characters (${lost}% smaller) over ${repairSizes.length} round(s); traceability was restored by removing analysis rather than by grounding it.`,
+        ];
       }
     }
     return this.finishInternal(project, run.id, { ...terminal, artifacts });
