@@ -752,11 +752,19 @@ export function loadConfig(overrides = {}) {
     memosContextMaxChars: Number(
       overrides.memosContextMaxChars ?? process.env.OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS ?? 20_000,
     ),
-    // Consecutive monitor polls with no new message and no new tool call before
-    // a run is treated as stalled. A ledger of start/dispatch/finish cannot tell
-    // a working run from a dead one, so both used to wait out the full timeout.
-    agentRunMonitorStallPolls: Number(
-      overrides.agentRunMonitorStallPolls ?? process.env.OPEN_SCIENCE_AGENT_RUN_MONITOR_STALL_POLLS ?? 240,
+    // How long a run may produce no new message and no new tool call before it
+    // is treated as stalled. A ledger of start/dispatch/finish cannot tell a
+    // working run from a dead one, so both used to wait out the full timeout.
+    //
+    // This was a poll count whose duration depended on an interval nobody
+    // passed, and it worked out to two minutes. A report-tier agent is silent
+    // for as long as one long model stream takes: across two production
+    // evidence-synthesis runs the longest gap between steps was 138s and 113s,
+    // so one run was killed mid-step and the other survived by seven seconds.
+    // Fifteen minutes leaves room above the observed maximum while still
+    // catching a dead runtime long before the overall timeout.
+    agentRunMonitorStallMs: Number(
+      overrides.agentRunMonitorStallMs ?? process.env.OPEN_SCIENCE_AGENT_RUN_MONITOR_STALL_MS ?? 900_000,
     ),
     memoryExtractionEnabled:
       overrides.memoryExtractionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED", true),

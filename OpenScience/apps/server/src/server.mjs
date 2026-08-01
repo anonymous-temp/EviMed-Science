@@ -61,6 +61,11 @@ import {
   writeFileAtomicNoFollow,
 } from "./security.mjs";
 
+// How often a running agent is polled for progress. The run monitor's limits are
+// expressed as counts of this interval, so it has to be stated once rather than
+// repeated as a literal at each call site.
+const AGENT_RUN_MONITOR_INTERVAL_MS = 500;
+
 function originFor(value) {
   if (!value) return null;
   try {
@@ -349,8 +354,15 @@ export function createWebApiApp(overrides = {}) {
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
     model: `deepseek/${config.deepseekModel}`,
-    monitorMaxPolls: Math.max(1, Math.ceil(config.agentRunMonitorTimeoutMs / 500)),
-    monitorStallPolls: Math.max(0, Number(config.agentRunMonitorStallPolls) || 0),
+    // Both poll counts are periods of this interval. It was assumed rather than
+    // passed, so the stall threshold silently meant a different amount of time
+    // than its name suggested.
+    monitorIntervalMs: AGENT_RUN_MONITOR_INTERVAL_MS,
+    monitorMaxPolls: Math.max(1, Math.ceil(config.agentRunMonitorTimeoutMs / AGENT_RUN_MONITOR_INTERVAL_MS)),
+    monitorStallPolls: Math.max(
+      0,
+      Math.ceil(Number(config.agentRunMonitorStallMs) / AGENT_RUN_MONITOR_INTERVAL_MS) || 0,
+    ),
     readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
