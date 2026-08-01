@@ -37,6 +37,24 @@ _R_TIMEOUT_SEC = int(os.getenv("MR_R_TIMEOUT_SEC", "900"))
 _r_env_cache: tuple[bool, str] | None = None
 _r_env_lock = threading.Lock()
 
+# Every R package the analysis templates call. The readiness check used to name
+# four of these, so an environment missing MVMR or MRlap reported healthy and the
+# multivariable and sample-overlap templates failed only once a run reached R.
+# test_r_environment.py holds this to what the templates actually reference and
+# to what install_r_packages.R installs, so the three cannot drift apart again.
+REQUIRED_R_PACKAGES = (
+    "TwoSampleMR",
+    "ieugwasr",
+    "jsonlite",
+    "MRPRESSO",
+    "RadialMR",
+    "MendelianRandomization",
+    "MVMR",
+    "MRlap",
+    "ggplot2",
+    "data.table",
+)
+
 # TwoSampleMR and friends are vendored into .r-lib beside this agent rather than
 # installed system-wide, and nothing ever told R where they were: both Rscript
 # calls inherited an environment with no R_LIBS_USER in it. Every run therefore
@@ -107,8 +125,9 @@ def _check_r_environment_impl() -> tuple[bool, str]:
     # actually missing is a dependency. TwoSampleMR sat on disk unusable for
     # want of data.table and the message said to install TwoSampleMR. Report the
     # load error, which names the real gap.
+    package_list = ", ".join(f'"{name}"' for name in REQUIRED_R_PACKAGES)
     check_script = (
-        'pkgs <- c("TwoSampleMR", "ieugwasr", "jsonlite", "MRPRESSO"); '
+        f"pkgs <- c({package_list}); "
         'bad <- character(0); '
         'for (p in pkgs) { '
         '  err <- tryCatch({ loadNamespace(p); NULL }, error = function(e) conditionMessage(e)); '
@@ -357,6 +376,12 @@ def _parse_summary(result: MRAnalysisResult, output_dir: Path) -> None:
         result.sample_size_exposure = n_exp
     if n_out is not None:
         result.sample_size_outcome = n_out
+    # jsonlite writes a one-element vector as a bare string even under I(), so
+    # accept both shapes rather than silently dropping a single skip.
+    skipped = data.get("skipped_analyses") or []
+    if isinstance(skipped, str):
+        skipped = [skipped]
+    result.skipped_analyses = [str(item) for item in skipped]
 
 
 def _check_error_file(output_dir: Path) -> None:

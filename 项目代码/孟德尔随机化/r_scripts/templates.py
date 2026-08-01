@@ -3,6 +3,75 @@
 # [POS] r_scripts/templates.py - R script templates
 """R script templates for MR analysis."""
 
+# --- Skip tracking, shared by every optional analysis ---
+
+# An analysis that could not run and one that ran and found nothing look
+# identical downstream unless the difference is recorded. That is how the
+# contamination-mixture step went unnoticed: it guarded on a package named
+# MRConMix, which exists nowhere, so requireNamespace() was always FALSE, the
+# block never ran in any environment, and every report still read as complete.
+_SKIP_TRACKING_BLOCK = """
+sensitivity_skipped <- character(0)
+note_skip <- function(name, reason) {{
+    sensitivity_skipped <<- c(sensitivity_skipped, paste0(name, ": ", reason))
+    cat(sprintf("%s skipped: %s\\n", name, reason))
+}}
+"""
+
+# --- Optional sensitivity analyses, shared by the MOE and local templates ---
+
+_SENSITIVITY_BLOCK = """
+# --- Radial MR ---
+tryCatch({{
+    if (!requireNamespace("RadialMR", quietly = TRUE)) {{
+        note_skip("radial_mr", "RadialMR package not installed")
+    }} else {{
+        radial_dat <- RadialMR::format_radial(
+            dat$beta.exposure, dat$beta.outcome,
+            dat$se.exposure, dat$se.outcome, dat$SNP)
+        radial_res <- RadialMR::ivw_radial(radial_dat, alpha = 0.05)
+        radial_df <- data.frame(
+            global_q_pval = radial_res$coef[1, "Pr(>|t|)"],
+            n_outliers = length(radial_res$outliers))
+        write.csv(radial_df, file.path(output_dir, "radial.csv"),
+            row.names=FALSE)
+    }}
+}}, error = function(e) {{
+    note_skip("radial_mr", e$message)
+}})
+
+# --- Contamination mixture ---
+# The method is MendelianRandomization::mr_conmix, reached through an MRInput
+# object rather than loose vectors.
+tryCatch({{
+    if (!requireNamespace("MendelianRandomization", quietly = TRUE)) {{
+        note_skip("contamination_mixture",
+            "MendelianRandomization package not installed")
+    }} else if (nrow(dat) < 5) {{
+        note_skip("contamination_mixture",
+            sprintf("needs at least 5 instruments, have %d", nrow(dat)))
+    }} else {{
+        conmix_res <- MendelianRandomization::mr_conmix(
+            MendelianRandomization::mr_input(
+                bx = dat$beta.exposure, bxse = dat$se.exposure,
+                by = dat$beta.outcome, byse = dat$se.outcome))
+        # A multimodal likelihood yields one interval per mode. Report the outer
+        # bounds and how many there were, rather than keeping the first and
+        # presenting a multimodal result as a single interval.
+        conmix_df <- data.frame(
+            estimate = conmix_res@Estimate,
+            ci_lower = min(conmix_res@CILower),
+            ci_upper = max(conmix_res@CIUpper),
+            n_intervals = length(conmix_res@CILower),
+            pval = conmix_res@Pvalue)
+        write.csv(conmix_df, file.path(output_dir, "conmix.csv"),
+            row.names=FALSE)
+    }}
+}}, error = function(e) {{
+    note_skip("contamination_mixture", e$message)
+}})
+"""
+
 # --- Shared plot generation block (PDF + PNG) ---
 
 _PLOT_BLOCK = """
@@ -122,9 +191,12 @@ tryCatch({{
     cat(sprintf("Steiger test failed: %s\\n", e$message))
 }})
 
+""" + _SKIP_TRACKING_BLOCK + """
 # --- MR-PRESSO outlier detection ---
 tryCatch({{
-    if (requireNamespace("MRPRESSO", quietly = TRUE)) {{
+    if (!requireNamespace("MRPRESSO", quietly = TRUE)) {{
+        note_skip("mr_presso", "MRPRESSO package not installed")
+    }} else {{
         presso <- MRPRESSO::mr_presso(
             BetaOutcome = "beta.outcome", BetaExposure = "beta.exposure",
             SdOutcome = "se.outcome", SdExposure = "se.exposure",
@@ -142,16 +214,15 @@ tryCatch({{
             cat(sprintf("MR-PRESSO distortion p=%.4e\\n",
                 presso$`MR-PRESSO results`$`Distortion Test`$Pvalue))
         }}
-    }} else {{
-        cat("MRPRESSO package not installed, skipping\\n")
     }}
 }}, error = function(e) {{
-    cat(sprintf("MR-PRESSO failed: %s\\n", e$message))
+    note_skip("mr_presso", e$message)
 }})
 """ + _PLOT_BLOCK + """
 summary <- list(exposure_id="{exposure_id}", outcome_id="{outcome_id}",
     n_instruments=nrow(dat), mean_f_statistic=mean(exposure_dat$F_stat),
-    pval_threshold=thresh, status="success")
+    pval_threshold=thresh, status="success",
+    skipped_analyses=I(sensitivity_skipped))
 write(toJSON(summary, auto_unbox=TRUE), file.path(output_dir, "mr_summary.json"))
 cat("MR analysis completed successfully\\n")
 """
@@ -213,9 +284,12 @@ tryCatch({{
     cat(sprintf("Steiger test failed: %s\\n", e$message))
 }})
 
+""" + _SKIP_TRACKING_BLOCK + """
 # --- MR-PRESSO ---
 tryCatch({{
-    if (requireNamespace("MRPRESSO", quietly = TRUE)) {{
+    if (!requireNamespace("MRPRESSO", quietly = TRUE)) {{
+        note_skip("mr_presso", "MRPRESSO package not installed")
+    }} else {{
         presso <- MRPRESSO::mr_presso(
             BetaOutcome = "beta.outcome", BetaExposure = "beta.exposure",
             SdOutcome = "se.outcome", SdExposure = "se.exposure",
@@ -230,47 +304,13 @@ tryCatch({{
         write.csv(presso_main, file.path(output_dir, "mrpresso.csv"), row.names=FALSE)
     }}
 }}, error = function(e) {{
-    cat(sprintf("MR-PRESSO failed: %s\\n", e$message))
+    note_skip("mr_presso", e$message)
 }})
-
-# --- Radial MR ---
-tryCatch({{
-    if (requireNamespace("RadialMR", quietly = TRUE)) {{
-        radial_dat <- RadialMR::format_radial(
-            dat$beta.exposure, dat$beta.outcome,
-            dat$se.exposure, dat$se.outcome, dat$SNP)
-        radial_res <- RadialMR::ivw_radial(radial_dat, alpha = 0.05)
-        radial_df <- data.frame(
-            global_q_pval = radial_res$coef[1, "Pr(>|t|)"],
-            n_outliers = length(radial_res$outliers))
-        write.csv(radial_df, file.path(output_dir, "radial.csv"),
-            row.names=FALSE)
-    }}
-}}, error = function(e) {{
-    cat(sprintf("Radial MR failed: %s\\n", e$message))
-}})
-
-# --- Contamination Mixture ---
-tryCatch({{
-    if (requireNamespace("MRConMix", quietly = TRUE) && nrow(dat) >= 5) {{
-        conmix_res <- MRConMix::MRConMix(
-            betaXG = dat$beta.exposure, betaYG = dat$beta.outcome,
-            seXG = dat$se.exposure, seYG = dat$se.outcome)
-        conmix_df <- data.frame(
-            estimate = conmix_res$CIEstimate,
-            ci_lower = conmix_res$CILower,
-            ci_upper = conmix_res$CIUpper,
-            pval = conmix_res$Pvalue)
-        write.csv(conmix_df, file.path(output_dir, "conmix.csv"),
-            row.names=FALSE)
-    }}
-}}, error = function(e) {{
-    cat(sprintf("ConMix failed: %s\\n", e$message))
-}})
-""" + _PLOT_BLOCK + """
+""" + _SENSITIVITY_BLOCK + _PLOT_BLOCK + """
 summary <- list(exposure_id="{exposure_id}", outcome_id="{outcome_id}",
     n_instruments=nrow(dat), mean_f_statistic=mean(exposure_dat$F_stat),
-    pval_threshold=5e-08, status="success")
+    pval_threshold=5e-08, status="success",
+    skipped_analyses=I(sensitivity_skipped))
 write(toJSON(summary, auto_unbox=TRUE), file.path(output_dir, "mr_summary.json"))
 """
 
@@ -306,8 +346,11 @@ tryCatch({{
     cat(sprintf("Steiger test failed: %s\\n", e$message))
 }})
 
+""" + _SKIP_TRACKING_BLOCK + """
 tryCatch({{
-    if (requireNamespace("MRPRESSO", quietly = TRUE)) {{
+    if (!requireNamespace("MRPRESSO", quietly = TRUE)) {{
+        note_skip("mr_presso", "MRPRESSO package not installed")
+    }} else {{
         presso <- MRPRESSO::mr_presso(
             BetaOutcome = "beta.outcome", BetaExposure = "beta.exposure",
             SdOutcome = "se.outcome", SdExposure = "se.exposure",
@@ -322,53 +365,17 @@ tryCatch({{
                 na.rm = TRUE))
         write.csv(presso_main, file.path(output_dir, "mrpresso.csv"),
             row.names=FALSE)
-    }} else {{
-        cat("MRPRESSO package not installed, skipping\\n")
     }}
 }}, error = function(e) {{
-    cat(sprintf("MR-PRESSO failed: %s\\n", e$message))
+    note_skip("mr_presso", e$message)
 }})
-
-# --- Radial MR ---
-tryCatch({{
-    if (requireNamespace("RadialMR", quietly = TRUE)) {{
-        radial_dat <- RadialMR::format_radial(
-            dat$beta.exposure, dat$beta.outcome,
-            dat$se.exposure, dat$se.outcome, dat$SNP)
-        radial_res <- RadialMR::ivw_radial(radial_dat, alpha = 0.05)
-        radial_df <- data.frame(
-            global_q_pval = radial_res$coef[1, "Pr(>|t|)"],
-            n_outliers = length(radial_res$outliers))
-        write.csv(radial_df, file.path(output_dir, "radial.csv"),
-            row.names=FALSE)
-    }}
-}}, error = function(e) {{
-    cat(sprintf("Radial MR failed: %s\\n", e$message))
-}})
-
-# --- Contamination Mixture ---
-tryCatch({{
-    if (requireNamespace("MRConMix", quietly = TRUE) && nrow(dat) >= 5) {{
-        conmix_res <- MRConMix::MRConMix(
-            betaXG = dat$beta.exposure, betaYG = dat$beta.outcome,
-            seXG = dat$se.exposure, seYG = dat$se.outcome)
-        conmix_df <- data.frame(
-            estimate = conmix_res$CIEstimate,
-            ci_lower = conmix_res$CILower,
-            ci_upper = conmix_res$CIUpper,
-            pval = conmix_res$Pvalue)
-        write.csv(conmix_df, file.path(output_dir, "conmix.csv"),
-            row.names=FALSE)
-    }}
-}}, error = function(e) {{
-    cat(sprintf("ConMix failed: %s\\n", e$message))
-}})
-""" + _PLOT_BLOCK + """
+""" + _SENSITIVITY_BLOCK + _PLOT_BLOCK + """
 summary <- list(
     exposure_id="{exposure_label}", outcome_id="{outcome_label}",
     n_instruments=nrow(dat),
     mean_f_statistic=mean(exposure_dat$F_stat),
-    pval_threshold={pval_threshold}, status="success")
+    pval_threshold={pval_threshold}, status="success",
+    skipped_analyses=I(sensitivity_skipped))
 write(toJSON(summary, auto_unbox=TRUE), file.path(output_dir, "mr_summary.json"))
 cat("MR analysis completed successfully\\n")
 """
