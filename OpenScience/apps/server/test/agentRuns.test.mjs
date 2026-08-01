@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -2010,20 +2010,21 @@ test("an editor tool slip does not fail a run whose EviMed work completed", asyn
 });
 
 test("tolerated source error codes are real codes, not typos", async () => {
-  // A misspelled entry here forgives nothing and looks identical to a correct
-  // one: the run keeps failing on the code it was meant to tolerate. Every
+  // A misspelled entry forgives nothing and looks identical to a correct one:
+  // the run keeps failing on the very code it was meant to tolerate. Every
   // public_source_* entry has to match a code the code base actually emits.
-  const roots = [
-    new URL("../../../runtime/mcp/evimed-research/", import.meta.url),
-    new URL("../src/", import.meta.url),
+  //
+  // Read only the two files that define them. Walking the source trees read
+  // forty files and slowed a timing-sensitive test running concurrently in
+  // another file, which is a poor trade for a list this small.
+  const sources = [
+    new URL("../../../runtime/mcp/evimed-research/public_sources.py", import.meta.url),
+    new URL("../src/publicSourceGateway.mjs", import.meta.url),
   ];
   const emitted = new Set();
-  for (const root of roots) {
-    for (const name of await readdir(root)) {
-      if (!/\.(py|mjs)$/.test(name)) continue;
-      const text = await readFile(new URL(name, root), "utf8");
-      for (const [, code] of text.matchAll(/"(public_source_[a-z_]+)"/g)) emitted.add(code);
-    }
+  for (const source of sources) {
+    const text = await readFile(source, "utf8");
+    for (const [, code] of text.matchAll(/"(public_source_[a-z_]+)"/g)) emitted.add(code);
   }
   assert.ok(emitted.size > 20, `expected the real code set, found ${emitted.size}`);
 
@@ -2031,7 +2032,7 @@ test("tolerated source error codes are real codes, not typos", async () => {
   const unknown = tolerated.filter((code) => !emitted.has(code));
   assert.deepEqual(unknown, [], `tolerated but never emitted (typo?): ${unknown.join(", ")}`);
 
-  // The failure that reached production: one public source returning 502.
+  // The failure that reached production: one public source answering with 502.
   assert.ok(recoverableEvidenceSourceErrorCodes.has("public_source_http_error"));
   // A malformed request is still the run's own problem.
   assert.ok(!recoverableEvidenceSourceErrorCodes.has("public_source_query_invalid"));
