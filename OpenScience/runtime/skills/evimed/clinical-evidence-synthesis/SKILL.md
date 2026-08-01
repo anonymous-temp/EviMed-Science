@@ -87,6 +87,23 @@ Screen the returned records, deduplicate them, and inspect enough relevant sourc
 
 Do not inflate counts with duplicates, irrelevant records, editorials, or title-only results.
 
+### Reading what you retrieved
+
+A literature search of twenty records runs to roughly seventy kilobytes, most of
+it abstracts, so the runtime writes it to a tool-output file instead of putting
+it in the conversation. Open that file with `read` and work from the records.
+
+**Never delegate this to a subagent.** A subagent replies in prose, so what
+returns is an account of the records — abstracts paraphrased, identifiers
+dropped — and every quotation you then take is your delegate's wording, not the
+source's. Two consecutive runs of this skill differed by nothing else: the one
+that read its own search results produced a report three times longer with ten
+traceable claims, and the one that delegated six reads had its support quotes
+rejected because they were not present in the documents they cited.
+
+The rule generalises: delegate a question, never a document. Anything you will
+quote, you read.
+
 ### Full-text and source preservation
 
 Use `evimed_official_page_fetch` for approved professional-society, guideline, evidence-review, public-health, or regulatory pages. Use `evimed_open_access_full_text` for key PMID, PMCID, or DOI records with accessible full text.

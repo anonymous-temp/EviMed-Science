@@ -2038,3 +2038,43 @@ test("tolerated source error codes are real codes, not typos", async () => {
   assert.ok(!recoverableEvidenceSourceErrorCodes.has("public_source_query_invalid"));
   assert.ok(!recoverableEvidenceSourceErrorCodes.has("invalid_input"));
 });
+
+test("delegating the reading of retrieved evidence is named as the fault, not left to the quote check", async () => {
+  // The weak production run delegated six reads of tool-output files. Its
+  // support quotes were then paraphrases, and the matrix check rejected them
+  // with "quote not found in its preserved artifact" — true, but three steps
+  // downstream of the cause.
+  const messages = [{
+    info: { role: "assistant" },
+    parts: [
+      {
+        type: "tool",
+        tool: "task",
+        state: {
+          status: "completed",
+          input: {
+            description: "Process NTG diagnostic search",
+            prompt: "Read the file /runtime/xdg-data/opencode/tool-output/tool_fbca227a6 and extract all literature records from it.",
+          },
+        },
+      },
+      {
+        type: "tool",
+        tool: "task",
+        state: {
+          status: "completed",
+          // Delegating a question is fine; only handing over a document is not.
+          input: { description: "Appraise study design", prompt: "Is a target trial emulation adequate for this comparison?" },
+        },
+      },
+    ],
+  }];
+
+  const flagged = messages
+    .flatMap((message) => message.parts)
+    .filter((part) => part.type === "tool" && part.tool === "task")
+    .filter((part) => /tool-output\/|\.evimed-sources\//.test(String(part.state.input.prompt ?? "")));
+
+  assert.equal(flagged.length, 1, "the delegated document read must be flagged");
+  assert.match(flagged[0].state.input.prompt, /tool-output/);
+});

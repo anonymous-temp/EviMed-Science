@@ -1046,6 +1046,15 @@ Do not claim completion if any required skill was not loaded successfully.
 Use only these declared EviMed research tools:
 ${toolLines}
 
+A search result large enough to be written to a tool-output file still has to be
+read by you. Open it with \`read\`. Do not delegate reading retrieved evidence to
+a subagent: a subagent answers in prose, so what comes back is a description of
+the records rather than the records, and a quotation taken from that description
+is no longer the source's wording. One run delegated six such reads, and its
+quotations could not be found in the documents they were attributed to.
+
+Delegate a question, never a document.
+
 ${outputContract}
 
 ${managedAgentMarker(manifest.skill, manifest.runtimeAgent)}
