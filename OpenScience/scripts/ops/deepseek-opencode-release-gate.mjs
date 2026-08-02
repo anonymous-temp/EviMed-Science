@@ -7,7 +7,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createModelGatewayHandler } from "../../apps/server/src/modelGateway.mjs";
+import { certifiedDeepSeekModel, createModelGatewayHandler, supportedDeepSeekModels } from "../../apps/server/src/modelGateway.mjs";
 import {
   RuntimeManager,
   syncRuntimeEviMedMcp,
@@ -18,7 +18,15 @@ import { runDeepSeekCompatibility } from "./deepseek-compatibility-preflight.mjs
 const scriptFile = fileURLToPath(import.meta.url);
 const defaultRepoRoot = path.resolve(path.dirname(scriptFile), "../..");
 const REQUIRED_OPENCODE_VERSION = "1.17.13";
-const REQUIRED_MODEL = "deepseek-v4-pro";
+// Whichever certified model this deployment configures. The gate then runs the
+// real chain against THAT model and signs a receipt naming it, so the receipt
+// attests what actually serves rather than what was hardcoded here.
+const REQUIRED_MODEL = certifiedDeepSeekModel();
+if (!REQUIRED_MODEL) {
+  throw new Error(
+    `OPEN_SCIENCE_DEEPSEEK_MODEL must name a certified model (${[...supportedDeepSeekModels].join(", ")}).`,
+  );
+}
 const MAX_PROCESS_OUTPUT = 4 * 1024 * 1024;
 const receiptCapabilities = [
   "providerBaseline",

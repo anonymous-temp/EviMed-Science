@@ -1,3 +1,22 @@
+// The production model is certified end to end, not merely configured: the
+// release gate exercises the whole tool chain against it and signs a receipt
+// naming it, readiness refuses to serve on any other, and the runtime refuses
+// to launch with any other. Adding a model here is a commitment to certify it —
+// the gate will run against whichever of these is configured, so a model that
+// cannot drive the chain fails the release rather than reaching a reader.
+export const supportedDeepSeekModels = Object.freeze(new Set([
+  "deepseek-v4-pro",
+  "deepseek-v4-flash",
+]));
+export const defaultDeepSeekModel = "deepseek-v4-pro";
+
+/** The model this deployment certifies and runs, or null if it names another.
+ *  @param {Record<string, string | undefined>} [env] */
+export function certifiedDeepSeekModel(env = process.env) {
+  const model = String(env.OPEN_SCIENCE_DEEPSEEK_MODEL ?? "").trim() || defaultDeepSeekModel;
+  return supportedDeepSeekModels.has(model) ? model : null;
+}
+
 const gatewayPath = "/internal/model/v1/chat/completions";
 const allowedRequestFields = new Set([
   "model",

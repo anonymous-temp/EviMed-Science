@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const OFFICIAL_BASE = "https://api.deepseek.com";
-const REQUIRED_MODEL = "deepseek-v4-pro";
+const REQUIRED_MODEL = String(process.env.OPEN_SCIENCE_DEEPSEEK_MODEL ?? "").trim() || "deepseek-v4-pro";
 const MAX_KEY_BYTES = 8 * 1024;
 const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 120_000;

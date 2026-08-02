@@ -11,6 +11,7 @@ import {
   dockerRuntimeMount,
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
+import { supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockOpenCodeRuntime } from "./mockRuntime.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
@@ -2098,8 +2099,9 @@ export async function syncRuntimeModelProvider(
     throw new HttpError(500, config.modelGatewaySigningSecretError, "Model gateway signing secret could not be loaded.");
   }
   const model = String(config.deepseekModel ?? "").trim();
-  if (model !== "deepseek-v4-pro") {
-    throw new HttpError(500, "runtime_model_gateway_model_invalid", "The managed DeepSeek model must be deepseek-v4-pro.");
+  if (!supportedDeepSeekModels.has(model)) {
+    throw new HttpError(500, "runtime_model_gateway_model_invalid",
+      `The managed DeepSeek model must be one of ${[...supportedDeepSeekModels].join(", ")}.`);
   }
   const opencodeRoot = path.join(plan.xdgConfigDir, "opencode");
   const configFile = path.join(opencodeRoot, "opencode.json");

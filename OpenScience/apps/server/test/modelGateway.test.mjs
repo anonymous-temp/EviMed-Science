@@ -7,7 +7,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { loadConfig } from "../src/config.mjs";
-import { createModelGatewayHandler, pipeModelGatewayBody } from "../src/modelGateway.mjs";
+import {
+  certifiedDeepSeekModel,
+  createModelGatewayHandler,
+  pipeModelGatewayBody,
+  supportedDeepSeekModels,
+} from "../src/modelGateway.mjs";
 
 async function listen(server) {
   server.listen(0, "127.0.0.1");
@@ -349,4 +354,22 @@ test("the message ceiling accommodates a long specialist run and stays configura
     loadConfig({ dataDir: "/tmp/os-model-gateway-messages", modelGatewayMaxMessages: 64 }).modelGatewayMaxMessages,
     64,
   );
+});
+
+test("only a certified DeepSeek model is served, and it is the one configured", () => {
+  // The model is certified end to end, not merely configured: the release gate
+  // runs the tool chain against whatever this resolves to and signs a receipt
+  // naming it. An uncertified name must resolve to nothing rather than to a
+  // default, or a typo would quietly serve on a model no gate ever exercised.
+  assert.equal(certifiedDeepSeekModel({}), "deepseek-v4-pro");
+  assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "" }), "deepseek-v4-pro");
+  assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "deepseek-v4-flash" }), "deepseek-v4-flash");
+  assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: " deepseek-v4-flash " }), "deepseek-v4-flash");
+  assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "deepseek-v4-turbo" }), null);
+  assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "gpt-4o" }), null);
+
+  for (const model of supportedDeepSeekModels) {
+    const config = loadConfig({ dataDir: "/tmp/os-model-gateway-certified", deepseekModel: model });
+    assert.equal(config.deepseekModel, model);
+  }
 });
