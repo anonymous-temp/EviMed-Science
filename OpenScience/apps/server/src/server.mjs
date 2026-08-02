@@ -17,7 +17,7 @@ import { SpecialistClassifier } from "./specialistClassifier.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
-import { createModelGatewayHandler, MODEL_GATEWAY_PATH } from "./modelGateway.mjs";
+import { createModelGatewayHandler, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
@@ -2414,7 +2414,7 @@ function readinessModelGateway(config) {
     /[\r\n\0]/.test(signingSecret) ||
     Buffer.byteLength(signingSecret, "utf8") < 32
   ) throw readinessFailure("model_gateway_signing_secret_invalid");
-  if (config.deepseekModel !== "deepseek-v4-pro") throw readinessFailure("deepseek_model_invalid");
+  if (!supportedDeepSeekModels.has(config.deepseekModel)) throw readinessFailure("deepseek_model_invalid");
   let upstream;
   let internal;
   try {
