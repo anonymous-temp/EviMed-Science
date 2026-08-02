@@ -154,13 +154,19 @@ function sourceDomain(value) {
   }
 }
 
+// Differences that do not bear on whether a quotation is genuine: smart quotes,
+// dash width, line wrapping, and the case of a letter. Quoting from mid-sentence
+// and lowercasing the leading article is ordinary scholarly practice, and it was
+// being reported as a quotation absent from its source — one letter cost a whole
+// package, on a passage that was verbatim in every other respect.
 function normalizedPassage(value) {
   return String(value ?? "")
     .normalize("NFKC")
     .replace(/[‘’“”"'＂＇]/g, "")
     .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .toLowerCase();
 }
 
 function validSupportingPassage(value) {
@@ -894,7 +900,14 @@ export function validateClinicalEvidencePackage({
       const undocumented = [...normalizedQueries].filter((query) => !executed.has(query));
       const unlogged = [...executed].filter((query) => !normalizedQueries.has(query));
       if (undocumented.length || unlogged.length) {
-        issues.push("The search log must exactly match successful evidence-search calls from the same run.");
+        // The run already knows which searches succeeded, so telling the agent
+        // only that the log "must match" leaves it to guess which of eighteen
+        // entries is wrong. Name them.
+        const detail = [
+          unlogged.length ? `missing from the log: ${unlogged.slice(0, 4).map((q) => `"${q.slice(0, 60)}"`).join(", ")}` : "",
+          undocumented.length ? `logged but never executed: ${undocumented.slice(0, 4).map((q) => `"${q.slice(0, 60)}"`).join(", ")}` : "",
+        ].filter(Boolean).join("; ");
+        issues.push(`The search log must exactly match successful evidence-search calls from the same run — ${detail}.`);
       }
     }
     if (searchedDatabases.size < 2) {
@@ -915,7 +928,17 @@ export function validateClinicalEvidencePackage({
       issues.push("The search log must preserve a coherent, internally consistent screening flow.");
     }
     if (inspectedRecords.length !== includedRecords.length) {
-      issues.push("Every included source record must have an inspected evidence access level.");
+      // Name the record. A title-only source carried into the included set is a
+      // specific reference the agent can drop or go and read, not a property of
+      // the log as a whole.
+      const uninspected = includedRecords
+        .filter((entry) => !inspectedRecords.includes(entry))
+        .map((entry) => `[${entry?.referenceNumber ?? "?"}] ${entry?.accessLevel ?? "no access level"}`)
+        .slice(0, 5);
+      issues.push(
+        `Every included source record must have an inspected evidence access level; ${uninspected.join(", ")} `
+        + "was carried into the included set without one. Read it, or exclude it — a title-only record supports nothing.",
+      );
     }
     const stats = runReceipt?.stats;
     if (
