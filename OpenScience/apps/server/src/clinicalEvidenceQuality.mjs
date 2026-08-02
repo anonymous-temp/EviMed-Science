@@ -238,6 +238,34 @@ function segmentsPresentInOrder(haystack, segments, project) {
 // quotation does. Each segment is then verified on its own, in order and without
 // overlapping, so an elision cannot join two passages that do not occur in that
 // sequence.
+// A quote that joins two passages without marking the gap fails the same check
+// as one the source never contained, but the two need opposite repairs — mark
+// the elision, versus find the passage that actually says it. Telling them
+// apart is worth the scan: both halves are in the document, just not adjacent.
+function quoteJoinsUnmarkedPassages(artifact, quote) {
+  const haystack = passageSkeleton(artifact);
+  const needle = passageSkeleton(quote);
+  if (!haystack || needle.length < 60) return false;
+  let matched = 0;
+  for (let length = needle.length - 1; length >= 30; length -= 1) {
+    if (haystack.includes(needle.slice(0, length))) {
+      matched = length;
+      break;
+    }
+  }
+  if (!matched) return false;
+  const rest = needle.slice(matched);
+  if (rest.length < 30) return false;
+  const resumesAfter = haystack.indexOf(needle.slice(0, matched)) + matched;
+  return haystack.indexOf(rest, resumesAfter) >= 0;
+}
+
+function quoteFailure(artifact, quote) {
+  return quoteJoinsUnmarkedPassages(artifact, quote)
+    ? "joins two passages that are not adjacent in the source. Mark the gap with … if the elision is intended, or quote the one passage that carries the claim"
+    : "was not found in its preserved source artifact";
+}
+
 function quoteIsPresent(artifact, quote) {
   const source = String(artifact ?? "");
   const segments = String(quote ?? "").split(quoteElision).map((part) => part.trim()).filter(Boolean);
@@ -686,7 +714,7 @@ function validateSynthesizedClaim(
         issues.push(`${sourceLabel}.artifactPath is not listed as a successful source artifact for this run.`);
       } else {
         if (!quoteIsPresent(artifactText.get(source.artifactPath), source.supportQuote)) {
-          issues.push(`${sourceLabel}.supportQuote was not found in its preserved source artifact.`);
+          issues.push(`${sourceLabel}.supportQuote ${quoteFailure(artifactText.get(source.artifactPath), source.supportQuote)}.`);
         }
       }
     }
@@ -872,7 +900,7 @@ export function validateClinicalEvidencePackage({
       issues.push(`${label}.artifactPath is not listed as a successful source artifact for this run.`);
     } else {
       if (!quoteIsPresent(artifactText.get(value.artifactPath), value.supportQuote)) {
-        issues.push(`${label}.supportQuote was not found in its preserved source artifact.`);
+        issues.push(`${label}.supportQuote ${quoteFailure(artifactText.get(value.artifactPath), value.supportQuote)}.`);
       }
     }
     const domain = sourceDomain(value.sourceUrl);

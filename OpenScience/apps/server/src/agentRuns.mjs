@@ -511,7 +511,15 @@ function terminalFromMessages(messages) {
     // exist is checked separately against the declared outputs.
     if (typeof part.tool !== "string" || !part.tool.includes("evimed_")) continue;
     const errorCode = parsedToolErrorCode(part);
-    if (evidenceSourceTool(part.tool) && recoverableEvidenceSourceErrorCodes.has(errorCode)) continue;
+    // Keyed on the code, not on which tool asked. Every code in that set means
+    // an external source was unreachable or had nothing to give, and that is
+    // equally true whichever tool made the request. Pairing it with a
+    // hand-listed set of "evidence source" tools meant the list decided the
+    // verdict: an openFDA adverse-event query answering HTTP 400 failed a run
+    // that had produced every deliverable, only because adr_case_query was not
+    // on a list written before it mattered. A list of tools always lags the
+    // tools; the code is the fact.
+    if (recoverableEvidenceSourceErrorCodes.has(errorCode)) continue;
     const correctedByLaterSuccess = toolParts.slice(index + 1).some((candidate) => (
       candidate.tool === part.tool && successfulToolPart(candidate)
     ));
