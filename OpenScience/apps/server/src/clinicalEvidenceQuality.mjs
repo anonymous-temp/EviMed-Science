@@ -162,9 +162,16 @@ function sourceDomain(value) {
 function normalizedPassage(value) {
   return String(value ?? "")
     .normalize("NFKC")
+    // Soft hyphens and zero-width joiners survive NFKC and are invisible in the
+    // artifact, so a faithfully retyped quote silently fails to match.
+    .replace(/[­​‌‍﻿]/g, "")
     .replace(/[‘’“”"'＂＇]/g, "")
     .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ")
+    // PDF extraction routinely spaces out CJK runs ("速 效 救 心 丸"). The
+    // spacing is an artefact of the extractor, not of the source, so it must
+    // not decide whether a quote is found.
+    .replace(/(?<=[　-〿一-鿿＀-￯])\s+(?=[　-〿一-鿿＀-￯])/g, "")
     .trim()
     .toLowerCase();
 }
@@ -570,6 +577,10 @@ function validateSynthesizedClaim(
   }
   const supportNumbers = new Set();
   const seenArtifacts = new Set();
+  // The same paper fetched twice — once by DOI, once by PMCID — lands in two
+  // different artifact directories, so path identity alone would let one study
+  // pose as two. Its landing URL is the same either way.
+  const seenSourceUrls = new Set();
   for (const [sourceIndex, source] of sources.entries()) {
     const sourceLabel = `${label}.supportingSources[${sourceIndex}]`;
     if (!source || typeof source !== "object" || Array.isArray(source)) {
@@ -580,16 +591,25 @@ function validateSynthesizedClaim(
       if (!nonEmpty(source[field])) issues.push(`${sourceLabel}.${field} must be a non-empty string.`);
     }
     if (!accessLevels.has(source.accessLevel)) {
-      issues.push(`${sourceLabel}.accessLevel must identify verified content access, not bibliographic metadata.`);
+      issues.push(`${sourceLabel}.accessLevel is ${JSON.stringify(source.accessLevel)}; use exactly one of ${[...accessLevels].join(", ")} to record how much of the preserved artifact you read.`);
+    }
+    const sourceIdentity = nonEmpty(source.sourceUrl)
+      ? source.sourceUrl.trim().toLowerCase().replace(/\/+$/, "")
+      : "";
+    if (sourceIdentity) {
+      if (seenSourceUrls.has(sourceIdentity)) {
+        issues.push(`${sourceLabel}.sourceUrl duplicates another supporting source. One document supports one source, however many times it is listed — drop the repeat and restate any count that assumed independent studies.`);
+      }
+      seenSourceUrls.add(sourceIdentity);
     }
     if (!validSupportingPassage(source.supportQuote)) {
       issues.push(`${sourceLabel}.supportQuote must contain a direct supporting passage.`);
     }
     if (!validSourceArtifactPath(source.artifactPath)) {
-      issues.push(`${sourceLabel}.artifactPath must be a safe .evimed-sources workspace path.`);
+      issues.push(`${sourceLabel}.artifactPath is ${JSON.stringify(source.artifactPath)}, which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.`);
     } else {
       if (seenArtifacts.has(source.artifactPath)) {
-        issues.push(`${sourceLabel}.artifactPath duplicates another supporting source.`);
+        issues.push(`${sourceLabel}.artifactPath duplicates another supporting source. One document supports one source, however many times it is listed — drop the repeat and restate any count that assumed independent studies.`);
       }
       seenArtifacts.add(source.artifactPath);
       if (!successfulArtifacts.has(source.artifactPath)) {
@@ -751,7 +771,7 @@ export function validateClinicalEvidencePackage({
       continue;
     }
     if (!accessLevels.has(value.accessLevel)) {
-      issues.push(`${label}.accessLevel must identify verified content access, not bibliographic metadata.`);
+      issues.push(`${label}.accessLevel is ${JSON.stringify(value.accessLevel)}; use exactly one of ${[...accessLevels].join(", ")} to record how much of the preserved artifact you read.`);
     }
     if (
       deepResearch
@@ -779,7 +799,7 @@ export function validateClinicalEvidencePackage({
       }
     }
     if (!validSourceArtifactPath(value.artifactPath)) {
-      issues.push(`${label}.artifactPath must be a safe .evimed-sources workspace path.`);
+      issues.push(`${label}.artifactPath is ${JSON.stringify(value.artifactPath)}, which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.`);
     } else if (!successfulArtifacts.has(value.artifactPath)) {
       issues.push(`${label}.artifactPath is not listed as a successful source artifact for this run.`);
     } else {

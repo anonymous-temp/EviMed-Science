@@ -175,6 +175,12 @@ Write `clinical-evidence-matrix.json` with a top-level `claims` array containing
 
 `referenceNumber` must resolve to the numbered reference list. `supportQuote` must be a contiguous verbatim passage present in the preserved source artifact. Every numeral in a claim must also appear in the quote, source title, or identifier.
 
+**`artifactPath` is copied from a tool result — never typed by hand.** Only two tools preserve an artifact you may cite: `evimed_open_access_full_text` (papers, by DOI or PMCID) and `evimed_official_page_fetch` (labels, guidelines, regulatory and institutional pages). Each returns the workspace path it wrote under `.evimed-sources/`; that exact string is the `artifactPath`. A search hit is not an artifact — search tells you what exists, preservation is a second call.
+
+So when you want to cite something you have only seen in search results, **preserve it first**: fetch the full text by its DOI or PMCID, or fetch its official page by URL. If neither preserves it — no open-access copy, no reachable official page — then you have not read that source and it cannot carry a claim. Cite the sources you did preserve instead, and if that leaves the point unsupported, say in the report that the evidence was not obtainable. Do not describe the gap in the path field: a string like `abstract-only PMID:15940087` or `regulatory-record NMPA速效救心丸` is not a path, and writing one asserts a verification that never happened.
+
+`accessLevel` is exactly one of `full_text`, `official_page`, `abstract`, `structured_record` — no other value is accepted. It records how much of the source the preserved artifact actually contains, so `abstract` and `structured_record` still require a preserved artifact to quote from; they mark a partial document, not a missing one.
+
 For an emergency-call claim, the contiguous quote must itself contain both the
 action to call emergency services and the relevant symptom condition. A quote
 that only describes the symptom is not sufficient.

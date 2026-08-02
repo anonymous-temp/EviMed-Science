@@ -172,6 +172,19 @@ test("matches source quotes across typographic quote styles and accepts a comple
   assert.equal(result.valid, true, result.issues.join("\n"));
 });
 
+test("extractor artefacts in the artifact do not hide a quote that is really there", () => {
+  const input = validPackage();
+  // A PDF extractor spaces out CJK runs and leaves soft hyphens behind; both are
+  // invisible to the agent reading the artifact, so a faithful quote must match.
+  input.matrix.claims[0].supportQuote = "The randomized cohort was followed for 12 months.";
+  input.sourceArtifacts[".evimed-sources/a/page.md"] +=
+    "\nThe random­ized cohort was followed for 12 months.";
+  input.matrix.claims[1].supportQuote = "速效救心丸用于缓解胸闷症状。";
+  input.sourceArtifacts[".evimed-sources/b/fulltext.md"] += "\n速 效 救 心 丸 用 于 缓 解 胸 闷 症 状 。";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
 test("rejects runtime-process prose and combined claim markers in the academic report", () => {
   const input = validPackage();
   input.reportText = input.reportText
@@ -689,6 +702,22 @@ test("rejects a synthesized claim resting on a single source", () => {
   );
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /supportingSources must name at least two distinct sources/);
+});
+
+test("rejects one document posing as two sources when it was fetched two ways", () => {
+  const result = validateClinicalEvidencePackage(
+    withSynthesizedClaim((claim) => ({
+      ...claim,
+      supportingSources: [
+        claim.supportingSources[0],
+        // Same paper, fetched again by another identifier: a second artifact
+        // directory, but the same document behind it.
+        { ...claim.supportingSources[1], sourceUrl: claim.supportingSources[0].sourceUrl },
+      ],
+    })),
+  );
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /sourceUrl duplicates another supporting source/);
 });
 
 test("rejects a synthesized claim whose source count exceeds its sources", () => {
