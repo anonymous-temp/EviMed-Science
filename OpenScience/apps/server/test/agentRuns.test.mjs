@@ -1249,6 +1249,28 @@ test("deep research tolerates documented source misses but requires invalid EviM
       ],
     },
     {
+      // The tolerance used to require the tool to be on a hand-written list of
+      // "evidence source" tools. openFDA answering 400 is the same unreachable
+      // source whether literature search or an adverse-event query asked it,
+      // and a run that produced every deliverable failed over the difference.
+      name: "adverse-event query whose public source was unreachable",
+      expectedStatus: "succeeded",
+      expectedErrorCode: null,
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_adr_case_query",
+          state: {
+            status: "error",
+            error: JSON.stringify({
+              status: "error",
+              error: { code: "public_source_http_error" },
+            }),
+          },
+        },
+      ],
+    },
+    {
       name: "uncorrected invalid deduplication input",
       expectedStatus: "failed",
       expectedErrorCode: "runtime_tool_error",

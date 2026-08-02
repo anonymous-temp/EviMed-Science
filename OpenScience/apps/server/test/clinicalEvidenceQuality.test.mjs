@@ -247,6 +247,29 @@ test("a quote may omit an inline citation marker the extractor left in the sente
   assert.equal(result.valid, true, result.issues.join("\n"));
 });
 
+test("an unmarked join is reported as a join, not as a missing quote", () => {
+  // A real run spliced two passages of one paper at "borneol" with no gap mark.
+  // Both halves are in the document; the repair is to mark the elision, which
+  // "not found in its preserved source artifact" does not tell anyone.
+  const input = validPackage();
+  input.sourceArtifacts[".evimed-sources/a/page.md"] +=
+    "\nCalcium measurement revealed that borneol activated the TRPM8 channel in a dose-dependent manner."
+    + " Tear production rose in the treated animals over the following week."
+    + " Borneol at micromolar concentrations did not affect the viability of the cultured corneal cells.";
+  input.matrix.claims[0].supportQuote =
+    "Calcium measurement revealed that borneol activated the TRPM8 channel in a dose-dependent manner."
+    + " Borneol at micromolar concentrations did not affect the viability of the cultured corneal cells.";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /joins two passages that are not adjacent in the source/);
+
+  // Marking the gap makes the same quotation acceptable.
+  input.matrix.claims[0].supportQuote =
+    "Calcium measurement revealed that borneol activated the TRPM8 channel in a dose-dependent manner."
+    + " … Borneol at micromolar concentrations did not affect the viability of the cultured corneal cells.";
+  assert.equal(validateClinicalEvidencePackage(input).valid, true);
+});
+
 test("a quote the source does not contain still fails, however it is spaced", () => {
   const input = validPackage();
   // Same words as the artifact except one the source never states.
