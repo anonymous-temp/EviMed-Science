@@ -809,16 +809,18 @@ async function requiredSpecialistArtifacts(
     // that reply cannot be found in the source, which the matrix check below
     // eventually catches — but only as "this quote does not match", long after
     // the cause. Name the cause instead.
+    //
+    // It names the cause, so it is carried into the verdict rather than
+    // returned as one. Delegation is what makes quotations go wrong; it is not
+    // itself a wrong quotation. When the matrix checks below find nothing —
+    // every quote matched its preserved source — the package is traceable on
+    // the evidence, and withholding it over how the agent got there delivers
+    // nothing for a defect that did not occur. When they do find something,
+    // this notice leads and explains it.
     const delegatedReads = delegatedDocumentReads(assistantMessages);
-    if (delegatedReads.length > 0) {
-      return {
-        artifacts,
-        errorCode: "specialist_delegated_evidence_read",
-        qualityIssues: [
-          `Reading retrieved evidence was delegated to a subagent ${delegatedReads.length} time(s); a subagent replies in prose, so quotations taken from it are not the source's wording. Read tool-output files with the read tool. Delegate a question, never a document.`,
-        ],
-      };
-    }
+    const delegationNotice = delegatedReads.length > 0
+      ? `Reading retrieved evidence was delegated to a subagent ${delegatedReads.length} time(s); a subagent replies in prose, so quotations taken from it are not the source's wording. Read tool-output files with the read tool. Delegate a question, never a document.`
+      : null;
     let matrix;
     try {
       matrix = JSON.parse(files.get("clinical-evidence-matrix.json") ?? "");
@@ -898,9 +900,18 @@ async function requiredSpecialistArtifacts(
         artifacts,
         errorCode: "specialist_evidence_traceability_failed",
         qualityIssues: [
+          ...(delegationNotice ? [`MUST FIX — ${delegationNotice}`] : []),
           ...blocking.map((issue) => `MUST FIX — ${issue}`),
           ...rest,
         ],
+        qualityDegradable: true,
+      };
+    }
+    if (delegationNotice) {
+      return {
+        artifacts,
+        errorCode: "specialist_delegated_evidence_read",
+        qualityIssues: [delegationNotice],
         qualityDegradable: true,
       };
     }
