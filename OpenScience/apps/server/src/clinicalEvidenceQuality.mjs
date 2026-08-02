@@ -192,10 +192,36 @@ function normalizedSearchQuery(value) {
     .toLowerCase();
 }
 
-// What survives when every separator is dropped: the letters and digits, in
-// order. Two passages with the same skeleton say the same words.
+// What survives when every separator is dropped: the letters, the digits, and
+// the symbols that change what a figure means. Two passages with the same
+// skeleton say the same thing. Comparison operators stay in — ">50%" and "50%"
+// are different findings and must not compare equal.
 function passageSkeleton(value) {
-  return normalizedPassage(value).replace(/[^\p{L}\p{N}]+/gu, "");
+  return normalizedPassage(value).replace(/[^\p{L}\p{N}<>=≥≤±%]+/gu, "");
+}
+
+// Scholarly elision. A quote may skip a passage it does not need, marking the
+// gap: each segment must still be verbatim, and the segments must appear in the
+// source in the order written, without overlapping.
+const quoteElision = /\s*(?:\.{3,}|…)+\s*/;
+
+// A superscript citation rendered inline by the extractor — "...coronary spasm
+// patients.23 Li Jin et al found..." — belongs to the document's apparatus, not
+// to the sentence, and no one quoting the sentence would copy it. The preceding
+// character must not be a digit, or the 25 of "0.25" would be read as a marker.
+const inlineReferenceMarker = /(?<=[^\d\s][.。!?])\d{1,3}(?=\s|$)/gu;
+
+function segmentsPresentInOrder(haystack, segments, project) {
+  if (!haystack) return false;
+  let from = 0;
+  for (const segment of segments) {
+    const needle = project(segment);
+    if (!needle) return false;
+    const at = haystack.indexOf(needle, from);
+    if (at < 0) return false;
+    from = at + needle.length;
+  }
+  return true;
 }
 
 // A preserved artifact carries extraction noise inside its sentences: a PDF
@@ -204,16 +230,24 @@ function passageSkeleton(value) {
 // extractor leaves a space before punctuation ("activity 37 ."). A quote copied
 // the way a human reads the sentence then fails literal containment even though
 // every word of it is there. Falling back to the skeleton accepts the
-// formatting difference and nothing else: the letters and digits must still
-// appear contiguously and in order, so a quote the source does not contain
+// formatting difference and nothing else: the words, figures and comparison
+// operators must still appear in order, so a quote the source does not contain
 // still fails.
+//
+// A quote may also elide — mark a skipped passage with … — the way any scholarly
+// quotation does. Each segment is then verified on its own, in order and without
+// overlapping, so an elision cannot join two passages that do not occur in that
+// sequence.
 function quoteIsPresent(artifact, quote) {
-  const preserved = normalizedPassage(artifact);
-  const passage = normalizedPassage(quote);
-  if (!preserved || !passage) return false;
-  if (preserved.includes(passage)) return true;
-  const skeleton = passageSkeleton(quote);
-  return skeleton.length > 0 && passageSkeleton(artifact).includes(skeleton);
+  const source = String(artifact ?? "");
+  const segments = String(quote ?? "").split(quoteElision).map((part) => part.trim()).filter(Boolean);
+  if (!source || !segments.length) return false;
+  // The artifact as preserved, then with inline citation markers taken out.
+  for (const text of [source, source.replace(inlineReferenceMarker, "")]) {
+    if (segmentsPresentInOrder(normalizedPassage(text), segments, normalizedPassage)) return true;
+    if (segmentsPresentInOrder(passageSkeleton(text), segments, passageSkeleton)) return true;
+  }
+  return false;
 }
 
 // The text a claim's numeric and quotational support is drawn from. Direct

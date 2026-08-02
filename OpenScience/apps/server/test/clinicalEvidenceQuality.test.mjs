@@ -200,6 +200,53 @@ test("separator noise inside a preserved sentence does not hide a quote that is 
   assert.equal(result.valid, true, result.issues.join("\n"));
 });
 
+test("an elided quote is verified segment by segment, in the order written", () => {
+  const input = validPackage();
+  input.sourceArtifacts[".evimed-sources/a/page.md"] +=
+    "\nCarriers were at higher risk (OR 1.242). Age and smoking were also recorded."
+    + " The genotype frequencies were 48.72, 42.67 and 8.6% in patients.";
+  input.matrix.claims[0].supportQuote =
+    "Carriers were at higher risk (OR 1.242). ... The genotype frequencies were 48.72, 42.67 and 8.6% in patients.";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
+test("an elision cannot reorder the source or invent a segment", () => {
+  const base = validPackage();
+  base.sourceArtifacts[".evimed-sources/a/page.md"] +=
+    "\nCarriers were at higher risk (OR 1.242). The genotype frequencies were 48.72% in patients.";
+
+  const reordered = validPackage();
+  reordered.sourceArtifacts = { ...base.sourceArtifacts };
+  reordered.matrix.claims[0].supportQuote =
+    "The genotype frequencies were 48.72% in patients. ... Carriers were at higher risk (OR 1.242).";
+  assert.equal(validateClinicalEvidencePackage(reordered).valid, false, "segments out of source order must fail");
+
+  const invented = validPackage();
+  invented.sourceArtifacts = { ...base.sourceArtifacts };
+  invented.matrix.claims[0].supportQuote =
+    "Carriers were at higher risk (OR 1.242). ... Mortality fell by half in the treated arm.";
+  assert.equal(validateClinicalEvidencePackage(invented).valid, false, "a segment absent from the source must fail");
+});
+
+test("dropping a comparison operator is not a formatting difference", () => {
+  const input = validPackage();
+  input.sourceArtifacts[".evimed-sources/a/page.md"] += "\nRisk was reduced by >50% in the treated arm.";
+  input.matrix.claims[0].supportQuote = "Risk was reduced by 50% in the treated arm.";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false, "\">50%\" and \"50%\" are different findings");
+});
+
+test("a quote may omit an inline citation marker the extractor left in the sentence", () => {
+  const input = validPackage();
+  input.sourceArtifacts[".evimed-sources/a/page.md"] +=
+    "\nGTN tolerance was exacerbated in coronary spasm patients.23 Li Jin et al reported the same effect.";
+  input.matrix.claims[0].supportQuote =
+    "GTN tolerance was exacerbated in coronary spasm patients. Li Jin et al reported the same effect.";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
 test("a quote the source does not contain still fails, however it is spaced", () => {
   const input = validPackage();
   // Same words as the artifact except one the source never states.
@@ -472,19 +519,32 @@ test("rejects authored retrieval excuses and uncited Chinese practical steps or 
 });
 
 test("rejects unsupported antacid or wait-and-see advice in the practical answer", () => {
-  const input = validPackage();
-  input.reportText = input.reportText.replace(
-    /## 结论与实际处置[\s\S]*$/,
-    [
-      "## 结论与实际处置",
-      "速效救心丸不应延误急诊评估。[claim:CLM-003]",
-      "不要尝试抗酸药并等待症状变化。[claim:CLM-003] "
-        + "结论必须同时保留临床紧迫性、适用边界和不确定性。".repeat(30),
-    ].join("\n"),
+  // The rule forbids ADDING this advice. Its earlier fixture said 不要尝试抗酸药
+  // 并等待症状变化 — a prohibition, the same shape as 不可等待观察症状变化, which a
+  // real run was flagged for writing. The recommendation is what must be caught.
+  const advice = (line) => {
+    const input = validPackage();
+    input.reportText = input.reportText.replace(
+      /## 结论与实际处置[\s\S]*$/,
+      [
+        "## 结论与实际处置",
+        "速效救心丸不应延误急诊评估。[claim:CLM-003]",
+        `${line}[claim:CLM-003] ` + "结论必须同时保留临床紧迫性、适用边界和不确定性。".repeat(30),
+      ].join("\n"),
+    );
+    return validateClinicalEvidencePackage(input);
+  };
+
+  const recommended = advice("可以先尝试抗酸药并等待症状变化。");
+  assert.equal(recommended.valid, false);
+  assert.match(recommended.issues.join("\n"), /unsupported advice about antacids or waiting/);
+
+  const forbidden = advice("不要尝试抗酸药并等待症状变化。");
+  assert.doesNotMatch(
+    forbidden.issues.join("\n"),
+    /unsupported advice about antacids or waiting/,
+    "telling the reader not to do it is not advising them to",
   );
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /unsupported advice about antacids or waiting/);
 });
 
 test("rejects an unrequested medicine and exclusive safety language", () => {
@@ -864,6 +924,31 @@ test("the medication-response rule judges the advice, not the discussion of it",
     "服药后症状缓解与否不足以判断是否需要去医院",
   ]) {
     assert.ok(!pattern.test(safe), `correct advice must not be flagged: ${safe}`);
+  }
+});
+
+test("the self-care rule reads a prohibition as a prohibition", async () => {
+  // 可 lives inside 不可, 建议 inside 不建议, 先 inside 不要先. Matching the
+  // recommendation word inside its own negation turned "不可等待观察症状变化" —
+  // the instruction the rule exists to require — into the advice it forbids.
+  const rules = JSON.parse(await readFile(new URL("../src/clinical-safety-rules.json", import.meta.url), "utf8"));
+  const rule = rules.rules.find((entry) => entry.id === "unsupported-self-care");
+  const pattern = new RegExp(rule.pattern, rule.flags ?? "");
+
+  for (const advice of [
+    "可以先吃点胃药，观察一下症状",
+    "建议先服用抗酸药后再观察症状变化",
+    "不妨先等待观察症状是否缓解",
+  ]) {
+    assert.ok(pattern.test(advice), `unsupported self-care must be caught: ${advice}`);
+  }
+  for (const safe of [
+    "不可等待观察症状变化，应立即拨打 120",
+    "不要等待症状缓解，不要自己驾车",
+    "不建议等待观察症状变化",
+    "切勿先观察症状变化，立即呼叫急救",
+  ]) {
+    assert.ok(!pattern.test(safe), `a prohibition must not read as advice: ${safe}`);
   }
 });
 
