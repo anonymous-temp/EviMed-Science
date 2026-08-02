@@ -180,6 +180,42 @@ function validSupportingPassage(value) {
   return normalizedPassage(value).replace(/\s+/g, "").length > 0;
 }
 
+// A search is identified by its terms. Retyping the same search into the log
+// without its phrase quotes, or with different spacing, is a transcription
+// difference — treating it as a search that never ran would accuse the agent of
+// inventing provenance it did not invent. The terms themselves must still match.
+function normalizedSearchQuery(value) {
+  return String(value ?? "")
+    .replace(/[‘’“”"'＂＇]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+// What survives when every separator is dropped: the letters and digits, in
+// order. Two passages with the same skeleton say the same words.
+function passageSkeleton(value) {
+  return normalizedPassage(value).replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+// A preserved artifact carries extraction noise inside its sentences: a PDF
+// line break splits a word ("coronary artery dis - ease"), a markdown list
+// marker lands mid-sentence ("call 999 if: - you get sudden pain"), an
+// extractor leaves a space before punctuation ("activity 37 ."). A quote copied
+// the way a human reads the sentence then fails literal containment even though
+// every word of it is there. Falling back to the skeleton accepts the
+// formatting difference and nothing else: the letters and digits must still
+// appear contiguously and in order, so a quote the source does not contain
+// still fails.
+function quoteIsPresent(artifact, quote) {
+  const preserved = normalizedPassage(artifact);
+  const passage = normalizedPassage(quote);
+  if (!preserved || !passage) return false;
+  if (preserved.includes(passage)) return true;
+  const skeleton = passageSkeleton(quote);
+  return skeleton.length > 0 && passageSkeleton(artifact).includes(skeleton);
+}
+
 // The text a claim's numeric and quotational support is drawn from. Direct
 // claims draw on their own single source; synthesized claims draw on every
 // supporting source plus the claim statement itself.
@@ -615,9 +651,7 @@ function validateSynthesizedClaim(
       if (!successfulArtifacts.has(source.artifactPath)) {
         issues.push(`${sourceLabel}.artifactPath is not listed as a successful source artifact for this run.`);
       } else {
-        const preserved = normalizedPassage(artifactText.get(source.artifactPath));
-        const quote = normalizedPassage(source.supportQuote);
-        if (!preserved || !quote || !preserved.includes(quote)) {
+        if (!quoteIsPresent(artifactText.get(source.artifactPath), source.supportQuote)) {
           issues.push(`${sourceLabel}.supportQuote was not found in its preserved source artifact.`);
         }
       }
@@ -803,9 +837,7 @@ export function validateClinicalEvidencePackage({
     } else if (!successfulArtifacts.has(value.artifactPath)) {
       issues.push(`${label}.artifactPath is not listed as a successful source artifact for this run.`);
     } else {
-      const preserved = normalizedPassage(artifactText.get(value.artifactPath));
-      const quote = normalizedPassage(value.supportQuote);
-      if (!preserved || !quote || !preserved.includes(quote)) {
+      if (!quoteIsPresent(artifactText.get(value.artifactPath), value.supportQuote)) {
         issues.push(`${label}.supportQuote was not found in its preserved source artifact.`);
       }
     }
@@ -885,7 +917,7 @@ export function validateClinicalEvidencePackage({
     const sourceRecords = Array.isArray(searchLog?.sourceRecords) ? searchLog.sourceRecords : [];
     const normalizedQueryEntries = queries.map((entry) => ({
       database: typeof entry?.database === "string" ? entry.database.trim().toLowerCase() : "",
-      query: typeof entry?.query === "string" ? entry.query.trim().toLowerCase() : "",
+      query: normalizedSearchQuery(entry?.query),
     }));
     const normalizedQueries = new Set(
       normalizedQueryEntries.map((entry) => entry.query).filter(Boolean),
@@ -914,7 +946,7 @@ export function validateClinicalEvidencePackage({
     if (Array.isArray(executedSearchQueries)) {
       const executed = new Set(
         executedSearchQueries
-          .map((value) => typeof value === "string" ? value.trim().toLowerCase() : "")
+          .map((value) => normalizedSearchQuery(value))
           .filter(Boolean),
       );
       const undocumented = [...normalizedQueries].filter((query) => !executed.has(query));
