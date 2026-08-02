@@ -206,7 +206,12 @@ test("permits an evidence-accessibility limitation but still rejects uncited pra
     .replace(/## 科学局限[\s\S]*?(?=\n## 结论与实际处置)/, "## 科学局限\n核心指南全文不可及。")
     .replace(
       /## 结论与实际处置[\s\S]*$/,
-      "## 结论与实际处置\n1. 不要自行驾车。\n2. 胃药缓解不能排除心脏病。[claim:CLM-001]",
+      // "胃药缓解不能排除心脏病" states that antacid relief CANNOT rule out a
+      // cardiac cause, which is the correct finding — and it was asserted here
+      // as something the rule must reject. The rule matched the subject matter
+      // rather than the claim, and this test held that mistake in place. Use
+      // advice that genuinely tells a reader to self-triage on the response.
+      "## 结论与实际处置\n1. 不要自行驾车。\n2. 胃药缓解说明不是心脏病。[claim:CLM-001]",
     );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
@@ -752,4 +757,51 @@ test("every bookkeeping pattern still matches a message the module actually emit
 
   const dead = patterns.filter((pattern) => !emitted.some((message) => pattern.test(message)));
   assert.deepEqual(dead.map(String), [], "these patterns match no message the module emits");
+});
+
+test("the medication-response rule judges the advice, not the discussion of it", async () => {
+  // A keyword-proximity rule cannot tell an assertion from its refutation: a
+  // report concluding "three studies found relief cannot distinguish cardiac
+  // from non-cardiac pain" puts the drug, "relief" and "diagnose" in one
+  // sentence exactly as advice recommending it would. Eight production runs
+  // were flagged for making precisely the finding the analysis exists to make,
+  // and deleting the passage was the cheapest way to comply. The harm lives in
+  // the practical answer, so that is what the rule reads.
+  const rules = JSON.parse(await readFile(new URL("../src/clinical-safety-rules.json", import.meta.url), "utf8"));
+  const rule = rules.rules.find((entry) => entry.id === "medication-response-not-diagnostic");
+  assert.equal(rule.kind, "practical_forbidden", "the analysis body must be free to examine the question");
+  const pattern = new RegExp(rule.pattern, rule.flags ?? "");
+
+  for (const advice of [
+    "先含服硝酸甘油，如果缓解说明是心绞痛，可以先在家观察",
+    "若速效救心丸能缓解疼痛，则基本可以排除心梗",
+    "通过含服后的反应判断是否需要去医院",
+    "含服硝酸甘油后缓解即为心源性，可暂不就医",
+  ]) {
+    assert.ok(pattern.test(advice), `unsafe self-triage advice must be caught: ${advice}`);
+  }
+
+  for (const safe of [
+    "不要凭服药反应判断是否需要就医——缓解与否均不能排除或确认心脏病",
+    "立即呼叫 120，不要等待观察服药效果",
+    "已确诊冠心病者可在呼叫 120 后按说明书含服硝酸甘油，服药不改变呼叫决策",
+  ]) {
+    assert.ok(!pattern.test(safe), `correct advice must not be flagged: ${safe}`);
+  }
+});
+
+test("the emergency-delay rule accepts the emergency number the skill asks for", async () => {
+  // The skill instructs the report to localise the emergency number to 120, and
+  // the rule demanded 呼救/急救/就医/评估 — so "不得延误呼叫 120", which is what
+  // the skill asked for, failed the check that exists to require it.
+  const rules = JSON.parse(await readFile(new URL("../src/clinical-safety-rules.json", import.meta.url), "utf8"));
+  const rule = rules.rules.find((entry) => entry.id === "suxiao-must-not-delay-emergency");
+  const pattern = new RegExp(rule.pattern, rule.flags ?? "");
+
+  assert.ok(pattern.test("速效救心丸不适用于该场景的急救决策，服用速效救心丸不得延误呼叫 120"));
+  assert.ok(pattern.test("服用任何自救药物均不得延误呼叫 120 急救"));
+  assert.ok(pattern.test("不得因服用速效救心丸而延误就医"));
+  // It must still be a requirement, not a formality.
+  assert.ok(!pattern.test("立即呼叫 120，保持坐位"));
+  assert.ok(!pattern.test("速效救心丸可用于气滞血瘀型心绞痛"));
 });
