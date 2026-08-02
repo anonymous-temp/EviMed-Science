@@ -185,6 +185,32 @@ test("extractor artefacts in the artifact do not hide a quote that is really the
   assert.equal(result.valid, true, result.issues.join("\n"));
 });
 
+test("separator noise inside a preserved sentence does not hide a quote that is really there", () => {
+  // All three shapes are from real preserved artifacts: a PDF line break split
+  // a word, a markdown list marker landed mid-sentence, and the extractor left
+  // a space before the full stop.
+  const input = validPackage();
+  input.matrix.claims[0].supportQuote = "The positive likelihood ratio for coronary artery disease was 1.1.";
+  input.sourceArtifacts[".evimed-sources/a/page.md"] +=
+    "\nThe positive likelihood ratio for coronary artery dis - ease was 1.1 .";
+  input.matrix.claims[1].supportQuote = "Call 999 if: you get sudden pain in your chest that does not go away.";
+  input.sourceArtifacts[".evimed-sources/b/fulltext.md"] +=
+    "\nCall 999 if:\n- you get sudden pain in your chest that does not go away.";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
+test("a quote the source does not contain still fails, however it is spaced", () => {
+  const input = validPackage();
+  // Same words as the artifact except one the source never states.
+  input.matrix.claims[0].supportQuote = "The positive likelihood ratio for coronary artery disease was 9.7.";
+  input.sourceArtifacts[".evimed-sources/a/page.md"] +=
+    "\nThe positive likelihood ratio for coronary artery dis - ease was 1.1 .";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /supportQuote was not found in its preserved source artifact/);
+});
+
 test("rejects runtime-process prose and combined claim markers in the academic report", () => {
   const input = validPackage();
   input.reportText = input.reportText
@@ -517,6 +543,18 @@ test("rejects documented deep-research queries that were not successfully execut
   assert.match(result.issues.join("\n"), /must exactly match successful evidence-search calls/);
 });
 
+test("a search retyped into the log without its phrase quotes is the same search", () => {
+  const input = deepResearchPackage();
+  const executed = JSON.parse(input.searchLogText).queries.map((entry) => entry.query);
+  // The run executed a phrase search; the log records the same terms unquoted
+  // and respaced. That is transcription, not a search the agent never ran.
+  input.executedSearchQueries = executed.map((query, index) =>
+    index === 0 ? `"${query.split(" ").join('" "')}"  ` : query,
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
 test("allows the same query text to be run against different source classes", () => {
   const input = deepResearchPackage();
   const search = JSON.parse(input.searchLogText);
@@ -814,6 +852,12 @@ test("the medication-response rule judges the advice, not the discussion of it",
     "不要凭服药反应判断是否需要就医——缓解与否均不能排除或确认心脏病",
     "立即呼叫 120，不要等待观察服药效果",
     "已确诊冠心病者可在呼叫 120 后按说明书含服硝酸甘油，服药不改变呼叫决策",
+    // 不得 is the formal prohibition of clinical Chinese and the wording a real
+    // run produced. It was absent from the rule's negation vocabulary, so the
+    // report was flagged for stating the very rule the gate exists to enforce.
+    "不得以服药后胸痛是否缓解来判断是否严重或是否需要去医院",
+    "禁止用含服后的缓解情况区分心源性与非心源性胸痛",
+    "勿以服药反应判断是否就医",
   ]) {
     assert.ok(!pattern.test(safe), `correct advice must not be flagged: ${safe}`);
   }
