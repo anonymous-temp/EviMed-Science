@@ -46,6 +46,12 @@ Record each completed search in `clinical-evidence-search.json` immediately afte
 the search succeeds. The JSON must exactly match successful search-tool calls
 from the current run. Planned, duplicate, or failed searches do not count.
 
+One log entry per call, and copy the query string verbatim from the call you
+made. A single search that reached several underlying databases is still one
+search: name the source class in `database` if that is clearer, but do not split
+it into an entry per database, and do not paraphrase or shorten the query. An
+entry whose query you never sent claims a search that did not happen.
+
 For an acute pressure-like chest symptom question, adapt the queries to examine
 urgent cardiovascular triage, diagnostic pathways, limits of symptom-based
 discrimination, relevant non-cardiac causes, population differences, current

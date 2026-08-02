@@ -858,6 +858,10 @@ test("the medication-response rule judges the advice, not the discussion of it",
     "不得以服药后胸痛是否缓解来判断是否严重或是否需要去医院",
     "禁止用含服后的缓解情况区分心源性与非心源性胸痛",
     "勿以服药反应判断是否就医",
+    // The negation sits between the relief and the inference, not before the
+    // drug, so only a guard that reads the span between them exonerates this.
+    "含服药物后胸痛是否缓解不能用于判断是否为心脏病或是否需要就医",
+    "服药后症状缓解与否不足以判断是否需要去医院",
   ]) {
     assert.ok(!pattern.test(safe), `correct advice must not be flagged: ${safe}`);
   }
