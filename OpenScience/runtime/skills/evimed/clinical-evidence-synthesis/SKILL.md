@@ -26,6 +26,25 @@ Do not claim completion if any required skill fails to load.
 4. Write a publication-grade evidence analysis, not an expanded chat answer. Let the question and usable evidence determine length; do not pad the report or repeat conclusions to meet a quota.
 5. Keep the safety-first practical answer separate and concise. Clinical urgency takes precedence over product discussion.
 
+### Argue a thesis; do not answer a questionnaire
+
+A report that poses sub-questions, searches each, and returns a verdict on each is not analysis — it is a lookup table with citations. These questions are chosen because they sit at an edge of what is known, and an edge is where the work is.
+
+State the bottom line first, then what would have to hold for it to be true, then attack each of those conditions with everything available. The reader should be able to see the argument being built, and see which load-bearing piece is weakest.
+
+**Absence of direct evidence is where the analysis begins, not where it ends.** "No study was found" is a finding about the literature, not an answer to the question. Having established it, you owe the reader the best defensible answer the evidence still permits, reached by whichever of these apply:
+
+- **Mechanism** — physical, chemical, or pharmacological reasoning from measured constants toward the direction, and where possible the magnitude, of the effect;
+- **Quantitative bounding** — take the constants you retrieved and compute. A vapour pressure and a sealed-system loss curve constrain an opened-container loss; a half-life and a dosing interval constrain accumulation; a sensitivity and a prevalence constrain post-test probability. An order-of-magnitude estimate with stated assumptions beats a refusal to estimate;
+- **Analogy** — a comparable agent, formulation, or system where the evidence does exist, with the differences that limit the transfer stated explicitly;
+- **Adjacent-population extrapolation** — with the indirectness named and its direction of bias argued;
+- **Converse and negative evidence** — what would already have been observed if the proposition were false, and whether it has been;
+- **Triangulation** — where two or more independent angles agree, say so and say why that agreement is or is not informative; where they conflict, adjudicate rather than list.
+
+Close by saying what evidence would settle the question — the study, measurement, or dataset that would convert the estimate into a finding. A question worth asking deserves a stated path to answering it.
+
+None of this licenses assertion beyond the evidence. It requires the opposite: every step above must be recorded as a derived claim (see "Derived results"), which makes the reasoning auditable and marks it in the report as reasoning rather than measurement.
+
 ## Deep-research protocol
 
 ### Question decomposition
@@ -205,6 +224,24 @@ A weighed cross-source conclusion — "across these four trials the evidence lea
 
 Numerals in a synthesized claim must either appear in one of the supporting quotes/titles/identifiers, or be a count of the supporting sources themselves ("4 项研究中 3 项…" — the gate counts). **A claim that says "three independent studies" needs three different documents behind it.** One paper cited three times is one study, and writing it as three overstates the evidence in the direction that matters most — a reader takes independent replication as far stronger than a single finding. Count the distinct artifactPaths before you write the number. Do not use the synthesized type to smuggle in numbers no source states, and do not use it for claims a single source does support — those stay direct claims.
 
+### Derived results (your own estimate, bound, or inference)
+
+`claimType: "derived"` is how you publish a conclusion no source states because you reasoned or computed it — the bounding estimate, the mechanistic inference, the extrapolation the "Argue a thesis" section asks for. It is the only claim type whose numerals need not appear in any source, because by construction they cannot.
+
+It is not a lighter standard, it is a different one. Where a direct claim is bonded to a verbatim quote, a derived claim is bonded to its working:
+
+- `claimId`, `claim`, `applicability`, `uncertainty` — as for direct claims.
+- `derivedFrom`: the claim ids this result reasons from. They must exist in the matrix, and following them must reach measured evidence — a derivation resting only on other derivations is not grounded.
+- `method`: the actual step from those inputs to this result — the relation applied, the arithmetic, the bound taken. Show the working, do not name it. "按一级动力学估算" is naming it; the equation, the inputs substituted, and the result is showing it.
+- `assumptions`: what must hold for the method to apply — held constant, assumed unchanged, taken as approximately linear.
+- `sensitivity`: what moves the result and by how much. An estimate whose fragility is unstated is worth less than no estimate.
+
+Every numeral you state in the report for a derived result must appear in its `method`, `assumptions`, `sensitivity`, or `uncertainty`. That is the audit trail replacing the missing quote: a reader can check your arithmetic even though they cannot check your quote.
+
+In the report, mark every line asserting a derived result with `〔推导〕` so it is never read as a measurement, and give it a hidden claim marker as usual. A derived result takes no numbered citation of its own — it is not a source; its inputs carry the citations.
+
+**A derived result may never appear in `安全优先的实际处置`.** Reason as far as the evidence allows in the analysis; what a reader is told to actually do must rest on measured evidence. If a derivation implies a more cautious action, state the caution in the analysis and give the practical step a directly supported claim.
+
 ### Bibliography and audit
 
 Write:
@@ -227,28 +264,29 @@ For organizations or official documents, use the issuing organization as the aut
 
 ## Required report structure
 
-Use a coherent academic structure containing these core sections. Merge adjacent analytical sections when that improves the argument, and add a medicine-specific subsection only when relevant:
+The structure carries the argument. Sections 2 through 6 are the argument being built and are the substance of the report; use these core sections, merge adjacent analytical sections when that improves the argument, and add a medicine-specific subsection only when relevant:
 
-1. `摘要`
-2. `临床问题与分析框架`
-3. `证据检索与评价方法`
-4. `证据结果`
-5. `病因鉴别与诊断推理`
-6. `急诊评估与风险分层`
-7. `药物证据与适用边界` when a medicine is named
-8. `讨论`
-9. `证据局限`
-10. `结论`
-11. `安全优先的实际处置`
-12. `参考文献`
+1. `摘要` — the bottom line first, then the strength it is held with
+2. `论点与判定条件` — the thesis, and what would have to hold for it to be true or false
+3. `证据基础与检索方法` — what was searched and what was found, reported as scholarly method; keep it proportionate, it is the ground of the argument and not the argument
+4. `逐角度论证与结果` — one subsection per angle attempted (direct evidence, mechanism, quantitative bounding, analogy, adjacent-population extrapolation, converse evidence), each saying what it establishes and what it cannot
+5. `三角互证与冲突处理` — where angles agree, whether that agreement is informative; where they conflict, which wins and why
+6. `推导与外推` — the derived results, each marked `〔推导〕`, with its working, assumptions, and sensitivity
+7. `讨论` — what the argument as a whole establishes, and what would settle the question
+8. `证据局限`
+9. `结论`
+10. `安全优先的实际处置`
+11. `参考文献`
+
+Sections 4, 5, and 6 are what distinguishes an analysis from a lookup. A report that reaches section 7 having only restated sources and declared a gap has not done the work — go back and attempt the angles.
 
 Keep `参考文献` as the final level-two section. Never append the practical answer, an operational note, or another report section after the numbered reference list.
 
 The methods section must report databases/source classes, complete query concepts, search date, eligibility criteria, deduplication, screening counts, access levels, and appraisal dimensions. Describe this as a scholarly method, not as a runtime log.
 
-The results section must synthesize evidence by clinical question, not list sources one by one. Compare agreement, conflict, directness, and certainty. Tables are encouraged for evidence characteristics and decision boundaries.
+The per-angle section must argue by angle, not list sources one by one. Each angle states what it establishes, how strongly, and what it cannot reach; compare agreement, conflict, directness, and certainty. Tables are encouraged for evidence characteristics and decision boundaries. An angle you attempted and that failed is worth reporting — say what you looked for, why it did not deliver, and what that absence itself implies.
 
-The discussion must explain what the evidence does and does not establish, distinguish acute undifferentiated symptoms from diagnosed chronic disease, and separate direct evidence from reasoned synthesis.
+The discussion must explain what the argument as a whole establishes, distinguish acute undifferentiated symptoms from diagnosed chronic disease, separate measured evidence from derived reasoning, and name the study or measurement that would settle the question.
 
 The limitations section must discuss only limitations that materially change interpretation, such as risk of bias, indirectness, imprecision, evidence form, publication bias, recency, population transferability, jurisdiction, or health-system applicability. Synthesize them into an argument rather than a checklist. Do not report tool, gateway, file, or page-retrieval failures in the academic report.
 
