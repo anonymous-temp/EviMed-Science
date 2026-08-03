@@ -210,7 +210,7 @@ Numerals in a synthesized claim must either appear in one of the supporting quot
 Write:
 
 - `references.bib` with one deduplicated entry for every numbered report reference;
-- `citation-ledger.csv` with one row per matrix claim;
+- `citation-ledger.csv` with a header row and one row per matrix claim. The header must name `claimId`, `referenceNumber`, and `supportQuote` columns; order does not matter and extra columns are welcome. Each row's `referenceNumber` must equal that claim's `referenceNumber` in the matrix;
 - `citation-audit.md` documenting unresolved identifiers, duplicates, corrections or retractions, metadata-only records, and claim-source mismatches.
 
 Record the checks actually performed and their findings, including unresolved

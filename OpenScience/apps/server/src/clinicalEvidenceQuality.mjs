@@ -59,7 +59,7 @@ const deepResearchProfile = "academic_deep_research_v1";
 const degradableQualityIssues = new Set([
   "references.bib must contain a bibliography entry for every numbered report reference.",
   "references.bib must contain a bibliography entry for every cited source URL.",
-  "citation-ledger.csv must contain a traceability header and one row per evidence-matrix claim.",
+  "citation-ledger.csv must have a header naming claimId, referenceNumber and supportQuote columns (any order, extra columns allowed) and one row per evidence-matrix claim.",
   "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.",
   "citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.",
   "citation-audit.md must reference at least one real audited source identifier from the evidence matrix.",
@@ -597,11 +597,44 @@ function reportSection(reportText, headingPattern) {
   return match?.[1] ?? "";
 }
 
+// Blanked, not deleted. The numeric audit reports the line it is unhappy with,
+// and it counts lines in this copy — so collapsing a section to one newline
+// moved every later line up and the number named a different line of the report
+// than the author would find. One production report ran to 125 lines while the
+// audited copy was 99: "Report line 68" pointed at a blank line, and a repair
+// asked to fix it had nowhere to go. Keeping the line count identical costs
+// nothing, since every check here reads content rather than position.
 function withoutReportSections(reportText, headingPattern) {
   return String(reportText ?? "").replace(
     new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${headingPattern})[^\\n]*\\n[\\s\\S]*?(?=\\n##\\s+|$)`, "gi"),
-    "\n",
+    (match) => "\n".repeat(match.split("\n").length - 1),
   );
+}
+
+// A CSV record is not a line: a quoted support quote may hold commas, doubled
+// quotes, and newlines, and the ledger is written by a csv writer that quotes
+// exactly that way. Counting lines therefore counted the wrong thing.
+function parseCsvRecords(text) {
+  const source = String(text ?? "").replace(/\r\n?/g, "\n");
+  const records = [];
+  let record = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (quoted) {
+      if (char !== '"') field += char;
+      else if (source[index + 1] === '"') { field += '"'; index += 1; }
+      else quoted = false;
+      continue;
+    }
+    if (char === '"') quoted = true;
+    else if (char === ",") { record.push(field); field = ""; }
+    else if (char === "\n") { record.push(field); records.push(record); record = []; field = ""; }
+    else field += char;
+  }
+  if (field || record.length) { record.push(field); records.push(record); }
+  return records.filter((row) => row.some((cell) => cell.trim()));
 }
 
 function standardCitationNumbers(value) {
@@ -1098,19 +1131,31 @@ export function validateClinicalEvidencePackage({
     }
     // citation-ledger.csv: a real cross-check — every matrix claim appears exactly
     // once and each row's reference number matches the claim it names.
-    const ledgerLines = String(citationLedgerText).trim().split(/\r?\n/).filter(Boolean);
-    if (
-      ledgerLines.length < claims.length + 1
-      // Positional header: the first three columns must be exactly claimId,
-      // referenceNumber, supportQuote — matching how each row is parsed below.
-      || !/^\s*"?(?:claimId|claim_id)"?\s*,\s*"?(?:referenceNumber|reference_number)"?\s*,\s*"?(?:supportQuote|support_quote)"?/i.test(ledgerLines[0] ?? "")
-    ) {
-      issues.push("citation-ledger.csv must contain a traceability header and one row per evidence-matrix claim.");
+    //
+    // Matched by column name, in any order. The header used to be positional —
+    // exactly claimId, referenceNumber, supportQuote in the first three columns
+    // — which no instruction stated and the preflight the agent is told to run
+    // until it passes never checked. Four consecutive production runs failed it;
+    // one rewrote its header three times, got the first two columns right, and
+    // could not guess that the third had to be the quote. A schema that is
+    // enforced but never written down is not a schema the run can satisfy, and
+    // column order carries no meaning here anyway.
+    const ledgerRecords = parseCsvRecords(citationLedgerText);
+    const ledgerHeader = (ledgerRecords[0] ?? []).map((cell) => cell.trim().toLowerCase().replace(/[_\s]/g, ""));
+    const claimIdColumn = ledgerHeader.indexOf("claimid");
+    const referenceColumn = ledgerHeader.indexOf("referencenumber");
+    // A run that records the quote as supportQuoteVerified has recorded the
+    // quote; the prefix is the requirement.
+    const quoteColumn = ledgerHeader.findIndex((name) => name.startsWith("supportquote"));
+    if (claimIdColumn < 0 || referenceColumn < 0 || quoteColumn < 0 || ledgerRecords.length < claims.length + 1) {
+      issues.push(
+        "citation-ledger.csv must have a header naming claimId, referenceNumber and supportQuote columns (any order, extra columns allowed) and one row per evidence-matrix claim.",
+      );
     } else {
       const ledgerRef = new Map();
-      for (const line of ledgerLines.slice(1)) {
-        const match = line.match(/^\s*"?([^",]+)"?\s*,\s*"?([^",]+)"?\s*,/);
-        if (match) ledgerRef.set(match[1].trim(), match[2].trim());
+      for (const row of ledgerRecords.slice(1)) {
+        const claimId = String(row[claimIdColumn] ?? "").trim();
+        if (claimId) ledgerRef.set(claimId, String(row[referenceColumn] ?? "").trim());
       }
       const matrixIds = new Set(claims.map((claim) => claim?.claimId));
       const ledgerMismatch = ledgerRef.size !== matrixIds.size
