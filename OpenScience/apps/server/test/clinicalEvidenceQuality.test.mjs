@@ -660,6 +660,100 @@ test("matches ordinal suffixes and zero-padded dates in direct numeric support",
   assert.equal(result.valid, true, result.issues.join("\n"));
 });
 
+// A package carrying one derived result: the analyst's own estimate, reasoned
+// from two quote-anchored claims, stated with its method, assumptions and
+// sensitivity, and marked in the report so no reader mistakes it for a measurement.
+function packageWithDerivedClaim(overrides = {}) {
+  const input = deepResearchPackage();
+  const derived = {
+    claimId: "CLM-101",
+    claimType: "derived",
+    claim: "在开盖频率与顶空条件给定时，冰片残余量在 6 个月约为初始值的 78%。",
+    method: "以来源报告的室温蒸汽压与密封体系 730 天损失曲线为输入，按一级逸散近似 ln(C/C0) = -k·t 反解 k，再以 6 个月代入，得残余 78%。",
+    assumptions: "假设温度恒定 20 ℃、每日开盖 2 次、顶空体积不变、基质不改变逸散路径。",
+    sensitivity: "开盖频率翻倍时残余降至约 61%；温度升至 30 ℃ 时该值再降约 9 个百分点。",
+    applicability: "仅适用于同类滴丸的密闭玻璃瓶包装，不外推至泡罩包装。",
+    uncertainty: "输入曲线来自密封体系，开封后气相边界条件不同，估计值为量级判断而非测定值。",
+    derivedFrom: ["CLM-001", "CLM-002"],
+    ...overrides,
+  };
+  input.matrix.claims = [...input.matrix.claims, derived];
+  input.reportText = input.reportText.replace(
+    "## 讨论\n",
+    "## 讨论\n〔推导〕在上述输入下，6 个月冰片残余约为 78%，开盖频率翻倍时约 61%。"
+      + " <!-- claim:CLM-101 -->\n",
+  );
+  return input;
+}
+
+test("accepts a derived result that shows its inputs, method and sensitivity", () => {
+  // The move the gate used to make impossible. A report holding a vapour
+  // pressure and a sealed-system loss curve could not put them together,
+  // because the estimate's numbers appear in no source — so every run learned
+  // to restate sources, declare the gap and stop.
+  const result = validateClinicalEvidencePackage(packageWithDerivedClaim());
+  assert.equal(result.valid, true, result.issues.join("\n"));
+  assert.ok(result.claimIds.includes("CLM-101"));
+});
+
+test("requires a derived result to be marked as derived wherever it is asserted", () => {
+  const input = packageWithDerivedClaim();
+  input.reportText = input.reportText.replace("〔推导〕", "");
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  // Blocking: an estimate a reader takes for a measurement is exactly what they
+  // cannot discount for themselves.
+  assert.match(result.blockingIssues.join("\n"), /without marking it as derived/);
+});
+
+test("keeps derived results out of the practical safety advice", () => {
+  const input = packageWithDerivedClaim();
+  input.reportText = input.reportText
+    .replace(" <!-- claim:CLM-101 -->\n", "\n")
+    .replace(
+      "## 实际处置",
+      "## 实际处置\n〔推导〕按估算 6 个月后残余约 78%，可据此更换。 <!-- claim:CLM-101 -->",
+    );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.blockingIssues.join("\n"), /practical advice must rest on measured evidence/);
+});
+
+test("refuses a derivation that never reaches measured evidence", () => {
+  const input = packageWithDerivedClaim({ derivedFrom: ["CLM-102"] });
+  input.matrix.claims = [...input.matrix.claims, {
+    ...input.matrix.claims.at(-1),
+    claimId: "CLM-102",
+    derivedFrom: ["CLM-101"],
+  }];
+  input.reportText = input.reportText.replace(
+    "<!-- claim:CLM-101 -->",
+    "<!-- claim:CLM-101 --> <!-- claim:CLM-102 -->",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /derived only from other derived claims/);
+});
+
+test("audits a derived number against the derivation rather than against a source", () => {
+  // The number is in the working, so it passes. Change the prose to a figure
+  // the derivation never produces and it is flagged — the discipline moves from
+  // "quotable" to "shown", it does not disappear.
+  const clean = validateClinicalEvidencePackage(packageWithDerivedClaim());
+  assert.doesNotMatch(clean.issues.join("\n"), /numeric facts/);
+
+  const input = packageWithDerivedClaim();
+  input.reportText = input.reportText.replace("6 个月冰片残余约为 78%", "6 个月冰片残余约为 43%");
+  const result = validateClinicalEvidencePackage(input);
+  assert.match(result.issues.join("\n"), /numeric facts .*43/);
+});
+
+test("requires a derived claim's method to show the step, not name it", () => {
+  const result = validateClinicalEvidencePackage(packageWithDerivedClaim({ method: "按一级动力学估算。" }));
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /method must state the reasoning or calculation/);
+});
+
 test("accepts a traceable deep-research package without editorial count quotas", () => {
   const input = deepResearchPackage();
   const result = validateClinicalEvidencePackage(input);

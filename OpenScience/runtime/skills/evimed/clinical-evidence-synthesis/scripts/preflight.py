@@ -31,6 +31,11 @@ REQUIRED_CLAIM_FIELDS = (
 SYNTHESIZED_BASE_FIELDS = ("claimId", "claim", "applicability", "uncertainty")
 SYNTHESIZED_SOURCE_FIELDS = ("sourceUrl", "sourceTitle", "artifactPath", "accessLevel", "supportQuote")
 CONFIDENCE_LEVELS = ("high", "moderate", "low")
+# A "derived" claim is the analyst's own estimate, bound, or inference. No
+# source states it, so it is bonded to its working instead of to a quote.
+DERIVED_BASE_FIELDS = ("claimId", "claim", "method", "assumptions", "sensitivity", "applicability", "uncertainty")
+CLAIM_ID_PATTERN = re.compile(r"^CLM-[0-9]{3,6}$")
+DERIVED_REPORT_LABEL = re.compile(r"[〔［【(（\[]\s*(?:推导|推算|估算|derived|estimated)\s*[〕］】)）\]]", re.I)
 
 
 def check_claim(index: int, claim: dict, issues: list[str]) -> None:
@@ -68,8 +73,27 @@ def check_claim(index: int, claim: dict, issues: list[str]) -> None:
                 f"clinical-evidence-matrix.json: claims[{index}].referenceNumber must be one of its referenceNumbers"
             )
         return
+    if claim.get("claimType", "direct") == "derived":
+        for field in DERIVED_BASE_FIELDS:
+            if not isinstance(claim.get(field), str) or not claim[field].strip():
+                issues.append(f"clinical-evidence-matrix.json: claims[{index}].{field} is empty")
+        inputs = claim.get("derivedFrom")
+        if not isinstance(inputs, list) or not inputs:
+            issues.append(f"clinical-evidence-matrix.json: claims[{index}].derivedFrom must list the claims it reasons from")
+        elif any(not isinstance(entry, str) or not CLAIM_ID_PATTERN.match(entry) for entry in inputs):
+            issues.append(f"clinical-evidence-matrix.json: claims[{index}].derivedFrom entries must match CLM-NNN")
+        elif claim.get("claimId") in inputs:
+            issues.append(f"clinical-evidence-matrix.json: claims[{index}].derivedFrom must not include the claim itself")
+        # The method is the audit trail that replaces the missing quote, so it
+        # has to show the step rather than name it.
+        method = claim.get("method")
+        if isinstance(method, str) and method.strip() and len(method.strip()) < 40:
+            issues.append(f"clinical-evidence-matrix.json: claims[{index}].method must show the working, not name it")
+        return
     if claim.get("claimType", "direct") != "direct":
-        issues.append(f'clinical-evidence-matrix.json: claims[{index}].claimType must be "direct" or "synthesized"')
+        issues.append(
+            f'clinical-evidence-matrix.json: claims[{index}].claimType must be "direct", "synthesized" or "derived"'
+        )
         return
     for field in REQUIRED_CLAIM_FIELDS:
         if not isinstance(claim.get(field), str) or not claim[field].strip():
@@ -211,6 +235,13 @@ def main() -> int:
             continue
         check_claim(index, claim, issues)
         claim_id = claim.get("claimId")
+        # A derived result is not a source: it takes no numbered citation of its
+        # own, its inputs carry them, and it is marked 〔推导〕 instead.
+        if claim.get("claimType") == "derived":
+            marker = f"<!-- claim:{claim_id} -->"
+            if marker not in report:
+                issues.append(f"clinical-evidence-report.md: missing marker {marker}")
+            continue
         reference_number = claim.get("referenceNumber")
         if not isinstance(reference_number, int) or reference_number < 1:
             issues.append(
@@ -226,7 +257,29 @@ def main() -> int:
                 f"clinical-evidence-report.md: {marker} is not paired with [{reference_number}]"
             )
 
+    # The two rules a derived result lives under, checked here as well as on the
+    # server so the run learns while it can still act.
+    derived_ids = {
+        claim.get("claimId")
+        for claim in claims
+        if isinstance(claim, dict) and claim.get("claimType") == "derived" and claim.get("claimId")
+    }
+    if derived_ids:
+        for line_number, line in enumerate(report.splitlines(), 1):
+            cited = {claim_id for claim_id in derived_ids if f"claim:{claim_id}" in line}
+            if cited and not DERIVED_REPORT_LABEL.search(line):
+                issues.append(
+                    f"clinical-evidence-report.md line {line_number}: derived result "
+                    f"{', '.join(sorted(cited))} must be marked 〔推导〕"
+                )
+
     practical = section(report, "实际处置|实用回答|Practical")
+    practical_derived = sorted(claim_id for claim_id in derived_ids if f"claim:{claim_id}" in practical)
+    if practical_derived:
+        issues.append(
+            "clinical-evidence-report.md: practical section cites derived result "
+            f"{', '.join(practical_derived)}; practical advice must rest on measured evidence"
+        )
     for line_number, line in enumerate(practical.splitlines(), 1):
         if not re.match(r"\s*(?:\d+[.、]|[-*+]\s+)", line):
             continue
@@ -268,8 +321,11 @@ def main() -> int:
         issues.append(
             "citation-ledger.csv: header must name " + ", ".join(missing_columns) + " (any column order)"
         )
-    if len(ledger_rows) < len(claims) + 1:
-        issues.append("citation-ledger.csv: require a header and one row per matrix claim")
+    # The ledger maps cited claims to their sources. A derived result cites no
+    # source of its own, so it is not a row here — its inputs are.
+    cited_claims = [claim for claim in claims if not (isinstance(claim, dict) and claim.get("claimType") == "derived")]
+    if len(ledger_rows) < len(cited_claims) + 1:
+        issues.append("citation-ledger.csv: require a header and one row per cited matrix claim")
 
     for label, pattern in {
         "unresolved": r"unresolved|未解析",

@@ -18,9 +18,36 @@ const accessLevels = new Set(["full_text", "official_page", "abstract", "structu
 // single-source verbatim bond for a stricter package: at least two distinct
 // preserved sources, each with its own verbatim quote, plus an explicit
 // confidence label and machine-verifiable numeric limits.
-const claimTypes = new Set(["direct", "synthesized"]);
+// A "derived" claim is the analyst's own result: an estimate, a bound, an
+// extrapolation, a mechanistic inference. By construction no source states it,
+// so demanding a verbatim quote for it made original analysis unpublishable —
+// a report that had found borneol's vapour pressure and a sealed-system loss
+// curve could not put the two together and estimate an opened-container loss,
+// because the estimate's numbers appear in no source. Every run therefore
+// learned the one safe move: restate sources, declare the gap, stop.
+//
+// It is not exempt from scrutiny, it is scrutinised differently. It must name
+// the quote-anchored claims it reasons from, state the method that takes those
+// inputs to this result, state the assumptions it rests on, and say what the
+// result is sensitive to. The audit then checks the derivation is complete and
+// grounded rather than checking the number against a source that cannot have
+// it. The report must mark it as derived, and it may never carry the practical
+// safety advice — that section stays measured evidence only.
+const claimTypes = new Set(["direct", "synthesized", "derived"]);
 const synthesizedConfidenceLevels = new Set(["high", "moderate", "low"]);
 const synthesizedBaseFields = Object.freeze(["claimId", "claim", "applicability", "uncertainty"]);
+const derivedBaseFields = Object.freeze([
+  "claimId",
+  "claim",
+  "method",
+  "assumptions",
+  "sensitivity",
+  "applicability",
+  "uncertainty",
+]);
+// How a derived result is marked in the report so a reader can never take it
+// for a measurement.
+const derivedReportLabelPattern = /[〔［【(（[]\s*(?:推导|推算|估算|derived|estimated)\s*[〕］】)）\]]/i;
 const synthesizedSourceFields = Object.freeze(["sourceUrl", "sourceTitle", "artifactPath", "accessLevel", "supportQuote"]);
 const sourceCountWordPattern = /(?:研究|试验|项|篇|文献|stud(?:y|ies)|trials?|sources?|records?)/i;
 const claimIdPattern = /^CLM-[0-9]{3,6}$/;
@@ -287,6 +314,13 @@ function claimEvidenceText(claim) {
       claim?.claim,
       ...claim.supportingSources.flatMap((source) => [source?.supportQuote, source?.sourceTitle, source?.identifier]),
     ].join(" ");
+  }
+  // A derived result's numbers cannot be in a source — that is what makes it
+  // derived. They must be in the derivation: the method that produced them, the
+  // assumptions they rest on, and the sensitivity that bounds them. So an
+  // estimate quoted in the prose has to be an estimate the working shows.
+  if (claim?.claimType === "derived") {
+    return [claim?.claim, claim?.method, claim?.assumptions, claim?.sensitivity, claim?.uncertainty].join(" ");
   }
   return [claim?.claim, claim?.supportQuote, claim?.sourceTitle, claim?.identifier].join(" ");
 }
@@ -867,6 +901,7 @@ export function validateClinicalEvidencePackage({
 
   if (!claims.length) issues.push("The evidence matrix must contain the report's material claims.");
   const seen = new Set();
+  const derivedClaims = [];
   for (const [index, value] of claims.entries()) {
     const label = `claims[${index}]`;
     if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -878,7 +913,10 @@ export function validateClinicalEvidencePackage({
       issues.push(`${label}.claimType must be "direct" or "synthesized" when present.`);
       continue;
     }
-    for (const field of claimType === "synthesized" ? synthesizedBaseFields : claimFields) {
+    const requiredFields = claimType === "synthesized"
+      ? synthesizedBaseFields
+      : claimType === "derived" ? derivedBaseFields : claimFields;
+    for (const field of requiredFields) {
       if (!nonEmpty(value[field])) issues.push(`${label}.${field} must be a non-empty string.`);
     }
     if (!claimIdPattern.test(value.claimId ?? "")) issues.push(`${label}.claimId must match CLM-NNN.`);
@@ -897,6 +935,25 @@ export function validateClinicalEvidencePackage({
         sourceDomains,
         issues,
       });
+      continue;
+    }
+    if (claimType === "derived") {
+      // Grounding is checked after the loop, once every claimId is known.
+      const inputs = value.derivedFrom;
+      if (!Array.isArray(inputs) || inputs.length === 0) {
+        issues.push(`${label}.derivedFrom must list the claim ids this result is reasoned from.`);
+      } else if (inputs.some((id) => typeof id !== "string" || !claimIdPattern.test(id))) {
+        issues.push(`${label}.derivedFrom entries must each match CLM-NNN.`);
+      } else if (inputs.includes(value.claimId)) {
+        issues.push(`${label}.derivedFrom must not include the claim itself.`);
+      }
+      // The method is the audit trail that replaces the missing quote, so it
+      // has to actually show the step rather than gesture at one. A result with
+      // a number in it must show that number's arithmetic or its bound.
+      if (nonEmpty(value.method) && String(value.method).trim().length < 40) {
+        issues.push(`${label}.method must state the reasoning or calculation that takes the inputs to this result, not name it.`);
+      }
+      derivedClaims.push({ label, claim: value });
       continue;
     }
     if (!accessLevels.has(value.accessLevel)) {
@@ -955,6 +1012,48 @@ export function validateClinicalEvidencePackage({
   }
 
   const claimsById = new Map(claims.map((claim) => [claim?.claimId, claim]));
+
+  // A derived result is only as good as what it stands on. Every input must
+  // resolve, and following the inputs must reach measured evidence: a chain of
+  // derivations resting on nothing is the fabrication this whole gate exists to
+  // stop, wearing the vocabulary of analysis.
+  for (const { label, claim } of derivedClaims) {
+    const inputs = Array.isArray(claim?.derivedFrom) ? claim.derivedFrom : [];
+    const unresolved = inputs.filter((id) => !claimsById.has(id));
+    if (unresolved.length) {
+      issues.push(`${label}.derivedFrom names ${unresolved.join(", ")}, which ${unresolved.length > 1 ? "are" : "is"} not in the evidence matrix.`);
+      continue;
+    }
+    const grounded = new Set();
+    const pending = [...inputs];
+    let reachesEvidence = false;
+    while (pending.length) {
+      const id = pending.pop();
+      if (grounded.has(id)) continue;
+      grounded.add(id);
+      const input = claimsById.get(id);
+      if ((input?.claimType ?? "direct") !== "derived") { reachesEvidence = true; continue; }
+      for (const next of Array.isArray(input?.derivedFrom) ? input.derivedFrom : []) pending.push(next);
+    }
+    if (!reachesEvidence) {
+      issues.push(`${label} is derived only from other derived claims; a derivation must reach measured evidence.`);
+    }
+  }
+
+  // Marked wherever it is asserted, so a reader meets the estimate as an
+  // estimate. The claim marker alone is invisible in rendered prose.
+  const derivedIds = new Set(derivedClaims.map(({ claim }) => claim?.claimId));
+  if (derivedIds.size) {
+    for (const [lineIndex, rawLine] of String(reportText ?? "").split("\n").entries()) {
+      const cited = reportClaimIds(rawLine).filter((id) => derivedIds.has(id));
+      if (cited.length && !derivedReportLabelPattern.test(rawLine)) {
+        issues.push(
+          `Report line ${lineIndex + 1} states derived result ${cited.join(", ")} without marking it as derived. Label it 〔推导〕 so it is not read as a measurement.`,
+        );
+      }
+    }
+  }
+
   const reportForNumericAudit = withoutReportSections(
     withoutReportSections(reportText, "参考文献|参考来源|References?"),
     "检索|方法|Methods?",
@@ -991,6 +1090,16 @@ export function validateClinicalEvidencePackage({
   }
 
   const practical = reportSection(reportText, "实际处置|实用|怎么办|Practical");
+  // The analysis may reason as far as the evidence allows. What a reader is
+  // told to actually do may not rest on the analyst's own estimate: this
+  // section is read as instruction, and an estimate read as instruction is the
+  // one place a derivation could hurt someone.
+  const derivedInPractical = [...new Set(reportClaimIds(practical).filter((id) => derivedIds.has(id)))];
+  if (derivedInPractical.length) {
+    issues.push(
+      `The practical section cites derived result ${derivedInPractical.join(", ")}; practical advice must rest on measured evidence. Move the reasoning to the analysis and give the action a directly supported claim.`,
+    );
+  }
   for (const message of evaluateClinicalSafetyRules({ reportText, practical, question: runReceipt?.question })) {
     issues.push(message);
   }
@@ -1140,6 +1249,10 @@ export function validateClinicalEvidencePackage({
     // could not guess that the third had to be the quote. A schema that is
     // enforced but never written down is not a schema the run can satisfy, and
     // column order carries no meaning here anyway.
+    // The ledger maps cited claims to the sources that carry them. A derived
+    // result cites no source of its own, so it is not a row here; its inputs
+    // are, and they are what a reader traces.
+    const citedClaims = claims.filter((claim) => (claim?.claimType ?? "direct") !== "derived");
     const ledgerRecords = parseCsvRecords(citationLedgerText);
     const ledgerHeader = (ledgerRecords[0] ?? []).map((cell) => cell.trim().toLowerCase().replace(/[_\s]/g, ""));
     const claimIdColumn = ledgerHeader.indexOf("claimid");
@@ -1147,7 +1260,7 @@ export function validateClinicalEvidencePackage({
     // A run that records the quote as supportQuoteVerified has recorded the
     // quote; the prefix is the requirement.
     const quoteColumn = ledgerHeader.findIndex((name) => name.startsWith("supportquote"));
-    if (claimIdColumn < 0 || referenceColumn < 0 || quoteColumn < 0 || ledgerRecords.length < claims.length + 1) {
+    if (claimIdColumn < 0 || referenceColumn < 0 || quoteColumn < 0 || ledgerRecords.length < citedClaims.length + 1) {
       issues.push(
         "citation-ledger.csv must have a header naming claimId, referenceNumber and supportQuote columns (any order, extra columns allowed) and one row per evidence-matrix claim.",
       );
@@ -1157,10 +1270,10 @@ export function validateClinicalEvidencePackage({
         const claimId = String(row[claimIdColumn] ?? "").trim();
         if (claimId) ledgerRef.set(claimId, String(row[referenceColumn] ?? "").trim());
       }
-      const matrixIds = new Set(claims.map((claim) => claim?.claimId));
+      const matrixIds = new Set(citedClaims.map((claim) => claim?.claimId));
       const ledgerMismatch = ledgerRef.size !== matrixIds.size
         || [...matrixIds].some((id) => !ledgerRef.has(id))
-        || claims.some((claim) => ledgerRef.get(claim?.claimId) !== String(claim?.referenceNumber));
+        || citedClaims.some((claim) => ledgerRef.get(claim?.claimId) !== String(claim?.referenceNumber));
       if (ledgerMismatch) {
         issues.push("citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.");
       }
@@ -1187,6 +1300,9 @@ export function validateClinicalEvidencePackage({
       issues.push("citation-audit.md must reference at least one real audited source identifier from the evidence matrix.");
     }
     for (const [index, claim] of claims.entries()) {
+      // A derived result is not a source and has no reference number of its
+      // own; its inputs carry the citations, and it carries the derived label.
+      if ((claim?.claimType ?? "direct") === "derived") continue;
       const marker = `<!-- claim:${claim?.claimId} -->`;
       const claimLine = String(reportText).split("\n").find((line) => line.includes(marker)) ?? "";
       if (!standardCitationNumbers(claimLine).has(claim?.referenceNumber)) {
