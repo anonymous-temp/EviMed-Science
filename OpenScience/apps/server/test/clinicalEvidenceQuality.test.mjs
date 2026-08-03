@@ -481,15 +481,67 @@ test("does not let a structural English number-word in the source mask a fabrica
   assert.match(result.issues.join("\n"), /numeric facts?\s+3\b/);
 });
 
-test("rejects a citation ledger whose columns are not in the required positional order", () => {
+test("accepts a citation ledger whose required columns are present in any order", () => {
+  // The header four consecutive production runs were failed for. Nothing stated
+  // that the first three columns had to be claimId, referenceNumber,
+  // supportQuote positionally, and the preflight the run is told to satisfy
+  // never looked — so one run rewrote its header three times, got the first two
+  // right, and could not guess the third. Column order carries no meaning here.
+  const input = deepResearchPackage();
+  const rows = input.citationLedgerText.trim().split("\n");
+  input.citationLedgerText = [
+    "claimId,referenceNumber,claimType,supportQuoteVerified",
+    ...rows.slice(1).map((row) => {
+      const [claimId, referenceNumber, ...rest] = row.split(",");
+      return [claimId, referenceNumber, "direct", rest.join(" ").replace(/,/g, " ")].join(",");
+    }),
+  ].join("\n");
+  const result = validateClinicalEvidencePackage(input);
+  assert.doesNotMatch(result.issues.join("\n"), /citation-ledger\.csv must have a header naming/);
+});
+
+test("rejects a citation ledger that never names the columns the cross-check reads", () => {
   const input = deepResearchPackage();
   input.citationLedgerText = input.citationLedgerText.replace(
     "claimId,referenceNumber,supportQuote",
-    "claimId,sourceUrl,referenceNumber,supportQuote",
+    "claim,source,quote",
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /citation-ledger\.csv must contain a traceability header/);
+  // The message names every column it wants, so the run can act on it.
+  assert.match(result.issues.join("\n"), /must have a header naming claimId, referenceNumber and supportQuote/);
+});
+
+test("counts ledger records, not lines, when a support quote spans newlines", () => {
+  // A csv writer quotes an embedded newline rather than losing it. Counting
+  // lines then counted one claim as two, or split a row in half.
+  const input = deepResearchPackage();
+  const rows = input.citationLedgerText.trim().split("\n");
+  input.citationLedgerText = [
+    rows[0],
+    rows[1].replace(/,([^,]*)$/, ',"first line\nsecond line"'),
+    ...rows.slice(2),
+  ].join("\n");
+  const result = validateClinicalEvidencePackage(input);
+  assert.doesNotMatch(result.issues.join("\n"), /citation-ledger\.csv must have a header naming/);
+});
+
+test("numeric-audit line numbers point at the line the report actually has there", () => {
+  // The audited copy collapsed each removed section to a single newline, so
+  // every later line moved up: a 125-line production report was audited as 99
+  // lines and "Report line 68" named a blank line in the real file.
+  // deepResearchPackage has a 检索与方法 section, which the audit strips, ahead
+  // of the line injected below — so a drifting count shows up here.
+  const input = deepResearchPackage();
+  input.reportText = input.reportText.replace(
+    "## 讨论",
+    "## 讨论\n\n该疗法使风险增加2.71倍。\n",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  const flagged = result.issues.find((issue) => /^Report line \d+ numeric facts/.test(issue));
+  assert.ok(flagged, `expected a numeric-fact issue, got: ${result.issues.join(" | ")}`);
+  const lineNumber = Number(/^Report line (\d+)/.exec(flagged)[1]);
+  assert.match(input.reportText.split("\n")[lineNumber - 1], /2\.71/);
 });
 
 test("does not audit structural numbers that carry no unit or statistic", () => {

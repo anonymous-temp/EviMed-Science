@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 import re
 import sys
@@ -249,7 +251,24 @@ def main() -> int:
     bibliography_count = len(re.findall(r"^@[A-Za-z]+\s*\{", bibliography, re.M))
     if bibliography_count < reference_count:
         issues.append("references.bib: missing entries for numbered report references")
-    if len([line for line in ledger.splitlines() if line.strip()]) < len(claims) + 1:
+    # Check the header the server checks. This counted rows only, so a ledger
+    # with the wrong columns passed here and was rejected there — the run was
+    # told to fix something it had already been told was fine, with no way to
+    # learn what the columns had to be.
+    ledger_rows = [row for row in csv.reader(io.StringIO(ledger)) if any(cell.strip() for cell in row)]
+    ledger_header = [cell.strip().lower().replace("_", "").replace(" ", "") for cell in (ledger_rows[0] if ledger_rows else [])]
+    missing_columns = [
+        name for name, present in (
+            ("claimId", "claimid" in ledger_header),
+            ("referenceNumber", "referencenumber" in ledger_header),
+            ("supportQuote", any(cell.startswith("supportquote") for cell in ledger_header)),
+        ) if not present
+    ]
+    if missing_columns:
+        issues.append(
+            "citation-ledger.csv: header must name " + ", ".join(missing_columns) + " (any column order)"
+        )
+    if len(ledger_rows) < len(claims) + 1:
         issues.append("citation-ledger.csv: require a header and one row per matrix claim")
 
     for label, pattern in {
