@@ -164,14 +164,14 @@ function normalizedPassage(value) {
     .normalize("NFKC")
     // Soft hyphens and zero-width joiners survive NFKC and are invisible in the
     // artifact, so a faithfully retyped quote silently fails to match.
-    .replace(/[­​‌‍﻿]/g, "")
+    .replace(/\u00AD|\u200B|\u200C|\u200D|\uFEFF/g, "")
     .replace(/[‘’“”"'＂＇]/g, "")
     .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ")
     // PDF extraction routinely spaces out CJK runs ("速 效 救 心 丸"). The
     // spacing is an artefact of the extractor, not of the source, so it must
     // not decide whether a quote is found.
-    .replace(/(?<=[　-〿一-鿿＀-￯])\s+(?=[　-〿一-鿿＀-￯])/g, "")
+    .replace(/(?<=[\u3000-\u303F\u4E00-\u9FFF\uFF00-\uFFEF])\s+(?=[\u3000-\u303F\u4E00-\u9FFF\uFF00-\uFFEF])/g, "")
     .trim()
     .toLowerCase();
 }

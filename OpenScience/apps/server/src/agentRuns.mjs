@@ -391,7 +391,97 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "public_source_dataset_unconfigured",
   "public_source_managed_credential_invalid",
   "public_source_gateway_credential_profile_required",
+  // A refusal is the guardrail working, not the run breaking. The fetch tool
+  // answers official_page_url_forbidden when an agent asks for a page outside
+  // the approved official-document set; the agent is meant to hear "not that
+  // one" and go elsewhere, which is exactly what it does. Failing the run for
+  // it punishes the agent for having asked: one production run explored
+  // professional.heart.org/en/science-news, was refused, obeyed, and went on to
+  // write a complete package that passed preflight — and was then failed for
+  // that single refused request, 50 tool calls after it stopped mattering.
+  // Whether the package is sound is decided by the package checks below.
+  //
+  // The gateway's own refusals are the same judgment, and it answers them with
+  // 403: the run asked for a source outside the approved set and was told no.
+  // Its 401 is the host's credential configuration, which the run can no more
+  // fix than a missing Unpaywall address above.
+  "official_page_url_forbidden",
+  "public_source_unsupported",
+  "public_source_document_path_forbidden",
+  "public_source_document_request_forbidden",
+  "public_source_gateway_credential_profile_forbidden",
+  "public_source_gateway_graphql_forbidden",
+  "public_source_gateway_url_forbidden",
+  "public_source_pdf_host_forbidden",
+  "public_source_gateway_token_invalid",
 ]);
+
+// The other half of the same judgment, kept explicit so that neither list can
+// quietly become the default. A failure here says the run's own machinery
+// broke — it could not write what it fetched, or it built a request the
+// gateway could not parse — and that is worth failing over even when
+// deliverables exist. The gateway draws the same line by status: it refuses
+// with 403 and rejects a malformed request with 400.
+//
+// Every code an evidence tool emits must appear in one set or the other; the
+// test that enumerates the tool sources holds that line, so a code added to the
+// MCP server cannot silently inherit "fails the run" by never being classified.
+export const terminalEvidenceSourceErrorCodes = new Set([
+  // The artifact could not be preserved, so nothing downstream can quote it.
+  "full_text_workspace_invalid",
+  "official_page_workspace_invalid",
+  "full_text_output_invalid",
+  "official_page_output_invalid",
+  // A malformed request is still the run's own problem: unlike a refusal, the
+  // tool never got far enough to have an opinion about the source.
+  "public_source_query_invalid",
+  "public_source_url_invalid",
+  "public_source_dataset_invalid",
+  "public_source_gateway_invalid",
+  "official_page_url_invalid",
+  "full_text_identifier_invalid",
+  "public_source_gateway_accept_invalid",
+  "public_source_gateway_body_invalid",
+  "public_source_gateway_body_too_large",
+  "public_source_gateway_content_type_invalid",
+  "public_source_gateway_credential_profile_invalid",
+  "public_source_gateway_doi_invalid",
+  "public_source_gateway_evimed_request_invalid",
+  "public_source_gateway_field_invalid",
+  "public_source_gateway_method_invalid",
+  "public_source_gateway_url_invalid",
+  "public_source_gateway_variables_invalid",
+  // Named like a refusal, answered as a 400: the runtime tried to supply
+  // credentials itself, which it must never do. That is the runtime
+  // misbehaving, not a source declining to be read.
+  "public_source_gateway_credential_parameter_forbidden",
+  // Retrieved, but unusable as evidence, which the run must not paper over.
+  "full_text_body_missing",
+  "official_page_content_missing",
+  "full_text_pdf_encrypted",
+  "full_text_pdf_not_machine_readable",
+  "full_text_pdf_reader_missing",
+  "full_text_pdf_unreadable",
+  "full_text_too_large",
+  "full_text_upstream_invalid",
+  "full_text_xml_invalid",
+  "official_page_too_large",
+  "official_page_response_invalid",
+]);
+
+// Transport died before either side could say anything. The MCP client reports
+// this as a bare string ("MCP error -32001: Request timed out") with no JSON
+// envelope, so no code parses out of it and the failure fell through to
+// terminal — the most recoverable class of failure there is, treated as the
+// least. It only ever reached a verdict by luck: whether some later call to the
+// same tool happened to succeed.
+const transportFailureSignature = /\b(timed out|timeout|econnreset|econnrefused|etimedout|socket hang up|network error|connection (?:closed|reset|refused)|stream closed)\b/i;
+
+function transportLevelToolFailure(part) {
+  const raw = part?.state?.error;
+  if (typeof raw !== "string" || !raw.trim() || raw.trim().startsWith("{")) return false;
+  return transportFailureSignature.test(raw);
+}
 
 function evidenceSourceTool(tool) {
   if (typeof tool !== "string") return false;
@@ -520,6 +610,7 @@ function terminalFromMessages(messages) {
     // on a list written before it mattered. A list of tools always lags the
     // tools; the code is the fact.
     if (recoverableEvidenceSourceErrorCodes.has(errorCode)) continue;
+    if (errorCode === null && transportLevelToolFailure(part)) continue;
     const correctedByLaterSuccess = toolParts.slice(index + 1).some((candidate) => (
       candidate.tool === part.tool && successfulToolPart(candidate)
     ));
@@ -616,17 +707,62 @@ function citedHttpUrls(text) {
     .map((match) => match[0].replace(/[.,;，。；、）】》「」『』！？…]+$/, ""));
 }
 
-function validExplicitCitations(text) {
-  const urls = [...String(text).matchAll(/https?:\/\/[^\s)\]}>"']+/g)].map((match) => match[0]);
-  return urls.every((value) => {
+// An address nobody outside this deployment can resolve. The named internal
+// route was the instance that got written down; loopback and private addresses
+// are the same defect, and a citation reaches a reader who is not on this
+// network. Generalized rather than listed so a second internal hostname cannot
+// arrive as a second bug.
+function unresolvableCitationHost(url) {
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) {
+    return true;
+  }
+  if (host === "::1" || host === "0.0.0.0" || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host)) {
+    return true;
+  }
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!ipv4) return false;
+  const [a, b] = ipv4.slice(1).map(Number);
+  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+}
+
+// What stops a reader checking a citation, kept apart from what merely looks
+// untidy. A reader follows the link and reads the source: an address that
+// cannot be resolved, or one carrying credentials that must never ship, defeats
+// that and is blocking. A source published over plain HTTP does not — the
+// reader opens it and reads it — so it is a notice on delivered work.
+//
+// Requiring HTTPS as a condition of delivery discarded two complete production
+// reports over one link each: a CQVIP journal record, and
+// http://purl.obolibrary.org/obo/CHEBI_28093, where http:// is the canonical
+// form of the persistent identifier and rewriting it as https would have made
+// the citation less correct. A URL fragment was rejected on the same footing,
+// though #section-3 is how a citation points at the passage it means; that is
+// not a defect at all and is no longer treated as one.
+function citationUrlDefects(text) {
+  const blocking = [];
+  const advisory = [];
+  for (const value of citedHttpUrls(text)) {
+    let url;
     try {
-      const url = new URL(value);
-      return url.protocol === "https:" && !url.username && !url.password && !url.hash
-        && !(url.hostname === "www.evimed.com" && url.pathname.startsWith("/api-evimed/"));
+      url = new URL(value);
     } catch {
-      return false;
+      blocking.push(`The citation ${value} is not a resolvable URL, so a reader cannot reach the source it names.`);
+      continue;
     }
-  });
+    if (url.username || url.password) {
+      blocking.push(`The citation for ${url.hostname} carries credentials in the URL; cite the public address of the source instead.`);
+      continue;
+    }
+    if ((url.hostname === "www.evimed.com" && url.pathname.startsWith("/api-evimed/")) || unresolvableCitationHost(url)) {
+      blocking.push(`The citation ${value} points inside this deployment, which a reader outside it cannot open; cite the public source the record came from.`);
+      continue;
+    }
+    if (url.protocol !== "https:") {
+      advisory.push(`The citation ${value} is served over plain HTTP. The source is reachable and the claim stands; prefer the HTTPS address where the publisher offers one.`);
+    }
+  }
+  return { blocking, advisory };
 }
 
 // Deliverables replaced wholesale after a repair was asked for. Patching with
@@ -684,6 +820,13 @@ function assistantProse(messages) {
  *  @param {any} agentRegistry
  *  @param {any} sourceArtifactProvenance
  *  @param {any} assistantMessages
+ *  @returns {Promise<{
+ *    artifacts: any[],
+ *    errorCode: string|null,
+ *    qualityIssues?: string[],
+ *    qualityDegradable?: boolean,
+ *    qualityNotices?: string[],
+ *  }>}
  */
 async function requiredSpecialistArtifacts(
   project,
@@ -691,6 +834,39 @@ async function requiredSpecialistArtifacts(
   agentRegistry,
   sourceArtifactProvenance = new Map(),
   assistantMessages = [],
+) {
+  // Notices a check raises that do not decide the verdict. Collected here
+  // because the checks below each return the moment they conclude, so a finding
+  // that is not a reason to withhold anything has nowhere else to survive.
+  const advisories = [];
+  const outcome = await specialistCompletionOutcome(
+    project,
+    run,
+    agentRegistry,
+    sourceArtifactProvenance,
+    assistantMessages,
+    advisories,
+  );
+  if (advisories.length === 0) return outcome;
+  return outcome.errorCode
+    ? { ...outcome, qualityIssues: [...(outcome.qualityIssues ?? []), ...advisories] }
+    : { ...outcome, qualityNotices: advisories };
+}
+
+/** @param {any} project
+ *  @param {any} run
+ *  @param {any} agentRegistry
+ *  @param {any} sourceArtifactProvenance
+ *  @param {any} assistantMessages
+ *  @param {string[]} advisories
+ */
+async function specialistCompletionOutcome(
+  project,
+  run,
+  agentRegistry,
+  sourceArtifactProvenance,
+  assistantMessages,
+  advisories,
 ) {
   if (!run.effectiveAgentId) return { artifacts: [], errorCode: null };
   const registry = await agentRegistry;
@@ -702,10 +878,11 @@ async function requiredSpecialistArtifacts(
     // Answer-mode contract: the deliverable is the assistant reply itself, not
     // workspace files. The floor is proportional — required skills must have
     // actually been loaded, and any explicit citation URL in the reply prose
-    // must be well-formed (HTTPS, no credentials, no internal API endpoints).
-    // A direct answer with zero citations is legitimate and passes. A missing
-    // skill load is a process gap, not an integrity violation: deliver the
-    // reply marked "unverified" instead of discarding a sound answer.
+    // must be one a reader can open (no credentials, nothing internal to this
+    // deployment). A direct answer with zero citations is legitimate and
+    // passes. A missing skill load is a process gap, not an integrity
+    // violation: deliver the reply marked "unverified" instead of discarding a
+    // sound answer.
     if (agent.completionChecks.includes("skillsLoaded")) {
       const loadedSkills = successfullyLoadedSkills(assistantMessages);
       const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
@@ -721,15 +898,14 @@ async function requiredSpecialistArtifacts(
       }
     }
     if (agent.completionChecks.includes("citationsResolvable")) {
-      const prose = assistantProse(assistantMessages);
-      if (!validExplicitCitations(prose)) {
+      const { blocking, advisory } = citationUrlDefects(assistantProse(assistantMessages));
+      advisories.push(...advisory);
+      if (blocking.length > 0) {
         return {
           artifacts: [],
           errorCode: "specialist_citation_invalid",
           qualityDegradable: true,
-          qualityIssues: [
-            "The reply cites a malformed or non-public URL (citations must be credential-free HTTPS public sources, never internal API routes); delivered unverified.",
-          ],
+          qualityIssues: blocking,
         };
       }
     }
@@ -769,8 +945,14 @@ async function requiredSpecialistArtifacts(
   }
   if (agent.completionChecks.includes("citationsResolvable")) {
     const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
-    if (markdown.some((text) => !validExplicitCitations(text))) {
-      return { artifacts, errorCode: "specialist_citation_invalid" };
+    const defects = markdown.map((text) => citationUrlDefects(text));
+    advisories.push(...defects.flatMap((defect) => defect.advisory));
+    const blocking = defects.flatMap((defect) => defect.blocking);
+    if (blocking.length > 0) {
+      // Naming the URL, as every other gate message here does. This returned a
+      // bare error code, so a run died with nothing to act on and the reason
+      // had to be recovered by replaying the predicate over the transcript.
+      return { artifacts, errorCode: "specialist_citation_invalid", qualityIssues: blocking };
     }
   }
   if (agent.completionChecks.includes("citationIntegrity")) {
@@ -1320,6 +1502,9 @@ export class AgentRunStore {
           terminal.errorCode = completion.errorCode;
           if (Array.isArray(completion.qualityIssues)) terminal.qualityNotices = completion.qualityIssues;
         }
+      } else if (Array.isArray(completion.qualityNotices) && completion.qualityNotices.length > 0) {
+        // Nothing withheld the package, but a check still had something to say.
+        terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...completion.qualityNotices];
       }
     }
     // Whatever the verdict, say if repair cost the report its substance. The
