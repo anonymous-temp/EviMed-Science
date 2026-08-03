@@ -6,7 +6,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
-import { AgentRunStore, recoverableEvidenceSourceErrorCodes } from "../src/agentRuns.mjs";
+import {
+  AgentRunStore,
+  recoverableEvidenceSourceErrorCodes,
+  terminalEvidenceSourceErrorCodes,
+} from "../src/agentRuns.mjs";
 import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
 async function withApp(fn, overrides = {}) {
@@ -560,9 +564,14 @@ test("an answer-mode turn delivers unverified (not failed) when its answer skill
   });
 });
 
-test("an answer-mode turn delivers unverified (not failed) on malformed or internal citation URLs", async () => {
+test("a citation a reader can open is delivered; one they cannot is marked unverified", async () => {
   await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
-    await dispatch("turn_answer_bad_citation");
+    // Plain HTTP is not an integrity defect. The reader opens the link and
+    // reads the source, so the answer stands and the scheme is a remark on it.
+    // Requiring HTTPS as a condition of delivery discarded two complete
+    // production reports, one of them over a purl.obolibrary.org identifier
+    // whose canonical form is http.
+    await dispatch("turn_answer_insecure_citation");
     appendHistory([
       skillLoadedPart,
       { type: "text", text: "有证据支持该结论 [1]。\n\n参考文献\n1. http://insecure.example.org/paper" },
@@ -570,9 +579,22 @@ test("an answer-mode turn delivers unverified (not failed) on malformed or inter
     const insecure = await store.reconcileSession(project, binding.sessionId);
     assert.equal(insecure.status, "succeeded");
     assert.equal(insecure.errorCode, null);
-    assert.equal(insecure.verification, "unverified");
-    assert.match(insecure.qualityNotices.join("\n"), /malformed or non-public URL/);
+    assert.notEqual(insecure.verification, "unverified");
+    assert.match(insecure.qualityNotices.join("\n"), /plain HTTP/);
 
+    // A fragment is how a citation points at the passage it means.
+    await dispatch("turn_answer_fragment_citation");
+    appendHistory([
+      skillLoadedPart,
+      { type: "text", text: "见该节 [1]。\n\n参考文献\n1. https://www.nice.org.uk/guidance/ng185#section-3" },
+    ]);
+    const fragment = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(fragment.status, "succeeded");
+    assert.equal(fragment.errorCode, null);
+    assert.deepEqual(fragment.qualityNotices, []);
+
+    // An address outside this deployment cannot resolve — that a reader cannot
+    // work around, so it is named and the reply is marked unverified.
     await dispatch("turn_answer_internal_citation");
     appendHistory([
       skillLoadedPart,
@@ -581,6 +603,29 @@ test("an answer-mode turn delivers unverified (not failed) on malformed or inter
     const internal = await store.reconcileSession(project, binding.sessionId);
     assert.equal(internal.status, "succeeded");
     assert.equal(internal.verification, "unverified");
+    assert.match(internal.qualityNotices.join("\n"), /points inside this deployment/);
+
+    // The same defect wearing a different address.
+    await dispatch("turn_answer_loopback_citation");
+    appendHistory([
+      skillLoadedPart,
+      { type: "text", text: "本地证据 [1]。\n\n参考文献\n1. https://127.0.0.1:8787/doc/42" },
+    ]);
+    const loopback = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(loopback.verification, "unverified");
+    assert.match(loopback.qualityNotices.join("\n"), /points inside this deployment/);
+
+    // Credentials in a citation must never ship, whatever the scheme.
+    await dispatch("turn_answer_credentialed_citation");
+    appendHistory([
+      skillLoadedPart,
+      { type: "text", text: "见此 [1]。\n\n参考文献\n1. https://reader:placeholder-token@journals.example.org/article/9" },
+    ]);
+    const credentialed = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(credentialed.verification, "unverified");
+    assert.match(credentialed.qualityNotices.join("\n"), /carries credentials/);
+    // The notice names the host and never repeats the credential it found.
+    assert.doesNotMatch(credentialed.qualityNotices.join("\n"), /placeholder-token/);
   });
 });
 
@@ -1243,6 +1288,67 @@ test("deep research tolerates documented source misses but requires invalid EviM
             error: JSON.stringify({
               status: "error",
               error: { code: "public_source_pdf_not_open_access" },
+            }),
+          },
+        },
+      ],
+    },
+    {
+      // The refusal that failed a production run. The agent asked for a page
+      // outside the approved official-document set, the gateway said no, and
+      // the agent obeyed and went elsewhere — then the run was failed for
+      // having asked. A guardrail the agent respected is the guardrail working.
+      name: "official page the gateway refused to fetch",
+      expectedStatus: "succeeded",
+      expectedErrorCode: null,
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_official_page_fetch",
+          state: {
+            status: "error",
+            error: JSON.stringify({
+              status: "error",
+              summary: "The URL is not an approved official document.",
+              error: { code: "official_page_url_forbidden" },
+            }),
+          },
+        },
+      ],
+    },
+    {
+      // Transport died before either side said anything. The MCP client
+      // reports it as a bare string with no JSON envelope, so no code parses
+      // out and it fell through to terminal — the most recoverable class of
+      // failure treated as the least. In production it survived only because a
+      // later call to the same tool happened to succeed.
+      name: "MCP transport timeout with no structured error code",
+      expectedStatus: "succeeded",
+      expectedErrorCode: null,
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_open_access_full_text",
+          state: { status: "error", error: "MCP error -32001: Request timed out" },
+        },
+      ],
+    },
+    {
+      // Still terminal: the gateway could not parse what the run sent it,
+      // which is the run's own defect rather than a source declining to be
+      // read. The gateway itself draws this line — 403 refuses, 400 rejects.
+      name: "malformed request the gateway could not parse",
+      expectedStatus: "failed",
+      expectedErrorCode: "runtime_tool_error",
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_biomedical_source_search",
+          state: {
+            status: "error",
+            error: JSON.stringify({
+              status: "error",
+              error: { code: "public_source_gateway_url_invalid" },
             }),
           },
         },
@@ -2000,6 +2106,141 @@ test("delivers a quality-only clinical failure as an unverified package instead 
   }
 });
 
+test("one plain-HTTP citation is a notice on a delivered package, not a reason to discard it", async () => {
+  // Two complete production reports were discarded over one link each — a
+  // CQVIP journal record, and http://purl.obolibrary.org/obo/CHEBI_28093,
+  // where http is the canonical form of the identifier. The predicate required
+  // https of every cited URL and the file-mode path returned a bare error
+  // code, so 17,975 and 11,292 characters of finished analysis were thrown
+  // away and nothing said which URL was at fault.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-http-citation-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_http_citation",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    // A package that is valid in every other respect, with one source served
+    // over plain HTTP. Rewritten across every deliverable so the citation, the
+    // matrix and the bibliography still agree with each other.
+    const insecure = "http://www.escardio.org/evidence/source-3";
+    const secure = "https://www.escardio.org/evidence/source-3";
+    const pkg = deepResearchPackage();
+    const rewrite = (value) => value.split(secure).join(insecure);
+    pkg.reportText = rewrite(pkg.reportText);
+    pkg.referencesText = rewrite(pkg.referencesText);
+    pkg.citationLedgerText = rewrite(pkg.citationLedgerText);
+    pkg.citationAuditText = rewrite(pkg.citationAuditText);
+    pkg.matrix = JSON.parse(rewrite(JSON.stringify(pkg.matrix)));
+
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+            { path: "clinical-evidence-search.json", required: true },
+            { path: "references.bib", required: true },
+            { path: "citation-ledger.csv", required: true },
+            { path: "citation-audit.md", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-flash",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+      maxClinicalRepairAttempts: 0,
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_http_citation",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async () => ({ accepted: true }));
+
+    const deliverables = new Map([
+      ["clinical-evidence-report.md", pkg.reportText],
+      ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
+      ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
+      ["clinical-evidence-search.json", pkg.searchLogText],
+      ["references.bib", pkg.referencesText],
+      ["citation-ledger.csv", pkg.citationLedgerText],
+      ["citation-audit.md", pkg.citationAuditText],
+    ]);
+    for (const [relative, content] of deliverables) {
+      await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
+    }
+    for (const [artifactPath, content] of Object.entries(pkg.sourceArtifacts)) {
+      await mkdir(path.join(project.workspaceDir, path.dirname(artifactPath)), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, artifactPath), content, "utf8");
+    }
+
+    const retrievalParts = Object.entries(pkg.sourceArtifacts).map(([artifactPath, content]) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_open_access_full_text",
+      state: {
+        status: "completed",
+        output: JSON.stringify({
+          status: "success",
+          artifacts: [artifactPath],
+          data: { artifactSha256s: { [artifactPath]: createHash("sha256").update(content, "utf8").digest("hex") } },
+        }),
+      },
+    }));
+    const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_literature_search",
+      state: { status: "completed", input: { query: entry.query } },
+    }));
+    history = [{
+      info: { id: "msg_http_citation", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...retrievalParts,
+        ...searchParts,
+        ...[...deliverables.keys()].map((filePath) => ({
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath } },
+        })),
+        { type: "text", text: "Completed." },
+      ],
+    }];
+
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.id, run.id);
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.errorCode, null);
+    assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
+    // Delivered, and the scheme is said out loud with the URL that carries it.
+    assert.match(finished.qualityNotices.join("\n"), /plain HTTP/);
+    assert.match(finished.qualityNotices.join("\n"), /escardio\.org\/evidence\/source-3/);
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("an editor tool slip does not fail a run whose EviMed work completed", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-editor-slip-"));
   try {
@@ -2074,6 +2315,54 @@ test("tolerated source error codes are real codes, not typos", async () => {
   // A malformed request is still the run's own problem.
   assert.ok(!recoverableEvidenceSourceErrorCodes.has("public_source_query_invalid"));
   assert.ok(!recoverableEvidenceSourceErrorCodes.has("invalid_input"));
+});
+
+test("every fetch-tool error code is classified, so a new one cannot default to failing runs", async () => {
+  // The allowlist lagged twice. First it lagged the tools, which was fixed by
+  // keying the decision on the error code instead of on which tool asked. Then
+  // it lagged the codes: official_page_url_forbidden was never added, so a
+  // refusal the agent correctly obeyed failed a run that had written a
+  // complete, preflight-clean package fifty tool calls later.
+  //
+  // Listing codes cannot stop a list lagging. What stops it is that an
+  // unclassified code is a test failure: whoever adds one to the MCP server has
+  // to say which it is, rather than inheriting "fails the run" by silence.
+  const sources = [
+    "../../../runtime/mcp/evimed-research/public_sources.py",
+    "../../../runtime/mcp/evimed-research/open_access_fulltext.py",
+    "../../../runtime/mcp/evimed-research/official_pages.py",
+    "../src/publicSourceGateway.mjs",
+  ].map((relative) => new URL(relative, import.meta.url));
+
+  const emitted = new Set();
+  for (const source of sources) {
+    const text = await readFile(source, "utf8");
+    for (const [, code] of text.matchAll(/"((?:public_source|full_text|official_page)_[a-z0-9_]+)"/g)) {
+      emitted.add(code);
+    }
+  }
+  assert.ok(emitted.size > 30, `expected the real code set, found ${emitted.size}`);
+
+  const unclassified = [...emitted]
+    .filter((code) => !recoverableEvidenceSourceErrorCodes.has(code) && !terminalEvidenceSourceErrorCodes.has(code))
+    .sort();
+  assert.deepEqual(
+    unclassified,
+    [],
+    "these codes are emitted but classified neither recoverable nor terminal, so they silently fail runs; "
+      + `add each to one set in agentRuns.mjs: ${unclassified.join(", ")}`,
+  );
+
+  const both = [...emitted].filter((code) => (
+    recoverableEvidenceSourceErrorCodes.has(code) && terminalEvidenceSourceErrorCodes.has(code)
+  ));
+  assert.deepEqual(both, [], `classified as both recoverable and terminal: ${both.join(", ")}`);
+
+  // The refusal that reached production, and the distinction it turns on: being
+  // told "not that source" is the guardrail working, while a request the tool
+  // could not even parse is the run's own defect.
+  assert.ok(recoverableEvidenceSourceErrorCodes.has("official_page_url_forbidden"));
+  assert.ok(terminalEvidenceSourceErrorCodes.has("official_page_url_invalid"));
 });
 
 test("delegating the reading of retrieved evidence is named as the fault, not left to the quote check", async () => {

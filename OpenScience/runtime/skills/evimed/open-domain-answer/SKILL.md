@@ -56,7 +56,7 @@ Retrieve, read, refine — do not stop at one query:
 - Cite as bracketed numbers in prose: `…可降低心血管事件风险 [1]。`
 - Collect full source details once, at the end, under `参考文献` / `References`, one numbered entry per source with its HTTPS URL.
 - Do not paste raw URLs into prose sentences, do not use inline `[1](https://…)` link syntax, and never emit internal markers such as `<!-- claim:… -->` or `[claim:…]`.
-- Only cite HTTPS sources that a reader can open: journal/publisher pages, PubMed/PMC records, guideline or regulator pages, label PDFs. **Never** cite internal EviMed API routes (`www.evimed.com/api-evimed/…`), gateway URLs, or any URL containing credentials or fragments — if a retrieval tool returns such a URL, cite the underlying public source it points to instead. A direct-tier answer with no retrieval needs no citations — do not pad it with honorary references.
+- Only cite sources a reader can open: journal/publisher pages, PubMed/PMC records, guideline or regulator pages, label PDFs. Prefer the HTTPS address, but cite the source's canonical URL as the publisher gives it — some persistent identifiers (for example `http://purl.obolibrary.org/obo/…`) are canonically http, and rewriting one makes the citation less correct, not more. A fragment is fine when it points at the passage you mean. **Never** cite internal EviMed API routes (`www.evimed.com/api-evimed/…`), gateway URLs, loopback or private addresses, or any URL containing credentials — if a retrieval tool returns such a URL, cite the underlying public source it points to instead. A direct-tier answer with no retrieval needs no citations — do not pad it with honorary references.
 
 ## Safety boundary
 
