@@ -1642,6 +1642,68 @@ test("fails baseline history closed and uses a persisted message cursor instead 
   }
 });
 
+test("records what was asked, bounded, so a run list is not a list of hashes", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-question-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    // One session per dispatch: a session may only have one run in flight.
+    const store = new AgentRunStore({
+      get: async (_project, sessionId) => ({
+        sessionId,
+        mode: "open-domain",
+        agentId: null,
+        agentVersion: null,
+        runtimeAgent: null,
+      }),
+    }, {
+      model: "deepseek/deepseek-v4-flash",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 100,
+      readSessionHistory: async () => [],
+    });
+    store.scheduleMonitor = () => {};
+
+    const run = await store.dispatch(project, {
+      sessionId: "ses_question",
+      dispatchId: "turn_question",
+      question: "  速效救心丸开封后\n  多久失效？  ",
+    }, async () => ({ accepted: true }));
+    // Whitespace collapsed: the prompt arrives with the newlines the composer
+    // put in it, and a run row is one line.
+    assert.equal(run.question, "速效救心丸开封后 多久失效？");
+
+    const long = await store.dispatch(project, {
+      sessionId: "ses_long",
+      dispatchId: "turn_long",
+      question: "问".repeat(400),
+    }, async () => ({ accepted: true }));
+    assert.ok(long.question.length <= 161, `preview was ${long.question.length} characters`);
+    assert.ok(long.question.endsWith("…"));
+
+    // A dispatch that names no question still works; the row falls back to the id.
+    const plain = await store.dispatch(project, {
+      sessionId: "ses_plain",
+      dispatchId: "turn_plain",
+    }, async () => ({ accepted: true }));
+    assert.equal(plain.question, null);
+
+    // It survives a reload, because the row is read back from the ledger.
+    const reloaded = (await store.list(project)).find((item) => item.dispatchId === "turn_question");
+    assert.equal(reloaded.question, "速效救心丸开封后 多久失效？");
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("atomically reserves one dispatch and rejects a different active turn", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-dispatch-conflict-"));
   try {

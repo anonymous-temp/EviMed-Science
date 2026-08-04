@@ -131,13 +131,29 @@ describe("RunsPage (hosted web)", () => {
     // clean one, and the reader had no way to know which figure to re-check.
     listWebAgentRuns.mockResolvedValue([webRun({
       verification: "unverified",
-      qualityNotices: ["报告第 44 行的数字未与所引主张对应。"],
+      qualityNotices: [
+        "Report line 44 numeric facts 1.26-1.38 are not present in the cited claim evidence. Cite the claim that carries them.",
+        "Report line 86 numeric facts 2.71 are not present in the cited claim evidence. Cite the claim that carries them.",
+        "MUST FIX — The search log must exactly match successful evidence-search calls from the same run.",
+      ],
       artifacts: ["clinical-evidence-report.md"],
     })]);
     renderPage();
     expect(await screen.findByText(/已交付，但未完成核验/)).toBeInTheDocument();
     expect(screen.getByText(/产物可以照常下载和阅读/)).toBeInTheDocument();
-    expect(screen.getByText("报告第 44 行的数字未与所引主张对应。")).toBeInTheDocument();
+    // Grouped and named in Chinese, with what must be fixed leading. The notices
+    // are written for the agent that repairs them; a reader meets the shape of
+    // the problem first and the validator prose second.
+    const mustFix = screen.getByText("必须修正");
+    expect(mustFix).toBeInTheDocument();
+    expect(screen.getByText("检索日志与运行记录")).toBeInTheDocument();
+    expect(screen.getByText("数字与所引主张不符")).toBeInTheDocument();
+    // Two notices of one kind are one heading carrying a count, not two walls.
+    expect(screen.getByText("2")).toBeInTheDocument();
+    // The severity marker is not left glued to the sentence.
+    expect(screen.queryByText(/^MUST FIX/)).not.toBeInTheDocument();
+    // The specifics a reader checks survive.
+    expect(screen.getByText(/Report line 44 numeric facts 1\.26-1\.38/)).toBeInTheDocument();
   });
 
   it("states a failure in the reader's language and keeps the code for support", async () => {
@@ -152,6 +168,29 @@ describe("RunsPage (hosted web)", () => {
     // The raw code stays reachable as a tooltip, not as the message.
     expect(verdict).toHaveAttribute("title", "错误码：specialist_citation_invalid");
     expect(screen.queryByText("specialist_citation_invalid")).not.toBeInTheDocument();
+  });
+
+  it("identifies a run by the question asked, keeping the id reachable", async () => {
+    // The row led with run_cf7f08fa4b78…, so a list of thirty analyses was a
+    // list of thirty hashes and telling them apart meant opening each.
+    listWebAgentRuns.mockResolvedValue([webRun({
+      question: "速效救心丸开封后多久失效？",
+    })]);
+    renderPage();
+    expect(await screen.findByText("速效救心丸开封后多久失效？")).toBeInTheDocument();
+    expect(screen.getByTitle("运行 ID")).toHaveTextContent("run-1");
+  });
+
+  it("finds a run by what was asked, not only by its id", async () => {
+    listWebAgentRuns.mockResolvedValue([
+      webRun({ question: "速效救心丸开封后多久失效？" }),
+      webRun({ id: "run-other", question: "可穿戴设备检出房颤后如何处置？" }),
+    ]);
+    renderPage();
+    await screen.findByText("速效救心丸开封后多久失效？");
+    await userEvent.type(screen.getByPlaceholderText(/搜索/), "房颤");
+    await waitFor(() => expect(screen.queryByText("速效救心丸开封后多久失效？")).not.toBeInTheDocument());
+    expect(screen.getByText("可穿戴设备检出房颤后如何处置？")).toBeInTheDocument();
   });
 
   it("shows liveness on a run that legitimately takes tens of minutes", async () => {

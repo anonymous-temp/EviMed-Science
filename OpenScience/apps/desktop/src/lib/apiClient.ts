@@ -247,6 +247,9 @@ export type WebAgentRunStatus = "running" | "succeeded" | "failed" | "canceled";
 export interface WebAgentRun {
   id: string;
   dispatchId: string | null;
+  // The question as asked, truncated. A run list keyed only by id is a list of
+  // hashes.
+  question?: string | null;
   dispatchStatus: "dispatching" | "accepted" | "unknown" | "rejected";
   sessionId: string;
   mode: "open-domain" | "specialist";
