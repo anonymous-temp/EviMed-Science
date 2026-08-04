@@ -171,10 +171,15 @@ function nonEmpty(value, minimum = 1) {
   return typeof value === "string" && value.trim().length >= minimum;
 }
 
+// The same standard the report's citations are held to: an address a reader can
+// open, carrying no credentials. Requiring https here while the report-side
+// check accepts http left one rule for a citation and another for the very same
+// URL in the matrix behind it — and a fragment, which is how a citation points
+// at the passage it means, disqualified the source outright.
 function sourceDomain(value) {
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:" || url.username || url.password || url.hash) return null;
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password) return null;
     return url.hostname.toLowerCase();
   } catch {
     return null;
@@ -440,7 +445,19 @@ function canonicalNumbers(text) {
 }
 
 function conclusoryQuantities(text) {
-  const source = String(text ?? "");
+  // A confidence interval is one quantity however its endpoints are punctuated.
+  // numericTokens already drops the percent sign that sits inside a range, so
+  // "98.5%-99.7%" and "98.5–99.7%" are the same interval to it; without the
+  // same normalisation here the two extractors disagreed about the same figure,
+  // and a claim quoting an interval faithfully was reported as unsupported.
+  const source = String(text ?? "")
+    .replace(/%(\s*[–—-]\s*)(?=\d)/g, "$1")
+    // "一次10丸、一日3次" says ten pills, three times a day. The 一 in 一次 and
+    // 一日 is the Chinese for "per", not a quantity, but it reads as the CJK
+    // numeral one against the units 次 and 日 — so a faithfully quoted dosing
+    // line reported the unsupported numeric fact 1, three times in one report.
+    // Only where the real quantity follows immediately, which is the idiom.
+    .replace(/一(?:次|日|天)(?=\s*[0-9〇零一二两三四五六七八九十])/g, "");
   const numbers = new Set();
   for (const pattern of [conclusorySuffixPattern, conclusoryPrefixPattern]) {
     pattern.lastIndex = 0;
@@ -980,12 +997,22 @@ export function validateClinicalEvidencePackage({
       && !emergencyCallSupportPattern.test(value.supportQuote ?? "")) {
       issues.push(`${label}.emergency-call action is not present in its direct support.`);
     }
-    const directSupportNumbers = new Set(numericTokens([
-      value.supportQuote,
-      value.sourceTitle,
-      value.identifier,
-    ].join(" ")));
-    for (const token of new Set(numericTokens(value.claim))) {
+    // Support counts under either reading, as the report-line audit already
+    // does: the two extractors split ranges differently, so a quote saying
+    // "98.5–99.7%" offers the atomic range under one and the endpoints under
+    // the other. Narrow what is demanded, never what is accepted as support.
+    const directSupport = [value.supportQuote, value.sourceTitle, value.identifier].join(" ");
+    const directSupportNumbers = new Set([
+      ...numericTokens(directSupport),
+      ...conclusoryQuantities(directSupport),
+    ]);
+    // The same standard the report lines are held to: a figure that carries a
+    // unit or a statistic, with publication years excluded. This audited every
+    // integer in the claim instead, so "2022年发表的网络meta分析" was reported
+    // as the unsupported numeric fact 2022 — a year the citation already
+    // carries, and one the report-line audit deliberately ignores. Two
+    // standards for the same number is not strictness, it is inconsistency.
+    for (const token of conclusoryQuantities(value.claim)) {
       if (!directSupportNumbers.has(token)) {
         issues.push(`${label}.claim numeric fact ${token} is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.`);
       }
