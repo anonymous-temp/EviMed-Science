@@ -686,6 +686,44 @@ function packageWithDerivedClaim(overrides = {}) {
   return input;
 }
 
+test("holds a claim's figures to the same standard as the report's, not a stricter one", () => {
+  // The report lines were audited for figures carrying a unit or a statistic,
+  // with publication years excluded; the claim text was audited for every
+  // integer in it. So "2022年发表的网络meta分析" was reported as the
+  // unsupported numeric fact 2022 — a year its citation already carries, and
+  // one the report-line audit deliberately ignores.
+  const input = validPackage();
+  input.matrix.claims[0].claim = "2022年发表的网络meta分析纳入179项随机对照试验。";
+  input.matrix.claims[0].supportQuote = "A total of 179 randomized controlled trials were included in this network meta-analysis.";
+  input.sourceArtifacts[".evimed-sources/a/page.md"] = input.matrix.claims
+    .filter((item) => item.artifactPath.endsWith("page.md"))
+    .map((item) => item.supportQuote)
+    .join("\n");
+  const result = validateClinicalEvidencePackage(input);
+  assert.doesNotMatch(result.issues.join("\n"), /numeric fact 2022/);
+  // The trial count is a finding and still has to be in the quote.
+  assert.doesNotMatch(result.issues.join("\n"), /numeric fact 179/);
+});
+
+test("reads a Chinese dosing line as a dose, not as the quantity one", () => {
+  // 一次10丸、一日3次 says ten pills, three times a day. The 一 is "per", but
+  // against the units 次 and 日 it read as the CJK numeral one, so a faithfully
+  // quoted dosing line reported an unsupported numeric fact 1 — three times in
+  // one production report.
+  const input = validPackage();
+  input.matrix.claims[0].claim = "说明书用法为一次10丸、一日3次。";
+  input.matrix.claims[0].supportQuote = "The label directs 10 pills per dose, 3 times daily.";
+  input.sourceArtifacts[".evimed-sources/a/page.md"] = input.matrix.claims
+    .filter((item) => item.artifactPath.endsWith("page.md"))
+    .map((item) => item.supportQuote)
+    .join("\n");
+  const result = validateClinicalEvidencePackage(input);
+  assert.doesNotMatch(result.issues.join("\n"), /numeric fact 1\b/);
+  // The dose itself is still audited: both figures are in the quote.
+  assert.doesNotMatch(result.issues.join("\n"), /numeric fact 10\b/);
+  assert.doesNotMatch(result.issues.join("\n"), /numeric fact 3\b/);
+});
+
 test("a reference the reader can find resolves, even when another entry cites the same source", () => {
   // De-duplication is how padding is detected, and it was also the denominator
   // for resolution — so a report listing 29 numbered entries, two citing one

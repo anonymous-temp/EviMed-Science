@@ -12,6 +12,7 @@ import {
   terminalEvidenceSourceErrorCodes,
 } from "../src/agentRuns.mjs";
 import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
+import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 
 async function withApp(fn, overrides = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-agent-runs-"));
@@ -2047,7 +2048,19 @@ test("requires an evidence agent's cited sources to all be recorded in its snaps
   }
 });
 
-test("delivers a quality-only clinical failure as an unverified package instead of discarding the run", async () => {
+test("a finding about the evidence itself still stamps the package unverified", async () => {
+  // The counterpart to the bookkeeping case: relaxing the mark must not empty
+  // it. A quotation absent from the source it names is exactly what a reader
+  // cannot check for themselves, and it keeps the mark.
+  const input = deepResearchPackage();
+  input.matrix.claims[0].supportQuote = "This passage was written after retrieval and appears in no preserved source.";
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.ok(result.blockingIssues.length > 0, "an absent quotation must be blocking");
+  assert.match(result.blockingIssues.join("\n"), /not found in its preserved source artifact/);
+});
+
+test("delivers a package whose only gap is bookkeeping, and does not stamp it unverified", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-clinical-degrade-"));
   try {
     const project = {
@@ -2161,7 +2174,11 @@ test("delivers a quality-only clinical failure as an unverified package instead 
     // Only a process-documentation gap remained: deliver, do not discard.
     assert.equal(finished.status, "succeeded");
     assert.equal(finished.errorCode, null);
-    assert.equal(finished.verification, "unverified");
+    // And do not stamp. "Unverified" is a statement about the evidence, and it
+    // used to fire on any remaining issue — so a package whose only notices
+    // were a gate bug of ours carried the same mark as one with a quotation
+    // absent from its source. A mark that means everything means nothing.
+    assert.notEqual(finished.verification, "unverified");
     assert.ok(finished.qualityNotices.length > 0);
     assert.match(finished.qualityNotices.join("\n"), /citation-audit\.md must document/);
     assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
@@ -2299,6 +2316,8 @@ test("one plain-HTTP citation is a notice on a delivered package, not a reason t
     assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
     // Delivered, and the scheme is said out loud with the URL that carries it.
     assert.match(finished.qualityNotices.join("\n"), /plain HTTP/);
+    // A reachable source over plain HTTP says nothing about the evidence.
+    assert.notEqual(finished.verification, "unverified");
     assert.match(finished.qualityNotices.join("\n"), /escardio\.org\/evidence\/source-3/);
     await store.closeProject(project, "canceled");
   } finally {

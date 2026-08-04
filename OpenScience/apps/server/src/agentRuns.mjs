@@ -840,6 +840,7 @@ function assistantProse(messages) {
  *    errorCode: string|null,
  *    qualityIssues?: string[],
  *    qualityDegradable?: boolean,
+ *    qualityUnverified?: boolean,
  *    qualityNotices?: string[],
  *  }>}
  */
@@ -906,6 +907,10 @@ async function specialistCompletionOutcome(
           artifacts: [],
           errorCode: "specialist_required_skill_missing",
           qualityDegradable: true,
+          // The managed-persona check did not run, which is what "unverified"
+          // literally means. Unlike a bookkeeping gap between the report and
+          // its apparatus, a reader cannot see that it was skipped.
+          qualityUnverified: true,
           qualityIssues: [
             `The ${agent.skill} skill was not loaded in this turn; the reply was delivered without managed-persona verification.`,
           ],
@@ -920,6 +925,7 @@ async function specialistCompletionOutcome(
           artifacts: [],
           errorCode: "specialist_citation_invalid",
           qualityDegradable: true,
+          qualityUnverified: true,
           qualityIssues: blocking,
         };
       }
@@ -931,6 +937,7 @@ async function specialistCompletionOutcome(
           artifacts: [],
           errorCode: "specialist_citation_integrity_failed",
           qualityDegradable: true,
+          qualityUnverified: true,
           qualityIssues: issues,
         };
       }
@@ -974,7 +981,13 @@ async function specialistCompletionOutcome(
     const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
     const issues = markdown.flatMap((text) => citationIntegrityIssues(text));
     if (issues.length > 0) {
-      return { artifacts, errorCode: "specialist_citation_integrity_failed", qualityDegradable: true, qualityIssues: issues };
+      return {
+        artifacts,
+        errorCode: "specialist_citation_integrity_failed",
+        qualityDegradable: true,
+        qualityUnverified: true,
+        qualityIssues: issues,
+      };
     }
   }
   // Generalized "sources recorded" check (the reusable part of clinical
@@ -1156,6 +1169,13 @@ async function specialistCompletionOutcome(
           ...rest,
         ],
         qualityDegradable: true,
+        // "Unverified" is a statement about the evidence, so only a finding
+        // about the evidence earns it. It used to fire on any remaining issue,
+        // so a package whose only two notices were a gate bug of ours carried
+        // the same mark as one with a quotation absent from its source — and a
+        // mark that means everything means nothing. Bookkeeping still ships
+        // attached to the run; it just no longer stamps it.
+        qualityUnverified: blocking.length > 0 || Boolean(delegationNotice),
       };
     }
     if (delegationNotice) {
@@ -1164,6 +1184,7 @@ async function specialistCompletionOutcome(
         errorCode: "specialist_delegated_evidence_read",
         qualityIssues: [delegationNotice],
         qualityDegradable: true,
+        qualityUnverified: true,
       };
     }
   }
@@ -1559,7 +1580,7 @@ export class AgentRunStore {
           // instead of discarding the whole run.
           terminal.status = "succeeded";
           terminal.errorCode = null;
-          terminal.verification = "unverified";
+          terminal.verification = completion.qualityUnverified ? "unverified" : null;
           terminal.qualityNotices = completion.qualityIssues;
         } else {
           terminal.status = "failed";
