@@ -595,6 +595,22 @@ const backReferenceOpener = /^\s*\d+[.、]\s*(?:同上|参见|同|见|(?:ibid|id
 const pointsAtAnotherEntry = /\[\s*\d+\s*\]|\b\d{1,3}\b/;
 const sourceIdentifier = /\b(?:10\.\d{4,9}\/\S+|pmid:?\s*\d+|https?:\/\/\S+)/i;
 
+// Which numbers the reference list actually offers. Resolution and padding are
+// different questions, and using the de-duplicated count as the denominator for
+// both answered the wrong one: a report listing 29 numbered entries, two of
+// which cite the same DOI, was told its reference 29 "must resolve to a
+// numbered report reference" while entry 29 sat in the list where the reader
+// would find it. Two production reports were marked unverified for that.
+export function numberedReferenceNumbers(reportText) {
+  const references = reportSection(reportText, "参考文献|参考来源|References?");
+  const numbers = new Set();
+  for (const line of references.split("\n")) {
+    const match = /^\s*(\d+)[.、]\s+\S/.exec(line);
+    if (match) numbers.add(Number(match[1]));
+  }
+  return numbers;
+}
+
 export function numberedReferenceCount(reportText) {
   const references = reportSection(reportText, "参考文献|参考来源|References?");
   const entries = references.split("\n").filter((line) => /^\s*\d+[.、]\s+\S/.test(line));
@@ -713,23 +729,19 @@ function sourceArtifactIdentity(value) {
 // must trace to a supporting quote or be machine-verifiable source counts.
 function validateSynthesizedClaim(
   value,
-  { label, deepResearch, reportReferenceCount, successfulArtifacts, artifactText, sourceDomains, issues },
+  { label, deepResearch, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, issues },
 ) {
   if (!synthesizedConfidenceLevels.has(value.confidence)) {
     issues.push(`${label}.confidence must be one of high, moderate, low for a synthesized claim.`);
   }
   if (deepResearch) {
-    if (
-      !Number.isInteger(value.referenceNumber)
-      || value.referenceNumber < 1
-      || value.referenceNumber > reportReferenceCount
-    ) {
+    if (!Number.isInteger(value.referenceNumber) || !reportReferenceNumbers.has(value.referenceNumber)) {
       issues.push(`${label}.referenceNumber must resolve to a numbered report reference.`);
     }
     const referenceNumbers = Array.isArray(value.referenceNumbers) ? value.referenceNumbers : [];
     if (
       referenceNumbers.length < 2
-      || referenceNumbers.some((entry) => !Number.isInteger(entry) || entry < 1 || entry > reportReferenceCount)
+      || referenceNumbers.some((entry) => !Number.isInteger(entry) || !reportReferenceNumbers.has(entry))
     ) {
       issues.push(`${label}.referenceNumbers must list at least two numbered report references.`);
     } else if (Number.isInteger(value.referenceNumber) && !referenceNumbers.includes(value.referenceNumber)) {
@@ -850,6 +862,7 @@ export function validateClinicalEvidencePackage({
     : new Map(Object.entries(sourceArtifacts && typeof sourceArtifacts === "object" ? sourceArtifacts : {}));
   const deepResearch = runReceipt?.reportProfile === deepResearchProfile;
   const reportReferenceCount = numberedReferenceCount(reportText);
+  const reportReferenceNumbers = numberedReferenceNumbers(reportText);
 
   if (!nonEmpty(reportText)) issues.push("clinical-evidence-report.md must contain academic analysis.");
   const title = typeof reportText === "string" ? reportText.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "" : "";
@@ -929,7 +942,7 @@ export function validateClinicalEvidencePackage({
       validateSynthesizedClaim(value, {
         label,
         deepResearch,
-        reportReferenceCount,
+        reportReferenceNumbers,
         successfulArtifacts,
         artifactText,
         sourceDomains,
@@ -959,14 +972,7 @@ export function validateClinicalEvidencePackage({
     if (!accessLevels.has(value.accessLevel)) {
       issues.push(`${label}.accessLevel is ${JSON.stringify(value.accessLevel)}; use exactly one of ${[...accessLevels].join(", ")} to record how much of the preserved artifact you read.`);
     }
-    if (
-      deepResearch
-      && (
-        !Number.isInteger(value.referenceNumber)
-        || value.referenceNumber < 1
-        || value.referenceNumber > reportReferenceCount
-      )
-    ) {
+    if (deepResearch && (!Number.isInteger(value.referenceNumber) || !reportReferenceNumbers.has(value.referenceNumber))) {
       issues.push(`${label}.referenceNumber must resolve to a numbered report reference.`);
     }
     if (!validSupportingPassage(value.supportQuote)) issues.push(`${label}.supportQuote must contain a direct supporting passage.`);
@@ -1212,14 +1218,19 @@ export function validateClinicalEvidencePackage({
     ) {
       issues.push("The run-receipt statistics must exactly match the search log and distinct preserved-source count.");
     }
-    const largestReferenceNumber = claims.reduce(
-      (maximum, claim) => Number.isInteger(claim?.referenceNumber)
-        ? Math.max(maximum, claim.referenceNumber)
-        : maximum,
-      0,
-    );
-    if (reportReferenceCount < largestReferenceNumber) {
-      issues.push("The numbered reference list must resolve every evidence-matrix reference.");
+    // Padding stays a finding, but its own: the de-duplicated count used to be
+    // the denominator for resolution, so listing one source twice silently made
+    // the last reference "not resolve". Say what is actually true instead.
+    if (reportReferenceNumbers.size > reportReferenceCount) {
+      issues.push(
+        `The numbered reference list gives ${reportReferenceNumbers.size} entries for ${reportReferenceCount} distinct sources; the same source is listed under more than one number.`,
+      );
+    }
+    const unresolved = [...new Set(claims
+      .map((claim) => claim?.referenceNumber)
+      .filter((number) => Number.isInteger(number) && !reportReferenceNumbers.has(number)))].sort((a, b) => a - b);
+    if (unresolved.length) {
+      issues.push(`The numbered reference list has no entry for reference ${unresolved.join(", ")}.`);
     }
     // references.bib: a real cross-check — it must actually contain every cited
     // source, not merely enough @entries to hit a count.
