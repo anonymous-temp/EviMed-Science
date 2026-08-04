@@ -686,6 +686,39 @@ function packageWithDerivedClaim(overrides = {}) {
   return input;
 }
 
+test("a reference the reader can find resolves, even when another entry cites the same source", () => {
+  // De-duplication is how padding is detected, and it was also the denominator
+  // for resolution — so a report listing 29 numbered entries, two citing one
+  // source, was told its reference 29 "must resolve to a numbered report
+  // reference" while entry 29 sat in the list. Two finished production reports
+  // were marked unverified for it: 29 entries counted as 28, and 18 as 15.
+  const input = deepResearchPackage();
+  const lines = input.reportText.split("\n");
+  const numbered = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => /^\s*\d+[.、]\s+\S/.test(line));
+  const firstUrl = /https?:\/\/\S+/.exec(lines[numbered[0].index])[0];
+  // The last entry now points at the same document as the first: one source,
+  // two numbers.
+  lines[numbered.at(-1).index] = lines[numbered.at(-1).index].replace(/https?:\/\/\S+/, firstUrl);
+  input.reportText = lines.join("\n");
+
+  const result = validateClinicalEvidencePackage(input);
+  // Every matrix reference still points at an entry the reader can find.
+  assert.doesNotMatch(result.issues.join("\n"), /must resolve to a numbered report reference/);
+  assert.doesNotMatch(result.issues.join("\n"), /has no entry for reference/);
+  // The padding is still reported — as itself, not as a phantom broken link.
+  assert.match(result.issues.join("\n"), /the same source is listed under more than one number/);
+});
+
+test("names the reference a claim points at when the list really has no such entry", () => {
+  const input = deepResearchPackage();
+  input.matrix.claims[0].referenceNumber = 97;
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /has no entry for reference 97/);
+});
+
 test("accepts a derived result that shows its inputs, method and sensitivity", () => {
   // The move the gate used to make impossible. A report holding a vapour
   // pressure and a sealed-system loss curve could not put them together,
