@@ -52,6 +52,36 @@ const WEB_RUN_STATUS_LABEL: Record<WebAgentRunStatus, string> = {
   canceled: "已取消",
 };
 
+/** What went wrong, in the reader's language. The raw code was rendered as-is,
+ *  so a run reported "specialist_citation_invalid" to someone reading a Chinese
+ *  interface. The code is kept as a tooltip for support, not as the message. */
+const WEB_RUN_ERROR_LABEL: Record<string, string> = {
+  agent_timeout: "运行超时，未能在时限内完成。",
+  runtime_tool_error: "科研工具调用失败，且后续没有成功的同类调用。",
+  runtime_session_error: "科研会话出错中断。",
+  runtime_canceled: "运行已被取消。",
+  runtime_limit_exceeded: "同时运行的任务已达上限，请等待前一个任务完成后重试。",
+  specialist_contract_unavailable: "该专项 Agent 的契约版本已变更，结果无法核验。",
+  specialist_required_output_missing: "缺少必需的产物文件。",
+  specialist_required_output_stale: "产物文件早于本次运行，未被更新。",
+  specialist_required_skill_missing: "本轮未加载所需技能，结果未经该技能核验。",
+  specialist_citation_invalid: "存在读者无法打开的引文地址（内部地址或含凭据）。",
+  specialist_citation_integrity_failed: "引文与其来源不一致。",
+  specialist_cited_source_unrecorded: "报告引用了未记录在证据快照中的来源。",
+  specialist_evidence_snapshot_missing: "缺少证据快照文件。",
+  specialist_evidence_snapshot_invalid: "证据快照文件格式无效。",
+  specialist_evidence_snapshot_empty: "证据快照中没有任何来源。",
+  specialist_evidence_traceability_failed: "部分结论未能追溯到其来源原文。",
+  specialist_evidence_provenance_failed: "来源文件的留存记录不完整。",
+  specialist_evidence_integrity_failed: "来源文件在运行后被改动。",
+  specialist_evidence_repair_failed: "多轮修复后仍未通过证据核验。",
+  specialist_delegated_evidence_read: "检索到的原文由子任务转述读取，引文非来源原始措辞。",
+};
+
+function runErrorLabel(code: string): string {
+  return WEB_RUN_ERROR_LABEL[code] ?? "运行未通过核验。";
+}
+
 /** Global Runs view (sidebar) — all runs across every session, like the global
  *  Files browser and Notebooks page. Same information architecture on both
  *  surfaces; only the data source and row actions differ. */
@@ -770,8 +800,45 @@ function WebRunRow({
               打开对话
             </Action>
             {run.durationMs != null && <span className="text-muted">耗时 {formatDuration(run.durationMs)}</span>}
-            {run.errorCode && <span className="text-error">{run.errorCode}</span>}
+            {run.status === "running" && run.observedToolCalls != null && run.observedToolCalls > 0 && (
+              // These analyses run for tens of minutes. Showing only "执行中"
+              // for that long is indistinguishable from being stuck.
+              <span className="text-muted">
+                已完成 {run.observedToolCalls} 次检索与工具调用
+                {run.lastProgressAt && ` · 最近进展 ${relativeTs(Date.parse(run.lastProgressAt) / 1000)}`}
+              </span>
+            )}
+            {run.errorCode && (
+              <span className="text-error" title={`错误码：${run.errorCode}`}>
+                {runErrorLabel(run.errorCode)}
+              </span>
+            )}
           </div>
+
+          {/* The verdict and its reasons were computed, stored, and returned by
+            * the API, and then rendered nowhere: a package delivered with seven
+            * named gaps looked exactly like a clean one. */}
+          {(run.verification === "unverified" || (run.qualityNotices?.length ?? 0) > 0) && (
+            <div className="rounded-card border border-border-faint bg-surface-2/40 p-2">
+              <div className="mb-1 flex items-center gap-1.5 text-caption font-medium uppercase tracking-wider text-muted">
+                <ScrollText size={12} />
+                {run.verification === "unverified" ? "已交付，但未完成核验" : "核验提示"}
+              </div>
+              {run.verification === "unverified" && (
+                <p className="mb-1.5 text-xs text-text/80">
+                  产物可以照常下载和阅读；以下各点是本次分析未能自证的部分，请在引用前自行核对。
+                </p>
+              )}
+              <ul className="space-y-1">
+                {(run.qualityNotices ?? []).map((notice, index) => (
+                  <li key={index} className="flex gap-1.5 text-xs leading-relaxed text-text/80">
+                    <span className="shrink-0 text-muted">·</span>
+                    <span className="min-w-0">{notice}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {run.artifacts.length > 0 && (
             <div>

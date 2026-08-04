@@ -269,6 +269,10 @@ export interface WebAgentRun {
   verification?: "unverified" | null;
   // Human-readable gate reasons attached to a failed or unverified run.
   qualityNotices?: string[];
+  // Liveness for a run that legitimately takes tens of minutes.
+  observedMessages?: number;
+  observedToolCalls?: number;
+  lastProgressAt?: string | null;
 }
 
 

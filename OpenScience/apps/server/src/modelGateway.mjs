@@ -10,6 +10,17 @@ export const supportedDeepSeekModels = Object.freeze(new Set([
 ]));
 export const defaultDeepSeekModel = "deepseek-v4-pro";
 
+/** The model's name as a reader should see it, derived from the id that is
+ *  actually running. Written out by hand, this label kept naming the model the
+ *  code was first written for rather than the one the deployment certified. */
+export function deepSeekModelDisplayName(model) {
+  const id = String(model ?? "").trim();
+  const match = /^deepseek-v(\d+)-(\w+)$/.exec(id);
+  if (!match) return id || defaultDeepSeekModel;
+  const tier = match[2];
+  return `DeepSeek V${match[1]} ${tier.charAt(0).toUpperCase()}${tier.slice(1)}`;
+}
+
 /** The model this deployment certifies and runs, or null if it names another.
  *  @param {Record<string, string | undefined>} [env] */
 export function certifiedDeepSeekModel(env = process.env) {
