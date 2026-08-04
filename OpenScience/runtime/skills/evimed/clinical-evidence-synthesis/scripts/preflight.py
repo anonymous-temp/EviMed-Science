@@ -371,6 +371,27 @@ def main() -> int:
     if receipt.get("status") != "succeeded":
         issues.append("clinical-evidence-run.json: status must be succeeded")
 
+    # The field the server reads to know which sources this run preserved. It
+    # was documented in the skill and checked nowhere here, so a run could omit
+    # it, be told ok=true, and be failed 45 minutes later by a server message
+    # that named no field. Every source path is checked exactly as the server
+    # checks it: inside .evimed-sources, present on disk, one per document.
+    source_paths = receipt.get("successfulSourceArtifacts")
+    if not isinstance(source_paths, list) or not source_paths:
+        issues.append(
+            "clinical-evidence-run.json: successfulSourceArtifacts must list the .evimed-sources paths this run preserved"
+        )
+    else:
+        if len(source_paths) > 48:
+            issues.append("clinical-evidence-run.json: successfulSourceArtifacts lists more than 48 artifacts")
+        for entry in source_paths:
+            if not isinstance(entry, str) or not entry.startswith(".evimed-sources/") or ".." in entry:
+                issues.append(
+                    f"clinical-evidence-run.json: successfulSourceArtifacts entry {entry!r} must be a .evimed-sources workspace path"
+                )
+            elif not (root / entry).is_file():
+                issues.append(f"clinical-evidence-run.json: successfulSourceArtifacts entry {entry!r} does not exist")
+
     payload = {
         "ok": not issues,
         "workspace": str(root),
