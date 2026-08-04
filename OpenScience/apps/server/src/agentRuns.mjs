@@ -1050,26 +1050,72 @@ async function specialistCompletionOutcome(
     }
     const sourceArtifacts = new Map();
     const sourcePaths = runReceipt?.successfulSourceArtifacts;
-    if (!Array.isArray(sourcePaths) || sourcePaths.length > 48) {
-      return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+    // Every return below used to be bare. A run that had preserved five sources
+    // and written all seven deliverables was failed after 45 minutes because
+    // its receipt omitted one field, and it was told only
+    // "specialist_evidence_traceability_failed" — which is also why it could
+    // not be repaired: the repair path requires issues to hand back, so a
+    // silent failure is not merely unhelpful, it is unfixable.
+    if (!Array.isArray(sourcePaths)) {
+      return {
+        artifacts,
+        errorCode: "specialist_evidence_traceability_failed",
+        qualityIssues: [
+          "clinical-evidence-run.json must contain successfulSourceArtifacts: an array of the .evimed-sources paths this run preserved, one canonical path per distinct document.",
+        ],
+      };
+    }
+    if (sourcePaths.length > 48) {
+      return {
+        artifacts,
+        errorCode: "specialist_evidence_traceability_failed",
+        qualityIssues: [
+          `clinical-evidence-run.json lists ${sourcePaths.length} source artifacts; at most 48 are accepted. List one canonical path per distinct document rather than every companion file.`,
+        ],
+      };
     }
     for (const rawPath of sourcePaths) {
       let relative;
       try {
         relative = normalizeWorkspaceRelativePath(rawPath, "source artifact path");
       } catch {
-        return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+        return {
+          artifacts,
+          errorCode: "specialist_evidence_traceability_failed",
+          qualityIssues: [
+            `clinical-evidence-run.json lists ${JSON.stringify(rawPath)} as a source artifact, which is not a safe workspace path.`,
+          ],
+        };
       }
       if (relative !== rawPath || !relative.startsWith(".evimed-sources/")) {
-        return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+        return {
+          artifacts,
+          errorCode: "specialist_evidence_traceability_failed",
+          qualityIssues: [
+            `clinical-evidence-run.json lists ${JSON.stringify(rawPath)} as a source artifact; it must be the exact .evimed-sources/... path a preserving tool returned, copied rather than typed.`,
+          ],
+        };
       }
       const expectedDigest = sourceArtifactProvenance.get(relative);
       if (!expectedDigest) {
         return { artifacts, errorCode: "specialist_evidence_provenance_failed" };
       }
       const sourceFile = await readRequiredFile(project, relative);
-      if (!sourceFile || sourceFile.stat.mtimeMs + 1_000 < Date.parse(run.startedAt)) {
-        return { artifacts, errorCode: "specialist_evidence_traceability_failed" };
+      if (!sourceFile) {
+        return {
+          artifacts,
+          errorCode: "specialist_evidence_traceability_failed",
+          qualityIssues: [`The source artifact ${relative} named in clinical-evidence-run.json does not exist in the workspace.`],
+        };
+      }
+      if (sourceFile.stat.mtimeMs + 1_000 < Date.parse(run.startedAt)) {
+        return {
+          artifacts,
+          errorCode: "specialist_evidence_traceability_failed",
+          qualityIssues: [
+            `The source artifact ${relative} predates this run, so it was not retrieved by it. Retrieve the source in this run, or drop the claims that rest on it.`,
+          ],
+        };
       }
       if (createHash("sha256").update(sourceFile.text, "utf8").digest("hex") !== expectedDigest) {
         return { artifacts, errorCode: "specialist_evidence_integrity_failed" };
