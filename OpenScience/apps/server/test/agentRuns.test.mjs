@@ -42,7 +42,10 @@ test("real OpenCode dispatch fails explicitly when the managed DeepSeek provider
     const result = await startRun(base, "ses_provider_missing");
     assert.equal(result.response.status, 503);
     assert.equal(result.body.code, "model_provider_not_configured");
-    assert.match(result.body.error, /DeepSeek V4 Pro/);
+    // Model-agnostic: this named "DeepSeek V4 Pro" while the deployment ran
+    // Flash, telling the reader to configure something under the wrong name.
+    assert.match(result.body.error, /research model provider is not configured/i);
+    assert.doesNotMatch(result.body.error, /Pro\b/);
   } finally {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });

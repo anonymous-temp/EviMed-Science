@@ -93,8 +93,9 @@ describe("RunsPage (hosted web)", () => {
     await userEvent.click(screen.getByRole("button", { name: /失败/ }));
     await waitFor(() => expect(screen.queryByText("run-1")).not.toBeInTheDocument());
     expect(screen.getByText("run-2")).toBeInTheDocument();
-    // The failed row's error code shows in its expanded detail.
-    expect(screen.getByText("agent_timeout")).toBeInTheDocument();
+    // The failed row explains itself in its expanded detail. It used to print
+    // the raw code, which is a server term in the wrong language for a reader.
+    expect(screen.getByText("运行超时，未能在时限内完成。")).toBeInTheDocument();
   });
 
   it("filters by debounced search over id, agent, model and artifacts", async () => {
@@ -122,5 +123,46 @@ describe("RunsPage (hosted web)", () => {
     listWebAgentRuns.mockResolvedValue([]);
     renderPage();
     expect(await screen.findByText(/尚无运行记录/)).toBeInTheDocument();
+  });
+
+  it("shows why a package was delivered unverified, and what is unverified about it", async () => {
+    // The verdict was computed, stored and returned by the API, and rendered
+    // nowhere — so a package delivered with named gaps looked exactly like a
+    // clean one, and the reader had no way to know which figure to re-check.
+    listWebAgentRuns.mockResolvedValue([webRun({
+      verification: "unverified",
+      qualityNotices: ["报告第 44 行的数字未与所引主张对应。"],
+      artifacts: ["clinical-evidence-report.md"],
+    })]);
+    renderPage();
+    expect(await screen.findByText(/已交付，但未完成核验/)).toBeInTheDocument();
+    expect(screen.getByText(/产物可以照常下载和阅读/)).toBeInTheDocument();
+    expect(screen.getByText("报告第 44 行的数字未与所引主张对应。")).toBeInTheDocument();
+  });
+
+  it("states a failure in the reader's language and keeps the code for support", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({
+      status: "failed",
+      errorCode: "specialist_citation_invalid",
+      artifacts: [],
+    })]);
+    renderPage();
+    const verdict = await screen.findByText(/读者无法打开的引文地址/);
+    expect(verdict).toBeInTheDocument();
+    // The raw code stays reachable as a tooltip, not as the message.
+    expect(verdict).toHaveAttribute("title", "错误码：specialist_citation_invalid");
+    expect(screen.queryByText("specialist_citation_invalid")).not.toBeInTheDocument();
+  });
+
+  it("shows liveness on a run that legitimately takes tens of minutes", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({
+      status: "running",
+      durationMs: null,
+      finishedAt: null,
+      observedToolCalls: 84,
+      lastProgressAt: new Date(Date.now() - 120_000).toISOString(),
+    })]);
+    renderPage();
+    expect(await screen.findByText(/已完成 84 次检索与工具调用/)).toBeInTheDocument();
   });
 });

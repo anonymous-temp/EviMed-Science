@@ -49,13 +49,15 @@ None of this licenses assertion beyond the evidence. It requires the opposite: e
 
 ### Question decomposition
 
-Decompose the question into the evidence domains needed to answer it. Typical domains include:
+Decompose the question into the evidence domains it actually needs. Derive them from the question in front of you — a stability question needs formulation and physical chemistry, a diagnostic question needs test performance and prevalence, a policy question needs jurisdiction and health-system context. Domains that recur across clinical questions:
 
-- symptom phenotype and differential diagnosis;
-- time-sensitive cardiovascular risk and triage;
-- diagnostic pathway, including ECG and serial high-sensitivity troponin;
-- non-cardiac mimics and limits of symptom-based discrimination;
-- treatment-specific efficacy, safety, indication, and regulatory scope when a medicine is named.
+- the phenotype or exposure in question, and what it is distinguished from;
+- the decision the answer feeds, and what makes that decision time-sensitive or reversible;
+- how the relevant quantity is measured, and the performance limits of that measurement;
+- competing explanations, and the limits of discriminating between them;
+- when a medicine, device, or intervention is named: efficacy, safety, indication, regulatory scope, and the population actually studied.
+
+Do not carry a previous question's domains into this one. If the question is about drug stability, ECG and troponin are not its domains; if it is about triage, formulation chemistry is not.
 
 ### Reproducible search
 
@@ -290,9 +292,20 @@ The discussion must explain what the argument as a whole establishes, distinguis
 
 The limitations section must discuss only limitations that materially change interpretation, such as risk of bias, indirectness, imprecision, evidence form, publication bias, recency, population transferability, jurisdiction, or health-system applicability. Synthesize them into an argument rather than a checklist. Do not report tool, gateway, file, or page-retrieval failures in the academic report.
 
-## Acute chest-pressure safety boundary
+## Safety boundaries
 
-For new pressure-like chest discomfort:
+These hold for any question where a reader might act on the answer:
+
+- do not let a differential be settled by symptoms alone when a time-sensitive cause is in it;
+- do not present response to any medicine as a diagnostic test;
+- give every action in the practical section its own direct evidence, not an inference from an adjacent finding;
+- localize practical contact details to the reader's jurisdiction (in China, emergency is `120`) while keeping the source proposition faithful;
+- do not extend a recommendation beyond the population, dose, or setting the evidence studied;
+- add no advice the question did not ask for and the evidence does not directly support.
+
+### Acute chest pressure
+
+Worked example of the boundaries above; apply the same reasoning to the analogous risk in any other domain. For new pressure-like chest discomfort:
 
 - do not diagnose heart disease versus gastrointestinal disease from symptoms alone;
 - do not use response to Suxiao Jiuxin Wan, nitroglycerin, an antacid, or any other medicine as a diagnostic test;

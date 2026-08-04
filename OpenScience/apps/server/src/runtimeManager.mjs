@@ -11,7 +11,7 @@ import {
   dockerRuntimeMount,
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
-import { supportedDeepSeekModels } from "./modelGateway.mjs";
+import { deepSeekModelDisplayName, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockOpenCodeRuntime } from "./mockRuntime.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
@@ -2151,7 +2151,10 @@ export async function syncRuntimeModelProvider(
       apiKey: token,
     },
     models: {
-      [model]: { name: "DeepSeek V4 Pro" },
+      // Derived from the model that is actually certified and running. Hardcoded
+      // as "DeepSeek V4 Pro", this labelled every runtime with the wrong model
+      // name the moment the deployment moved to Flash.
+      [model]: { name: deepSeekModelDisplayName(model) },
     },
   };
   const merged = {

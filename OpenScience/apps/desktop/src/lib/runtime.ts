@@ -63,7 +63,14 @@ function userFacingRuntimeError(error: unknown): string {
     : null;
   if (errorCode) {
     const known: Record<string, string> = {
-      model_provider_not_configured: "科研模型尚未配置，请在服务端完成 DeepSeek V4 Pro 配置后重试。",
+      // Never name a model here. This said "DeepSeek V4 Pro" while the
+      // deployment was running V4 Flash, so the message told the reader to go
+      // configure something that was already configured, under the wrong name.
+      // Which model is certified is a deployment fact, not a UI string.
+      model_provider_not_configured: "科研模型尚未配置，请在服务端完成模型配置后重试。",
+      // Said "Too many running runtimes for this user; limit is 2." — a server
+      // term for a state the reader can act on, in the wrong language.
+      runtime_limit_exceeded: "同时进行的分析任务已达上限。请等待正在执行的任务完成后再提交，分析通常需要数十分钟。",
       runtime_mcp_config_collision: "科研工具配置发生冲突，请联系管理员检查运行时配置。",
       runtime_bootstrap_failed: "科研服务启动失败，请联系管理员检查运行时配置。",
       runtime_model_provider_unavailable: "科研模型服务当前不可用，请稍后重试。",

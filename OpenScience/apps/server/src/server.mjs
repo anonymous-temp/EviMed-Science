@@ -789,7 +789,7 @@ export function createWebApiApp(overrides = {}) {
           throw new HttpError(
             503,
             "model_provider_not_configured",
-            "DeepSeek V4 Pro is not configured on this EviMed server.",
+            "The research model provider is not configured on this EviMed server.",
           );
         }
         const registry = await agentRegistry;
