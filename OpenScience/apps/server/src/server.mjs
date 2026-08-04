@@ -818,6 +818,7 @@ export function createWebApiApp(overrides = {}) {
         const run = await agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
+          question: text,
           effectiveAgentId: effectiveAgent?.agentId ?? null,
           effectiveAgentVersion: effectiveAgent?.agentVersion ?? null,
           effectiveRuntimeAgent: effectiveAgent?.runtimeAgent ?? null,

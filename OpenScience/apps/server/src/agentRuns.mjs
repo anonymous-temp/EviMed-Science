@@ -17,6 +17,7 @@ const startFields = new Set(["sessionId"]);
 const dispatchFields = new Set([
   "sessionId",
   "dispatchId",
+  "question",
   "effectiveAgentId",
   "effectiveAgentVersion",
   "effectiveRuntimeAgent",
@@ -52,6 +53,15 @@ function normalizeStartInput(input) {
   return { sessionId: safeId(input.sessionId, "research session id") };
 }
 
+const maxQuestionPreview = 160;
+
+function questionPreview(value) {
+  if (typeof value !== "string") return null;
+  const collapsed = value.replace(/\s+/g, " ").trim();
+  if (!collapsed) return null;
+  return collapsed.length > maxQuestionPreview ? `${collapsed.slice(0, maxQuestionPreview)}…` : collapsed;
+}
+
 function normalizeDispatchInput(input) {
   assertObject(input, "Agent run dispatch payload must be an object.");
   assertOnlyFields(input, dispatchFields);
@@ -71,6 +81,10 @@ function normalizeDispatchInput(input) {
   return {
     sessionId: safeId(input.sessionId, "research session id"),
     dispatchId: safeId(input.dispatchId, "agent run dispatch id"),
+    // What the reader asked, kept short. A run list identified only by
+    // run_cf7f08fa4b78… is a list of hashes: thirty analyses side by side and
+    // no way to tell which is which without opening each one.
+    question: questionPreview(input.question),
     effectiveAgentId: input.effectiveAgentId ?? null,
     effectiveAgentVersion: input.effectiveAgentVersion ?? null,
     effectiveRuntimeAgent: input.effectiveRuntimeAgent ?? null,
@@ -199,6 +213,7 @@ function foldEvents(events) {
         effectiveAgentVersion,
         effectiveRuntimeAgent,
         model: event.model,
+        question: typeof event.question === "string" && event.question ? event.question : null,
         status: "running",
         createdAt: storedTimestamp(event.createdAt, "createdAt"),
         startedAt,
@@ -1197,6 +1212,7 @@ export class AgentRunStore {
   async reserveRun(project, session, {
     baselineCursor,
     dispatchId = null,
+    question = null,
     effectiveAgentId = session.mode === "specialist" ? session.agentId : null,
     effectiveAgentVersion = session.mode === "specialist" ? session.agentVersion : null,
     effectiveRuntimeAgent = session.mode === "specialist" ? session.runtimeAgent : null,
@@ -1231,6 +1247,7 @@ export class AgentRunStore {
         effectiveAgentVersion,
         effectiveRuntimeAgent,
         model: this.model,
+        question,
         createdAt: now,
         startedAt: now,
         baselineCursor,
@@ -1261,6 +1278,7 @@ export class AgentRunStore {
     const {
       sessionId,
       dispatchId,
+      question,
       effectiveAgentId,
       effectiveAgentVersion,
       effectiveRuntimeAgent,
@@ -1279,7 +1297,7 @@ export class AgentRunStore {
           effectiveRuntimeAgent: session.runtimeAgent,
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent };
-    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, ...selected });
+    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, question, ...selected });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);

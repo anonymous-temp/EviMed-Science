@@ -82,6 +82,48 @@ function runErrorLabel(code: string): string {
   return WEB_RUN_ERROR_LABEL[code] ?? "运行未通过核验。";
 }
 
+/** What each gate notice is about, in the reader's language. The notices are
+ *  written for the agent that has to repair them, so making them visible put
+ *  forty lines of English validator prose in front of a Chinese-reading
+ *  researcher. Grouping gives them the shape of the problem first; the detail
+ *  lines still carry the line numbers, URLs and claim ids they need to check. */
+const NOTICE_GROUPS: { label: string; match: RegExp }[] = [
+  { label: "数字未标注其来源主张", match: /^Report line \d+ numeric facts .+ have no evidence-matrix claim reference/ },
+  { label: "数字与所引主张不符", match: /^Report line \d+ numeric facts .+ are not present in the cited claim evidence/ },
+  { label: "推导结论未标注为推导", match: /states derived result .+ without marking it as derived/ },
+  { label: "推导结论进入了处置建议", match: /practical advice must rest on measured evidence/ },
+  { label: "引文地址", match: /^The citation /i },
+  { label: "证据矩阵主张", match: /^claims\[\d+\]/ },
+  { label: "引文台账与参考文献", match: /^(?:citation-ledger\.csv|references\.bib|citation-audit\.md)/ },
+  { label: "检索日志与运行记录", match: /search log|clinical-evidence-(?:search|run)\.json/i },
+  { label: "检索到的原文由子任务转述", match: /^Reading retrieved evidence was delegated/ },
+  { label: "修复过程影响了报告篇幅", match: /^(?:The report was replaced|Repair reduced)/ },
+  { label: "报告结构与表述", match: /^The (?:academic|deep-research) report/ },
+];
+
+interface NoticeGroup {
+  label: string;
+  mustFix: boolean;
+  items: string[];
+}
+
+function groupQualityNotices(notices: string[]): NoticeGroup[] {
+  const groups = new Map<string, NoticeGroup>();
+  for (const notice of notices) {
+    // "MUST FIX — " is how the gate marks what a reader cannot see for
+    // themselves. It is a severity, not part of the sentence.
+    const mustFix = /^MUST FIX\s*[—-]\s*/.test(notice);
+    const body = notice.replace(/^MUST FIX\s*[—-]\s*/, "");
+    const label = NOTICE_GROUPS.find((group) => group.match.test(body))?.label ?? "其他核验提示";
+    const key = `${mustFix ? "1" : "0"}:${label}`;
+    const existing = groups.get(key);
+    if (existing) existing.items.push(body);
+    else groups.set(key, { label, mustFix, items: [body] });
+  }
+  // What must be fixed leads: it is the part a reader cannot discount alone.
+  return [...groups.values()].sort((a, b) => Number(b.mustFix) - Number(a.mustFix));
+}
+
 /** Global Runs view (sidebar) — all runs across every session, like the global
  *  Files browser and Notebooks page. Same information architecture on both
  *  surfaces; only the data source and row actions differ. */
@@ -460,7 +502,7 @@ function HostedRunsView() {
           (!filter.status || run.status === filter.status) &&
           (!sinceTs || webRunTs(run) >= sinceTs) &&
           (!query ||
-            [run.id, run.sessionId, run.mode, run.agentId, run.effectiveAgentId, run.model, ...run.artifacts]
+            [run.question, run.id, run.sessionId, run.mode, run.agentId, run.effectiveAgentId, run.model, ...run.artifacts]
               .filter(Boolean)
               .join(" ")
               .toLowerCase()
@@ -765,8 +807,18 @@ function WebRunRow({
           )}
           title={WEB_RUN_STATUS_LABEL[run.status]}
         />
-        <span className={cn("min-w-0 flex-1 truncate font-mono text-ui", failed ? "text-text/70" : "text-text")}>
-          {run.id}
+        {/* The question, when the run recorded one. The list was keyed on the
+          * run id alone, so thirty analyses read as thirty hashes and telling
+          * them apart meant opening each one. */}
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate text-ui",
+            run.question ? "" : "font-mono",
+            failed ? "text-text/70" : "text-text",
+          )}
+          title={run.question ? `${run.question}\n${run.id}` : run.id}
+        >
+          {run.question || run.id}
         </span>
         <span className="shrink-0 text-caption font-semibold uppercase tracking-wide text-accent">
           {run.effectiveAgentId
@@ -790,6 +842,7 @@ function WebRunRow({
               <Chip title="开放域自动路由专项">{run.effectiveAgentId}</Chip>
             )}
             <Chip title="会话">{run.sessionId}</Chip>
+            {run.question && <Chip title="运行 ID">{run.id}</Chip>}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -829,11 +882,26 @@ function WebRunRow({
                   产物可以照常下载和阅读；以下各点是本次分析未能自证的部分，请在引用前自行核对。
                 </p>
               )}
-              <ul className="space-y-1">
-                {(run.qualityNotices ?? []).map((notice, index) => (
-                  <li key={index} className="flex gap-1.5 text-xs leading-relaxed text-text/80">
-                    <span className="shrink-0 text-muted">·</span>
-                    <span className="min-w-0">{notice}</span>
+              <ul className="space-y-2">
+                {groupQualityNotices(run.qualityNotices ?? []).map((group) => (
+                  <li key={`${group.mustFix}-${group.label}`}>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      {group.mustFix && (
+                        <span className="shrink-0 rounded bg-error/10 px-1 py-px text-caption font-medium text-error">
+                          必须修正
+                        </span>
+                      )}
+                      <span className="font-medium text-text">{group.label}</span>
+                      <span className="tabular-nums text-muted">{group.items.length}</span>
+                    </div>
+                    <ul className="mt-0.5 space-y-0.5">
+                      {group.items.map((item, index) => (
+                        <li key={index} className="flex gap-1.5 leading-relaxed text-text/70">
+                          <span className="shrink-0 text-muted">·</span>
+                          <span className="min-w-0 break-words">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </li>
                 ))}
               </ul>
