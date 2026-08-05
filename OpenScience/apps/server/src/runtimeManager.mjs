@@ -3586,8 +3586,20 @@ export class RuntimeManager {
       const headers = runtime.password ? { authorization: basicAuth(runtime.password) } : {};
       const response = await requestRuntime(runtime, target, { headers });
       if (response.status !== 200) {
-        await response.body?.cancel().catch(() => {});
-        throw new HttpError(502, "runtime_history_unavailable", "Runtime session history is unavailable.");
+        // The runtime said why and this discarded it, so every cause — an
+        // unknown session, a workspace the runtime does not have, a rejected
+        // password — arrived as the same sentence with nothing to act on.
+        let detail = "";
+        try {
+          detail = (await readRuntimeResponseBody(response.body, 2_048)).toString("utf8").replace(/\s+/g, " ").slice(0, 300);
+        } catch {
+          await response.body?.cancel().catch(() => {});
+        }
+        throw new HttpError(
+          502,
+          "runtime_history_unavailable",
+          `Runtime session history is unavailable (runtime answered HTTP ${response.status}${detail ? `: ${detail}` : ""}).`,
+        );
       }
       const payload = await readRuntimeResponseBody(response.body, this.config.maxJsonBytes);
       let value;
