@@ -757,6 +757,32 @@ test("names the reference a claim points at when the list really has no such ent
   assert.match(result.issues.join("\n"), /has no entry for reference 97/);
 });
 
+test("refuses subject labels that are record numbers from the source data", () => {
+  // A production analysis of an uploaded hospital extract wrote P11322133,
+  // P10750726 and P6851332 through its report and evidence matrix — real
+  // PATIENT_IDs with a P stuck on the front, which reads like a pseudonym and
+  // is not one. Nobody reading the report can tell, and the person exposed is
+  // not the reader.
+  const input = validPackage();
+  input.reportText = input.reportText.replace(
+    "症状不能单独完成病因归类。",
+    "P11322133 的浓度高于参考区间上限。",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, false);
+  assert.match(result.blockingIssues.join("\n"), /record numbers \(P11322133\)/);
+  assert.match(result.issues.join("\n"), /Assign your own sequential pseudonyms/);
+});
+
+test("leaves bibliographic identifiers and short pseudonyms alone", () => {
+  const input = validPackage();
+  input.reportText = input.reportText
+    .replace("症状不能单独完成病因归类。", "P3 与 P12 的浓度可比。")
+    + "\n\n综述编号 CD004473 与 PMC9584998 见参考文献。\n";
+  const result = validateClinicalEvidencePackage(input);
+  assert.doesNotMatch(result.issues.join("\n"), /record numbers/);
+});
+
 test("accepts a derived result that shows its inputs, method and sensitivity", () => {
   // The move the gate used to make impossible. A report holding a vapour
   // pressure and a sealed-system loss curve could not put them together,

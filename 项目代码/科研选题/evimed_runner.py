@@ -346,7 +346,17 @@ async def _analyze_with_service(request: dict, output_dir: Path, service) -> dic
     task = await service.create_task(direction)
     completed = await service.process_task(task.task_id)
     if completed.status != TaskStatus.COMPLETED or completed.report is None:
-        raise RuntimeError(completed.error_message or "research-topic pipeline did not complete")
+        # Say which condition failed. Raising error_message alone surfaced the
+        # service's own degradation notice as the cause: a caller was told
+        # "仅检索到1篇相关文献…系统将执行简化分析" — a statement that the pipeline
+        # was continuing — and read it as the reason it had stopped.
+        status = getattr(completed.status, "value", completed.status)
+        reason = f"status={status}, report={'present' if completed.report else 'missing'}"
+        note = (completed.error_message or "").strip()
+        raise RuntimeError(
+            f"research-topic pipeline did not complete ({reason})"
+            + (f"; service note: {note}" if note else "")
+        )
     invalid_modules = []
     for module_id, module_output in completed.module_outputs.items():
         serialized = json.dumps(module_output.data, ensure_ascii=False, default=str)

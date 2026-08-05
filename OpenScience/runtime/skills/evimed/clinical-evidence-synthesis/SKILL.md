@@ -26,6 +26,22 @@ Do not claim completion if any required skill fails to load.
 4. Write a publication-grade evidence analysis, not an expanded chat answer. Let the question and usable evidence determine length; do not pad the report or repeat conclusions to meet a quota.
 5. Keep the safety-first practical answer separate and concise. Clinical urgency takes precedence over product discussion.
 
+### Never carry a record number out of the data
+
+When the analysis is over a dataset the user supplied, subjects are referred to
+by pseudonyms **you assign** — P1, P2, P3 in a stable order — and never by a
+value copied from the file. Prefixing a hospital number with a letter does not
+de-identify it: `P11322133` reads like a pseudonym and is one of the source
+`PATIENT_ID`s. The same holds for case numbers, medical record numbers,
+admission numbers, dates of birth, and names.
+
+A production run wrote five real `PATIENT_ID`s through its report and evidence
+matrix this way. Nobody reading the report could tell, and the people exposed
+were not the reader.
+
+Identifiers of *sources* — PMID, PMC, DOI, NCT, Cochrane CD numbers — are
+citations and belong in the report as they are.
+
 ### Argue a thesis; do not answer a questionnaire
 
 A report that poses sub-questions, searches each, and returns a verdict on each is not analysis — it is a lookup table with citations. These questions are chosen because they sit at an edge of what is known, and an edge is where the work is.

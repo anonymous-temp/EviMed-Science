@@ -422,6 +422,16 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // fix than a missing Unpaywall address above.
   "official_page_url_forbidden",
   "public_source_unsupported",
+  // A downstream specialist service that could not complete. It is one tool a
+  // run may call among many, and calling it is not what the run is judged on:
+  // a production analysis wrote all seven deliverables, then was failed because
+  // the research-topic service crashed on a PubMed 429 and a missing plotting
+  // library — an outage in a helper container and an upstream rate limit,
+  // neither of which is a defect in the analysis. Whether the package is sound
+  // is what the package checks decide.
+  "specialist_execution_failed",
+  "meta_agent_execution_failed",
+  "upstream_failed",
   "public_source_document_path_forbidden",
   "public_source_document_request_forbidden",
   "public_source_gateway_credential_profile_forbidden",
