@@ -657,6 +657,38 @@ function parseJsonObject(value) {
   }
 }
 
+// Bibliographic identifiers are letters-then-digits too, and they belong in a
+// report. These are the schemes that do.
+const bibliographicIdentifierScheme = /^(?:PMC|PMID|NCT|ISRCTN|EudraCT|ChiCTR|CTRI|JPRN|UMIN|DOI|ISBN|ISSN|CLM|CD|MR|e|S)$/i;
+
+// A subject label carrying six or more digits is a record number, not a
+// pseudonym. A production analysis of an uploaded hospital extract wrote
+// P11322133, P10750726 and P6851332 through its report and evidence matrix —
+// real PATIENT_IDs from the source file with a P stuck on the front, which
+// reads like a pseudonym and is not one. Nobody reading the report can tell,
+// and the person exposed is not the reader.
+function recordIdentifiersInReport(reportText) {
+  const found = new Set();
+  // Only the analysis body. Article numbers like BMJ's e004216 are letters and
+  // digits too, and the reference list is exactly where they belong.
+  const text = withoutReportSections(String(reportText ?? ""), "参考文献|参考来源|References?");
+  for (const match of text.matchAll(/([A-Za-z]{1,6})[-_]?(\d{6,})/g)) {
+    const [whole, scheme] = match;
+    if (bibliographicIdentifierScheme.test(scheme)) continue;
+    const before = text.slice(Math.max(0, match.index - 60), match.index);
+    // Inside a URL, a DOI, or after an identifier label it is a citation.
+    if (/https?:\/\/\S*$|10\.\d{4,}\/\S*$|(?:PMID|PMC|DOI|NCT)\s*[:：]?\s*$/i.test(before)) continue;
+    // Second guard, so the scheme list above does not have to be complete: a
+    // line that cites something is a line about a source, not about a subject.
+    const lineStart = text.lastIndexOf("\n", match.index) + 1;
+    const lineEnd = text.indexOf("\n", match.index);
+    const line = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd);
+    if (/\[\d+\]|https?:\/\/|10\.\d{4,}\/|doi|PMID/i.test(line)) continue;
+    found.add(whole);
+  }
+  return [...found];
+}
+
 function reportSection(reportText, headingPattern) {
   const match = String(reportText ?? "").match(
     new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${headingPattern})[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i"),
@@ -1120,6 +1152,18 @@ export function validateClinicalEvidencePackage({
         `Report line ${lineIndex + 1} numeric facts ${unsupportedNumbers.join(", ")} are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.`,
       );
     }
+  }
+
+  // Pseudonyms are assigned by the analysis; record numbers come from the data
+  // and must not leave it. Blocking, because a reader cannot tell P11322133
+  // from a pseudonym, and the person it exposes is not the reader.
+  const leakedInReport = recordIdentifiersInReport(reportText);
+  const leakedInMatrix = recordIdentifiersInReport(JSON.stringify(matrix ?? {}));
+  const leaked = [...new Set([...leakedInReport, ...leakedInMatrix])].sort();
+  if (leaked.length) {
+    issues.push(
+      `The deliverables carry subject labels containing record numbers (${leaked.slice(0, 6).join(", ")}${leaked.length > 6 ? `, +${leaked.length - 6}` : ""}). Assign your own sequential pseudonyms and never reproduce an identifier from the source data.`,
+    );
   }
 
   const practical = reportSection(reportText, "实际处置|实用|怎么办|Practical");

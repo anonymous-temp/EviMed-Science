@@ -1298,6 +1298,30 @@ test("deep research tolerates documented source misses but requires invalid EviM
       ],
     },
     {
+      // A downstream specialist service that crashed. The production run that
+      // exposed this wrote all seven deliverables, then was failed because the
+      // research-topic service died on a PubMed 429 and a missing plotting
+      // library — an outage in a helper container and an upstream rate limit,
+      // neither a defect in the analysis it was helping with.
+      name: "downstream specialist service that could not complete",
+      expectedStatus: "succeeded",
+      expectedErrorCode: null,
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_research_topic_selection",
+          state: {
+            status: "error",
+            error: JSON.stringify({
+              status: "error",
+              summary: "PubMed 限流(429) … matplotlib not available",
+              error: { code: "specialist_execution_failed" },
+            }),
+          },
+        },
+      ],
+    },
+    {
       // The refusal that failed a production run. The agent asked for a page
       // outside the approved official-document set, the gateway said no, and
       // the agent obeyed and went elsewhere — then the run was failed for
