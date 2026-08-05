@@ -48,6 +48,26 @@ test("the heavy clinical report pipeline only engages on explicit report intent"
   );
 });
 
+test("asking for a report routes to the report line whichever verb carries it", async () => {
+  // The production prompt that exposed this: "给我写出所有的分析结果和报告".
+  // 写出 was not among the verbs the pattern listed, so a request for a report
+  // was answered as a chat message with no file produced at all.
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+  const asked = [
+    "请你基于上传的数据集，来分析能做哪些科学性研究……并给我写出所有的分析结果和报告",
+    "请输出一份阿立哌唑血药浓度的分析报告",
+    "帮我形成关于抗精神病药 TDM 的综述",
+    "完成一份回顾性研究的可行性报告",
+  ];
+  for (const query of asked) {
+    assert.equal(
+      routeOpenDomainSpecialist(query, agents)?.agentId,
+      "clinical-evidence-synthesis",
+      `should route to the report line: ${query}`,
+    );
+  }
+});
+
 test("plain clinical questions stay on the open-domain answer line", async () => {
   const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
   // No explicit report intent: analysis/efficacy questions — including ones
