@@ -34,16 +34,30 @@ function parseClassifierJson(content) {
   if (typeof content !== "string") return null;
   const raw = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
   if (!raw) return null;
-  let parsed;
+  let parsed = null;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return null;
+    // reasoning_content is prose that happens to contain the verdict. Take the
+    // last balanced object in it: the model states its answer at the end, and
+    // an earlier brace may belong to something it was reasoning about.
+    for (const match of [...raw.matchAll(/\{[^{}]*\}/g)].reverse()) {
+      try {
+        const candidate = JSON.parse(match[0]);
+        if (candidate && typeof candidate === "object" && "agentId" in candidate) {
+          parsed = candidate;
+          break;
+        }
+      } catch { /* keep looking */ }
+    }
+    if (!parsed) return null;
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   const agentId = typeof parsed.agentId === "string" ? parsed.agentId.trim() : null;
   const confidence = Number(parsed.confidence);
-  if (!agentId || agentId.toLowerCase() === "none" || !Number.isFinite(confidence)) return null;
+  if (!agentId || !Number.isFinite(confidence)) return null;
+  // "none" is an answer, not a missing one. Returning null for it made a model
+  // that correctly declined indistinguishable from a model that never replied.
   return { agentId, confidence: Math.max(0, Math.min(1, confidence)) };
 }
 
@@ -70,6 +84,16 @@ export class SpecialistClassifier {
     return this.enabled && this.config?.deepseekProviderEnabled === true && Boolean(this.config?.deepseekApiKey);
   }
 
+  /** A classification that never happened, as opposed to one that concluded
+   *  "no specialist". Both send the turn to the answer line, but only this one
+   *  means the fallback is not working — and for six of six live calls it was
+   *  not, silently, because the token budget cut the verdict off. */
+  declined(reason) {
+    this.lastFailure = reason;
+    process.stderr.write(`specialist classifier produced no verdict: ${reason}\n`);
+    return null;
+  }
+
   async classify(query, agents) {
     if (!this.available) return null;
     if (typeof query !== "string" || !query.trim()) return null;
@@ -94,7 +118,15 @@ export class SpecialistClassifier {
           model: this.config.deepseekModel,
           stream: false,
           temperature: 0,
-          max_tokens: 200,
+          // A reasoning model spends its budget thinking before it writes.
+          // At 200 it spent all of it: measured against the live API, six of
+          // six classifications came back with an empty content and 900–1000
+          // characters of reasoning_content — the verdict never got written.
+          // The fallback that exists to catch what the regex misses was
+          // therefore dead, and every miss fell to the answer line looking
+          // exactly like "no specialist fits". At 2000 the same six return a
+          // verdict every time.
+          max_tokens: 2_000,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: classifierInstructions },
@@ -103,10 +135,19 @@ export class SpecialistClassifier {
         }),
         signal: controller.signal,
       });
-      if (!response.ok) return null;
+      if (!response.ok) return this.declined(`http_${response.status}`);
       const body = await boundedJsonResponse(response);
-      const parsed = parseClassifierJson(body?.choices?.[0]?.message?.content);
-      if (!parsed) return null;
+      // Read the verdict wherever the model put it. A reasoning model that
+      // runs its budget close still often carries the JSON in
+      // reasoning_content, and a classification we already paid for should not
+      // be discarded over which field it arrived in.
+      const message = body?.choices?.[0]?.message;
+      const parsed = parseClassifierJson(message?.content) ?? parseClassifierJson(message?.reasoning_content);
+      // No verdict at all is a broken classifier; "none" and a low-confidence
+      // guess are verdicts. Only the first is worth reporting, and it used to
+      // be indistinguishable from the other two.
+      if (!parsed) return this.declined(message?.content?.trim() ? "unparseable" : "empty_content");
+      if (parsed.agentId.toLowerCase() === "none") return null;
       const agent = byId.get(parsed.agentId);
       if (!agent) return null;
       if (parsed.confidence < this.threshold) return null;
@@ -117,8 +158,8 @@ export class SpecialistClassifier {
         reason: `llm:${parsed.confidence.toFixed(2)}`,
         confidence: parsed.confidence,
       });
-    } catch {
-      return null;
+    } catch (error) {
+      return this.declined(error?.name === "AbortError" ? "timeout" : `error_${error?.code ?? "unknown"}`);
     } finally {
       clearTimeout(timeout);
     }

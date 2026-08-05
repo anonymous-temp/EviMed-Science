@@ -21,14 +21,17 @@ function baseConfig(overrides = {}) {
   };
 }
 
-function fetchReturning(content, { ok = true } = {}) {
+function fetchReturning(content, { ok = true, reasoningContent = undefined } = {}) {
   const calls = [];
   const fetchImpl = async (url, init) => {
     calls.push({ url: String(url), init });
+    const message = reasoningContent === undefined
+      ? { content }
+      : { content, reasoning_content: reasoningContent };
     return {
       ok,
       headers: { get: () => null },
-      text: async () => JSON.stringify({ choices: [{ message: { content } }] }),
+      text: async () => JSON.stringify({ choices: [{ message }] }),
     };
   };
   fetchImpl.calls = calls;
@@ -94,4 +97,44 @@ test("fails safe to no route on transport error or a non-ok response", async () 
 test("fails safe on malformed model JSON", async () => {
   const classifier = new SpecialistClassifier(baseConfig(), { fetchImpl: fetchReturning("not json at all") });
   assert.equal(await classifier.classify("analyze adverse events", agents), null);
+});
+
+test("recovers the verdict a reasoning model left in reasoning_content", async () => {
+  // The production failure, measured against the live API: six of six calls
+  // returned an empty content with 900–1000 characters of reasoning, because
+  // max_tokens was 200 and the model spent all of it thinking. The fallback
+  // that exists to catch what the regex misses was dead, and every miss looked
+  // exactly like "no specialist fits".
+  const reasoning = [
+    "The user uploaded a dataset and asks which studies are feasible.",
+    "They ask for a pooled synthesis, so meta-analysis fits.",
+    "Final answer: {\"agentId\": \"meta-analysis\", \"confidence\": 0.9}",
+  ].join(" ");
+  const fetchImpl = fetchReturning("", { reasoningContent: reasoning });
+  const classifier = new SpecialistClassifier(baseConfig(), { fetchImpl });
+  const routed = await classifier.classify("基于上传的数据集能做哪些研究，写出报告", agents);
+  assert.equal(routed?.agentId, "meta-analysis");
+});
+
+test("gives the model room to answer after it finishes reasoning", async () => {
+  const fetchImpl = fetchReturning(JSON.stringify({ agentId: "meta-analysis", confidence: 0.9 }));
+  const classifier = new SpecialistClassifier(baseConfig(), { fetchImpl });
+  await classifier.classify("请开展一项荟萃分析", agents);
+  const body = JSON.parse(fetchImpl.calls[0].init.body);
+  assert.ok(body.max_tokens >= 1_000, `max_tokens was ${body.max_tokens}; a reasoning model needs room to answer`);
+});
+
+test("a classifier that produced no verdict is distinguishable from one that said none", async () => {
+  // Both send the turn to the answer line. Only the first means the fallback
+  // is broken, and it used to be unreportable.
+  const broken = new SpecialistClassifier(baseConfig(), { fetchImpl: fetchReturning("") });
+  assert.equal(await broken.classify("写一份报告", agents), null);
+  assert.equal(broken.lastFailure, "empty_content");
+
+  const decided = new SpecialistClassifier(baseConfig(), {
+    fetchImpl: fetchReturning(JSON.stringify({ agentId: "none", confidence: 0.9 })),
+  });
+  decided.lastFailure = undefined;
+  assert.equal(await decided.classify("帮我润色一句话", agents), null);
+  assert.equal(decided.lastFailure, undefined, "a verdict of none is not a failure");
 });
