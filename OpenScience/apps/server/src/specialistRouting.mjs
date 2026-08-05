@@ -32,12 +32,27 @@ const routeRules = Object.freeze([
   ["research-topic-selection", /(?:科研选题|研究选题|选题设计|research topic selection)/i],
 ]);
 
-const clinicalSubject = /(?:胸痛|胸口|心绞痛|急性冠脉|冠心病|胃食管|患者|症状|诊断|治疗|用药|药物|临床|疾病)/i;
+// Subjects that are research work rather than a clinical presentation. These
+// only route anywhere in combination with an explicit report request, so a
+// question that merely mentions 研究 or 数据 is unaffected.
+const researchSubject = /(?:数据集|数据库|字段|数据结构|队列|回顾性|前瞻性|真实世界|科研|研究方向|研究设计|选题|可行性|统计分析|挖掘|dataset|cohort|retrospective|real[- ]world)/i;
+// Presentations, and the pharmacology vocabulary a medication question is
+// actually written in. Without the latter, "阿立哌唑血药浓度的分析报告" named
+// no clinical subject the router recognised: the drug is not on the safety
+// rules' medicine list and 血药浓度 was in neither pattern.
+const clinicalSubject = /(?:胸痛|胸口|心绞痛|急性冠脉|冠心病|胃食管|患者|症状|诊断|治疗|用药|药物|临床|疾病|血药浓度|药物浓度|血药|药代动力学|药动学|治疗药物监测|TDM|不良反应|适应症|禁忌|剂量)/i;
 // The heavy clinical report pipeline only engages on an EXPLICIT report /
 // deep-synthesis request. Plain clinical questions ("X 药疗效怎么样",
 // "分析下 X 的机制") stay on the open-domain answer line, whose skill carries
 // the same safety framing without the 12-section academic package.
-const explicitReportIntent = /(?:证据报告|证据综合|循证.{0,6}报告|综合.{0,6}证据.{0,4}报告|出一份|写一份|撰写|生成.{0,12}(?:报告|综述)|整理.{0,12}(?:报告|综述)|深度(?:研究|调研|报告)|systematic review|evidence report|evidence synthesis|clinical evidence report)/i;
+// The verbs here were the ones someone thought of. A real request — "给我写出
+// 所有的分析结果和报告" — used 写出, matched none of them, and went to the
+// answer line, which produces no file: the user asked for a report and received
+// a chat message. Asking for a 报告 or 综述 is the intent, whichever verb
+// carries it, and a named report ("分析报告", "研究报告") is one outright.
+// Questions that merely contain 分析 or 研究 without asking for a document are
+// unaffected, which the routing tests hold.
+const explicitReportIntent = /(?:证据报告|证据综合|循证.{0,6}报告|综合.{0,6}证据.{0,4}报告|出一份|写一份|撰写|(?:生成|整理|写出|给我|出具|提供|输出|形成|产出|完成).{0,16}(?:报告|综述)|(?:分析|研究|评估|可行性|调研|论证|总结)报告|深度(?:研究|调研|报告)|systematic review|evidence report|evidence synthesis|clinical evidence report)/i;
 const positiveMetaIntent = /(?:(?:开展|进行|执行|完成|做|conduct|run).{0,24}(?:meta\s*分析|荟萃分析|系统评价|systematic review|meta-analysis)|(?:meta\s*分析|荟萃分析|systematic review|meta-analysis).{0,24}(?:开展|进行|执行|完成|研究|分析))/i;
 const negatedMetaIntent = /(?:不要|不得|无需|不需要|避免|别|禁止|not|without).{0,48}(?:meta\s*分析|荟萃分析|系统评价|systematic review|meta-analysis)/i;
 
@@ -65,7 +80,15 @@ export function routeOpenDomainSpecialist(query, agents) {
   if (positiveMetaIntent.test(query) && !negatedMetaIntent.test(query)) {
     return selection(byId.get("meta-analysis"), "matched:meta-analysis");
   }
+  // The clinical-subject requirement exists to keep generic conversation off
+  // the heavy pipeline. It also kept a dataset off it: "基于上传的数据集，分析
+  // 能做哪些科学性研究……写出所有的分析结果和报告" names no symptom, drug or
+  // diagnosis, because its clinical content is in the attached file rather than
+  // in the sentence. The router reads the prompt, not the workspace, so that
+  // request could not reach the report line however it was phrased. A request
+  // to report on data or on research design is not generic conversation.
   const clinicalSubjectMatch = clinicalSubject.test(query)
+    || researchSubject.test(query)
     || (clinicalRoutingMedicinePattern != null && clinicalRoutingMedicinePattern.test(query));
   if (clinicalSubjectMatch && explicitReportIntent.test(query)) {
     return selection(byId.get("clinical-evidence-synthesis"), "matched:clinical-evidence-synthesis");
