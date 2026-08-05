@@ -106,6 +106,23 @@ export class ControlPlaneDatabase {
     });
     this.ownsPool = !pool;
     this.ready = null;
+    // An idle client losing its connection is routine — a TCP timeout, a
+    // database restart, a network blip — and pg reports it by emitting "error"
+    // on the pool. An EventEmitter with no error listener throws, so this took
+    // the whole API process down in production: "Unhandled 'error' event ...
+    // Connection terminated unexpectedly", container restart count 1, and then
+    // a readiness check stuck on 57P03 while a fresh client connected fine.
+    //
+    // The pool discards the broken client on its own. What it needed was
+    // somewhere for the error to go, and for the migration promise to be
+    // dropped so the next query re-establishes rather than trusting a
+    // connection that has already died.
+    this.pool.on("error", (error) => {
+      this.ready = null;
+      process.stderr.write(
+        `control-plane database pool error: ${error?.code ?? "unknown"} ${error?.message ?? error}\n`,
+      );
+    });
   }
 
   async migrate() {
