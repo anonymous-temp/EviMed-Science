@@ -85,6 +85,9 @@ test("a question that starts from the researcher's own data reaches the scoping 
     "这份住院 TDM 数据集能不能支撑一个个体化用药的预测模型？",
     "用我上传的数据集建一个剂量预测模型可行吗",
     "assess the feasibility of a dose prediction model on my uploaded dataset",
+    // 科研选题 is research-topic-selection's own trigger, but a researcher who
+    // says it while holding data wants the topic analysis grounded in that data.
+    "基于我上传的这份住院数据集做一次完整的科研选题分析，判断它能支撑哪些课题",
   ];
   for (const query of scoping) {
     assert.equal(
@@ -109,7 +112,7 @@ test("a question that starts from the researcher's own data reaches the scoping 
   assert.equal(
     routeOpenDomainSpecialist("为 ICU 抗菌药精准给药设计科研选题", agents)?.agentId,
     "research-topic-selection",
-    "direction-first topic selection is unaffected",
+    "direction-first topic selection with no data in hand is unaffected",
   );
   assert.equal(
     routeOpenDomainSpecialist("请输出一份阿立哌唑血药浓度的分析报告", agents)?.agentId,
