@@ -22,11 +22,13 @@ const profileScript = path.join(skillRoot, "scripts/profile_dataset.py");
 const preflightScript = path.join(skillRoot, "scripts/preflight.py");
 const hasPython3 = spawnSync("python3", ["--version"], { stdio: "ignore" }).status === 0;
 
+// START_DATETIME is day-first, as the real extract exported it; RECORD_CONTENT
+// is the vital-signs column whose name contains "record" without being one.
 const ORDERS = [
-  "PATIENT_ID,DRUG,FREQUENCY,START_DATETIME,END_DATETIME,BP",
-  "P11322133,olanzapine,BID4,2026-01-02 08:00,0/0/0 00:00:00,129/74",
-  "P11322134,quetiapine,QD11,2026-01-03 08:00,2026-01-09 08:00,131/80",
-  "P11322135,olanzapine,ONCE,2026-01-04 08:00,0/0/0 00:00:00,140/90",
+  "PATIENT_ID,DRUG,FREQUENCY,START_DATETIME,END_DATETIME,BP,RECORD_CONTENT",
+  "P11322133,olanzapine,BID4,2/1/2026 08:00,0/0/0 00:00:00,129/74,101/62",
+  "P11322134,quetiapine,QD11,3/1/2026 08:00,9/1/2026 08:00,131/80,110/70",
+  "P11322135,olanzapine,ONCE,4/1/2026 08:00,0/0/0 00:00:00,140/90,120/80",
 ].join("\n");
 // The join key is declared and entirely empty, which no schema diagram shows.
 const DIAGNOSIS = ["PATIENT_ID,MAIN_DIAGNOSIS_CODE,AGE", ",F20.0,56岁", ",F31.1,44岁"].join("\n");
@@ -116,9 +118,18 @@ test("the profiler reports the traps and never emits an identifier", { skip: !ha
     assert.ok(frequency.vocabulary.values.some(([value]) => value === "BID4"));
 
     assert.deepEqual(column("orders.csv", "END_DATETIME").sentinelSuspects, ["0/0/0 00:00:00"]);
-    // A sentinel date is not a composite value; only BP is.
+    // Neither a sentinel date nor a day-first timestamp is a cell carrying two
+    // values. Matching only year-first dates made 915 timestamps of one real
+    // column read as composite and buried the comorbidity strings that were.
     assert.equal(column("orders.csv", "END_DATETIME").compositeSuspects.count, 0);
+    assert.equal(column("orders.csv", "START_DATETIME").compositeSuspects.count, 0);
+    assert.equal(column("orders.csv", "START_DATETIME").inferredType, "date");
     assert.equal(column("orders.csv", "BP").compositeSuspects.count, 3);
+    // "record" alone must not mask a column: RECORD_CONTENT carries the vital
+    // signs, and masking it hid that blood pressure is stored as a composite.
+    const recordContent = column("orders.csv", "RECORD_CONTENT");
+    assert.equal(recordContent.vocabulary.identifying, false);
+    assert.equal(recordContent.compositeSuspects.count, 3);
     assert.deepEqual(profile.typeConflicts.map((c) => c.column), ["AGE"]);
 
     // No identifier reaches either deliverable, while its cardinality still does.

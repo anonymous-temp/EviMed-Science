@@ -41,11 +41,28 @@ JOIN_KEY_PATTERN = re.compile(r"(?:^|_)(?:id|no|code|key|num|number)$", re.I)
 # deliverable — which is what the preflight's first gate exists to catch, and it
 # caught this script doing it. Joins are still computed from the real values;
 # they are simply never emitted.
-IDENTIFIER_COLUMN_PATTERN = re.compile(
-    r"(?:patient|subject|person|case|record|admission|visit|encounter|inpatient|mrn|"
-    r"病案|住院|门诊|患者|病人|姓名|身份证|就诊)",
+#
+# Matching the subject word alone was too broad: RECORD_DATE and RECORD_CONTENT
+# contain "record", so a vital-signs table had its most analytic column masked.
+# An identifier is a subject word carrying an id-shaped suffix, or one of the
+# few names that are identifiers outright.
+IDENTIFIER_EXPLICIT = re.compile(r"^(?:id|mrn|姓名|患者姓名|身份证号?|病案号|住院号|门诊号|就诊号)$", re.I)
+IDENTIFIER_SUBJECT = re.compile(
+    r"(?:patient|subject|person|case|record|admission|visit|encounter|inpatient|"
+    r"病案|住院|门诊|患者|病人|就诊)",
     re.I,
 )
+IDENTIFIER_SUFFIX = re.compile(r"(?:^|_)(?:id|no|num|number|code)$", re.I)
+
+
+def is_identifying(name: str) -> bool:
+    """True when a column's values identify a person or an episode of care."""
+    return bool(
+        IDENTIFIER_EXPLICIT.match(name.strip())
+        or (IDENTIFIER_SUBJECT.search(name) and IDENTIFIER_SUFFIX.search(name))
+    )
+
+
 # Dates that are really "unset". These parse as text and fail as dates, which is
 # why 11.5% of one real END_DATETIME column silently broke every duration.
 SENTINEL_PATTERN = re.compile(
@@ -56,7 +73,14 @@ SENTINEL_PATTERN = re.compile(
 COMPOSITE_PATTERN = re.compile(r"^[^|;,/\\]+(?:\s*[|;/\\]\s*[^|;,/\\]+)+$")
 INTEGER_PATTERN = re.compile(r"^[+-]?\d+$")
 NUMBER_PATTERN = re.compile(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$")
-DATE_PATTERN = re.compile(r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:[ tT]\d{1,2}:\d{2}(?::\d{2})?)?\s*$")
+# Both orders, because a real extract exported day-first: matching only
+# year-first left 915 of one column's timestamps looking like composite values,
+# which buried the genuine composites — the pipe-delimited comorbidity strings —
+# under an entire column of false positives.
+DATE_PATTERN = re.compile(
+    r"^(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})"
+    r"(?:[ tT]\d{1,2}:\d{2}(?::\d{2})?)?\s*$",
+)
 
 
 def is_blank(value: str) -> bool:
@@ -85,7 +109,7 @@ def profile_column(name: str, cells: list[str]) -> tuple[dict, set[str]]:
     stripped = [c.strip() for c in filled]
     counts = Counter(stripped)
     distinct = len(counts)
-    identifying = bool(IDENTIFIER_COLUMN_PATTERN.search(name))
+    identifying = is_identifying(name)
     complete = distinct <= VOCABULARY_COMPLETE_MAX and not identifying
     shown = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
     if identifying:

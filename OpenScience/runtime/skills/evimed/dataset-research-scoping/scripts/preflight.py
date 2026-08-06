@@ -45,12 +45,25 @@ PROSE_OUTPUTS = (
 )
 # Columns whose values identify a person or an episode of care. Their values may
 # never leave the data; a run refers to subjects by pseudonyms it assigns.
-IDENTIFIER_COLUMN_PATTERN = re.compile(
-    r"(?:patient|subject|person|case|record|admission|visit|encounter|inpatient|mrn|"
-    r"病案|住院|门诊|患者|病人|姓名|身份证|就诊)",
+# Kept identical to profile_dataset.py's rule. Matching the subject word alone
+# swept in RECORD_DATE and RECORD_CONTENT, whose values are timestamps and
+# clinical text: every date in the report would then have read as a leaked
+# identifier and blocked a sound package.
+IDENTIFIER_EXPLICIT = re.compile(r"^(?:id|mrn|姓名|患者姓名|身份证号?|病案号|住院号|门诊号|就诊号)$", re.I)
+IDENTIFIER_SUBJECT = re.compile(
+    r"(?:patient|subject|person|case|record|admission|visit|encounter|inpatient|"
+    r"病案|住院|门诊|患者|病人|就诊)",
     re.I,
 )
-IDENTIFIER_NAME_SUFFIX = re.compile(r"(?:^|_)(?:id|no|num|number|code)$", re.I)
+IDENTIFIER_SUFFIX = re.compile(r"(?:^|_)(?:id|no|num|number|code)$", re.I)
+
+
+def is_identifying(name: str) -> bool:
+    """True when a column's values identify a person or an episode of care."""
+    return bool(
+        IDENTIFIER_EXPLICIT.match(name.strip())
+        or (IDENTIFIER_SUBJECT.search(name) and IDENTIFIER_SUFFIX.search(name))
+    )
 # An identifier short enough to collide with an ordinary number in prose is not
 # evidence of leakage; below this length a match is not reported.
 IDENTIFIER_MIN_LENGTH = 5
@@ -109,10 +122,7 @@ def identifier_values(dataset_paths: list[Path]) -> set[str]:
 
         for header, rows in tables:
             for index, column_name in enumerate(header):
-                name = str(column_name)
-                if not IDENTIFIER_COLUMN_PATTERN.search(name):
-                    continue
-                if not IDENTIFIER_NAME_SUFFIX.search(name) and not IDENTIFIER_COLUMN_PATTERN.search(name):
+                if not is_identifying(str(column_name)):
                     continue
                 for row in rows:
                     if index >= len(row):
