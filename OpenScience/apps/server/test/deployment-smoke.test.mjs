@@ -11,6 +11,14 @@ import { productionReleaseConfig } from "./releaseFixture.mjs";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const smokeScript = path.join(repoRoot, "scripts/ops/deployment-smoke.mjs");
 const hasPython3 = spawnSync("python3", ["--version"], { stdio: "ignore" }).status === 0;
+// The kernel smoke path runs a Python kernel and then an R one, so it needs both
+// interpreters on the host. Declaring only Python meant a machine without R
+// failed here with "spawn Rscript ENOENT" — an error that names a missing binary
+// rather than an unmet test precondition, and one that no amount of reading the
+// test would predict. That made `pnpm test:web` and `pnpm ci:web` unpassable on
+// any host without R. Skipping is right only here: `smoke:deployment` run against
+// a real deployment still fails on a missing R, which is a genuine host defect.
+const hasRscript = spawnSync("Rscript", ["--version"], { stdio: "ignore" }).status === 0;
 
 function runSmoke(env) {
   return new Promise((resolve, reject) => {
@@ -119,7 +127,7 @@ test("deployment smoke accepts an operator-supplied OIDC session without passwor
   }
 });
 
-test("deployment smoke executes a project-scoped hosted Python kernel", { skip: !hasPython3 }, async () => {
+test("deployment smoke executes project-scoped hosted Python and R kernels", { skip: !hasPython3 || !hasRscript }, async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-web-smoke-kernel-"));
   const app = createWebApiApp({
     dataDir,
