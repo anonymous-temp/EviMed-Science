@@ -53,21 +53,38 @@ PROSE_OUTPUTS = (
 # swept in RECORD_DATE and RECORD_CONTENT, whose values are timestamps and
 # clinical text: every date in the report would then have read as a leaked
 # identifier and blocked a sound package.
+# Matching the subject word as a substring was too broad (RECORD_DATE), and
+# matching it as a whole word was too narrow: a real front-page column is
+# MED_REC_NO — the medical record number, abbreviated — which neither rule
+# caught, so its full vocabulary of hospital numbers was printed into the
+# profile and handed over as a clean deliverable. Names are split into tokens
+# and a column identifies when a subject token meets an id-shaped last token.
 IDENTIFIER_EXPLICIT = re.compile(r"^(?:id|mrn|姓名|患者姓名|身份证号?|病案号|住院号|门诊号|就诊号)$", re.I)
-IDENTIFIER_SUBJECT = re.compile(
-    r"(?:patient|subject|person|case|record|admission|visit|encounter|inpatient|"
-    r"病案|住院|门诊|患者|病人|就诊)",
-    re.I,
-)
-IDENTIFIER_SUFFIX = re.compile(r"(?:^|_)(?:id|no|num|number|code)$", re.I)
+IDENTIFIER_SUBJECT_TOKENS = frozenset({
+    "patient", "subject", "person", "case", "record", "rec", "admission",
+    "visit", "encounter", "inpatient", "outpatient", "mrn",
+})
+# "adm" and "reg" were in this set and masked ADM_DEPT_CODE, the admitting
+# department — a covariate, not a person. A subject token must be a word that
+# names the subject, not any abbreviation that begins one.
+IDENTIFIER_SUFFIX_TOKENS = frozenset({"id", "no", "num", "number", "code", "sn"})
+IDENTIFIER_SUBJECT_CJK = re.compile(r"(?:病案|住院|门诊|患者|病人|就诊|身份证|姓名)")
 
 
 def is_identifying(name: str) -> bool:
     """True when a column's values identify a person or an episode of care."""
-    return bool(
-        IDENTIFIER_EXPLICIT.match(name.strip())
-        or (IDENTIFIER_SUBJECT.search(name) and IDENTIFIER_SUFFIX.search(name))
-    )
+    cleaned = name.strip()
+    if IDENTIFIER_EXPLICIT.match(cleaned):
+        return True
+    tokens = [t for t in re.split(r"[^0-9A-Za-z]+", cleaned) if t]
+    if tokens and tokens[-1].lower() in IDENTIFIER_SUFFIX_TOKENS:
+        if any(t.lower() in IDENTIFIER_SUBJECT_TOKENS for t in tokens):
+            return True
+        if IDENTIFIER_SUBJECT_CJK.search(cleaned):
+            return True
+    return False
+
+
 # An identifier short enough to collide with an ordinary number in prose is not
 # evidence of leakage; below this length a match is not reported.
 IDENTIFIER_MIN_LENGTH = 5

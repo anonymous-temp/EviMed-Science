@@ -46,21 +46,36 @@ JOIN_KEY_PATTERN = re.compile(r"(?:^|_)(?:id|no|code|key|num|number)$", re.I)
 # contain "record", so a vital-signs table had its most analytic column masked.
 # An identifier is a subject word carrying an id-shaped suffix, or one of the
 # few names that are identifiers outright.
+# Matching the subject word as a substring was too broad (RECORD_DATE), and
+# matching it as a whole word was too narrow: a real front-page column is
+# MED_REC_NO — the medical record number, abbreviated — which neither rule
+# caught, so its full vocabulary of hospital numbers was printed into the
+# profile and handed over as a clean deliverable. Names are split into tokens
+# and a column identifies when a subject token meets an id-shaped last token.
 IDENTIFIER_EXPLICIT = re.compile(r"^(?:id|mrn|姓名|患者姓名|身份证号?|病案号|住院号|门诊号|就诊号)$", re.I)
-IDENTIFIER_SUBJECT = re.compile(
-    r"(?:patient|subject|person|case|record|admission|visit|encounter|inpatient|"
-    r"病案|住院|门诊|患者|病人|就诊)",
-    re.I,
-)
-IDENTIFIER_SUFFIX = re.compile(r"(?:^|_)(?:id|no|num|number|code)$", re.I)
+IDENTIFIER_SUBJECT_TOKENS = frozenset({
+    "patient", "subject", "person", "case", "record", "rec", "admission",
+    "visit", "encounter", "inpatient", "outpatient", "mrn",
+})
+# "adm" and "reg" were in this set and masked ADM_DEPT_CODE, the admitting
+# department — a covariate, not a person. A subject token must be a word that
+# names the subject, not any abbreviation that begins one.
+IDENTIFIER_SUFFIX_TOKENS = frozenset({"id", "no", "num", "number", "code", "sn"})
+IDENTIFIER_SUBJECT_CJK = re.compile(r"(?:病案|住院|门诊|患者|病人|就诊|身份证|姓名)")
 
 
 def is_identifying(name: str) -> bool:
     """True when a column's values identify a person or an episode of care."""
-    return bool(
-        IDENTIFIER_EXPLICIT.match(name.strip())
-        or (IDENTIFIER_SUBJECT.search(name) and IDENTIFIER_SUFFIX.search(name))
-    )
+    cleaned = name.strip()
+    if IDENTIFIER_EXPLICIT.match(cleaned):
+        return True
+    tokens = [t for t in re.split(r"[^0-9A-Za-z]+", cleaned) if t]
+    if tokens and tokens[-1].lower() in IDENTIFIER_SUFFIX_TOKENS:
+        if any(t.lower() in IDENTIFIER_SUBJECT_TOKENS for t in tokens):
+            return True
+        if IDENTIFIER_SUBJECT_CJK.search(cleaned):
+            return True
+    return False
 
 
 # Dates that are really "unset". These parse as text and fail as dates, which is
@@ -209,6 +224,36 @@ def profile_tables(paths: list[Path]) -> tuple[dict, dict[tuple[str, str], set[s
     return {"schemaVersion": SCHEMA_VERSION, "tables": tables}, values
 
 
+# A column with no name at all cannot be classified by name, and one real sheet
+# has exactly that: an unnamed column carrying CASE_NO values, whose vocabulary
+# was printed in full because the rule had nothing to match on. Identifiers
+# travel across columns regardless of what the column is called, so any column
+# whose values are mostly values of an identifying column is masked too.
+VALUE_OVERLAP_MASK_RATIO = 0.5
+
+
+def mask_by_value_overlap(profile: dict, values: dict[tuple[str, str], set[str]]) -> None:
+    pool: set[str] = set()
+    for table in profile["tables"]:
+        for column in table["columns"]:
+            if column["vocabulary"]["identifying"]:
+                pool |= values.get((table["name"], column["name"]), set())
+    if not pool:
+        return
+    for table in profile["tables"]:
+        for column in table["columns"]:
+            if column["vocabulary"]["identifying"]:
+                continue
+            own = values.get((table["name"], column["name"]), set())
+            if not own:
+                continue
+            if len(own & pool) / len(own) >= VALUE_OVERLAP_MASK_RATIO:
+                column["vocabulary"]["identifying"] = True
+                column["vocabulary"]["complete"] = False
+                column["vocabulary"]["values"] = []
+                column["compositeSuspects"]["examples"] = []
+
+
 def discover_joins(values: dict[tuple[str, str], set[str]]) -> list[dict]:
     """Inclusion dependencies: is every value of A.col also a value of B.col?
 
@@ -338,6 +383,7 @@ def main() -> int:
         raise SystemExit("input file(s) not found: " + ", ".join(missing))
 
     profile, values = profile_tables(sorted(paths, key=lambda p: p.name))
+    mask_by_value_overlap(profile, values)
     profile["joins"] = discover_joins(values)
     profile["typeConflicts"] = find_type_conflicts(profile["tables"])
 
