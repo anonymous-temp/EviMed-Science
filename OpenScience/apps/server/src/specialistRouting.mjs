@@ -32,6 +32,22 @@ const routeRules = Object.freeze([
   ["research-topic-selection", /(?:科研选题|研究选题|选题设计|research topic selection)/i],
 ]);
 
+// A request that starts from data the researcher already holds and asks what it
+// can support. Both halves are required: the data they have, and the question of
+// what it can carry.
+//
+// These used to reach clinical-evidence-synthesis, which is a literature
+// synthesis and has no profiling step — so the dataset's own fields never
+// entered the judgment it was asked to make. A production run asked exactly
+// this of a five-table hospital extract and got an evidence report back.
+// dataset-research-scoping profiles the data first and answers per candidate
+// question, naming the missing field whenever the answer is no.
+// The possessive and the data word are rarely adjacent — "我手上有一份住院数据"
+// puts five characters between them — so a bounded gap is allowed, stopping at
+// a sentence boundary so two unrelated clauses cannot combine into a match.
+const datasetSubject = /(?:(?:上传|我的|我们的|手上|手里|现有|已有|这份|那份|本院|院内|自己的)[^。；;!?\n]{0,12}?(?:数据集?|数据库|数据表|资料|表格)|数据集|dataset|data\s?set)/i;
+const datasetScopingIntent = /(?:(?:能|可以|可能|适合|能否|能不能|可不可以)\s*(?:做|开展|支撑|支持|回答|产出|发)\s*(?:哪些|什么|多少)?\s*(?:科学性?)?(?:研究|课题|分析|选题|文章|论文)|(?:研究|课题|选题|分析)\s*(?:的)?\s*可行性|(?:哪些|什么)\s*(?:科学性?)?(?:研究|课题|选题)|what\s+(?:research|studies|questions).{0,24}(?:support|possible|feasible)|research\s+feasibilit|feasibility\s+of\s+(?:the\s+)?(?:data|dataset))/i;
+
 // Subjects that are research work rather than a clinical presentation. These
 // only route anywhere in combination with an explicit report request, so a
 // question that merely mentions 研究 or 数据 is unaffected.
@@ -79,6 +95,11 @@ export function routeOpenDomainSpecialist(query, agents) {
   }
   if (positiveMetaIntent.test(query) && !negatedMetaIntent.test(query)) {
     return selection(byId.get("meta-analysis"), "matched:meta-analysis");
+  }
+  // After meta, so "对我的数据集做 meta 分析" still reaches the meta pipeline,
+  // and before the clinical fallback, which would otherwise take this.
+  if (datasetSubject.test(query) && datasetScopingIntent.test(query)) {
+    return selection(byId.get("dataset-research-scoping"), "matched:dataset-research-scoping");
   }
   // The clinical-subject requirement exists to keep generic conversation off
   // the heavy pipeline. It also kept a dataset off it: "基于上传的数据集，分析

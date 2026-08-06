@@ -279,6 +279,7 @@ test("specialty agent catalog requires authentication and exposes only public me
       "bibliometric-analysis",
       "clinical-evidence-synthesis",
       "comprehensive-drug-evaluation",
+      "dataset-research-scoping",
       "drug-selection",
       "mendelian-randomization",
       "meta-analysis",

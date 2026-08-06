@@ -94,6 +94,7 @@ test("official skills name every output declared by their manifest", async () =>
     "bibliometric-analysis",
     "clinical-evidence-synthesis",
     "comprehensive-drug-evaluation",
+    "dataset-research-scoping",
     "drug-selection",
     "mendelian-randomization",
     "meta-analysis",
@@ -122,6 +123,7 @@ test("official specialist packages preserve domain-specific evidence and release
     ["bibliometric-analysis", "1.0.1"],
     ["clinical-evidence-synthesis", "2.1.0"],
     ["comprehensive-drug-evaluation", "2.2.1"],
+    ["dataset-research-scoping", "1.0.0"],
     ["drug-selection", "2.1.1"],
     ["mendelian-randomization", "1.0.1"],
     ["meta-analysis", "1.0.0"],
@@ -137,6 +139,10 @@ test("official specialist packages preserve domain-specific evidence and release
     let expectedChecks = ["requiredOutputsExist", "citationsResolvable"];
     if (agent.id === "clinical-evidence-synthesis") {
       expectedChecks = ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable", "skillsLoaded"];
+    } else if (agent.id === "dataset-research-scoping") {
+      // The profiling step is only meaningful if the skill stack that defines it
+      // actually loaded, so skill loading is part of this contract's floor.
+      expectedChecks = ["requiredOutputsExist", "citationsResolvable", "skillsLoaded"];
     } else if (agent.id === "open-domain-answer") {
       // Answer-mode contract: the reply is the deliverable, so the floor is
       // skill loading plus citation hygiene and integrity, instead of file outputs.
