@@ -178,6 +178,18 @@ test("each blocking gate rejects what it exists to catch", { skip: !hasPython3 }
       expect: /carries the source identifier/,
     },
     {
+      name: "a pseudonym mapping written into a working file",
+      apply: async (root) => {
+        // Not a declared deliverable — exactly how the real leak escaped.
+        await writeFile(
+          path.join(root, "tdm-derived.json"),
+          JSON.stringify({ pseudonyms: { P11322133: "P1" } }),
+          "utf8",
+        );
+      },
+      expect: /tdm-derived\.json: carries the source identifier/,
+    },
+    {
       name: "profile numbers that are not the script's",
       apply: async (root) => {
         const file = path.join(root, "data-profile.json");

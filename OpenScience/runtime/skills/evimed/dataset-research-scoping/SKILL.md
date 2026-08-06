@@ -47,6 +47,13 @@ admission numbers, dates of birth, and names.
 A production run wrote five real `PATIENT_ID`s through its deliverables this
 way. Nobody reading them could tell, and the people exposed were not the reader.
 
+**The mapping is the identifier.** A run wrote `{"pseudonyms": {"216359": "P1",
+...}}` into a working file of its own, which hands back exactly what the
+pseudonyms were assigned to hide. Derive the pseudonym in memory and never
+write the correspondence to disk — not into a deliverable, not into a scratch
+file, not into a script's output. The preflight scans every file left in the
+workspace, not only the declared deliverables.
+
 Identifiers of *sources* — PMID, PMC, DOI, NCT — are citations and belong in the
 deliverables as they are.
 
