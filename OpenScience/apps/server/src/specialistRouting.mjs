@@ -96,8 +96,15 @@ function selection(agent, reason) {
 export function routeOpenDomainSpecialist(query, agents) {
   if (typeof query !== "string" || !query.trim() || !Array.isArray(agents)) return null;
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
+  // A researcher who says 科研选题 while holding a dataset wants the topic
+  // analysis grounded in that data. research-topic-selection starts from a
+  // direction and never opens the file, so taking this on the word alone sends
+  // the one request that must read the data to the one skill that cannot.
+  const dataInHand = datasetSubject.test(query) && datasetScopingIntent.test(query);
   for (const [id, pattern] of routeRules) {
-    if (/** @type {RegExp} */ (pattern).test(query)) return selection(byId.get(id), `matched:${id}`);
+    if (!(/** @type {RegExp} */ (pattern).test(query))) continue;
+    if (id === "research-topic-selection" && dataInHand) break;
+    return selection(byId.get(id), `matched:${id}`);
   }
   if (positiveMetaIntent.test(query) && !negatedMetaIntent.test(query)) {
     return selection(byId.get("meta-analysis"), "matched:meta-analysis");
