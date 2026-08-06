@@ -154,20 +154,48 @@ def identifier_values(dataset_paths: list[Path]) -> set[str]:
     return values
 
 
+def scannable_files(root: Path, dataset_paths: list[Path]) -> list[Path]:
+    """Every text file the run leaves behind, except the source data itself.
+
+    Scanning only the declared deliverables was not enough. A run wrote its own
+    working file holding {"pseudonyms": {"216359": "P1", ...}} — the mapping back
+    to real hospital numbers, which defeats the pseudonyms entirely — and because
+    that file was not on the declared list it was never looked at. Anything left
+    in the workspace can be read by whoever receives it.
+    """
+    sources = {path.resolve() for path in dataset_paths}
+    files = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        if path.resolve() in sources:
+            continue
+        # Retrieved source documents are quoted evidence, not run output.
+        if ".evimed-sources" in path.parts:
+            continue
+        if path.suffix.lower() in {".xlsx", ".xlsm", ".xls", ".png", ".jpg", ".pdf", ".zip", ".gz"}:
+            continue
+        files.append(path)
+    return files
+
+
 def check_identifier_leakage(root: Path, dataset_paths: list[Path], issues: list[str]) -> int:
     values = identifier_values(dataset_paths)
     if not values:
         return 0
     leaked = 0
-    for name in PROSE_OUTPUTS:
-        text = read_text(root, name)
-        if not text:
+    for path in scannable_files(root, dataset_paths):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
             continue
         for value in sorted(values):
             if value in text:
                 leaked += 1
+                name = path.relative_to(root).as_posix()
                 issues.append(
-                    f"{name}: carries the source identifier {value!r}. Refer to subjects by a pseudonym you assign."
+                    f"{name}: carries the source identifier {value!r}. Refer to subjects by a pseudonym you "
+                    "assign, and never write the mapping back to the source value into the workspace."
                 )
     return leaked
 
