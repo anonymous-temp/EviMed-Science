@@ -40,14 +40,14 @@ and for every question judged infeasible, **the specific field that is missing**
 
 Subjects are referred to by pseudonyms **you assign** — P1, P2, P3 in a stable
 order — never by a value copied from the file. Prefixing a hospital number with
-a letter does not de-identify it: `P11322133` reads like a pseudonym and is a
+a letter does not de-identify it: `P90000001` reads like a pseudonym and is a
 source `PATIENT_ID`. The same holds for case numbers, medical record numbers,
 admission numbers, dates of birth, and names.
 
 A production run wrote five real `PATIENT_ID`s through its deliverables this
 way. Nobody reading them could tell, and the people exposed were not the reader.
 
-**The mapping is the identifier.** A run wrote `{"pseudonyms": {"216359": "P1",
+**The mapping is the identifier.** A run wrote `{"pseudonyms": {"900004": "P1",
 ...}}` into a working file of its own, which hands back exactly what the
 pseudonyms were assigned to hide. Derive the pseudonym in memory and never
 write the correspondence to disk — not into a deliverable, not into a scratch
