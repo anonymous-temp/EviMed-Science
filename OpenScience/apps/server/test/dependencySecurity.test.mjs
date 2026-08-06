@@ -20,11 +20,27 @@ test("document preview dependencies resolve to audited ECharts and UUID fixes", 
   assert.equal(dependencyVersion("exceljs", "uuid"), "11.1.1");
 });
 
-test("the accepted production advisory list stays at the reviewed exception", async () => {
+test("no production advisory is accepted, because the last one is now fixable", async () => {
   const pkg = JSON.parse(
     await readFile(path.join(repoRoot, "package.json"), "utf8"),
   );
-  assert.deepEqual(pkg.pnpm?.auditConfig?.ignoreCves, ["CVE-2026-14257"]);
+  // The brace-expansion chain under exceljs was accepted while the only patched
+  // line was 5, which glob 7 cannot consume. Upstream backported the fix within
+  // each major line, so it is pinned rather than excused, and the list is empty.
+  assert.deepEqual(pkg.pnpm?.auditConfig?.ignoreCves ?? [], []);
+
+  // Assert the property rather than one resolution path: no brace-expansion
+  // below its line's patched release may resolve anywhere in the tree.
+  const lockfile = await readFile(path.join(repoRoot, "pnpm-lock.yaml"), "utf8");
+  const resolved = [...new Set(lockfile.match(/brace-expansion@\d+\.\d+\.\d+/g) ?? [])]
+    .map((entry) => entry.split("@")[1]);
+  assert.ok(resolved.length > 0, "brace-expansion should still be in the tree");
+  for (const version of resolved) {
+    const [major, minor, patch] = version.split(".").map(Number);
+    const vulnerable = (major === 1 && (minor < 1 || (minor === 1 && patch < 18)))
+      || (major === 2 && (minor < 1 || (minor === 1 && patch < 4)));
+    assert.equal(vulnerable, false, `brace-expansion ${version} is a known-vulnerable release`);
+  }
 });
 
 test("the shipped web bundle carries no exceljs Node archive dependency", async () => {
