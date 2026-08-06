@@ -663,7 +663,7 @@ const bibliographicIdentifierScheme = /^(?:PMC|PMID|NCT|ISRCTN|EudraCT|ChiCTR|CT
 
 // A subject label carrying six or more digits is a record number, not a
 // pseudonym. A production analysis of an uploaded hospital extract wrote
-// P11322133, P10750726 and P6851332 through its report and evidence matrix —
+// P90000001, P90000002 and P9000003 through its report and evidence matrix —
 // real PATIENT_IDs from the source file with a P stuck on the front, which
 // reads like a pseudonym and is not one. Nobody reading the report can tell,
 // and the person exposed is not the reader.
@@ -1155,7 +1155,7 @@ export function validateClinicalEvidencePackage({
   }
 
   // Pseudonyms are assigned by the analysis; record numbers come from the data
-  // and must not leave it. Blocking, because a reader cannot tell P11322133
+  // and must not leave it. Blocking, because a reader cannot tell P90000001
   // from a pseudonym, and the person it exposes is not the reader.
   const leakedInReport = recordIdentifiersInReport(reportText);
   const leakedInMatrix = recordIdentifiersInReport(JSON.stringify(matrix ?? {}));

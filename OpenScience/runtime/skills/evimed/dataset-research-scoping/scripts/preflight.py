@@ -158,7 +158,7 @@ def scannable_files(root: Path, dataset_paths: list[Path]) -> list[Path]:
     """Every text file the run leaves behind, except the source data itself.
 
     Scanning only the declared deliverables was not enough. A run wrote its own
-    working file holding {"pseudonyms": {"216359": "P1", ...}} — the mapping back
+    working file holding {"pseudonyms": {"900004": "P1", ...}} — the mapping back
     to real hospital numbers, which defeats the pseudonyms entirely — and because
     that file was not on the declared list it was never looked at. Anything left
     in the workspace can be read by whoever receives it.

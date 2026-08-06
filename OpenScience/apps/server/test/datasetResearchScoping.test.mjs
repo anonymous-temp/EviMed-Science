@@ -26,14 +26,14 @@ const hasPython3 = spawnSync("python3", ["--version"], { stdio: "ignore" }).stat
 // is the vital-signs column whose name contains "record" without being one.
 const ORDERS = [
   "PATIENT_ID,DRUG,FREQUENCY,START_DATETIME,END_DATETIME,BP,RECORD_CONTENT",
-  "P11322133,olanzapine,BID4,2/1/2026 08:00,0/0/0 00:00:00,129/74,101/62",
-  "P11322134,quetiapine,QD11,3/1/2026 08:00,9/1/2026 08:00,131/80,110/70",
-  "P11322135,olanzapine,ONCE,4/1/2026 08:00,0/0/0 00:00:00,140/90,120/80",
+  "P90000001,olanzapine,BID4,2/1/2026 08:00,0/0/0 00:00:00,129/74,101/62",
+  "P90000002,quetiapine,QD11,3/1/2026 08:00,9/1/2026 08:00,131/80,110/70",
+  "P90000003,olanzapine,ONCE,4/1/2026 08:00,0/0/0 00:00:00,140/90,120/80",
 ].join("\n");
 // The join key is declared and entirely empty, which no schema diagram shows.
 const DIAGNOSIS = ["PATIENT_ID,MAIN_DIAGNOSIS_CODE,AGE", ",F20.0,56岁", ",F31.1,44岁"].join("\n");
 // AGE is text here and an integer above.
-const LABS = ["PATIENT_ID,LOINC_CODE,VALUE,AGE", "P11322133,3016-3,12.4,56", "P11322134,3016-3,8.1,44"].join("\n");
+const LABS = ["PATIENT_ID,LOINC_CODE,VALUE,AGE", "P90000001,3016-3,12.4,56", "P90000002,3016-3,8.1,44"].join("\n");
 
 const FEASIBILITY = [
   "# 可行性矩阵",
@@ -140,7 +140,7 @@ test("the profiler reports the traps and never emits an identifier", { skip: !ha
     // No identifier reaches either deliverable, while its cardinality still does.
     assert.equal(column("orders.csv", "PATIENT_ID").distinct, 3);
     assert.equal(column("orders.csv", "PATIENT_ID").vocabulary.identifying, true);
-    for (const identifier of ["P11322133", "P11322134", "P11322135"]) {
+    for (const identifier of ["P90000001", "P90000002", "P90000003"]) {
       assert.equal(markdown.includes(identifier), false, `data-profile.md leaked ${identifier}`);
       assert.equal(
         JSON.stringify(profile).includes(identifier),
@@ -173,7 +173,7 @@ test("each blocking gate rejects what it exists to catch", { skip: !hasPython3 }
       name: "an identifier copied out of the source data",
       apply: async (root) => {
         const file = path.join(root, "research-portfolio.md");
-        await writeFile(file, `${await readFile(file, "utf8")}\n患者 P11322133 的浓度最高。\n`, "utf8");
+        await writeFile(file, `${await readFile(file, "utf8")}\n患者 P90000001 的浓度最高。\n`, "utf8");
       },
       expect: /carries the source identifier/,
     },
@@ -183,7 +183,7 @@ test("each blocking gate rejects what it exists to catch", { skip: !hasPython3 }
         // Not a declared deliverable — exactly how the real leak escaped.
         await writeFile(
           path.join(root, "tdm-derived.json"),
-          JSON.stringify({ pseudonyms: { P11322133: "P1" } }),
+          JSON.stringify({ pseudonyms: { P90000001: "P1" } }),
           "utf8",
         );
       },

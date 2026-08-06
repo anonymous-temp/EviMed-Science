@@ -31,7 +31,7 @@ Do not claim completion if any required skill fails to load.
 When the analysis is over a dataset the user supplied, subjects are referred to
 by pseudonyms **you assign** — P1, P2, P3 in a stable order — and never by a
 value copied from the file. Prefixing a hospital number with a letter does not
-de-identify it: `P11322133` reads like a pseudonym and is one of the source
+de-identify it: `P90000001` reads like a pseudonym and is one of the source
 `PATIENT_ID`s. The same holds for case numbers, medical record numbers,
 admission numbers, dates of birth, and names.
 

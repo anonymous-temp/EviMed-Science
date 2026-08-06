@@ -36,11 +36,23 @@ function placeholder(value) {
     || /(example|fake|placeholder|redacted|replace|test-only|your[-_ ]key)/.test(normalized);
 }
 
+// A subject label carrying a real hospital number. Two of these reached the
+// repository as illustrations — in a skill file copied into every runtime
+// container, and in a test fixture — because they were written in comments and
+// prose, which the credential rules below deliberately skip. Examples must use
+// the reserved synthetic range (a leading 9), so a real number stands out.
+const SUBJECT_LABEL = /\bP\d{6,}\b/g;
+const SYNTHETIC_SUBJECT = /^P9\d{5,}$/;
+
 export function suspiciousLines(content, file = "fixture.yml") {
   const findings = [];
   const structuredConfig = /(?:\.ya?ml|\.properties|\.env\.example)$/i.test(file);
   for (const [index, rawLine] of content.split("\n").entries()) {
     const line = rawLine.trim();
+    // Checked before the comment skip: this is exactly what hid in a comment.
+    for (const label of line.match(SUBJECT_LABEL) ?? []) {
+      if (!SYNTHETIC_SUBJECT.test(label)) { findings.push(index + 1); break; }
+    }
     if (!line || line.startsWith("#") || line.startsWith("//") || line.startsWith("*")) continue;
 
     const prefixedCredential = line.match(/\b(?:(?:sk|tvly)-[A-Za-z0-9_-]{20,}|(?:LTAI|AKIA)[A-Za-z0-9]{12,})\b/)?.[0];
