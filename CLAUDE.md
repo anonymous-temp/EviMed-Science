@@ -30,22 +30,34 @@ Working language: discussion in Chinese is fine, but **code, files, comments, an
 - `open-science-master/` — upstream reference snapshot of OpenScience (`ai4s-workbench` v0.2.0, desktop-only: no `apps/server`, `deploy/`, or `evals/`). **Not** the active tree — use `OpenScience/`. Read-only.
 - `grok-build-main/` — vendored Rust workspace (SpaceXAI "Grok Build" terminal coding agent; `xai-*` crates under `crates/`, vendored `third_party/`). Unrelated to platform code; read-only reference for the fusion design in `docs/superpowers/specs/`.
 - `.playwright-mcp/` — Playwright MCP session logs/snapshots. Tooling artifact.
+- `uploads/` — untracked scratch dir of run inputs/outputs from manual product exercises (timestamped run dirs plus `deploy-tools/`). Ephemeral; not an input to any build.
 
 ## OpenScience/ — production SaaS (AI research workbench)
 
-Read `OpenScience/AGENTS.md` first — it is the authoritative rules file (its `CLAUDE.md` is a symlink to it; edit only `AGENTS.md`). pnpm monorepo `evimed-science` v0.1.3 (Node ≥20, `pnpm@9.4.0`; workspace globs `apps/*` + `packages/*`):
+Read `OpenScience/AGENTS.md` first — it is the authoritative rules file (its `CLAUDE.md` is a symlink to it; edit only `AGENTS.md`). pnpm monorepo `evimed-science` v0.1.3 (root `engines.node >= 22.22.0`, `pnpm@9.4.0`; workspace globs `apps/*` + `packages/*`):
 
 - `apps/desktop` — Tauri 2 + React + Vite shell (`@ai4s/desktop`); frontend in `src/app/`, `src/components/` (incl. `components/ui/` primitives), `src/lib/`; Rust in `src-tauri/`.
-- `apps/server` — plain-Node hosted web boundary (`@ai4s/server`).
+- `apps/server` — plain-Node (`.mjs`, no build step) hosted web boundary (`@ai4s/server`); two entrypoints — `src/index.mjs` (HTTP API) and `src/runtimeControllerIndex.mjs` (`start:controller`). Not typeless: `tsconfig.json` runs `checkJs` over `src/**/*.mjs` and ESLint gates it at `--max-warnings 0`, so `pnpm lint` / `pnpm typecheck:server` cover it.
 - `packages/{sdk,shared}` — `sdk` holds the `OpenCodeClient` wrapper; `packages/ui` is a README-only placeholder (real primitives live in `apps/desktop/src/components/ui/`).
 - `runtime/` — `harness`, `kernel`, `manager`, `mcp` (`evimed-research` MCP server with its own Python unittest suite), `opencode-profile`, `skills` (`core`, `curated-scientific`, `evimed`, `external`, `office`).
 - `deploy/` — `web/` (Caddyfile + docker-compose stacks: saas, oidc, local-auth, monitoring, backup + `release-manifest.json`), `runtime-opencode/`, `specialist-adapter/` (Python adapter for the `项目代码/` agents, with Dockerfiles), `memos/`.
-- `evals/` — Python eval harnesses: `capability-audit`, `drug-evidence-quality`, `specialist-smoke`, `title-to-paper`. `examples/` — `bci-trends`, `climate-trends`.
+- `evals/` — Python eval harnesses: `capability-audit`, `drug-evidence-quality`, `open-domain-answer-quality`, `specialist-smoke`, `title-to-paper`. `examples/` — `bci-trends`, `climate-trends`.
 - Key docs: `docs/PRD.md`, `docs/TECHNICAL_DESIGN.md`, `docs/WEB_DEPLOYMENT.md`, `docs/EVIMED_RELEASE_AND_DELIVERY_CHECKLIST.md`, `docs/WEB_OPERATIONS_RUNBOOK.md`.
 
 Architecture: the same React frontend ships as a Tauri desktop app **or** a hosted web app (desktop is optional; the hosted SaaS is the release target). The UI never calls the agent runtime directly — it goes through `packages/sdk` (`OpenCodeClient`) to a bundled, version-pinned **OpenCode** sidecar (`OPENCODE_VERSION = "1.17.13"` in `packages/sdk/src/types.ts`, fetched by `scripts/dev/fetch-opencode.sh` into `apps/desktop/src-tauri/binaries/`) over HTTP + SSE. Safety defaults are non-negotiable: workspace-only access, manual approval mode, API keys in the OS keychain only.
 
 Open-domain answering runs on two product lines (2026-07-26): unrouted open-domain questions are dispatched to the managed **`open-domain-answer`** agent package (`runtime/skills/evimed/open-domain-answer/`) — answers-first persona with a proportional quality floor (`skillsLoaded` + reply-prose citation hygiene; no file deliverables) — while the ten specialist packages keep the full file-delivery gates, reserved by `specialistRouting.mjs` for explicit report intent or named-specialty requests. The LLM fallback classifier (`specialistClassifier.mjs`) is **on by default** (`OPEN_SCIENCE_LLM_ROUTING_ENABLED`), runs only after the regex router misses, and fails safe to the answer line.
+
+### The evidence-quality gate (`apps/server/src`, the densest area of the codebase)
+
+Most active work lands in the server boundary, and its center of gravity is not request handling but **deciding whether a finished run may be delivered**. Four files carry it and only make sense together:
+
+- `agentRuns.mjs` (~1.7k lines) — the run ledger and delivery decision. Records progress as observed message/tool counts change (so a run that dies in its first minute is distinguishable from one still working, instead of both waiting out the timeout), classifies source failures via `recoverableEvidenceSourceErrorCodes` / `terminalEvidenceSourceErrorCodes`, and drives the **repair loop**: a failing package is patched in place and sent back with the specific issue, never regenerated wholesale.
+- `clinicalEvidenceQuality.mjs` (~1.4k lines) — `validateClinicalEvidencePackage` + `citationIntegrityIssues`. Claims are typed `direct` (verbatim quote bond to one source), `synthesized` (cross-source conclusion; ≥2 preserved sources, each quoted, plus a confidence label), or `derived` (the analyst's own estimate; must name its quote-anchored inputs, method, assumptions, and sensitivities, must be marked as derived in the report, and may never carry practical safety advice). It also bans runtime/retrieval leakage — tool names, gateway names, artifact paths, first-person retrieval diaries — from report prose.
+- `clinical-safety-rules.json` — drug- and scenario-specific safety rules kept **as data so pharmacists can edit them without touching server code**. Generic non-drug-specific rules stay in the `.mjs`. Add a medicine/scenario rule here, not in code.
+- `runtime/skills/evimed/clinical-evidence-synthesis/scripts/preflight.py` — the run-side check. **Invariant: whatever the server gate rejects, the preflight must already catch**, since the skill tells runs to fix preflight issues and rerun until clean. The two have drifted three times in production, each time costing a finished package; `test/clinicalEvidencePreflightAgreement.test.mjs` now pins them against each other. **Change one side and you must change the other.**
+
+Surrounding infrastructure: `runtimeManager.mjs` (~4.6k lines, the largest module — OpenCode container lifecycle and launch plans), `runtimeControllerServer.mjs` (privileged Docker operations behind a unix socket, versioned by `RUNTIME_CONTROLLER_PROTOCOL_VERSION`), `modelGateway.mjs` (DeepSeek boundary; certifies the model that actually runs rather than the one named in source), `publicSourceGateway.mjs` (server-side DOI/Unpaywall resolution — the runtime never names a host, and private/link-local addresses are refused before fetch), `controlPlaneDatabase.mjs` (Postgres pool), `memoryIntelligence.mjs` (Memos-backed extraction/recall).
 
 ```bash
 cd OpenScience
@@ -54,20 +66,23 @@ pnpm dev            # desktop frontend (Vite); `pnpm --filter @ai4s/desktop taur
 pnpm dev:server     # hosted web / server variant
 pnpm dev:evimed     # local EviMed-flavored dev stack (scripts/dev/start-evimed-local.mjs)
 pnpm build          # build desktop; `pnpm build:web` for the hosted bundle
-pnpm typecheck      # tsc --noEmit (desktop)
-pnpm lint           # ESLint (desktop)
+pnpm typecheck      # tsc --noEmit (desktop); `typecheck:server` for apps/server (checkJs over .mjs)
+pnpm lint           # ESLint: desktop AND server (`lint:server` alone for the server)
 pnpm check:tauri    # cargo check for the Rust side (apps/desktop/src-tauri)
 pnpm test           # desktop unit tests (Vitest)
-pnpm test:server    # server tests (node --test)
+pnpm test:server    # server tests (node --test test/*.test.mjs)
 pnpm test:mcp       # runtime/mcp/evimed-research Python unittest suite
-pnpm test:web       # test:mcp + test:server + typecheck + desktop tests
-pnpm test:web:e2e   # server e2e tests
+pnpm test:web       # test:mcp + test:server + lint:server + typecheck:server + typecheck + test
+pnpm test:web:e2e   # hosted production e2e (scripts/ops/hosted-production-e2e.mjs)
 pnpm ci:web         # full CI pipeline: test:web + all audits + build:web
 # single desktop test: pnpm --filter @ai4s/desktop exec vitest run <file> -t "<name>"
-# single server test:  node --test test/<file>.test.mjs
+# single server test:  pnpm --filter @ai4s/server exec node --test test/<file>.test.mjs
+#   (server also has focused `test:unit` and `test:contract` scripts)
 ```
 
-Ops/release gates (all in `package.json`): `audit:source-secrets`, `audit:hosted-compliance`, `audit:saas-alignment`, `audit:capabilities`, `audit:dependencies`; `configure:*`/`check:*` for monitoring, backup, local-auth, production-state, oidc (under `scripts/ops/`); `release:manifest` / `check:release-manifest` / `verify:release-manifest`; `smoke:deployment`; `preflight:host`, `preflight:deepseek(:release)`; `backup:object` / `restore:object` / `probe:object`; `migrate:data`.
+Eval harnesses are separate from tests and hit live models: `eval:drug-evidence`, `eval:open-domain` (run + judge), `test:drug-evidence-eval` (the harness's own unit tests).
+
+Ops/release gates (all in `package.json`): `audit:source-secrets`, `audit:hosted-compliance`, `audit:saas-alignment`, `audit:capabilities`, `audit:dependencies`; `configure:*`/`check:*` for monitoring (+`probe:monitoring`), backup, local-auth, production-state, oidc (under `scripts/ops/`); `check:evidence-connectors`; `release:manifest` / `check:release-manifest` / `verify:release-manifest`; `smoke:deployment`; `preflight:host`, `preflight:deepseek(:release)`; `backup:object` / `restore:object` / `probe:object`; `migrate:data`; `configure:evimed-local` for local secrets.
 
 Working conventions (from `OpenScience/AGENTS.md`): design principles **simple, explicit, clear, complete**; UI baseline language Simplified Chinese with design tokens as single source of truth (ESLint bans new arbitrary values); append one line per real milestone to `OpenScience/PROGRESS.md` (`YYYY-MM-DD HH:MM · ...`, newest on top); avoid adding new Markdown docs unless asked; prefer minimal, verifiable changes.
 
