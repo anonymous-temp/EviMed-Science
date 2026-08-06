@@ -722,6 +722,26 @@ export async function runHostPreflight({
   );
   onCheck("container-images", "Web, Runtime, and Caddy images match host architecture");
 
+  // The runtime image is only used while a job runs, so between jobs no
+  // container references it and `docker system prune -a` on a shared host takes
+  // it. That happened twice: the image vanished, and nothing said so until
+  // somebody submitted work and the platform answered runtime_image_unavailable.
+  // A container in the created state is enough to pin it — compose already
+  // defines one under the runtime-image profile.
+  const runtimeImagePin = execute(
+    "docker",
+    ["ps", "-a", "--filter", `ancestor=${config.runtimeImage}`, "--format", "{{.Names}}"],
+    commandOptions,
+  ).trim();
+  if (!runtimeImagePin) {
+    throw failure(
+      "preflight_runtime_image_unpinned",
+      `No container references ${config.runtimeImage}, so a host-wide image prune will remove it and the next job will fail with runtime_image_unavailable. `
+        + "Create the pin: docker compose --profile runtime-image up --no-build --no-start opencode-runtime-image",
+    );
+  }
+  onCheck("runtime-image-pinned", `referenced by ${runtimeImagePin.split("\n")[0]}`);
+
   execute("docker", buildComposeArgs(config, resolvedEnvFile), commandOptions);
   onCheck("compose-config", "base, TLS, and selected production overlays");
 
