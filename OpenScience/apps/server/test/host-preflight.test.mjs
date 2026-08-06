@@ -308,6 +308,9 @@ test("host preflight verifies Docker, images, Compose, release identity, and pub
     if (command === "docker" && args[0] === "compose" && args[1] === "version") return "v2.27.1";
     if (command === "docker" && args[0] === "info") return "/var/lib/docker";
     if (command === "docker" && args[0] === "image") return imageInfo;
+    // A container in any state referencing the runtime image; without one, a
+    // host-wide prune takes it between jobs.
+    if (command === "docker" && args[0] === "ps") return "web-opencode-runtime-image-1\n";
     return "";
   };
   const headers = {
@@ -378,5 +381,40 @@ test("host preflight fails before Docker when the deployment env file is not pri
       execute: () => assert.fail("Docker must not run for an unsafe env file."),
     }),
     { code: "preflight_file_permissions" },
+  );
+});
+
+test("host preflight refuses a runtime image no container references", async (t) => {
+  // It vanished twice from the shared host: between jobs nothing referenced it,
+  // a host-wide `docker system prune -a` took it, and nobody found out until
+  // somebody submitted work and got runtime_image_unavailable.
+  const fixture = await deploymentFixture(deploymentValues());
+  t.after(() => rm(fixture.dir, { recursive: true, force: true }));
+  const imageInfo = `sha256:${"b".repeat(64)}|linux|amd64`;
+  const execute = (command, args) => {
+    if (command === "docker" && args[0] === "version") return "26.1.4|linux|amd64";
+    if (command === "docker" && args[0] === "compose" && args[1] === "version") return "v2.27.1";
+    if (command === "docker" && args[0] === "info") return "/var/lib/docker";
+    if (command === "docker" && args[0] === "image") return imageInfo;
+    if (command === "docker" && args[0] === "ps") return "";
+    return "";
+  };
+  await assert.rejects(
+    () => runHostPreflight({
+      envFile: fixture.envFile,
+      online: false,
+      processEnv: {},
+      platform: "linux",
+      execute,
+      stat: () => ({ gid: 998, mode: 0o140660, isSocket: () => true }),
+      statfs: () => ({ bavail: 4_000_000n, bsize: 4096n }),
+      onCheck: () => {},
+    }),
+    (error) => {
+      assert.equal(error.code, "preflight_runtime_image_unpinned");
+      assert.match(error.message, /host-wide image prune will remove it/);
+      assert.match(error.message, /--profile runtime-image up --no-build --no-start/);
+      return true;
+    },
   );
 });
