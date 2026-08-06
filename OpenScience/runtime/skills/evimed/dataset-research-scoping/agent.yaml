@@ -1,5 +1,5 @@
 id: dataset-research-scoping
-version: 1.0.0
+version: 1.1.0
 title: Dataset Research Scoping
 category: Research Planning
 description: Start from a dataset the researcher already holds, profile it mechanically, map it against the published literature, and decide which research questions it can and cannot support — naming the missing field for every question it cannot.
@@ -7,6 +7,7 @@ skill: dataset-research-scoping
 companionSkills:
   - deep-research
   - biomedical-database-search
+  - research-topic-selection
 estimatedMinutes: [30, 120]
 starterPrompts:
   - Profile the uploaded hospital dataset and tell me which studies it can actually support.
@@ -21,6 +22,7 @@ requiredTools:
   - evimed_literature_search
   - evimed_data_source_catalog
 optionalTools:
+  - evimed_research_topic_selection
   - evimed_open_access_full_text
   - evimed_official_page_fetch
   - evimed_guideline_search
@@ -48,6 +50,8 @@ outputs:
   - path: external-linkage.md
     required: true
   - path: research-portfolio.md
+    required: true
+  - path: study-protocol.md
     required: true
   - path: scoping-run.json
     required: true

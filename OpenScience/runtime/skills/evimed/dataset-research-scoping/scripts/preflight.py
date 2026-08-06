@@ -5,7 +5,9 @@ Blocks on the four things a reader cannot check for themselves:
 
 1. an identifier copied out of the source data,
 2. profile numbers that do not match the script that claims to produce them,
-3. an infeasible verdict that does not name the field it is missing,
+3. an infeasible verdict that does not name the field it is missing, does not
+   show that the gap actually binds, or does not say what the data can still
+   answer,
 4. a post-hoc power calculation.
 
 Warns on four a reader can see: an unqualified fill rate, an unexplained blank
@@ -34,6 +36,7 @@ REQUIRED_OUTPUTS = (
     "feasibility-matrix.md",
     "external-linkage.md",
     "research-portfolio.md",
+    "study-protocol.md",
     "scoping-run.json",
 )
 PROSE_OUTPUTS = (
@@ -42,6 +45,7 @@ PROSE_OUTPUTS = (
     "feasibility-matrix.md",
     "external-linkage.md",
     "research-portfolio.md",
+    "study-protocol.md",
 )
 # Columns whose values identify a person or an episode of care. Their values may
 # never leave the data; a run refers to subjects by pseudonyms it assigns.
@@ -73,6 +77,23 @@ POST_HOC_POWER = re.compile(
 )
 INFEASIBLE_LINE = re.compile(r"(?:不可行|infeasible|not feasible)", re.I)
 MISSING_FIELD_LINE = re.compile(r"(?:缺失字段|缺少字段|缺字段|missing field|missing column)", re.I)
+# Naming the missing field was the whole bar, and it turned out to reward
+# refusal: a run could discharge its duty by pointing at an absent column and
+# never ask what the data could still answer. An infeasible verdict now also
+# owes the strongest remaining question, or an explicit statement that none
+# exists — stated somewhere in the matrix, not necessarily on the verdict line.
+FALLBACK_MENTION = re.compile(
+    r"(?:退而求其次|降级|替代设计|仍可|仍然可以|还能|可改为|可降级为|弱化为|"
+    r"fallback|degraded design|can still|weaker question|instead answer)",
+    re.I,
+)
+# A binding test: the gap was compared against something in the same units
+# rather than asserted from a general rule about what a method requires.
+BINDING_TEST = re.compile(
+    r"(?:半衰期|给药间隔|变异(?:度|系数)|CV|倍|数量级|相对极差|敏感性分析|"
+    r"half-life|dosing interval|fold|order of magnitude|sensitivity analys)",
+    re.I,
+)
 FILL_RATE_MENTION = re.compile(r"(?:填充率|fill rate|completeness)", re.I)
 COMPLETENESS_QUALIFIER = re.compile(r"(?:density|documentation|breadth|predictive|Weiskopf)", re.I)
 SEVEN_ELEMENTS = (
@@ -208,6 +229,24 @@ def check_infeasible_verdicts(root: Path, issues: list[str]) -> int:
         if not MISSING_FIELD_LINE.search(line):
             issues.append(
                 f"feasibility-matrix.md line {line_number}: an infeasible verdict must name the missing field."
+            )
+    if verdicts:
+        # Whole-document checks: a refusal is only a verdict once it has been
+        # shown to bind and the remaining question has been stated. Requiring
+        # these per line would force boilerplate onto every row, so they are
+        # required of the matrix as a whole.
+        if not BINDING_TEST.search(text):
+            issues.append(
+                "feasibility-matrix.md declares questions infeasible without showing anywhere that the gap "
+                "actually binds — compare it against the effect being studied in the same units "
+                "(half-life against dosing interval, assay CV against between-subject spread), "
+                "rather than citing a general requirement."
+            )
+        if not FALLBACK_MENTION.search(text):
+            issues.append(
+                "feasibility-matrix.md declares questions infeasible without naming the strongest question "
+                "the data can still answer. State the degraded design and its assumption, or say explicitly "
+                "that none exists."
             )
     return verdicts
 

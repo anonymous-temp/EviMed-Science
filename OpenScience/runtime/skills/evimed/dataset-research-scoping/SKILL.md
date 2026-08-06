@@ -142,10 +142,21 @@ TDM data it was this step — not the field inventory — that found a 2.7-fold
 spread in dose-normalized concentration, and that only 1 of 6 samples could be
 confidently called steady-state.
 
-## Phase 3 — Literature landscape
+## Phase 3 — Literature landscape, including how others handled *this* gap
 
 Go to the literature carrying the concrete findings of Phases 1–2, not the
-general topic. Answer:
+general topic.
+
+**Search the methodology as hard as the subject.** For every gap Phase 1 found,
+someone has already faced it and published what they did: unknown sampling times,
+coded or ambiguous dose regimens, unwitnessed administration, no outcome scale,
+n in the single digits. Find those papers and take the method. A gap you have
+only reasoned about is a gap you are guessing at; a gap with a published
+treatment is a design choice with a citation. This is what makes the difference
+between "the field is missing so the study is impossible" and "here is how three
+groups handled the same missing field, and which transfers."
+
+Then answer:
 
 - What have others produced from comparable data, published where, at what n?
 - What is the field's **standard criterion** (reference ranges, diagnostic
@@ -201,14 +212,70 @@ measured before time zero. Misalignment is the source of immortal time bias —
 **a design defect caused by a missing field, not something a later statistical
 adjustment repairs.**
 
-**Decision rule: if any of the seven cannot be implemented from existing fields
-and no external resource supplies it, the question is infeasible, and the
-missing field must be named.** A verdict of "the data does not support this"
-without naming what is missing is not a verdict.
+### A missing field is a hypothesis, not a verdict
+
+**Before calling anything infeasible you must show that the missing element
+actually binds — quantitatively, on this drug and this design.** A general rule
+about what a method "requires" is a starting point, not a finding.
+
+The failure this exists to prevent happened on a real run. It judged
+model-informed precision dosing impossible because sampling times were absent,
+citing the general requirement. Aripiprazole has a half-life near 75 h and was
+dosed once daily, so within a dosing interval the concentration moves by roughly
+`exp(-ln2 × 24/75) ≈ 0.80` — about 20% — while the between-subject spread it
+had just measured in the same data was 2.7-fold. The unknown it refused over was
+an order of magnitude smaller than the signal it was studying. The rule is real;
+it simply does not bind here. For a drug with a two-hour half-life it would.
+
+So for each of the seven elements that cannot be read straight from a field:
+
+1. **Quantify what the gap costs.** Compare it against the effect being studied,
+   in the same units. Half-life against dosing interval; assay CV against
+   between-subject spread; decoding ambiguity against the contrast of interest.
+2. **State the assumption that closes it and test it.** An unknown draw time
+   becomes an interval; a coded frequency becomes a set of decodings; unwitnessed
+   administration becomes an adherence range. Carry each through as a sensitivity
+   analysis and report the range of the answer, not a point.
+3. **Only if the answer changes materially across that range is the question
+   infeasible** — and then name the missing field.
+
+**Every infeasible verdict must also carry the strongest question the data can
+still answer**, with its assumption and its cost stated. "Cannot estimate the
+exposure-response slope" and "can estimate the exposure distribution and bound
+the slope's sign under stated adherence" are different findings, and only the
+second is useful to the researcher who owns the data.
+
+A verdict of "the data does not support this" that names no missing field is not
+a verdict. One that names a field without showing it binds, and without the
+fallback, is a refusal wearing a verdict's clothes.
 
 This matrix satisfies TARGET items 6 and 7 directly.
 
-## Phase 6 — Full design for what survives
+## Phase 6 — What, why, and how, for what survives
+
+A scoping report that stops at "this is feasible" has done half the job. The
+researcher's next question is always the same — *so how do I actually run it* —
+and an answer that cannot be handed to someone else to execute has not answered
+it. Each surviving question therefore needs all three:
+
+- **What** — the scientific question, stated so it could be pre-registered.
+- **Why** — what makes it worth doing given what Phase 3 found others have done,
+  and what it adds that the literature does not already have.
+- **How** — an executable protocol: eligibility, the construction algorithm for
+  every variable naming the exact source field and derivation rule, the analysis
+  plan with its estimator and its handling of missing and sentinel values, the
+  sensitivity analyses that carry the Phase 5 assumptions, the tables and figures
+  with what each one answers, and the reporting-guideline mapping.
+
+Write the protocol into `study-protocol.md`, one section per feasible question.
+It must be specific enough that a second analyst could execute it without asking
+you anything: field names, thresholds, and decision rules, not "an appropriate
+sensitivity analysis should be performed".
+
+State each protocol's **preconditions and stopping conditions** — what must be
+true before it starts, and what would make it right to abandon it midway.
+
+## Phase 6b — Full design for what survives
 
 For each feasible question: the scientific question, how each variable is
 constructed (including the exact construction of any proxy), the study design,
