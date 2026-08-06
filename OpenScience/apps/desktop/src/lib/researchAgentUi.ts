@@ -65,6 +65,13 @@ const translations: Record<string, AgentTranslation> = {
     description: "从宽泛方向中识别证据空白、科学矛盾与可执行的高价值研究问题。",
     starterPrompts: ["围绕重症患者抗菌药精准给药，提出有证据依据且可落地的科研选题。"],
   },
+  "dataset-research-scoping": {
+    code: "DR",
+    title: "数据集科研可行性勘查",
+    category: "研究规划",
+    description: "从你手上的数据出发：先按字段逐列剖析，再对照文献版图，逐个课题判定能不能做；判定不可行的必须说清缺哪个字段。",
+    starterPrompts: ["剖析我上传的住院数据，判断它到底能支撑哪些研究课题。"],
+  },
   "peer-review": {
     code: "PR",
     title: "论文审稿",

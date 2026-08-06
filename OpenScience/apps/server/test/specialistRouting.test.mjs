@@ -23,6 +23,7 @@ test("open-domain research questions deterministically route to every registered
     ["评估某药超说明书用于儿童感染的证据", "off-label-analysis"],
     ["请对我上传的临床试验论文做同行评审", "peer-review"],
     ["为 ICU 抗菌药精准给药设计科研选题", "research-topic-selection"],
+    ["我手上这份住院数据集能支撑哪些研究课题", "dataset-research-scoping"],
     ["胸口突然发闷发紧，是心绞痛还是胃病？请结合速效救心丸生成一份证据报告", "clinical-evidence-synthesis"],
   ]);
   for (const [query, expected] of cases) {
@@ -54,7 +55,7 @@ test("asking for a report routes to the report line whichever verb carries it", 
   // was answered as a chat message with no file produced at all.
   const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
   const asked = [
-    "请你基于上传的数据集，来分析能做哪些科学性研究……并给我写出所有的分析结果和报告",
+    "请把阿立哌唑血药浓度的证据整理好，并给我写出所有的分析结果和报告",
     "请输出一份阿立哌唑血药浓度的分析报告",
     "帮我形成关于抗精神病药 TDM 的综述",
     "完成一份回顾性研究的可行性报告",
@@ -66,6 +67,50 @@ test("asking for a report routes to the report line whichever verb carries it", 
       `should route to the report line: ${query}`,
     );
   }
+});
+
+test("a question that starts from the researcher's own data reaches the scoping line", async () => {
+  // The production prompt that motivated the skill. It went to
+  // clinical-evidence-synthesis, which synthesises literature and never profiles
+  // a file, so the five-table extract it was handed had no bearing on the answer.
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+  const scoping = [
+    "请你基于上传的数据集，来分析能做哪些科学性研究……并给我写出所有的分析结果和报告",
+    "我手上有一份住院数据，能做什么研究？",
+    "这份数据集能支撑哪些课题",
+    "评估我上传的数据集的研究可行性",
+    "profile my uploaded dataset and tell me what research it can support",
+  ];
+  for (const query of scoping) {
+    assert.equal(
+      routeOpenDomainSpecialist(query, agents)?.agentId,
+      "dataset-research-scoping",
+      `should route to the scoping line: ${query}`,
+    );
+  }
+
+  // Both halves are required, so neither a dataset alone nor a feasibility
+  // question alone diverts a request that belongs elsewhere.
+  assert.equal(
+    routeOpenDomainSpecialist("对我的数据集做 meta 分析", agents)?.agentId,
+    "meta-analysis",
+    "meta analysis keeps its own line even when a dataset is named",
+  );
+  assert.equal(
+    routeOpenDomainSpecialist("完成一份回顾性研究的可行性报告", agents)?.agentId,
+    "clinical-evidence-synthesis",
+    "a feasibility report with no dataset in hand is not scoping",
+  );
+  assert.equal(
+    routeOpenDomainSpecialist("为 ICU 抗菌药精准给药设计科研选题", agents)?.agentId,
+    "research-topic-selection",
+    "direction-first topic selection is unaffected",
+  );
+  assert.equal(
+    routeOpenDomainSpecialist("请输出一份阿立哌唑血药浓度的分析报告", agents)?.agentId,
+    "clinical-evidence-synthesis",
+    "a clinical report request is unaffected",
+  );
 });
 
 test("plain clinical questions stay on the open-domain answer line", async () => {
