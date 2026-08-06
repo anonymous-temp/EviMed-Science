@@ -41,7 +41,10 @@ const FEASIBILITY = [
   "- 入组标准 → ✅ MAIN_DIAGNOSIS_CODE",
   "判定：可行。",
   "## 课题 B",
-  "判定：不可行。缺失字段：diagnosis 表 PATIENT_ID 全空。",
+  // The gap is shown to bind (compared in the same units) and the degraded
+  // question is stated, which is what the gate now requires of a refusal.
+  "该表连接键全空，跨住院次链接率 0%，与所需 100% 相差一个数量级，敏感性分析无法弥补。",
+  "判定：不可行。缺失字段：diagnosis 表 PATIENT_ID 全空。仍可退而求其次做单次住院内的横断面描述。",
 ].join("\n");
 const QUALITY = [
   "# 数据质量",
@@ -51,6 +54,7 @@ const QUALITY = [
 ].join("\n");
 const PORTFOLIO = "# 课题组合\n课题 A 的最小可检出效应 MDE=0.6 SD，预期 CI 宽度 0.8。\n";
 const LINKAGE = "# 外部资源接驳\n- LOINC：通过 `LOINC_CODE` 连接，检验项粒度，单位需配 UCUM\n";
+const PROTOCOL = "# 研究方案\n## 课题 A\n变量构造：VALUE 取自 labs.VALUE。分析计划：描述统计 + Bootstrap 区间。\n";
 
 async function buildWorkspace() {
   const root = await mkdtemp(path.join(tmpdir(), "dataset-scoping-"));
@@ -61,6 +65,7 @@ async function buildWorkspace() {
   await writeFile(path.join(root, "data-quality.md"), QUALITY, "utf8");
   await writeFile(path.join(root, "research-portfolio.md"), PORTFOLIO, "utf8");
   await writeFile(path.join(root, "external-linkage.md"), LINKAGE, "utf8");
+  await writeFile(path.join(root, "study-protocol.md"), PROTOCOL, "utf8");
   await writeFile(
     path.join(root, "scoping-run.json"),
     JSON.stringify({
@@ -189,6 +194,26 @@ test("each blocking gate rejects what it exists to catch", { skip: !hasPython3 }
         await writeFile(file, `${await readFile(file, "utf8")}\n## 课题 C\n判定：不可行。\n`, "utf8");
       },
       expect: /must name the missing field/,
+    },
+    {
+      name: "an infeasible verdict that never shows the gap binds",
+      apply: async (root) => {
+        const file = path.join(root, "feasibility-matrix.md");
+        const text = (await readFile(file, "utf8"))
+          .replace("该表连接键全空，跨住院次链接率 0%，与所需 100% 相差一个数量级，敏感性分析无法弥补。", "该表连接键全空。");
+        await writeFile(file, text, "utf8");
+      },
+      expect: /without showing anywhere that the gap/,
+    },
+    {
+      name: "an infeasible verdict with no remaining question",
+      apply: async (root) => {
+        const file = path.join(root, "feasibility-matrix.md");
+        const text = (await readFile(file, "utf8"))
+          .replace("仍可退而求其次做单次住院内的横断面描述。", "");
+        await writeFile(file, text, "utf8");
+      },
+      expect: /naming the strongest question/,
     },
     {
       name: "a post-hoc power calculation",

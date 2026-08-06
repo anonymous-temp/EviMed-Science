@@ -123,7 +123,7 @@ test("official specialist packages preserve domain-specific evidence and release
     ["bibliometric-analysis", "1.0.1"],
     ["clinical-evidence-synthesis", "2.1.0"],
     ["comprehensive-drug-evaluation", "2.2.1"],
-    ["dataset-research-scoping", "1.0.0"],
+    ["dataset-research-scoping", "1.1.0"],
     ["drug-selection", "2.1.1"],
     ["mendelian-randomization", "1.0.1"],
     ["meta-analysis", "1.0.0"],
