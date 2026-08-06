@@ -46,7 +46,13 @@ const routeRules = Object.freeze([
 // puts five characters between them — so a bounded gap is allowed, stopping at
 // a sentence boundary so two unrelated clauses cannot combine into a match.
 const datasetSubject = /(?:(?:上传|我的|我们的|手上|手里|现有|已有|这份|那份|本院|院内|自己的)[^。；;!?\n]{0,12}?(?:数据集?|数据库|数据表|资料|表格)|数据集|dataset|data\s?set)/i;
-const datasetScopingIntent = /(?:(?:能|可以|可能|适合|能否|能不能|可不可以)\s*(?:做|开展|支撑|支持|回答|产出|发)\s*(?:哪些|什么|多少)?\s*(?:科学性?)?(?:研究|课题|分析|选题|文章|论文)|(?:研究|课题|选题|分析)\s*(?:的)?\s*可行性|(?:哪些|什么)\s*(?:科学性?)?(?:研究|课题|选题)|what\s+(?:research|studies|questions).{0,24}(?:support|possible|feasible)|research\s+feasibilit|feasibility\s+of\s+(?:the\s+)?(?:data|dataset))/i;
+// The last clause is the model case, and it was missing. "这份数据能不能支撑一个
+// 个体化用药的预测模型" is the same question — what will this data carry — but
+// its object is a model rather than a 研究 or 课题, so the enumeration above did
+// not reach it and only the LLM fallback did. A router that depends on the
+// fallback for a question this central is one outage away from answering it in
+// chat with no deliverable.
+const datasetScopingIntent = /(?:(?:能|可以|可能|适合|能否|能不能|可不可以)\s*(?:做|开展|支撑|支持|回答|产出|发)\s*(?:哪些|什么|多少)?\s*(?:科学性?)?(?:研究|课题|分析|选题|文章|论文)|(?:研究|课题|选题|分析)\s*(?:的)?\s*可行性|(?:哪些|什么)\s*(?:科学性?)?(?:研究|课题|选题)|(?:能|可以|能否|能不能|可不可以|是否)\s*(?:支撑|支持|做|搭|建|构建|训练|拟合|开发)\s*(?:出|一个|一套|一版)?[^。；;!?\n]{0,16}?模型|模型[^。；;!?\n]{0,10}可行|what\s+(?:research|studies|questions).{0,24}(?:support|possible|feasible)|research\s+feasibilit|feasibility\s+of\s+(?:the\s+)?(?:data|dataset|[^.;\n]{0,24}model))/i;
 
 // Subjects that are research work rather than a clinical presentation. These
 // only route anywhere in combination with an explicit report request, so a

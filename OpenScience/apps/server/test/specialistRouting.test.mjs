@@ -80,6 +80,11 @@ test("a question that starts from the researcher's own data reaches the scoping 
     "这份数据集能支撑哪些课题",
     "评估我上传的数据集的研究可行性",
     "profile my uploaded dataset and tell me what research it can support",
+    // The object is a model rather than a 研究, which the enumeration missed
+    // entirely: only the LLM fallback reached it.
+    "这份住院 TDM 数据集能不能支撑一个个体化用药的预测模型？",
+    "用我上传的数据集建一个剂量预测模型可行吗",
+    "assess the feasibility of a dose prediction model on my uploaded dataset",
   ];
   for (const query of scoping) {
     assert.equal(
