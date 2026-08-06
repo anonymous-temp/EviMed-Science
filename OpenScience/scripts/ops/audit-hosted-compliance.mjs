@@ -689,17 +689,21 @@ async function checkDependencySecurity() {
     fail("production_dependency_audit_gate_missing", "Web CI must run a production dependency vulnerability audit.");
   }
   // Every accepted advisory needs a standing reason, so pin the list here and
-  // make any addition fail this gate until it is reviewed the same way.
-  // CVE-2026-14257 (brace-expansion) reaches only exceljs's Node archive
-  // dependencies. The hosted bundle carries exceljs's browser build, which uses
-  // JSZip, so archiver, unzipper, glob, minimatch, and brace-expansion are
-  // absent from the shipped assets, and the app only ever calls xlsx.load.
-  // exceljs 4.4.0 and its maintained fork both pin archiver ^5, and every
-  // minimatch release that depends on the patched brace-expansion 5 line
-  // exports an object where glob 7 requires a callable, so no override fixes it.
+  // make any change fail this gate until it is reviewed the same way.
+  //
+  // The list is now empty, and that is the reviewed state. The brace-expansion
+  // chain under exceljs used to be accepted rather than fixed: the patched line
+  // at the time was 5, and every minimatch release depending on it exports an
+  // object where glob 7 requires a callable, so forcing 5 into that chain broke
+  // it and the advisory was accepted on the grounds that the hosted bundle ships
+  // exceljs's browser build and never loads those Node archive dependencies.
+  // Upstream has since backported the fix within each major line — 1.1.18 and
+  // 2.1.4 — so the chain is pinned to a patched release of the line it already
+  // used, no major is forced anywhere, and `pnpm audit --prod` is clean with no
+  // exception at all. An advisory that can be fixed should not be accepted.
   const acceptedAdvisories = pkg.pnpm?.auditConfig?.ignoreCves ?? [];
-  if (acceptedAdvisories.length === 1 && acceptedAdvisories[0] === "CVE-2026-14257") {
-    pass("production_dependency_audit_exceptions", "The only accepted production advisory is the unbundled brace-expansion chain under exceljs.");
+  if (acceptedAdvisories.length === 0) {
+    pass("production_dependency_audit_exceptions", "No production advisory is accepted; the previously accepted brace-expansion chain is patched by override.");
   } else {
     fail("production_dependency_audit_exceptions_unreviewed", "Accepted production dependency advisories changed and need review.");
   }
