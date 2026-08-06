@@ -24,11 +24,14 @@ const hasPython3 = spawnSync("python3", ["--version"], { stdio: "ignore" }).stat
 
 // START_DATETIME is day-first, as the real extract exported it; RECORD_CONTENT
 // is the vital-signs column whose name contains "record" without being one.
+// MED_REC_NO is the medical record number as a real front page abbreviates it;
+// ADM_DEPT_CODE is the admitting department, a covariate; the last column has
+// no name at all and carries the patient id, as one real sheet does.
 const ORDERS = [
-  "PATIENT_ID,DRUG,FREQUENCY,START_DATETIME,END_DATETIME,BP,RECORD_CONTENT",
-  "P90000001,olanzapine,BID4,2/1/2026 08:00,0/0/0 00:00:00,129/74,101/62",
-  "P90000002,quetiapine,QD11,3/1/2026 08:00,9/1/2026 08:00,131/80,110/70",
-  "P90000003,olanzapine,ONCE,4/1/2026 08:00,0/0/0 00:00:00,140/90,120/80",
+  "PATIENT_ID,DRUG,FREQUENCY,START_DATETIME,END_DATETIME,BP,RECORD_CONTENT,MED_REC_NO,ADM_DEPT_CODE,",
+  "P90000001,olanzapine,BID4,2/1/2026 08:00,0/0/0 00:00:00,129/74,101/62,M90000001,DEPT07,P90000001",
+  "P90000002,quetiapine,QD11,3/1/2026 08:00,9/1/2026 08:00,131/80,110/70,M90000002,DEPT07,P90000002",
+  "P90000003,olanzapine,ONCE,4/1/2026 08:00,0/0/0 00:00:00,140/90,120/80,M90000003,DEPT09,P90000003",
 ].join("\n");
 // The join key is declared and entirely empty, which no schema diagram shows.
 const DIAGNOSIS = ["PATIENT_ID,MAIN_DIAGNOSIS_CODE,AGE", ",F20.0,56岁", ",F31.1,44岁"].join("\n");
@@ -136,6 +139,14 @@ test("the profiler reports the traps and never emits an identifier", { skip: !ha
     assert.equal(recordContent.vocabulary.identifying, false);
     assert.equal(recordContent.compositeSuspects.count, 3);
     assert.deepEqual(profile.typeConflicts.map((c) => c.column), ["AGE"]);
+
+    // Abbreviated identifier, false-positive covariate, and a column with no
+    // name whose values give it away — each cost a real leak or a masked finding.
+    assert.equal(column("orders.csv", "MED_REC_NO").vocabulary.identifying, true);
+    assert.equal(column("orders.csv", "ADM_DEPT_CODE").vocabulary.identifying, false);
+    const unnamed = table("orders.csv").columns.find((c) => c.name === "");
+    assert.ok(unnamed, "the unnamed column should be profiled");
+    assert.equal(unnamed.vocabulary.identifying, true, "an unnamed column carrying ids must be masked by value");
 
     // No identifier reaches either deliverable, while its cardinality still does.
     assert.equal(column("orders.csv", "PATIENT_ID").distinct, 3);
