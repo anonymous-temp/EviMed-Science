@@ -33,8 +33,36 @@ Data-profiling tools do not read literature, literature tools do not read data,
 and topic tools do not look at either. **The judgment this skill owes is the
 join: what this dataset can carry, given what the field has already done.**
 
-The deliverable is not a list of ideas. It is a verdict per candidate question,
-and for every question judged infeasible, **the specific field that is missing**.
+The deliverable is a set of **study designs**, each with its estimator, its
+variable construction against named fields, and its pipeline proven by running
+it on the data you were given. A verdict per candidate question is part of that,
+not the point of it. A report that is mostly verdicts is a gatekeeper's report,
+and the researcher did not ask for a gatekeeper.
+
+## An extract is a schema sample, not a cohort
+
+**The single most expensive mistake this skill has made.** A five-patient export
+was read as a five-patient study population, so every question was judged
+against n=5, every inferential design failed that test, and what survived was
+two descriptive audits. An audit is not a paper. The researcher's hospital has
+the same schema behind it with the whole census in it; what they handed you is a
+sample of the *structure*.
+
+Unless the researcher says the extract is the entire population, treat n as a
+property of the export and not of the source system. That changes what you owe:
+
+- **Never write "infeasible because n is small."** State the method, run it on
+  the sample so the pipeline is proven and the code is real, and give the sample
+  size the method needs at scale, derived — events per variable, Riley's
+  criteria, the detectable effect at a stated α and power.
+- A quantity computed on six observations is an **existence proof for the
+  pipeline**, not an estimate. Report it as one, with its interval, and say so.
+- The questions that scale is needed for are still the questions worth naming.
+  Rank by scientific value first and by how much data they need second.
+
+What n genuinely does bind is the *precision* of an estimate from this extract.
+It does not bind whether the design is sound, whether the fields support it, or
+whether it is worth doing.
 
 ## Never carry an identifier out of the data
 
@@ -136,18 +164,41 @@ Fill rates do not tell you whether there is signal. Compute the quantities that
 actually carry information **in this domain** and look at their spread and
 distribution.
 
-This skill deliberately ships **no catalogue of per-domain quantities**. What
-matters is domain-specific — a therapeutic-drug-monitoring dataset wants
-dose-normalized concentration, metabolite-to-parent ratio, steady-state
-attainment and position within the reference range; a survival dataset wants
-follow-up completeness and censoring pattern; a laboratory dataset wants
-reference-interval deviation. Derive them from the domain and the literature of
-Phase 3, and state why each one is the quantity that carries the signal.
+Which quantities matter is domain-specific and this skill does not ship a
+catalogue of them — a therapeutic-drug-monitoring dataset wants dose-normalized
+concentration, metabolite-to-parent ratio, steady-state attainment and position
+within the reference range; a survival dataset wants follow-up completeness and
+censoring pattern; a laboratory dataset wants reference-interval deviation.
+Derive them from the domain and from Phase 3, and say why each is the quantity
+that carries the signal.
 
-This phase is what decides whether there is anything here at all. On the real
-TDM data it was this step — not the field inventory — that found a 2.7-fold
-spread in dose-normalized concentration, and that only 1 of 6 samples could be
-confidently called steady-state.
+**But three kinds are not optional, because they are what the rest depends on,
+and a run that skipped all three produced a report with nothing in it:**
+
+1. **Every identity the schema implies, run and reported with counts.** If a
+   table holds a parent, a metabolite and a total, check that the total is the
+   sum — on the real TDM extract it held in 6 of 6 sets, which is what licenses
+   using any of the three. If a stay has an admission date, a discharge date and
+   a length, check they agree. If a value has a reference range in its own row,
+   check the value against it. These cost minutes and they decide whether the
+   numbers can be used at all.
+2. **The mechanism proxy the domain already gives you.** A ratio between two
+   measured species is usually a phenotype. On the real extract, the
+   dehydro-aripiprazole to aripiprazole ratio ran 0.174 to 0.492 — a 2.8-fold
+   spread — and that ratio *is* the CYP2D6 activity phenotype, so the run that
+   declared prediction impossible "because there is no genotype" had the
+   phenotype in its hands and never computed it. Before writing that a covariate
+   is absent, ask what in the data stands in for it.
+3. **The exposure quantity, reconstructed rather than assumed missing.** Daily
+   dose comes from the order in force on the sampling date, not from a
+   dose field on the lab row. On the real extract this gave C/D of 7.99 to 23.60
+   ng/mL per mg/day across five subjects, and one subject sampled twice at an
+   unchanged 20 mg/day moved 317 to 400 ng/mL — a 26% within-subject shift that
+   bounds what any single measurement can mean. Both numbers came from joining
+   two tables that a field inventory reports as unrelated.
+
+This phase is what decides whether there is anything here at all. Report every
+derived quantity **as a number**, not as an intention.
 
 ## Phase 3 — Evidence expansion
 
@@ -314,6 +365,38 @@ units, so pair it with UCUM**; one LOINC code can receive both mg/dL and mmol/L.
 State the cost of each mapping. OMOP's own documentation warns that "up-hill"
 mapping loses semantic precision; its example is ICD-9 *bitten by goose*
 mapping to SNOMED *pecked by bird*.
+
+## Phase 4b — The analysis families, every one of them, on the record
+
+A run that never asks whether prediction is on the table will not produce a
+prediction question, and the report will read as though the data could not
+support one. That is what happened: a run deleted the metabolic-side-effect
+question for want of "代谢实验室参数" while 22 longitudinal weight records sat
+in the vitals table, and deleted the herb-drug question for want of "中药暴露
+定量" while every herb order carried a dose in grams, a route, and a date.
+
+**Walk this list explicitly and record a line for each**, before the matrix.
+Say which fields it would consume, what it would answer, and — only if it truly
+is — why it is off the table. "Not considered" is not an allowed state.
+
+| Family | The question it asks | What it consumes |
+|---|---|---|
+| **Prediction / modelling** | Predict a measured quantity, or the dose that achieves it, or who lands outside a target | measured values as *features*, not only as outcomes; covariates; a validation scheme |
+| **Class-level comparison** | Behaviour of a whole drug or disease class rather than one member | each member placed against its own reference or equivalent-dose scale |
+| **Association mining** | What co-occurs with what, at what lift | order, diagnosis and procedure sets as baskets |
+| **Causal inference** | Effect of an exposure on an outcome, not their correlation | a defensible time zero, measured confounders, an estimator |
+| **Pharmacovigilance / ADR** | Which harms show up, at what rate, against which exposure | longitudinal vitals and labs, symptomatic-treatment proxies, external spontaneous-report data |
+| **External linkage** | What a public resource adds that this data alone cannot | a join key and a vocabulary |
+| **Multi-library synthesis** | Where the published record disagrees with itself, and where this data sits in it | the Phase 3 evidence base as a distribution, not a reading list |
+| **Descriptive / audit** | The distribution or the process, described | anything |
+
+Two rules about that last row. **A descriptive audit is the design of last
+resort, never the default** — if it is what you propose, say which of the rows
+above you ruled out and on what evidence. And a *proxy outcome you construct* is
+a real outcome: an anticholinergic prescription standing in for extrapyramidal
+symptoms, a weight trajectory standing in for metabolic effect, a repeat
+measurement standing in for assay reproducibility. A run that writes "no outcome
+field" without having looked for a proxy has not finished this phase.
 
 ## Phase 5 — Candidate question × target-trial matrix
 

@@ -12,7 +12,10 @@ Blocks on what a reader cannot check for themselves:
 5. an evidence base below the Phase 3 floors — too few works, too few channels,
    too few full texts, citations a reader cannot open, or a work cited in the
    report that is absent from the map,
-6. a surviving question with no novelty statement.
+6. a surviving question with no novelty statement,
+7. an analysis that never left the ground — fewer than six of the eight analysis
+   families considered anywhere, a surviving question with no named estimator, or
+   not one internal-consistency identity run against the schema.
 
 Warns on four a reader can see: an unqualified fill rate, an unexplained blank
 in the seven-element matrix, an external resource with no join key, and a
@@ -23,6 +26,14 @@ depends on the data, and a quota would only teach runs to pad. It does check how
 much of the field was read before deciding, because that number does not depend
 on the data at all: a run searched one index, cited twelve works, and returned a
 portfolio whose directions nobody could tell were new.
+
+Evidence breadth is only half of it. A later run cleared every breadth floor —
+49 works, nine channels, six full texts — and still handed back two descriptive
+audits, because it never asked whether prediction, class-level comparison,
+association mining, or multi-library synthesis were on the table, and deleted the
+metabolic-effect question for want of laboratory parameters while 22 longitudinal
+weight records sat in the vitals table. Depth is checked separately for that
+reason.
 """
 
 from __future__ import annotations
@@ -130,6 +141,37 @@ BINDING_TEST = re.compile(
 )
 VERDICT_MENTION = re.compile(r"(?:判定|裁定|verdict)", re.I)
 FEASIBLE_MENTION = re.compile(r"(?:可行|feasible)", re.I)
+# Phase 4b. A run that never asks whether prediction is on the table does not
+# produce a prediction question, and the report then reads as though the data
+# could not carry one. The run this exists for deleted the metabolic-effect
+# question for want of lab parameters while 22 weight records sat in the vitals
+# table, and never considered prediction, association mining, or causal
+# inference at all — its two survivors were both descriptive audits.
+ANALYSIS_FAMILIES = (
+    ("prediction", re.compile(r"预测|prediction|predictive model|建模", re.I)),
+    ("class-level", re.compile(r"类药|药物类|class[- ]level|同类药|drug class", re.I)),
+    ("association", re.compile(r"关联挖掘|关联规则|association (?:rule|mining)|共现|market[- ]basket", re.I)),
+    ("causal", re.compile(r"因果|causal|target trial|目标试验|IPTW|g-formula|反事实", re.I)),
+    ("pharmacovigilance", re.compile(r"不良反应|药物警戒|pharmacovigilance|ADR|信号检测|ROR|FAERS", re.I)),
+    ("external-linkage", re.compile(r"外部(?:资源|链接|接驳)|external linkage|公共数据库|RxNorm|LOINC|ATC", re.I)),
+    ("multi-library", re.compile(r"多库|multi[- ]librar|跨库|证据合成|pooled|meta[- ]analy", re.I)),
+    ("descriptive", re.compile(r"描述性|审计|descriptive|audit", re.I)),
+)
+MIN_FAMILIES_CONSIDERED = 6
+# A surviving question without an estimator is a topic, not a design.
+ESTIMATOR_MENTION = re.compile(
+    r"估计量|估计器|estimator|回归|regression|logistic|cox|混合效应|mixed[- ]effect|"
+    r"随机森林|random forest|lasso|贝叶斯|bayes|bootstrap|交叉验证|cross[- ]valid|"
+    r"IPTW|g-formula|倾向|propensity|ROR|PRR|apriori|FP[- ]growth|置信区间|confidence interval",
+    re.I,
+)
+# An identity the schema implies, actually run, with a count. The TDM extract's
+# total = parent + metabolite held in 6 of 6 sets, which is what licensed using
+# any of the three numbers; no run had ever checked it.
+IDENTITY_CHECK = re.compile(
+    r"(?:一致性|恒等|校验|identity|consistency check|internal check|对账)[^\n]{0,80}?\d",
+    re.I,
+)
 FILL_RATE_MENTION = re.compile(r"(?:填充率|fill rate|completeness)", re.I)
 COMPLETENESS_QUALIFIER = re.compile(r"(?:density|documentation|breadth|predictive|Weiskopf)", re.I)
 SEVEN_ELEMENTS = (
@@ -320,7 +362,56 @@ def check_breadth_and_novelty(root: Path, issues: list[str]) -> dict:
             feasible += 1
     metrics["feasibleQuestions"] = feasible
     metrics.update(check_novelty_statements(root, "research-portfolio.md", feasible, issues))
+    metrics.update(check_analytical_depth(root, feasible, issues))
     return metrics
+
+
+def check_analytical_depth(root: Path, feasible: int, issues: list[str]) -> dict:
+    """Whether designs were produced, or only verdicts about designs.
+
+    Evidence breadth is already checked; this is the other half. A package can
+    cite fifty works, draw on nine channels, and still hand back two descriptive
+    audits because it never asked whether prediction or causal inference were on
+    the table, never ran the identities that license its own numbers, and never
+    named an estimator for anything that survived.
+    """
+    matrix = read_text(root, "feasibility-matrix.md")
+    portfolio = read_text(root, "research-portfolio.md")
+    protocol = read_text(root, "study-protocol.md")
+    quality = read_text(root, "data-quality.md")
+    profile = read_text(root, "data-profile.md")
+    considered = sorted(
+        name for name, pattern in ANALYSIS_FAMILIES if pattern.search(matrix) or pattern.search(portfolio)
+    )
+    if len(considered) < MIN_FAMILIES_CONSIDERED:
+        missing = [name for name, _ in ANALYSIS_FAMILIES if name not in considered]
+        issues.append(
+            f"only {len(considered)} of {len(ANALYSIS_FAMILIES)} analysis families appear anywhere in the "
+            f"matrix or the portfolio ({', '.join(considered) or 'none'}); the floor is "
+            f"{MIN_FAMILIES_CONSIDERED}. Never considered: {', '.join(missing)}. Walk the Phase 4b list "
+            "and record a line for each — which fields it would consume, what it would answer, and only "
+            "if it truly is, why it is off the table."
+        )
+    estimators = len(ESTIMATOR_MENTION.findall(portfolio)) + len(ESTIMATOR_MENTION.findall(protocol))
+    if feasible > 0 and estimators < feasible:
+        issues.append(
+            f"{estimators} estimator mentions across research-portfolio.md and study-protocol.md for "
+            f"{feasible} surviving questions. A question without a named estimator is a topic, not a "
+            "design — say what is being estimated and with what."
+        )
+    identities = len(IDENTITY_CHECK.findall(quality)) + len(IDENTITY_CHECK.findall(profile))
+    if identities == 0:
+        issues.append(
+            "no internal-consistency identity is reported with a count in data-quality.md or "
+            "data-profile.md. Run every identity the schema implies — a total against the sum of its "
+            "parts, a length of stay against its dates, a value against the reference range in its own "
+            "row — and report how many rows passed. These are what license using the numbers at all."
+        )
+    return {
+        "analysisFamiliesConsidered": considered,
+        "estimatorMentions": estimators,
+        "identityChecksReported": identities,
+    }
 
 
 def check_post_hoc_power(root: Path, issues: list[str]) -> None:
