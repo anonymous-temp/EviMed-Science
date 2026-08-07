@@ -45,14 +45,14 @@ const routeRules = Object.freeze([
 // The possessive and the data word are rarely adjacent — "我手上有一份住院数据"
 // puts five characters between them — so a bounded gap is allowed, stopping at
 // a sentence boundary so two unrelated clauses cannot combine into a match.
-const datasetSubject = /(?:(?:上传|我的|我们的|手上|手里|现有|已有|这份|那份|本院|院内|自己的)[^。；;!?\n]{0,12}?(?:数据集?|数据库|数据表|资料|表格)|数据集|dataset|data\s?set)/i;
+const datasetSubject = /(?:(?:上传|我的|我们的|手上|手里|现有|已有|这份|那份|本院|院内|自己的)[^。；;!?\n]{0,12}?(?:数据集?|数据库|数据表|资料|表格)|数据集|数据抽取|抽取数据|数据导出|\.(?:xlsx?|csv|tsv|parquet)\b|dataset|data\s?set|data\s+extract)/i;
 // The last clause is the model case, and it was missing. "这份数据能不能支撑一个
 // 个体化用药的预测模型" is the same question — what will this data carry — but
 // its object is a model rather than a 研究 or 课题, so the enumeration above did
 // not reach it and only the LLM fallback did. A router that depends on the
 // fallback for a question this central is one outage away from answering it in
 // chat with no deliverable.
-const datasetScopingIntent = /(?:(?:能|可以|可能|适合|能否|能不能|可不可以)\s*(?:做|开展|支撑|支持|回答|产出|发)\s*(?:哪些|什么|多少)?\s*(?:科学性?)?(?:研究|课题|分析|选题|文章|论文)|(?:研究|课题|选题|分析)\s*(?:的)?\s*可行性|(?:哪些|什么)\s*(?:科学性?)?(?:研究|课题|选题)|(?:能|可以|能否|能不能|可不可以|是否)\s*(?:支撑|支持|做|搭|建|构建|训练|拟合|开发)\s*(?:出|一个|一套|一版)?[^。；;!?\n]{0,16}?模型|模型[^。；;!?\n]{0,10}可行|what\s+(?:research|studies|questions).{0,24}(?:support|possible|feasible)|research\s+feasibilit|feasibility\s+of\s+(?:the\s+)?(?:data|dataset|[^.;\n]{0,24}model))/i;
+const datasetScopingIntent = /(?:(?:能|可以|可能|适合|能否|能不能|可不可以)\s*(?:做|开展|支撑|支持|回答|产出|发)\s*(?:哪些|什么|多少)?\s*(?:科学性?)?(?:研究|课题|分析|选题|文章|论文)|(?:研究|课题|选题|分析)\s*(?:的)?\s*可行性|(?:哪些|什么)\s*(?:科学性?)?(?:研究|课题|选题)|(?:能|可以|能否|能不能|可不可以|是否)\s*(?:支撑|支持|做|搭|建|构建|训练|拟合|开发)\s*(?:出|一个|一套|一版)?[^。；;!?\n]{0,16}?模型|模型[^。；;!?\n]{0,10}可行|what\s+(?:research|studies|questions).{0,24}(?:support|possible|feasible)|research\s+feasibilit|feasibility\s+of\s+(?:the\s+)?(?:data|dataset|[^.;\n]{0,24}model)|(?:请|帮我|麻烦)?\s*(?:出|做|写|给出|产出|生成|完成)\s*(?:一份|一版|一个)?[^。；;!?\n]{0,20}?(?:分析报告|科研选题|选题分析|研究方案|课题|数据画像|可行性分析)|(?:分析|画像|勘查|梳理)\s*(?:一下|下)?\s*(?:这份|这批|上传的|我的)?\s*(?:数据|数据集|抽取)|(?:analy[sz]e|profile|scope)\s+(?:the\s+)?(?:uploaded\s+)?(?:hospital\s+)?(?:data|dataset|extract))/i;
 
 // Subjects that are research work rather than a clinical presentation. These
 // only route anywhere in combination with an explicit report request, so a
@@ -100,10 +100,22 @@ export function routeOpenDomainSpecialist(query, agents) {
   // analysis grounded in that data. research-topic-selection starts from a
   // direction and never opens the file, so taking this on the word alone sends
   // the one request that must read the data to the one skill that cannot.
+  // Naming the package is an instruction. A request that says
+  // "请按 dataset-research-scoping 出一份报告" was routed elsewhere because the
+  // name matched no topic pattern — the one unambiguous signal in the prompt
+  // was the only one nothing looked at.
+  const named = agents.find((agent) => query.toLowerCase().includes(agent.id));
+  if (named) return selection(named, `matched:named:${named.id}`);
   const dataInHand = datasetSubject.test(query) && datasetScopingIntent.test(query);
+  // Both of these start from a question and never open the file. Naming a
+  // mini-review or a literature landscape inside a scoping request is normal —
+  // the scoping skill owes one per topic — so the review vocabulary must not
+  // outrank the dataset. A request asking for both went to
+  // clinical-evidence-synthesis, which read no data at all.
+  const literatureOnly = new Set(["research-topic-selection", "clinical-evidence-synthesis"]);
   for (const [id, pattern] of routeRules) {
     if (!(/** @type {RegExp} */ (pattern).test(query))) continue;
-    if (id === "research-topic-selection" && dataInHand) break;
+    if (literatureOnly.has(id) && dataInHand) break;
     return selection(byId.get(id), `matched:${id}`);
   }
   if (positiveMetaIntent.test(query) && !negatedMetaIntent.test(query)) {
@@ -125,6 +137,7 @@ export function routeOpenDomainSpecialist(query, agents) {
     || researchSubject.test(query)
     || (clinicalRoutingMedicinePattern != null && clinicalRoutingMedicinePattern.test(query));
   if (clinicalSubjectMatch && explicitReportIntent.test(query)) {
+    if (dataInHand) return selection(byId.get("dataset-research-scoping"), "matched:dataset-research-scoping");
     return selection(byId.get("clinical-evidence-synthesis"), "matched:clinical-evidence-synthesis");
   }
   return null;
