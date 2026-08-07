@@ -70,6 +70,17 @@ Verified against the deployed host:
 `clinicaltrials.gov` and `arxiv.org` do not resolve from the deployed host. Do
 not spend the run retrying them.
 
+**`evimed_literature_search` returns titles and nothing else.** Its own warning
+says a title does not establish study design, evidence level, outcome, or effect
+size — so any statement about what a paper *found*, built on that call alone, is
+invented. Use it to find candidates; use `evimed_biomedical_source_search`,
+which returns abstracts, to read them; use `evimed_open_access_full_text` for
+the ones a design actually depends on. This is the mechanism behind a report
+that cites papers and says nothing about any of them.
+
+Ask for more than the default ten per call. The limit goes to 50 on most
+sources and 123 on the biomedical source search.
+
 Search every candidate direction four ways. A missing axis is what makes an
 agenda thin:
 
