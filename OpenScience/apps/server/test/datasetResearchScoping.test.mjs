@@ -20,6 +20,7 @@ const skillRoot = path.resolve(
 );
 const profileScript = path.join(skillRoot, "scripts/profile_dataset.py");
 const preflightScript = path.join(skillRoot, "scripts/preflight.py");
+const topicSkillRoot = path.resolve(skillRoot, "../research-topic-selection");
 const hasPython3 = spawnSync("python3", ["--version"], { stdio: "ignore" }).status === 0;
 
 // START_DATETIME is day-first, as the real extract exported it; RECORD_CONTENT
@@ -329,7 +330,7 @@ test("each blocking gate rejects what it exists to catch", { skip: !hasPython3 }
       apply: async (root) => {
         await writeFile(path.join(root, "research-portfolio.md"), "# 课题组合\n课题 A 的 MDE=0.6 SD。\n", "utf8");
       },
-      expect: /0 novelty statements for 1 feasible questions/,
+      expect: /0 novelty statements for 1 surviving questions/,
     },
     {
       name: "a prior data contact declaration written after the fact",
@@ -365,6 +366,68 @@ test("the reader-visible defects warn instead of blocking", { skip: !hasPython3 
     assert.equal(result.ok, true, "a visible defect must not withhold the package");
     assert.ok(result.warnings.some((w) => /completeness definitions/.test(w)));
     assert.ok(result.warnings.some((w) => /naming the field that joins them/.test(w)));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// Skill packages are copied into the runtime independently and cannot import
+// from one another, so the floor logic exists twice. Drift between the server
+// gate and the run-side preflight has cost three finished packages in
+// production; this is the same failure mode one directory over.
+test("both research-planning skills carry the same evidence floor", async () => {
+  const [scoping, topic] = await Promise.all([
+    readFile(path.join(skillRoot, "scripts/evidence_floor.py"), "utf8"),
+    readFile(path.join(topicSkillRoot, "scripts/evidence_floor.py"), "utf8"),
+  ]);
+  assert.equal(topic, scoping, "evidence_floor.py has drifted between the two skill packages");
+});
+
+test("the topic preflight holds an agenda to the same floors", { skip: !hasPython3 }, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "topic-selection-"));
+  const topicPreflight = path.join(topicSkillRoot, "scripts/preflight.py");
+  const run = async () => {
+    try {
+      const { stdout } = await execFileAsync("python3", [topicPreflight, "--workspace", root], { cwd: root });
+      return JSON.parse(stdout);
+    } catch (error) {
+      return JSON.parse(error.stdout);
+    }
+  };
+  try {
+    await writeFile(path.join(root, "research-topic-run.json"), JSON.stringify({ jobState: "succeeded" }), "utf8");
+    await writeFile(
+      path.join(root, "research-topic-report.md"),
+      "# 选题报告\n检索范围：见证据地图。\n## Q1 住院 TDM 基准\n设计为横断面描述。\n",
+      "utf8",
+    );
+    await writeFile(path.join(root, "evidence-map.md"), evidenceMap(12), "utf8");
+
+    const thin = await run();
+    assert.equal(thin.ok, false, "an agenda written off twelve works must not pass");
+    assert.ok(thin.issues.some((issue) => /cite 12 distinct works; the floor is 30/.test(issue)));
+    assert.ok(thin.issues.some((issue) => /0 full texts were retrieved/.test(issue)));
+    assert.ok(thin.issues.some((issue) => /0 novelty statements for 1 surviving questions/.test(issue)));
+
+    await writeFile(path.join(root, "evidence-map.md"), evidenceMap(), "utf8");
+    for (let index = 0; index < 5; index += 1) {
+      const slug = path.join(root, ".evimed-sources", `article-${index + 1}`);
+      await mkdir(slug, { recursive: true });
+      await writeFile(path.join(slug, "fulltext.md"), "# Methods\n", "utf8");
+    }
+    await writeFile(
+      path.join(root, "research-topic-report.md"),
+      [
+        "# 选题报告",
+        "检索范围：PubMed / Europe PMC / OpenAlex / Semantic Scholar / Crossref / bioRxiv。",
+        "## Q1 住院 TDM 基准",
+        "新颖性：最接近的是 PMID 30000001（门诊人群），本题为住院人群，差异轴为治疗场景。",
+      ].join("\n"),
+      "utf8",
+    );
+    const expanded = await run();
+    assert.deepEqual(expanded.issues, []);
+    assert.equal(expanded.metrics.channels.length >= 5, true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
