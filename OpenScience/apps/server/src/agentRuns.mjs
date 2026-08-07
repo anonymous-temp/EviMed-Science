@@ -401,6 +401,22 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "public_source_gateway_rate_limited",
   "public_source_gateway_response_invalid",
   "public_source_gateway_response_too_large",
+  // The open web is the one channel that is expected to be partly unreachable:
+  // engines rate-limit, serve CAPTCHAs, and suspend themselves, and a
+  // deployment may have no metasearch backend at all. Every one of these means
+  // the run failed to ask, not that it found nothing — it carries on with the
+  // bibliographic channels, which is precisely what the skill tells it to do.
+  // Adding the tool without classifying its codes failed a run that had
+  // produced all ten deliverables, six full texts, and sixty-seven works.
+  "web_search_unconfigured",
+  "web_search_unavailable",
+  "web_search_rate_limited",
+  "web_search_upstream_error",
+  "web_search_timeout",
+  "web_search_response_invalid",
+  "web_search_response_too_large",
+  "web_search_endpoint_invalid",
+  "web_search_gateway_token_invalid",
   // Host configuration the run cannot do anything about.
   "public_source_gateway_unconfigured",
   "public_source_dataset_unconfigured",
