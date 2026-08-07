@@ -205,10 +205,15 @@ though it were evidence is worse than no page.
 
 Two categories behave differently and both are worth a call:
 
-- `categories: ["science"]` reaches arXiv, **OpenAIRE publications and
-  datasets**, PubMed and PDBe. OpenAIRE is the reason to bother — it indexes EU
-  project, funding and dataset records that no other channel here carries, which
-  is where "who is already working on this, funded by whom" actually shows up.
+- `categories: ["science"]` reaches **arXiv** and PubMed reliably, and OpenAIRE
+  publications and datasets intermittently — it answered 15 records on one probe
+  and timed out on the next, so treat a miss as a miss and retry rather than as
+  an absence. arXiv is the reason to bother: `export.arxiv.org` does not resolve
+  through the source gateway at all, so this is the **only** channel here that
+  reaches it. OpenAIRE, when it answers, carries EU project, funding and dataset
+  records nothing else here does — which is where "who is already working on
+  this, and on whose grant" shows up. PubMed through this route duplicates
+  `evimed_biomedical_source_search`; prefer that one, which returns abstracts.
 - `categories: ["general"]` reaches 360search and Baidu, and nothing else:
   Google, DuckDuckGo, Brave and Wikipedia do not resolve from this host, and
   Bing answers it but serves markup the aggregator cannot parse. **The general
