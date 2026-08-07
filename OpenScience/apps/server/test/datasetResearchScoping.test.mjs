@@ -368,6 +368,15 @@ test("each blocking gate rejects what it exists to catch", { skip: !hasPython3 }
       expect: /estimator mentions across/,
     },
     {
+      name: "a topic named after the activity instead of the question",
+      apply: async (root) => {
+        const file = path.join(root, "research-portfolio.md");
+        const text = await readFile(file, "utf8");
+        await writeFile(file, `${text}\n## TDM 采样实践审计\n判定：可行。\n`, "utf8");
+      },
+      expect: /named after the activity performed/,
+    },
+    {
       name: "a package that ran no consistency identity",
       apply: async (root) => {
         const file = path.join(root, "data-quality.md");

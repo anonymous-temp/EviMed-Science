@@ -168,6 +168,16 @@ ESTIMATOR_MENTION = re.compile(
 # An identity the schema implies, actually run, with a count. The TDM extract's
 # total = parent + metabolite held in 6 of 6 sets, which is what licensed using
 # any of the three numbers; no run had ever checked it.
+# A topic named after the activity performed rather than the question answered.
+# "TDM 采样实践审计" was rejected outright by the researcher — "这是学术语言吗" —
+# and the skill had put the word there itself. The register is part of the design:
+# a compliance word in a title tells a reviewer the work is administrative before
+# they read a line. Checked on headings only, so the same word may still be
+# discussed in the prose.
+ACTIVITY_TITLE = re.compile(
+    r"^#{2,4}[^\n]*(?:审计|梳理|摸底|盘点|情况分析|现状调查|\baudit\b|\bstocktak)",
+    re.I | re.M,
+)
 IDENTITY_CHECK = re.compile(
     r"(?:一致性|恒等|校验|identity|consistency check|internal check|对账)[^\n]{0,80}?\d",
     re.I,
@@ -399,6 +409,14 @@ def check_analytical_depth(root: Path, feasible: int, issues: list[str]) -> dict
             f"{feasible} surviving questions. A question without a named estimator is a topic, not a "
             "design — say what is being estimated and with what."
         )
+    activity_titles = ACTIVITY_TITLE.findall(portfolio) + ACTIVITY_TITLE.findall(protocol)
+    if activity_titles:
+        issues.append(
+            f"{len(activity_titles)} topic heading(s) are named after the activity performed rather "
+            "than the question answered — 审计 / 梳理 / 摸底 / 盘点 / audit and the like. Name a topic "
+            "after what the reader learns or what is estimated: not 「采样实践审计」 but 「常规 TDM "
+            "记录中稳态达标率的估计及其与群体分布的偏离」."
+        )
     identities = len(IDENTITY_CHECK.findall(quality)) + len(IDENTITY_CHECK.findall(profile))
     if identities == 0:
         issues.append(
@@ -411,6 +429,7 @@ def check_analytical_depth(root: Path, feasible: int, issues: list[str]) -> dict
         "analysisFamiliesConsidered": considered,
         "estimatorMentions": estimators,
         "identityChecksReported": identities,
+        "activityStyleTitles": len(activity_titles),
     }
 
 

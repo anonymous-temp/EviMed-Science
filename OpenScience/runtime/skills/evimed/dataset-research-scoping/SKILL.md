@@ -154,6 +154,10 @@ Every row below was hit on real hospital data. Check each one explicitly.
 | **Empty join key** | Diagnosis table `PATIENT_ID` has **0% fill** | No patient-level analysis across admissions is possible |
 | **Type differs across tables** | `AGE` is text `"56岁"` on the front page, numeric in labs | Joins fail silently |
 | **Unsplit composite values** | Blood pressure stored `129/74`; comorbidities pipe-delimited | Not directly computable |
+| **Ambiguous date order** | 517 of 915 `START_DATETIME` values have both leading parts ≤ 12 | Guessing wrong silently reorders every timeline the designs rest on |
+| **Several coding systems in one column** | `DIAGNOSIS_CODE`: 27 ICD-10 rows beside 16 rows of two Chinese TCM code families | A quarter of the rows map to nothing, and the flag column does not separate them reliably |
+| **Timestamp is order entry, not administration** | Bedtime (QN) orders share QD's entry-hour profile; no nightly order is entered at night | Time since dose computed from it is wrong for every row |
+| **Physiologically impossible value** | One blood pressure recorded as `126/7` | Passes every type and range check that does not know physiology |
 
 `data-quality.md` must end with a **mandatory preprocessing list**, each item
 naming the downstream analysis that breaks if it is skipped.
@@ -417,9 +421,9 @@ is — why it is off the table. "Not considered" is not an allowed state.
 | **Pharmacovigilance / ADR** | Which harms show up, at what rate, against which exposure | longitudinal vitals and labs, symptomatic-treatment proxies, external spontaneous-report data |
 | **External linkage** | What a public resource adds that this data alone cannot | a join key and a vocabulary |
 | **Multi-library synthesis** | Where the published record disagrees with itself, and where this data sits in it | the Phase 3 evidence base as a distribution, not a reading list |
-| **Descriptive / audit** | The distribution or the process, described | anything |
+| **Descriptive** | The distribution or the process, estimated and positioned against an external one | anything |
 
-Two rules about that last row. **A descriptive audit is the design of last
+Two rules about that last row. **A purely descriptive design is the last
 resort, never the default** — if it is what you propose, say which of the rows
 above you ruled out and on what evidence. And a *proxy outcome you construct* is
 a real outcome: an anticholinergic prescription standing in for extrapyramidal
@@ -537,6 +541,23 @@ all three of these, in this order:**
    named fields, the validation scheme, the minimum detectable effect and
    expected interval width, the principal biases and their handling, the sample
    size needed at scale, the novelty statement, and the target journal.
+
+### The words are part of the design
+
+A topic titled "TDM 采样实践审计" was rejected by the researcher with "这是学术语言吗"
+— and they were right. `审计` / *audit* is a compliance word, not a scientific one, and
+this skill had put it there: it named a whole deliverable that way and the runs
+learned the register from it. Vocabulary is not decoration. A title in the wrong
+register tells a reviewer the work is administrative before they read a line.
+
+Name a topic after **the question it answers or the quantity it estimates**, never
+after the activity performed. `采样实践审计` is an activity; `常规 TDM 记录中稳态达标率
+的估计及其与群体分布的偏离` is a question. Words to keep out of a topic title
+entirely: 审计 / audit, 梳理, 摸底, 盘点, 情况分析, 现状调查 — every one of them
+describes what the analyst did rather than what the reader learns.
+
+The same applies inside the text. Write "本院的稳态达标率为 x%（95% CI …），
+低于注册库同剂量带的 y%" — not "对采样规范性进行了审计".
 
 **Aim for five or six topics, not nine and not two.** Nine is a list nobody
 prioritises; two is a refusal. Merge topics that share an estimator and a data
