@@ -2546,4 +2546,23 @@ test("replacing the report during repair is named, not just its shrinkage", asyn
 
   // The write before the repair prompt is the original authoring, not a rewrite.
   assert.equal(rewrites.length, 1, "only the rewrite that answered the repair counts");
+})
+
+test("an unreachable open web does not fail a complete package", () => {
+  // Adding evimed_web_search without classifying its failure codes failed a run
+  // that had written all ten deliverables, six full texts and sixty-seven works,
+  // because one engine rate-limited. The open web is the channel most expected
+  // to be partly unreachable; a miss there is not a broken run.
+  for (const code of [
+    "web_search_unconfigured",
+    "web_search_unavailable",
+    "web_search_rate_limited",
+    "web_search_upstream_error",
+    "web_search_timeout",
+  ]) {
+    assert.ok(recoverableEvidenceSourceErrorCodes.has(code), `${code} must not fail a run`);
+  }
+  // A malformed request from the agent is still the agent's problem.
+  assert.equal(recoverableEvidenceSourceErrorCodes.has("web_search_query_invalid"), false);
 });
+;
