@@ -98,8 +98,62 @@ DATE_PATTERN = re.compile(
 )
 
 
+# A day-first date whose first two components are both 12 or under reads equally
+# well as month-first, and nothing in the cell says which. On the real extract
+# more than half of one column's values were ambiguous this way, so a reader who
+# guesses wrong silently reorders the timeline — and every temporal design, every
+# time-zero, every before-and-after rests on that order. The count is reported
+# per column so the run has to state which convention it adopted and on what.
+AMBIGUOUS_DATE = re.compile(r"^(\d{1,2})[-/](\d{1,2})[-/]\d{4}")
+# A code column that holds more than one shape is holding more than one coding
+# system. The real 诊断记录 DIAGNOSIS_CODE carried ICD-10 alongside three
+# families of Chinese TCM syndrome codes, and a run that treats the column as
+# one vocabulary maps a quarter of its rows to nothing.
+CODE_SHAPES = (
+    ("icd10", re.compile(r"^[A-Z]\d{2}(?:\.\d+)?(?:x\d+)?$", re.I)),
+    ("alpha-numeric-block", re.compile(r"^[A-Z]{2,4}\d{2,4}$")),
+    ("dotted-numeric", re.compile(r"^[A-Z]?\d{2}(?:\.\d{2}){1,3}$", re.I)),
+    ("loinc", re.compile(r"^\d{1,5}-\d$")),
+    ("numeric", re.compile(r"^\d+$")),
+)
+CODE_COLUMN = re.compile(r"(?:code|编码|代码)$", re.I)
+CODE_SHAPE_MIN = 2
+
+
 def is_blank(value: str) -> bool:
     return not value or not value.strip()
+
+
+def date_ambiguity(values: list[str]) -> dict:
+    """How many values cannot say for themselves whether they are D/M or M/D."""
+    dated = [v for v in values if DATE_PATTERN.match(v)]
+    if not dated:
+        return {"dateValues": 0, "ambiguous": 0, "share": 0.0}
+    ambiguous = 0
+    for value in dated:
+        match = AMBIGUOUS_DATE.match(value)
+        if match and int(match.group(1)) <= 12 and int(match.group(2)) <= 12:
+            ambiguous += 1
+    return {
+        "dateValues": len(dated),
+        "ambiguous": ambiguous,
+        "share": round(ambiguous / len(dated), 4),
+    }
+
+
+def code_shapes(name: str, values: list[str]) -> dict:
+    """The distinct code shapes a coded column holds, and how many rows each."""
+    if not CODE_COLUMN.search(name.strip()):
+        return {"applies": False, "shapes": {}}
+    found: Counter = Counter()
+    for value in values:
+        label = next((key for key, pattern in CODE_SHAPES if pattern.match(value)), "other")
+        found[label] += 1
+    return {
+        "applies": True,
+        "shapes": dict(sorted(found.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "mixed": len(found) >= CODE_SHAPE_MIN,
+    }
 
 
 def infer_type(values: list[str]) -> str:
@@ -150,6 +204,8 @@ def profile_column(name: str, cells: list[str]) -> tuple[dict, set[str]]:
         "inferredType": infer_type(stripped),
         "vocabulary": {"complete": complete, "identifying": identifying, "values": [[v, c] for v, c in shown]},
         "sentinelSuspects": sentinels,
+        "dateAmbiguity": date_ambiguity(stripped),
+        "codeShapes": code_shapes(name, stripped),
         "compositeSuspects": {
             "count": len(composites),
             "examples": [] if identifying else sorted({v for v in composites})[:3],
@@ -332,6 +388,18 @@ def render_markdown(profile: dict) -> str:
                 notes.append("哨兵值：" + "、".join(f"`{s}`" for s in column["sentinelSuspects"][:3]))
             if column["compositeSuspects"]["count"]:
                 notes.append(f"复合值 {column['compositeSuspects']['count']} 处")
+            ambiguity = column.get("dateAmbiguity") or {}
+            if ambiguity.get("ambiguous"):
+                notes.append(
+                    f"日期歧义 {ambiguity['ambiguous']}/{ambiguity['dateValues']}"
+                    f"（{ambiguity['share']:.0%} 无法自证日/月次序）"
+                )
+            shapes = column.get("codeShapes") or {}
+            if shapes.get("mixed"):
+                notes.append(
+                    "编码形态混用："
+                    + "、".join(f"{k} {v}" for k, v in shapes["shapes"].items())
+                )
             if column["filled"] == 0:
                 notes.append("**该列全空**")
             lines.append(
