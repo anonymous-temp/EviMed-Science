@@ -5,12 +5,23 @@
 # port. That is why the bot limiter is off: it exists to stop anonymous public
 # abuse, and here the only client already authenticated with a runtime token.
 #
-# The engine list is a deployment fact, not a preference. Measured from the
-# production host: Google, DuckDuckGo, Brave, Startpage, and Wikipedia do not
-# resolve at all; Mojeek answers 403 to datacenter addresses; Sogou serves a
-# CAPTCHA and then suspends itself for an hour. What answers with parsed rows
-# is 360search, Baidu, and Marginalia. Re-check after any egress change — this
-# list is a measurement, and measurements expire.
+# The engine list is a measurement, and measurements expire. Asked from inside
+# the deployment rather than probed at the hosts, this is what answers:
+#
+#   general  — 360search and Baidu only. Google, DuckDuckGo, Brave, Startpage,
+#              Wikipedia, Wiby, Yep, Encyclosearch and Tusksearch return nothing
+#              or do not resolve; Mojeek answers 403 to datacenter addresses;
+#              Sogou serves a CAPTCHA and then suspends itself for an hour; Bing
+#              answers the host but serves markup the parser extracts nothing
+#              from. The general channel is therefore Chinese-language-skewed.
+#   science  — arXiv, OpenAIRE publications and datasets, PubMed, PDBe. This is
+#              the productive category from here: 46 results in 4.5 s on a
+#              pharmacology query, and OpenAIRE carries EU project, funding and
+#              dataset records that no bibliographic connector in this platform
+#              reaches.
+#
+# Everything measured dead is disabled rather than left to spend the request
+# timeout: `google cse` alone cost ten seconds on every search before it was.
 
 use_default_settings: true
 
@@ -50,12 +61,12 @@ outgoing:
   enable_http2: true
 
 engines:
-  # Unreachable from this host, measured rather than assumed. Left enabled they
-  # spend the request timeout on every query and return nothing; `google cse`
-  # alone cost ten seconds a search before it was turned off.
+  # Measured returning nothing, or not resolving at all, from this host.
   - name: google
     disabled: true
   - name: google cse
+    disabled: true
+  - name: google cse images
     disabled: true
   - name: google news
     disabled: true
@@ -77,22 +88,31 @@ engines:
     disabled: true
   - name: reuters
     disabled: true
-  # bing.com answers this host directly, but SearXNG's parser extracts nothing
-  # from what it serves here — a scrape, not an API, and the markup differs by
-  # client. Kept enabled because it costs one request and may start working;
-  # do not count it as a channel until it returns rows.
-  - name: bing
-    disabled: false
+  - name: yep
+    disabled: true
+  - name: encyclosearch
+    disabled: true
+  - name: tusksearch
+    disabled: true
+  - name: wiby
+    disabled: true
   # Answers with a CAPTCHA and then suspends itself for an hour.
   - name: sogou
     disabled: true
+  # bing.com answers this host directly, but the parser extracts nothing from
+  # what it serves here. Kept because it costs one request and may start
+  # working; do not count it as a channel until it returns rows.
+  - name: bing
+    disabled: false
 
-  # Verified returning parsed results from this host.
+  # Verified returning parsed results.
   - name: 360search
     disabled: false
   - name: baidu
     disabled: false
-  # Indexes small independent sites the majors bury. On a pharmacology probe it
-  # was the only engine that surfaced journal DOIs and repository records.
-  - name: marginalia
+  - name: arxiv
+    disabled: false
+  - name: openairepublications
+    disabled: false
+  - name: openairedatasets
     disabled: false

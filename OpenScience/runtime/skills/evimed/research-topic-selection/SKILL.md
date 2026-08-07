@@ -88,13 +88,21 @@ record — and if it is published literature, re-found through
 `evimed_biomedical_source_search` so it carries an identifier. A page cited as
 though it were evidence is worse than no page.
 
-The tool reports which engines answered. From this host that is 360search,
-Baidu, and Marginalia; Google, DuckDuckGo, Brave, and Wikipedia do not resolve
-at all, and Bing answers the host but yields nothing the aggregator can parse.
-**A thin result set therefore means few engines answered, not that little
-exists** — never write "nothing found on the open web" as a novelty argument.
-The coverage is also skewed: two of the three are Chinese-language indexes, so
-an English-only query under-samples what is there. If the tool reports that open-web search is not configured, say so
+Two categories behave differently and both are worth a call:
+
+- `categories: ["science"]` reaches arXiv, **OpenAIRE publications and
+  datasets**, PubMed and PDBe. OpenAIRE is the reason to bother — it indexes EU
+  project, funding and dataset records that no other channel here carries, which
+  is where "who is already working on this, funded by whom" actually shows up.
+- `categories: ["general"]` reaches 360search and Baidu, and nothing else:
+  Google, DuckDuckGo, Brave and Wikipedia do not resolve from this host, and
+  Bing answers it but serves markup the aggregator cannot parse. **The general
+  channel is Chinese-language-skewed**, so run the Chinese phrasing too — an
+  English-only query under-samples what these two indexes hold.
+
+The tool reports which engines answered. **A thin result set means few engines
+answered, not that little exists** — never write "nothing found on the open web"
+as a novelty argument. If the tool reports that open-web search is not configured, say so
 and carry on with the bibliographic channels; an unavailable search is not an
 empty field.
 
