@@ -130,7 +130,7 @@ test("official specialist packages preserve domain-specific evidence and release
     ["off-label-analysis", "2.2.1"],
     ["open-domain-answer", "1.0.0"],
     ["peer-review", "1.0.1"],
-    ["research-topic-selection", "1.0.2"],
+    ["research-topic-selection", "1.1.0"],
   ]);
   const evidenceSnapshotAgents = new Set(["comprehensive-drug-evaluation", "drug-selection", "off-label-analysis"]);
   for (const agent of registry.list()) {
@@ -142,6 +142,10 @@ test("official specialist packages preserve domain-specific evidence and release
     } else if (agent.id === "dataset-research-scoping") {
       // The profiling step is only meaningful if the skill stack that defines it
       // actually loaded, so skill loading is part of this contract's floor.
+      expectedChecks = ["requiredOutputsExist", "citationsResolvable", "skillsLoaded"];
+    } else if (agent.id === "research-topic-selection") {
+      // The specialist job it drives searches one index; the skill's own
+      // evidence expansion is only real if the skill actually loaded.
       expectedChecks = ["requiredOutputsExist", "citationsResolvable", "skillsLoaded"];
     } else if (agent.id === "open-domain-answer") {
       // Answer-mode contract: the reply is the deliverable, so the floor is
