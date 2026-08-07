@@ -1,0 +1,124 @@
+{
+  "nodes": [
+    {
+      "id": "Neels Hugo",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 2.0,
+      "weighted_degree": 12
+    },
+    {
+      "id": "Maudens Kristof E",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 2.0,
+      "weighted_degree": 12
+    },
+    {
+      "id": "Sabbe Bernard",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 2.0,
+      "weighted_degree": 12
+    },
+    {
+      "id": "Correll Christoph U",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.1667,
+      "betweenness": 0.0,
+      "closeness": 0.1667,
+      "weighted_degree": 1
+    },
+    {
+      "id": "Solmi Marco",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.1667,
+      "betweenness": 0.0,
+      "closeness": 0.1667,
+      "weighted_degree": 1
+    },
+    {
+      "id": "Morrens Manuel",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 2.0,
+      "weighted_degree": 12
+    },
+    {
+      "id": "Patteet Lisbeth",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 2.0,
+      "weighted_degree": 12
+    }
+  ],
+  "edges": [
+    {
+      "source": "Neels Hugo",
+      "target": "Maudens Kristof E",
+      "weight": 3
+    },
+    {
+      "source": "Neels Hugo",
+      "target": "Patteet Lisbeth",
+      "weight": 3
+    },
+    {
+      "source": "Neels Hugo",
+      "target": "Morrens Manuel",
+      "weight": 3
+    },
+    {
+      "source": "Neels Hugo",
+      "target": "Sabbe Bernard",
+      "weight": 3
+    },
+    {
+      "source": "Maudens Kristof E",
+      "target": "Patteet Lisbeth",
+      "weight": 3
+    },
+    {
+      "source": "Maudens Kristof E",
+      "target": "Morrens Manuel",
+      "weight": 3
+    },
+    {
+      "source": "Maudens Kristof E",
+      "target": "Sabbe Bernard",
+      "weight": 3
+    },
+    {
+      "source": "Sabbe Bernard",
+      "target": "Patteet Lisbeth",
+      "weight": 3
+    },
+    {
+      "source": "Sabbe Bernard",
+      "target": "Morrens Manuel",
+      "weight": 3
+    },
+    {
+      "source": "Correll Christoph U",
+      "target": "Solmi Marco",
+      "weight": 1
+    },
+    {
+      "source": "Morrens Manuel",
+      "target": "Patteet Lisbeth",
+      "weight": 3
+    }
+  ]
+}

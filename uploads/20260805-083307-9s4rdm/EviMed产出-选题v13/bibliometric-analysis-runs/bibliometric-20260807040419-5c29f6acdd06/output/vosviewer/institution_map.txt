@@ -1,0 +1,6 @@
+id	label	x	y	cluster	weight<Occurrences>	weight<Total link strength>
+1	National Health Service	-0.563747	0.975645	1	3	2
+2	Laboratory for TDM and Toxicology	0.633740	-0.603715	2	2	4
+3	Toxicological Centre	0.276294	-0.780324	2	3	4
+4	Institute of Psychiatry	-1.000000	0.648933	1	3	2
+5	University of Antwerp	0.653712	-0.240539	2	2	4

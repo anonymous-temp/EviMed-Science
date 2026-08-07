@@ -1,0 +1,99 @@
+{
+  "admissionWindow": {
+    "dayTotalMismatchCount": 0,
+    "inBeforeDisAll": true,
+    "losByPatient": {
+      "P1": 17,
+      "P2": 27,
+      "P3": 17,
+      "P4": 48,
+      "P5": 14
+    }
+  },
+  "ageVsBirthdate": {
+    "mismatchCount": 0,
+    "patientsChecked": 5,
+    "perPatient": {
+      "P1": 21.8,
+      "P2": 29.6,
+      "P3": 23.6,
+      "P4": 56.4,
+      "P5": 26.6
+    }
+  },
+  "diagnosisJoin": {
+    "caseNoDistinct": 5,
+    "caseNoFill": 1.0,
+    "frontPageCases": 5,
+    "patientIdFill": 0.0
+  },
+  "drugOrderCoverage": {
+    "奥氮平": {
+      "brandNameOrders": 0,
+      "genericNameOrders": 2
+    },
+    "帕利哌酮": {
+      "brandNameOrders": 5,
+      "genericNameOrders": 0
+    },
+    "氯氮平": {
+      "brandNameOrders": 0,
+      "genericNameOrders": 6
+    },
+    "氯硝西泮": {
+      "brandNameOrders": 0,
+      "genericNameOrders": 3
+    },
+    "阿立哌唑": {
+      "brandNameOrders": 0,
+      "genericNameOrders": 12
+    }
+  },
+  "localVocabularies": {
+    "ADM_WAY_values": [
+      2
+    ],
+    "BLOOD_RH_values": [
+      2,
+      4
+    ],
+    "BLOOD_TYPE_values": [
+      2,
+      3,
+      6
+    ],
+    "DIS_RESULT_values": [
+      0
+    ],
+    "DIS_WAY_values": [
+      1
+    ],
+    "FREQUENCY_distinct": 30,
+    "ORDER_TYPE_values": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "SEX_values": [
+      1,
+      2
+    ]
+  },
+  "orderTimeOrder": {
+    "checkedRows": 810,
+    "endAfterStartAll": true,
+    "sentinelEndRows": 105
+  },
+  "tdmTiming": {
+    "applyBeforeTestAll": true,
+    "testInsideAdmission": 22,
+    "testTotal": 22
+  },
+  "vitalsTiming": {
+    "allAt1400": false,
+    "insideAdmission": 503,
+    "total": 537
+  }
+}

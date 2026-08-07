@@ -1,0 +1,714 @@
+source,target,weight,source_freq,target_freq
+Antipsychotic Agents,therapeutic use,19,34,19
+Antipsychotic Agents,adverse effects,16,34,16
+Antipsychotic Agents,drug therapy,14,34,14
+Antipsychotic Agents,Drug Monitoring,13,34,13
+drug therapy,therapeutic use,13,14,19
+Antipsychotic Agents,blood,11,34,11
+Antipsychotic Agents,Tandem Mass Spectrometry,11,34,11
+Antipsychotic Agents,Schizophrenia,10,34,10
+adverse effects,therapeutic use,10,16,19
+Schizophrenia,therapeutic use,10,10,19
+Schizophrenia,drug therapy,10,10,14
+Antipsychotic Agents,Antipsychotics,9,34,10
+Antipsychotic Agents,Clozapine,9,34,10
+Tandem Mass Spectrometry,blood,8,11,11
+adverse effects,drug therapy,8,16,14
+Antipsychotic Agents,pharmacokinetics,8,34,8
+Antipsychotic Agents,methods,8,34,8
+Schizophrenia,adverse effects,7,10,16
+Antipsychotic Agents,Risperidone,7,34,7
+Antipsychotic Agents,therapeutic drug monitoring,7,34,8
+Drug Monitoring,Tandem Mass Spectrometry,7,13,11
+Antipsychotic Agents,Aripiprazole,6,34,6
+Drug Monitoring,therapeutic use,6,13,19
+Clozapine,Risperidone,6,10,7
+Clozapine,Olanzapine,6,10,6
+Olanzapine,Risperidone,6,6,7
+Drug Monitoring,blood,6,13,11
+"Chromatography, High Pressure Liquid",blood,6,6,11
+Antipsychotic Agents,administration & dosage,6,34,6
+blood,therapeutic drug monitoring,6,11,8
+Tandem Mass Spectrometry,therapeutic drug monitoring,6,11,8
+Antipsychotics,Tandem Mass Spectrometry,6,10,11
+pharmacokinetics,therapeutic use,6,8,19
+Antipsychotic Agents,"Chromatography, High Pressure Liquid",6,34,6
+"Chromatography, High Pressure Liquid",Tandem Mass Spectrometry,6,6,11
+Antipsychotic Agents,Olanzapine,6,34,6
+Clozapine,adverse effects,5,10,16
+"Chromatography, Liquid",Tandem Mass Spectrometry,5,5,11
+Tandem Mass Spectrometry,methods,5,11,8
+Clozapine,therapeutic use,5,10,19
+Drug Monitoring,methods,5,13,8
+Antipsychotic Agents,"Chromatography, Liquid",5,34,5
+Antipsychotics,blood,5,10,11
+Antipsychotic Agents,chemically induced,5,34,5
+adverse effects,chemically induced,5,16,5
+Clozapine,drug therapy,5,10,14
+Aripiprazole,Risperidone,5,6,7
+Drug Monitoring,pharmacokinetics,5,13,8
+Antipsychotic Agents,drug effects,5,34,5
+Drug Monitoring,therapeutic drug monitoring,5,13,8
+"Chromatography, High Pressure Liquid",Drug Monitoring,5,6,13
+Antipsychotic Agents,"Dose-Response Relationship, Drug",4,34,4
+administration & dosage,adverse effects,4,6,16
+Amisulpride,Clozapine,4,4,10
+Quetiapine Fumarate,Risperidone,4,4,7
+Aripiprazole,Tandem Mass Spectrometry,4,6,11
+Aripiprazole,Olanzapine,4,6,6
+administration & dosage,therapeutic use,4,6,19
+Antipsychotics,therapeutic drug monitoring,4,10,8
+Antipsychotic Agents,Quetiapine Fumarate,4,34,4
+Olanzapine,adverse effects,4,6,16
+blood,methods,4,11,8
+Risperidone,adverse effects,4,7,16
+Aripiprazole,Clozapine,4,6,10
+Antipsychotic Agents,epidemiology,4,34,4
+Amisulpride,Risperidone,4,4,7
+Amisulpride,Olanzapine,4,4,6
+Amisulpride,Antipsychotic Agents,4,4,34
+Amisulpride,Aripiprazole,4,4,6
+"Chromatography, High Pressure Liquid",therapeutic drug monitoring,4,6,8
+Antipsychotic Agents,metabolism,4,34,4
+Drug Monitoring,adverse effects,4,13,16
+adverse effects,drug effects,4,16,5
+Antipsychotics,"Chromatography, High Pressure Liquid",4,10,6
+"Chromatography, High Pressure Liquid",methods,4,6,8
+adverse effects,epidemiology,4,16,4
+chemically induced,therapeutic use,3,5,19
+administration & dosage,drug therapy,3,6,14
+Schizophrenia,administration & dosage,3,10,6
+"Dose-Response Relationship, Drug",adverse effects,3,4,16
+Antipsychotic Agents,pharmacology,3,34,3
+Tandem Mass Spectrometry,chemistry,3,11,3
+Reproducibility of Results,methods,3,3,8
+Clozapine,Tandem Mass Spectrometry,3,10,11
+Antipsychotic Agents,chemistry,3,34,3
+Antipsychotic Agents,Reproducibility of Results,3,34,3
+Drug Monitoring,administration & dosage,3,13,6
+Drug Monitoring,Schizophrenia,3,13,10
+"Dose-Response Relationship, Drug",administration & dosage,3,4,6
+Weight Gain,adverse effects,3,3,16
+Weight Gain,drug effects,3,3,5
+Antipsychotic Agents,Weight Gain,3,34,3
+epidemiology,therapeutic use,3,4,19
+Schizophrenia,pharmacokinetics,3,10,8
+administration & dosage,methods,3,6,8
+Drug Interactions,therapeutic use,3,3,19
+"Dose-Response Relationship, Drug",Drug Monitoring,3,4,13
+Drug Interactions,pharmacokinetics,3,3,8
+Drug Monitoring,drug therapy,3,13,14
+Antipsychotic Agents,Drug Interactions,3,34,3
+blood,therapeutic use,3,11,19
+adverse effects,pharmacokinetics,3,16,8
+Reproducibility of Results,Tandem Mass Spectrometry,3,3,11
+metabolism,therapeutic drug monitoring,3,4,8
+drug therapy,pharmacokinetics,3,14,8
+Antipsychotics,Clozapine,3,10,10
+Antipsychotics,therapeutic use,3,10,19
+Clozapine,Schizophrenia,3,10,10
+"Dose-Response Relationship, Drug",therapeutic use,3,4,19
+Antipsychotics,Drug Monitoring,3,10,13
+Antipsychotics,"Chromatography, Liquid",3,10,5
+Antipsychotic Agents,Benzodiazepines,3,34,3
+Antipsychotic Agents,haloperidol,3,34,3
+Benzodiazepines,Olanzapine,3,3,6
+Benzodiazepines,Quetiapine Fumarate,3,3,4
+Benzodiazepines,Risperidone,3,3,7
+Amisulpride,haloperidol,3,4,3
+Clozapine,Quetiapine Fumarate,3,10,4
+Clozapine,haloperidol,3,10,3
+Olanzapine,Quetiapine Fumarate,3,6,4
+Antipsychotic Agents,"Databases, Factual",3,34,3
+Antipsychotic Agents,statistics & numerical data,3,34,3
+"Chromatography, Liquid",blood,3,5,11
+Olanzapine,haloperidol,3,6,3
+Risperidone,haloperidol,3,7,3
+Antipsychotics,methods,3,10,8
+methods,therapeutic drug monitoring,3,8,8
+Aripiprazole,haloperidol,3,6,3
+Benzodiazepines,Clozapine,3,3,10
+Antipsychotic Agents,Paliperidone Palmitate,3,34,3
+Olanzapine,drug therapy,3,6,14
+Risperidone,Tandem Mass Spectrometry,3,7,11
+Risperidone,drug therapy,3,7,14
+Aripiprazole,Paliperidone Palmitate,3,6,3
+Aripiprazole,Quetiapine Fumarate,3,6,4
+Paliperidone Palmitate,Risperidone,3,3,7
+"Databases, Factual",administration & dosage,3,3,6
+Risperidone,therapeutic use,3,7,19
+Quetiapine Fumarate,therapeutic use,3,4,19
+Paliperidone Palmitate,Quetiapine Fumarate,3,3,4
+blood,drug therapy,3,11,14
+Schizophrenia,atypical antipsychotics,2,10,3
+Drug Interactions,adverse effects,2,3,16
+Antipsychotic Agents,antipsychotic,2,34,2
+Tandem Mass Spectrometry,pharmacokinetics,2,11,8
+atypical antipsychotics,drug therapy,2,3,14
+Antipsychotic Agents,atypical antipsychotics,2,34,3
+atypical antipsychotics,therapeutic use,2,3,19
+Schizophrenia,blood,2,10,11
+Schizophrenia,chemically induced,2,10,5
+Weight Gain,chemically induced,2,3,5
+Olanzapine,Piperazines,2,6,2
+Piperazines,Quetiapine Fumarate,2,2,4
+Piperazines,Risperidone,2,2,7
+Antipsychotic Agents,Psychotic Disorders,2,34,2
+Psychotic Disorders,therapeutic use,2,2,19
+Psychotic Disorders,drug therapy,2,2,14
+chemically induced,drug effects,2,5,5
+Benzodiazepines,Dibenzothiazepines,2,3,2
+Benzodiazepines,Piperazines,2,3,2
+Antipsychotic Agents,antipsychotic drugs,2,34,3
+Drug Monitoring,Quetiapine Fumarate,2,13,4
+Tandem Mass Spectrometry,therapeutic use,2,11,19
+Aripiprazole,therapeutic use,2,6,19
+Paliperidone Palmitate,therapeutic use,2,3,19
+Drug Monitoring,Risperidone,2,13,7
+chemically induced,epidemiology,2,5,4
+"Databases, Factual",chemically induced,2,3,5
+Quetiapine Fumarate,Tandem Mass Spectrometry,2,4,11
+Paliperidone Palmitate,Tandem Mass Spectrometry,2,3,11
+Clozapine,Dibenzothiazepines,2,10,2
+Clozapine,Piperazines,2,10,2
+Dibenzothiazepines,Olanzapine,2,2,6
+Dibenzothiazepines,Piperazines,2,2,2
+Dibenzothiazepines,Quetiapine Fumarate,2,2,4
+Dibenzothiazepines,Risperidone,2,2,7
+Risperidone,methods,2,7,8
+Reproducibility of Results,Risperidone,2,3,7
+antipsychotic,drug therapy,2,2,14
+Antipsychotic Agents,Dibenzothiazepines,2,34,2
+Antipsychotic Agents,Piperazines,2,34,2
+Olanzapine,methods,2,6,8
+Olanzapine,Reproducibility of Results,2,6,3
+Olanzapine,Tandem Mass Spectrometry,2,6,11
+Clozapine,Reproducibility of Results,2,10,3
+Aripiprazole,methods,2,6,8
+Aripiprazole,Reproducibility of Results,2,6,3
+Clozapine,methods,2,10,8
+Amisulpride,methods,2,4,8
+Amisulpride,Reproducibility of Results,2,4,3
+Amisulpride,Tandem Mass Spectrometry,2,4,11
+Amisulpride,adverse effects,2,4,16
+Amisulpride,Benzodiazepines,2,4,3
+Risperidone,sertindole,2,7,2
+Antipsychotic Agents,sertindole,2,34,2
+adverse effects,pharmacology,2,16,3
+Olanzapine,quetiapine,2,6,2
+Olanzapine,sertindole,2,6,2
+paliperidone,quetiapine,2,2,2
+Risperidone,paliperidone,2,7,2
+paliperidone,sertindole,2,2,2
+Antipsychotic Agents,paliperidone,2,34,2
+Risperidone,quetiapine,2,7,2
+quetiapine,sertindole,2,2,2
+Antipsychotic Agents,quetiapine,2,34,2
+Risperidone,iloperidone,2,7,2
+iloperidone,sertindole,2,2,2
+Antipsychotic Agents,iloperidone,2,34,2
+Olanzapine,lurasidone,2,6,2
+lurasidone,paliperidone,2,2,2
+lurasidone,quetiapine,2,2,2
+Risperidone,lurasidone,2,7,2
+drug effects,drug therapy,2,5,14
+Quality Control,Tandem Mass Spectrometry,2,2,11
+Aripiprazole,adverse effects,2,6,16
+Benzodiazepines,adverse effects,2,3,16
+adverse effects,haloperidol,2,16,3
+Quetiapine Fumarate,adverse effects,2,4,16
+Aripiprazole,Benzodiazepines,2,6,3
+lurasidone,sertindole,2,2,2
+Antipsychotic Agents,lurasidone,2,34,2
+Olanzapine,paliperidone,2,6,2
+Clozapine,paliperidone,2,10,2
+Clozapine,quetiapine,2,10,2
+Clozapine,sertindole,2,10,2
+haloperidol,iloperidone,2,3,2
+haloperidol,lurasidone,2,3,2
+haloperidol,paliperidone,2,3,2
+haloperidol,quetiapine,2,3,2
+haloperidol,sertindole,2,3,2
+Olanzapine,therapeutic use,2,6,19
+Benzodiazepines,Paliperidone Palmitate,2,3,3
+Amisulpride,Paliperidone Palmitate,2,4,3
+Amisulpride,Quetiapine Fumarate,2,4,4
+"Databases, Factual",epidemiology,2,3,4
+"Databases, Factual",statistics & numerical data,2,3,3
+Clozapine,therapeutic drug monitoring,2,10,8
+drug effects,therapeutic use,2,5,19
+iloperidone,lurasidone,2,2,2
+Olanzapine,iloperidone,2,6,2
+iloperidone,paliperidone,2,2,2
+iloperidone,quetiapine,2,2,2
+Clozapine,asenapine,2,10,2
+asenapine,haloperidol,2,2,3
+asenapine,iloperidone,2,2,2
+asenapine,lurasidone,2,2,2
+Olanzapine,asenapine,2,6,2
+asenapine,paliperidone,2,2,2
+asenapine,quetiapine,2,2,2
+Risperidone,asenapine,2,7,2
+asenapine,sertindole,2,2,2
+administration & dosage,statistics & numerical data,2,6,3
+Antipsychotic Agents,Quality Control,2,34,2
+Benzodiazepines,therapeutic use,2,3,19
+Antipsychotic Agents,asenapine,2,34,2
+Clozapine,iloperidone,2,10,2
+Clozapine,lurasidone,2,10,2
+Amisulpride,asenapine,2,4,2
+Amisulpride,iloperidone,2,4,2
+Amisulpride,lurasidone,2,4,2
+Amisulpride,paliperidone,2,4,2
+Amisulpride,quetiapine,2,4,2
+Amisulpride,sertindole,2,4,2
+Aripiprazole,asenapine,2,6,2
+"Chromatography, Liquid",Clozapine,2,5,10
+Benzodiazepines,Schizophrenia,2,3,10
+Benzodiazepines,drug therapy,2,3,14
+Clozapine,Paliperidone Palmitate,2,10,3
+Antipsychotic Agents,United States Food and Drug Administration,2,34,2
+United States Food and Drug Administration,adverse effects,2,2,16
+"Databases, Factual",adverse effects,2,3,16
+administration & dosage,chemically induced,2,6,5
+administration & dosage,epidemiology,2,6,4
+Schizophrenia,epidemiology,2,10,4
+Antipsychotics,chemistry,2,10,3
+Antipsychotics,Reproducibility of Results,2,10,3
+chemistry,therapeutic drug monitoring,2,3,8
+Reproducibility of Results,therapeutic drug monitoring,2,3,8
+Olanzapine,Paliperidone Palmitate,2,6,3
+Olanzapine,Schizophrenia,2,6,10
+Quetiapine Fumarate,Schizophrenia,2,4,10
+Quetiapine Fumarate,drug therapy,2,4,14
+Risperidone,Schizophrenia,2,7,10
+Antipsychotic Agents,medication adherence,2,34,2
+Aripiprazole,iloperidone,2,6,2
+Aripiprazole,lurasidone,2,6,2
+Aripiprazole,paliperidone,2,6,2
+Aripiprazole,quetiapine,2,6,2
+Aripiprazole,sertindole,2,6,2
+"Databases, Factual",therapeutic use,2,3,19
+statistics & numerical data,therapeutic use,2,3,19
+drug therapy,statistics & numerical data,2,14,3
+"Databases, Factual",Drug Monitoring,2,3,13
+pharmacokinetics,therapeutic drug monitoring,2,8,8
+drug therapy,epidemiology,2,14,4
+Antipsychotics,Quality Control,2,10,2
+Quality Control,blood,2,2,11
+"Chromatography, High Pressure Liquid",Quality Control,2,6,2
+"Chromatography, Liquid",Drug Monitoring,2,5,13
+Clozapine,epidemiology,2,10,4
+Antidepressive Agents,Antipsychotic Agents,2,2,34
+adverse effects,methods,2,16,8
+"Dose-Response Relationship, Drug",pharmacokinetics,2,4,8
+administration & dosage,pharmacokinetics,2,6,8
+pharmacokinetics,pharmacology,2,8,3
+methods,pharmacokinetics,2,8,8
+pharmacology,therapeutic use,2,3,19
+methods,therapeutic use,2,8,19
+adverse effects,blood,2,16,11
+"Dose-Response Relationship, Drug",methods,2,4,8
+"Chromatography, Liquid",therapeutic drug monitoring,2,5,8
+Dried Blood Spot Testing,therapeutic drug monitoring,2,2,8
+Antipsychotic Agents,Dried Blood Spot Testing,2,34,2
+Dried Blood Spot Testing,blood,2,2,11
+Dried Blood Spot Testing,Drug Monitoring,2,2,13
+Dried Blood Spot Testing,Tandem Mass Spectrometry,2,2,11
+Antipsychotics,metabolism,2,10,4
+Antipsychotics,Aripiprazole,2,10,6
+blood,chemistry,2,11,3
+Reproducibility of Results,blood,2,3,11
+chemistry,methods,2,3,8
+Reproducibility of Results,chemistry,2,3,3
+"Chromatography, High Pressure Liquid",Reproducibility of Results,2,6,3
+Aripiprazole,chemistry,2,6,3
+"Chromatography, Liquid",chemistry,2,5,3
+Antipsychotics,adverse effects,2,10,16
+Antipsychotics,epidemiology,2,10,4
+"Dose-Response Relationship, Drug",Schizophrenia,2,4,10
+"Dose-Response Relationship, Drug",drug therapy,2,4,14
+Aripiprazole,therapeutic drug monitoring,2,6,8
+blood,metabolism,2,11,4
+Aripiprazole,blood,2,6,11
+Aripiprazole,metabolism,2,6,4
+Tandem Mass Spectrometry,metabolism,2,11,4
+Aripiprazole,"Chromatography, Liquid",2,6,5
+chemically induced,drug therapy,2,5,14
+Clozapine,Psychotic Disorders,1,10,2
+Piperazines,chemistry,1,2,3
+Piperazines,Reproducibility of Results,1,2,3
+Paliperidone Palmitate,chemistry,1,3,3
+Paliperidone Palmitate,Reproducibility of Results,1,3,3
+Paliperidone Palmitate,Piperazines,1,3,2
+Olanzapine,chemistry,1,6,3
+Quetiapine Fumarate,methods,1,4,8
+Piperazines,methods,1,2,8
+"Chromatography, Liquid",Paliperidone Palmitate,1,5,3
+"Chromatography, Liquid",Piperazines,1,5,2
+"Chromatography, Liquid",Quetiapine Fumarate,1,5,4
+"Chromatography, Liquid",Reproducibility of Results,1,5,3
+"Chromatography, Liquid",Risperidone,1,5,7
+Drug Interactions,drug effects,1,3,5
+Schizophrenia,drug effects,1,10,5
+chemically induced,pharmacokinetics,1,5,8
+Weight Gain,pharmacokinetics,1,3,8
+Weight Gain,therapeutic use,1,3,19
+adverse effects,antipsychotic,1,16,2
+Risperidone,antipsychotic,1,7,2
+Risperidone,pharmacokinetics,1,7,8
+Aripiprazole,pharmacokinetics,1,6,8
+Quetiapine Fumarate,pharmacokinetics,1,4,8
+Paliperidone Palmitate,pharmacokinetics,1,3,8
+medication adherence,methods,1,2,8
+atypical antipsychotics,therapeutic drug monitoring,1,3,8
+atypical antipsychotics,pharmacokinetics,1,3,8
+atypical antipsychotics,metabolism,1,3,4
+"Dose-Response Relationship, Drug",atypical antipsychotics,1,4,3
+Drug Monitoring,atypical antipsychotics,1,13,3
+therapeutic drug monitoring,therapeutic use,1,8,19
+"Dose-Response Relationship, Drug",therapeutic drug monitoring,1,4,8
+"Chromatography, Liquid",metabolism,1,5,4
+chemistry,metabolism,1,3,4
+Drug Interactions,pharmacology,1,3,3
+Drug Monitoring,pharmacology,1,13,3
+Drug Interactions,Drug Monitoring,1,3,13
+United States Food and Drug Administration,therapeutic use,1,2,19
+Amisulpride,chemistry,1,4,3
+Aripiprazole,Dibenzothiazepines,1,6,2
+blood,chemically induced,1,11,5
+"Dose-Response Relationship, Drug",medication adherence,1,4,2
+Drug Monitoring,medication adherence,1,13,2
+"Chromatography, Liquid",Dried Blood Spot Testing,1,5,2
+"Chromatography, High Pressure Liquid",chemistry,1,6,3
+Drug Monitoring,chemistry,1,13,3
+administration & dosage,medication adherence,1,6,2
+antipsychotic drugs,therapeutic drug monitoring,1,3,8
+antipsychotic drugs,blood,1,3,11
+"Chromatography, Liquid",antipsychotic drugs,1,5,3
+Dried Blood Spot Testing,antipsychotic drugs,1,2,3
+Antipsychotics,Schizophrenia,1,10,10
+Antipsychotics,drug therapy,1,10,14
+"Dose-Response Relationship, Drug",blood,1,4,11
+Drug Monitoring,antipsychotic drugs,1,13,3
+Tandem Mass Spectrometry,antipsychotic drugs,1,11,3
+drug therapy,utilization,1,14,2
+Schizophrenia,therapeutic drug monitoring,1,10,8
+drug therapy,therapeutic drug monitoring,1,14,8
+metabolism,pharmacokinetics,1,4,8
+metabolism,therapeutic use,1,4,19
+"Dose-Response Relationship, Drug",metabolism,1,4,4
+Drug Monitoring,metabolism,1,13,4
+Schizophrenia,metabolism,1,10,4
+drug therapy,metabolism,1,14,4
+Antipsychotics,psychosis,1,10,2
+Antipsychotics,Drug Interactions,1,10,3
+Antipsychotics,pharmacokinetics,1,10,8
+Antidepressive Agents,Antipsychotics,1,2,10
+adverse effects,medication adherence,1,16,2
+medication adherence,pharmacokinetics,1,2,8
+administration & dosage,pharmacology,1,6,3
+Antidepressive Agents,"Chromatography, High Pressure Liquid",1,2,6
+Antidepressive Agents,methods,1,2,8
+Antidepressive Agents,Drug Monitoring,1,2,13
+Antidepressive Agents,Drug Interactions,1,2,3
+Antidepressive Agents,pharmacokinetics,1,2,8
+Antidepressive Agents,therapeutic use,1,2,19
+antipsychotic,utilization,1,2,2
+administration & dosage,antipsychotic,1,6,2
+antipsychotic,therapeutic use,1,2,19
+"Databases, Factual",antipsychotic,1,3,2
+antipsychotic,statistics & numerical data,1,2,3
+Schizophrenia,antipsychotic,1,10,2
+Drug Monitoring,antipsychotic,1,13,2
+Antipsychotic Agents,utilization,1,34,2
+administration & dosage,utilization,1,6,2
+therapeutic use,utilization,1,19,2
+Schizophrenia,utilization,1,10,2
+Drug Monitoring,utilization,1,13,2
+"Databases, Factual",drug therapy,1,3,14
+"Databases, Factual",Schizophrenia,1,3,10
+Drug Monitoring,Reproducibility of Results,1,13,3
+Schizophrenia,pharmacology,1,10,3
+drug therapy,pharmacology,1,14,3
+methods,pharmacology,1,8,3
+Schizophrenia,methods,1,10,8
+drug therapy,methods,1,14,8
+"Chromatography, High Pressure Liquid","Chromatography, Liquid",1,6,5
+"Chromatography, Liquid",Quality Control,1,5,2
+Drug Monitoring,Quality Control,1,13,2
+Schizophrenia,statistics & numerical data,1,10,3
+Drug Monitoring,statistics & numerical data,1,13,3
+Antidepressive Agents,blood,1,2,11
+Amisulpride,drug effects,1,4,5
+medication adherence,therapeutic use,1,2,19
+"Chromatography, Liquid",medication adherence,1,5,2
+Clozapine,medication adherence,1,10,2
+Tandem Mass Spectrometry,medication adherence,1,11,2
+"Chromatography, Liquid",therapeutic use,1,5,19
+Antipsychotics,"Databases, Factual",1,10,3
+adverse effects,statistics & numerical data,1,16,3
+blood,pharmacokinetics,1,11,8
+"Chromatography, High Pressure Liquid",pharmacokinetics,1,6,8
+Paliperidone Palmitate,Schizophrenia,1,3,10
+Paliperidone Palmitate,drug therapy,1,3,14
+Antipsychotics,medication adherence,1,10,2
+Aripiprazole,Weight Gain,1,6,3
+"Databases, Factual",utilization,1,3,2
+statistics & numerical data,utilization,1,3,2
+Olanzapine,epidemiology,1,6,4
+Paliperidone Palmitate,epidemiology,1,3,4
+Quetiapine Fumarate,epidemiology,1,4,4
+Risperidone,epidemiology,1,7,4
+Paliperidone Palmitate,haloperidol,1,3,3
+Quetiapine Fumarate,haloperidol,1,4,3
+Schizophrenia,haloperidol,1,10,3
+drug therapy,haloperidol,1,14,3
+Aripiprazole,epidemiology,1,6,4
+Aripiprazole,Schizophrenia,1,6,10
+Aripiprazole,drug therapy,1,6,14
+Weight Gain,asenapine,1,3,2
+adverse effects,asenapine,1,16,2
+asenapine,drug effects,1,2,5
+Antidepressive Agents,Tandem Mass Spectrometry,1,2,11
+Amisulpride,Weight Gain,1,4,3
+drug effects,lurasidone,1,5,2
+Clozapine,Weight Gain,1,10,3
+Clozapine,drug effects,1,10,5
+haloperidol,therapeutic use,1,3,19
+Benzodiazepines,epidemiology,1,3,4
+Benzodiazepines,haloperidol,1,3,3
+Amisulpride,epidemiology,1,4,4
+epidemiology,statistics & numerical data,1,4,3
+United States Food and Drug Administration,epidemiology,1,2,4
+United States Food and Drug Administration,statistics & numerical data,1,2,3
+"Databases, Factual",United States Food and Drug Administration,1,3,2
+Weight Gain,haloperidol,1,3,3
+drug effects,haloperidol,1,5,3
+Aripiprazole,drug effects,1,6,5
+United States Food and Drug Administration,administration & dosage,1,2,6
+epidemiology,haloperidol,1,4,3
+Weight Gain,quetiapine,1,3,2
+adverse effects,quetiapine,1,16,2
+Weight Gain,iloperidone,1,3,2
+adverse effects,iloperidone,1,16,2
+drug effects,iloperidone,1,5,2
+Antipsychotics,administration & dosage,1,10,6
+Antipsychotics,chemically induced,1,10,5
+Antipsychotics,statistics & numerical data,1,10,3
+Antipsychotics,United States Food and Drug Administration,1,10,2
+Amisulpride,Schizophrenia,1,4,10
+Amisulpride,drug therapy,1,4,14
+Paliperidone Palmitate,adverse effects,1,3,16
+Benzodiazepines,psychosis,1,3,2
+Clozapine,psychosis,1,10,2
+Weight Gain,lurasidone,1,3,2
+adverse effects,lurasidone,1,16,2
+Amisulpride,therapeutic drug monitoring,1,4,8
+asenapine,therapeutic drug monitoring,1,2,8
+drug effects,quetiapine,1,5,2
+Risperidone,Weight Gain,1,7,3
+Risperidone,drug effects,1,7,5
+Weight Gain,sertindole,1,3,2
+adverse effects,sertindole,1,16,2
+drug effects,sertindole,1,5,2
+adverse effects,metabolism,1,16,4
+metabolism,pharmacology,1,4,3
+drug effects,metabolism,1,5,4
+Olanzapine,Weight Gain,1,6,3
+Olanzapine,drug effects,1,6,5
+Weight Gain,paliperidone,1,3,2
+adverse effects,paliperidone,1,16,2
+drug effects,paliperidone,1,5,2
+Schizophrenia,psychosis,1,10,2
+drug therapy,psychosis,1,14,2
+Amisulpride,therapeutic use,1,4,19
+antipsychotic drugs,therapeutic use,1,3,19
+Benzodiazepines,antipsychotic drugs,1,3,3
+Clozapine,antipsychotic drugs,1,10,3
+antipsychotic drugs,epidemiology,1,3,4
+antipsychotic drugs,haloperidol,1,3,3
+Antipsychotics,haloperidol,1,10,3
+Antipsychotics,iloperidone,1,10,2
+Antipsychotics,lurasidone,1,10,2
+Antipsychotics,Olanzapine,1,10,6
+Antipsychotics,paliperidone,1,10,2
+Antipsychotics,quetiapine,1,10,2
+Antipsychotics,Risperidone,1,10,7
+Antipsychotics,sertindole,1,10,2
+Amisulpride,Quality Control,1,4,2
+Amisulpride,blood,1,4,11
+Amisulpride,metabolism,1,4,4
+Amisulpride,"Chromatography, High Pressure Liquid",1,4,6
+drug effects,pharmacology,1,5,3
+Antipsychotics,Dried Blood Spot Testing,1,10,2
+"Chromatography, High Pressure Liquid",Dried Blood Spot Testing,1,6,2
+Dried Blood Spot Testing,methods,1,2,8
+Amisulpride,Antipsychotics,1,4,10
+Antipsychotics,asenapine,1,10,2
+epidemiology,psychosis,1,4,2
+haloperidol,psychosis,1,3,2
+Olanzapine,psychosis,1,6,2
+Paliperidone Palmitate,psychosis,1,3,2
+Quetiapine Fumarate,psychosis,1,4,2
+Risperidone,psychosis,1,7,2
+"Chromatography, High Pressure Liquid",asenapine,1,6,2
+Reproducibility of Results,asenapine,1,3,2
+Tandem Mass Spectrometry,asenapine,1,11,2
+Clozapine,Quality Control,1,10,2
+Clozapine,blood,1,10,11
+Clozapine,metabolism,1,10,4
+"Chromatography, High Pressure Liquid",Clozapine,1,6,10
+haloperidol,therapeutic drug monitoring,1,3,8
+iloperidone,therapeutic drug monitoring,1,2,8
+lurasidone,therapeutic drug monitoring,1,2,8
+Olanzapine,therapeutic drug monitoring,1,6,8
+paliperidone,therapeutic drug monitoring,1,2,8
+Quality Control,therapeutic drug monitoring,1,2,8
+quetiapine,therapeutic drug monitoring,1,2,8
+Risperidone,therapeutic drug monitoring,1,7,8
+sertindole,therapeutic drug monitoring,1,2,8
+Reproducibility of Results,haloperidol,1,3,3
+Tandem Mass Spectrometry,haloperidol,1,11,3
+Quality Control,iloperidone,1,2,2
+blood,iloperidone,1,11,2
+iloperidone,metabolism,1,2,4
+iloperidone,methods,1,2,8
+"Chromatography, High Pressure Liquid",iloperidone,1,6,2
+Reproducibility of Results,iloperidone,1,3,2
+Tandem Mass Spectrometry,iloperidone,1,11,2
+Quality Control,lurasidone,1,2,2
+Aripiprazole,Quality Control,1,6,2
+Aripiprazole,"Chromatography, High Pressure Liquid",1,6,6
+Quality Control,asenapine,1,2,2
+asenapine,blood,1,2,11
+asenapine,metabolism,1,2,4
+asenapine,methods,1,2,8
+lurasidone,methods,1,2,8
+"Chromatography, High Pressure Liquid",lurasidone,1,6,2
+Reproducibility of Results,lurasidone,1,3,2
+Tandem Mass Spectrometry,lurasidone,1,11,2
+Olanzapine,Quality Control,1,6,2
+Olanzapine,blood,1,6,11
+Olanzapine,metabolism,1,6,4
+"Chromatography, High Pressure Liquid",Olanzapine,1,6,6
+Quality Control,paliperidone,1,2,2
+blood,paliperidone,1,11,2
+metabolism,paliperidone,1,4,2
+Quality Control,haloperidol,1,2,3
+blood,haloperidol,1,11,3
+haloperidol,metabolism,1,3,4
+haloperidol,methods,1,3,8
+"Chromatography, High Pressure Liquid",haloperidol,1,6,3
+Reproducibility of Results,paliperidone,1,3,2
+Tandem Mass Spectrometry,paliperidone,1,11,2
+Quality Control,quetiapine,1,2,2
+Quality Control,Risperidone,1,2,7
+Quality Control,sertindole,1,2,2
+Quality Control,metabolism,1,2,4
+Quality Control,methods,1,2,8
+Quality Control,Reproducibility of Results,1,2,3
+blood,quetiapine,1,11,2
+metabolism,quetiapine,1,4,2
+methods,quetiapine,1,8,2
+"Chromatography, High Pressure Liquid",quetiapine,1,6,2
+Reproducibility of Results,quetiapine,1,3,2
+Tandem Mass Spectrometry,quetiapine,1,11,2
+blood,lurasidone,1,11,2
+lurasidone,metabolism,1,2,4
+Aripiprazole,psychosis,1,6,2
+psychosis,therapeutic use,1,2,19
+Olanzapine,antipsychotic,1,6,2
+Clozapine,antipsychotic,1,10,2
+antipsychotic drugs,psychosis,1,3,2
+Amisulpride,antipsychotic drugs,1,4,3
+metabolism,sertindole,1,4,2
+methods,sertindole,1,8,2
+"Chromatography, High Pressure Liquid",sertindole,1,6,2
+Reproducibility of Results,sertindole,1,3,2
+Tandem Mass Spectrometry,sertindole,1,11,2
+metabolism,methods,1,4,8
+"Chromatography, High Pressure Liquid",metabolism,1,6,4
+Reproducibility of Results,metabolism,1,3,4
+methods,paliperidone,1,8,2
+"Chromatography, High Pressure Liquid",paliperidone,1,6,2
+Clozapine,Drug Monitoring,1,10,13
+Dibenzothiazepines,Schizophrenia,1,2,10
+Dibenzothiazepines,drug therapy,1,2,14
+Risperidone,blood,1,7,11
+Risperidone,metabolism,1,7,4
+"Chromatography, High Pressure Liquid",Risperidone,1,6,7
+blood,sertindole,1,11,2
+Olanzapine,antipsychotic drugs,1,6,3
+Paliperidone Palmitate,antipsychotic drugs,1,3,3
+Quetiapine Fumarate,antipsychotic drugs,1,4,3
+Risperidone,antipsychotic drugs,1,7,3
+Schizophrenia,antipsychotic drugs,1,10,3
+antipsychotic drugs,drug therapy,1,3,14
+Amisulpride,psychosis,1,4,2
+Antipsychotic Agents,psychosis,1,34,2
+adverse effects,psychosis,1,16,2
+Drug Monitoring,Piperazines,1,13,2
+blood,statistics & numerical data,1,11,3
+Psychotic Disorders,blood,1,2,11
+Psychotic Disorders,statistics & numerical data,1,2,3
+drug effects,pharmacokinetics,1,5,8
+Dibenzothiazepines,adverse effects,1,2,16
+Piperazines,adverse effects,1,2,16
+Dibenzothiazepines,therapeutic use,1,2,19
+Piperazines,therapeutic use,1,2,19
+adverse effects,antipsychotic drugs,1,16,3
+Aripiprazole,antipsychotic drugs,1,6,3
+Aripiprazole,Drug Monitoring,1,6,13
+Drug Monitoring,Paliperidone Palmitate,1,13,3
+chemically induced,statistics & numerical data,1,5,3
+United States Food and Drug Administration,chemically induced,1,2,5
+Benzodiazepines,Drug Monitoring,1,3,13
+atypical antipsychotics,blood,1,3,11
+adverse effects,atypical antipsychotics,1,16,3
+atypical antipsychotics,chemically induced,1,3,5
+Drug Interactions,chemically induced,1,3,5
+Drug Interactions,Schizophrenia,1,3,10
+Drug Interactions,drug therapy,1,3,14
+Drug Interactions,Weight Gain,1,3,3
+Schizophrenia,Weight Gain,1,10,3
+Weight Gain,drug therapy,1,3,14
+Amisulpride,"Chromatography, Liquid",1,4,5
+Amisulpride,Dibenzothiazepines,1,4,2
+Amisulpride,Piperazines,1,4,2
+Dibenzothiazepines,Drug Monitoring,1,2,13
+Drug Monitoring,Olanzapine,1,13,6
+Piperazines,Schizophrenia,1,2,10
+Piperazines,drug therapy,1,2,14
+Paliperidone Palmitate,methods,1,3,8
+antipsychotic drugs,atypical antipsychotics,1,3,3
+antipsychotic drugs,utilization,1,3,2
+atypical antipsychotics,utilization,1,3,2
+Piperazines,Tandem Mass Spectrometry,1,2,11
+"Dose-Response Relationship, Drug",chemically induced,1,4,5
+"Dose-Response Relationship, Drug",epidemiology,1,4,4
+Drug Monitoring,chemically induced,1,13,5
+Drug Monitoring,epidemiology,1,13,4
+chemically induced,methods,1,5,8
+epidemiology,methods,1,4,8
+Benzodiazepines,chemistry,1,3,3
+Benzodiazepines,Tandem Mass Spectrometry,1,3,11
+"Chromatography, Liquid",Dibenzothiazepines,1,5,2
+"Chromatography, Liquid",methods,1,5,8
+"Chromatography, Liquid",Olanzapine,1,5,6
+Aripiprazole,Piperazines,1,6,2
+Benzodiazepines,"Chromatography, Liquid",1,3,5
+Benzodiazepines,methods,1,3,8
+administration & dosage,blood,1,6,11
+Clozapine,chemistry,1,10,3
+Dibenzothiazepines,methods,1,2,8
+Dibenzothiazepines,Paliperidone Palmitate,1,2,3
+Dibenzothiazepines,Reproducibility of Results,1,2,3
+Dibenzothiazepines,chemistry,1,2,3
+Benzodiazepines,Reproducibility of Results,1,3,3
+Quetiapine Fumarate,Reproducibility of Results,1,4,3
+Quetiapine Fumarate,chemistry,1,4,3
+Risperidone,chemistry,1,7,3
+"Databases, Factual","Dose-Response Relationship, Drug",1,3,4
+"Databases, Factual",methods,1,3,8
+Dibenzothiazepines,Tandem Mass Spectrometry,1,2,11

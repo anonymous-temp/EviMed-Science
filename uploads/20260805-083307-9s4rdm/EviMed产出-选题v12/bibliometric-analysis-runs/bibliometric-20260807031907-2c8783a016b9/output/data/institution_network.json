@@ -1,0 +1,167 @@
+{
+  "nodes": [
+    {
+      "id": "The Zucker Hillside Hospital",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.5,
+      "betweenness": 0.0,
+      "closeness": 0.5714,
+      "weighted_degree": 5
+    },
+    {
+      "id": "Galician Foundation of Genomic Medicine",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.375,
+      "betweenness": 0.0,
+      "closeness": 0.45,
+      "weighted_degree": 4
+    },
+    {
+      "id": "Alexianer Hospital Aachen",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.5,
+      "betweenness": 0.0,
+      "closeness": 0.6667,
+      "weighted_degree": 6
+    },
+    {
+      "id": "University Medical Center of Mainz",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.5,
+      "betweenness": 0.0,
+      "closeness": 0.5714,
+      "weighted_degree": 5
+    },
+    {
+      "id": "University of Santiago de Compostela",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.375,
+      "betweenness": 0.0,
+      "closeness": 0.45,
+      "weighted_degree": 4
+    },
+    {
+      "id": "Health Research Institute of Santiago de Compostela (IDIS)",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.375,
+      "betweenness": 0.0,
+      "closeness": 0.45,
+      "weighted_degree": 4
+    },
+    {
+      "id": "RWTH Aachen University",
+      "weight": 4,
+      "cluster": 0,
+      "degree": 0.5,
+      "betweenness": 0.0893,
+      "closeness": 1.0,
+      "weighted_degree": 8
+    },
+    {
+      "id": "University Clinical Hospital of Santiago de Compostela (SERGAS)",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.375,
+      "betweenness": 0.0536,
+      "closeness": 0.75,
+      "weighted_degree": 6
+    },
+    {
+      "id": "University of Regensburg",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.5,
+      "betweenness": 0.0,
+      "closeness": 0.6667,
+      "weighted_degree": 6
+    }
+  ],
+  "edges": [
+    {
+      "source": "The Zucker Hillside Hospital",
+      "target": "RWTH Aachen University",
+      "weight": 2
+    },
+    {
+      "source": "The Zucker Hillside Hospital",
+      "target": "University Medical Center of Mainz",
+      "weight": 1
+    },
+    {
+      "source": "The Zucker Hillside Hospital",
+      "target": "University of Regensburg",
+      "weight": 1
+    },
+    {
+      "source": "The Zucker Hillside Hospital",
+      "target": "Alexianer Hospital Aachen",
+      "weight": 1
+    },
+    {
+      "source": "Galician Foundation of Genomic Medicine",
+      "target": "University Clinical Hospital of Santiago de Compostela (SERGAS)",
+      "weight": 2
+    },
+    {
+      "source": "Galician Foundation of Genomic Medicine",
+      "target": "Health Research Institute of Santiago de Compostela (IDIS)",
+      "weight": 1
+    },
+    {
+      "source": "Galician Foundation of Genomic Medicine",
+      "target": "University of Santiago de Compostela",
+      "weight": 1
+    },
+    {
+      "source": "Alexianer Hospital Aachen",
+      "target": "RWTH Aachen University",
+      "weight": 2
+    },
+    {
+      "source": "Alexianer Hospital Aachen",
+      "target": "University of Regensburg",
+      "weight": 2
+    },
+    {
+      "source": "Alexianer Hospital Aachen",
+      "target": "University Medical Center of Mainz",
+      "weight": 1
+    },
+    {
+      "source": "University Medical Center of Mainz",
+      "target": "RWTH Aachen University",
+      "weight": 2
+    },
+    {
+      "source": "University Medical Center of Mainz",
+      "target": "University of Regensburg",
+      "weight": 1
+    },
+    {
+      "source": "University of Santiago de Compostela",
+      "target": "University Clinical Hospital of Santiago de Compostela (SERGAS)",
+      "weight": 2
+    },
+    {
+      "source": "University of Santiago de Compostela",
+      "target": "Health Research Institute of Santiago de Compostela (IDIS)",
+      "weight": 1
+    },
+    {
+      "source": "Health Research Institute of Santiago de Compostela (IDIS)",
+      "target": "University Clinical Hospital of Santiago de Compostela (SERGAS)",
+      "weight": 2
+    },
+    {
+      "source": "RWTH Aachen University",
+      "target": "University of Regensburg",
+      "weight": 2
+    }
+  ]
+}

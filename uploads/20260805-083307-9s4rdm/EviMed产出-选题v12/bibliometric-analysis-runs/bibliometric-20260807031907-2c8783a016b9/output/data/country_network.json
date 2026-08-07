@@ -1,0 +1,142 @@
+{
+  "nodes": [
+    {
+      "id": "Italy",
+      "weight": 7,
+      "cluster": 0,
+      "degree": 0.5,
+      "betweenness": 0.25,
+      "closeness": 0.64,
+      "weighted_degree": 5
+    },
+    {
+      "id": "Belgium",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.125,
+      "betweenness": 0.0,
+      "closeness": 0.4706,
+      "weighted_degree": 1
+    },
+    {
+      "id": "Japan",
+      "weight": 11,
+      "cluster": 2,
+      "degree": 0.25,
+      "betweenness": 0.25,
+      "closeness": 0.5714,
+      "weighted_degree": 2
+    },
+    {
+      "id": "Switzerland",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.375,
+      "betweenness": 0.0,
+      "closeness": 0.7619,
+      "weighted_degree": 5
+    },
+    {
+      "id": "United States",
+      "weight": 8,
+      "cluster": 1,
+      "degree": 0.5,
+      "betweenness": 0.25,
+      "closeness": 0.8,
+      "weighted_degree": 6
+    },
+    {
+      "id": "Spain",
+      "weight": 7,
+      "cluster": 1,
+      "degree": 0.125,
+      "betweenness": 0.0,
+      "closeness": 0.5,
+      "weighted_degree": 1
+    },
+    {
+      "id": "China",
+      "weight": 10,
+      "cluster": 2,
+      "degree": 0.125,
+      "betweenness": 0.0,
+      "closeness": 0.381,
+      "weighted_degree": 1
+    },
+    {
+      "id": "United Kingdom",
+      "weight": 5,
+      "cluster": 0,
+      "degree": 0.125,
+      "betweenness": 0.0,
+      "closeness": 0.5,
+      "weighted_degree": 2
+    },
+    {
+      "id": "Germany",
+      "weight": 9,
+      "cluster": 1,
+      "degree": 0.625,
+      "betweenness": 0.6071,
+      "closeness": 0.8889,
+      "weighted_degree": 7
+    }
+  ],
+  "edges": [
+    {
+      "source": "Italy",
+      "target": "United Kingdom",
+      "weight": 2
+    },
+    {
+      "source": "Italy",
+      "target": "United States",
+      "weight": 1
+    },
+    {
+      "source": "Italy",
+      "target": "Switzerland",
+      "weight": 1
+    },
+    {
+      "source": "Italy",
+      "target": "Germany",
+      "weight": 1
+    },
+    {
+      "source": "Belgium",
+      "target": "United States",
+      "weight": 1
+    },
+    {
+      "source": "Japan",
+      "target": "China",
+      "weight": 1
+    },
+    {
+      "source": "Japan",
+      "target": "Germany",
+      "weight": 1
+    },
+    {
+      "source": "Switzerland",
+      "target": "United States",
+      "weight": 2
+    },
+    {
+      "source": "Switzerland",
+      "target": "Germany",
+      "weight": 2
+    },
+    {
+      "source": "United States",
+      "target": "Germany",
+      "weight": 2
+    },
+    {
+      "source": "Spain",
+      "target": "Germany",
+      "weight": 1
+    }
+  ]
+}

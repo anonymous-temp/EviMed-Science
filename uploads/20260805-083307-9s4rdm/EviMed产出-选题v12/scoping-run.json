@@ -1,0 +1,71 @@
+{
+  "run": {
+    "skill": "dataset-research-scoping",
+    "startedAt": "2026-08-07",
+    "agent": "evimed-dataset-research-scoping",
+    "workspace": "/workspace"
+  },
+  "priorDataContact": {
+    "filesReceived": ["20260803TDM.xlsx"],
+    "partsInspected": "表名与列名结构（5 张表 93 列）及画像脚本产出的聚合统计；未检查任何检验结果（TDM 浓度）的分布。",
+    "outcomeDistributionSeen": false,
+    "declaration": "本声明写于机械画像运行之时，早于任何领域派生量计算。截至声明时点，分析者未查看检验结果（潜在结局变量）的分布、未查看任何患者级数值、未形成基于数据内容的研究假设。后续候选问题的提出均发生在画像与多通道文献检索之后。"
+  },
+  "dataFingerprint": {
+    "file": "20260803TDM.xlsx",
+    "sha256": "5b52d6d8ee644e798e1017b78923004648c6936f7157d401529c163205a8f585",
+    "tables": ["病案首页(5行38列)", "医嘱记录(915行22列)", "检验(22行12列)", "诊断记录(56行11列)", "体征(537行10列)"]
+  },
+  "searches": [
+    {"tool": "evimed_literature_search", "query": "aripiprazole therapeutic drug monitoring plasma concentration", "limit": 40, "finding": "EviMed 内部适配器返回 40 条跨域 TDM 题录，多为非精神科（伊立替康、利匹韦林等），相关性低；仅 1 条直接相关（阿立哌唑受体占据）。改用各生物医学源。"},
+    {"tool": "evimed_biomedical_source_search", "source": "pubmed", "query": "aripiprazole therapeutic drug monitoring concentration dose", "limit": 30, "finding": "30 条；含 Sparshatt 2010 系统评价（20584524）、AGNP 任务组参考范围方法学（39950917）、中国奥氮平/氨磺必利 TDM（36286707/36863030）、12 药浓度汇编（31025986）、19,926 例注册表（39996570）等。"},
+    {"tool": "evimed_biomedical_source_search", "source": "europe-pmc", "query": "aripiprazole dehydroaripiprazole plasma concentration ratio Chinese patients", "limit": 30, "finding": "17 条；关键命中 gpsych n=299 中国队列（33851072）、台湾 n=64（35923249）、汉族 PK n=12（24678101）、东亚 PK 差异（36143147）、儿童 PPK（36532742）。"},
+    {"tool": "evimed_biomedical_source_search", "source": "openalex", "query": "aripiprazole therapeutic drug monitoring", "limit": 30, "finding": "30 条；AGNP 2017/2011 共识（10.1055/s-0043-116492 等）、Lancet Psychiatry 2019 基因型队列（10.1016/S2215-0366(19)30088-4）、Kirschbaum C/D 变异性（10.1097/01.ftd.0000249944.42859.bf）、12 药汇编（10.1097/ftd.0000000000000585）。"},
+    {"tool": "evimed_biomedical_source_search", "source": "crossref", "query": "aripiprazole therapeutic drug monitoring Chinese psychiatric inpatients", "limit": 30, "finding": "30 条；含住院精神科 TDM 审计（10.1097/ftd.0000000000001156）、TDM 恰当性审计（10.1097/01.ftd.0000189897.16307.65）、中国 UPLC-MS/MS 方法学（10.1002/bmc.3928）、ISRCTN16840270（利奈唑胺 TDM）。"},
+    {"tool": "evimed_guideline_search", "query": "therapeutic drug monitoring antipsychotics psychiatry", "limit": 20, "finding": "20 条；AGNP 2017 摘要版（WFSBP 2018）等；含 QTc 监测共识（与 TDM 不同主题）。"},
+    {"tool": "evimed_guideline_search", "query": "治疗药物监测 精神科 抗精神病药", "language": "zh", "limit": 20, "finding": "15 条；中国精神科 TDM 临床应用专家共识 2022、浙江省 TDM 管理专家共识 2025、AGNP 2017 中文版、精神类药物 LC-MS/MS 共识 2025、精神科药物基因组学共识 2025。"},
+    {"tool": "evimed_biomedical_source_search", "source": "isrctn", "query": "aripiprazole therapeutic drug monitoring", "limit": 25, "finding": "0 条（absence：无已注册阿立哌唑 TDM 试验）。"},
+    {"tool": "evimed_biomedical_source_search", "source": "medrxiv", "query": "antipsychotic therapeutic drug monitoring sampling practice steady state", "limit": 25, "finding": "连接器报错：要求精确 DOI，不支持文本检索（如实记录，非阴性证据）。"},
+    {"tool": "evimed_biomedical_source_search", "source": "biorxiv", "query": "aripiprazole therapeutic drug monitoring", "limit": 20, "finding": "连接器报错：要求精确 DOI，不支持文本检索（如实记录）。"},
+    {"tool": "evimed_biomedical_source_search", "source": "clinpgx-pharmgkb", "query": "aripiprazole CYP2D6 genotype", "limit": 25, "finding": "HTTP 404（重试一次仍 404，如实记录；PGx 证据改由 pubmed 通道取得）。"},
+    {"tool": "evimed_biomedical_source_search", "source": "semantic-scholar", "query": "aripiprazole therapeutic drug monitoring", "limit": 25, "finding": "HTTP 503（重试一次仍 503，如实记录）。"},
+    {"tool": "evimed_biomedical_source_search", "source": "pubmed", "query": "aripiprazole concentration schizophrenia Chinese population TDM study", "limit": 25, "finding": "1 条：台湾剂量-反应队列（35923249，n=64，>300 ng/mL 反应更高）。"},
+    {"tool": "evimed_biomedical_source_search", "source": "pubmed", "query": "clozapine plasma concentration dose ratio cohort study", "limit": 25, "finding": "15 条；西安氯氮平 C/D 频次研究（39613021，C/D 1.6-2.8）、BC C/D 预测（38520287，n=172）、联用-ADR（41546851，n=360）、列线图（14709950）等。"},
+    {"tool": "evimed_biomedical_source_search", "source": "pubmed", "query": "paliperidone plasma concentration Chinese patients schizophrenia therapeutic drug monitoring", "limit": 25, "finding": "1 条：利培酮 C/D-疗效中国研究（37551602，n=252）。"},
+    {"tool": "evimed_biomedical_source_search", "source": "openfda", "query": "aripiprazole", "limit": 10, "finding": "3 条 NMPA 标签候选（阿立哌唑片×2、博思清），均为 EviMed 索引候选，须以 NMPA 官方现行版核验。"},
+    {"tool": "evimed_biomedical_source_search", "source": "dailymed", "query": "aripiprazole", "limit": 10, "finding": "10 条 US SPL（阿立哌唑片/口崩片）。"},
+    {"tool": "evimed_biomedical_source_search", "source": "rxnorm", "query": "aripiprazole", "limit": 10, "finding": "10 条 RXCUI（1602604 注射剂、1998453-1998463 口服片）——药品标准化连接键。"},
+    {"tool": "evimed_biomedical_source_search", "source": "mesh", "query": "aripiprazole therapeutic drug monitoring", "limit": 10, "finding": "0 条（多词查询无匹配）。"},
+    {"tool": "evimed_clinical_trial_search", "query": "aripiprazole therapeutic drug monitoring", "limit": 20, "finding": "20 条（total 427）；无精神科抗精神病药 TDM 注册试验；注册 TDM 试验集中于抗菌药/免疫抑制剂/肿瘤药（absence 轴关键证据）。"},
+    {"tool": "evimed_research_topic_selection", "action": "start", "researchDirection": "aripiprazole TDM 中国住院患者（参考范围达标率/C/D 变异/活性部分/联用/采样实践）", "finding": "作业 topic-20260807031834-36477bdeb6d6 失败：PubMed 429 限流导致管线错误'未检索到相关文献'。如实记录失败；选题判断由本 run 的 8 通道手工扩充承担。"},
+    {"tool": "evimed_bibliometric_analysis", "action": "start", "topic": "aripiprazole therapeutic drug monitoring plasma concentration", "maxRecords": 300, "finding": "作业 bibliometric-20260807031907-2c8783a016b9 成功：70 篇（2001-2026）、42 期刊、20 国、峰值 2008、日本 11 篇居首；研究前沿：东亚人群、药物基因组学、精神药物。产物在 bibliometric-analysis-runs/ 下。"},
+    {"tool": "evimed_term_normalize", "term": "阿立哌唑", "domain": "drug", "finding": "本地词表无该词目，原样返回；以 RxNorm/ATC 作为规范来源。"}
+  ],
+  "fullTexts": [
+    {"identifier": "PMID:33851072", "pmcid": "PMC8009217", "title": "Effects of the combination of SGAs on serum concentrations of aripiprazole and dehydroaripiprazole in Chinese patients with schizophrenia (gpsych, n=299)", "read": true},
+    {"identifier": "PMID:35923249", "pmcid": "PMC9340887", "title": "Dose-response analysis of aripiprazole in patients with schizophrenia in Taiwan (n=64)", "read": true},
+    {"identifier": "PMID:36195732", "pmcid": "PMC9584998", "title": "Therapeutic Reference Range for Aripiprazole in Schizophrenia Revised (meta, N=3,373)", "read": true},
+    {"identifier": "PMID:39077630", "pmcid": "PMC11284031", "title": "Increased antipsychotic drug concentration in hospitalized patients following COVID-19 (Beijing, n=329)", "read": true},
+    {"identifier": "PMID:36532742", "pmcid": "PMC9755210", "title": "Pediatric tic PPK with CYP2D6 and DARI/ARI MR (n=84)", "read": true},
+    {"identifier": "PMID:29325852", "finding": "AGNP 2018 共识：无 OA 全文可获取（Thieme 付费墙），以 openalex/guideline 摘要层引用", "read": false},
+    {"identifier": "PMID:24678101", "finding": "汉族 PK 试点：ScienceDirect HTTP 403，未落盘", "read": false},
+    {"identifier": "PMID:39613021", "finding": "西安氯氮平 C/D：无 OA，摘要层引用", "read": false}
+  ],
+  "candidateQuestions": [
+    {"id": "Q1", "title": "阿立哌唑 TDM 描述性试点（C/D、双口径达标率、代谢比）", "verdict": "feasible（试点/短篇）"},
+    {"id": "Q2", "title": "TDM 采样实践审计（稳态达标率、采样时刻记录、面板、编码）", "verdict": "feasible（审计/QI）"},
+    {"id": "Q3", "title": "多药 TDM 面板超范围浓度病例系列（氯氮平 721、帕利哌酮 86.4）", "verdict": "feasible（病例报告）"},
+    {"id": "Q4", "title": "DARI/阿立哌唑代谢比独立成题", "verdict": "answered-dropped（并入 Q1）"},
+    {"id": "Q5", "title": "浓度-疗效（暴露-反应）", "verdict": "infeasible+answered-dropped；缺失字段：结局量表；fallback：TDM-剂量调整时序"},
+    {"id": "Q6", "title": "CYP2D6 基因型-暴露关联", "verdict": "infeasible+answered-dropped；缺失字段：基因型；fallback：代谢比描述"},
+    {"id": "Q7", "title": "中医证型-血药浓度关联", "verdict": "infeasible；缺失字段：样本量；fallback：证型分布描述"},
+    {"id": "Q8", "title": "模型引导个体化给药（model-informed precision dosing）", "verdict": "infeasible；缺失字段：带时刻多次浓度序列；fallback：C/D 区间描述"}
+  ],
+  "floors": {
+    "distinctWorksMapped": 41,
+    "channels": ["pubmed", "europe-pmc", "openalex", "crossref", "guideline", "trial-registry", "drug-label", "bibliometrics"],
+    "fullTextsRead": 5,
+    "methodCitationsPerSurvivingQuestion": {"Q1": 4, "Q2": 4, "Q3": 4}
+  },
+  "verdictSummary": "3 个存活课题（Q1/Q2/Q3），全部为描述/审计/病例级别；5 个方向被删除（2 个已答、3 个不可行并指明缺失字段与降级方案）。根因：n=5 例 / 6 采样点的规模不支持任何推断性研究。"
+}

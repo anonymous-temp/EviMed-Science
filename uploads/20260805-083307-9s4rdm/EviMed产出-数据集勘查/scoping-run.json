@@ -1,0 +1,328 @@
+{
+  "candidateQuestions": [
+    {
+      "id": "Q1",
+      "question": "阿立哌唑剂量校正浓度（C/D）的个体间变异度与参考范围达标率",
+      "verdict": "可行（描述性 TDM 服务审计；不可推断外推）"
+    },
+    {
+      "id": "Q2",
+      "question": "脱氢阿立哌唑/阿立哌唑代谢比作为 CYP2D6 表型提示的病例系列",
+      "verdict": "可行（假说生成；表型判定缺 CYP2D6 基因型）"
+    },
+    {
+      "id": "Q3",
+      "question": "阿立哌唑参考范围判读标准一致性（本院 vs AGNP 2017 vs Hart 2022）",
+      "verdict": "可行（方法学注记）"
+    },
+    {
+      "id": "Q4",
+      "question": "TDM 采样规范性审计（稳态达标、重复采样、谷浓度信息）",
+      "verdict": "可行（质控/教学）"
+    },
+    {
+      "id": "Q5",
+      "question": "阿立哌唑浓度与疗效/不良反应的关联",
+      "verdict": "不可行。缺失字段：疗效/不良反应结局量表、评定时间戳、谷浓度采样时间"
+    },
+    {
+      "id": "Q6",
+      "question": "CYP2D6 基因型对阿立哌唑 C/D 的效应估计",
+      "verdict": "不可行。缺失字段：CYP2D6/CYP3A4 基因型、样本量"
+    },
+    {
+      "id": "Q7",
+      "question": "氯氮平>600 ng/mL 的剂量-浓度关系与 DRR 对照",
+      "verdict": "不可行。缺失字段：重复浓度样本、剂量滴定史、吸烟状态、N-去甲氯氮平、采血时刻"
+    },
+    {
+      "id": "Q8",
+      "question": "中药煎剂联用对阿立哌唑暴露的影响",
+      "verdict": "不可行。缺失字段：中药实际摄入量、疗程-采样时序、对照亚组、样本量"
+    },
+    {
+      "id": "Q9",
+      "question": "住院期间体重/体征轨迹与抗精神病药方案的关联",
+      "verdict": "不可行。缺失字段：规范化称重时点、代谢实验室指标、饮食活动混杂、随访窗"
+    }
+  ],
+  "dataFingerprint": {
+    "20260803TDM.xlsx": "sha256:5b52d6d8ee644e798e1017b78923004648c6936f7157d401529c163205a8f585"
+  },
+  "deidentification": {
+    "maskedColumns": [
+      "ID",
+      "PATIENT_ID",
+      "CASE_NO",
+      "MED_REC_NO",
+      "DOCTOR_ORDER_ID",
+      "ORDER_NO",
+      "ORDER_SUB_NO",
+      "SAMPLENO",
+      "RECORD_ID",
+      "无表头列"
+    ],
+    "patientPseudonyms": [
+      "P1",
+      "P2",
+      "P3",
+      "P4",
+      "P5"
+    ],
+    "pseudonymRule": "按 PATIENT_ID 升序稳定编号；源值不落盘、不打印",
+    "sampleLabelRule": "按 (TEST_DATE, SAMPLENO) 升序编号；源样本号不落盘",
+    "sampleLabels": [
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5",
+      "S6"
+    ]
+  },
+  "deliverables": [
+    "data-profile.md",
+    "data-profile.json",
+    "data-profile.py",
+    "data-quality.md",
+    "feasibility-matrix.md",
+    "external-linkage.md",
+    "research-portfolio.md",
+    "scoping-run.json",
+    "scripts/domain_quantities.py",
+    "scripts/quality_checks.py",
+    "scripts/design_precision.py"
+  ],
+  "evidenceDeduplication": {
+    "duplicates": 0,
+    "input": 15,
+    "tool": "evimed_evidence_deduplicate",
+    "unique": 15
+  },
+  "keyFindings": {
+    "aripiprazoleCDfoldSpreadSteadyState": 2.36,
+    "aripiprazoleParentOutOfRange": "4/6（2 高 2 低，本院范围 100-350）",
+    "clozapineS2": "721 ng/mL，高于 350-600 范围",
+    "exposureGap": "P2 采样日无阿立哌唑医嘱但检验报浓度（暴露来源不明）",
+    "metabolicRatioRange": "0.174-0.492（DARI/ARI，n=6）",
+    "missingCoreFields": [
+      "采血时刻/谷浓度信息",
+      "给药执行记录",
+      "CYP 基因型",
+      "疗效/不良反应结局量表",
+      "吸烟状态"
+    ],
+    "nMeasurements": 22,
+    "nPatients": 5,
+    "nTdmSamples": 6,
+    "steadyStateConfirmable": "1-2/6（在药天数 0-27；仅 P4 第二次 27 天可确认）"
+  },
+  "preflight": {
+    "issues": [],
+    "metrics": {
+      "datasetFiles": 1,
+      "identifierLeaks": 0,
+      "infeasibleVerdicts": 11,
+      "profileRecomputable": true
+    },
+    "ranAt": "2026-08-06T00:00:00+08:00",
+    "status": "ok",
+    "warnings": []
+  },
+  "priorDataContact": {
+    "declaredAt": "2026-08-06T00:00:00+08:00",
+    "declaredBeforeProfiling": true,
+    "filesReceived": [
+      "20260803TDM.xlsx"
+    ],
+    "filesReceivedDescription": "住院数据集：病案首页、医嘱记录、检验、诊断记录、体征 5 张表",
+    "outcomeDistributionNote": "声明写入时尚未打开工作簿；任何字段（含 TDM 浓度）的分布均未查看，未形成基于取值的先验假设。",
+    "outcomeDistributionSeen": false,
+    "partsInspected": [],
+    "postRunInspectionAddendum": "声明写入之后才进行机械剖析与派生量计算。后续检查发现：检验表含 6 次采样事件（阿立哌唑母体/代谢物/总浓度三件套×6 及其他 4 药各 1 次）；TDM 浓度为 63.0-503.0 ng/mL 区间；该分布信息在声明之后获得，不影响声明的先验性。"
+  },
+  "runCompletedAt": "2026-08-06T00:00:00+08:00",
+  "runId": "scoping-tdm-20260803",
+  "runStartedAt": "2026-08-06T00:00:00+08:00",
+  "schemaVersion": 1,
+  "searchRecord": [
+    {
+      "date": "2026-08-06",
+      "note": "过宽，多为抗精神病药综述，未采用",
+      "phase": 3,
+      "query": "aripiprazole therapeutic drug monitoring dose-normalized concentration reference values consensus",
+      "records": 20,
+      "tool": "evimed_literature_search",
+      "used": 0
+    },
+    {
+      "date": "2026-08-06",
+      "keys": [
+        "PMID 28910830",
+        "PMID 29493375",
+        "PMID 41848691",
+        "PMID 30446893"
+      ],
+      "phase": 3,
+      "query": "Hiemke consensus guidelines therapeutic drug monitoring neuropsychopharmacology update 2017",
+      "records": 13,
+      "tool": "evimed_literature_search",
+      "used": 4
+    },
+    {
+      "date": "2026-08-06",
+      "keys": [
+        "PMID 30565279",
+        "PMID 40662264",
+        "PMID 34125422",
+        "PMID 26514968",
+        "PMID 31000417",
+        "PMID 36195732",
+        "PMID 17828532",
+        "PMID 17164689",
+        "PMID 19142178",
+        "PMID 33560096",
+        "PMID 39237024"
+      ],
+      "phase": 3,
+      "query": "dehydroaripiprazole aripiprazole ratio CYP2D6 poor metabolizer therapeutic drug monitoring",
+      "records": 20,
+      "tool": "evimed_literature_search",
+      "used": 11
+    },
+    {
+      "date": "2026-08-06",
+      "note": "total=15079 命中，主题漂移，未采用",
+      "phase": 3,
+      "query": "aripiprazole dose-normalized concentration reference range population pharmacokinetics steady state",
+      "records": 15,
+      "tool": "evimed_literature_search",
+      "used": 0
+    },
+    {
+      "date": "2026-08-06",
+      "note": "无相关中文记录",
+      "phase": 3,
+      "query": "中国 精神科 治疗药物监测 专家共识 抗精神病药 血药浓度",
+      "records": 15,
+      "tool": "evimed_literature_search",
+      "used": 0
+    },
+    {
+      "date": "2026-08-06",
+      "note": "无相关中文记录；中文共识经 guideline_search 补齐",
+      "phase": 3,
+      "query": "精神药物 血药浓度监测 临床应用 专家共识 精神科 监测规范",
+      "records": 15,
+      "tool": "evimed_literature_search",
+      "used": 0
+    },
+    {
+      "date": "2026-08-06",
+      "keys": [
+        "PMID 32555152",
+        "PMID 12844323",
+        "PMID 24764199",
+        "PMID 38421925"
+      ],
+      "phase": 3,
+      "query": "clozapine serum concentration 600 ng/mL threshold safety supratherapeutic TDM",
+      "records": 12,
+      "tool": "evimed_literature_search",
+      "used": 4
+    },
+    {
+      "date": "2026-08-06",
+      "keys": [
+        "Patel 2012 risperidone TDM service",
+        "PMID 27251417"
+      ],
+      "phase": 3,
+      "query": "paliperidone serum concentration reference range 20 60 ng/mL therapeutic drug monitoring",
+      "records": 12,
+      "tool": "evimed_literature_search",
+      "used": 2
+    },
+    {
+      "date": "2026-08-06",
+      "keys": [
+        "中国精神科TDM专家共识2022",
+        "AGNP2017中文译本2022",
+        "浙江省TDM管理专家共识2025",
+        "精神科药物基因组学专家共识2025",
+        "精神类药物LC-MS/MS方法学共识2025",
+        "难治性精神分裂症中国专家共识2025"
+      ],
+      "phase": 3,
+      "query": "精神科 治疗药物监测 共识 抗精神病药",
+      "records": 10,
+      "tool": "evimed_guideline_search",
+      "used": 6
+    },
+    {
+      "date": "2026-08-06",
+      "keys": [
+        "DailyMed connected_public",
+        "DrugBank blocked_license",
+        "Therapeutics Data Commons skill"
+      ],
+      "phase": 4,
+      "query": "drug",
+      "records": 3,
+      "tool": "evimed_data_source_catalog",
+      "used": 3
+    },
+    {
+      "date": "2026-08-06",
+      "note": "词表类无目录匹配，改经 biomedical source connector 实测",
+      "phase": 4,
+      "query": "LOINC / RxNorm ATC / TDM psychiatry",
+      "records": 0,
+      "tool": "evimed_data_source_catalog",
+      "used": 0
+    },
+    {
+      "date": "2026-08-06",
+      "note": "RxCUI 制剂记录可查（连接可用）",
+      "phase": 4,
+      "query": "aripiprazole",
+      "records": 5,
+      "source": "rxnorm",
+      "tool": "evimed_biomedical_source_search",
+      "used": 5
+    },
+    {
+      "date": "2026-08-06",
+      "note": "HTTP 404，连接器不可用；记录缺口，不当作阴性证据",
+      "phase": 4,
+      "query": "aripiprazole CYP2D6 guideline",
+      "records": 0,
+      "source": "clinpgx-pharmgkb",
+      "tool": "evimed_biomedical_source_search",
+      "used": 0
+    },
+    {
+      "date": "2026-08-06",
+      "note": "返回无语义标题记录，未采用",
+      "phase": 4,
+      "query": "Drug Monitoring",
+      "records": 2,
+      "source": "mesh",
+      "tool": "evimed_biomedical_source_search",
+      "used": 0
+    },
+    {
+      "date": "2026-08-06",
+      "keys": [
+        "PMID 36920501 A Survey of Therapeutic Drug Monitoring Status in China"
+      ],
+      "note": "中文共识正文无公开期刊 URL，以全国 TDM 现状调查作背景支撑",
+      "phase": 3,
+      "query": "中国精神科治疗药物监测临床应用专家共识 2022 精神药物 血药浓度 实施 结果解释",
+      "records": 8,
+      "tool": "evimed_literature_search",
+      "used": 1
+    }
+  ],
+  "skill": "dataset-research-scoping"
+}

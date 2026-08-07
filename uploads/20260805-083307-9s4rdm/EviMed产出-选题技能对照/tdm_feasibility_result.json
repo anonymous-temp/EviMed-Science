@@ -1,0 +1,74 @@
+{
+ "detectable_r_n6": 0.924,
+ "detectable_r_n10": 0.785,
+ "detectable_r_n15": 0.669,
+ "detectable_r_n20": 0.591,
+ "detectable_r_n30": 0.492,
+ "detectable_r_n50": 0.387,
+ "n_for_r_0.55": 24,
+ "n_for_r_0.70": 14,
+ "ari_cd_mean_sd": [
+  15.49,
+  6.57
+ ],
+ "ari_cd_ci": [
+  9.73,
+  21.25
+ ],
+ "ari_cd_ci_halfwidth_pct": 37.2,
+ "ari_cd_benchmark_bachmann": 11.0,
+ "timeerr_阿立哌唑": {
+  "err2h": 1.019,
+  "err6h": 1.057,
+  "err12h": 1.117
+ },
+ "timeerr_奥氮平": {
+  "err2h": 1.047,
+  "err6h": 1.149,
+  "err12h": 1.32
+ },
+ "timeerr_氯氮平": {
+  "err2h": 1.091,
+  "err6h": 1.297,
+  "err12h": 1.682
+ },
+ "timeerr_帕利哌酮": {
+  "err2h": 1.062,
+  "err6h": 1.198,
+  "err12h": 1.436
+ },
+ "peak_trough_ari_QD": 1.248,
+ "peak_trough_clz_QD": 2.828,
+ "ari_range_achievement": {
+  "in": 2,
+  "n": 6,
+  "pct": 33.3,
+  "wilson_ci": [
+   0.097,
+   0.7
+  ]
+ },
+ "clz_cd_main": 1.802,
+ "clz_cd_alt_q12h": 1.442,
+ "clz_cd_delta_pct": 20.0,
+ "ari_freq_mapping_robust": "QN/QD/BID4 在主、备选映射下每日次数一致,阿立哌唑C/D不受频次解读影响",
+ "prospective_n_30pct_cd_diff": {
+  "cohen_d": 0.71,
+  "n_per_group": 32,
+  "n_total": 64
+ },
+ "prospective_n_50pct_cd_diff": {
+  "cohen_d": 1.18,
+  "n_per_group": 12,
+  "n_total": 24
+ },
+ "new_patient_cd_interval": {
+  "mean": 15.5,
+  "sd": 6.6,
+  "p95_range": [
+   2.3,
+   28.6
+  ],
+  "fold_range": 12.19
+ }
+}

@@ -1,0 +1,6 @@
+id	label	x	y	cluster	weight<Occurrences>	weight<Total link strength>
+1	drug therapy	-0.300763	0.945314	1	2	7
+2	Drug Monitoring	1.000000	-0.788503	1	2	4
+3	therapeutic use	-0.313379	-0.691714	1	2	7
+4	Aripiprazole	-0.982078	0.083908	1	2	7
+5	Antipsychotic Agents	0.596221	0.450995	1	2	7

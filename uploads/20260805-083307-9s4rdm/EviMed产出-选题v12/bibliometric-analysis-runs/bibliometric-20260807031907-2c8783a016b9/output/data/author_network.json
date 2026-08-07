@@ -1,0 +1,656 @@
+{
+  "nodes": [
+    {
+      "id": "Kagawa Shoko",
+      "weight": 5,
+      "cluster": 2,
+      "degree": 0.2069,
+      "betweenness": 0.0,
+      "closeness": 1.0345,
+      "weighted_degree": 30
+    },
+    {
+      "id": "Paulzen Michael",
+      "weight": 3,
+      "cluster": 3,
+      "degree": 0.1379,
+      "betweenness": 0.0049,
+      "closeness": 0.2365,
+      "weighted_degree": 7
+    },
+    {
+      "id": "Toja-Camba Francisco José",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.2069,
+      "betweenness": 0.0015,
+      "closeness": 0.4966,
+      "weighted_degree": 15
+    },
+    {
+      "id": "Hermans Rebecca A",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.1724,
+      "betweenness": 0.0,
+      "closeness": 0.2874,
+      "weighted_degree": 9
+    },
+    {
+      "id": "Meng Zhuocheng",
+      "weight": 2,
+      "cluster": 4,
+      "degree": 0.1379,
+      "betweenness": 0.0,
+      "closeness": 0.2759,
+      "weighted_degree": 8
+    },
+    {
+      "id": "Haen Ekkehard",
+      "weight": 2,
+      "cluster": 3,
+      "degree": 0.1379,
+      "betweenness": 0.0,
+      "closeness": 0.1576,
+      "weighted_degree": 5
+    },
+    {
+      "id": "Koch Birgit C P",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.1724,
+      "betweenness": 0.0012,
+      "closeness": 0.3979,
+      "weighted_degree": 12
+    },
+    {
+      "id": "Hermelo-Vidal Gonzalo",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.2069,
+      "betweenness": 0.0,
+      "closeness": 0.3103,
+      "weighted_degree": 10
+    },
+    {
+      "id": "Nagai Goyo",
+      "weight": 6,
+      "cluster": 2,
+      "degree": 0.2069,
+      "betweenness": 0.0,
+      "closeness": 1.1638,
+      "weighted_degree": 34
+    },
+    {
+      "id": "Fernández-Ferreiro Anxo",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.2069,
+      "betweenness": 0.0015,
+      "closeness": 0.4966,
+      "weighted_degree": 15
+    },
+    {
+      "id": "Suzuki Takeshi",
+      "weight": 6,
+      "cluster": 2,
+      "degree": 0.2069,
+      "betweenness": 0.0,
+      "closeness": 1.1638,
+      "weighted_degree": 34
+    },
+    {
+      "id": "Zarra-Ferro Irene",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.2069,
+      "betweenness": 0.0015,
+      "closeness": 0.4966,
+      "weighted_degree": 15
+    },
+    {
+      "id": "Dierckx Bram",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.1724,
+      "betweenness": 0.0012,
+      "closeness": 0.3979,
+      "weighted_degree": 12
+    },
+    {
+      "id": "de Winter Brenda C M",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.1724,
+      "betweenness": 0.0012,
+      "closeness": 0.3979,
+      "weighted_degree": 12
+    },
+    {
+      "id": "Mondelo-García Cristina",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.2069,
+      "betweenness": 0.0015,
+      "closeness": 0.4966,
+      "weighted_degree": 15
+    },
+    {
+      "id": "Gründer Gerhard",
+      "weight": 4,
+      "cluster": 3,
+      "degree": 0.1034,
+      "betweenness": 0.0,
+      "closeness": 0.1576,
+      "weighted_degree": 5
+    },
+    {
+      "id": "Nemoto Kenji",
+      "weight": 5,
+      "cluster": 2,
+      "degree": 0.2069,
+      "betweenness": 0.0,
+      "closeness": 1.0345,
+      "weighted_degree": 30
+    },
+    {
+      "id": "Kloosterboer Sanne M",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.1724,
+      "betweenness": 0.0,
+      "closeness": 0.2463,
+      "weighted_degree": 8
+    },
+    {
+      "id": "Mihara Kazuo",
+      "weight": 6,
+      "cluster": 2,
+      "degree": 0.2069,
+      "betweenness": 0.0,
+      "closeness": 1.1638,
+      "weighted_degree": 34
+    },
+    {
+      "id": "Maroñas Olalla",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.2069,
+      "betweenness": 0.0,
+      "closeness": 0.3103,
+      "weighted_degree": 10
+    },
+    {
+      "id": "Kondo Tsuyoshi",
+      "weight": 6,
+      "cluster": 2,
+      "degree": 0.2069,
+      "betweenness": 0.0,
+      "closeness": 1.1638,
+      "weighted_degree": 34
+    },
+    {
+      "id": "Bandín-Vilar Enrique",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.2069,
+      "betweenness": 0.0,
+      "closeness": 0.3103,
+      "weighted_degree": 10
+    },
+    {
+      "id": "Yang Liu",
+      "weight": 2,
+      "cluster": 4,
+      "degree": 0.1379,
+      "betweenness": 0.0,
+      "closeness": 0.2759,
+      "weighted_degree": 8
+    },
+    {
+      "id": "Ding Jing",
+      "weight": 2,
+      "cluster": 4,
+      "degree": 0.1379,
+      "betweenness": 0.0,
+      "closeness": 0.2759,
+      "weighted_degree": 8
+    },
+    {
+      "id": "Schoretsanitis Georgios",
+      "weight": 2,
+      "cluster": 3,
+      "degree": 0.1034,
+      "betweenness": 0.0,
+      "closeness": 0.1439,
+      "weighted_degree": 4
+    },
+    {
+      "id": "Nakamura Akifumi",
+      "weight": 6,
+      "cluster": 2,
+      "degree": 0.2069,
+      "betweenness": 0.0,
+      "closeness": 1.1638,
+      "weighted_degree": 34
+    },
+    {
+      "id": "Hillegers Manon H J",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.1724,
+      "betweenness": 0.0,
+      "closeness": 0.2874,
+      "weighted_degree": 9
+    },
+    {
+      "id": "Zhang Yan",
+      "weight": 2,
+      "cluster": 4,
+      "degree": 0.1379,
+      "betweenness": 0.0,
+      "closeness": 0.2759,
+      "weighted_degree": 8
+    },
+    {
+      "id": "Hiemke Christoph",
+      "weight": 5,
+      "cluster": 3,
+      "degree": 0.1379,
+      "betweenness": 0.0049,
+      "closeness": 0.1947,
+      "weighted_degree": 7
+    },
+    {
+      "id": "Zhang Suo",
+      "weight": 2,
+      "cluster": 4,
+      "degree": 0.1379,
+      "betweenness": 0.0,
+      "closeness": 0.2759,
+      "weighted_degree": 8
+    }
+  ],
+  "edges": [
+    {
+      "source": "Kagawa Shoko",
+      "target": "Nagai Goyo",
+      "weight": 5
+    },
+    {
+      "source": "Kagawa Shoko",
+      "target": "Nakamura Akifumi",
+      "weight": 5
+    },
+    {
+      "source": "Kagawa Shoko",
+      "target": "Mihara Kazuo",
+      "weight": 5
+    },
+    {
+      "source": "Kagawa Shoko",
+      "target": "Kondo Tsuyoshi",
+      "weight": 5
+    },
+    {
+      "source": "Kagawa Shoko",
+      "target": "Nemoto Kenji",
+      "weight": 5
+    },
+    {
+      "source": "Kagawa Shoko",
+      "target": "Suzuki Takeshi",
+      "weight": 5
+    },
+    {
+      "source": "Paulzen Michael",
+      "target": "Hiemke Christoph",
+      "weight": 2
+    },
+    {
+      "source": "Paulzen Michael",
+      "target": "Schoretsanitis Georgios",
+      "weight": 2
+    },
+    {
+      "source": "Paulzen Michael",
+      "target": "Haen Ekkehard",
+      "weight": 2
+    },
+    {
+      "source": "Paulzen Michael",
+      "target": "Gründer Gerhard",
+      "weight": 1
+    },
+    {
+      "source": "Toja-Camba Francisco José",
+      "target": "Fernández-Ferreiro Anxo",
+      "weight": 3
+    },
+    {
+      "source": "Toja-Camba Francisco José",
+      "target": "Mondelo-García Cristina",
+      "weight": 3
+    },
+    {
+      "source": "Toja-Camba Francisco José",
+      "target": "Zarra-Ferro Irene",
+      "weight": 3
+    },
+    {
+      "source": "Toja-Camba Francisco José",
+      "target": "Bandín-Vilar Enrique",
+      "weight": 2
+    },
+    {
+      "source": "Toja-Camba Francisco José",
+      "target": "Hermelo-Vidal Gonzalo",
+      "weight": 2
+    },
+    {
+      "source": "Toja-Camba Francisco José",
+      "target": "Maroñas Olalla",
+      "weight": 2
+    },
+    {
+      "source": "Hermans Rebecca A",
+      "target": "Hillegers Manon H J",
+      "weight": 2
+    },
+    {
+      "source": "Hermans Rebecca A",
+      "target": "Koch Birgit C P",
+      "weight": 2
+    },
+    {
+      "source": "Hermans Rebecca A",
+      "target": "Dierckx Bram",
+      "weight": 2
+    },
+    {
+      "source": "Hermans Rebecca A",
+      "target": "de Winter Brenda C M",
+      "weight": 2
+    },
+    {
+      "source": "Hermans Rebecca A",
+      "target": "Kloosterboer Sanne M",
+      "weight": 1
+    },
+    {
+      "source": "Meng Zhuocheng",
+      "target": "Zhang Yan",
+      "weight": 2
+    },
+    {
+      "source": "Meng Zhuocheng",
+      "target": "Ding Jing",
+      "weight": 2
+    },
+    {
+      "source": "Meng Zhuocheng",
+      "target": "Zhang Suo",
+      "weight": 2
+    },
+    {
+      "source": "Meng Zhuocheng",
+      "target": "Yang Liu",
+      "weight": 2
+    },
+    {
+      "source": "Haen Ekkehard",
+      "target": "Schoretsanitis Georgios",
+      "weight": 1
+    },
+    {
+      "source": "Haen Ekkehard",
+      "target": "Gründer Gerhard",
+      "weight": 1
+    },
+    {
+      "source": "Haen Ekkehard",
+      "target": "Hiemke Christoph",
+      "weight": 1
+    },
+    {
+      "source": "Koch Birgit C P",
+      "target": "de Winter Brenda C M",
+      "weight": 3
+    },
+    {
+      "source": "Koch Birgit C P",
+      "target": "Dierckx Bram",
+      "weight": 3
+    },
+    {
+      "source": "Koch Birgit C P",
+      "target": "Hillegers Manon H J",
+      "weight": 2
+    },
+    {
+      "source": "Koch Birgit C P",
+      "target": "Kloosterboer Sanne M",
+      "weight": 2
+    },
+    {
+      "source": "Hermelo-Vidal Gonzalo",
+      "target": "Fernández-Ferreiro Anxo",
+      "weight": 2
+    },
+    {
+      "source": "Hermelo-Vidal Gonzalo",
+      "target": "Mondelo-García Cristina",
+      "weight": 2
+    },
+    {
+      "source": "Hermelo-Vidal Gonzalo",
+      "target": "Zarra-Ferro Irene",
+      "weight": 2
+    },
+    {
+      "source": "Hermelo-Vidal Gonzalo",
+      "target": "Bandín-Vilar Enrique",
+      "weight": 1
+    },
+    {
+      "source": "Hermelo-Vidal Gonzalo",
+      "target": "Maroñas Olalla",
+      "weight": 1
+    },
+    {
+      "source": "Nagai Goyo",
+      "target": "Mihara Kazuo",
+      "weight": 6
+    },
+    {
+      "source": "Nagai Goyo",
+      "target": "Nakamura Akifumi",
+      "weight": 6
+    },
+    {
+      "source": "Nagai Goyo",
+      "target": "Kondo Tsuyoshi",
+      "weight": 6
+    },
+    {
+      "source": "Nagai Goyo",
+      "target": "Suzuki Takeshi",
+      "weight": 6
+    },
+    {
+      "source": "Nagai Goyo",
+      "target": "Nemoto Kenji",
+      "weight": 5
+    },
+    {
+      "source": "Fernández-Ferreiro Anxo",
+      "target": "Mondelo-García Cristina",
+      "weight": 3
+    },
+    {
+      "source": "Fernández-Ferreiro Anxo",
+      "target": "Zarra-Ferro Irene",
+      "weight": 3
+    },
+    {
+      "source": "Fernández-Ferreiro Anxo",
+      "target": "Maroñas Olalla",
+      "weight": 2
+    },
+    {
+      "source": "Fernández-Ferreiro Anxo",
+      "target": "Bandín-Vilar Enrique",
+      "weight": 2
+    },
+    {
+      "source": "Suzuki Takeshi",
+      "target": "Nakamura Akifumi",
+      "weight": 6
+    },
+    {
+      "source": "Suzuki Takeshi",
+      "target": "Kondo Tsuyoshi",
+      "weight": 6
+    },
+    {
+      "source": "Suzuki Takeshi",
+      "target": "Mihara Kazuo",
+      "weight": 6
+    },
+    {
+      "source": "Suzuki Takeshi",
+      "target": "Nemoto Kenji",
+      "weight": 5
+    },
+    {
+      "source": "Zarra-Ferro Irene",
+      "target": "Mondelo-García Cristina",
+      "weight": 3
+    },
+    {
+      "source": "Zarra-Ferro Irene",
+      "target": "Maroñas Olalla",
+      "weight": 2
+    },
+    {
+      "source": "Zarra-Ferro Irene",
+      "target": "Bandín-Vilar Enrique",
+      "weight": 2
+    },
+    {
+      "source": "Dierckx Bram",
+      "target": "de Winter Brenda C M",
+      "weight": 3
+    },
+    {
+      "source": "Dierckx Bram",
+      "target": "Hillegers Manon H J",
+      "weight": 2
+    },
+    {
+      "source": "Dierckx Bram",
+      "target": "Kloosterboer Sanne M",
+      "weight": 2
+    },
+    {
+      "source": "de Winter Brenda C M",
+      "target": "Hillegers Manon H J",
+      "weight": 2
+    },
+    {
+      "source": "de Winter Brenda C M",
+      "target": "Kloosterboer Sanne M",
+      "weight": 2
+    },
+    {
+      "source": "Mondelo-García Cristina",
+      "target": "Bandín-Vilar Enrique",
+      "weight": 2
+    },
+    {
+      "source": "Mondelo-García Cristina",
+      "target": "Maroñas Olalla",
+      "weight": 2
+    },
+    {
+      "source": "Gründer Gerhard",
+      "target": "Hiemke Christoph",
+      "weight": 3
+    },
+    {
+      "source": "Nemoto Kenji",
+      "target": "Nakamura Akifumi",
+      "weight": 5
+    },
+    {
+      "source": "Nemoto Kenji",
+      "target": "Mihara Kazuo",
+      "weight": 5
+    },
+    {
+      "source": "Nemoto Kenji",
+      "target": "Kondo Tsuyoshi",
+      "weight": 5
+    },
+    {
+      "source": "Kloosterboer Sanne M",
+      "target": "Hillegers Manon H J",
+      "weight": 1
+    },
+    {
+      "source": "Mihara Kazuo",
+      "target": "Nakamura Akifumi",
+      "weight": 6
+    },
+    {
+      "source": "Mihara Kazuo",
+      "target": "Kondo Tsuyoshi",
+      "weight": 6
+    },
+    {
+      "source": "Maroñas Olalla",
+      "target": "Bandín-Vilar Enrique",
+      "weight": 1
+    },
+    {
+      "source": "Kondo Tsuyoshi",
+      "target": "Nakamura Akifumi",
+      "weight": 6
+    },
+    {
+      "source": "Yang Liu",
+      "target": "Zhang Yan",
+      "weight": 2
+    },
+    {
+      "source": "Yang Liu",
+      "target": "Ding Jing",
+      "weight": 2
+    },
+    {
+      "source": "Yang Liu",
+      "target": "Zhang Suo",
+      "weight": 2
+    },
+    {
+      "source": "Ding Jing",
+      "target": "Zhang Suo",
+      "weight": 2
+    },
+    {
+      "source": "Ding Jing",
+      "target": "Zhang Yan",
+      "weight": 2
+    },
+    {
+      "source": "Schoretsanitis Georgios",
+      "target": "Hiemke Christoph",
+      "weight": 1
+    },
+    {
+      "source": "Zhang Yan",
+      "target": "Zhang Suo",
+      "weight": 2
+    }
+  ]
+}

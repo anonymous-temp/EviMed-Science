@@ -1,0 +1,101 @@
+{
+  "nodes": [
+    {
+      "id": "drug therapy",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 1.6,
+      "weighted_degree": 7
+    },
+    {
+      "id": "Drug Monitoring",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 1.0,
+      "weighted_degree": 4
+    },
+    {
+      "id": "therapeutic use",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 1.6,
+      "weighted_degree": 7
+    },
+    {
+      "id": "Aripiprazole",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 1.6,
+      "weighted_degree": 7
+    },
+    {
+      "id": "Antipsychotic Agents",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 1.6,
+      "weighted_degree": 7
+    }
+  ],
+  "edges": [
+    {
+      "source": "drug therapy",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "Aripiprazole",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Aripiprazole",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Antipsychotic Agents",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Aripiprazole",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    }
+  ]
+}

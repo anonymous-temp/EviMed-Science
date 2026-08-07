@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "runId": "scoping-20260803-TDM",
+  "createdAt": "2026-08-06T00:00:00Z",
+  "completedAt": "2026-08-06T14:45:00Z",
+  "priorDataContact": {
+    "filesReceived": ["20260803TDM.xlsx"],
+    "partsInspected": [
+      "Structural inspection only (sheet names, row/column counts) before this declaration was written. No cell values read before the declaration.",
+      "User-reported hints recorded verbatim: sampling times missing from lab records; dose frequency in a local coding vocabulary; no medication-administration records; no efficacy rating scales; patient-level n in the single digits; intended focus: inpatient therapeutic drug monitoring (TDM)."
+    ],
+    "outcomeDistributionSeen": false,
+    "notes": "Declaration written before any cell-value inspection, per secondary-data preregistration (Weston 2019; Van den Akker 2021)."
+  },
+  "dataFingerprint": {
+    "file": "20260803TDM.xlsx",
+    "sha256": "5b52d6d8ee644e798e1017b78923004648c6936f7157d401529c163205a8f585",
+    "tables": {
+      "病案首页": {"rows": 5, "cols": 38},
+      "医嘱记录": {"rows": 915, "cols": 22},
+      "检验": {"rows": 22, "cols": 12},
+      "诊断记录": {"rows": 56, "cols": 11},
+      "体征": {"rows": 537, "cols": 10}
+    }
+  },
+  "pseudonymMap": "P1..P5 assigned by ascending PATIENT_ID; raw identifiers (PATIENT_ID, CASE_NO, MED_REC_NO, BIRTHDATE, SAMPLENO, RECORD_ID, DOCTOR_ORDER_ID) never appear in deliverables; verified by preflight identifier-leakage gate.",
+  "artifactsProduced": [
+    "data-profile.py / data-profile.json / data-profile.md (mechanical profile, recomputable)",
+    "tdm-signal-analysis.py / tdm-signal-table.csv / tdm-derived.json (domain-derived quantities)",
+    "data-quality.md (Kahn-categorized findings + mandatory preprocessing list)",
+    "feasibility-matrix.md (7-element target-trial matrix + binding tests + fallbacks)",
+    "external-linkage.md (resource x join-key x granularity x added capability x mapping cost)",
+    "research-portfolio.md (full designs + infeasible list + prediction-model verdict)",
+    "study-protocol.md (executable protocols, preconditions, stopping conditions)"
+  ],
+  "searchRecord": {
+    "tools": ["evimed_literature_search", "evimed_biomedical_source_search(pubmed)", "evimed_open_access_full_text", "evimed_guideline_search", "evimed_data_source_catalog"],
+    "date": "2026-08-06",
+    "queries": [
+      {"query": "therapeutic drug monitoring antipsychotics consensus guideline reference range", "tool": "evimed_literature_search", "returned": 15, "used": ["Bakken 2011 quetiapine C/D variability", "Tveit 2020 registry audit", "Brasso 2021 adherence vs TDM"]},
+      {"query": "aripiprazole dose-normalized concentration therapeutic drug monitoring variability", "tool": "evimed_literature_search", "returned": 15, "used": 0, "note": "off-target, replaced by pubmed connector"},
+      {"query": "unknown sampling time TDM retrospective electronic health record blood draw time missing", "tool": "evimed_literature_search", "returned": 9, "used": 0, "note": "off-target"},
+      {"query": "Consensus Guidelines for Therapeutic Drug Monitoring in Neuropsychopharmacology Update 2017 Hiemke", "tool": "pubmed", "returned": 5, "used": ["PMID 28910830 AGNP 2017", "PMID 42392224 AGNP 2026 (abstract only, not OA)", "PMID 29493375 summary"]},
+      {"query": "aripiprazole dose-adjusted serum concentration therapeutic drug monitoring CYP2D6", "tool": "pubmed", "returned": 6, "used": ["PMID 17541885", "PMID 17828532", "PMID 19142178", "PMID 24232129", "PMID 38635089", "PMID 31637453"]},
+      {"query": "clozapine plasma concentration toxicity seizures", "tool": "pubmed", "returned": 6, "used": ["PMID 9068925 threshold 1000 ng/mL", "PMID 29432503 ranges", "PMID 41293932 ADR-concentration", "PMID 39836512 valproate"]},
+      {"query": "aripiprazole akathisia serum concentration", "tool": "pubmed", "returned": 1, "used": ["PMID 18381903 RCT akathisia"]},
+      {"query": "aripiprazole population pharmacokinetics", "tool": "pubmed", "returned": 8, "used": ["PMID 32008418 review 16 popPK models", "PMID 38957736 Chinese popPK", "PMID 26902506 Korean popPK", "PMID 38602057 LAI model", "PMID 30565279 meta"]},
+      {"query": "prescribed versus administered medication records hospital discrepancy", "tool": "pubmed", "returned": 1, "used": ["PMID 22479108 order/administration discrepancies"]},
+      {"query": "aripiprazole steady state concentration clinical response schizophrenia correlation", "tool": "pubmed", "returned": 1, "used": ["PMID 18641558 adolescent variability 6.4-fold"]},
+      {"query": "Jukic CYP2D6 genotype exposure efficacy risperidone aripiprazole Lancet Psychiatry", "tool": "pubmed", "returned": 1, "used": ["PMID 31000417"]},
+      {"query": "trough concentration sampling time antipsychotic TDM interpretation", "tool": "pubmed", "returned": 1, "used": ["PMID 41724034 random-to-trough conversion method"]},
+      {"query": "olanzapine plasma concentration weight gain metabolic side effects", "tool": "pubmed", "returned": 5, "used": ["PMID 15876904 20.6 ng/mL threshold", "PMID 19653979 dose-response review", "PMID 39698079 meta"]},
+      {"query": "阿立哌唑 血药浓度 治疗药物监测 精神分裂症", "tool": "evimed_literature_search", "returned": 10, "used": 0, "note": "Chinese literature dominated by efficacy RCTs, no concentration-positioning studies surfaced"},
+      {"query": "治疗药物监测 精神科 共识 指南", "tool": "evimed_guideline_search", "returned": 8, "used": 0, "note": "no Chinese TDM guideline surfaced; AGNP consensus used as the international standard"},
+      {"query": "PubMed literature TDM guideline therapeutic drug monitoring", "tool": "evimed_data_source_catalog", "returned": 0, "note": "catalog query too specific; catalog itself reviewed (64 connected_public sources)"}
+    ],
+    "fullTextInspected": [
+      {"id": "PMC11098931", "pmid": "38635089", "title": "Rapid Metabolism Underlying Subtherapeutic Serum Levels of Atypical Antipsychotics Preceding Clozapine Treatment", "access": "full text (Europe PMC OA), 34,483 chars, hash 6fed24d1...", "keyExtraction": "C/D stratification by 25th/75th percentile of population-based C/D from 147,964 measurements; exclusion of samples lacking dosing information and of CDs above the 75th percentile; aripiprazole active-moiety lower bound 335 nmol/L = 150 ug/L; undetectable levels = nonadherence"}
+    ],
+    "notOpenAccessNoted": [
+      {"pmid": "28910830", "note": "AGNP 2017 consensus, abstract-level evidence"},
+      {"pmid": "42392224", "note": "AGNP 2026 update, abstract-level evidence; full text not OA (fetch failed, retryable=false)"},
+      {"pmid": "17828532", "note": "CYP2D6 genotype C/D values, abstract-level evidence"}
+    ],
+    "emptyOrOffTarget": [
+      {"query": "clozapine serum concentration seizures encephalopathy toxicity threshold monitoring", "note": "0 records, long-query connector sensitivity"},
+      {"query": "medication dosing frequency extraction electronic health record pharmacoepidemiology validation", "note": "0 records"},
+      {"query": "therapeutic drug monitoring audit implementation psychiatric hospital routine practice", "note": "1 off-target record, not used"}
+    ]
+  },
+  "bindingTestSummary": {
+    "samplingTimeMissing": "Aripiprazole t1/2 75h, interval 24h -> within-interval swing 1.25x (+-12%), vs between-subject C/D spread 4.5-4.7x and genotype effect 1.59x: gap does NOT bind for aripiprazole C/D classification. Clozapine t1/2 16h, interval 12h -> 1.68x: P2 clozapine 721 spans 429-1211 across the 600 upper bound and 1000 alert level: gap BINDS for clozapine/paliperidone out-of-range classification; protocol reports intervals and sensitivity.",
+    "frequencyCoding": "BID4 and overlapping-brand ambiguity give 2x daily-dose range; P4 aripiprazole C/D moves 20-40 ng/mL/mg, both ends in the slow-metabolizer band: classification robust.",
+    "noOutcomeScale": "Efficacy outcome absent by 100% (no scale field, DIAGNOSTIC_CONTENT empty, DIS_RESULT constant, no follow-up); fallback = toxicity proxies (clozapine 1000 ng/mL PMID 9068925; olanzapine 20.6 ng/mL PMID 15876904; EPS via anticholinergic orders).",
+    "predictionModel": "Training a popPK/ML model infeasible: n=5/22 samples, no sampling times, no administration records, no genotype, no validation set; prediction-interval ~10x vs therapeutic window 3.3x; fallback = descriptive C/D positioning (Q1) + external-model simulation (Q6a) explicitly unvalidated."
+  },
+  "verdicts": {
+    "Q1 C/D benchmark": "feasible",
+    "Q2 result-to-dose-adjustment audit": "feasible",
+    "Q3 toxicity-proxy audit": "feasible (descriptive case series)",
+    "Q4 sensitivity methodology": "feasible (transfer of PMID 41724034 method)",
+    "Q5 concentration-efficacy analysis": "infeasible; missing field: efficacy outcome scale/follow-up; fallback Q3",
+    "Q6 prediction-model training/validation": "infeasible; missing fields: sampling time, administration record, CYP genotype, sample size; fallback Q1 + Q6a external-model simulation"
+  }
+}

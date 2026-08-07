@@ -1,0 +1,4021 @@
+{
+  "nodes": [
+    {
+      "id": "Piperazines",
+      "weight": 26,
+      "cluster": 0,
+      "degree": 0.9388,
+      "betweenness": 0.0035,
+      "closeness": 4.6592,
+      "weighted_degree": 273
+    },
+    {
+      "id": "drug therapy",
+      "weight": 34,
+      "cluster": 0,
+      "degree": 0.9184,
+      "betweenness": 0.0125,
+      "closeness": 4.8559,
+      "weighted_degree": 305
+    },
+    {
+      "id": "Risperidone",
+      "weight": 11,
+      "cluster": 2,
+      "degree": 0.7347,
+      "betweenness": 0.0,
+      "closeness": 3.6425,
+      "weighted_degree": 101
+    },
+    {
+      "id": "metabolism",
+      "weight": 18,
+      "cluster": 0,
+      "degree": 0.8571,
+      "betweenness": 0.0,
+      "closeness": 4.0744,
+      "weighted_degree": 169
+    },
+    {
+      "id": "Positron-Emission Tomography",
+      "weight": 3,
+      "cluster": 2,
+      "degree": 0.4082,
+      "betweenness": 0.0,
+      "closeness": 1.9732,
+      "weighted_degree": 33
+    },
+    {
+      "id": "Drug Therapy, Combination",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.4082,
+      "betweenness": 0.0,
+      "closeness": 1.9784,
+      "weighted_degree": 31
+    },
+    {
+      "id": "therapeutic use",
+      "weight": 27,
+      "cluster": 0,
+      "degree": 0.8776,
+      "betweenness": 0.0003,
+      "closeness": 4.5807,
+      "weighted_degree": 235
+    },
+    {
+      "id": "therapeutic drug monitoring",
+      "weight": 11,
+      "cluster": 1,
+      "degree": 0.6122,
+      "betweenness": 0.0,
+      "closeness": 3.4009,
+      "weighted_degree": 74
+    },
+    {
+      "id": "pharmacokinetics",
+      "weight": 32,
+      "cluster": 0,
+      "degree": 0.898,
+      "betweenness": 0.0357,
+      "closeness": 4.7008,
+      "weighted_degree": 281
+    },
+    {
+      "id": "Antidepressive Agents",
+      "weight": 4,
+      "cluster": 1,
+      "degree": 0.3878,
+      "betweenness": 0.0,
+      "closeness": 1.9823,
+      "weighted_degree": 27
+    },
+    {
+      "id": "Quetiapine Fumarate",
+      "weight": 3,
+      "cluster": 2,
+      "degree": 0.5102,
+      "betweenness": 0.0,
+      "closeness": 2.0006,
+      "weighted_degree": 39
+    },
+    {
+      "id": "Aripiprazole",
+      "weight": 46,
+      "cluster": 0,
+      "degree": 0.9796,
+      "betweenness": 0.1706,
+      "closeness": 5.2365,
+      "weighted_degree": 413
+    },
+    {
+      "id": "Cytochrome P-450 CYP3A",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.3061,
+      "betweenness": 0.0,
+      "closeness": 2.0062,
+      "weighted_degree": 35
+    },
+    {
+      "id": "Quinolones",
+      "weight": 25,
+      "cluster": 0,
+      "degree": 0.9388,
+      "betweenness": 0.0035,
+      "closeness": 4.6245,
+      "weighted_degree": 261
+    },
+    {
+      "id": "Drug Stability",
+      "weight": 4,
+      "cluster": 1,
+      "degree": 0.3469,
+      "betweenness": 0.0,
+      "closeness": 2.3311,
+      "weighted_degree": 42
+    },
+    {
+      "id": "East Asian People",
+      "weight": 4,
+      "cluster": 0,
+      "degree": 0.2653,
+      "betweenness": 0.0,
+      "closeness": 2.3251,
+      "weighted_degree": 26
+    },
+    {
+      "id": "blood",
+      "weight": 40,
+      "cluster": 1,
+      "degree": 1.0,
+      "betweenness": 0.1467,
+      "closeness": 5.0202,
+      "weighted_degree": 349
+    },
+    {
+      "id": "chemistry",
+      "weight": 9,
+      "cluster": 1,
+      "degree": 0.6122,
+      "betweenness": 0.0,
+      "closeness": 3.1077,
+      "weighted_degree": 84
+    },
+    {
+      "id": "Clozapine",
+      "weight": 5,
+      "cluster": 2,
+      "degree": 0.5306,
+      "betweenness": 0.0,
+      "closeness": 2.3642,
+      "weighted_degree": 48
+    },
+    {
+      "id": "Limit of Detection",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.4286,
+      "betweenness": 0.0,
+      "closeness": 1.8753,
+      "weighted_degree": 32
+    },
+    {
+      "id": "Sensitivity and Specificity",
+      "weight": 4,
+      "cluster": 1,
+      "degree": 0.3061,
+      "betweenness": 0.0,
+      "closeness": 2.4122,
+      "weighted_degree": 42
+    },
+    {
+      "id": "Genotype",
+      "weight": 5,
+      "cluster": 0,
+      "degree": 0.3673,
+      "betweenness": 0.0,
+      "closeness": 2.7099,
+      "weighted_degree": 55
+    },
+    {
+      "id": "Dose-Response Relationship, Drug",
+      "weight": 12,
+      "cluster": 0,
+      "degree": 0.551,
+      "betweenness": 0.0,
+      "closeness": 3.6728,
+      "weighted_degree": 105
+    },
+    {
+      "id": "Receptors, Dopamine D2",
+      "weight": 3,
+      "cluster": 2,
+      "degree": 0.3673,
+      "betweenness": 0.0,
+      "closeness": 1.9727,
+      "weighted_degree": 26
+    },
+    {
+      "id": "Antipsychotic Agents",
+      "weight": 54,
+      "cluster": 0,
+      "degree": 0.9592,
+      "betweenness": 0.5746,
+      "closeness": 5.3996,
+      "weighted_degree": 448
+    },
+    {
+      "id": "Antipsychotic",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.3061,
+      "betweenness": 0.0,
+      "closeness": 1.8093,
+      "weighted_degree": 20
+    },
+    {
+      "id": "methods",
+      "weight": 22,
+      "cluster": 1,
+      "degree": 0.7551,
+      "betweenness": 0.0591,
+      "closeness": 4.3913,
+      "weighted_degree": 195
+    },
+    {
+      "id": "antipsychotics",
+      "weight": 7,
+      "cluster": 1,
+      "degree": 0.4286,
+      "betweenness": 0.0,
+      "closeness": 2.653,
+      "weighted_degree": 42
+    },
+    {
+      "id": "Psychotropic Drugs",
+      "weight": 4,
+      "cluster": 1,
+      "degree": 0.4082,
+      "betweenness": 0.0,
+      "closeness": 2.2518,
+      "weighted_degree": 30
+    },
+    {
+      "id": "adverse effects",
+      "weight": 11,
+      "cluster": 0,
+      "degree": 0.6939,
+      "betweenness": 0.0,
+      "closeness": 3.6472,
+      "weighted_degree": 102
+    },
+    {
+      "id": "Asian People",
+      "weight": 5,
+      "cluster": 0,
+      "degree": 0.4694,
+      "betweenness": 0.0,
+      "closeness": 2.6838,
+      "weighted_degree": 62
+    },
+    {
+      "id": "Mental Disorders",
+      "weight": 5,
+      "cluster": 0,
+      "degree": 0.4694,
+      "betweenness": 0.0,
+      "closeness": 2.6286,
+      "weighted_degree": 47
+    },
+    {
+      "id": "Reproducibility of Results",
+      "weight": 8,
+      "cluster": 1,
+      "degree": 0.5714,
+      "betweenness": 0.0,
+      "closeness": 3.0818,
+      "weighted_degree": 85
+    },
+    {
+      "id": "analysis",
+      "weight": 4,
+      "cluster": 1,
+      "degree": 0.4694,
+      "betweenness": 0.0,
+      "closeness": 2.1235,
+      "weighted_degree": 40
+    },
+    {
+      "id": "Chromatography, High Pressure Liquid",
+      "weight": 8,
+      "cluster": 1,
+      "degree": 0.551,
+      "betweenness": 0.0,
+      "closeness": 3.1095,
+      "weighted_degree": 79
+    },
+    {
+      "id": "administration & dosage",
+      "weight": 11,
+      "cluster": 0,
+      "degree": 0.6122,
+      "betweenness": 0.0,
+      "closeness": 3.588,
+      "weighted_degree": 110
+    },
+    {
+      "id": "Schizophrenia",
+      "weight": 24,
+      "cluster": 0,
+      "degree": 0.7959,
+      "betweenness": 0.0411,
+      "closeness": 4.4212,
+      "weighted_degree": 212
+    },
+    {
+      "id": "Drug Monitoring",
+      "weight": 26,
+      "cluster": 1,
+      "degree": 0.8776,
+      "betweenness": 0.0323,
+      "closeness": 4.5253,
+      "weighted_degree": 213
+    },
+    {
+      "id": "genetics",
+      "weight": 6,
+      "cluster": 0,
+      "degree": 0.3878,
+      "betweenness": 0.0,
+      "closeness": 2.967,
+      "weighted_degree": 65
+    },
+    {
+      "id": "Paliperidone Palmitate",
+      "weight": 4,
+      "cluster": 2,
+      "degree": 0.5714,
+      "betweenness": 0.0,
+      "closeness": 2.4039,
+      "weighted_degree": 49
+    },
+    {
+      "id": "Benzodiazepines",
+      "weight": 8,
+      "cluster": 2,
+      "degree": 0.6531,
+      "betweenness": 0.0,
+      "closeness": 3.3328,
+      "weighted_degree": 86
+    },
+    {
+      "id": "Drug Interactions",
+      "weight": 6,
+      "cluster": 0,
+      "degree": 0.449,
+      "betweenness": 0.0,
+      "closeness": 2.6759,
+      "weighted_degree": 56
+    },
+    {
+      "id": "Cytochrome P-450 CYP2D6",
+      "weight": 7,
+      "cluster": 0,
+      "degree": 0.4286,
+      "betweenness": 0.0,
+      "closeness": 3.2085,
+      "weighted_degree": 75
+    },
+    {
+      "id": "Olanzapine",
+      "weight": 9,
+      "cluster": 2,
+      "degree": 0.6735,
+      "betweenness": 0.0,
+      "closeness": 3.4905,
+      "weighted_degree": 98
+    },
+    {
+      "id": "pharmacology",
+      "weight": 7,
+      "cluster": 0,
+      "degree": 0.4694,
+      "betweenness": 0.0,
+      "closeness": 2.8541,
+      "weighted_degree": 63
+    },
+    {
+      "id": "Chromatography, Liquid",
+      "weight": 7,
+      "cluster": 1,
+      "degree": 0.6531,
+      "betweenness": 0.0,
+      "closeness": 2.6742,
+      "weighted_degree": 63
+    },
+    {
+      "id": "Haloperidol",
+      "weight": 5,
+      "cluster": 2,
+      "degree": 0.449,
+      "betweenness": 0.0,
+      "closeness": 2.665,
+      "weighted_degree": 50
+    },
+    {
+      "id": "drug effects",
+      "weight": 4,
+      "cluster": 2,
+      "degree": 0.4694,
+      "betweenness": 0.0,
+      "closeness": 2.3753,
+      "weighted_degree": 42
+    },
+    {
+      "id": "Tandem Mass Spectrometry",
+      "weight": 11,
+      "cluster": 1,
+      "degree": 0.6122,
+      "betweenness": 0.0,
+      "closeness": 3.4163,
+      "weighted_degree": 101
+    },
+    {
+      "id": "Prolactin",
+      "weight": 3,
+      "cluster": 2,
+      "degree": 0.3673,
+      "betweenness": 0.0,
+      "closeness": 1.9802,
+      "weighted_degree": 27
+    }
+  ],
+  "edges": [
+    {
+      "source": "Piperazines",
+      "target": "Aripiprazole",
+      "weight": 26
+    },
+    {
+      "source": "Piperazines",
+      "target": "Quinolones",
+      "weight": 25
+    },
+    {
+      "source": "Piperazines",
+      "target": "Antipsychotic Agents",
+      "weight": 21
+    },
+    {
+      "source": "Piperazines",
+      "target": "blood",
+      "weight": 17
+    },
+    {
+      "source": "Piperazines",
+      "target": "pharmacokinetics",
+      "weight": 15
+    },
+    {
+      "source": "Piperazines",
+      "target": "drug therapy",
+      "weight": 14
+    },
+    {
+      "source": "Piperazines",
+      "target": "metabolism",
+      "weight": 10
+    },
+    {
+      "source": "Piperazines",
+      "target": "Schizophrenia",
+      "weight": 10
+    },
+    {
+      "source": "Piperazines",
+      "target": "therapeutic use",
+      "weight": 10
+    },
+    {
+      "source": "Piperazines",
+      "target": "methods",
+      "weight": 9
+    },
+    {
+      "source": "Piperazines",
+      "target": "Drug Monitoring",
+      "weight": 8
+    },
+    {
+      "source": "Piperazines",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 7
+    },
+    {
+      "source": "Piperazines",
+      "target": "administration & dosage",
+      "weight": 7
+    },
+    {
+      "source": "Piperazines",
+      "target": "genetics",
+      "weight": 6
+    },
+    {
+      "source": "Piperazines",
+      "target": "Reproducibility of Results",
+      "weight": 6
+    },
+    {
+      "source": "Piperazines",
+      "target": "Genotype",
+      "weight": 5
+    },
+    {
+      "source": "Piperazines",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 5
+    },
+    {
+      "source": "Piperazines",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 5
+    },
+    {
+      "source": "Piperazines",
+      "target": "Asian People",
+      "weight": 5
+    },
+    {
+      "source": "Piperazines",
+      "target": "pharmacology",
+      "weight": 5
+    },
+    {
+      "source": "Piperazines",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 5
+    },
+    {
+      "source": "Piperazines",
+      "target": "chemistry",
+      "weight": 4
+    },
+    {
+      "source": "Piperazines",
+      "target": "Sensitivity and Specificity",
+      "weight": 4
+    },
+    {
+      "source": "Piperazines",
+      "target": "adverse effects",
+      "weight": 4
+    },
+    {
+      "source": "Piperazines",
+      "target": "Drug Stability",
+      "weight": 3
+    },
+    {
+      "source": "Piperazines",
+      "target": "Drug Interactions",
+      "weight": 3
+    },
+    {
+      "source": "Piperazines",
+      "target": "Cytochrome P-450 CYP3A",
+      "weight": 3
+    },
+    {
+      "source": "Piperazines",
+      "target": "Chromatography, Liquid",
+      "weight": 3
+    },
+    {
+      "source": "Piperazines",
+      "target": "Haloperidol",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "Mental Disorders",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "Benzodiazepines",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "Olanzapine",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "analysis",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "Limit of Detection",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "Paliperidone Palmitate",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "Positron-Emission Tomography",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "drug effects",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "therapeutic drug monitoring",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "Receptors, Dopamine D2",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "Risperidone",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "Prolactin",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "East Asian People",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "Antipsychotic",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "Drug Therapy, Combination",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Antipsychotic Agents",
+      "weight": 32
+    },
+    {
+      "source": "drug therapy",
+      "target": "Aripiprazole",
+      "weight": 23
+    },
+    {
+      "source": "drug therapy",
+      "target": "blood",
+      "weight": 22
+    },
+    {
+      "source": "drug therapy",
+      "target": "therapeutic use",
+      "weight": 22
+    },
+    {
+      "source": "drug therapy",
+      "target": "pharmacokinetics",
+      "weight": 21
+    },
+    {
+      "source": "drug therapy",
+      "target": "Schizophrenia",
+      "weight": 20
+    },
+    {
+      "source": "drug therapy",
+      "target": "Quinolones",
+      "weight": 14
+    },
+    {
+      "source": "drug therapy",
+      "target": "Drug Monitoring",
+      "weight": 11
+    },
+    {
+      "source": "drug therapy",
+      "target": "administration & dosage",
+      "weight": 10
+    },
+    {
+      "source": "drug therapy",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 9
+    },
+    {
+      "source": "drug therapy",
+      "target": "metabolism",
+      "weight": 9
+    },
+    {
+      "source": "drug therapy",
+      "target": "adverse effects",
+      "weight": 8
+    },
+    {
+      "source": "drug therapy",
+      "target": "methods",
+      "weight": 7
+    },
+    {
+      "source": "drug therapy",
+      "target": "Olanzapine",
+      "weight": 6
+    },
+    {
+      "source": "drug therapy",
+      "target": "Mental Disorders",
+      "weight": 5
+    },
+    {
+      "source": "drug therapy",
+      "target": "Risperidone",
+      "weight": 5
+    },
+    {
+      "source": "drug therapy",
+      "target": "Asian People",
+      "weight": 5
+    },
+    {
+      "source": "drug therapy",
+      "target": "Drug Interactions",
+      "weight": 5
+    },
+    {
+      "source": "drug therapy",
+      "target": "Benzodiazepines",
+      "weight": 4
+    },
+    {
+      "source": "drug therapy",
+      "target": "Haloperidol",
+      "weight": 4
+    },
+    {
+      "source": "drug therapy",
+      "target": "genetics",
+      "weight": 4
+    },
+    {
+      "source": "drug therapy",
+      "target": "pharmacology",
+      "weight": 4
+    },
+    {
+      "source": "drug therapy",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 4
+    },
+    {
+      "source": "drug therapy",
+      "target": "Positron-Emission Tomography",
+      "weight": 3
+    },
+    {
+      "source": "drug therapy",
+      "target": "Drug Therapy, Combination",
+      "weight": 3
+    },
+    {
+      "source": "drug therapy",
+      "target": "drug effects",
+      "weight": 3
+    },
+    {
+      "source": "drug therapy",
+      "target": "East Asian People",
+      "weight": 3
+    },
+    {
+      "source": "drug therapy",
+      "target": "Genotype",
+      "weight": 3
+    },
+    {
+      "source": "drug therapy",
+      "target": "Cytochrome P-450 CYP3A",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "Prolactin",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "antipsychotics",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "therapeutic drug monitoring",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "Receptors, Dopamine D2",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Limit of Detection",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "chemistry",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Psychotropic Drugs",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Antipsychotic",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Antidepressive Agents",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Aripiprazole",
+      "weight": 11
+    },
+    {
+      "source": "Risperidone",
+      "target": "Antipsychotic Agents",
+      "weight": 9
+    },
+    {
+      "source": "Risperidone",
+      "target": "blood",
+      "weight": 6
+    },
+    {
+      "source": "Risperidone",
+      "target": "Olanzapine",
+      "weight": 6
+    },
+    {
+      "source": "Risperidone",
+      "target": "Drug Monitoring",
+      "weight": 5
+    },
+    {
+      "source": "Risperidone",
+      "target": "Benzodiazepines",
+      "weight": 5
+    },
+    {
+      "source": "Risperidone",
+      "target": "pharmacokinetics",
+      "weight": 5
+    },
+    {
+      "source": "Risperidone",
+      "target": "therapeutic use",
+      "weight": 5
+    },
+    {
+      "source": "Risperidone",
+      "target": "methods",
+      "weight": 4
+    },
+    {
+      "source": "Risperidone",
+      "target": "Schizophrenia",
+      "weight": 4
+    },
+    {
+      "source": "Risperidone",
+      "target": "antipsychotics",
+      "weight": 3
+    },
+    {
+      "source": "Risperidone",
+      "target": "Quetiapine Fumarate",
+      "weight": 3
+    },
+    {
+      "source": "Risperidone",
+      "target": "Clozapine",
+      "weight": 3
+    },
+    {
+      "source": "Risperidone",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "Paliperidone Palmitate",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "therapeutic drug monitoring",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "Haloperidol",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "Quinolones",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "analysis",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "chemistry",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Antidepressive Agents",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Positron-Emission Tomography",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Drug Therapy, Combination",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Prolactin",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "pharmacology",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Drug Interactions",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "metabolism",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "blood",
+      "weight": 15
+    },
+    {
+      "source": "metabolism",
+      "target": "Antipsychotic Agents",
+      "weight": 14
+    },
+    {
+      "source": "metabolism",
+      "target": "Aripiprazole",
+      "weight": 13
+    },
+    {
+      "source": "metabolism",
+      "target": "Quinolones",
+      "weight": 10
+    },
+    {
+      "source": "metabolism",
+      "target": "pharmacokinetics",
+      "weight": 9
+    },
+    {
+      "source": "metabolism",
+      "target": "therapeutic use",
+      "weight": 8
+    },
+    {
+      "source": "metabolism",
+      "target": "Schizophrenia",
+      "weight": 7
+    },
+    {
+      "source": "metabolism",
+      "target": "methods",
+      "weight": 5
+    },
+    {
+      "source": "metabolism",
+      "target": "Drug Monitoring",
+      "weight": 5
+    },
+    {
+      "source": "metabolism",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 5
+    },
+    {
+      "source": "metabolism",
+      "target": "therapeutic drug monitoring",
+      "weight": 4
+    },
+    {
+      "source": "metabolism",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 3
+    },
+    {
+      "source": "metabolism",
+      "target": "chemistry",
+      "weight": 3
+    },
+    {
+      "source": "metabolism",
+      "target": "adverse effects",
+      "weight": 3
+    },
+    {
+      "source": "metabolism",
+      "target": "Cytochrome P-450 CYP3A",
+      "weight": 3
+    },
+    {
+      "source": "metabolism",
+      "target": "Genotype",
+      "weight": 3
+    },
+    {
+      "source": "metabolism",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 3
+    },
+    {
+      "source": "metabolism",
+      "target": "Psychotropic Drugs",
+      "weight": 3
+    },
+    {
+      "source": "metabolism",
+      "target": "genetics",
+      "weight": 3
+    },
+    {
+      "source": "metabolism",
+      "target": "Asian People",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "antipsychotics",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Positron-Emission Tomography",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "pharmacology",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "administration & dosage",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Receptors, Dopamine D2",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Chromatography, Liquid",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Drug Stability",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "analysis",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Sensitivity and Specificity",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Antidepressive Agents",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Drug Interactions",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Mental Disorders",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "Aripiprazole",
+      "weight": 3
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "Quinolones",
+      "weight": 2
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "blood",
+      "weight": 2
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "pharmacokinetics",
+      "weight": 1
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "Receptors, Dopamine D2",
+      "weight": 1
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 1
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "Haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Positron-Emission Tomography",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "blood",
+      "weight": 3
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "pharmacokinetics",
+      "weight": 2
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "Aripiprazole",
+      "weight": 2
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "pharmacology",
+      "weight": 1
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "Quinolones",
+      "weight": 1
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "Haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "Prolactin",
+      "weight": 1
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "Drug Therapy, Combination",
+      "target": "Antidepressive Agents",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Antipsychotic Agents",
+      "weight": 27
+    },
+    {
+      "source": "therapeutic use",
+      "target": "pharmacokinetics",
+      "weight": 16
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Aripiprazole",
+      "weight": 16
+    },
+    {
+      "source": "therapeutic use",
+      "target": "blood",
+      "weight": 15
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Schizophrenia",
+      "weight": 13
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Drug Monitoring",
+      "weight": 11
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Quinolones",
+      "weight": 10
+    },
+    {
+      "source": "therapeutic use",
+      "target": "therapeutic drug monitoring",
+      "weight": 5
+    },
+    {
+      "source": "therapeutic use",
+      "target": "methods",
+      "weight": 5
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 5
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Olanzapine",
+      "weight": 5
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 4
+    },
+    {
+      "source": "therapeutic use",
+      "target": "adverse effects",
+      "weight": 4
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Asian People",
+      "weight": 4
+    },
+    {
+      "source": "therapeutic use",
+      "target": "administration & dosage",
+      "weight": 4
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Benzodiazepines",
+      "weight": 4
+    },
+    {
+      "source": "therapeutic use",
+      "target": "pharmacology",
+      "weight": 3
+    },
+    {
+      "source": "therapeutic use",
+      "target": "genetics",
+      "weight": 3
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Mental Disorders",
+      "weight": 3
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Clozapine",
+      "weight": 3
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Haloperidol",
+      "weight": 3
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Cytochrome P-450 CYP3A",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Genotype",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Drug Interactions",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic use",
+      "target": "drug effects",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic use",
+      "target": "East Asian People",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Receptors, Dopamine D2",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Limit of Detection",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Psychotropic Drugs",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Antipsychotic",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Prolactin",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Antidepressive Agents",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Antipsychotic Agents",
+      "weight": 9
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Drug Monitoring",
+      "weight": 6
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Aripiprazole",
+      "weight": 6
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "pharmacokinetics",
+      "weight": 5
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "blood",
+      "weight": 5
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 3
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "antipsychotics",
+      "weight": 3
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Benzodiazepines",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Olanzapine",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Chromatography, Liquid",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Psychotropic Drugs",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Antidepressive Agents",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "chemistry",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Mental Disorders",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "pharmacology",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Quinolones",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Limit of Detection",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Antipsychotic Agents",
+      "weight": 28
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Aripiprazole",
+      "weight": 23
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "blood",
+      "weight": 17
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Quinolones",
+      "weight": 15
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Drug Monitoring",
+      "weight": 11
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Schizophrenia",
+      "weight": 11
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 9
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "administration & dosage",
+      "weight": 9
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "methods",
+      "weight": 8
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "adverse effects",
+      "weight": 8
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "pharmacology",
+      "weight": 6
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Drug Interactions",
+      "weight": 6
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Mental Disorders",
+      "weight": 4
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 4
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Reproducibility of Results",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Chromatography, Liquid",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Olanzapine",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "chemistry",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "genetics",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Genotype",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "East Asian People",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Asian People",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Quetiapine Fumarate",
+      "weight": 2
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Benzodiazepines",
+      "weight": 2
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 2
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Sensitivity and Specificity",
+      "weight": 2
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Drug Stability",
+      "weight": 2
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Cytochrome P-450 CYP3A",
+      "weight": 2
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Prolactin",
+      "weight": 2
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "antipsychotics",
+      "weight": 2
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Receptors, Dopamine D2",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Psychotropic Drugs",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Limit of Detection",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Antidepressive Agents",
+      "weight": 1
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "Drug Monitoring",
+      "weight": 3
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "blood",
+      "weight": 3
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 2
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "antipsychotics",
+      "weight": 2
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "Psychotropic Drugs",
+      "weight": 1
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "Drug Stability",
+      "weight": 1
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "Aripiprazole",
+      "weight": 1
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 1
+    },
+    {
+      "source": "Antidepressive Agents",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Benzodiazepines",
+      "weight": 3
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Olanzapine",
+      "weight": 3
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Aripiprazole",
+      "weight": 3
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Paliperidone Palmitate",
+      "weight": 2
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "methods",
+      "weight": 2
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "blood",
+      "weight": 2
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "chemistry",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Quinolones",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "analysis",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Antipsychotic Agents",
+      "weight": 37
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "blood",
+      "weight": 28
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Quinolones",
+      "weight": 25
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Schizophrenia",
+      "weight": 19
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Drug Monitoring",
+      "weight": 14
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "methods",
+      "weight": 14
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "administration & dosage",
+      "weight": 9
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 8
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Olanzapine",
+      "weight": 8
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "adverse effects",
+      "weight": 8
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Benzodiazepines",
+      "weight": 7
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 7
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 7
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "genetics",
+      "weight": 6
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 6
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "pharmacology",
+      "weight": 6
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Reproducibility of Results",
+      "weight": 6
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Asian People",
+      "weight": 5
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "chemistry",
+      "weight": 5
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Haloperidol",
+      "weight": 5
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "antipsychotics",
+      "weight": 5
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Genotype",
+      "weight": 5
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Sensitivity and Specificity",
+      "weight": 4
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Chromatography, Liquid",
+      "weight": 4
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "drug effects",
+      "weight": 4
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Clozapine",
+      "weight": 4
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Paliperidone Palmitate",
+      "weight": 4
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Drug Interactions",
+      "weight": 4
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Prolactin",
+      "weight": 3
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "analysis",
+      "weight": 3
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Cytochrome P-450 CYP3A",
+      "weight": 3
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Drug Stability",
+      "weight": 3
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Mental Disorders",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Limit of Detection",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Antipsychotic",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "East Asian People",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Receptors, Dopamine D2",
+      "weight": 2
+    },
+    {
+      "source": "Cytochrome P-450 CYP3A",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 3
+    },
+    {
+      "source": "Cytochrome P-450 CYP3A",
+      "target": "Quinolones",
+      "weight": 3
+    },
+    {
+      "source": "Cytochrome P-450 CYP3A",
+      "target": "blood",
+      "weight": 3
+    },
+    {
+      "source": "Cytochrome P-450 CYP3A",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Cytochrome P-450 CYP3A",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "Cytochrome P-450 CYP3A",
+      "target": "genetics",
+      "weight": 2
+    },
+    {
+      "source": "Cytochrome P-450 CYP3A",
+      "target": "Genotype",
+      "weight": 2
+    },
+    {
+      "source": "Cytochrome P-450 CYP3A",
+      "target": "Asian People",
+      "weight": 1
+    },
+    {
+      "source": "Cytochrome P-450 CYP3A",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "Quinolones",
+      "target": "Antipsychotic Agents",
+      "weight": 20
+    },
+    {
+      "source": "Quinolones",
+      "target": "blood",
+      "weight": 16
+    },
+    {
+      "source": "Quinolones",
+      "target": "Schizophrenia",
+      "weight": 10
+    },
+    {
+      "source": "Quinolones",
+      "target": "methods",
+      "weight": 8
+    },
+    {
+      "source": "Quinolones",
+      "target": "administration & dosage",
+      "weight": 7
+    },
+    {
+      "source": "Quinolones",
+      "target": "Drug Monitoring",
+      "weight": 7
+    },
+    {
+      "source": "Quinolones",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 7
+    },
+    {
+      "source": "Quinolones",
+      "target": "Reproducibility of Results",
+      "weight": 6
+    },
+    {
+      "source": "Quinolones",
+      "target": "genetics",
+      "weight": 6
+    },
+    {
+      "source": "Quinolones",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 5
+    },
+    {
+      "source": "Quinolones",
+      "target": "Genotype",
+      "weight": 5
+    },
+    {
+      "source": "Quinolones",
+      "target": "Asian People",
+      "weight": 5
+    },
+    {
+      "source": "Quinolones",
+      "target": "pharmacology",
+      "weight": 5
+    },
+    {
+      "source": "Quinolones",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 4
+    },
+    {
+      "source": "Quinolones",
+      "target": "chemistry",
+      "weight": 4
+    },
+    {
+      "source": "Quinolones",
+      "target": "Sensitivity and Specificity",
+      "weight": 4
+    },
+    {
+      "source": "Quinolones",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 4
+    },
+    {
+      "source": "Quinolones",
+      "target": "adverse effects",
+      "weight": 4
+    },
+    {
+      "source": "Quinolones",
+      "target": "Drug Stability",
+      "weight": 3
+    },
+    {
+      "source": "Quinolones",
+      "target": "Drug Interactions",
+      "weight": 3
+    },
+    {
+      "source": "Quinolones",
+      "target": "Chromatography, Liquid",
+      "weight": 3
+    },
+    {
+      "source": "Quinolones",
+      "target": "Haloperidol",
+      "weight": 2
+    },
+    {
+      "source": "Quinolones",
+      "target": "Mental Disorders",
+      "weight": 2
+    },
+    {
+      "source": "Quinolones",
+      "target": "analysis",
+      "weight": 2
+    },
+    {
+      "source": "Quinolones",
+      "target": "drug effects",
+      "weight": 2
+    },
+    {
+      "source": "Quinolones",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Quinolones",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "Quinolones",
+      "target": "Receptors, Dopamine D2",
+      "weight": 1
+    },
+    {
+      "source": "Quinolones",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "Quinolones",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Quinolones",
+      "target": "Limit of Detection",
+      "weight": 1
+    },
+    {
+      "source": "Quinolones",
+      "target": "Prolactin",
+      "weight": 1
+    },
+    {
+      "source": "Quinolones",
+      "target": "East Asian People",
+      "weight": 1
+    },
+    {
+      "source": "Quinolones",
+      "target": "Antipsychotic",
+      "weight": 1
+    },
+    {
+      "source": "Drug Stability",
+      "target": "blood",
+      "weight": 4
+    },
+    {
+      "source": "Drug Stability",
+      "target": "Reproducibility of Results",
+      "weight": 4
+    },
+    {
+      "source": "Drug Stability",
+      "target": "methods",
+      "weight": 4
+    },
+    {
+      "source": "Drug Stability",
+      "target": "chemistry",
+      "weight": 3
+    },
+    {
+      "source": "Drug Stability",
+      "target": "Sensitivity and Specificity",
+      "weight": 3
+    },
+    {
+      "source": "Drug Stability",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 3
+    },
+    {
+      "source": "Drug Stability",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 3
+    },
+    {
+      "source": "Drug Stability",
+      "target": "analysis",
+      "weight": 1
+    },
+    {
+      "source": "Drug Stability",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "Drug Stability",
+      "target": "Psychotropic Drugs",
+      "weight": 1
+    },
+    {
+      "source": "Drug Stability",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "East Asian People",
+      "target": "Antipsychotic Agents",
+      "weight": 4
+    },
+    {
+      "source": "East Asian People",
+      "target": "blood",
+      "weight": 3
+    },
+    {
+      "source": "East Asian People",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "East Asian People",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 2
+    },
+    {
+      "source": "East Asian People",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "East Asian People",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "East Asian People",
+      "target": "Prolactin",
+      "weight": 1
+    },
+    {
+      "source": "blood",
+      "target": "Antipsychotic Agents",
+      "weight": 31
+    },
+    {
+      "source": "blood",
+      "target": "methods",
+      "weight": 14
+    },
+    {
+      "source": "blood",
+      "target": "Drug Monitoring",
+      "weight": 14
+    },
+    {
+      "source": "blood",
+      "target": "Schizophrenia",
+      "weight": 12
+    },
+    {
+      "source": "blood",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 8
+    },
+    {
+      "source": "blood",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 7
+    },
+    {
+      "source": "blood",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 7
+    },
+    {
+      "source": "blood",
+      "target": "chemistry",
+      "weight": 7
+    },
+    {
+      "source": "blood",
+      "target": "administration & dosage",
+      "weight": 6
+    },
+    {
+      "source": "blood",
+      "target": "Reproducibility of Results",
+      "weight": 6
+    },
+    {
+      "source": "blood",
+      "target": "adverse effects",
+      "weight": 6
+    },
+    {
+      "source": "blood",
+      "target": "Olanzapine",
+      "weight": 5
+    },
+    {
+      "source": "blood",
+      "target": "Chromatography, Liquid",
+      "weight": 4
+    },
+    {
+      "source": "blood",
+      "target": "Benzodiazepines",
+      "weight": 4
+    },
+    {
+      "source": "blood",
+      "target": "Psychotropic Drugs",
+      "weight": 4
+    },
+    {
+      "source": "blood",
+      "target": "Haloperidol",
+      "weight": 4
+    },
+    {
+      "source": "blood",
+      "target": "drug effects",
+      "weight": 4
+    },
+    {
+      "source": "blood",
+      "target": "Sensitivity and Specificity",
+      "weight": 4
+    },
+    {
+      "source": "blood",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 4
+    },
+    {
+      "source": "blood",
+      "target": "genetics",
+      "weight": 4
+    },
+    {
+      "source": "blood",
+      "target": "pharmacology",
+      "weight": 4
+    },
+    {
+      "source": "blood",
+      "target": "Receptors, Dopamine D2",
+      "weight": 3
+    },
+    {
+      "source": "blood",
+      "target": "antipsychotics",
+      "weight": 3
+    },
+    {
+      "source": "blood",
+      "target": "Prolactin",
+      "weight": 3
+    },
+    {
+      "source": "blood",
+      "target": "Drug Interactions",
+      "weight": 3
+    },
+    {
+      "source": "blood",
+      "target": "Genotype",
+      "weight": 3
+    },
+    {
+      "source": "blood",
+      "target": "Asian People",
+      "weight": 3
+    },
+    {
+      "source": "blood",
+      "target": "Mental Disorders",
+      "weight": 3
+    },
+    {
+      "source": "blood",
+      "target": "analysis",
+      "weight": 2
+    },
+    {
+      "source": "blood",
+      "target": "Paliperidone Palmitate",
+      "weight": 2
+    },
+    {
+      "source": "blood",
+      "target": "Limit of Detection",
+      "weight": 2
+    },
+    {
+      "source": "blood",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "blood",
+      "target": "Antipsychotic",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "methods",
+      "weight": 8
+    },
+    {
+      "source": "chemistry",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 6
+    },
+    {
+      "source": "chemistry",
+      "target": "Antipsychotic Agents",
+      "weight": 5
+    },
+    {
+      "source": "chemistry",
+      "target": "Reproducibility of Results",
+      "weight": 5
+    },
+    {
+      "source": "chemistry",
+      "target": "Drug Monitoring",
+      "weight": 4
+    },
+    {
+      "source": "chemistry",
+      "target": "Chromatography, Liquid",
+      "weight": 4
+    },
+    {
+      "source": "chemistry",
+      "target": "Sensitivity and Specificity",
+      "weight": 3
+    },
+    {
+      "source": "chemistry",
+      "target": "analysis",
+      "weight": 3
+    },
+    {
+      "source": "chemistry",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 3
+    },
+    {
+      "source": "chemistry",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Mental Disorders",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Receptors, Dopamine D2",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Psychotropic Drugs",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Limit of Detection",
+      "weight": 1
+    },
+    {
+      "source": "Clozapine",
+      "target": "Antipsychotic Agents",
+      "weight": 4
+    },
+    {
+      "source": "Clozapine",
+      "target": "Schizophrenia",
+      "weight": 4
+    },
+    {
+      "source": "Clozapine",
+      "target": "Benzodiazepines",
+      "weight": 3
+    },
+    {
+      "source": "Clozapine",
+      "target": "Olanzapine",
+      "weight": 3
+    },
+    {
+      "source": "Clozapine",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 2
+    },
+    {
+      "source": "Clozapine",
+      "target": "Paliperidone Palmitate",
+      "weight": 2
+    },
+    {
+      "source": "Clozapine",
+      "target": "methods",
+      "weight": 2
+    },
+    {
+      "source": "Clozapine",
+      "target": "Haloperidol",
+      "weight": 2
+    },
+    {
+      "source": "Clozapine",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Clozapine",
+      "target": "analysis",
+      "weight": 1
+    },
+    {
+      "source": "Clozapine",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "Clozapine",
+      "target": "Antipsychotic",
+      "weight": 1
+    },
+    {
+      "source": "Clozapine",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "Clozapine",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Clozapine",
+      "target": "Prolactin",
+      "weight": 1
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 3
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "Drug Monitoring",
+      "weight": 3
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "methods",
+      "weight": 3
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "Mental Disorders",
+      "weight": 1
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 1
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "Psychotropic Drugs",
+      "weight": 1
+    },
+    {
+      "source": "Limit of Detection",
+      "target": "analysis",
+      "weight": 1
+    },
+    {
+      "source": "Sensitivity and Specificity",
+      "target": "Reproducibility of Results",
+      "weight": 4
+    },
+    {
+      "source": "Sensitivity and Specificity",
+      "target": "methods",
+      "weight": 4
+    },
+    {
+      "source": "Sensitivity and Specificity",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 3
+    },
+    {
+      "source": "Sensitivity and Specificity",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 3
+    },
+    {
+      "source": "Sensitivity and Specificity",
+      "target": "analysis",
+      "weight": 1
+    },
+    {
+      "source": "Sensitivity and Specificity",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Sensitivity and Specificity",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "Genotype",
+      "target": "genetics",
+      "weight": 5
+    },
+    {
+      "source": "Genotype",
+      "target": "Antipsychotic Agents",
+      "weight": 5
+    },
+    {
+      "source": "Genotype",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 5
+    },
+    {
+      "source": "Genotype",
+      "target": "Asian People",
+      "weight": 2
+    },
+    {
+      "source": "Genotype",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "Genotype",
+      "target": "Drug Monitoring",
+      "weight": 2
+    },
+    {
+      "source": "Genotype",
+      "target": "Mental Disorders",
+      "weight": 1
+    },
+    {
+      "source": "Genotype",
+      "target": "Drug Interactions",
+      "weight": 1
+    },
+    {
+      "source": "Genotype",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "Antipsychotic Agents",
+      "weight": 11
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "administration & dosage",
+      "weight": 7
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "Drug Monitoring",
+      "weight": 6
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "Schizophrenia",
+      "weight": 5
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "methods",
+      "weight": 3
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "pharmacology",
+      "weight": 3
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "adverse effects",
+      "weight": 3
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "Drug Interactions",
+      "weight": 3
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "Asian People",
+      "weight": 2
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "drug effects",
+      "weight": 2
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "Mental Disorders",
+      "weight": 1
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "Receptors, Dopamine D2",
+      "weight": 1
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "Haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Receptors, Dopamine D2",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Receptors, Dopamine D2",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "Receptors, Dopamine D2",
+      "target": "Haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Receptors, Dopamine D2",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "Receptors, Dopamine D2",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Receptors, Dopamine D2",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "Receptors, Dopamine D2",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Drug Monitoring",
+      "weight": 23
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Schizophrenia",
+      "weight": 20
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "methods",
+      "weight": 15
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "adverse effects",
+      "weight": 11
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "administration & dosage",
+      "weight": 10
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Olanzapine",
+      "weight": 9
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Benzodiazepines",
+      "weight": 8
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 7
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 7
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "genetics",
+      "weight": 6
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "antipsychotics",
+      "weight": 5
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Asian People",
+      "weight": 5
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Mental Disorders",
+      "weight": 5
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "pharmacology",
+      "weight": 5
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Haloperidol",
+      "weight": 5
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Chromatography, Liquid",
+      "weight": 5
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Drug Interactions",
+      "weight": 4
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "drug effects",
+      "weight": 4
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Paliperidone Palmitate",
+      "weight": 4
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 3
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Prolactin",
+      "weight": 3
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Antipsychotic",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "analysis",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Psychotropic Drugs",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotic",
+      "target": "Schizophrenia",
+      "weight": 3
+    },
+    {
+      "source": "Antipsychotic",
+      "target": "methods",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotic",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotic",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotic",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotic",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotic",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "methods",
+      "target": "Drug Monitoring",
+      "weight": 14
+    },
+    {
+      "source": "methods",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 8
+    },
+    {
+      "source": "methods",
+      "target": "Reproducibility of Results",
+      "weight": 8
+    },
+    {
+      "source": "methods",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 7
+    },
+    {
+      "source": "methods",
+      "target": "Schizophrenia",
+      "weight": 5
+    },
+    {
+      "source": "methods",
+      "target": "Olanzapine",
+      "weight": 4
+    },
+    {
+      "source": "methods",
+      "target": "Chromatography, Liquid",
+      "weight": 4
+    },
+    {
+      "source": "methods",
+      "target": "analysis",
+      "weight": 4
+    },
+    {
+      "source": "methods",
+      "target": "Paliperidone Palmitate",
+      "weight": 4
+    },
+    {
+      "source": "methods",
+      "target": "Benzodiazepines",
+      "weight": 4
+    },
+    {
+      "source": "methods",
+      "target": "adverse effects",
+      "weight": 3
+    },
+    {
+      "source": "methods",
+      "target": "administration & dosage",
+      "weight": 3
+    },
+    {
+      "source": "methods",
+      "target": "Psychotropic Drugs",
+      "weight": 3
+    },
+    {
+      "source": "methods",
+      "target": "Mental Disorders",
+      "weight": 2
+    },
+    {
+      "source": "methods",
+      "target": "Asian People",
+      "weight": 1
+    },
+    {
+      "source": "methods",
+      "target": "antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotics",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 2
+    },
+    {
+      "source": "antipsychotics",
+      "target": "Drug Monitoring",
+      "weight": 2
+    },
+    {
+      "source": "antipsychotics",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "antipsychotics",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotics",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotics",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotics",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotics",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotics",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Psychotropic Drugs",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "Psychotropic Drugs",
+      "target": "Drug Monitoring",
+      "weight": 2
+    },
+    {
+      "source": "Psychotropic Drugs",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 2
+    },
+    {
+      "source": "Psychotropic Drugs",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Psychotropic Drugs",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 1
+    },
+    {
+      "source": "Psychotropic Drugs",
+      "target": "administration & dosage",
+      "weight": 1
+    },
+    {
+      "source": "Psychotropic Drugs",
+      "target": "Mental Disorders",
+      "weight": 1
+    },
+    {
+      "source": "Psychotropic Drugs",
+      "target": "analysis",
+      "weight": 1
+    },
+    {
+      "source": "adverse effects",
+      "target": "Schizophrenia",
+      "weight": 6
+    },
+    {
+      "source": "adverse effects",
+      "target": "administration & dosage",
+      "weight": 4
+    },
+    {
+      "source": "adverse effects",
+      "target": "Drug Monitoring",
+      "weight": 3
+    },
+    {
+      "source": "adverse effects",
+      "target": "pharmacology",
+      "weight": 2
+    },
+    {
+      "source": "adverse effects",
+      "target": "Drug Interactions",
+      "weight": 2
+    },
+    {
+      "source": "adverse effects",
+      "target": "Benzodiazepines",
+      "weight": 2
+    },
+    {
+      "source": "adverse effects",
+      "target": "Olanzapine",
+      "weight": 2
+    },
+    {
+      "source": "adverse effects",
+      "target": "Asian People",
+      "weight": 1
+    },
+    {
+      "source": "adverse effects",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "adverse effects",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 1
+    },
+    {
+      "source": "adverse effects",
+      "target": "Haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "adverse effects",
+      "target": "Prolactin",
+      "weight": 1
+    },
+    {
+      "source": "adverse effects",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "adverse effects",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Asian People",
+      "target": "Schizophrenia",
+      "weight": 5
+    },
+    {
+      "source": "Asian People",
+      "target": "genetics",
+      "weight": 3
+    },
+    {
+      "source": "Asian People",
+      "target": "administration & dosage",
+      "weight": 2
+    },
+    {
+      "source": "Asian People",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 2
+    },
+    {
+      "source": "Asian People",
+      "target": "Drug Monitoring",
+      "weight": 2
+    },
+    {
+      "source": "Asian People",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Asian People",
+      "target": "Drug Interactions",
+      "weight": 1
+    },
+    {
+      "source": "Asian People",
+      "target": "pharmacology",
+      "weight": 1
+    },
+    {
+      "source": "Asian People",
+      "target": "Haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Mental Disorders",
+      "target": "Drug Monitoring",
+      "weight": 4
+    },
+    {
+      "source": "Mental Disorders",
+      "target": "Drug Interactions",
+      "weight": 2
+    },
+    {
+      "source": "Mental Disorders",
+      "target": "administration & dosage",
+      "weight": 2
+    },
+    {
+      "source": "Mental Disorders",
+      "target": "genetics",
+      "weight": 1
+    },
+    {
+      "source": "Mental Disorders",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 1
+    },
+    {
+      "source": "Mental Disorders",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "Mental Disorders",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 6
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 4
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Drug Monitoring",
+      "weight": 4
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "analysis",
+      "weight": 3
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Chromatography, Liquid",
+      "weight": 2
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "analysis",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 2
+    },
+    {
+      "source": "analysis",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 2
+    },
+    {
+      "source": "analysis",
+      "target": "Drug Monitoring",
+      "weight": 2
+    },
+    {
+      "source": "analysis",
+      "target": "Benzodiazepines",
+      "weight": 2
+    },
+    {
+      "source": "analysis",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "analysis",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "analysis",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Chromatography, High Pressure Liquid",
+      "target": "Drug Monitoring",
+      "weight": 6
+    },
+    {
+      "source": "Chromatography, High Pressure Liquid",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 4
+    },
+    {
+      "source": "Chromatography, High Pressure Liquid",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Chromatography, High Pressure Liquid",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "Chromatography, High Pressure Liquid",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Drug Monitoring",
+      "weight": 5
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Schizophrenia",
+      "weight": 5
+    },
+    {
+      "source": "administration & dosage",
+      "target": "pharmacology",
+      "weight": 3
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Drug Interactions",
+      "weight": 3
+    },
+    {
+      "source": "administration & dosage",
+      "target": "genetics",
+      "weight": 1
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 1
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "administration & dosage",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Olanzapine",
+      "weight": 6
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Drug Monitoring",
+      "weight": 6
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Haloperidol",
+      "weight": 4
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Benzodiazepines",
+      "weight": 4
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "genetics",
+      "weight": 3
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 3
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Paliperidone Palmitate",
+      "weight": 2
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Prolactin",
+      "weight": 2
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Drug Interactions",
+      "weight": 2
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "drug effects",
+      "weight": 2
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "pharmacology",
+      "weight": 2
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Olanzapine",
+      "weight": 4
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 4
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Benzodiazepines",
+      "weight": 4
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Drug Interactions",
+      "weight": 3
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "genetics",
+      "weight": 2
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 2
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Chromatography, Liquid",
+      "weight": 2
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "pharmacology",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "genetics",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 5
+    },
+    {
+      "source": "genetics",
+      "target": "Drug Interactions",
+      "weight": 1
+    },
+    {
+      "source": "genetics",
+      "target": "Haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Paliperidone Palmitate",
+      "target": "Benzodiazepines",
+      "weight": 3
+    },
+    {
+      "source": "Paliperidone Palmitate",
+      "target": "Olanzapine",
+      "weight": 3
+    },
+    {
+      "source": "Paliperidone Palmitate",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 3
+    },
+    {
+      "source": "Paliperidone Palmitate",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Olanzapine",
+      "weight": 7
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 2
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Haloperidol",
+      "weight": 2
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Prolactin",
+      "weight": 1
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "pharmacology",
+      "weight": 4
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "Cytochrome P-450 CYP2D6",
+      "weight": 1
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Cytochrome P-450 CYP2D6",
+      "target": "pharmacology",
+      "weight": 1
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Haloperidol",
+      "weight": 3
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "drug effects",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Prolactin",
+      "weight": 1
+    },
+    {
+      "source": "pharmacology",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "pharmacology",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "pharmacology",
+      "target": "Haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Chromatography, Liquid",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 6
+    },
+    {
+      "source": "Haloperidol",
+      "target": "drug effects",
+      "weight": 3
+    },
+    {
+      "source": "Haloperidol",
+      "target": "Prolactin",
+      "weight": 1
+    },
+    {
+      "source": "drug effects",
+      "target": "Prolactin",
+      "weight": 1
+    }
+  ]
+}

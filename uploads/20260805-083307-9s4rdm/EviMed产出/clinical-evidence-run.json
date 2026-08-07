@@ -1,0 +1,56 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "基于上传的五表 TDM 回顾性数据集（20260803TDM.xlsx：病案首页/医嘱记录/检验/诊断记录/体征），在仅限回顾性、不新增任何数据采集（无基因检测、无量表评分、无采血/给药时刻补充、不索取额外字段）的约束下，结合现有公开发表文献、指南证据与公共数据库，可开展哪些科学性研究？",
+  "title": "基于五表 TDM 回顾性数据集（20260803TDM.xlsx）可开展的科学研究：证据约束下的可行性分析与研究方向",
+  "startedAt": "2026-08-05T06:26:00Z",
+  "completedAt": "2026-08-05T06:40:01Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate",
+    "evimed_research_topic_selection",
+    "evimed_drug_term_normalize",
+    "evimed_official_page_fetch (not used; allowlist did not cover target sources)"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC8613074/fulltext.md",
+    ".evimed-sources/PMC12996889/fulltext.md",
+    ".evimed-sources/PMC9584998/fulltext.md",
+    ".evimed-sources/PMC3948577/fulltext.md",
+    ".evimed-sources/PMC8408068/fulltext.md",
+    ".evimed-sources/PMC11179308/fulltext.md",
+    ".evimed-sources/PMC9997772/fulltext.md",
+    ".evimed-sources/PMC11217561/fulltext.md"
+  ],
+  "userProvidedData": [
+    "/workspace/20260803TDM.xlsx"
+  ],
+  "failedSources": [
+    "PMID:28910830 (AGNP 2017 consensus; no open-access full text)",
+    "DOI:10.1055/s-0043-116492 (AGNP 2017 consensus; no open-access full text)",
+    "PMCID:PMC9891304 (Europe PMC upstream unavailable after one retry)",
+    "PMCID:PMC2675764 (Europe PMC upstream unavailable after one retry)",
+    "PMCID:PMC4011352 (Europe PMC upstream unavailable after one retry)",
+    "clinpgx-pharmgkb query 'aripiprazole CYP2D6' (public source HTTP 404)",
+    "managed job topic-20260805062628-97fa3cb1a718 (research topic selection pipeline failed: 仅检索到1篇相关文献，证据基础较薄弱; runner error)"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true
+  },
+  "stats": {
+    "totalSearches": 17,
+    "recordsIdentified": 266,
+    "recordsAfterDeduplication": 135,
+    "sourcesIncluded": 9,
+    "distinctPreservedSources": 9
+  },
+  "status": "succeeded"
+}

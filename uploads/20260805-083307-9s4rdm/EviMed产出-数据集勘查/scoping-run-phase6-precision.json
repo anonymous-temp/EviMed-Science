@@ -1,0 +1,88 @@
+{
+  "fieldComparatorsN": {
+    "Ferchichi2026_clozapine_n_samples": 755,
+    "Hendset2007_n": 62,
+    "Jukic2019_aripiprazole_n": 1334,
+    "Molden2006_ariC/D_n_samples": 155,
+    "thisDataset_n_patients": 5,
+    "thisDataset_n_samples": 6
+  },
+  "q1_cd_all": {
+    "foldSpread": 2.95,
+    "logMean": 2.66,
+    "logMeanSE": 0.569,
+    "logSD": 0.458,
+    "max": 23.6,
+    "median": 15.85,
+    "medianBootstrap95CI": [
+      7.99,
+      23.6
+    ],
+    "medianCIWidth": 15.61,
+    "min": 7.99,
+    "n": 5
+  },
+  "q1_cd_steadyState": {
+    "foldSpread": 2.36,
+    "logMean": 2.806,
+    "logMeanSE": 0.594,
+    "logSD": 0.373,
+    "max": 23.6,
+    "median": 17.93,
+    "medianBootstrap95CI": [
+      10.0,
+      23.6
+    ],
+    "medianCIWidth": 13.6,
+    "min": 10.0,
+    "n": 4
+  },
+  "q1_outOfRangeProportion": {
+    "clopperPearson95CI": [
+      0.223,
+      0.957
+    ],
+    "expectedWidth": 0.734,
+    "k": 4,
+    "n": 6,
+    "p": 0.6666666666666666
+  },
+  "q2_singleRatioPrecision": {
+    "assaySE": 0.041,
+    "assumedAnalyticalCV": 0.15,
+    "exampleRatio": 0.27,
+    "ratioSpread": 2.83,
+    "ratios": [
+      0.174,
+      0.492,
+      0.258,
+      0.223,
+      0.343,
+      0.266
+    ]
+  },
+  "q3_reclassification": {
+    "clopperPearson95CI": [
+      0.043,
+      0.777
+    ],
+    "expectedWidth": 0.734,
+    "n": 6,
+    "p": 0.3333333333333333,
+    "reclassified": 2
+  },
+  "twoGroupMDE": {
+    "nPerGroup_25": {
+      "note": "Cohen's d detectable at alpha=0.05, power=0.80, equal groups. n=3/group is the best this dataset could split into; n=25 shown as the field's typical scale.",
+      "standardizedMeanDifference_d": 0.81
+    },
+    "nPerGroup_3": {
+      "note": "Cohen's d detectable at alpha=0.05, power=0.80, equal groups. n=3/group is the best this dataset could split into; n=25 shown as the field's typical scale.",
+      "standardizedMeanDifference_d": 3.04
+    },
+    "nPerGroup_5": {
+      "note": "Cohen's d detectable at alpha=0.05, power=0.80, equal groups. n=3/group is the best this dataset could split into; n=25 shown as the field's typical scale.",
+      "standardizedMeanDifference_d": 2.02
+    }
+  }
+}

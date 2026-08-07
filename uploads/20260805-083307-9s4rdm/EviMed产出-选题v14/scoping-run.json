@@ -1,0 +1,236 @@
+{
+  "schemaVersion": 1,
+  "runType": "dataset-research-scoping",
+  "receivedFiles": [
+    "20260803TDM.xlsx"
+  ],
+  "phases": {
+    "phase0": "done",
+    "phase1": "done",
+    "phase2": "done",
+    "phase3": "done",
+    "phase4": "done",
+    "phase4b": "done",
+    "phase5": "done",
+    "phase6": "done"
+  },
+  "searchRecord": [
+    {
+      "channel": "pubmed",
+      "query": "aripiprazole therapeutic drug monitoring dose-corrected concentration CYP2D6",
+      "hits": 1,
+      "date": "2026-08-07",
+      "note": "PMID 33560096 MR/表型"
+    },
+    {
+      "channel": "europe-pmc",
+      "query": "aripiprazole dehydroaripiprazole ratio CYP2D6 phenotype concentration",
+      "hits": 30,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "openalex",
+      "query": "aripiprazole model-informed precision dosing therapeutic drug monitoring",
+      "hits": 30,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "pubmed",
+      "query": "antipsychotic therapeutic drug monitoring consensus guideline AGNP",
+      "hits": 5,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "pubmed",
+      "query": "antipsychotic weight gain",
+      "hits": 20,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "pubmed",
+      "query": "herb drug interaction antipsychotic CYP2D6",
+      "hits": 3,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "europe-pmc",
+      "query": "association rule mining prescription drug combination electronic medical record",
+      "hits": 30,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "crossref",
+      "query": "therapeutic drug monitoring antipsychotic Chinese hospital real-world dose-corrected",
+      "hits": 30,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "pubmed",
+      "query": "antipsychotic weight gain trajectory inpatient longitudinal body weight monitoring adverse",
+      "hits": 0,
+      "date": "2026-08-07",
+      "note": "query too specific, simplified variant returned 20"
+    },
+    {
+      "channel": "pubmed",
+      "query": "Chinese herbal medicine antipsychotic co-prescription herb-drug interaction inpatient",
+      "hits": 0,
+      "date": "2026-08-07",
+      "note": "simplified variant returned 3"
+    },
+    {
+      "channel": "europe-pmc",
+      "query": "aripiprazole concentration-to-dose Chinese patients therapeutic drug monitoring variability",
+      "hits": 25,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "pubmed",
+      "query": "Chinese patients aripiprazole plasma concentration dose steady state",
+      "hits": 3,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "guideline_search",
+      "query": "治疗药物监测 抗精神病药 共识",
+      "hits": 20,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "clinpgx-pharmgkb",
+      "query": "aripiprazole CYP2D6",
+      "hits": 0,
+      "date": "2026-08-07",
+      "note": "HTTP 404 from public source; recorded as gap"
+    },
+    {
+      "channel": "dailymed",
+      "query": "aripiprazole",
+      "hits": 15,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "europe-pmc",
+      "query": "SRC:PPR AND (aripiprazole OR antipsychotic) AND (therapeutic drug monitoring OR concentration)",
+      "hits": 20,
+      "date": "2026-08-07",
+      "note": "preprints incl PPR1199621 solanidine phenotype"
+    },
+    {
+      "channel": "semantic-scholar",
+      "query": "dose-related reference range dose-corrected concentration antipsychotic interindividual variability",
+      "hits": 0,
+      "date": "2026-08-07",
+      "note": "HTTP 503, one retry not performed per boundary"
+    },
+    {
+      "channel": "rxnorm",
+      "query": "aripiprazole",
+      "hits": 15,
+      "date": "2026-08-07"
+    },
+    {
+      "channel": "clinical-trial-search",
+      "query": "antipsychotic therapeutic drug monitoring dose individualization",
+      "hits": 0,
+      "date": "2026-08-07",
+      "note": "OptIMA registered via ISRCTN found in crossref"
+    },
+    {
+      "channel": "literature_search",
+      "query": "aripiprazole population pharmacokinetics Chinese concentration dose ratio",
+      "hits": 30,
+      "date": "2026-08-07",
+      "note": "title-level, low relevance, used for candidates only"
+    },
+    {
+      "channel": "web_search",
+      "query": "中药 西药 联合用药 处方 数据挖掘 住院 抗精神病药 血药浓度 治疗药物监测",
+      "hits": 15,
+      "date": "2026-08-07",
+      "note": "unreviewed pages, direction only"
+    },
+    {
+      "channel": "bibliometric_analysis",
+      "query": "aripiprazole therapeutic drug monitoring dose-corrected concentration",
+      "hits": 3,
+      "date": "2026-08-07",
+      "note": "exact-phrase query; 3 works 2020-2021; term still niche"
+    },
+    {
+      "channel": "research_topic_selection",
+      "query": "基于真实世界住院数据的抗精神病药TDM...",
+      "hits": 0,
+      "date": "2026-08-07",
+      "note": "managed job FAILED: 未检索到相关文献; recorded as infrastructure gap, not novelty"
+    },
+    {
+      "channel": "open_access_full_text",
+      "identifiers": [
+        "38635089",
+        "38469209",
+        "36532742",
+        "39310932",
+        "10.3389/fphar.2022.975855"
+      ],
+      "hits": 5,
+      "date": "2026-08-07",
+      "note": "5 full texts read; 33560096 & 10.1097/ftd.0000000000000962 & 28517955 not OA"
+    }
+  ],
+  "dedup": [],
+  "terminalJobStates": {
+    "bibliometric-20260807060601-060b2b9f1635": {
+      "status": "succeeded",
+      "note": "exact-phrase PubMed bibliometric; n=3 works, 2020-2021, China 1"
+    },
+    "topic-20260807060601-0af22ff5e73c": {
+      "status": "failed",
+      "error": "托管选题作业未检索到相关文献",
+      "note": "managed job search returned nothing; not treated as evidence of empty field"
+    }
+  },
+  "dataFingerprint": {
+    "sha256": "5b52d6d8ee644e798e1017b78923004648c6936f7157d401529c163205a8f585",
+    "tables": {
+      "病案首页": "5x38",
+      "医嘱记录": "915x22",
+      "检验": "22x12",
+      "诊断记录": "56x11",
+      "体征": "537x10"
+    }
+  },
+  "evidenceFloors": {
+    "distinctWorks": 56,
+    "channels": [
+      "pubmed",
+      "europe-pmc",
+      "openalex",
+      "crossref",
+      "guideline_search",
+      "dailymed",
+      "rxnorm",
+      "web_search",
+      "bibliometric_analysis",
+      "literature_search",
+      "clinical-trial (ISRCTN via crossref)"
+    ],
+    "fullTextsRead": 5,
+    "fullTextPMCIDs": [
+      "PMC11098931",
+      "PMC10925492",
+      "PMC9755210",
+      "PMC11528948",
+      "PMC9552071"
+    ]
+  },
+  "priorDataContact": {
+    "filesReceived": [
+      "20260803TDM.xlsx"
+    ],
+    "partsInspected": [
+      "五张表全部行（病案首页5、医嘱915、检验22、诊断56、体征537）；每张表表头与首行在剖析前已人工查看；未逐格人工检查全部单元格"
+    ],
+    "outcomeDistributionSeen": "仅检验表首行一个浓度值 354 ng/mL（参考 100.0-350.0）；其余浓度/代谢比/C/D/体重分布均在本轮剖析中首次计算"
+  }
+}

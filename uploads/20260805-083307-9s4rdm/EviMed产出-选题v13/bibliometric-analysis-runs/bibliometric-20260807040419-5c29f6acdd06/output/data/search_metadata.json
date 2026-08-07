@@ -1,0 +1,28 @@
+{
+  "query": "therapeutic drug monitoring of antipsychotics (aripiprazole, clozapine, olanzapine, paliperidone)",
+  "date_from": "2000",
+  "date_to": "2026",
+  "max_records": 500,
+  "total_found": 38,
+  "total_fetched": 38,
+  "search_strategy": {
+    "formal_query": "(\"therapeutic drug monitoring of antipsychotics (aripiprazole clozapine olanzapine paliperidone)\"[Title/Abstract]) AND (\"2000/01/01\"[Date - Publication] : \"2026/08/07\"[Date - Publication])",
+    "concepts": [
+      {
+        "label": "therapeutic drug monitoring of antipsychotics (aripiprazole clozapine olanzapine paliperidone)",
+        "free_terms": [
+          "therapeutic drug monitoring of antipsychotics (aripiprazole clozapine olanzapine paliperidone)"
+        ],
+        "mesh_descriptor": null,
+        "mesh_ui": null,
+        "entry_terms_used": [],
+        "mesh_lookup_failed": false
+      }
+    ],
+    "strategy_text": "**Concept 1: therapeutic drug monitoring of antipsychotics (aripiprazole clozapine olanzapine paliperidone)**\n- MeSH descriptor: no matching descriptor found (free-text search used)\n- Free-text terms: \"therapeutic drug monitoring of antipsychotics (aripiprazole clozapine olanzapine paliperidone)\"\n\n**Boolean combination:** Concept blocks combined with AND\n**Date filter:** 2000 to 2026\n\n**Full search string:**\n\n`(\"therapeutic drug monitoring of antipsychotics (aripiprazole clozapine olanzapine paliperidone)\"[Title/Abstract]) AND (\"2000/01/01\"[Date - Publication] : \"2026/08/07\"[Date - Publication])`",
+    "user_query": "therapeutic drug monitoring of antipsychotics (aripiprazole, clozapine, olanzapine, paliperidone)",
+    "fallback_query": "therapeutic drug monitoring of antipsychotics (aripiprazole, clozapine, olanzapine, paliperidone)",
+    "fallback_reason": "formal_query_zero_results"
+  },
+  "after_dedup": 38
+}

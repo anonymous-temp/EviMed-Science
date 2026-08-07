@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "kind": "bibliometric-analysis",
+  "jobId": "bibliometric-20260807060601-060b2b9f1635",
+  "status": "succeeded",
+  "request": {
+    "topic": "aripiprazole therapeutic drug monitoring dose-corrected concentration",
+    "dateFrom": "2000",
+    "dateTo": "2026",
+    "maxRecords": 200,
+    "outputLanguage": "zh"
+  },
+  "workspace": "/data/users/scoping-v12/projects/scoping-v14-0807-060144/workspace",
+  "outputRoot": "/data/users/scoping-v12/projects/scoping-v14-0807-060144/workspace/bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output",
+  "sourceEvidence": {
+    "algorithm": "sha256",
+    "digest": "4109f9407b360e1d5dfed6adec8047c1d87795fead8ba5c1aecc14c26c707646"
+  },
+  "createdAt": "2026-08-07T06:06:01.010704Z",
+  "updatedAt": "2026-08-07T06:09:16.976135Z",
+  "artifacts": [
+    {
+      "kind": "csv",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/data/cleaned_records.csv"
+    },
+    {
+      "kind": "csv",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/data/keyword_cooccurrence.csv"
+    },
+    {
+      "kind": "json",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/data/keyword_network.json"
+    },
+    {
+      "kind": "json",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/data/raw_records.json"
+    },
+    {
+      "kind": "json",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/data/search_metadata.json"
+    },
+    {
+      "kind": "png",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/figures/annual_trend.png"
+    },
+    {
+      "kind": "png",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/figures/citation_overview.png"
+    },
+    {
+      "kind": "png",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/figures/keyword_network.png"
+    },
+    {
+      "kind": "png",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/figures/keyword_wordcloud.png"
+    },
+    {
+      "kind": "png",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/figures/timeline_clusters.png"
+    },
+    {
+      "kind": "png",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/figures/top_authors.png"
+    },
+    {
+      "kind": "png",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/figures/top_countries.png"
+    },
+    {
+      "kind": "png",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/figures/top_institutions.png"
+    },
+    {
+      "kind": "png",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/figures/top_journals.png"
+    },
+    {
+      "kind": "png",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/figures/top_keywords.png"
+    },
+    {
+      "kind": "md",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/report.md"
+    },
+    {
+      "kind": "json",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/request.json"
+    },
+    {
+      "kind": "json",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/result.json"
+    },
+    {
+      "kind": "csv",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/tables/cluster_summary.csv"
+    },
+    {
+      "kind": "csv",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/tables/pub_type_distribution.csv"
+    },
+    {
+      "kind": "csv",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/tables/top_authors.csv"
+    },
+    {
+      "kind": "csv",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/tables/top_countries.csv"
+    },
+    {
+      "kind": "csv",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/tables/top_institutions.csv"
+    },
+    {
+      "kind": "csv",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/tables/top_journals.csv"
+    },
+    {
+      "kind": "csv",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/tables/top_keywords.csv"
+    },
+    {
+      "kind": "csv",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/tables/year_trend.csv"
+    },
+    {
+      "kind": "txt",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/vosviewer/keyword_map.txt"
+    },
+    {
+      "kind": "txt",
+      "path": "bibliometric-analysis-runs/bibliometric-20260807060601-060b2b9f1635/output/vosviewer/keyword_network.txt"
+    }
+  ],
+  "workerPid": 254045,
+  "startedAt": "2026-08-07T06:06:01.960429Z",
+  "finishedAt": "2026-08-07T06:09:16.976152Z",
+  "returnCode": 0
+}

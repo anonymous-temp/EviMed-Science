@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "kind": "research-topic-selection",
+  "jobId": "topic-20260807040420-c80f8ad3848a",
+  "status": "failed",
+  "request": {
+    "researchDirection": "精神科住院患者抗精神病药（阿立哌唑、氯氮平、奥氮平、帕利哌酮）治疗药物监测（TDM）的真实世界临床实践质量：稳态采样率、参考范围达标率、剂量归一化浓度个体间变异、TDM结果到剂量调整的处置链完整性、检验申请与医嘱的一致性，以及电子病历数据质量（用药频率编码、采样时间缺失）对TDM审计的影响。关注中国精神科中西医结合病房场景与中文文献。",
+    "outputLanguage": "zh"
+  },
+  "workspace": "/data/users/scoping-v12/projects/scoping-v13-0807-040043/workspace",
+  "outputRoot": "/data/users/scoping-v12/projects/scoping-v13-0807-040043/workspace/research-topic-runs/topic-20260807040420-c80f8ad3848a/output",
+  "sourceEvidence": {
+    "algorithm": "sha256",
+    "digest": "aee9870b7aecb34dcc398f3937d82a600cf10215924016b31304e66073c0982f"
+  },
+  "createdAt": "2026-08-07T04:04:20.524936Z",
+  "updatedAt": "2026-08-07T04:13:11.962803Z",
+  "artifacts": [],
+  "workerPid": 252693,
+  "startedAt": "2026-08-07T04:04:21.356225Z",
+  "finishedAt": "2026-08-07T04:13:11.962819Z",
+  "returnCode": 1,
+  "retryable": false,
+  "error": "未检索到相关文献。可能原因：检索词过于具体、术语拼写有误、或该领域文献极少。"
+}

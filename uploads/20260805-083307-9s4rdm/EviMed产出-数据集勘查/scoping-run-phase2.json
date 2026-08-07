@@ -1,0 +1,599 @@
+{
+  "aripiprazoleRatios": [
+    {
+      "dehydro": 55.0,
+      "dehydroParentRatio": 0.174,
+      "parent": 317.0,
+      "pseudonym": "P4",
+      "sample": "S1",
+      "testDate": "21/12/2020",
+      "total": 372.0,
+      "totalParentRatio": 1.174
+    },
+    {
+      "dehydro": 31.0,
+      "dehydroParentRatio": 0.492,
+      "parent": 63.0,
+      "pseudonym": "P2",
+      "sample": "S2",
+      "testDate": "30/12/2020",
+      "total": 94.0,
+      "totalParentRatio": 1.492
+    },
+    {
+      "dehydro": 103.0,
+      "dehydroParentRatio": 0.258,
+      "parent": 400.0,
+      "pseudonym": "P4",
+      "sample": "S3",
+      "testDate": "4/1/2021",
+      "total": 503.0,
+      "totalParentRatio": 1.258
+    },
+    {
+      "dehydro": 79.0,
+      "dehydroParentRatio": 0.223,
+      "parent": 354.0,
+      "pseudonym": "P3",
+      "sample": "S4",
+      "testDate": "4/1/2021",
+      "total": 433.0,
+      "totalParentRatio": 1.223
+    },
+    {
+      "dehydro": 27.4,
+      "dehydroParentRatio": 0.343,
+      "parent": 79.9,
+      "pseudonym": "P1",
+      "sample": "S5",
+      "testDate": "1/3/2021",
+      "total": 107.0,
+      "totalParentRatio": 1.339
+    },
+    {
+      "dehydro": 26.6,
+      "dehydroParentRatio": 0.266,
+      "parent": 100.0,
+      "pseudonym": "P5",
+      "sample": "S6",
+      "testDate": "19/3/2021",
+      "total": 127.0,
+      "totalParentRatio": 1.27
+    }
+  ],
+  "frequencyVocabulary": [
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 1.0,
+      "pattern": "standing",
+      "value": "ALWAYS"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 1.0,
+      "pattern": "standing",
+      "value": "ALWAYS1"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 2.0,
+      "pattern": "BID",
+      "value": "BID"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 2.0,
+      "pattern": "BID",
+      "value": "BID1"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 2.0,
+      "pattern": "BID",
+      "value": "BID4"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 2.0,
+      "pattern": "BID",
+      "value": "BID5"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 2.0,
+      "pattern": "BID",
+      "value": "BID8"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": null,
+      "pattern": "once",
+      "value": "ONCE"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": null,
+      "pattern": "prn",
+      "value": "PRN"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 1.0,
+      "pattern": "QD",
+      "value": "QD"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 1.0,
+      "pattern": "QD",
+      "value": "QD11"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 1.0,
+      "pattern": "QD",
+      "value": "QD12"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 1.0,
+      "pattern": "QD",
+      "value": "QD15"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 1.0,
+      "pattern": "QD",
+      "value": "QD16"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 1.0,
+      "pattern": "QD",
+      "value": "QD20"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 1.0,
+      "pattern": "QD",
+      "value": "QD9"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 1.0,
+      "pattern": "QN",
+      "value": "QN"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 0.5,
+      "pattern": "QOD",
+      "value": "QOD"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 3.0,
+      "pattern": "TID",
+      "value": "TID"
+    },
+    {
+      "courseDurationDays": null,
+      "dosesPerDay": 3.0,
+      "pattern": "TID",
+      "value": "TID4"
+    },
+    {
+      "courseDurationDays": "",
+      "dosesPerDay": 0.14285714285714285,
+      "pattern": "W1D",
+      "value": "W1D"
+    },
+    {
+      "courseDurationDays": "8",
+      "dosesPerDay": 0.14285714285714285,
+      "pattern": "W1D8",
+      "value": "W1D8"
+    },
+    {
+      "courseDurationDays": "",
+      "dosesPerDay": 0.2857142857142857,
+      "pattern": "W2D",
+      "value": "W2D"
+    },
+    {
+      "courseDurationDays": "1",
+      "dosesPerDay": 0.2857142857142857,
+      "pattern": "W2D1",
+      "value": "W2D1"
+    },
+    {
+      "courseDurationDays": "8",
+      "dosesPerDay": 0.2857142857142857,
+      "pattern": "W2D8",
+      "value": "W2D8"
+    },
+    {
+      "courseDurationDays": "8",
+      "dosesPerDay": 0.42857142857142855,
+      "pattern": "W3D8",
+      "value": "W3D8"
+    },
+    {
+      "courseDurationDays": "8",
+      "dosesPerDay": 0.5714285714285714,
+      "pattern": "W4D8",
+      "value": "W4D8"
+    },
+    {
+      "courseDurationDays": "",
+      "dosesPerDay": 0.7142857142857143,
+      "pattern": "W5D",
+      "value": "W5D"
+    },
+    {
+      "courseDurationDays": "8",
+      "dosesPerDay": 0.7142857142857143,
+      "pattern": "W5D8",
+      "value": "W5D8"
+    },
+    {
+      "courseDurationDays": "8",
+      "dosesPerDay": 0.8571428571428571,
+      "pattern": "W6D8",
+      "value": "W6D8"
+    }
+  ],
+  "nPatients": 5,
+  "ordersSummary": {
+    "cancelled": 2,
+    "dischargeOnsetWithinAdmission": 25,
+    "dischargeTakeHome": 25,
+    "drugOrders": 497,
+    "endSentinelRows": 105,
+    "rows": 915,
+    "standingOrders": 0
+  },
+  "pseudonyms": [
+    "P1",
+    "P2",
+    "P3",
+    "P4",
+    "P5"
+  ],
+  "tdmEvents": [
+    {
+      "activeOrders": 1,
+      "cdRatio": 23.6,
+      "daysOnDrug": 9,
+      "doseMgPerDay": 15.0,
+      "drug": "阿立哌唑",
+      "project": "阿立哌唑",
+      "pseudonym": "P3",
+      "ref": "100.0-350.0",
+      "refPosition": "above",
+      "result": 354.0,
+      "sample": "S4",
+      "testDate": "4/1/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 5.267,
+      "daysOnDrug": 9,
+      "doseMgPerDay": 15.0,
+      "drug": "阿立哌唑",
+      "project": "脱氢阿立哌唑",
+      "pseudonym": "P3",
+      "ref": "nan",
+      "refPosition": "no-ref",
+      "result": 79.0,
+      "sample": "S4",
+      "testDate": "4/1/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 28.867,
+      "daysOnDrug": 9,
+      "doseMgPerDay": 15.0,
+      "drug": "阿立哌唑",
+      "project": "总阿立哌唑",
+      "pseudonym": "P3",
+      "ref": "150.0-500.0",
+      "refPosition": "within",
+      "result": 433.0,
+      "sample": "S4",
+      "testDate": "4/1/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 20.0,
+      "daysOnDrug": 27,
+      "doseMgPerDay": 20.0,
+      "drug": "阿立哌唑",
+      "project": "阿立哌唑",
+      "pseudonym": "P4",
+      "ref": "100.0-350.0",
+      "refPosition": "above",
+      "result": 400.0,
+      "sample": "S3",
+      "testDate": "4/1/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 5.15,
+      "daysOnDrug": 27,
+      "doseMgPerDay": 20.0,
+      "drug": "阿立哌唑",
+      "project": "脱氢阿立哌唑",
+      "pseudonym": "P4",
+      "ref": "nan",
+      "refPosition": "no-ref",
+      "result": 103.0,
+      "sample": "S3",
+      "testDate": "4/1/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 25.15,
+      "daysOnDrug": 27,
+      "doseMgPerDay": 20.0,
+      "drug": "阿立哌唑",
+      "project": "总阿立哌唑",
+      "pseudonym": "P4",
+      "ref": "150.0-500.0",
+      "refPosition": "above",
+      "result": 503.0,
+      "sample": "S3",
+      "testDate": "4/1/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 2.75,
+      "daysOnDrug": 13,
+      "doseMgPerDay": 20.0,
+      "drug": "阿立哌唑",
+      "project": "脱氢阿立哌唑",
+      "pseudonym": "P4",
+      "ref": "nan",
+      "refPosition": "no-ref",
+      "result": 55.0,
+      "sample": "S1",
+      "testDate": "21/12/2020"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 18.6,
+      "daysOnDrug": 13,
+      "doseMgPerDay": 20.0,
+      "drug": "阿立哌唑",
+      "project": "总阿立哌唑",
+      "pseudonym": "P4",
+      "ref": "150.0-500.0",
+      "refPosition": "within",
+      "result": 372.0,
+      "sample": "S1",
+      "testDate": "21/12/2020"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 15.85,
+      "daysOnDrug": 13,
+      "doseMgPerDay": 20.0,
+      "drug": "阿立哌唑",
+      "project": "阿立哌唑",
+      "pseudonym": "P4",
+      "ref": "100.0-350.0",
+      "refPosition": "within",
+      "result": 317.0,
+      "sample": "S1",
+      "testDate": "21/12/2020"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 2.71,
+      "daysOnDrug": 0,
+      "doseMgPerDay": 20.0,
+      "drug": "奥氮平",
+      "project": "奥氮平",
+      "pseudonym": "P1",
+      "ref": "20.0-80.0",
+      "refPosition": "within",
+      "result": 54.2,
+      "sample": "S5",
+      "testDate": "1/3/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 7.99,
+      "daysOnDrug": 0,
+      "doseMgPerDay": 10.0,
+      "drug": "阿立哌唑",
+      "project": "阿立哌唑",
+      "pseudonym": "P1",
+      "ref": "100.0-350.0",
+      "refPosition": "below",
+      "result": 79.9,
+      "sample": "S5",
+      "testDate": "1/3/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 2.74,
+      "daysOnDrug": 0,
+      "doseMgPerDay": 10.0,
+      "drug": "阿立哌唑",
+      "project": "脱氢阿立哌唑",
+      "pseudonym": "P1",
+      "ref": "nan",
+      "refPosition": "no-ref",
+      "result": 27.4,
+      "sample": "S5",
+      "testDate": "1/3/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 10.7,
+      "daysOnDrug": 0,
+      "doseMgPerDay": 10.0,
+      "drug": "阿立哌唑",
+      "project": "总阿立哌唑",
+      "pseudonym": "P1",
+      "ref": "150.0-500.0",
+      "refPosition": "below",
+      "result": 107.0,
+      "sample": "S5",
+      "testDate": "1/3/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 10.0,
+      "daysOnDrug": 7,
+      "doseMgPerDay": 10.0,
+      "drug": "阿立哌唑",
+      "project": "阿立哌唑",
+      "pseudonym": "P5",
+      "ref": "100.0-350.0",
+      "refPosition": "within",
+      "result": 100.0,
+      "sample": "S6",
+      "testDate": "19/3/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 2.66,
+      "daysOnDrug": 7,
+      "doseMgPerDay": 10.0,
+      "drug": "阿立哌唑",
+      "project": "脱氢阿立哌唑",
+      "pseudonym": "P5",
+      "ref": "nan",
+      "refPosition": "no-ref",
+      "result": 26.6,
+      "sample": "S6",
+      "testDate": "19/3/2021"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 12.7,
+      "daysOnDrug": 7,
+      "doseMgPerDay": 10.0,
+      "drug": "阿立哌唑",
+      "project": "总阿立哌唑",
+      "pseudonym": "P5",
+      "ref": "150.0-500.0",
+      "refPosition": "below",
+      "result": 127.0,
+      "sample": "S6",
+      "testDate": "19/3/2021"
+    },
+    {
+      "activeOrders": 2,
+      "cdRatio": 1.802,
+      "daysOnDrug": 4,
+      "doseMgPerDay": 400.0,
+      "drug": "氯氮平",
+      "project": "氯氮平",
+      "pseudonym": "P2",
+      "ref": "350.0-600.0",
+      "refPosition": "above",
+      "result": 721.0,
+      "sample": "S2",
+      "testDate": "30/12/2020"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 11.65,
+      "daysOnDrug": 4,
+      "doseMgPerDay": 4.0,
+      "drug": "氯硝西泮",
+      "project": "氯硝西泮",
+      "pseudonym": "P2",
+      "ref": "4.0-80.0",
+      "refPosition": "within",
+      "result": 46.6,
+      "sample": "S2",
+      "testDate": "30/12/2020"
+    },
+    {
+      "activeOrders": 1,
+      "cdRatio": 7.2,
+      "daysOnDrug": 4,
+      "doseMgPerDay": 12.0,
+      "drug": "帕利哌酮",
+      "project": "帕利哌酮（帕潘立酮）",
+      "pseudonym": "P2",
+      "ref": "20.0-60.0",
+      "refPosition": "above",
+      "result": 86.4,
+      "sample": "S2",
+      "testDate": "30/12/2020"
+    },
+    {
+      "activeOrders": 0,
+      "cdRatio": null,
+      "daysOnDrug": null,
+      "doseMgPerDay": null,
+      "drug": "阿立哌唑",
+      "project": "阿立哌唑",
+      "pseudonym": "P2",
+      "ref": "100.0-350.0",
+      "refPosition": "below",
+      "result": 63.0,
+      "sample": "S2",
+      "testDate": "30/12/2020"
+    },
+    {
+      "activeOrders": 0,
+      "cdRatio": null,
+      "daysOnDrug": null,
+      "doseMgPerDay": null,
+      "drug": "阿立哌唑",
+      "project": "脱氢阿立哌唑",
+      "pseudonym": "P2",
+      "ref": "nan",
+      "refPosition": "no-ref",
+      "result": 31.0,
+      "sample": "S2",
+      "testDate": "30/12/2020"
+    },
+    {
+      "activeOrders": 0,
+      "cdRatio": null,
+      "daysOnDrug": null,
+      "doseMgPerDay": null,
+      "drug": "阿立哌唑",
+      "project": "总阿立哌唑",
+      "pseudonym": "P2",
+      "ref": "150.0-500.0",
+      "refPosition": "below",
+      "result": 94.0,
+      "sample": "S2",
+      "testDate": "30/12/2020"
+    }
+  ],
+  "vitalsSummary": {
+    "bpCompositeCount": 53,
+    "bpMeanDia": 69.25,
+    "bpMeanSys": 111.40384615384616,
+    "bpParseFailures": 1,
+    "bpParsedCount": 52,
+    "heightCount": 6,
+    "perPatientRows": {
+      "P1": 67,
+      "P2": 134,
+      "P3": 70,
+      "P4": 189,
+      "P5": 77
+    },
+    "rows": 537,
+    "signTypeCounts": {
+      "体温": 150,
+      "体重": 22,
+      "呼吸": 150,
+      "脉搏": 150,
+      "血压": 53,
+      "血氧饱和度": 6,
+      "身高": 6
+    },
+    "weightCount": 22
+  }
+}

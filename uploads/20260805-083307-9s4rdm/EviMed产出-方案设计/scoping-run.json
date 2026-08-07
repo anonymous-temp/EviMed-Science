@@ -1,0 +1,49 @@
+{
+  "runId": "tdmdesign-0806-125444",
+  "round": 3,
+  "role": "protocol-design-round",
+  "workspace": "/workspace",
+  "completedAt": "2026-08-06",
+  "schemaVersion": 1,
+  "dataFingerprint": {
+    "files": [
+      {"name": "20260803TDM.xlsx", "sha256": "5b52d6d8ee644e798e1017b78923004648c6936f7157d401529c163205a8f585", "bytes": 149991}
+    ]
+  },
+  "priorDataContact": {
+    "filesReceived": ["20260803TDM.xlsx"],
+    "partsInspected": "全部 5 张表均已机械剖析（病案首页 5 行、医嘱记录 915 行、检验 22 行、诊断记录 56 行、体征 537 行），见 data-profile.md。前两轮（feasibility 轮、portfolio 轮）已完成同源数据剖析与领域量计算，本轮为第三轮方案设计，直接沿用其剖析与判定结果（prior-feasibility-matrix.md、prior-research-portfolio.md 保留于工作区），本轮仅补充方案设计所需的逐例医嘱-采样对齐核算（输出见 research-portfolio.md 工作示例）。",
+    "outcomeDistributionSeen": true,
+    "outcomeDistributionNote": "结局变量分布在前两轮已查看：母体浓度 63-400 ng/mL（6 事件）、剂量校正浓度跨样本约 2.7-2.95 倍离散、达标率本院口径 2/6、Hart 2022 口径 0/6、代谢比 0.17-0.49。本轮方案（方案一审计 A/B）的假设 H1-H6 均写于查看之后，且全部为描述性预注册陈述，不做推断性检验；样本量以 MDE 与预期区间宽度前瞻声明，不做事后功效回算。"
+  },
+  "pseudonymRule": "患者 P1-P5 按 病案首页.CASE_NO 升序稳定分配；采样 S1-S6 按 检验.TEST_DATE 升序（同日多样本按 SAMPLENO 字典序）稳定分配。源标识符值（PATIENT_ID/CASE_NO/MED_REC_NO/SAMPLENO）不出现在任何产物中；data-profile.py 已将这些列列为 identifying 列，词表不外带。",
+  "searchRecord": [
+    {"round": 3, "tool": "evimed_literature_search", "query": "aripiprazole population pharmacokinetic model Bayesian", "source": "internal", "hits": 20, "note": "多为无关中文临床试验，未采纳", "date": "2026-08-06"},
+    {"round": 3, "tool": "evimed_literature_search", "query": "external evaluation population pharmacokinetic model Bayesian forecasting predictive performance criteria", "source": "internal", "hits": 20, "note": "输出截断，单条相关记录为 ceftazidime/avibactam PKPD（不相关），未采纳", "date": "2026-08-06"},
+    {"round": 3, "tool": "evimed_literature_search", "query": "aripiprazole population pharmacokinetic model adult schizophrenia", "source": "internal", "hits": 15, "note": "无关（RCT/动物/经济评价），未采纳", "date": "2026-08-06"},
+    {"round": 3, "tool": "evimed_biomedical_source_search", "query": "aripiprazole population pharmacokinetics", "source": "europe-pmc", "hits": 15, "note": "纳入 1 条：PMID 40662264（CYP2D6 表型×C/D，2026，Schizophr Bull）——已并入外部对照锚点（research-portfolio 未直接引用其数字，仅作 C/D 分层参照）", "date": "2026-08-06"},
+    {"round": 3, "tool": "evimed_biomedical_source_search", "query": "aripiprazole population pharmacokinetics oral", "source": "pubmed", "hits": 15, "note": "纳入 PMID 19032724（Kim 2008 口服 PopPK 主选先验）、PMID 34979059（AOM 备选反例）、PMID 38602057（RTU 备选反例）、PMID 29392351（参考范围，元数据级）、PMID 36195732（Hart 2022 修订范围）", "date": "2026-08-06"},
+    {"round": 3, "tool": "evimed_biomedical_source_search", "query": "maximum a posteriori Bayesian estimation pharmacokinetics individualization", "source": "pubmed", "hits": 15, "note": "纳入 PMID 34342170（mapbayr）、PMID 34618919（AdDS）、PMID 38465725（nlmixr2 vs NONMEM，沿用前两轮 [31]）、PMID 21383653（最优采样策略综述）", "date": "2026-08-06"},
+    {"round": 3, "tool": "evimed_open_access_full_text", "query": "PMID:35385439 (Lereclus 2022 clozapine)", "source": "europe-pmc", "hits": 0, "note": "非开放获取，未取到全文；维持摘要级引用（前两轮已核验 MPE≤±20%/MAPE≤30%）", "date": "2026-08-06"},
+    {"round": 3, "tool": "evimed_biomedical_source_search", "query": "19032724 (identifier lookup)", "source": "europe-pmc", "hits": 1, "note": "确认 Kim 2008 摘要：ka=1.06 h-1、V/F=192 L、CYP2D6 IIV 37.8%→30.5%、IM≈60% EM、代谢比 0.20-0.34", "date": "2026-08-06"},
+    {"round": 3, "tool": "evimed_biomedical_source_search", "query": "36195732 (identifier lookup)", "source": "europe-pmc", "hits": 1, "note": "确认 Hart 2022：母体 120-270、活性 180-380 ng/mL，N=3,373/53 队列", "date": "2026-08-06"},
+    {"round": 3, "tool": "evimed_biomedical_source_search", "query": "Therapeutic reference range aripiprazole Hart schizophrenia systematic review", "source": "europe-pmc", "hits": 5, "note": "纳入 TDM-VIGIL（PMID 39487894，IQR 分层参照）", "date": "2026-08-06"}
+  ],
+  "evidenceAccessSummary": "本轮新增检索均为摘要级或题录级；无全文级新增。关键数值（Kim 2008 模型参数典型值、Hart 2022 参考区间、外评阈值 MPE≤±20%/MAPE≤30%、TDM-VIGIL 分层法）来自摘要级可核验来源；Kim 2008 的 IIV 协方差矩阵与残留误差模型参数需在实施前取全文核验（方案二失败条件 R6）。",
+  "deliverables": {
+    "data-profile.md": "5 表 93 列剖析，含连接可达性与类型冲突",
+    "data-profile.json": "与 data-profile.py 重跑逐字节一致（preflight 校验）",
+    "data-profile.py": "标识符掩码已修复（MED_REC_NO/SAMPLENO 列为 identifying）",
+    "data-quality.md": "Kahn 分类质量发现 + 10 项强制预处理清单（每项点名破坏的分析）",
+    "feasibility-matrix.md": "前两轮判定存档（不重做），标注本轮方案映射",
+    "external-linkage.md": "22 项外部资源连接图（判读标准/模型/结构化三类）",
+    "research-portfolio.md": "四项方案完整设计（审计 A/B、MAP 演示、数据采集改造、前瞻外评+校准）",
+    "scoping-run.json": "本运行回执"
+  },
+  "gates": {
+    "preflight": "PASS (2026-08-06)",
+    "identifierLeaks": 0,
+    "postHocPower": "无（全部以 MDE 与预期区间宽度表述）",
+    "infeasibleVerdictsNameMissingFields": true
+  }
+}

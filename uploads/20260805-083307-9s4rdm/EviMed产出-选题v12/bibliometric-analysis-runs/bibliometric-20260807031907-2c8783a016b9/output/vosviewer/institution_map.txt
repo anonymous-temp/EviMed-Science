@@ -1,0 +1,10 @@
+id	label	x	y	cluster	weight<Occurrences>	weight<Total link strength>
+1	The Zucker Hillside Hospital	-0.247773	0.013864	1	3	5
+2	Galician Foundation of Genomic Medicine	1.000000	0.286653	2	2	4
+3	Alexianer Hospital Aachen	-0.535858	-0.833799	1	2	6
+4	University Medical Center of Mainz	-0.840019	-0.176881	1	2	5
+5	University of Santiago de Compostela	0.771405	0.710647	2	2	4
+6	Health Research Institute of Santiago de Compostela (IDIS)	0.266857	0.737641	2	2	4
+7	RWTH Aachen University	-0.254201	-0.465687	1	4	8
+8	University Clinical Hospital of Santiago de Compostela (SERGAS)	0.493138	0.213954	2	3	6
+9	University of Regensburg	-0.653549	-0.486393	1	2	6

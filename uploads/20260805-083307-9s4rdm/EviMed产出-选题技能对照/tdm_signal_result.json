@@ -1,0 +1,341 @@
+{
+ "samples": [
+  {
+   "sample_no": "20201221TDM013",
+   "pid": "[REDACTED-04]",
+   "test_date": "2020-12-21",
+   "apply_date": "2020-12-18",
+   "results": {
+    "脱氢阿立哌唑": {
+     "value": 55.0,
+     "ref": null
+    },
+    "总阿立哌唑": {
+     "value": 372.0,
+     "ref": "150.0-500.0"
+    },
+    "阿立哌唑": {
+     "value": 317.0,
+     "ref": "100.0-350.0"
+    }
+   },
+   "dose_mg_day_main": {
+    "ari": 20.0,
+    "clo": 0.0,
+    "ola": 0.0,
+    "pal": 0.0,
+    "clon": 0.0,
+    "lith": 0.0
+   },
+   "dose_mg_day_alt": {
+    "ari": 20.0,
+    "clo": 0.0,
+    "ola": 0.0,
+    "pal": 0.0,
+    "clon": 0.0,
+    "lith": 0.0
+   },
+   "c_d_ratio": {
+    "ari": 15.85
+   },
+   "cd_weight": {
+    "weight_kg": 63.0,
+    "ari_dose_per_kg": 0.317
+   },
+   "dhc_ari_ratio": 0.174,
+   "active_total": 372.0,
+   "total_measured": 372.0
+  },
+  {
+   "sample_no": "20201226TDM022",
+   "pid": "[REDACTED-02]",
+   "test_date": "2020-12-30",
+   "apply_date": "2020-12-25",
+   "results": {
+    "氯氮平": {
+     "value": 721.0,
+     "ref": "350.0-600.0"
+    },
+    "氯硝西泮": {
+     "value": 46.6,
+     "ref": "4.0-80.0"
+    },
+    "帕利哌酮（帕潘立酮）": {
+     "value": 86.4,
+     "ref": "20.0-60.0"
+    },
+    "阿立哌唑": {
+     "value": 63.0,
+     "ref": "100.0-350.0"
+    },
+    "脱氢阿立哌唑": {
+     "value": 31.0,
+     "ref": null
+    },
+    "总阿立哌唑": {
+     "value": 94.0,
+     "ref": "150.0-500.0"
+    }
+   },
+   "dose_mg_day_main": {
+    "ari": 0.0,
+    "clo": 400.0,
+    "ola": 0.0,
+    "pal": 0.0,
+    "clon": 4.0,
+    "lith": 0.6
+   },
+   "dose_mg_day_alt": {
+    "ari": 0.0,
+    "clo": null,
+    "ola": 0.0,
+    "pal": 0.0,
+    "clon": null,
+    "lith": 0.8999999999999999
+   },
+   "c_d_ratio": {
+    "clo": 1.8,
+    "clon": 11.65
+   },
+   "cd_weight": {},
+   "dhc_ari_ratio": 0.492,
+   "active_total": 94.0,
+   "total_measured": 94.0
+  },
+  {
+   "sample_no": "20210104TDM006",
+   "pid": "[REDACTED-04]",
+   "test_date": "2021-01-04",
+   "apply_date": "2021-01-01",
+   "results": {
+    "阿立哌唑": {
+     "value": 400.0,
+     "ref": "100.0-350.0"
+    },
+    "脱氢阿立哌唑": {
+     "value": 103.0,
+     "ref": null
+    },
+    "总阿立哌唑": {
+     "value": 503.0,
+     "ref": "150.0-500.0"
+    }
+   },
+   "dose_mg_day_main": {
+    "ari": 20.0,
+    "clo": 0.0,
+    "ola": 0.0,
+    "pal": 0.0,
+    "clon": 0.0,
+    "lith": 0.0
+   },
+   "dose_mg_day_alt": {
+    "ari": 20.0,
+    "clo": 0.0,
+    "ola": 0.0,
+    "pal": 0.0,
+    "clon": 0.0,
+    "lith": 0.0
+   },
+   "c_d_ratio": {
+    "ari": 20.0
+   },
+   "cd_weight": {
+    "weight_kg": 63.0,
+    "ari_dose_per_kg": 0.317
+   },
+   "dhc_ari_ratio": 0.258,
+   "active_total": 503.0,
+   "total_measured": 503.0
+  },
+  {
+   "sample_no": "20210104TDM014",
+   "pid": "[REDACTED-03]",
+   "test_date": "2021-01-04",
+   "apply_date": "2021-01-03",
+   "results": {
+    "阿立哌唑": {
+     "value": 354.0,
+     "ref": "100.0-350.0"
+    },
+    "脱氢阿立哌唑": {
+     "value": 79.0,
+     "ref": null
+    },
+    "总阿立哌唑": {
+     "value": 433.0,
+     "ref": "150.0-500.0"
+    }
+   },
+   "dose_mg_day_main": {
+    "ari": 15.0,
+    "clo": 0.0,
+    "ola": 0.0,
+    "pal": 0.0,
+    "clon": 0.0,
+    "lith": 0.6
+   },
+   "dose_mg_day_alt": {
+    "ari": null,
+    "clo": 0.0,
+    "ola": 0.0,
+    "pal": 0.0,
+    "clon": 0.0,
+    "lith": null
+   },
+   "c_d_ratio": {
+    "ari": 23.6
+   },
+   "cd_weight": {
+    "weight_kg": 64.0,
+    "ari_dose_per_kg": 0.234
+   },
+   "dhc_ari_ratio": 0.223,
+   "active_total": 433.0,
+   "total_measured": 433.0
+  },
+  {
+   "sample_no": "20210301TDM008",
+   "pid": "[REDACTED-01]",
+   "test_date": "2021-03-01",
+   "apply_date": "2021-02-27",
+   "results": {
+    "奥氮平": {
+     "value": 54.2,
+     "ref": "20.0-80.0"
+    },
+    "阿立哌唑": {
+     "value": 79.9,
+     "ref": "100.0-350.0"
+    },
+    "脱氢阿立哌唑": {
+     "value": 27.4,
+     "ref": null
+    },
+    "总阿立哌唑": {
+     "value": 107.0,
+     "ref": "150.0-500.0"
+    }
+   },
+   "dose_mg_day_main": {
+    "ari": 10.0,
+    "clo": 0.0,
+    "ola": 20.0,
+    "pal": 0.0,
+    "clon": 0.0,
+    "lith": 0.0
+   },
+   "dose_mg_day_alt": {
+    "ari": null,
+    "clo": 0.0,
+    "ola": null,
+    "pal": 0.0,
+    "clon": 0.0,
+    "lith": 0.0
+   },
+   "c_d_ratio": {
+    "ari": 7.99,
+    "ola": 2.71
+   },
+   "cd_weight": {
+    "weight_kg": 82.0,
+    "ari_dose_per_kg": 0.122
+   },
+   "dhc_ari_ratio": 0.343,
+   "active_total": 107.3,
+   "total_measured": 107.0
+  },
+  {
+   "sample_no": "20210319TDM006",
+   "pid": "[REDACTED-05]",
+   "test_date": "2021-03-19",
+   "apply_date": "2021-03-17",
+   "results": {
+    "阿立哌唑": {
+     "value": 100.0,
+     "ref": "100.0-350.0"
+    },
+    "脱氢阿立哌唑": {
+     "value": 26.6,
+     "ref": null
+    },
+    "总阿立哌唑": {
+     "value": 127.0,
+     "ref": "150.0-500.0"
+    }
+   },
+   "dose_mg_day_main": {
+    "ari": 10.0,
+    "clo": 0.0,
+    "ola": 0.0,
+    "pal": 0.0,
+    "clon": 0.0,
+    "lith": 0.3
+   },
+   "dose_mg_day_alt": {
+    "ari": null,
+    "clo": 0.0,
+    "ola": 0.0,
+    "pal": 0.0,
+    "clon": 0.0,
+    "lith": null
+   },
+   "c_d_ratio": {
+    "ari": 10.0
+   },
+   "cd_weight": {
+    "weight_kg": 54.0,
+    "ari_dose_per_kg": 0.185
+   },
+   "dhc_ari_ratio": 0.266,
+   "active_total": 126.6,
+   "total_measured": 127.0
+  }
+ ],
+ "per_patient_summary": {
+  "[REDACTED-04]": {
+   "age": "56岁",
+   "sex": "女",
+   "main_dx": "精神分裂症后抑郁",
+   "other_dx": "迟发性运动障碍|肝功能不全|高泌乳素血症|焦虑障碍|慢性活动型乙型病毒性肝炎|右眼 结膜出血",
+   "n_samples": 2
+  },
+  "[REDACTED-02]": {
+   "age": "29岁",
+   "sex": "女",
+   "main_dx": "双相情感障碍，目前为轻躁狂发作",
+   "other_dx": "焦虑状态",
+   "n_samples": 1
+  },
+  "[REDACTED-03]": {
+   "age": "23岁",
+   "sex": "女",
+   "main_dx": "可疑精神和行为障碍的观察",
+   "other_dx": null,
+   "n_samples": 1
+  },
+  "[REDACTED-01]": {
+   "age": "21岁",
+   "sex": "男",
+   "main_dx": "未分化型精神分裂症",
+   "other_dx": "肌张力障碍",
+   "n_samples": 1
+  },
+  "[REDACTED-05]": {
+   "age": "26岁",
+   "sex": "女",
+   "main_dx": "双相情感障碍,目前为伴有精神病性症状的重度抑郁发作",
+   "other_dx": "低钾血症",
+   "n_samples": 1
+  }
+ },
+ "notes": {
+  "weight_kg": {
+   "[REDACTED-04]": 63.0,
+   "[REDACTED-02]": 76.0,
+   "[REDACTED-03]": 64.0,
+   "[REDACTED-01]": 82.0,
+   "[REDACTED-05]": 54.0
+  }
+ }
+}

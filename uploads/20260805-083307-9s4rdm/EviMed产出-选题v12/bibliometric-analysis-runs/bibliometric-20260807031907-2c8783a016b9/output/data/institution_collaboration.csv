@@ -1,0 +1,17 @@
+source,target,weight,source_freq,target_freq
+RWTH Aachen University,University Medical Center of Mainz,2,4,2
+RWTH Aachen University,The Zucker Hillside Hospital,2,4,3
+Health Research Institute of Santiago de Compostela (IDIS),University Clinical Hospital of Santiago de Compostela (SERGAS),2,2,3
+Galician Foundation of Genomic Medicine,University Clinical Hospital of Santiago de Compostela (SERGAS),2,2,3
+University Clinical Hospital of Santiago de Compostela (SERGAS),University of Santiago de Compostela,2,3,2
+Alexianer Hospital Aachen,RWTH Aachen University,2,2,4
+Alexianer Hospital Aachen,University of Regensburg,2,2,2
+RWTH Aachen University,University of Regensburg,2,4,2
+Health Research Institute of Santiago de Compostela (IDIS),University of Santiago de Compostela,1,2,2
+Galician Foundation of Genomic Medicine,Health Research Institute of Santiago de Compostela (IDIS),1,2,2
+The Zucker Hillside Hospital,University Medical Center of Mainz,1,3,2
+The Zucker Hillside Hospital,University of Regensburg,1,3,2
+Alexianer Hospital Aachen,The Zucker Hillside Hospital,1,2,3
+Galician Foundation of Genomic Medicine,University of Santiago de Compostela,1,2,2
+University Medical Center of Mainz,University of Regensburg,1,2,2
+Alexianer Hospital Aachen,University Medical Center of Mainz,1,2,2

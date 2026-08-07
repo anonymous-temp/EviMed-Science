@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-05T06:26:00Z",
+  "databases": ["PubMed", "PubMed (guideline filter)", "PharmGKB (clinpgx mirror)", "RxNorm", "PMC (Europe PMC)"],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "therapeutic drug monitoring antipsychotics AGNP consensus reference ranges",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 29
+    },
+    {
+      "database": "PubMed",
+      "query": "aripiprazole dehydroaripiprazole metabolic ratio CYP2D6 phenotype concentration dose",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "clozapine concentration-dose ratio norclozapine therapeutic drug monitoring",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed (guideline filter)",
+      "query": "治疗药物监测 精神科 专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PharmGKB (clinpgx mirror)",
+      "query": "aripiprazole",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "aripiprazole therapeutic reference range schizophrenia systematic review revised",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "olanzapine therapeutic reference range 20-80 ng/mL concentration effect relationship",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "clozapine plasma concentration dose ratio therapeutic drug monitoring schizophrenia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "精神科 治疗药物监测 专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PMC (Europe PMC)",
+      "query": "aripiprazole CYP2D6 poor metabolizer dose adjustment concentration",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "RxNorm",
+      "query": "aripiprazole",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "PubMed",
+      "query": "aripiprazole reference range",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "clozapine norclozapine concentration dose ratio",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "Hart therapeutic reference range aripiprazole",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PMC (Europe PMC)",
+      "query": "clozapine concentration dose ratio smoking",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PMC (Europe PMC)",
+      "query": "aripiprazole therapeutic reference range schizophrenia systematic review Hart",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PMC (Europe PMC)",
+      "query": "olanzapine therapeutic reference range blood concentration clinical effects",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 266,
+    "recordsAfterDeduplication": 135,
+    "sourcesIncluded": 9
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Dataset20260803TDM",
+      "identifier": "dataset:20260803TDM.xlsx",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "analysis data (user-provided, 5 sheets)"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Kneller2021",
+      "identifier": "PMID:34125422",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "aripiprazole CYP2D6 phenotype PK"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Gras2025",
+      "identifier": "PMID:40662264",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "CYP2D6 phenotypes and aripiprazole levels/response"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Hart2022",
+      "identifier": "PMID:36195732",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "aripiprazole reference range systematic review"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Tsuda2014",
+      "identifier": "PMID:24595134",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "smoking effects on olanzapine/clozapine C/D"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Rafizadeh2024",
+      "identifier": "PMID:38520287",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "clozapine C/D patient-specific factors"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Kylleso2021",
+      "identifier": "PMID:34417726",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "clozapine concentrations and switching (1979 patients)"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Yuan2023",
+      "identifier": "PMID:36897697",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "olanzapine concentration-efficacy (Chinese cohort)"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Zhang2024",
+      "identifier": "PMID:38957736",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "aripiprazole DDI population PK"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Hiemke2018",
+      "identifier": "PMID:28910830",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "AGNP consensus 2017 (closed access; range values verified via Hart/Kneller full texts)"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Schoretsanitis2020",
+      "identifier": "PMID:32433836",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "ASCP/AGNP joint consensus (closed access)"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Wesner2023",
+      "identifier": "PMID:37471567",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "olanzapine reference range review (closed access)"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Suzuki2011",
+      "identifier": "PMID:21157400",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "CYP2D6*10 and aripiprazole in Japanese patients (closed access)"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Jukic2019",
+      "identifier": "PMID:31000417",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "CYP2D6 genotype effect on aripiprazole exposure (closed access)"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Hendset2007",
+      "identifier": "PMID:17828532",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "CYP2D6 genotype and aripiprazole steady-state (closed access)"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "ZhangX2018",
+      "identifier": "PMID:30565279",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "aripiprazole PK and CYP2D6 phenotypes meta-analysis (closed access)"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "Molden2006",
+      "identifier": "PMID:17164689",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "aripiprazole/DHA PK variability (closed access)"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "Patteet2014",
+      "identifier": "PMID:25289972",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "retrospective clozapine/norclozapine TDM audit (closed access)"
+    }
+  ]
+}

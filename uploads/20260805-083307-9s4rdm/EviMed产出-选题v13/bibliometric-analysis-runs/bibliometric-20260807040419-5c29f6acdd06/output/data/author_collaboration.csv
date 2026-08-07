@@ -1,0 +1,12 @@
+source,target,weight,source_freq,target_freq
+Maudens Kristof E,Patteet Lisbeth,3,3,3
+Morrens Manuel,Patteet Lisbeth,3,3,3
+Patteet Lisbeth,Sabbe Bernard,3,3,3
+Maudens Kristof E,Neels Hugo,3,3,3
+Neels Hugo,Patteet Lisbeth,3,3,3
+Maudens Kristof E,Morrens Manuel,3,3,3
+Maudens Kristof E,Sabbe Bernard,3,3,3
+Morrens Manuel,Neels Hugo,3,3,3
+Morrens Manuel,Sabbe Bernard,3,3,3
+Neels Hugo,Sabbe Bernard,3,3,3
+Correll Christoph U,Solmi Marco,1,3,2
