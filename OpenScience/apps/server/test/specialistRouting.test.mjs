@@ -151,4 +151,26 @@ test("a pharmacovigilance report reaches the ADR specialist however it is phrase
   }
   // A plain safety question is still a conversation, not a signal-analysis package.
   assert.equal(routeOpenDomainSpecialist("二甲双胍的安全性怎么样？", agents), null);
+})
+
+test("a dataset in hand outranks the review vocabulary", async () => {
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+  // The final scoping request asked for a mini-review per topic and a
+  // literature landscape. Both phrases belong to clinical-evidence-synthesis,
+  // which never opens the file, and it took the request away from the one
+  // skill that had to read it.
+  const withData = [
+    "上传的 20260803TDM.xlsx 是住院治疗药物监测数据抽取，请出一份分析报告，每个题目配一个小综述和研究方案",
+    "针对我上传的数据集做选题分析，并给出证据综述与文献检索范围",
+    "profile the uploaded hospital dataset and give each topic a mini-review of the evidence",
+  ];
+  for (const query of withData) {
+    assert.equal(routeOpenDomainSpecialist(query, agents)?.agentId, "dataset-research-scoping", query);
+  }
+  // Without a dataset the same review vocabulary still reaches the evidence skill.
+  assert.equal(
+    routeOpenDomainSpecialist("胸口发闷，请结合速效救心丸生成一份临床证据报告", agents)?.agentId,
+    "clinical-evidence-synthesis",
+  );
 });
+;
