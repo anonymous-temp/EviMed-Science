@@ -53,6 +53,8 @@ const FEASIBILITY = [
 const QUALITY = [
   "# 数据质量",
   "填充率为 density completeness（Weiskopf 四义之一）。",
+  // An identity the schema implies, run, with a count — what licenses the numbers.
+  "一致性校验：总值 = 分项之和，3 组中 3 组通过；参考范围内外判定 2 内 / 1 外。",
   "## 预处理必做清单",
   "- 拆分 BP 复合值：否则无法计算收缩压",
 ].join("\n");
@@ -60,6 +62,16 @@ const PORTFOLIO = [
   "# 课题组合",
   "课题 A 的最小可检出效应 MDE=0.6 SD，预期 CI 宽度 0.8。",
   "新颖性：最接近的已发表工作是 PMID 30000001，差异轴为人群（该文为门诊，本数据为住院）。",
+  // Phase 4b: the eight families walked, and an estimator named for what survives.
+  "## 分析族逐条记录",
+  "- 预测：以实测值为特征预测目标剂量；消耗 labs.VALUE + 体重 + 年龄；估计量为 LASSO 回归，LOOCV。",
+  "- 同类药 class-level：各药按自身参考范围归一后比较。",
+  "- 关联挖掘：以 LONG_D_NO 为篮，apriori 计 support/confidence/lift。",
+  "- 因果：目标试验模拟，估计量 IPTW，时间零点取 START_DATETIME。",
+  "- 不良反应 ADR：体征轨迹对暴露，外接 FAERS 计 ROR。",
+  "- 外部资源接驳：LOINC/RxNorm/ATC 见 external-linkage.md。",
+  "- 多库证据合成：pooled 参考分布，见 evidence-map.md。",
+  "- 描述性：仅在上述均被排除时作为兜底，本次未采用为默认。",
 ].join("\n");
 const LINKAGE = "# 外部资源接驳\n- LOINC：通过 `LOINC_CODE` 连接，检验项粒度，单位需配 UCUM\n";
 const PROTOCOL = "# 研究方案\n## 课题 A\n变量构造：VALUE 取自 labs.VALUE。分析计划：描述统计 + Bootstrap 区间。\n";
@@ -333,6 +345,38 @@ test("each blocking gate rejects what it exists to catch", { skip: !hasPython3 }
       expect: /0 novelty statements for 1 surviving questions/,
     },
     {
+      name: "an analysis that never considered most of the families",
+      apply: async (root) => {
+        await writeFile(
+          path.join(root, "research-portfolio.md"),
+          "# 课题组合\n新颖性：最接近 PMID 30000001，差异轴为人群。\n本次仅做描述性审计。估计量为 bootstrap 置信区间。\n",
+          "utf8",
+        );
+      },
+      expect: /analysis families appear anywhere/,
+    },
+    {
+      name: "a surviving question with no named estimator",
+      apply: async (root) => {
+        const file = path.join(root, "research-portfolio.md");
+        const text = (await readFile(file, "utf8"))
+          .replaceAll(/估计量[^。]*。|LASSO 回归，LOOCV。|apriori 计 support\/confidence\/lift。|计 ROR。|pooled 参考分布，见 evidence-map.md。/g, "略。");
+        await writeFile(file, text, "utf8");
+        const protocolFile = path.join(root, "study-protocol.md");
+        await writeFile(protocolFile, "# 研究方案\n## 课题 A\n变量构造：VALUE 取自 labs.VALUE。\n", "utf8");
+      },
+      expect: /estimator mentions across/,
+    },
+    {
+      name: "a package that ran no consistency identity",
+      apply: async (root) => {
+        const file = path.join(root, "data-quality.md");
+        const text = (await readFile(file, "utf8")).replace(/^一致性校验.*$/m, "");
+        await writeFile(file, text, "utf8");
+      },
+      expect: /no internal-consistency identity is reported/,
+    },
+    {
       name: "a prior data contact declaration written after the fact",
       apply: async (root) => {
         await writeFile(path.join(root, "scoping-run.json"), JSON.stringify({ searches: [] }), "utf8");
@@ -360,7 +404,13 @@ test("each blocking gate rejects what it exists to catch", { skip: !hasPython3 }
 test("the reader-visible defects warn instead of blocking", { skip: !hasPython3 }, async () => {
   const root = await buildWorkspace();
   try {
-    await writeFile(path.join(root, "data-quality.md"), "# 数据质量\n本表填充率见上。\n", "utf8");
+    // Keeps the identity line: this test is about the fill-rate qualifier and the
+    // join key, and dropping the identity would block on a different gate.
+    await writeFile(
+      path.join(root, "data-quality.md"),
+      "# 数据质量\n本表填充率见上。\n一致性校验：总值 = 分项之和，3 组中 3 组通过。\n",
+      "utf8",
+    );
     await writeFile(path.join(root, "external-linkage.md"), "# 外部资源\n- LOINC：可用于标准化\n", "utf8");
     const result = await preflight(root);
     assert.equal(result.ok, true, "a visible defect must not withhold the package");
