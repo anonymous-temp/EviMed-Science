@@ -26,6 +26,7 @@ import official_pages
 import meta_agent
 import specialist_jobs
 import source_catalog
+import web_search
 
 
 SERVER_NAME = "evimed-research"
@@ -280,6 +281,25 @@ TOOL_DEFINITIONS = [
         "inputSchema": object_schema(
             {"url": {"type": "string", "minLength": 1, "maxLength": 2048}},
             ("url",),
+        ),
+    },
+    {
+        "name": "evimed_web_search",
+        "description": "Search the open web through the platform's self-hosted metasearch aggregator. Use for what bibliographic indexes do not carry - funding calls, conference programmes, society pages, registries, methods described only on a group's own site. Results are unreviewed pages: follow one to its primary record before any claim from it enters a report.",
+        "inputSchema": object_schema(
+            {
+                "query": {"type": "string", "minLength": 1, "maxLength": 512},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+                "categories": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "items": {"type": "string", "enum": ["general", "science", "news", "it", "files"]},
+                },
+                "language": {"type": "string", "minLength": 2, "maxLength": 5},
+                "timeRange": {"type": "string", "enum": ["day", "week", "month", "year"]},
+            },
+            ("query",),
         ),
     },
     {
@@ -1473,6 +1493,22 @@ def call_tool(name, arguments):
             "Matched %d audited data sources." % data["matched"],
             data=_data_with_provenance(data, name, arguments, _scope()),
         )
+    if name == "evimed_web_search":
+        try:
+            result = web_search.search(arguments)
+        except web_search.WebSearchError as error:
+            return failure(
+                error.code,
+                str(error),
+                error.retryable,
+                "retry" if error.retryable else "unsupported",
+                [
+                    "Retry once the backend recovers." if error.retryable
+                    else "Continue with the bibliographic channels; do not read an unavailable web search as an empty field.",
+                ],
+            )
+        result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
+        return result
     if name == "evimed_open_access_full_text":
         result = open_access_fulltext.fetch(arguments)
         if result["status"] == "success":

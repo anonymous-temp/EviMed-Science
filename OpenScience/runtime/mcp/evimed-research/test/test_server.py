@@ -58,6 +58,7 @@ class ToolContractTests(unittest.TestCase):
             "evimed_biomedical_source_search",
             "evimed_official_page_fetch",
             "evimed_open_access_full_text",
+            "evimed_web_search",
             "evimed_term_normalize",
             "evimed_drug_term_normalize",
             "evimed_evidence_deduplicate",

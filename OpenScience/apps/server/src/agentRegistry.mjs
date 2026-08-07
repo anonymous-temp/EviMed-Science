@@ -35,6 +35,7 @@ const optionalManifestFields = new Set(["companionSkills"]);
 export const EVIMED_AGENT_TOOL_IDS = new Set([
   "evimed_data_source_catalog",
   "evimed_biomedical_source_search",
+  "evimed_web_search",
   "evimed_official_page_fetch",
   "evimed_open_access_full_text",
   "evimed_term_normalize",

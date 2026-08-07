@@ -1878,6 +1878,29 @@ function evimedMcpEnvironment(config, project, plan) {
     }
     environment.EVIMED_PUBLIC_SOURCE_GATEWAY_URL = publicSourceGatewayUrl;
     environment.EVIMED_MODEL_CONFIG_FILE = modelConfigRuntimePath(plan);
+    // Open-web search rides the same runtime token as the source gateway, and
+    // is only offered when the deployment actually has a metasearch backend.
+    // Its URL is the server's own route: the runtime never learns which
+    // aggregator, or which engines, sit behind it.
+    if (String(config.webSearchUrl ?? "").trim()) {
+      const webSearchGatewayUrl = String(config.webSearchGatewayInternalUrl ?? "").trim();
+      let parsedSearch;
+      try {
+        parsedSearch = new URL(webSearchGatewayUrl);
+      } catch {
+        throw runtimeMcpError(
+          "runtime_web_search_gateway_url_invalid",
+          "The web-search gateway URL must be an absolute HTTP(S) URL.",
+        );
+      }
+      if (!["http:", "https:"].includes(parsedSearch.protocol) || parsedSearch.username || parsedSearch.password) {
+        throw runtimeMcpError(
+          "runtime_web_search_gateway_url_invalid",
+          "The web-search gateway URL must be an HTTP(S) URL without embedded credentials.",
+        );
+      }
+      environment.EVIMED_WEB_SEARCH_GATEWAY_URL = webSearchGatewayUrl;
+    }
   }
   // Keyless-public Unpaywall tier: when the operator configured an email, the
   // runtime MCP may query Unpaywall anonymously (email param) even without a

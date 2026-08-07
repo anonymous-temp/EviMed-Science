@@ -61,11 +61,12 @@ Verified against the deployed host:
 | OpenAlex | `sourceId: openalex` | Citation counts, concepts, publication year: how large a topic is and how fast it is moving |
 | Semantic Scholar | `sourceId: semantic-scholar` | References and citing works — who built on a paper, and who did not. Rate-limited without a key; retry with backoff |
 | Crossref | `sourceId: crossref` | Very recent DOIs, ahead of MEDLINE indexing |
-| Preprints | `sourceId: biorxiv` / `medrxiv` | What is being done right now and is not yet published |
+| Preprints | `evimed_biomedical_source_search` with `sourceId: europe-pmc` and `SRC:PPR` in the query | What is being done right now and is not yet published. `sourceId: biorxiv`/`medrxiv` resolves a DOI you already have — it is a lookup, not a search |
 | Full text | `evimed_open_access_full_text` | The actual Methods and Limitations paragraphs |
 | Guidelines | `evimed_guideline_search`, `evimed_official_page_fetch` | What practice already recommends, and on what evidence grade |
 | Drug and gene facts | `sourceId: dailymed` / `openfda` / `rxnorm` / `clinpgx-pharmgkb` | Label text, adverse-event counts, pharmacogenomic annotation |
 | Trend analysis | `evimed_bibliometric_analysis` | Publication-volume curve, author and institution clusters, emergent terms |
+| Open web | `evimed_web_search` | Everything the indexes do not carry — funding calls, conference programmes, society pages, registries, a method a group describes only on its own site |
 
 `clinicaltrials.gov` and `arxiv.org` do not resolve from the deployed host. Do
 not spend the run retrying them.
@@ -80,6 +81,20 @@ that cites papers and says nothing about any of them.
 
 Ask for more than the default ten per call. The limit goes to 50 on most
 sources and 123 on the biomedical source search.
+
+**Open-web results are unreviewed pages.** They widen a direction; they do not
+support a claim. Anything you take from one has to be followed to its primary
+record — and if it is published literature, re-found through
+`evimed_biomedical_source_search` so it carries an identifier. A page cited as
+though it were evidence is worse than no page.
+
+The tool reports which engines answered. This host reaches Bing, 360, Baidu,
+Sogou, and Marginalia; Google, DuckDuckGo, Brave, and Wikipedia do not resolve
+from it. **A thin result set therefore means few engines answered, not that
+little exists** — never write "nothing found on the open web" as a novelty
+argument. If the tool reports that open-web search is not configured, say so
+and carry on with the bibliographic channels; an unavailable search is not an
+empty field.
 
 Search every candidate direction four ways. A missing axis is what makes an
 agenda thin:
