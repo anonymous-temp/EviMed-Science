@@ -50,6 +50,7 @@ EVIDENCE_CHANNELS = (
     ("pharmacogenomics", re.compile(r"pharmgkb|clinpgx|cpic", re.I)),
     ("trial-registry", re.compile(r"clinicaltrials|isrctn|chictr", re.I)),
     ("bibliometrics", re.compile(r"文献计量|bibliometric", re.I)),
+    ("open-web", re.compile(r"开放网络|open[\s_-]?web|web[\s_-]?search|searxng", re.I)),
 )
 # Full texts are not self-reported. `evimed_open_access_full_text` writes each
 # retrieved article into .evimed-sources/<slug>/, so the count is recomputed
@@ -111,8 +112,8 @@ def check_evidence_breadth(root: Path, prose_outputs, issues: list[str]) -> dict
         issues.append(
             f"{EVIDENCE_MAP} draws on {len(channels)} channels ({', '.join(channels) or 'none'}); "
             f"the floor is {MIN_CHANNELS}. Europe PMC searches full text, OpenAlex and Semantic Scholar "
-            "carry the citation graph, Crossref is ahead of MEDLINE indexing, and the preprint servers "
-            "hold what the peer-reviewed record does not have yet."
+            "carry the citation graph, Crossref is ahead of MEDLINE indexing, and Europe PMC indexes "
+            "preprints under SRC:PPR — what is being done now and is not yet published."
         )
     if full_texts < MIN_FULL_TEXTS:
         issues.append(

@@ -1,3 +1,4 @@
+2026-08-07 11:40 · 接入自建聚合搜索（SearXNG，profile web-search）作为开放网络通道：服务端新增 /internal/search/v1/query 网关与 evimed_web_search 工具，运行时只发查询、不知道后端是谁。实测该主机 Google/DuckDuckGo/Brave/维基百科不可达，Bing/360/百度/搜狗/Marginalia 可用，已在引擎配置里如实固化。同一数据集重跑（选题v12，13 分钟）：47 篇不重复文献（v11 为 13）、9 条通道（v11 为 1）、5 篇全文落盘（v11 为 0）、3 个存活课题各带新颖性陈述（v11 为 0）。运行本身查出技能表里一处错误：biorxiv/medrxiv 连接器只按 DOI 取记录、不支持检索，预印本应走 Europe PMC 的 SRC:PPR，已改。
 2026-08-07 03:10 · 研究选题两条线（dataset-research-scoping v1.2.0、research-topic-selection v1.1.0）改为多渠道证据扩充：新增 evidence-map.md 交付物与共享 evidence_floor.py 下限（≥30 篇、≥5 渠道、≥5 篇全文、每个存活课题一条新颖性陈述），并写明 evimed_literature_search 只返回标题。
 # Progress
 

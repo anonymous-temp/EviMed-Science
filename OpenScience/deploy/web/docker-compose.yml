@@ -84,6 +84,38 @@ services:
       - /tmp:rw,nosuid,nodev,noexec,size=16m
     restart: "no"
 
+  # Open-web search: a self-hosted metasearch aggregator, reached only by the
+  # server's /internal/search/v1/query route. No port is published and the
+  # runtime never learns this host exists. Behind the "web-search" profile so a
+  # deployment that does not want an open-web channel simply does not start it.
+  open-science-web-search:
+    image: ${OPEN_SCIENCE_WEB_SEARCH_CONTAINER_IMAGE:-searxng/searxng:2026.8.4-c63835bd2}
+    profiles: ["web-search"]
+    # SEARXNG_SECRET only. It is read from a host file rather than this .env so
+    # the value never enters the release directory or the repository; SearXNG
+    # refuses to start without it even though, with the limiter and the image
+    # proxy both off and no published port, it protects nothing here.
+    env_file:
+      - ${OPEN_SCIENCE_WEB_SEARCH_SECRET_ENV_FILE:-./secrets/web-search.env}
+    environment:
+      SEARXNG_BASE_URL: http://open-science-web-search:8080/
+    volumes:
+      - type: bind
+        source: ./searxng/settings.yml
+        target: /etc/searxng/settings.yml
+        read_only: true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
   open-science-web:
     image: ${OPEN_SCIENCE_WEB_CONTAINER_IMAGE:-open-science-web:0.1.3}
     build:
@@ -209,6 +241,12 @@ services:
       OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT: ${OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT:-true}
       OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/model/v1}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/sources/v1/fetch}
+      # Empty disables the open-web channel; the tool then refuses with a
+      # stated reason rather than returning an empty result set a run could
+      # read as "nothing has been published on this".
+      OPEN_SCIENCE_WEB_SEARCH_URL: ${OPEN_SCIENCE_WEB_SEARCH_URL:-}
+      OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/search/v1/query}
+      OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS: ${OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS:-30000}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS:-60000}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES:-16777216}
       OPEN_SCIENCE_MODEL_GATEWAY_TIMEOUT_MS: ${OPEN_SCIENCE_MODEL_GATEWAY_TIMEOUT_MS:-300000}

@@ -18,6 +18,7 @@ requiredTools:
   - evimed_literature_search
   - evimed_open_access_full_text
 optionalTools:
+  - evimed_web_search
   - evimed_data_source_catalog
   - evimed_guideline_search
   - evimed_bibliometric_analysis

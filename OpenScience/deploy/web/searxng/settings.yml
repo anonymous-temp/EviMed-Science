@@ -1,0 +1,82 @@
+# SearXNG for the EviMed open-web channel.
+#
+# This instance is reachable only from the compose network — the server's
+# /internal/search/v1/query route is the sole caller, and nothing publishes a
+# port. That is why the bot limiter is off: it exists to stop anonymous public
+# abuse, and here the only client already authenticated with a runtime token.
+#
+# The engine list is a deployment fact, not a preference. Measured from the
+# production host: Google, DuckDuckGo, Brave, Startpage, Wikipedia, and Wiby do
+# not resolve at all, and Mojeek answers 403 to datacenter addresses. Leaving
+# them enabled would spend the request timeout on every query for nothing, so
+# they are disabled here and should be re-enabled if the host's egress changes.
+
+use_default_settings: true
+
+general:
+  instance_name: "EviMed Web Search"
+  # Nothing here is a person's query; there is no user-facing UI to link to.
+  contact_url: false
+  enable_metrics: false
+
+server:
+  bind_address: "0.0.0.0"
+  port: 8080
+  secret_key: "" # supplied by SEARXNG_SECRET
+  limiter: false
+  public_instance: false
+  image_proxy: false
+  method: "GET"
+
+search:
+  # JSON is what the gateway consumes; the HTML UI stays available for a human
+  # operator debugging engine health from inside the network.
+  formats:
+    - html
+    - json
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "auto"
+
+outgoing:
+  # An aggregator is as slow as its slowest engine. Three seconds is enough for
+  # the engines that do answer from this host and short enough that the dead
+  # ones cannot dominate a query.
+  request_timeout: 3.0
+  max_request_timeout: 6.0
+  pool_connections: 20
+  pool_maxsize: 10
+  enable_http2: true
+
+engines:
+  # Unreachable from this host — see the header.
+  - name: google
+    disabled: true
+  - name: duckduckgo
+    disabled: true
+  - name: brave
+    disabled: true
+  - name: startpage
+    disabled: true
+  - name: qwant
+    disabled: true
+  - name: mojeek
+    disabled: true
+  - name: wikipedia
+    disabled: true
+  - name: wikidata
+    disabled: true
+
+  # Verified answering with real results from this host.
+  - name: bing
+    disabled: false
+  - name: 360search
+    disabled: false
+  - name: baidu
+    disabled: false
+  - name: sogou
+    disabled: false
+  # Indexes small independent sites the majors bury; on a pharmacology probe it
+  # was the only engine that surfaced journal DOIs and repository records.
+  - name: marginalia
+    disabled: false

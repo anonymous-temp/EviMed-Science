@@ -22,6 +22,7 @@ import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
 } from "./publicSourceGateway.mjs";
+import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { MemosClient } from "./memosClient.mjs";
 import { MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
@@ -409,6 +410,9 @@ export function createWebApiApp(overrides = {}) {
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.publicSourceFetch ?? globalThis.fetch,
   });
+  const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
+    fetchImpl: overrides.webSearchFetch ?? globalThis.fetch,
+  });
   const commands = createCommandRegistry({ config, runtimeManager });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx));
   const rateLimiter = new FixedWindowRateLimiter();
@@ -450,6 +454,10 @@ export function createWebApiApp(overrides = {}) {
     }
     if (pathname === PUBLIC_SOURCE_GATEWAY_PATH) {
       await publicSourceGatewayHandler(req, res);
+      return;
+    }
+    if (pathname === WEB_SEARCH_GATEWAY_PATH) {
+      await webSearchGatewayHandler(req, res);
       return;
     }
     if (req.method === "OPTIONS") {

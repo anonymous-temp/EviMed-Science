@@ -709,6 +709,19 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES ??
       16 * 1024 * 1024,
     ),
+    // The self-hosted metasearch origin. Empty means the deployment has no
+    // open-web channel; the tool then refuses with a stated reason instead of
+    // the runtime silently getting nothing back.
+    webSearchUrl: overrides.webSearchUrl ?? process.env.OPEN_SCIENCE_WEB_SEARCH_URL ?? "",
+    webSearchGatewayInternalUrl:
+      overrides.webSearchGatewayInternalUrl ??
+      process.env.OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL ??
+      (production
+        ? "http://open-science-web:8787/internal/search/v1/query"
+        : `http://127.0.0.1:${port}/internal/search/v1/query`),
+    webSearchTimeoutMs: Number(
+      overrides.webSearchTimeoutMs ?? process.env.OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS ?? 30_000,
+    ),
     modelGatewayTimeoutMs: Number(
       overrides.modelGatewayTimeoutMs ?? process.env.OPEN_SCIENCE_MODEL_GATEWAY_TIMEOUT_MS ?? 300_000,
     ),
