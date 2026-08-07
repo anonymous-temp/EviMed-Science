@@ -162,22 +162,29 @@ def build():
                 r.bold = bold
             p.paragraph_format.space_after = Pt(4)
 
-    para(doc, "六、跨领域方法借鉴与转移边界", style="Heading 2")
+    para(doc, "六、投稿目标期刊", style="Heading 2")
+    for block in C.JOURNAL_INTRO.split("\n\n"):
+        para(doc, block)
+    table(doc, *C.TABLE_JOURNALS, widths=[1.0, 4.4, 5.2, 5.8])
+    for block in C.JOURNAL_CAVEAT.split("\n\n"):
+        para(doc, block)
+
+    para(doc, "七、跨领域方法借鉴与转移边界", style="Heading 2")
     para(doc, C.CROSSFIELD_INTRO)
     table(doc, *C.TABLE_CROSSFIELD, widths=[1.4, 3.4, 2.8, 4.4, 4.4])
 
-    para(doc, "七、字段使用总表", style="Heading 2")
+    para(doc, "八、字段使用总表", style="Heading 2")
     para(doc, C.FIELDUSE_INTRO)
     table(doc, *C.TABLE_FIELDUSE, widths=[4.0, 2.0, 4.6, 5.8])
 
-    para(doc, "八、全量数据需求与治理要求", style="Heading 2")
+    para(doc, "九、全量数据需求与治理要求", style="Heading 2")
     para(doc, C.GOVERNANCE_INTRO)
     bullets(doc, C.GOVERNANCE_ITEMS)
 
-    para(doc, "九、局限", style="Heading 2")
+    para(doc, "十、局限", style="Heading 2")
     bullets(doc, C.LIMITS)
 
-    para(doc, "十、实施次序", style="Heading 2")
+    para(doc, "十一、实施次序", style="Heading 2")
     para(doc, C.CLOSING)
 
     doc.save("住院TDM数据研究方向与实施方案.docx")

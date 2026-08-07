@@ -174,6 +174,14 @@ ESTIMATOR_MENTION = re.compile(
 # a compliance word in a title tells a reviewer the work is administrative before
 # they read a line. Checked on headings only, so the same word may still be
 # discussed in the prose.
+# Phase 7. A journal named without its partition is a guess the researcher acts
+# on, and a partition is not derivable from the impact factor — it differs
+# between a journal's broad and narrow category and is re-issued annually. The
+# comparable manuscript is what proves the fit rather than asserting it, and it
+# doubles as the writing template.
+JOURNAL_MENTION = re.compile(r"(?:目标期刊|投稿|target journal|submit to)", re.I)
+JOURNAL_TIER = re.compile(r"(?:[一二三四1-4]\s*区|Q[1-4]\b|quartile|分区)", re.I)
+COMPARABLE_WORK = re.compile(r"(?:相近稿件|对照稿件|该刊(?:已)?发表|comparable (?:paper|manuscript)|参照)", re.I)
 ACTIVITY_TITLE = re.compile(
     r"^#{2,4}[^\n]*(?:审计|梳理|摸底|盘点|情况分析|现状调查|\baudit\b|\bstocktak)",
     re.I | re.M,
@@ -409,6 +417,21 @@ def check_analytical_depth(root: Path, feasible: int, issues: list[str]) -> dict
             f"{feasible} surviving questions. A question without a named estimator is a topic, not a "
             "design — say what is being estimated and with what."
         )
+    placement = portfolio + protocol
+    if feasible > 0 and JOURNAL_MENTION.search(placement):
+        if not JOURNAL_TIER.search(placement):
+            issues.append(
+                "target journals are named without their partition or quartile. A journal named "
+                "without its standing is a guess the researcher will act on, and the standing is not "
+                "derivable from the impact factor — verify it against a source, say which edition, "
+                "and note that a journal's broad and narrow categories often differ."
+            )
+        if not COMPARABLE_WORK.search(placement):
+            issues.append(
+                "no comparable manuscript is named for any recommended journal. Name a paper that "
+                "journal has already published which resembles this design, and say what resembles "
+                "it — that proves the fit instead of asserting it, and gives the researcher a template."
+            )
     activity_titles = ACTIVITY_TITLE.findall(portfolio) + ACTIVITY_TITLE.findall(protocol)
     if activity_titles:
         issues.append(

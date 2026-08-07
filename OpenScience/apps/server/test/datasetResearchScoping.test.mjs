@@ -72,6 +72,9 @@ const PORTFOLIO = [
   "- 外部资源接驳：LOINC/RxNorm/ATC 见 external-linkage.md。",
   "- 多库证据合成：pooled 参考分布，见 evidence-map.md。",
   "- 描述性：仅在上述均被排除时作为兜底，本次未采用为默认。",
+  // Phase 7: the journal, its verified partition, and a comparable manuscript.
+  "目标期刊：Journal of Example Medicine（医学 2 区 / 小类 2 区，IF 4.2，2023 升级版）。",
+  "相近稿件：该刊已发表的同类设计可作模板（PMID 30000001）。",
 ].join("\n");
 const LINKAGE = "# 外部资源接驳\n- LOINC：通过 `LOINC_CODE` 连接，检验项粒度，单位需配 UCUM\n";
 const PROTOCOL = "# 研究方案\n## 课题 A\n变量构造：VALUE 取自 labs.VALUE。分析计划：描述统计 + Bootstrap 区间。\n";
@@ -366,6 +369,24 @@ test("each blocking gate rejects what it exists to catch", { skip: !hasPython3 }
         await writeFile(protocolFile, "# 研究方案\n## 课题 A\n变量构造：VALUE 取自 labs.VALUE。\n", "utf8");
       },
       expect: /estimator mentions across/,
+    },
+    {
+      name: "a journal named without its partition",
+      apply: async (root) => {
+        const file = path.join(root, "research-portfolio.md");
+        const text = (await readFile(file, "utf8")).replace("（医学 2 区 / 小类 2 区，IF 4.2，2023 升级版）", "");
+        await writeFile(file, text, "utf8");
+      },
+      expect: /named without their partition or quartile/,
+    },
+    {
+      name: "a recommended journal with no comparable manuscript",
+      apply: async (root) => {
+        const file = path.join(root, "research-portfolio.md");
+        const text = (await readFile(file, "utf8")).replace(/^相近稿件.*$/m, "");
+        await writeFile(file, text, "utf8");
+      },
+      expect: /no comparable manuscript is named/,
     },
     {
       name: "a topic named after the activity instead of the question",

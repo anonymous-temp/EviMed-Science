@@ -159,8 +159,23 @@ Every row below was hit on real hospital data. Check each one explicitly.
 | **Timestamp is order entry, not administration** | Bedtime (QN) orders share QD's entry-hour profile; no nightly order is entered at night | Time since dose computed from it is wrong for every row |
 | **Physiologically impossible value** | One blood pressure recorded as `126/7` | Passes every type and range check that does not know physiology |
 
-`data-quality.md` must end with a **mandatory preprocessing list**, each item
-naming the downstream analysis that breaks if it is skipped.
+`data-quality.md` must end with two tables, in this order.
+
+**The mandatory preprocessing list**, each item naming the downstream analysis
+that breaks if it is skipped.
+
+**The field-usage table**, which is what the researcher actually hands to their
+information department: one row per field, giving which design consumes it, the
+preprocessing it requires, and — where the trap is subtle — the one sentence that
+prevents the misuse. The rows that earn this table are the ones where the obvious
+reading is wrong: *use the date part only, the time is when the order was
+entered, not when the drug was given*; *the gram unit marks herbal items and the
+milligram unit western ones, so the column must be split before any dose is
+summed*; *strip the padding before grouping, or one concept counts as several*.
+
+Close it with what to **request at full scale**: the fields the designs need that
+this extract does not carry, ordered by how much they unlock. One of them is
+usually worth more than all the others together — name it and say why.
 
 ## Phase 2 — Domain-derived quantities
 
@@ -359,6 +374,16 @@ Floors, not targets. A package under any of them is not a landscape:
 Do not pad. A work is cited because a sentence depends on it. A bibliography of
 things nobody used is worse than a short one, which is why the map has to say
 what each work was used for.
+
+### Mark what you verified
+
+A report mixing citations you opened with citations a tool handed you, without
+saying which is which, cannot be acted on: the reader has to re-check everything
+or trust everything. **Carry a two-level mark through the whole document** — one
+symbol for facts verified against the source during this run, another for facts
+carried from a search result and not re-opened — and define the marks where they
+first appear. This costs nothing and it is the difference between a report a
+researcher can build on and one they have to redo.
 
 Then answer:
 
@@ -603,6 +628,83 @@ truncation and censoring; RECORD-PE 19.1.a requires how completely the database
 captures the drug exposure of interest. **A study that cannot supply one of
 these is unreportable however good its numbers look.**
 
+## Phase 7 — Where each topic gets published
+
+Naming a journal in one line at the end of a design is not placement, and a
+journal named without checking its standing is worse than none — the researcher
+acts on it. Placement is its own step and it has three parts.
+
+### Ask for the tier, then verify it
+
+The bar is the researcher's, not yours. Ask, or read it from the request. When
+Chinese partitions are the currency, the usual forms are 中科院分区小类二区以上
+(CAS narrow-category tier 2 or better), sometimes with 大类 allowed to be one
+tier lower, and **就高不就低** — where the broad and narrow categories disagree,
+the higher one is what is claimed.
+
+**Verify every partition against a source and say so.** They are not derivable
+from the impact factor, they differ between the broad and narrow category of the
+same journal, and they are re-issued annually with basic and upgraded editions
+that disagree. State the edition you used and tell the researcher to confirm
+against the one their institution recognises.
+
+Do not aim above the bar either. A tier-1 journal wants a cohort and a question
+this data cannot carry, and recommending one wastes a submission cycle.
+
+### The framing decides the tier, not the content
+
+This is the finding that matters most, and it emerged from a real check: the
+specialty journals of a methodological field are often ranked *below* the
+general journals of the clinical field it serves. Every pharmacokinetics and
+therapeutic-drug-monitoring journal checked sat at tier 3 or lower, while the
+psychopharmacology journals that would take the same study sat at tier 2.
+
+So the same study lands in different tiers depending on how its question is
+stated. Written as "a population pharmacokinetic model of drug X" it is a
+pharmacokinetics paper; written as "what the co-prescribed drugs actually
+measure at" it is a psychopharmacology paper. The data, the estimator and the
+result are identical.
+
+**Say this explicitly for each topic**: which framing was chosen, and what the
+alternative framing would cost or gain. A researcher who understands that the
+tier is a writing decision can make it themselves next time.
+
+### Every recommendation carries a comparable manuscript
+
+Name **a paper that journal has already published which resembles the proposed
+study**, and say what resembles it. This does two things a rationale cannot: it
+proves the fit rather than asserting it, and it hands the researcher a template
+— that paper's structure, its choice of comparator, and the way its discussion
+is organised are what the editor expects.
+
+The ideal case is a comparable that is close on the *data structure* rather than
+on the topic. The strongest one found in a real run was a paper fitting a parent
+drug and its metabolite simultaneously — a different drug, but exactly the data
+shape the new study had, so the whole modelling section transfers.
+
+### A topic that cannot be placed is replaced, not defended
+
+If a topic has no home at the required tier, that is a finding about the topic,
+not a problem to argue around. Process-quality and practice-conformance
+questions are the usual casualties: they are worth doing and hard to publish in
+clinical journals at tier 2.
+
+**Go back to Phase 4b and take another one.** The data almost always supports
+more designs than the report has room for, and the replacement is usually
+stronger, because a topic that a journal wants is a topic with a readership.
+Say what was replaced and why — the researcher may still want the unplaceable
+question done for their own institution.
+
+### A novelty pattern worth looking for
+
+When looking for a replacement, the most reliable source of a placeable topic is
+this: **find where the published field measures a proxy and this data measures
+the thing itself.** Whole literatures are built on counting what could have been
+measured — how many drugs were co-prescribed, rather than what each one reached;
+whether a patient was exposed, rather than to how much. If the data holds the
+measurement behind the field's proxy, the topic writes itself, and its novelty
+statement is one sentence long.
+
 ## Deliverables
 
 | File | Content |
@@ -610,11 +712,11 @@ these is unreportable however good its numbers look.**
 | `data-profile.md` | Per table, per column: fill rate, cardinality, type, vocabulary, join reachability |
 | `data-profile.json` | The same profile, machine-readable — what the preflight recomputes and compares |
 | `data-profile.py` | The script that produced both, runnable again |
-| `data-quality.md` | Findings classified by Kahn category, ending in the mandatory preprocessing list |
+| `data-quality.md` | Findings classified by Kahn category, the mandatory preprocessing list, and the **field-usage table**: per field, which design consumes it, the preprocessing it needs, and what to request at full scale |
 | `evidence-map.md` | One row per work: identifier, URL, channel, axis, **field of origin**, what it was used for, full text read |
 | `feasibility-matrix.md` | Candidate question × the seven target-trial elements, with a verdict each |
 | `external-linkage.md` | Resource, join key, granularity, and what it adds |
-| `research-portfolio.md` | Five or six topics, each with its 小综述, its 思路, and its 研究方案 — plus the infeasible list with named missing fields |
+| `research-portfolio.md` | Five or six topics, each with its 小综述, its 思路, its 研究方案 and its **verified journal placement with a comparable manuscript** — plus the infeasible list with named missing fields |
 | `scoping-run.json` | Run receipt: data fingerprint, search record, **prior data contact declaration** |
 
 Phases 0–4 feed Phases 5–6. Do not skip ahead to candidate questions.
