@@ -1,0 +1,130 @@
+{
+  "run": {
+    "skill": "dataset-research-scoping",
+    "date": "2026-08-07",
+    "dataset_file": "20260803TDM.xlsx",
+    "file_md5": "174e1766f7eaed549193046d7125f4ec",
+    "profile_fingerprint": "see data-profile.json (sourceFingerprint per table)",
+    "sheets": ["病案首页", "医嘱记录", "检验", "诊断记录", "体征"],
+    "agent": "evimed-dataset-research-scoping"
+  },
+  "priorDataContact": {
+    "declaredAt": "2026-08-07 (before Phase 1 profiling)",
+    "filesReceived": ["20260803TDM.xlsx"],
+    "partsInspected": "none at declaration time — no sheet, column, or cell value had been read or summarised",
+    "outcomeDistributionSeen": "no",
+    "guidance": "Weston 2019 (PMID 31039398); Van den Akker 2021 (PMID 33870513)"
+  },
+  "phases": {
+    "phase0_declaration": {"status": "done"},
+    "phase1_profiling": {
+      "status": "done",
+      "summary": "5 tables, 93 columns, 9 entirely empty, 20 candidate joins, 1 type conflict (AGE text/int); diagnosis table PATIENT_ID 0% fill; only 5 patients in the whole extract",
+      "artifacts": ["data-profile.py", "data-profile.json", "data-profile.md", "data-quality.md"]
+    },
+    "phase2_derived_quantities": {
+      "status": "done",
+      "summary": "aripiprazole total C/D 10.7-28.9 (2.7-fold); parent C/D 8.0-23.6; DHC/ARI 0.17-0.49; steady-state 1/6; range position parent 2above/2below/2in, total 2above/3below/1in; post-draw dose changes 2/5; sampling clock-time 0/6; order-test mismatch 1/6 (P2); BMI trajectory computed (5 pts)",
+      "note": "P4 draw on 01/03 uses 10 mg/day (28/02 order), not the 15 mg discharge order"
+    },
+    "phase3_evidence": {
+      "status": "done",
+      "channels_answered": [
+        "pubmed (via evimed_biomedical_source_search)",
+        "europe-pmc (full-text search + SRC:PPR preprints)",
+        "openalex",
+        "crossref (incl. ISRCTN OptIMA 2/3)",
+        "evimed_literature_search (internal index)",
+        "evimed_guideline_search",
+        "evimed_open_access_full_text (europe-pmc XML + OA PDF)",
+        "evimed_bibliometric_analysis (managed job, succeeded, 38 records)",
+        "evimed_web_search categories=science (engines answered: arxiv, pubmed; semantic scholar unresponsive)",
+        "evimed_web_search categories=general (engines answered: 360search, baidu; Chinese queries)"
+      ],
+      "channels_failed_or_unanswered": {
+        "semantic-scholar": "HTTP 503 on both attempts (2026-08-07); retried once per policy; no results used from it",
+        "evimed_research_topic_selection": "managed job topic-20260807040420-c80f8ad3848a FAILED: '未检索到相关文献' after PubMed 429 rate-limit; evimed_runner.py RuntimeError; output NOT used for any novelty claim; recorded as failure",
+        "web_science_openAIRE": "two science-category queries returned only arxiv records; no OpenAIRE project/funding records were returned; recorded as engine non-response, NOT as 'no EU projects exist'"
+      },
+      "works_count": 45,
+      "fulltexts_read": 6,
+      "fulltexts": [
+        "PMC9584998 (Schoretsanitis 2022 meta, PMID 36195732)",
+        "PMC10013164 (China TDM survey 2023, PMID 36920501)",
+        "PMC11272526 (vancomycin AUC survey China, PMID 39070794)",
+        "PMC12996889 (CYP2D6 phenotypes aripiprazole, PMID 40662264)",
+        "10.1111/bcp.15800 (pediatric precision dosing, PMID 37222228, submitted version)",
+        "PMC6553956 (12-antipsychotic compilation, PMID 31025986)"
+      ],
+      "artifacts": ["evidence-map.md"]
+    },
+    "phase4_linkage": {"status": "done", "artifacts": ["external-linkage.md"]},
+    "phase5_matrix": {
+      "status": "done",
+      "artifacts": ["feasibility-matrix.md"],
+      "survivors": ["Q1 TDM process quality audit (descriptive, brief report)", "Q2 data-gap quantification methodology"],
+      "dropped": {
+        "C": "C/D distribution case series - ANSWERED (compilation n=1610; meta N=3373; Kirschbaum 155)",
+        "D": "concentration-response - INFEASIBLE (missing outcome scale/follow-up) + ANSWERED (Chinese 2006/2022/2025 papers)",
+        "E": "case reports - ANSWERED (clozapine supratherapeutic cases exist; weak teaching point)",
+        "F": "weight/BMI metabolic effects - INFEASIBLE (n=5, no metabolic labs, no control) + ANSWERED",
+        "G": "TCM+Western combination TDM - INFEASIBLE (missing TCM exposure quantification)"
+      }
+    },
+    "phase6_protocols": {"status": "done", "artifacts": ["research-portfolio.md", "study-protocol.md"]},
+    "preflight": {"status": "pending", "note": "run preflight.py until ok"}
+  },
+  "search_record": [
+    {"n": 1, "channel": "lit", "query": "aripiprazole therapeutic drug monitoring", "hits": 50},
+    {"n": 2, "channel": "lit", "query": "antipsychotic therapeutic drug monitoring China", "hits": 50},
+    {"n": 3, "channel": "pubmed", "query": "aripiprazole therapeutic drug monitoring dose-normalized concentration", "hits": 1},
+    {"n": 4, "channel": "epmc", "query": "aripiprazole TDM steady state sampling audit", "hits": 18, "note": "conference abstracts noise"},
+    {"n": 5, "channel": "pubmed", "query": "Hiemke consensus guidelines TDM neuropsychopharmacology update 2017", "hits": 5},
+    {"n": 6, "channel": "pubmed", "query": "aripiprazole dose-adjusted plasma concentration clinical response", "hits": 0},
+    {"n": 7, "channel": "pubmed", "query": "clozapine therapeutic drug monitoring China schizophrenia", "hits": 30},
+    {"n": 8, "channel": "pubmed", "query": "therapeutic drug monitoring audit psychiatry sampling steady state quality", "hits": 1},
+    {"n": 9, "channel": "pubmed", "query": "dehydroaripiprazole aripiprazole ratio CYP2D6", "hits": 13},
+    {"n": 10, "channel": "pubmed", "query": "therapeutic drug monitoring status China survey", "hits": 30},
+    {"n": 11, "channel": "pubmed", "query": "consensus guidelines TDM neuropsychopharmacology update 2017 Pharmacopsychiatry", "hits": 5},
+    {"n": 12, "channel": "pubmed", "query": "aripiprazole plasma concentration Chinese patients schizophrenia TDM", "hits": 3},
+    {"n": 13, "channel": "epmc", "query": "aripiprazole TDM AND (SRC:PPR OR SRC:MED) AND (KIND:R)", "hits": 0},
+    {"n": 14, "channel": "openalex", "query": "aripiprazole therapeutic drug monitoring dose concentration range", "hits": 30},
+    {"n": 15, "channel": "web-sci", "query": "aripiprazole therapeutic drug monitoring antipsychotic precision dosing", "hits": 15, "engines": ["arxiv", "pubmed"], "unresponsive": ["semantic scholar"]},
+    {"n": 16, "channel": "web-gen-zh", "query": "精神科 治疗药物监测 TDM 专家共识", "hits": 15, "engines": ["360search", "baidu"]},
+    {"n": 17, "channel": "pubmed", "query": "PMID 40304505 re-find", "hits": 1},
+    {"n": 18, "channel": "epmc", "query": "中国精神科治疗药物监测临床应用专家共识", "hits": 20, "note": "irrelevant Chinese consensuses; consensus re-found via web-gen instead"},
+    {"n": 19, "channel": "crossref", "query": "antipsychotic therapeutic drug monitoring", "hits": 25},
+    {"n": 20, "channel": "semantic-scholar", "query": "antipsychotic blood concentration therapeutic drug monitoring variability", "hits": "HTTP 503"},
+    {"n": 21, "channel": "web-gen-zh", "query": "阿立哌唑 血药浓度 治疗药物监测 精神科 研究", "hits": 15, "engines": ["360search", "baidu"]},
+    {"n": 22, "channel": "pubmed", "query": "Therapeutic Reference Range Aripiprazole Schizophrenia Revised", "hits": 1},
+    {"n": 23, "channel": "pubmed", "query": "Compilation of serum concentrations 12 antipsychotic drugs TDM", "hits": 0, "note": "re-hit later as compilation serum concentrations antipsychotics percentile -> 31025986"},
+    {"n": 24, "channel": "epmc", "query": "aripiprazole AND SRC:PPR", "hits": 30, "note": "no relevant TDM preprints"},
+    {"n": 25, "channel": "pubmed", "query": "therapeutic drug monitoring psychotropic drugs China nationwide survey", "hits": 3},
+    {"n": 26, "channel": "pubmed", "query": "compilation serum concentrations antipsychotics percentile", "hits": 1},
+    {"n": 27, "channel": "web-gen-zh", "query": "治疗药物监测 采样时间 稳态 谷浓度 精神科 规范", "hits": 13, "engines": ["360search", "baidu"]},
+    {"n": 28, "channel": "pubmed", "query": "Korell aripiprazole pharmacokinetic model sampling", "hits": 1},
+    {"n": 29, "channel": "pubmed", "query": "therapeutic drug monitoring children adolescents aripiprazole", "hits": 1},
+    {"n": 30, "channel": "pubmed", "query": "aripiprazole dose plasma concentration receptor occupancy response systematic review", "hits": 1},
+    {"n": 31, "channel": "pubmed", "query": "steady-state sampling proportion quality indicator antipsychotic", "hits": 0},
+    {"n": 32, "channel": "pubmed", "query": "stewardship antipsychotics inpatient", "hits": 1},
+    {"n": 33, "channel": "biblio", "query": "managed job therapeutic drug monitoring of antipsychotics", "hits": 38, "status": "succeeded"},
+    {"n": 34, "channel": "topic-sel", "query": "managed job 中文方向", "status": "FAILED - PubMed 429, no records, pipeline error; not used"},
+    {"n": 35, "channel": "web-sci", "query": "therapeutic drug monitoring psychiatry EU project H2020 precision dosing funding", "hits": 10, "engines": ["arxiv"], "note": "OpenAIRE did not answer on either attempt"},
+    {"n": 36, "channel": "web-gen-zh", "query": "中国药理学会 治疗药物监测研究专业委员会 学术年会 精神科", "hits": 15, "engines": ["360search", "baidu"]},
+    {"n": 37, "channel": "pubmed", "query": "stewardship antipsychotics inpatient settings program", "hits": 1},
+    {"n": 38, "channel": "pubmed", "query": "WJBP summary consensus TDM tool clinicians", "hits": 0, "note": "cited via guideline channel instead"}
+  ],
+  "open_web_channel_record": {
+    "science": {"engines_answered": ["arxiv", "pubmed"], "engines_unresponsive": ["semantic scholar"], "openAIRE_project_records": "none returned in two attempts", "note": "thin results = few engines answered, not absence of content"},
+    "general": {"engines_answered": ["360search", "baidu"], "queries": ["精神科 治疗药物监测 TDM 专家共识", "阿立哌唑 血药浓度 治疗药物监测 精神科 研究", "中国药理学会 治疗药物监测研究专业委员会 学术年会 精神科", "治疗药物监测 采样时间 稳态 谷浓度 精神科 规范"], "key_finds": ["2022 Chinese psychiatric TDM consensus (Sinomed 2022423503)", "2025 PGx consensus", "TDM result interpretation consensus", "15th TDM annual meeting Changsha 2025-09", "registered 2026 study on random-concentration to trough conversion", "multiple Chinese concentration-response papers 2006-2025"]}
+  },
+  "floors": {
+    "distinct_works": 45,
+    "min_30": true,
+    "channels_answered": 10,
+    "min_5_channels": true,
+    "fulltexts_read": 6,
+    "min_5_fulltexts": true,
+    "method_citations_per_surviving_question": "Q1: Korell 2018, Schoretsanitis 2022, Benchimol RECORD, Langan RECORD-PE, Hoenig&Heisey, Bland = 6; Q2: Korell 2018, Kahn 2016, Weiskopf 2013, Abedjan 2015, Benchimol, Langan = 6"
+  }
+}

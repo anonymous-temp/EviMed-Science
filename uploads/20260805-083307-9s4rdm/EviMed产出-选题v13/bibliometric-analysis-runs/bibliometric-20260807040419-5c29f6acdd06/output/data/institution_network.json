@@ -1,0 +1,71 @@
+{
+  "nodes": [
+    {
+      "id": "National Health Service",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.25,
+      "betweenness": 0.0,
+      "closeness": 0.5,
+      "weighted_degree": 2
+    },
+    {
+      "id": "Laboratory for TDM and Toxicology",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.5,
+      "betweenness": 0.0,
+      "closeness": 1.0,
+      "weighted_degree": 4
+    },
+    {
+      "id": "Toxicological Centre",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.5,
+      "betweenness": 0.0,
+      "closeness": 1.0,
+      "weighted_degree": 4
+    },
+    {
+      "id": "Institute of Psychiatry",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.25,
+      "betweenness": 0.0,
+      "closeness": 0.5,
+      "weighted_degree": 2
+    },
+    {
+      "id": "University of Antwerp",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.5,
+      "betweenness": 0.0,
+      "closeness": 1.0,
+      "weighted_degree": 4
+    }
+  ],
+  "edges": [
+    {
+      "source": "National Health Service",
+      "target": "Institute of Psychiatry",
+      "weight": 2
+    },
+    {
+      "source": "Laboratory for TDM and Toxicology",
+      "target": "University of Antwerp",
+      "weight": 2
+    },
+    {
+      "source": "Laboratory for TDM and Toxicology",
+      "target": "Toxicological Centre",
+      "weight": 2
+    },
+    {
+      "source": "Toxicological Centre",
+      "target": "University of Antwerp",
+      "weight": 2
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "query": "aripiprazole therapeutic drug monitoring dose-corrected concentration",
+  "date_from": "2000",
+  "date_to": "2026",
+  "max_records": 200,
+  "total_found": 3,
+  "total_fetched": 3,
+  "search_strategy": {
+    "formal_query": "(\"aripiprazole therapeutic drug monitoring dose-corrected concentration\"[Title/Abstract]) AND (\"2000/01/01\"[Date - Publication] : \"2026/08/07\"[Date - Publication])",
+    "concepts": [
+      {
+        "label": "aripiprazole therapeutic drug monitoring dose-corrected concentration",
+        "free_terms": [
+          "aripiprazole therapeutic drug monitoring dose-corrected concentration"
+        ],
+        "mesh_descriptor": null,
+        "mesh_ui": null,
+        "entry_terms_used": [],
+        "mesh_lookup_failed": false
+      }
+    ],
+    "strategy_text": "**Concept 1: aripiprazole therapeutic drug monitoring dose-corrected concentration**\n- MeSH descriptor: no matching descriptor found (free-text search used)\n- Free-text terms: \"aripiprazole therapeutic drug monitoring dose-corrected concentration\"\n\n**Boolean combination:** Concept blocks combined with AND\n**Date filter:** 2000 to 2026\n\n**Full search string:**\n\n`(\"aripiprazole therapeutic drug monitoring dose-corrected concentration\"[Title/Abstract]) AND (\"2000/01/01\"[Date - Publication] : \"2026/08/07\"[Date - Publication])`",
+    "user_query": "aripiprazole therapeutic drug monitoring dose-corrected concentration",
+    "fallback_query": "aripiprazole therapeutic drug monitoring dose-corrected concentration",
+    "fallback_reason": "formal_query_zero_results"
+  },
+  "after_dedup": 3
+}

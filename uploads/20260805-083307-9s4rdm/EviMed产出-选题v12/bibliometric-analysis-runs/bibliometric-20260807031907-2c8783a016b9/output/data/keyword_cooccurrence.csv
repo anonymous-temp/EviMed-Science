@@ -1,0 +1,1427 @@
+source,target,weight,source_freq,target_freq
+Antipsychotic Agents,Aripiprazole,37,54,46
+Antipsychotic Agents,drug therapy,32,54,34
+Antipsychotic Agents,blood,31,54,40
+Antipsychotic Agents,pharmacokinetics,28,54,32
+Aripiprazole,blood,28,46,40
+Antipsychotic Agents,therapeutic use,27,54,27
+Aripiprazole,Piperazines,26,46,26
+Aripiprazole,Quinolones,25,46,25
+Piperazines,Quinolones,25,26,25
+Aripiprazole,drug therapy,23,46,34
+Aripiprazole,pharmacokinetics,23,46,32
+Antipsychotic Agents,Drug Monitoring,23,54,26
+blood,drug therapy,22,40,34
+drug therapy,therapeutic use,22,34,27
+drug therapy,pharmacokinetics,21,34,32
+Antipsychotic Agents,Piperazines,21,54,26
+Antipsychotic Agents,Schizophrenia,20,54,24
+Antipsychotic Agents,Quinolones,20,54,25
+Schizophrenia,drug therapy,20,24,34
+Aripiprazole,Schizophrenia,19,46,24
+Piperazines,blood,17,26,40
+blood,pharmacokinetics,17,40,32
+pharmacokinetics,therapeutic use,16,32,27
+Aripiprazole,therapeutic use,16,46,27
+Quinolones,blood,16,25,40
+blood,therapeutic use,15,40,27
+Antipsychotic Agents,methods,15,54,22
+Piperazines,pharmacokinetics,15,26,32
+blood,metabolism,15,40,18
+Quinolones,pharmacokinetics,15,25,32
+Piperazines,drug therapy,14,26,34
+Antipsychotic Agents,metabolism,14,54,18
+blood,methods,14,40,22
+Quinolones,drug therapy,14,25,34
+Drug Monitoring,blood,14,26,40
+Drug Monitoring,methods,14,26,22
+Aripiprazole,Drug Monitoring,14,46,26
+Aripiprazole,methods,14,46,22
+Schizophrenia,therapeutic use,13,24,27
+Aripiprazole,metabolism,13,46,18
+Schizophrenia,blood,12,24,40
+Aripiprazole,Risperidone,11,46,11
+Drug Monitoring,pharmacokinetics,11,26,32
+Antipsychotic Agents,"Dose-Response Relationship, Drug",11,54,12
+Drug Monitoring,drug therapy,11,26,34
+Drug Monitoring,therapeutic use,11,26,27
+Antipsychotic Agents,adverse effects,11,54,11
+Schizophrenia,pharmacokinetics,11,24,32
+Piperazines,metabolism,10,26,18
+Quinolones,metabolism,10,25,18
+Quinolones,Schizophrenia,10,25,24
+Antipsychotic Agents,administration & dosage,10,54,11
+administration & dosage,drug therapy,10,11,34
+Piperazines,Schizophrenia,10,26,24
+Quinolones,therapeutic use,10,25,27
+Piperazines,therapeutic use,10,26,27
+Antipsychotic Agents,therapeutic drug monitoring,9,54,11
+"Dose-Response Relationship, Drug",pharmacokinetics,9,12,32
+administration & dosage,pharmacokinetics,9,11,32
+"Dose-Response Relationship, Drug",drug therapy,9,12,34
+Antipsychotic Agents,Risperidone,9,54,11
+Aripiprazole,administration & dosage,9,46,11
+Piperazines,methods,9,26,22
+drug therapy,metabolism,9,34,18
+Antipsychotic Agents,Olanzapine,9,54,9
+metabolism,pharmacokinetics,9,18,32
+Aripiprazole,Tandem Mass Spectrometry,8,46,11
+Aripiprazole,Olanzapine,8,46,9
+Antipsychotic Agents,Benzodiazepines,8,54,8
+methods,pharmacokinetics,8,22,32
+chemistry,methods,8,9,22
+Tandem Mass Spectrometry,methods,8,11,22
+Tandem Mass Spectrometry,blood,8,11,40
+adverse effects,drug therapy,8,11,34
+Drug Monitoring,Piperazines,8,26,26
+Quinolones,methods,8,25,22
+Reproducibility of Results,methods,8,8,22
+Aripiprazole,adverse effects,8,46,11
+metabolism,therapeutic use,8,18,27
+adverse effects,pharmacokinetics,8,11,32
+Cytochrome P-450 CYP2D6,Piperazines,7,7,26
+Schizophrenia,metabolism,7,24,18
+"Dose-Response Relationship, Drug",blood,7,12,40
+Aripiprazole,Benzodiazepines,7,46,8
+Piperazines,administration & dosage,7,26,11
+Aripiprazole,"Dose-Response Relationship, Drug",7,46,12
+Antipsychotic Agents,Cytochrome P-450 CYP2D6,7,54,7
+"Chromatography, High Pressure Liquid",blood,7,8,40
+blood,chemistry,7,40,9
+"Dose-Response Relationship, Drug",administration & dosage,7,12,11
+Quinolones,administration & dosage,7,25,11
+Drug Monitoring,Quinolones,7,26,25
+Aripiprazole,Cytochrome P-450 CYP2D6,7,46,7
+Benzodiazepines,Olanzapine,7,8,9
+drug therapy,methods,7,34,22
+Antipsychotic Agents,Tandem Mass Spectrometry,7,54,11
+"Chromatography, High Pressure Liquid",methods,7,8,22
+Cytochrome P-450 CYP2D6,Quinolones,7,7,25
+"Chromatography, High Pressure Liquid",Drug Monitoring,6,8,26
+Aripiprazole,genetics,6,46,6
+Aripiprazole,"Chromatography, High Pressure Liquid",6,46,8
+pharmacokinetics,pharmacology,6,32,7
+Olanzapine,drug therapy,6,9,34
+Risperidone,blood,6,11,40
+administration & dosage,blood,6,11,40
+Drug Monitoring,therapeutic drug monitoring,6,26,11
+Antipsychotic Agents,genetics,6,54,6
+Drug Interactions,pharmacokinetics,6,6,32
+"Chromatography, High Pressure Liquid",Reproducibility of Results,6,8,8
+Tandem Mass Spectrometry,chemistry,6,11,9
+Olanzapine,Risperidone,6,9,11
+Quinolones,Reproducibility of Results,6,25,8
+Olanzapine,Schizophrenia,6,9,24
+Schizophrenia,adverse effects,6,24,11
+Piperazines,genetics,6,26,6
+Quinolones,genetics,6,25,6
+"Dose-Response Relationship, Drug",Drug Monitoring,6,12,26
+Drug Monitoring,Schizophrenia,6,26,24
+Piperazines,Reproducibility of Results,6,26,8
+Aripiprazole,therapeutic drug monitoring,6,46,11
+Reproducibility of Results,blood,6,8,40
+Aripiprazole,pharmacology,6,46,7
+Aripiprazole,Reproducibility of Results,6,46,8
+"Chromatography, Liquid",Tandem Mass Spectrometry,6,7,11
+adverse effects,blood,6,11,40
+Genotype,genetics,5,5,6
+Genotype,Piperazines,5,5,26
+Antipsychotic Agents,Genotype,5,54,5
+Piperazines,Tandem Mass Spectrometry,5,26,11
+therapeutic drug monitoring,therapeutic use,5,11,27
+"Dose-Response Relationship, Drug",Piperazines,5,12,26
+"Dose-Response Relationship, Drug",Quinolones,5,12,25
+Cytochrome P-450 CYP2D6,genetics,5,7,6
+Cytochrome P-450 CYP2D6,Genotype,5,7,5
+Genotype,Quinolones,5,5,25
+Antipsychotic Agents,antipsychotics,5,54,7
+Antipsychotic Agents,Asian People,5,54,5
+"Dose-Response Relationship, Drug",Schizophrenia,5,12,24
+Drug Monitoring,Risperidone,5,26,11
+Olanzapine,blood,5,9,40
+Aripiprazole,Asian People,5,46,5
+Asian People,Piperazines,5,5,26
+Antipsychotic Agents,Mental Disorders,5,54,5
+Mental Disorders,drug therapy,5,5,34
+Asian People,Quinolones,5,5,25
+Asian People,Schizophrenia,5,5,24
+Drug Monitoring,administration & dosage,5,26,11
+Risperidone,drug therapy,5,11,34
+methods,therapeutic use,5,22,27
+Aripiprazole,chemistry,5,46,9
+pharmacokinetics,therapeutic drug monitoring,5,32,11
+Schizophrenia,methods,5,24,22
+Piperazines,pharmacology,5,26,7
+Antipsychotic Agents,pharmacology,5,54,7
+blood,therapeutic drug monitoring,5,40,11
+Antipsychotic Agents,chemistry,5,54,9
+Aripiprazole,Haloperidol,5,46,5
+Benzodiazepines,Risperidone,5,8,11
+"Dose-Response Relationship, Drug",therapeutic use,5,12,27
+Asian People,drug therapy,5,5,34
+Aripiprazole,antipsychotics,5,46,7
+Drug Interactions,drug therapy,5,6,34
+metabolism,methods,5,18,22
+Olanzapine,therapeutic use,5,9,27
+"Chromatography, High Pressure Liquid",Piperazines,5,8,26
+Schizophrenia,administration & dosage,5,24,11
+Risperidone,pharmacokinetics,5,11,32
+Reproducibility of Results,chemistry,5,8,9
+Antipsychotic Agents,Haloperidol,5,54,5
+Drug Monitoring,metabolism,5,26,18
+Antipsychotic Agents,"Chromatography, Liquid",5,54,7
+Quinolones,pharmacology,5,25,7
+Cytochrome P-450 CYP2D6,metabolism,5,7,18
+Risperidone,therapeutic use,5,11,27
+Aripiprazole,Genotype,5,46,5
+Drug Monitoring,Olanzapine,4,26,9
+Reproducibility of Results,Sensitivity and Specificity,4,8,4
+Olanzapine,methods,4,9,22
+Antipsychotic Agents,Drug Interactions,4,54,6
+Aripiprazole,Sensitivity and Specificity,4,46,4
+Reproducibility of Results,Tandem Mass Spectrometry,4,8,11
+Cytochrome P-450 CYP2D6,therapeutic use,4,7,27
+Drug Monitoring,Reproducibility of Results,4,26,8
+Piperazines,chemistry,4,26,9
+adverse effects,therapeutic use,4,11,27
+Quinolones,Tandem Mass Spectrometry,4,25,11
+Risperidone,methods,4,11,22
+Risperidone,Schizophrenia,4,11,24
+Quinolones,chemistry,4,25,9
+"Chromatography, Liquid",blood,4,7,40
+"Chromatography, Liquid",methods,4,7,22
+Drug Stability,blood,4,4,40
+Benzodiazepines,drug therapy,4,8,34
+Benzodiazepines,blood,4,8,40
+Antipsychotic Agents,Clozapine,4,54,5
+Antipsychotic Agents,East Asian People,4,54,4
+Aripiprazole,"Chromatography, Liquid",4,46,7
+metabolism,therapeutic drug monitoring,4,18,11
+Drug Monitoring,Mental Disorders,4,26,5
+Drug Monitoring,chemistry,4,26,9
+Drug Monitoring,Tandem Mass Spectrometry,4,26,11
+Mental Disorders,pharmacokinetics,4,5,32
+Psychotropic Drugs,blood,4,4,40
+administration & dosage,adverse effects,4,11,11
+Antipsychotic Agents,drug effects,4,54,4
+Haloperidol,drug therapy,4,5,34
+Asian People,therapeutic use,4,5,27
+Haloperidol,blood,4,5,40
+Haloperidol,Schizophrenia,4,5,24
+blood,drug effects,4,40,4
+administration & dosage,therapeutic use,4,11,27
+"Chromatography, Liquid",chemistry,4,7,9
+Aripiprazole,drug effects,4,46,4
+drug therapy,genetics,4,34,6
+Benzodiazepines,Schizophrenia,4,8,24
+Quinolones,Sensitivity and Specificity,4,25,4
+Sensitivity and Specificity,blood,4,4,40
+Piperazines,Sensitivity and Specificity,4,26,4
+Aripiprazole,Clozapine,4,46,5
+Piperazines,adverse effects,4,26,11
+"Chromatography, High Pressure Liquid",Quinolones,4,8,25
+Sensitivity and Specificity,methods,4,4,22
+Quinolones,adverse effects,4,25,11
+Cytochrome P-450 CYP2D6,blood,4,7,40
+blood,genetics,4,40,6
+Cytochrome P-450 CYP2D6,pharmacokinetics,4,7,32
+Drug Stability,Reproducibility of Results,4,4,8
+Aripiprazole,Paliperidone Palmitate,4,46,4
+analysis,methods,4,4,22
+Antipsychotic Agents,Paliperidone Palmitate,4,54,4
+Benzodiazepines,therapeutic use,4,8,27
+Aripiprazole,Drug Interactions,4,46,6
+blood,pharmacology,4,40,7
+"Chromatography, High Pressure Liquid",Tandem Mass Spectrometry,4,8,11
+drug therapy,pharmacology,4,34,7
+Paliperidone Palmitate,methods,4,4,22
+Benzodiazepines,Drug Monitoring,4,8,26
+Drug Interactions,pharmacology,4,6,7
+Cytochrome P-450 CYP2D6,drug therapy,4,7,34
+Clozapine,Schizophrenia,4,5,24
+Benzodiazepines,methods,4,8,22
+Drug Stability,methods,4,4,22
+Aripiprazole,Positron-Emission Tomography,3,46,3
+"Drug Therapy, Combination",blood,3,3,40
+Reproducibility of Results,pharmacokinetics,3,8,32
+Positron-Emission Tomography,drug therapy,3,3,34
+"Drug Therapy, Combination",drug therapy,3,3,34
+Antipsychotic,Schizophrenia,3,3,24
+Drug Stability,chemistry,3,4,9
+Sensitivity and Specificity,chemistry,3,4,9
+Drug Stability,Quinolones,3,4,25
+Antipsychotic Agents,"Drug Therapy, Combination",3,54,3
+Drug Stability,Sensitivity and Specificity,3,4,4
+Drug Stability,Tandem Mass Spectrometry,3,4,11
+"Drug Therapy, Combination",therapeutic use,3,3,27
+Drug Stability,Piperazines,3,4,26
+Benzodiazepines,Paliperidone Palmitate,3,8,4
+Risperidone,antipsychotics,3,11,7
+Antidepressive Agents,Antipsychotic Agents,3,4,54
+Antidepressive Agents,Drug Monitoring,3,4,26
+"Dose-Response Relationship, Drug",metabolism,3,12,18
+Tandem Mass Spectrometry,therapeutic drug monitoring,3,11,11
+"Dose-Response Relationship, Drug",methods,3,12,22
+Antipsychotic Agents,"Receptors, Dopamine D2",3,54,3
+adverse effects,methods,3,11,22
+Benzodiazepines,Clozapine,3,8,5
+"Receptors, Dopamine D2",blood,3,3,40
+administration & dosage,methods,3,11,22
+chemistry,metabolism,3,9,18
+Haloperidol,drug effects,3,5,4
+Antipsychotic Agents,"Chromatography, High Pressure Liquid",3,54,8
+Drug Interactions,Quinolones,3,6,25
+Drug Interactions,Piperazines,3,6,26
+Antidepressive Agents,blood,3,4,40
+drug effects,drug therapy,3,4,34
+antipsychotics,blood,3,7,40
+Drug Monitoring,adverse effects,3,26,11
+Sensitivity and Specificity,Tandem Mass Spectrometry,3,4,11
+pharmacology,therapeutic use,3,7,27
+Benzodiazepines,Quetiapine Fumarate,3,8,3
+Drug Interactions,Drug Monitoring,3,6,26
+adverse effects,metabolism,3,11,18
+Aripiprazole,Prolactin,3,46,3
+Antipsychotic Agents,Prolactin,3,54,3
+Antipsychotic Agents,Quetiapine Fumarate,3,54,3
+Quetiapine Fumarate,Risperidone,3,3,11
+"Chromatography, High Pressure Liquid",Limit of Detection,3,8,3
+Olanzapine,Quetiapine Fumarate,3,9,3
+Aripiprazole,Quetiapine Fumarate,3,46,3
+"Chromatography, High Pressure Liquid",Drug Stability,3,8,4
+Olanzapine,Paliperidone Palmitate,3,9,4
+"Chromatography, High Pressure Liquid",Sensitivity and Specificity,3,8,4
+Paliperidone Palmitate,Tandem Mass Spectrometry,3,4,11
+antipsychotics,therapeutic drug monitoring,3,7,11
+Drug Monitoring,Limit of Detection,3,26,3
+Aripiprazole,analysis,3,46,4
+Limit of Detection,methods,3,3,22
+Prolactin,blood,3,3,40
+Cytochrome P-450 CYP3A,metabolism,3,3,18
+Schizophrenia,genetics,3,24,6
+"Chromatography, Liquid",pharmacokinetics,3,7,32
+Cytochrome P-450 CYP2D6,Cytochrome P-450 CYP3A,3,7,3
+Cytochrome P-450 CYP3A,Piperazines,3,3,26
+Cytochrome P-450 CYP3A,Quinolones,3,3,25
+Genotype,metabolism,3,5,18
+Olanzapine,pharmacokinetics,3,9,32
+Delayed-Action Preparations,blood,3,3,40
+Tandem Mass Spectrometry,metabolism,3,11,18
+administration & dosage,pharmacology,3,11,7
+"Dose-Response Relationship, Drug",pharmacology,3,12,7
+Saliva,chemistry,3,3,9
+Aripiprazole,Cytochrome P-450 CYP3A,3,46,3
+Drug Interactions,blood,3,6,40
+Drug Interactions,administration & dosage,3,6,11
+Reproducibility of Results,analysis,3,8,4
+analysis,chemistry,3,4,9
+Cytochrome P-450 CYP2D6,Schizophrenia,3,7,24
+Psychotropic Drugs,methods,3,4,22
+chemistry,pharmacokinetics,3,9,32
+genetics,pharmacokinetics,3,6,32
+Delayed-Action Preparations,administration & dosage,3,3,11
+Genotype,pharmacokinetics,3,5,32
+East Asian People,drug therapy,3,4,34
+Cytochrome P-450 CYP3A,blood,3,3,40
+Genotype,blood,3,5,40
+"Chromatography, Liquid",Piperazines,3,7,26
+Genotype,drug therapy,3,5,34
+"Chromatography, Liquid",Quinolones,3,7,25
+Psychotropic Drugs,metabolism,3,4,18
+Asian People,blood,3,5,40
+East Asian People,pharmacokinetics,3,4,32
+genetics,therapeutic use,3,6,27
+Asian People,genetics,3,5,6
+"Dose-Response Relationship, Drug",adverse effects,3,12,11
+Aripiprazole,Delayed-Action Preparations,3,46,3
+Mental Disorders,therapeutic use,3,5,27
+genetics,metabolism,3,6,18
+Antipsychotic Agents,Cytochrome P-450 CYP3A,3,54,3
+Mental Disorders,blood,3,5,40
+Delayed-Action Preparations,drug therapy,3,3,34
+"Chromatography, High Pressure Liquid",chemistry,3,8,9
+Bipolar Disorder,drug therapy,3,3,34
+Antipsychotic Agents,Positron-Emission Tomography,3,54,3
+Antipsychotic Agents,Valproic Acid,3,54,3
+Antipsychotic Agents,Bipolar Disorder,3,54,3
+instrumentation,methods,3,3,22
+Clozapine,Olanzapine,3,5,9
+Haloperidol,Olanzapine,3,5,9
+Antimanic Agents,drug therapy,3,3,34
+Tandem Mass Spectrometry,pharmacokinetics,3,11,32
+Bipolar Disorder,pharmacokinetics,3,3,32
+Antimanic Agents,pharmacokinetics,3,3,32
+Bipolar Disorder,blood,3,3,40
+Antimanic Agents,blood,3,3,40
+Clozapine,therapeutic use,3,5,27
+East Asian People,blood,3,4,40
+Haloperidol,therapeutic use,3,5,27
+Positron-Emission Tomography,therapeutic use,3,3,27
+Asian People,pharmacokinetics,3,5,32
+Valproic Acid,therapeutic use,3,3,27
+Saliva,methods,3,3,22
+Valproic Acid,drug therapy,3,3,34
+"Dose-Response Relationship, Drug",Drug Interactions,3,12,6
+Clozapine,Risperidone,3,5,11
+blood,instrumentation,3,40,3
+Bipolar Disorder,therapeutic use,3,3,27
+Aripiprazole,Drug Stability,3,46,4
+Benzodiazepines,therapeutic drug monitoring,2,8,11
+Antipsychotic Agents,Saliva,2,54,3
+"Polymorphism, Genetic",Quinolones,2,2,25
+"Polymorphism, Genetic",drug therapy,2,2,34
+Linear Models,Quinolones,2,2,25
+Linear Models,Sensitivity and Specificity,2,2,4
+Linear Models,Reproducibility of Results,2,2,8
+Olanzapine,therapeutic drug monitoring,2,9,11
+Linear Models,"Spectrometry, Mass, Electrospray Ionization",2,2,2
+Reproducibility of Results,"Spectrometry, Mass, Electrospray Ionization",2,8,2
+Sensitivity and Specificity,"Spectrometry, Mass, Electrospray Ionization",2,4,2
+Quinolones,"Spectrometry, Mass, Electrospray Ionization",2,25,2
+Specimen Handling,blood,2,2,40
+"Spectrometry, Mass, Electrospray Ionization",Tandem Mass Spectrometry,2,2,11
+Antipsychotic Agents,Psychiatric Status Rating Scales,2,54,2
+Antipsychotic Agents,Severity of Illness Index,2,54,2
+Asian People,administration & dosage,2,5,11
+Linear Models,chemistry,2,2,9
+"Spectrometry, Mass, Electrospray Ionization",chemistry,2,2,9
+Antimanic Agents,Piperazines,2,3,26
+Specimen Handling,methods,2,2,22
+Mental Disorders,methods,2,5,22
+"Chromatography, Liquid",Saliva,2,7,3
+"Spectrometry, Mass, Electrospray Ionization",blood,2,2,40
+Drug Monitoring,Specimen Handling,2,26,2
+Piperazines,"Spectrometry, Mass, Electrospray Ionization",2,26,2
+Linear Models,Tandem Mass Spectrometry,2,2,11
+Antimanic Agents,Quinolones,2,3,25
+Aripiprazole,Fluoxetine,2,46,2
+Asian People,metabolism,2,5,18
+Cytochrome P-450 CYP2D6,"Polymorphism, Genetic",2,7,2
+Antipsychotic Agents,"Polymorphism, Genetic",2,54,2
+"Polymorphism, Genetic",pharmacokinetics,2,2,32
+Cytochrome P-450 CYP3A,therapeutic use,2,3,27
+Fluoxetine,blood,2,2,40
+Genotype,therapeutic use,2,5,27
+Asian People,Psychiatric Status Rating Scales,2,5,2
+Antipsychotic Agents,Limit of Detection,2,54,3
+Asian People,Genotype,2,5,5
+Tandem Mass Spectrometry,UPLC-MS/MS,2,11,2
+Drug Monitoring,UPLC-MS/MS,2,26,2
+"Chromatography, High Pressure Liquid",UPLC-MS/MS,2,8,2
+Aripiprazole,UPLC-MS/MS,2,46,2
+Antipsychotic Agents,UPLC-MS/MS,2,54,2
+UPLC-MS/MS,blood,2,2,40
+Aripiprazole,"Polymorphism, Genetic",2,46,2
+Tandem Mass Spectrometry,antipsychotics,2,11,7
+Asian People,Cytochrome P-450 CYP2D6,2,5,7
+Antidepressive Agents,"Chromatography, High Pressure Liquid",2,4,8
+Psychiatric Status Rating Scales,administration & dosage,2,2,11
+Piperazines,"Polymorphism, Genetic",2,26,2
+Severity of Illness Index,adverse effects,2,2,11
+Genotype,Schizophrenia,2,5,24
+Genotype,"Polymorphism, Genetic",2,5,2
+Haloperidol,Piperazines,2,5,26
+Haloperidol,Quinolones,2,5,25
+Cytochrome P-450 CYP3A,drug therapy,2,3,34
+Cytochrome P-450 CYP3A,Schizophrenia,2,3,24
+Solid Phase Extraction,Tandem Mass Spectrometry,2,2,11
+"Polymorphism, Genetic",genetics,2,2,6
+Aripiprazole,Solid Phase Extraction,2,46,2
+Psychiatric Status Rating Scales,pharmacokinetics,2,2,32
+Solid Phase Extraction,blood,2,2,40
+Severity of Illness Index,pharmacokinetics,2,2,32
+Aripiprazole,Psychiatric Status Rating Scales,2,46,2
+Aripiprazole,Severity of Illness Index,2,46,2
+antipsychotics,metabolism,2,7,18
+Risperidone,Tandem Mass Spectrometry,2,11,11
+Fluoxetine,Risperidone,2,2,11
+Asian People,"Dose-Response Relationship, Drug",2,5,12
+Solid Phase Extraction,chemistry,2,2,9
+analysis,blood,2,4,40
+adverse effects,pharmacology,2,11,7
+Paliperidone Palmitate,Quetiapine Fumarate,2,4,3
+Drug Interactions,adverse effects,2,6,11
+Quetiapine Fumarate,methods,2,3,22
+Saliva,analysis,2,3,4
+Drug Interactions,therapeutic use,2,6,27
+Quetiapine Fumarate,pharmacokinetics,2,3,32
+Benzodiazepines,pharmacokinetics,2,8,32
+Quetiapine Fumarate,blood,2,3,40
+Psychotic Disorders,therapeutic use,2,2,27
+Reproducibility of Results,Saliva,2,8,3
+Benzodiazepines,adverse effects,2,8,11
+Paliperidone Palmitate,Risperidone,2,4,11
+Risperidone,adverse effects,2,11,11
+Aripiprazole,Mental Disorders,2,46,5
+Aripiprazole,"Spectrophotometry, Ultraviolet",2,46,2
+"Chromatography, High Pressure Liquid","Spectrophotometry, Ultraviolet",2,8,2
+"Spectrophotometry, Ultraviolet",methods,2,2,22
+Drug Monitoring,"Spectrophotometry, Ultraviolet",2,26,2
+Mental Disorders,Piperazines,2,5,26
+Olanzapine,adverse effects,2,9,11
+"Chromatography, High Pressure Liquid",pharmacokinetics,2,8,32
+Psychotropic Drugs,instrumentation,2,4,3
+Mass Spectrometry,Psychotropic Drugs,2,3,4
+Psychotropic Drugs,Reproducibility of Results,2,4,8
+Drug Monitoring,Psychotropic Drugs,2,26,4
+"Chromatography, High Pressure Liquid",Psychotropic Drugs,2,8,4
+"Chromatography, High Pressure Liquid",instrumentation,2,8,3
+"Chromatography, High Pressure Liquid",Mass Spectrometry,2,8,3
+"Chromatography, High Pressure Liquid",analysis,2,8,4
+Bipolar Disorder,"Drug Therapy, Combination",2,3,3
+"Drug Therapy, Combination",adverse effects,2,3,11
+Mass Spectrometry,Reproducibility of Results,2,3,8
+Mass Spectrometry,methods,2,3,22
+Schizophrenic Psychology,drug therapy,2,2,34
+Drug Monitoring,instrumentation,2,26,3
+Drug Monitoring,Mass Spectrometry,2,26,3
+"Drug Therapy, Combination",pharmacokinetics,2,3,32
+Sensitivity and Specificity,pharmacokinetics,2,4,32
+Drug Monitoring,Saliva,2,26,3
+Mass Spectrometry,instrumentation,2,3,3
+Reproducibility of Results,instrumentation,2,8,3
+Limit of Detection,Reproducibility of Results,2,3,8
+Mass Spectrometry,blood,2,3,40
+Drug Stability,pharmacokinetics,2,4,32
+Drug Monitoring,Reference Values,2,26,2
+Psychotic Disorders,drug therapy,2,2,34
+Reference Values,methods,2,2,22
+Psychotic Disorders,blood,2,2,40
+"Chromatography, High Pressure Liquid",Reference Values,2,8,2
+Antipsychotic Agents,Psychotic Disorders,2,54,2
+"Spectrometry, Mass, Electrospray Ionization",methods,2,2,22
+Drug Stability,Linear Models,2,4,2
+Saliva,Tandem Mass Spectrometry,2,3,11
+Antimanic Agents,Aripiprazole,2,3,46
+Mental Disorders,Quinolones,2,5,25
+Benzodiazepines,Piperazines,2,8,26
+Drug Monitoring,Hydrogen-Ion Concentration,2,26,2
+Drug Stability,"Spectrometry, Mass, Electrospray Ionization",2,4,2
+Hydrogen-Ion Concentration,methods,2,2,22
+Linear Models,Piperazines,2,2,26
+Linear Models,blood,2,2,40
+Aripiprazole,Limit of Detection,2,46,3
+Reference Values,blood,2,2,40
+Paliperidone Palmitate,blood,2,4,40
+Limit of Detection,blood,2,3,40
+Antimanic Agents,pharmacology,2,3,7
+Benzodiazepines,Tandem Mass Spectrometry,2,8,11
+Antipsychotic Agents,chemically induced,2,54,2
+Piperazines,"Spectrophotometry, Ultraviolet",2,26,2
+Quinolones,"Spectrophotometry, Ultraviolet",2,25,2
+Reproducibility of Results,"Spectrophotometry, Ultraviolet",2,8,2
+adverse effects,chemically induced,2,11,2
+"Chromatography, Liquid",Reproducibility of Results,2,7,8
+drug effects,therapeutic use,2,4,27
+Aripiprazole,chemically induced,2,46,2
+Aripiprazole,Linear Models,2,46,2
+Aripiprazole,"Drug Therapy, Combination",2,46,3
+Aripiprazole,"Spectrometry, Mass, Electrospray Ionization",2,46,2
+Linear Models,methods,2,2,22
+Olanzapine,Tandem Mass Spectrometry,2,9,11
+Tandem Mass Spectrometry,analysis,2,11,4
+Quinolones,analysis,2,25,4
+"Chromatography, High Pressure Liquid",Linear Models,2,8,2
+Olanzapine,Piperazines,2,9,26
+Piperazines,analysis,2,26,4
+Schizophrenia,chemically induced,2,24,2
+Limit of Detection,Piperazines,2,3,26
+chemically induced,drug therapy,2,2,34
+Antipsychotic Agents,Reproducibility of Results,2,54,8
+"Chromatography, High Pressure Liquid","Spectrometry, Mass, Electrospray Ionization",2,8,2
+Paliperidone Palmitate,Piperazines,2,4,26
+Clozapine,Tandem Mass Spectrometry,2,5,11
+Clozapine,Paliperidone Palmitate,2,5,4
+Piperazines,Positron-Emission Tomography,2,26,3
+Piperazines,drug effects,2,26,4
+Paliperidone Palmitate,Schizophrenia,2,4,24
+Antipsychotic,methods,2,3,22
+Antipsychotic,Antipsychotic Agents,2,3,54
+Positron-Emission Tomography,Quinolones,2,3,25
+Positron-Emission Tomography,metabolism,2,3,18
+Antipsychotic,Aripiprazole,2,3,46
+Quinolones,drug effects,2,25,4
+Risperidone,therapeutic drug monitoring,2,11,11
+Aripiprazole,Pharmacogenetics,2,46,3
+Antipsychotic Agents,Antipsychotic drugs,2,54,2
+"ATP Binding Cassette Transporter, Subfamily B",pharmacokinetics,2,2,32
+Antipsychotic drugs,therapeutic drug monitoring,2,2,11
+Cytochrome P-450 CYP3A,pharmacokinetics,2,3,32
+"ATP Binding Cassette Transporter, Subfamily B",blood,2,2,40
+"ATP Binding Cassette Transporter, Subfamily B",genetics,2,2,6
+"ATP Binding Cassette Transporter, Subfamily B",Antipsychotic Agents,2,2,54
+"ATP Binding Cassette Transporter, Subfamily B",Cytochrome P-450 CYP3A,2,2,3
+"ATP Binding Cassette Transporter, Subfamily B",metabolism,2,2,18
+Prolactin,pharmacokinetics,2,3,32
+Antipsychotic Agents,Sulpiride,2,54,2
+"ATP Binding Cassette Transporter, Subfamily B",Genotype,2,2,5
+Antipsychotic drugs,Drug Monitoring,2,2,26
+Drug Monitoring,antipsychotics,2,26,7
+"ATP Binding Cassette Transporter, Subfamily B",Aripiprazole,2,2,46
+Antidepressive Agents,antipsychotics,2,4,7
+Antidepressants,Drug Monitoring,2,2,26
+Antidepressants,Antipsychotic Agents,2,2,54
+Antidepressants,Antidepressive Agents,2,2,4
+Drug Monitoring,genetics,2,26,6
+Cytochrome P-450 CYP2D6,Drug Monitoring,2,7,26
+Antidepressants,antipsychotics,2,2,7
+Prolactin,drug therapy,2,3,34
+Prolactin,Schizophrenia,2,3,24
+Drug Monitoring,Genotype,2,26,5
+Clozapine,methods,2,5,22
+Aripiprazole,paliperidone,2,46,2
+Pharmacogenetics,antipsychotics,2,3,7
+antipsychotics,paliperidone,2,7,2
+Protein Binding,metabolism,2,2,18
+Antipsychotic Agents,Protein Binding,2,54,2
+Aripiprazole,Protein Binding,2,46,2
+Positron-Emission Tomography,blood,2,3,40
+Drug Monitoring,analysis,2,26,4
+Antipsychotic Agents,Pharmacogenetics,2,54,3
+Benzodiazepines,analysis,2,8,4
+Antipsychotic Agents,analysis,2,54,4
+"Dose-Response Relationship, Drug",drug effects,2,12,4
+Risperidone,paliperidone,2,11,2
+Clozapine,drug therapy,2,5,34
+Clozapine,Haloperidol,2,5,5
+Haloperidol,Risperidone,2,5,11
+Schizophrenia,therapeutic drug monitoring,2,24,11
+Bipolar Disorder,Valproic Acid,2,3,3
+Aripiprazole,Quetiapine,2,46,2
+Antimanic Agents,Valproic Acid,2,3,3
+Antimanic Agents,Bipolar Disorder,2,3,3
+Antimanic Agents,Antipsychotic Agents,2,3,54
+Valproic Acid,pharmacokinetics,2,3,32
+Valproic Acid,blood,2,3,40
+East Asian People,therapeutic use,2,4,27
+Calibration,blood,2,2,40
+Anticonvulsants,drug therapy,2,2,34
+Olanzapine,Quetiapine,2,9,2
+Quetiapine,pharmacokinetics,2,2,32
+Anticonvulsants,Bipolar Disorder,2,2,3
+Anticonvulsants,Antipsychotic Agents,2,2,54
+Quetiapine,Risperidone,2,2,11
+Anticonvulsants,pharmacokinetics,2,2,32
+Quetiapine,methods,2,2,22
+Anticonvulsants,blood,2,2,40
+Anticonvulsants,therapeutic use,2,2,27
+Quetiapine,drug therapy,2,2,34
+Quetiapine,Schizophrenia,2,2,24
+Antimanic Agents,therapeutic use,2,3,27
+Amisulpride,Antipsychotic Agents,2,2,54
+Amisulpride,Sulpiride,2,2,2
+"ATP Binding Cassette Transporter, Subfamily B",Cytochrome P-450 CYP2D6,2,2,7
+"ATP Binding Cassette Transporter, Subfamily B",Piperazines,2,2,26
+"ATP Binding Cassette Transporter, Subfamily B",Quinolones,2,2,25
+metabolism,pharmacology,2,18,7
+Calibration,"Chromatography, High Pressure Liquid",2,2,8
+Calibration,methods,2,2,22
+Piperazines,therapeutic drug monitoring,2,26,11
+Calibration,Drug Monitoring,2,2,26
+Antipsychotic Agents,Weight Gain,2,54,2
+Autism Spectrum Disorder,Weight Gain,2,2,2
+Benzodiazepines,Haloperidol,2,8,5
+Cytochrome P-450 CYP3A,genetics,2,3,6
+Weight Gain,pharmacokinetics,2,2,32
+Autism Spectrum Disorder,pharmacokinetics,2,2,32
+Cytochrome P-450 CYP3A,Genotype,2,3,5
+Aripiprazole,Weight Gain,2,46,2
+Aripiprazole,Autism Spectrum Disorder,2,46,2
+antipsychotics,drug therapy,2,7,34
+antipsychotics,pharmacokinetics,2,7,32
+adverse effects,antipsychotics,2,11,7
+Schizophrenia,long-acting injectable,2,24,2
+Antipsychotic,long-acting injectable,2,3,2
+Calibration,Reproducibility of Results,2,2,8
+Positron-Emission Tomography,Schizophrenia,2,3,24
+Antipsychotic Agents,Autism Spectrum Disorder,2,54,2
+Antipsychotic Agents,Drug Administration Schedule,2,54,2
+Double-Blind Method,drug therapy,2,2,34
+Delayed-Action Preparations,Drug Administration Schedule,2,3,2
+Delayed-Action Preparations,"Dose-Response Relationship, Drug",2,3,12
+Antipsychotic Agents,Double-Blind Method,2,54,2
+Aripiprazole,Schizophrenic Psychology,2,46,2
+Antipsychotic Agents,Dopamine D2 Receptor Antagonists,2,54,2
+Drug Administration Schedule,adverse effects,2,2,11
+Dried Blood Spot Testing,Drug Monitoring,2,2,26
+Drug Interactions,Mental Disorders,2,6,5
+Psychiatric Status Rating Scales,Quinolones,2,2,25
+Psychiatric Status Rating Scales,Schizophrenia,2,2,24
+Aripiprazole,East Asian People,2,46,4
+Mental Disorders,administration & dosage,2,5,11
+Piperazines,Severity of Illness Index,2,26,2
+Olanzapine,Schizophrenic Psychology,2,9,2
+"Chromatography, High Pressure Liquid",metabolism,2,8,18
+Haloperidol,Schizophrenic Psychology,2,5,2
+Schizophrenic Psychology,blood,2,2,40
+administration & dosage,metabolism,2,11,18
+Double-Blind Method,blood,2,2,40
+"Dose-Response Relationship, Drug",Psychiatric Status Rating Scales,2,12,2
+drug therapy,therapeutic drug monitoring,2,34,11
+Quinolones,Severity of Illness Index,2,25,2
+Antipsychotic Agents,Medication Adherence,2,54,2
+Antipsychotic Agents,COVID-19,2,54,2
+Drug Administration Schedule,blood,2,2,40
+Antipsychotic Agents,Delayed-Action Preparations,2,54,3
+Olanzapine,drug effects,2,9,4
+Psychiatric Status Rating Scales,drug therapy,2,2,34
+Aripiprazole,Drug Administration Schedule,2,46,2
+Antipsychotic Agents,Schizophrenic Psychology,2,54,2
+Aripiprazole,"Receptors, Dopamine D2",2,46,3
+Drug Interactions,Schizophrenia,2,6,24
+Antipsychotic Agents,Quetiapine,2,54,2
+Schizophrenia,Schizophrenic Psychology,2,24,2
+Drug Administration Schedule,administration & dosage,2,2,11
+Asian People,Drug Monitoring,2,5,26
+Liquid Chromatography-Mass Spectrometry,blood,2,2,40
+Schizophrenic Psychology,drug effects,2,2,4
+Drug Administration Schedule,drug therapy,2,2,34
+East Asian People,Schizophrenia,2,4,24
+Reproducibility of Results,metabolism,2,8,18
+Schizophrenia,drug effects,2,24,4
+Drug Administration Schedule,Schizophrenia,2,2,24
+Delayed-Action Preparations,pharmacokinetics,2,3,32
+"Receptors, Dopamine D2",metabolism,2,3,18
+"Chromatography, Liquid",Liquid Chromatography-Mass Spectrometry,2,7,2
+"Chromatography, Liquid",metabolism,2,7,18
+"Receptors, Dopamine D2",drug therapy,2,3,34
+Piperazines,Psychiatric Status Rating Scales,2,26,2
+"Chromatography, Liquid",Drug Monitoring,2,7,26
+Dried Blood Spot Testing,blood,2,2,40
+Antipsychotic Agents,Dried Blood Spot Testing,2,54,2
+Liquid Chromatography-Mass Spectrometry,Tandem Mass Spectrometry,2,2,11
+Drug Stability,metabolism,2,4,18
+"Chromatography, Liquid",therapeutic drug monitoring,2,7,11
+"Dose-Response Relationship, Drug",East Asian People,2,12,4
+Schizophrenia,pharmacology,2,24,7
+Delayed-Action Preparations,Schizophrenia,2,3,24
+"Receptors, Dopamine D2",Schizophrenia,2,3,24
+Dopamine D2 Receptor Antagonists,Schizophrenia,2,2,24
+Dopamine D2 Receptor Antagonists,drug therapy,2,2,34
+Delayed-Action Preparations,adverse effects,2,3,11
+Genotype,Mental Disorders,1,5,5
+Olanzapine,chemistry,1,9,9
+Mental Disorders,"Polymorphism, Genetic",1,5,2
+Olanzapine,Sulpiride,1,9,2
+Olanzapine,Reproducibility of Results,1,9,8
+Paliperidone Palmitate,Quinolones,1,4,25
+Olanzapine,Quinolones,1,9,25
+Olanzapine,Saliva,1,9,3
+Drug Monitoring,"Polymorphism, Genetic",1,26,2
+Protein Binding,Severity of Illness Index,1,2,2
+Positron-Emission Tomography,pharmacokinetics,1,3,32
+"Receptors, Dopamine D2",pharmacokinetics,1,3,32
+Asian People,"Polymorphism, Genetic",1,5,2
+Quetiapine Fumarate,Saliva,1,3,3
+Quetiapine Fumarate,chemistry,1,3,9
+Quetiapine Fumarate,Sulpiride,1,3,2
+Quetiapine Fumarate,Tandem Mass Spectrometry,1,3,11
+Sulpiride,methods,1,2,22
+Quinolones,Risperidone,1,25,11
+Quinolones,Saliva,1,25,3
+Quinolones,Sulpiride,1,25,2
+Piperazines,"Receptors, Dopamine D2",1,26,3
+Hydrogen-Ion Concentration,Reference Values,1,2,2
+Positron-Emission Tomography,"Receptors, Dopamine D2",1,3,3
+Quinolones,"Receptors, Dopamine D2",1,25,3
+Aripiprazole,Calibration,1,46,2
+"Receptors, Dopamine D2",therapeutic use,1,3,27
+Psychotropic Drugs,pharmacokinetics,1,4,32
+COVID-19,pharmacokinetics,1,2,32
+Paliperidone Palmitate,Reproducibility of Results,1,4,8
+Paliperidone Palmitate,Saliva,1,4,3
+Psychotropic Drugs,therapeutic drug monitoring,1,4,11
+administration & dosage,therapeutic drug monitoring,1,11,11
+Paliperidone Palmitate,chemistry,1,4,9
+Protein Binding,pharmacokinetics,1,2,32
+Protein Binding,Quinolones,1,2,25
+Piperazines,Quetiapine Fumarate,1,26,3
+Piperazines,Risperidone,1,26,11
+Cytochrome P-450 CYP3A,"Polymorphism, Genetic",1,3,2
+Piperazines,Saliva,1,26,3
+Severity of Illness Index,metabolism,1,2,18
+Piperazines,Sulpiride,1,26,2
+Piperazines,Protein Binding,1,26,2
+Quetiapine Fumarate,Quinolones,1,3,25
+Quetiapine Fumarate,Reproducibility of Results,1,3,8
+Paliperidone Palmitate,Sulpiride,1,4,2
+Hydrogen-Ion Concentration,Saliva,1,2,3
+Amisulpride,Paliperidone Palmitate,1,2,4
+Amisulpride,Piperazines,1,2,26
+Drug Interactions,genetics,1,6,6
+Amisulpride,Quetiapine Fumarate,1,2,3
+Mental Disorders,genetics,1,5,6
+Amisulpride,Quinolones,1,2,25
+"Chromatography, Liquid",Risperidone,1,7,11
+Amisulpride,Risperidone,1,2,11
+Drug Interactions,Genotype,1,6,5
+Amisulpride,Saliva,1,2,3
+Amisulpride,chemistry,1,2,9
+Amisulpride,Tandem Mass Spectrometry,1,2,11
+Psychotropic Drugs,Specimen Handling,1,4,2
+"Chromatography, Liquid",Hydrogen-Ion Concentration,1,7,2
+"Chromatography, Liquid",analysis,1,7,4
+Amisulpride,Reproducibility of Results,1,2,8
+administration & dosage,genetics,1,11,6
+Amisulpride,Clozapine,1,2,5
+Amisulpride,methods,1,2,22
+Amisulpride,"Chromatography, Liquid",1,2,7
+Amisulpride,Benzodiazepines,1,2,8
+Amisulpride,Aripiprazole,1,2,46
+Amisulpride,analysis,1,2,4
+Cytochrome P-450 CYP2D6,administration & dosage,1,7,11
+Reference Values,Reproducibility of Results,1,2,8
+"Polymorphism, Genetic",administration & dosage,1,2,11
+Cytochrome P-450 CYP2D6,Drug Interactions,1,7,6
+Amisulpride,Olanzapine,1,2,9
+Cytochrome P-450 CYP2D6,Mental Disorders,1,7,5
+Hydrogen-Ion Concentration,Tandem Mass Spectrometry,1,2,11
+Hydrogen-Ion Concentration,chemistry,1,2,9
+Reproducibility of Results,Specimen Handling,1,8,2
+Reference Values,Specimen Handling,1,2,2
+Genotype,administration & dosage,1,5,11
+Benzodiazepines,Sulpiride,1,8,2
+"Chromatography, Liquid",Clozapine,1,7,5
+"Chromatography, Liquid",Olanzapine,1,7,9
+Hydrogen-Ion Concentration,pharmacokinetics,1,2,32
+"Chromatography, Liquid",Paliperidone Palmitate,1,7,4
+"Chromatography, Liquid",Quetiapine Fumarate,1,7,3
+"Chromatography, Liquid",Sulpiride,1,7,2
+Clozapine,Piperazines,1,5,26
+Clozapine,analysis,1,5,4
+Clozapine,Quetiapine Fumarate,1,5,3
+Clozapine,Quinolones,1,5,25
+"Polymorphism, Genetic",Schizophrenia,1,2,24
+Clozapine,Reproducibility of Results,1,5,8
+Clozapine,Saliva,1,5,3
+Clozapine,chemistry,1,5,9
+Drug Interactions,"Polymorphism, Genetic",1,6,2
+Clozapine,Sulpiride,1,5,2
+Antipsychotic Agents,Hydrogen-Ion Concentration,1,54,2
+Psychotropic Drugs,Reference Values,1,4,2
+Mass Spectrometry,Specimen Handling,1,3,2
+Olanzapine,analysis,1,9,4
+Paliperidone Palmitate,analysis,1,4,4
+Mass Spectrometry,Reference Values,1,3,2
+Quetiapine Fumarate,analysis,1,3,4
+Hydrogen-Ion Concentration,Specimen Handling,1,2,2
+Risperidone,analysis,1,11,4
+Benzodiazepines,chemistry,1,8,9
+Hydrogen-Ion Concentration,Reproducibility of Results,1,2,8
+Saliva,pharmacokinetics,1,3,32
+Aripiprazole,Saliva,1,46,3
+Aripiprazole,Sulpiride,1,46,2
+Benzodiazepines,"Chromatography, Liquid",1,8,7
+Benzodiazepines,Quinolones,1,8,25
+Benzodiazepines,Reproducibility of Results,1,8,8
+Benzodiazepines,Saliva,1,8,3
+Sulpiride,analysis,1,2,4
+"Spectrometry, Mass, Electrospray Ionization",analysis,1,2,4
+Reproducibility of Results,Solid Phase Extraction,1,8,2
+Sensitivity and Specificity,analysis,1,4,4
+Sensitivity and Specificity,Solid Phase Extraction,1,4,2
+analysis,metabolism,1,4,18
+Solid Phase Extraction,"Spectrometry, Mass, Electrospray Ionization",1,2,2
+Linear Models,metabolism,1,2,18
+Antipsychotic Agents,Mass Spectrometry,1,54,3
+Linear Models,analysis,1,2,4
+Calibration,Piperazines,1,2,26
+administration & dosage,chemically induced,1,11,2
+"Chromatography, Liquid",administration & dosage,1,7,11
+Mass Spectrometry,administration & dosage,1,3,11
+Severity of Illness Index,administration & dosage,1,2,11
+Asian People,adverse effects,1,5,11
+"Chromatography, Liquid",adverse effects,1,7,11
+Mass Spectrometry,adverse effects,1,3,11
+Psychiatric Status Rating Scales,adverse effects,1,2,11
+Severity of Illness Index,drug therapy,1,2,34
+Schizophrenia,Severity of Illness Index,1,24,2
+Drug Stability,analysis,1,4,4
+Drug Monitoring,Positron-Emission Tomography,1,26,3
+Solid Phase Extraction,methods,1,2,22
+"Dose-Response Relationship, Drug",Psychotic Disorders,1,12,2
+"Dose-Response Relationship, Drug",Positron-Emission Tomography,1,12,3
+Aripiprazole,Psychotic Disorders,1,46,2
+administration & dosage,drug effects,1,11,4
+Drug Stability,Solid Phase Extraction,1,4,2
+Psychotic Disorders,administration & dosage,1,2,11
+Positron-Emission Tomography,administration & dosage,1,3,11
+Quinolones,Solid Phase Extraction,1,25,2
+Linear Models,Solid Phase Extraction,1,2,2
+Psychiatric Status Rating Scales,methods,1,2,22
+Drug Monitoring,Psychiatric Status Rating Scales,1,26,2
+Piperazines,Solid Phase Extraction,1,26,2
+Asian People,methods,1,5,22
+Psychiatric Status Rating Scales,therapeutic use,1,2,27
+Solid Phase Extraction,pharmacokinetics,1,2,32
+"Spectrometry, Mass, Electrospray Ionization",pharmacokinetics,1,2,32
+"Spectrometry, Mass, Electrospray Ionization",metabolism,1,2,18
+Sensitivity and Specificity,metabolism,1,4,18
+Linear Models,pharmacokinetics,1,2,32
+"Dose-Response Relationship, Drug",Severity of Illness Index,1,12,2
+Asian People,Severity of Illness Index,1,5,2
+"Chromatography, Liquid",chemically induced,1,7,2
+"Dose-Response Relationship, Drug",Mass Spectrometry,1,12,3
+"Dose-Response Relationship, Drug",chemically induced,1,12,2
+Drug Interactions,chemically induced,1,6,2
+Mass Spectrometry,chemically induced,1,3,2
+chemically induced,pharmacology,1,2,7
+Piperazines,chemically induced,1,26,2
+Psychiatric Status Rating Scales,Severity of Illness Index,1,2,2
+Quinolones,chemically induced,1,25,2
+Severity of Illness Index,chemically induced,1,2,2
+"Chromatography, Liquid","Dose-Response Relationship, Drug",1,7,12
+"Chromatography, Liquid",Severity of Illness Index,1,7,2
+"Chromatography, Liquid",drug therapy,1,7,34
+"Chromatography, Liquid",Drug Interactions,1,7,6
+"Chromatography, Liquid",Mass Spectrometry,1,7,3
+"Chromatography, Liquid",pharmacology,1,7,7
+"Chromatography, Liquid",Psychiatric Status Rating Scales,1,7,2
+"Chromatography, Liquid",Schizophrenia,1,7,24
+Psychiatric Status Rating Scales,chemically induced,1,2,2
+Asian People,Cytochrome P-450 CYP3A,1,5,3
+chemically induced,pharmacokinetics,1,2,32
+Severity of Illness Index,pharmacology,1,2,7
+Mass Spectrometry,pharmacokinetics,1,3,32
+Psychiatric Status Rating Scales,pharmacology,1,2,7
+Aripiprazole,Mass Spectrometry,1,46,3
+Mass Spectrometry,Severity of Illness Index,1,3,2
+Mass Spectrometry,drug therapy,1,3,34
+Mass Spectrometry,Schizophrenia,1,3,24
+Drug Interactions,Mass Spectrometry,1,6,3
+Mass Spectrometry,Quinolones,1,3,25
+Asian People,"Chromatography, Liquid",1,5,7
+Mass Spectrometry,Psychiatric Status Rating Scales,1,3,2
+Mass Spectrometry,Piperazines,1,3,26
+Asian People,Drug Interactions,1,5,6
+Asian People,Mass Spectrometry,1,5,3
+Mass Spectrometry,pharmacology,1,3,7
+Drug Interactions,Severity of Illness Index,1,6,2
+Asian People,pharmacology,1,5,7
+Drug Interactions,Psychiatric Status Rating Scales,1,6,2
+Asian People,chemically induced,1,5,2
+Drug Monitoring,Drug Stability,1,26,4
+"Chromatography, High Pressure Liquid",Specimen Handling,1,8,2
+"Chromatography, High Pressure Liquid",Hydrogen-Ion Concentration,1,8,2
+Calibration,Specimen Handling,1,2,2
+Calibration,Reference Values,1,2,2
+Calibration,Psychotropic Drugs,1,2,4
+Calibration,Mass Spectrometry,1,2,3
+Calibration,Hydrogen-Ion Concentration,1,2,2
+Calibration,Drug Stability,1,2,4
+Drug Monitoring,Psychotic Disorders,1,26,2
+drug therapy,instrumentation,1,34,3
+Antipsychotic Agents,instrumentation,1,54,3
+instrumentation,therapeutic use,1,3,27
+Specimen Handling,metabolism,1,2,18
+Reference Values,metabolism,1,2,18
+Drug Monitoring,pharmacology,1,26,7
+Mass Spectrometry,metabolism,1,3,18
+Hydrogen-Ion Concentration,metabolism,1,2,18
+instrumentation,metabolism,1,3,18
+Calibration,metabolism,1,2,18
+Calibration,instrumentation,1,2,3
+Hydrogen-Ion Concentration,Psychotropic Drugs,1,2,4
+Reproducibility of Results,Risperidone,1,8,11
+Reproducibility of Results,Sulpiride,1,8,2
+Hydrogen-Ion Concentration,Mass Spectrometry,1,2,3
+Risperidone,Saliva,1,11,3
+Risperidone,chemistry,1,11,9
+Risperidone,Sulpiride,1,11,2
+Saliva,Sulpiride,1,3,2
+Sulpiride,chemistry,1,2,9
+"Chromatography, Liquid",Sensitivity and Specificity,1,7,4
+Drug Stability,Specimen Handling,1,4,2
+Drug Stability,Reference Values,1,4,2
+Drug Stability,Psychotropic Drugs,1,4,4
+Drug Stability,Mass Spectrometry,1,4,3
+Drug Stability,Hydrogen-Ion Concentration,1,4,2
+"Chromatography, Liquid",Drug Stability,1,7,4
+Specimen Handling,instrumentation,1,2,3
+Reference Values,instrumentation,1,2,3
+Hydrogen-Ion Concentration,instrumentation,1,2,3
+Drug Stability,instrumentation,1,4,3
+Sulpiride,Tandem Mass Spectrometry,1,2,11
+Limit of Detection,Quinolones,1,3,25
+Limit of Detection,"Spectrophotometry, Ultraviolet",1,3,2
+Antidepressive Agents,metabolism,1,4,18
+Drug Interactions,metabolism,1,6,18
+Antimanic Agents,Schizophrenia,1,3,24
+Mental Disorders,Reproducibility of Results,1,5,8
+Mental Disorders,"Spectrophotometry, Ultraviolet",1,5,2
+Reproducibility of Results,drug therapy,1,8,34
+"Spectrophotometry, Ultraviolet",drug therapy,1,2,34
+Hydrogen-Ion Concentration,blood,1,2,40
+Antimanic Agents,metabolism,1,3,18
+drug effects,metabolism,1,4,18
+Psychotic Disorders,metabolism,1,2,18
+Psychotic Disorders,drug effects,1,2,4
+Psychotic Disorders,Quinolones,1,2,25
+Positron-Emission Tomography,drug effects,1,3,4
+Positron-Emission Tomography,Psychotic Disorders,1,3,2
+Piperazines,Psychotic Disorders,1,26,2
+"Chromatography, High Pressure Liquid",Solid Phase Extraction,1,8,2
+Drug Monitoring,drug effects,1,26,4
+Antimanic Agents,Drug Interactions,1,3,6
+Antipsychotic Agents,"Spectrophotometry, Ultraviolet",1,54,2
+Antidepressive Agents,Specimen Handling,1,4,2
+Antidepressive Agents,Reproducibility of Results,1,4,8
+Antidepressive Agents,Reference Values,1,4,2
+Limit of Detection,pharmacokinetics,1,3,32
+Antidepressive Agents,Psychotropic Drugs,1,4,4
+"Spectrophotometry, Ultraviolet",pharmacokinetics,1,2,32
+"Chromatography, High Pressure Liquid",therapeutic use,1,8,27
+Limit of Detection,therapeutic use,1,3,27
+Limit of Detection,drug therapy,1,3,34
+"Spectrophotometry, Ultraviolet",therapeutic use,1,2,27
+Antidepressive Agents,Mass Spectrometry,1,4,3
+Antidepressive Agents,Hydrogen-Ion Concentration,1,4,2
+"Chromatography, High Pressure Liquid",Mental Disorders,1,8,5
+"Chromatography, High Pressure Liquid",drug therapy,1,8,34
+Antidepressive Agents,Drug Stability,1,4,4
+Antidepressive Agents,instrumentation,1,4,3
+Antidepressive Agents,methods,1,4,22
+Antidepressive Agents,Calibration,1,4,2
+Limit of Detection,Mental Disorders,1,3,5
+Reproducibility of Results,therapeutic use,1,8,27
+Liquid Chromatography-Mass Spectrometry,therapeutic drug monitoring,1,2,11
+Antipsychotic Agents,Liquid Chromatography-Mass Spectrometry,1,54,2
+Dried Blood Spot Testing,Liquid Chromatography-Mass Spectrometry,1,2,2
+Drug Monitoring,Liquid Chromatography-Mass Spectrometry,1,26,2
+Dried Blood Spot Testing,therapeutic drug monitoring,1,2,11
+"Chromatography, Liquid",Dried Blood Spot Testing,1,7,2
+Dried Blood Spot Testing,Tandem Mass Spectrometry,1,2,11
+Dopamine D2 Receptor Antagonists,blood,1,2,40
+Medication Adherence,blood,1,2,40
+Aripiprazole,Dopamine D2 Receptor Antagonists,1,46,2
+Aripiprazole,Double-Blind Method,1,46,2
+Aripiprazole,Medication Adherence,1,46,2
+Benzodiazepines,paliperidone,1,8,2
+Dopamine D2 Receptor Antagonists,Haloperidol,1,2,5
+Dopamine D2 Receptor Antagonists,Medication Adherence,1,2,2
+Dopamine D2 Receptor Antagonists,Olanzapine,1,2,9
+Dopamine D2 Receptor Antagonists,"Receptors, Dopamine D2",1,2,3
+Dopamine D2 Receptor Antagonists,drug effects,1,2,4
+Dopamine D2 Receptor Antagonists,Schizophrenic Psychology,1,2,2
+Double-Blind Method,Haloperidol,1,2,5
+Double-Blind Method,Medication Adherence,1,2,2
+Double-Blind Method,Olanzapine,1,2,9
+Double-Blind Method,"Receptors, Dopamine D2",1,2,3
+Double-Blind Method,drug effects,1,2,4
+Double-Blind Method,Schizophrenia,1,2,24
+Double-Blind Method,Schizophrenic Psychology,1,2,2
+Dopamine D2 Receptor Antagonists,Double-Blind Method,1,2,2
+Antipsychotic,Paliperidone Palmitate,1,3,4
+Antipsychotic,Tandem Mass Spectrometry,1,3,11
+Schizophrenia,Tandem Mass Spectrometry,1,24,11
+Paliperidone Palmitate,therapeutic use,1,4,27
+Tandem Mass Spectrometry,therapeutic use,1,11,27
+Olanzapine,Valproic Acid,1,9,3
+Schizophrenia,Valproic Acid,1,24,3
+Drug Monitoring,Valproic Acid,1,26,3
+Benzodiazepines,Valproic Acid,1,8,3
+Aripiprazole,COVID-19,1,46,2
+Benzodiazepines,COVID-19,1,8,2
+COVID-19,analysis,1,2,4
+COVID-19,Drug Monitoring,1,2,26
+Antipsychotic drugs,Tandem Mass Spectrometry,1,2,11
+Protein Binding,blood,1,2,40
+Pharmacogenetics,paliperidone,1,3,2
+Pharmacogenetics,Risperidone,1,3,11
+Antidepressants,Pharmacogenetics,1,2,3
+Antidepressants,therapeutic drug monitoring,1,2,11
+Pharmacogenetics,therapeutic drug monitoring,1,3,11
+Antidepressive Agents,Pharmacogenetics,1,4,3
+Drug Monitoring,Pharmacogenetics,1,26,3
+Antidepressive Agents,therapeutic drug monitoring,1,4,11
+Antipsychotic drugs,Liquid Chromatography-Mass Spectrometry,1,2,2
+Antipsychotic drugs,blood,1,2,40
+Antipsychotic drugs,"Chromatography, Liquid",1,2,7
+Antipsychotic drugs,Dried Blood Spot Testing,1,2,2
+COVID-19,methods,1,2,22
+"Chromatography, High Pressure Liquid",Fluoxetine,1,8,2
+"Chromatography, High Pressure Liquid",Risperidone,1,8,11
+Drug Monitoring,Fluoxetine,1,26,2
+Fluoxetine,Tandem Mass Spectrometry,1,2,11
+Solid Phase Extraction,antipsychotics,1,2,7
+"Chromatography, Liquid",antipsychotics,1,7,7
+antipsychotics,chemistry,1,7,9
+Solid Phase Extraction,therapeutic drug monitoring,1,2,11
+Antipsychotic Agents,Solid Phase Extraction,1,54,2
+Solid Phase Extraction,metabolism,1,2,18
+"Chromatography, Liquid",Solid Phase Extraction,1,7,2
+chemistry,therapeutic drug monitoring,1,9,11
+Haloperidol,Medication Adherence,1,5,2
+Medication Adherence,adverse effects,1,2,11
+Medication Adherence,pharmacokinetics,1,2,32
+"Dose-Response Relationship, Drug",Medication Adherence,1,12,2
+Drug Monitoring,Medication Adherence,1,26,2
+Medication Adherence,methods,1,2,22
+Antipsychotic Agents,Specimen Handling,1,54,2
+Mental Disorders,chemistry,1,5,9
+chemistry,drug therapy,1,9,34
+Specimen Handling,chemistry,1,2,9
+Mental Disorders,Specimen Handling,1,5,2
+Specimen Handling,drug therapy,1,2,34
+Aripiprazole,Dried Blood Spot Testing,1,46,2
+Dried Blood Spot Testing,methods,1,2,22
+Medication Adherence,administration & dosage,1,2,11
+Haloperidol,"Receptors, Dopamine D2",1,5,3
+Medication Adherence,Olanzapine,1,2,9
+Medication Adherence,"Receptors, Dopamine D2",1,2,3
+Medication Adherence,drug effects,1,2,4
+Medication Adherence,Schizophrenia,1,2,24
+Medication Adherence,drug therapy,1,2,34
+Medication Adherence,Schizophrenic Psychology,1,2,2
+Olanzapine,"Receptors, Dopamine D2",1,9,3
+"Receptors, Dopamine D2",drug effects,1,3,4
+"Receptors, Dopamine D2",Schizophrenic Psychology,1,3,2
+UPLC-MS/MS,antipsychotics,1,2,7
+"Chromatography, High Pressure Liquid",antipsychotics,1,8,7
+Fluoxetine,antipsychotics,1,2,7
+Antipsychotic Agents,Fluoxetine,1,54,2
+Antidepressive Agents,UPLC-MS/MS,1,4,2
+Fluoxetine,UPLC-MS/MS,1,2,2
+Risperidone,UPLC-MS/MS,1,11,2
+Antidepressants,blood,1,2,40
+Antidepressants,Aripiprazole,1,2,46
+Antidepressants,"Chromatography, High Pressure Liquid",1,2,8
+Antidepressants,Fluoxetine,1,2,2
+Antidepressants,Risperidone,1,2,11
+Antidepressants,Tandem Mass Spectrometry,1,2,11
+Antidepressive Agents,Aripiprazole,1,4,46
+Antidepressive Agents,Fluoxetine,1,4,2
+Antidepressive Agents,Risperidone,1,4,11
+Antidepressive Agents,Tandem Mass Spectrometry,1,4,11
+Antidepressants,UPLC-MS/MS,1,2,2
+COVID-19,therapeutic use,1,2,27
+COVID-19,Mental Disorders,1,2,5
+COVID-19,drug therapy,1,2,34
+COVID-19,metabolism,1,2,18
+Mental Disorders,metabolism,1,5,18
+Drug Administration Schedule,pharmacokinetics,1,2,32
+East Asian People,administration & dosage,1,4,11
+East Asian People,adverse effects,1,4,11
+Delayed-Action Preparations,East Asian People,1,3,4
+"Dose-Response Relationship, Drug",Drug Administration Schedule,1,12,2
+Drug Administration Schedule,East Asian People,1,2,4
+"Chromatography, Liquid",Psychotropic Drugs,1,7,4
+Antipsychotic,Clozapine,1,3,5
+Liquid Chromatography-Mass Spectrometry,methods,1,2,22
+Liquid Chromatography-Mass Spectrometry,Psychotropic Drugs,1,2,4
+Liquid Chromatography-Mass Spectrometry,metabolism,1,2,18
+Pharmacogenetics,pharmacokinetics,1,3,32
+Pharmacogenetics,blood,1,3,40
+"ATP Binding Cassette Transporter, Subfamily B",Pharmacogenetics,1,2,3
+Pharmacogenetics,genetics,1,3,6
+Cytochrome P-450 CYP3A,Pharmacogenetics,1,3,3
+Pharmacogenetics,metabolism,1,3,18
+Genotype,Pharmacogenetics,1,5,3
+Cytochrome P-450 CYP2D6,Pharmacogenetics,1,7,3
+Pharmacogenetics,Piperazines,1,3,26
+Pharmacogenetics,Quinolones,1,3,25
+Psychotropic Drugs,Tandem Mass Spectrometry,1,4,11
+Calibration,Sensitivity and Specificity,1,2,4
+Calibration,Quinolones,1,2,25
+Protein Binding,adverse effects,1,2,11
+Calibration,"Spectrophotometry, Ultraviolet",1,2,2
+Drug Monitoring,Sensitivity and Specificity,1,26,4
+"Spectrophotometry, Ultraviolet",blood,1,2,40
+Sensitivity and Specificity,"Spectrophotometry, Ultraviolet",1,4,2
+Cytochrome P-450 CYP2D6,adverse effects,1,7,11
+Cytochrome P-450 CYP3A,adverse effects,1,3,11
+"Dose-Response Relationship, Drug",Mental Disorders,1,12,5
+"Dose-Response Relationship, Drug",chemistry,1,12,9
+"Receptors, Dopamine D2",chemistry,1,3,9
+"Dose-Response Relationship, Drug","Receptors, Dopamine D2",1,12,3
+COVID-19,administration & dosage,1,2,11
+"Receptors, Dopamine D2",methods,1,3,22
+drug effects,pharmacology,1,4,7
+Haloperidol,pharmacology,1,5,7
+"Dose-Response Relationship, Drug",Haloperidol,1,12,5
+COVID-19,therapeutic drug monitoring,1,2,11
+Mental Disorders,therapeutic drug monitoring,1,5,11
+Psychotropic Drugs,administration & dosage,1,4,11
+Psychotropic Drugs,therapeutic use,1,4,27
+COVID-19,Psychotropic Drugs,1,2,4
+Mental Disorders,Psychotropic Drugs,1,5,4
+Psychotropic Drugs,drug therapy,1,4,34
+Antipsychotic Agents,Psychotropic Drugs,1,54,4
+COVID-19,blood,1,2,40
+Drug Monitoring,"Receptors, Dopamine D2",1,26,3
+Amisulpride,drug therapy,1,2,34
+Sulpiride,drug therapy,1,2,34
+Amisulpride,therapeutic use,1,2,27
+Amisulpride,East Asian People,1,2,4
+Sulpiride,therapeutic use,1,2,27
+East Asian People,Sulpiride,1,4,2
+East Asian People,Prolactin,1,4,3
+Piperazines,Prolactin,1,26,3
+Prolactin,Quinolones,1,3,25
+East Asian People,Piperazines,1,4,26
+East Asian People,Quinolones,1,4,25
+Antipsychotic drugs,Aripiprazole,1,2,46
+Drug Monitoring,Quetiapine,1,26,2
+Antipsychotic drugs,pharmacokinetics,1,2,32
+Antipsychotic drugs,Risperidone,1,2,11
+Antipsychotic drugs,therapeutic use,1,2,27
+Antipsychotic drugs,Weight Gain,1,2,2
+Autism Spectrum Disorder,Risperidone,1,2,11
+Autism Spectrum Disorder,therapeutic drug monitoring,1,2,11
+Autism Spectrum Disorder,therapeutic use,1,2,27
+Autism Spectrum Disorder,Drug Monitoring,1,2,26
+Risperidone,Weight Gain,1,11,2
+Weight Gain,therapeutic drug monitoring,1,2,11
+Weight Gain,therapeutic use,1,2,27
+Drug Monitoring,Weight Gain,1,26,2
+Antipsychotic,therapeutic use,1,3,27
+Antipsychotic drugs,Autism Spectrum Disorder,1,2,2
+Quetiapine,therapeutic use,1,2,27
+Anticonvulsants,Antimanic Agents,1,2,3
+Anticonvulsants,"Dose-Response Relationship, Drug",1,2,12
+Anticonvulsants,East Asian People,1,2,4
+Anticonvulsants,Valproic Acid,1,2,3
+Antimanic Agents,"Dose-Response Relationship, Drug",1,3,12
+Antimanic Agents,East Asian People,1,3,4
+Bipolar Disorder,"Dose-Response Relationship, Drug",1,3,12
+Bipolar Disorder,East Asian People,1,3,4
+"Dose-Response Relationship, Drug",Valproic Acid,1,12,3
+East Asian People,Valproic Acid,1,4,3
+Olanzapine,Positron-Emission Tomography,1,9,3
+Positron-Emission Tomography,Risperidone,1,3,11
+Schizophrenia,Sulpiride,1,24,2
+Haloperidol,Positron-Emission Tomography,1,5,3
+Benzodiazepines,Positron-Emission Tomography,1,8,3
+Autism Spectrum Disorder,antipsychotics,1,2,7
+Weight Gain,antipsychotics,1,2,7
+Autism Spectrum Disorder,adverse effects,1,2,11
+Weight Gain,adverse effects,1,2,11
+Autism Spectrum Disorder,drug therapy,1,2,34
+Weight Gain,drug therapy,1,2,34
+pharmacology,therapeutic drug monitoring,1,7,11
+Quinolones,therapeutic drug monitoring,1,25,11
+Cytochrome P-450 CYP2D6,therapeutic drug monitoring,1,7,11
+Cytochrome P-450 CYP2D6,pharmacology,1,7,7
+Amisulpride,Schizophrenia,1,2,24
+Clozapine,Positron-Emission Tomography,1,5,3
+Clozapine,adverse effects,1,5,11
+Haloperidol,adverse effects,1,5,11
+Prolactin,adverse effects,1,3,11
+Schizophrenic Psychology,adverse effects,1,2,11
+Clozapine,blood,1,5,40
+blood,chemically induced,1,40,2
+chemically induced,therapeutic use,1,2,27
+Prolactin,therapeutic use,1,3,27
+Schizophrenic Psychology,therapeutic use,1,2,27
+Benzodiazepines,drug effects,1,8,4
+Benzodiazepines,chemically induced,1,8,2
+Benzodiazepines,"Drug Therapy, Combination",1,8,3
+Dried Blood Spot Testing,Risperidone,1,2,11
+Benzodiazepines,Schizophrenic Psychology,1,8,2
+Clozapine,drug effects,1,5,4
+chemically induced,drug effects,1,2,4
+"Drug Therapy, Combination",drug effects,1,3,4
+Prolactin,drug effects,1,3,4
+Risperidone,drug effects,1,11,4
+Clozapine,chemically induced,1,5,2
+Clozapine,"Drug Therapy, Combination",1,5,3
+Clozapine,Prolactin,1,5,3
+Clozapine,Schizophrenic Psychology,1,5,2
+"Drug Therapy, Combination",chemically induced,1,3,2
+Haloperidol,chemically induced,1,5,2
+Olanzapine,chemically induced,1,9,2
+Benzodiazepines,Prolactin,1,8,3
+Antipsychotic,Delayed-Action Preparations,1,3,3
+Antipsychotic,Drug Administration Schedule,1,3,2
+Antipsychotic,Drug Monitoring,1,3,26
+Antipsychotic,Piperazines,1,3,26
+Antipsychotic,blood,1,3,40
+Antipsychotic,Quinolones,1,3,25
+Antipsychotic,drug therapy,1,3,34
+Antipsychotic Agents,long-acting injectable,1,54,2
+administration & dosage,long-acting injectable,1,11,2
+adverse effects,long-acting injectable,1,11,2
+Aripiprazole,long-acting injectable,1,46,2
+Delayed-Action Preparations,long-acting injectable,1,3,2
+Drug Administration Schedule,long-acting injectable,1,2,2
+adverse effects,drug effects,1,11,4
+long-acting injectable,methods,1,2,22
+Piperazines,long-acting injectable,1,26,2
+blood,long-acting injectable,1,40,2
+Quinolones,long-acting injectable,1,25,2
+drug therapy,long-acting injectable,1,34,2
+Delayed-Action Preparations,Drug Monitoring,1,3,26
+Delayed-Action Preparations,methods,1,3,22
+Delayed-Action Preparations,Piperazines,1,3,26
+Delayed-Action Preparations,Quinolones,1,3,25
+Drug Administration Schedule,Drug Monitoring,1,2,26
+Drug Administration Schedule,methods,1,2,22
+Drug Administration Schedule,Piperazines,1,2,26
+Drug Administration Schedule,Quinolones,1,2,25
+Drug Monitoring,long-acting injectable,1,26,2
+Aripiprazole,Valproic Acid,1,46,3
+Antimanic Agents,administration & dosage,1,3,11
+Antimanic Agents,"Drug Therapy, Combination",1,3,3
+Bipolar Disorder,administration & dosage,1,3,11
+"Drug Therapy, Combination",administration & dosage,1,3,11
+Valproic Acid,administration & dosage,1,3,11
+Bipolar Disorder,pharmacology,1,3,7
+"Drug Therapy, Combination",pharmacology,1,3,7
+Valproic Acid,pharmacology,1,3,7
+Bipolar Disorder,Piperazines,1,3,26
+Bipolar Disorder,Quinolones,1,3,25
+"Drug Therapy, Combination",Piperazines,1,3,26
+Prolactin,chemically induced,1,3,2
+"Drug Therapy, Combination",Valproic Acid,1,3,3
+Piperazines,Valproic Acid,1,26,3
+Quinolones,Valproic Acid,1,25,3
+Asian People,Haloperidol,1,5,5
+Haloperidol,genetics,1,5,6
+"ATP Binding Cassette Transporter, Subfamily B",therapeutic use,1,2,27
+"ATP Binding Cassette Transporter, Subfamily B",Asian People,1,2,5
+"ATP Binding Cassette Transporter, Subfamily B","Polymorphism, Genetic",1,2,2
+"ATP Binding Cassette Transporter, Subfamily B",Schizophrenia,1,2,24
+"ATP Binding Cassette Transporter, Subfamily B",drug therapy,1,2,34
+"Polymorphism, Genetic",metabolism,1,2,18
+"Polymorphism, Genetic",blood,1,2,40
+"Polymorphism, Genetic",therapeutic use,1,2,27
+"Drug Therapy, Combination",Quinolones,1,3,25
+Risperidone,chemically induced,1,11,2
+Schizophrenic Psychology,chemically induced,1,2,2
+"Drug Therapy, Combination",Haloperidol,1,3,5
+"Drug Therapy, Combination",Olanzapine,1,3,9
+"Drug Therapy, Combination",Prolactin,1,3,3
+"Drug Therapy, Combination",Risperidone,1,3,11
+"Drug Therapy, Combination",Schizophrenia,1,3,24
+"Drug Therapy, Combination",Schizophrenic Psychology,1,3,2
+Haloperidol,Prolactin,1,5,3
+Olanzapine,Prolactin,1,9,3
+Prolactin,Risperidone,1,3,11
+Prolactin,Schizophrenic Psychology,1,3,2
+Risperidone,Schizophrenic Psychology,1,11,2
+Aripiprazole,Bipolar Disorder,1,46,3
+Fluoxetine,pharmacology,1,2,7
+Risperidone,pharmacology,1,11,7
+Fluoxetine,drug therapy,1,2,34
+Fluoxetine,administration & dosage,1,2,11
+Risperidone,administration & dosage,1,11,11
+Delayed-Action Preparations,Drug Interactions,1,3,6
+Delayed-Action Preparations,Fluoxetine,1,3,2
+Delayed-Action Preparations,Risperidone,1,3,11
+Fluoxetine,pharmacokinetics,1,2,32
+"Dose-Response Relationship, Drug",Fluoxetine,1,12,2
+"Dose-Response Relationship, Drug",Risperidone,1,12,11
+Drug Interactions,Fluoxetine,1,6,2
+Drug Interactions,Risperidone,1,6,11
+Delayed-Action Preparations,pharmacology,1,3,7
+Limit of Detection,Olanzapine,1,3,9
+Limit of Detection,Paliperidone Palmitate,1,3,4
+Limit of Detection,Reference Values,1,3,2
+Limit of Detection,Tandem Mass Spectrometry,1,3,11
+Olanzapine,Reference Values,1,9,2
+Paliperidone Palmitate,Reference Values,1,4,2
+Piperazines,Reference Values,1,26,2
+Reference Values,Tandem Mass Spectrometry,1,2,11
+Olanzapine,antipsychotics,1,9,7
+Quetiapine,antipsychotics,1,2,7
+Benzodiazepines,antipsychotics,1,8,7
+antipsychotics,methods,1,7,22
+Antipsychotic,adverse effects,1,3,11
+Quetiapine Fumarate,antipsychotics,1,3,7
+Schizophrenia,antipsychotics,1,24,7
+Olanzapine,paliperidone,1,9,2
+Olanzapine,metabolism,1,9,18
+Quetiapine,paliperidone,1,2,2
+Antipsychotic Agents,paliperidone,1,54,2
+adverse effects,paliperidone,1,11,2
+blood,paliperidone,1,40,2
+paliperidone,pharmacokinetics,1,2,32
+methods,paliperidone,1,22,2
+metabolism,paliperidone,1,18,2
+Paliperidone Palmitate,paliperidone,1,4,2
+Quetiapine Fumarate,paliperidone,1,3,2
+Paliperidone Palmitate,antipsychotics,1,4,7
+Dopamine D2 Receptor Antagonists,therapeutic drug monitoring,1,2,11
+"Dose-Response Relationship, Drug",therapeutic drug monitoring,1,12,11
+Dopamine D2 Receptor Antagonists,pharmacokinetics,1,2,32
+Dopamine D2 Receptor Antagonists,therapeutic use,1,2,27
+Dopamine D2 Receptor Antagonists,metabolism,1,2,18
+Dopamine D2 Receptor Antagonists,"Dose-Response Relationship, Drug",1,2,12
+Dopamine D2 Receptor Antagonists,Drug Monitoring,1,2,26
+UPLC-MS/MS,therapeutic drug monitoring,1,2,11
+Benzodiazepines,UPLC-MS/MS,1,8,2
+UPLC-MS/MS,methods,1,2,22
+Limit of Detection,UPLC-MS/MS,1,3,2
+Olanzapine,UPLC-MS/MS,1,9,2
+Paliperidone Palmitate,UPLC-MS/MS,1,4,2
+Drug Monitoring,Paliperidone Palmitate,1,26,4
+Reference Values,UPLC-MS/MS,1,2,2
+"Chromatography, High Pressure Liquid",therapeutic drug monitoring,1,8,11
+methods,therapeutic drug monitoring,1,22,11
+Limit of Detection,therapeutic drug monitoring,1,3,11
+Paliperidone Palmitate,therapeutic drug monitoring,1,4,11
+Reference Values,therapeutic drug monitoring,1,2,11
+Antipsychotic Agents,Reference Values,1,54,2
+Aripiprazole,Reference Values,1,46,2
+Benzodiazepines,"Chromatography, High Pressure Liquid",1,8,8
+Benzodiazepines,Limit of Detection,1,8,3
+Benzodiazepines,Reference Values,1,8,2
+"Chromatography, High Pressure Liquid",Olanzapine,1,8,9
+"Chromatography, High Pressure Liquid",Paliperidone Palmitate,1,8,4
+Piperazines,UPLC-MS/MS,1,26,2
+Antidepressive Agents,Double-Blind Method,1,4,2
+Antidepressive Agents,"Drug Therapy, Combination",1,4,3
+Bipolar Disorder,adverse effects,1,3,11
+Double-Blind Method,adverse effects,1,2,11
+Bipolar Disorder,Double-Blind Method,1,3,2
+Double-Blind Method,"Drug Therapy, Combination",1,2,3
+Limit of Detection,Psychotropic Drugs,1,3,4
+Psychotropic Drugs,analysis,1,4,4
+Psychotropic Drugs,chemistry,1,4,9
+Psychotropic Drugs,Saliva,1,4,3
+"Chromatography, High Pressure Liquid",Saliva,1,8,3
+Limit of Detection,instrumentation,1,3,3
+analysis,instrumentation,1,4,3
+Schizophrenia,paliperidone,1,24,2
+Saliva,instrumentation,1,3,3
+Limit of Detection,Mass Spectrometry,1,3,3
+Limit of Detection,analysis,1,3,4
+Limit of Detection,chemistry,1,3,9
+Limit of Detection,Saliva,1,3,3
+Mass Spectrometry,analysis,1,3,4
+Mass Spectrometry,chemistry,1,3,9
+Mass Spectrometry,Saliva,1,3,3
+Saliva,blood,1,3,40
+Quetiapine Fumarate,therapeutic drug monitoring,1,3,11
+Quetiapine Fumarate,therapeutic use,1,3,27
+Drug Monitoring,Quetiapine Fumarate,1,26,3
+Antipsychotic,administration & dosage,1,3,11
+chemistry,instrumentation,1,9,3
+drug therapy,paliperidone,1,34,2
+Quetiapine,adverse effects,1,2,11
+Quetiapine,blood,1,2,40
+Benzodiazepines,Quetiapine,1,8,2
+Quetiapine,metabolism,1,2,18
+Paliperidone Palmitate,Quetiapine,1,4,2
+Quetiapine,Quetiapine Fumarate,1,2,3
+Risperidone,metabolism,1,11,18
+Paliperidone Palmitate,adverse effects,1,4,11
+Quetiapine Fumarate,adverse effects,1,3,11
+Paliperidone Palmitate,pharmacokinetics,1,4,32
+Benzodiazepines,metabolism,1,8,18
+Paliperidone Palmitate,metabolism,1,4,18
+Antidepressive Agents,drug therapy,1,4,34
+Paliperidone Palmitate,drug therapy,1,4,34
+Quetiapine Fumarate,Schizophrenia,1,3,24
+Quetiapine Fumarate,drug therapy,1,3,34
+Anticonvulsants,Antidepressive Agents,1,2,4
+Anticonvulsants,adverse effects,1,2,11
+Anticonvulsants,Double-Blind Method,1,2,2
+Anticonvulsants,"Drug Therapy, Combination",1,2,3
+Antidepressive Agents,pharmacokinetics,1,4,32
+Double-Blind Method,pharmacokinetics,1,2,32
+Antidepressive Agents,therapeutic use,1,4,27
+Double-Blind Method,therapeutic use,1,2,27
+Antidepressive Agents,adverse effects,1,4,11
+Antidepressive Agents,Bipolar Disorder,1,4,3
+Quetiapine Fumarate,metabolism,1,3,18

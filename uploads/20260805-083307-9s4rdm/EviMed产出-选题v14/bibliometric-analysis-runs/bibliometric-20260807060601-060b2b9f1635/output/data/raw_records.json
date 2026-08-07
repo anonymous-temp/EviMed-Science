@@ -1,0 +1,338 @@
+[
+  {
+    "pmid": "34030168",
+    "title": "Infection is associated with elevated serum concentrations of antipsychotic drugs.",
+    "abstract": "We aimed to investigate the effects of infection on serum concentrations of different antipsychotics in inpatients with respiratory tract infections treated with psychiatric drugs, including risperidone, clozapine, quetiapine, and aripiprazole. All patients underwent therapeutic drug monitoring (TDM) and routine blood tests during infection and noninfection periods. The Wilcoxon signed-rank test was used to analyze intra-individual differences in dose-corrected serum concentrations (C/D) levels in infection and noninfection periods. To study the effects of infection intensity on drug concentrations, white blood cells (WBCs) parameters and C/D levels were analyzed by Spearman's correlation analysis using all samples. The median C/D levels of risperidone (risperidone + 9-OH, n = 36) and clozapine (n = 42) were significantly higher (P < 0.001), whereas the median C/D levels of quetiapine (n = 21) and aripiprazole (n = 13) were slightly significantly higher (P < 0.01) in infection than in noninfection period. A significant positive association between C/D levels and WBC parameters was observed for risperidone, clozapine, and quetiapine. These results indicated reduced clearance of all drugs evaluated, especially clozapine and risperidone, due to infection. Therefore, during infection in patients receiving risperidone, clozapine, quetiapine, or aripiprazole, TDM should be performed to minimize the possible adverse effects associated with elevated drug concentrations.",
+    "authors": [
+      {
+        "last_name": "Zhang",
+        "fore_name": "Yuan-Yuan",
+        "initials": "YY",
+        "affiliations": [
+          "Department of Pharmacy, Hefei Fourth People's Hospital.",
+          "Psychopharmacology Research Laboratory, Anhui Mental Health Center.",
+          "Department of Pharmacy, Affiliated Psychological Hospital of Anhui Medical University, Hefei, China."
+        ]
+      },
+      {
+        "last_name": "Zhou",
+        "fore_name": "Xie-Hai",
+        "initials": "XH",
+        "affiliations": [
+          "Department of Pharmacy, Hefei Fourth People's Hospital.",
+          "Psychopharmacology Research Laboratory, Anhui Mental Health Center.",
+          "Department of Pharmacy, Affiliated Psychological Hospital of Anhui Medical University, Hefei, China."
+        ]
+      },
+      {
+        "last_name": "Shan",
+        "fore_name": "Feng",
+        "initials": "F",
+        "affiliations": [
+          "Department of Pharmacy, Hefei Fourth People's Hospital.",
+          "Psychopharmacology Research Laboratory, Anhui Mental Health Center.",
+          "Department of Pharmacy, Affiliated Psychological Hospital of Anhui Medical University, Hefei, China."
+        ]
+      },
+      {
+        "last_name": "Liang",
+        "fore_name": "Jun",
+        "initials": "J",
+        "affiliations": [
+          "Department of Pharmacy, Hefei Fourth People's Hospital.",
+          "Psychopharmacology Research Laboratory, Anhui Mental Health Center.",
+          "Department of Pharmacy, Affiliated Psychological Hospital of Anhui Medical University, Hefei, China."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Department of Pharmacy, Affiliated Psychological Hospital of Anhui Medical University, Hefei, China.",
+      "Psychopharmacology Research Laboratory, Anhui Mental Health Center.",
+      "Department of Pharmacy, Hefei Fourth People's Hospital."
+    ],
+    "journal": {
+      "title": "International clinical psychopharmacology",
+      "iso": "Int Clin Psychopharmacol",
+      "issn": "1473-5857"
+    },
+    "year": "2021",
+    "mesh_terms": [
+      "Antipsychotic Agents",
+      "blood",
+      "therapeutic use",
+      "Aripiprazole",
+      "blood",
+      "therapeutic use",
+      "Clozapine",
+      "blood",
+      "therapeutic use",
+      "Humans",
+      "Quetiapine Fumarate",
+      "blood",
+      "therapeutic use",
+      "Respiratory Tract Infections",
+      "blood",
+      "drug therapy",
+      "Risperidone",
+      "blood",
+      "therapeutic use"
+    ],
+    "keywords": [],
+    "pub_types": [
+      "Journal Article",
+      "Research Support, Non-U.S. Gov't"
+    ],
+    "doi": "10.1097/YIC.0000000000000366",
+    "country": "England"
+  },
+  {
+    "pmid": "33560096",
+    "title": "Therapeutic Drug Monitoring of Psychotropics as a Diagnostic Tool for CYP2D6 Poor Metabolizer Phenotype.",
+    "abstract": "BACKGROUND: Interpatient variability in cytochrome P450 2D6 (CYP2D6) enzyme activity alters the serum concentrations of most psychotropics, which often have narrow therapeutic indices. Therefore, preemptive knowledge of CYP2D6 activity is desired. However, accessible indicators for deficient CYP2D6 activity are necessary because genotyping all patients prescribed CYP2D6 metabolized drugs is often not feasible or cost-effective. METHODS: In this study, the predictive value of the ratio between a CYP2D6 substrate and its metabolite, known as the metabolic ratio (MR), the dose-corrected serum concentration of substrate (CDR), and the dose-corrected sum concentration of substrate and metabolite (Sum CDR) of venlafaxine, risperidone, aripiprazole, and nortriptyline were determined to predict the CYP2D6 poor metabolizer (PM) phenotype. The area-under-the-receiver operator characteristic curve, as well as the sensitivity, specificity, and positive and negative predictive values of the optimal thresholds, were calculated. RESULTS: Although the MR, CDR, and Sum CDR all predicted the CYP2D6 PM phenotype, the predictive value of the MR was most robust for venlafaxine and aripiprazole, and the Sum CDR was inferior for all 3 psychotropics. MRs of venlafaxine, risperidone, and aripiprazole, and CDR of nortriptyline showed an area-under-the-receiver operator characteristics (95% confidence interval) of 97.2% (94.7%-99.6%), 93.0% (88.8%-97.2%), 97.8% (95.4%-100.0%), and 85.6% (78.0%-93.1%), respectively. Thresholds of the log(MR) of ≥0.1 for venlafaxine, ≥0.0 for risperidone, and ≥1.5 for aripiprazole, and log(CDR) ≥0.5 for nortriptyline produced >92% sensitivity and >64% specificity. CONCLUSIONS: If therapeutic drug monitoring is available, the thresholds presented here could serve as a diagnostic tool for the CYP2D6 PM phenotype of psychiatric patients prescribed the aforementioned psychotropic medications.",
+    "authors": [
+      {
+        "last_name": "Ganesh",
+        "fore_name": "Soraya V",
+        "initials": "SV",
+        "affiliations": [
+          "Department of Clinical Pharmacology and Pharmacy, Amsterdam UMC, Vrije Universiteit Amsterdam, Amsterdam ; and."
+        ]
+      },
+      {
+        "last_name": "Beunk",
+        "fore_name": "Lianne",
+        "initials": "L",
+        "affiliations": [
+          "Department of Clinical Chemistry, St Jansdal Hospital, Harderwijk, the Netherlands."
+        ]
+      },
+      {
+        "last_name": "Nikolik",
+        "fore_name": "Bojan",
+        "initials": "B",
+        "affiliations": [
+          "Department of Clinical Pharmacology and Pharmacy, Amsterdam UMC, Vrije Universiteit Amsterdam, Amsterdam ; and."
+        ]
+      },
+      {
+        "last_name": "van der Weide",
+        "fore_name": "Jan",
+        "initials": "J",
+        "affiliations": [
+          "Department of Clinical Chemistry, St Jansdal Hospital, Harderwijk, the Netherlands."
+        ]
+      },
+      {
+        "last_name": "Bet",
+        "fore_name": "Pierre M",
+        "initials": "PM",
+        "affiliations": [
+          "Department of Clinical Pharmacology and Pharmacy, Amsterdam UMC, Vrije Universiteit Amsterdam, Amsterdam ; and."
+        ]
+      }
+    ],
+    "affiliations": [
+      "Department of Clinical Pharmacology and Pharmacy, Amsterdam UMC, Vrije Universiteit Amsterdam, Amsterdam ; and.",
+      "Department of Clinical Chemistry, St Jansdal Hospital, Harderwijk, the Netherlands."
+    ],
+    "journal": {
+      "title": "Therapeutic drug monitoring",
+      "iso": "Ther Drug Monit",
+      "issn": "1536-3694"
+    },
+    "year": "2021",
+    "mesh_terms": [
+      "Cytochrome P-450 CYP2D6",
+      "genetics",
+      "Drug Monitoring",
+      "Genotype",
+      "Humans",
+      "Phenotype",
+      "Psychotropic Drugs",
+      "administration & dosage",
+      "pharmacokinetics"
+    ],
+    "keywords": [],
+    "pub_types": [
+      "Journal Article"
+    ],
+    "doi": "10.1097/FTD.0000000000000868",
+    "country": "United States"
+  },
+  {
+    "pmid": "32997183",
+    "title": "Therapeutic drug monitoring of children and adolescents treated with aripiprazole: observational results from routine patient care.",
+    "abstract": "Although aripiprazole is one of the most used antipsychotics, knowledge about serum concentrations in children and adolescents is scarce and age-specific therapeutic ranges have not been established yet. Data of a routine therapeutic drug monitoring service were analyzed in order to evaluate the relationship between dose and serum concentration of aripiprazole in children and adolescents. The study also aimed to evaluate whether the therapeutic reference range defined for adults with schizophrenia (100-350 ng/ml) is applicable for minors. Data from 130 patients (aged 7-19 years) treated with aripiprazole for different indications in doses of 2-30 mg/day were evaluated. Patient characteristics, doses, serum concentrations and therapeutic outcome were assessed by standardized measures. A positive mean correlation between body weight-corrected daily dose and aripiprazole concentration was found (rp = 0.59, p < 0.001) with variation in dose explaining 35% of the variability in serum concentrations. Girls had on average 41% higher dose-corrected concentrations than boys (244.9 versus 173.4 mg/l; p = 0.006). Aripiprazole concentrations did not vary with co-medication (p = 0.22). About 70% of all measured serum concentrations were within the recommended therapeutic range for adults. Using a calculation method in all responding patients with an ICD-10 F2 diagnosis for a rough estimation of a preliminary therapeutic window also demonstrated a similar therapeutic range of aripiprazole in minors (105.9-375.3 ng/ml) than for adults. If confirmed in larger samples and more controlled study designs, these data may contribute to the definition of a therapeutic range of aripiprazole concentrations in children and adolescents.",
+    "authors": [
+      {
+        "last_name": "Egberts",
+        "fore_name": "Karin",
+        "initials": "K",
+        "affiliations": [
+          "Department of Child and Adolescent Psychiatry, Psychosomatics and Psychotherapy, Center for Mental Health, University Hospital of Wuerzburg, Wuerzburg, Germany.",
+          "Competence Network Therapeutic Drug Monitoring (TDM-KJP e.V.), Wuerzburg, Germany."
+        ]
+      },
+      {
+        "last_name": "Reuter-Dang",
+        "fore_name": "Su-Yin",
+        "initials": "SY",
+        "affiliations": [
+          "Department of Child and Adolescent Psychiatry, Psychosomatics and Psychotherapy, Center for Mental Health, University Hospital of Wuerzburg, Wuerzburg, Germany."
+        ]
+      },
+      {
+        "last_name": "Fekete",
+        "fore_name": "Stefanie",
+        "initials": "S",
+        "affiliations": [
+          "Department of Child and Adolescent Psychiatry, Psychosomatics and Psychotherapy, Center for Mental Health, University Hospital of Wuerzburg, Wuerzburg, Germany."
+        ]
+      },
+      {
+        "last_name": "Kulpok",
+        "fore_name": "Christine",
+        "initials": "C",
+        "affiliations": [
+          "Department of Child and Adolescent Psychiatry, Psychosomatics and Psychotherapy, Center for Mental Health, University Hospital of Wuerzburg, Wuerzburg, Germany."
+        ]
+      },
+      {
+        "last_name": "Mehler-Wex",
+        "fore_name": "Claudia",
+        "initials": "C",
+        "affiliations": [
+          "Competence Network Therapeutic Drug Monitoring (TDM-KJP e.V.), Wuerzburg, Germany.",
+          "HEMERA Private Hospital for Mental Health, Adolescents and Young Adults, Bad Kissingen, Germany.",
+          "Department of Child and Adolescent Psychiatry and Psychotherapy, University Hospital of Ulm, Ulm, Germany."
+        ]
+      },
+      {
+        "last_name": "Wewetzer",
+        "fore_name": "Christoph",
+        "initials": "C",
+        "affiliations": [
+          "Competence Network Therapeutic Drug Monitoring (TDM-KJP e.V.), Wuerzburg, Germany.",
+          "Clinic for Child and Adolescent Psychiatry and Psychotherapy, Clinics of the City Cologne GmbH, Cologne, Germany."
+        ]
+      },
+      {
+        "last_name": "Karwautz",
+        "fore_name": "Andreas",
+        "initials": "A",
+        "affiliations": [
+          "Competence Network Therapeutic Drug Monitoring (TDM-KJP e.V.), Wuerzburg, Germany.",
+          "Department of Child and Adolescent Psychiatry, Medical University of Vienna, Vienna, Austria."
+        ]
+      },
+      {
+        "last_name": "Mitterer",
+        "fore_name": "Michaela",
+        "initials": "M",
+        "affiliations": [
+          "Department of Child and Adolescent Psychiatry, Medical University of Vienna, Vienna, Austria."
+        ]
+      },
+      {
+        "last_name": "Holtkamp",
+        "fore_name": "Kristian",
+        "initials": "K",
+        "affiliations": [
+          "DRK Fachklinik Bad Neuenahr, Bad Neuenahr-Ahrweiler, Germany."
+        ]
+      },
+      {
+        "last_name": "Boege",
+        "fore_name": "Isabel",
+        "initials": "I",
+        "affiliations": [
+          "Department of Child and Adolescent Psychiatry, ZfP Suedwuerttemberg, Weissenau, Germany."
+        ]
+      },
+      {
+        "last_name": "Burger",
+        "fore_name": "Rainer",
+        "initials": "R",
+        "affiliations": [
+          "TDM-Laboratory, Department of Psychiatry, Psychosomatics and Psychotherapy, Center for Mental Health, University Hospital of Wuerzburg, Wuerzburg, Germany."
+        ]
+      },
+      {
+        "last_name": "Romanos",
+        "fore_name": "Marcel",
+        "initials": "M",
+        "affiliations": [
+          "Department of Child and Adolescent Psychiatry, Psychosomatics and Psychotherapy, Center for Mental Health, University Hospital of Wuerzburg, Wuerzburg, Germany.",
+          "Competence Network Therapeutic Drug Monitoring (TDM-KJP e.V.), Wuerzburg, Germany."
+        ]
+      },
+      {
+        "last_name": "Gerlach",
+        "fore_name": "Manfred",
+        "initials": "M",
+        "affiliations": [
+          "Department of Child and Adolescent Psychiatry, Psychosomatics and Psychotherapy, Center for Mental Health, University Hospital of Wuerzburg, Wuerzburg, Germany.",
+          "Competence Network Therapeutic Drug Monitoring (TDM-KJP e.V.), Wuerzburg, Germany."
+        ]
+      },
+      {
+        "last_name": "Taurines",
+        "fore_name": "Regina",
+        "initials": "R",
+        "affiliations": [
+          "Department of Child and Adolescent Psychiatry, Psychosomatics and Psychotherapy, Center for Mental Health, University Hospital of Wuerzburg, Wuerzburg, Germany. taurines_r@ukw.de.",
+          "Competence Network Therapeutic Drug Monitoring (TDM-KJP e.V.), Wuerzburg, Germany. taurines_r@ukw.de."
+        ]
+      }
+    ],
+    "affiliations": [
+      "HEMERA Private Hospital for Mental Health, Adolescents and Young Adults, Bad Kissingen, Germany.",
+      "Competence Network Therapeutic Drug Monitoring (TDM-KJP e.V.), Wuerzburg, Germany.",
+      "Department of Child and Adolescent Psychiatry, ZfP Suedwuerttemberg, Weissenau, Germany.",
+      "TDM-Laboratory, Department of Psychiatry, Psychosomatics and Psychotherapy, Center for Mental Health, University Hospital of Wuerzburg, Wuerzburg, Germany.",
+      "Clinic for Child and Adolescent Psychiatry and Psychotherapy, Clinics of the City Cologne GmbH, Cologne, Germany.",
+      "DRK Fachklinik Bad Neuenahr, Bad Neuenahr-Ahrweiler, Germany.",
+      "Competence Network Therapeutic Drug Monitoring (TDM-KJP e.V.), Wuerzburg, Germany. taurines_r@ukw.de.",
+      "Department of Child and Adolescent Psychiatry, Medical University of Vienna, Vienna, Austria.",
+      "Department of Child and Adolescent Psychiatry, Psychosomatics and Psychotherapy, Center for Mental Health, University Hospital of Wuerzburg, Wuerzburg, Germany.",
+      "Department of Child and Adolescent Psychiatry, Psychosomatics and Psychotherapy, Center for Mental Health, University Hospital of Wuerzburg, Wuerzburg, Germany. taurines_r@ukw.de.",
+      "Department of Child and Adolescent Psychiatry and Psychotherapy, University Hospital of Ulm, Ulm, Germany."
+    ],
+    "journal": {
+      "title": "Journal of neural transmission (Vienna, Austria : 1996)",
+      "iso": "J Neural Transm (Vienna)",
+      "issn": "1435-1463"
+    },
+    "year": "2020",
+    "mesh_terms": [
+      "Adolescent",
+      "Adult",
+      "Antipsychotic Agents",
+      "therapeutic use",
+      "Aripiprazole",
+      "Child",
+      "Drug Monitoring",
+      "Female",
+      "Humans",
+      "Male",
+      "Patient Care",
+      "Schizophrenia",
+      "drug therapy"
+    ],
+    "keywords": [
+      "Aripiprazole",
+      "Children",
+      "Pharmacovigilance",
+      "Schizophrenia",
+      "Serum concentration",
+      "TDM"
+    ],
+    "pub_types": [
+      "Journal Article",
+      "Observational Study",
+      "Research Support, Non-U.S. Gov't"
+    ],
+    "doi": "10.1007/s00702-020-02253-4",
+    "country": "Austria"
+  }
+]

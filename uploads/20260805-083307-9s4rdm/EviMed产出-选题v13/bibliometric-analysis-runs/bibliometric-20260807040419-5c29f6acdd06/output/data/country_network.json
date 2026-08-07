@@ -1,0 +1,129 @@
+{
+  "nodes": [
+    {
+      "id": "Germany",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.1667,
+      "betweenness": 0.0,
+      "closeness": 0.8571,
+      "weighted_degree": 2
+    },
+    {
+      "id": "China",
+      "weight": 7,
+      "cluster": 0,
+      "degree": 0.1667,
+      "betweenness": 0.0,
+      "closeness": 0.6316,
+      "weighted_degree": 1
+    },
+    {
+      "id": "United States",
+      "weight": 10,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.6,
+      "closeness": 1.3333,
+      "weighted_degree": 9
+    },
+    {
+      "id": "Spain",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 0.8,
+      "weighted_degree": 4
+    },
+    {
+      "id": "Canada",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 0.8,
+      "weighted_degree": 4
+    },
+    {
+      "id": "United Kingdom",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 1.125,
+      "weighted_degree": 7
+    },
+    {
+      "id": "Italy",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.6667,
+      "betweenness": 0.0,
+      "closeness": 1.125,
+      "weighted_degree": 7
+    }
+  ],
+  "edges": [
+    {
+      "source": "Germany",
+      "target": "United States",
+      "weight": 2
+    },
+    {
+      "source": "China",
+      "target": "United States",
+      "weight": 1
+    },
+    {
+      "source": "United States",
+      "target": "United Kingdom",
+      "weight": 2
+    },
+    {
+      "source": "United States",
+      "target": "Italy",
+      "weight": 2
+    },
+    {
+      "source": "United States",
+      "target": "Canada",
+      "weight": 1
+    },
+    {
+      "source": "United States",
+      "target": "Spain",
+      "weight": 1
+    },
+    {
+      "source": "Spain",
+      "target": "Canada",
+      "weight": 1
+    },
+    {
+      "source": "Spain",
+      "target": "United Kingdom",
+      "weight": 1
+    },
+    {
+      "source": "Spain",
+      "target": "Italy",
+      "weight": 1
+    },
+    {
+      "source": "Canada",
+      "target": "United Kingdom",
+      "weight": 1
+    },
+    {
+      "source": "Canada",
+      "target": "Italy",
+      "weight": 1
+    },
+    {
+      "source": "United Kingdom",
+      "target": "Italy",
+      "weight": 3
+    }
+  ]
+}

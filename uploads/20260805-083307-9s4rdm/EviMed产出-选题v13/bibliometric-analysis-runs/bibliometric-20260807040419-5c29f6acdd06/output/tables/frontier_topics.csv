@@ -1,0 +1,21 @@
+topic,frontier_score,growth_rate,burst_score,novelty_score,centrality,evidence
+atypical antipsychotics,0.444,0.667,0,0.375,0.0,近期快速增长（67%）
+antipsychotic drugs,0.316,0.333,0,0.562,0.0,中等信号
+Schizophrenia,0.294,0.5,0,0.125,0.0,中等信号
+administration & dosage,0.278,0.5,0,0.062,0.0,中等信号
+epidemiology,0.278,0.5,0,0.062,0.0,中等信号
+Antipsychotic Agents,0.274,0.235,0,0.0,0.835,网络中心性高（0.84）
+confidence intervals (CIs),0.25,0.0,0,1.0,0.0,相对新颖的主题
+Drug Substitution,0.25,0.0,0,1.0,0.0,相对新颖的主题
+dyslipidaemia,0.25,0.0,0,1.0,0.0,相对新颖的主题
+liquid chromatography-tandem mass spectrometry (LC-MS/MS),0.25,0.0,0,1.0,0.0,相对新颖的主题
+Hong Kong,0.25,0.0,0,1.0,0.0,相对新颖的主题
+Prolactin,0.25,0.0,0,1.0,0.0,相对新颖的主题
+Perphenazine,0.25,0.0,0,1.0,0.0,相对新颖的主题
+typical antipsychotics,0.25,0.0,0,1.0,0.0,相对新颖的主题
+mental disorder,0.25,0.0,0,1.0,0.0,相对新颖的主题
+single nucleotide polymorphism,0.25,0.0,0,1.0,0.0,相对新颖的主题
+standardization,0.25,0.0,0,1.0,0.0,相对新颖的主题
+diagnosis,0.25,0.0,0,1.0,0.0,相对新颖的主题
+Adverse Drug Reaction Reporting Systems,0.25,0.0,0,1.0,0.0,相对新颖的主题
+Blood Pressure,0.25,0.0,0,1.0,0.0,相对新颖的主题

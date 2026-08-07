@@ -1,0 +1,3844 @@
+{
+ "source": "/workspace/20260803TDM.xlsx",
+ "sheets": {
+  "病案首页": {
+   "header": [
+    "ID",
+    "PATIENT_ID",
+    "CASE_NO",
+    "CURRENT_TIMES",
+    "SEX",
+    "AGE",
+    "AGE_UNIT",
+    "BIRTHDATE",
+    "NATIONALS",
+    "BLOOD_TYPE",
+    "BLOOD_RH",
+    "MED_REC_NO",
+    "IN_DATE",
+    "ADM_DEPT_CODE",
+    "ADM_DEPT_NAME",
+    "ADM_WAY",
+    "CONDITION_STATUS",
+    "OUTP_DIAGNOSIS_NAME",
+    "OUTP_DIAGNOSIS_CODE",
+    "PATHOLOGY_DIAGNOSIS_CODE",
+    "PATHOLOGY_DIAGNOSIS_NAME",
+    "MAIN_DIAGNOSIS_CODE",
+    "MAIN_DIAGNOSIS_NAME",
+    "OTHER_DIAGNOSIS_CODE",
+    "OTHER_DIAGNOSIS_NAME",
+    "DIS_DATE",
+    "DIS_DEPT_CODE",
+    "DIS_DEPT_NAME",
+    "DIS_WAY",
+    "DIS_RESULT",
+    "DAY_TOTAL",
+    "DRUG_ALLERGY_MARK",
+    "DRUG_ALLERGENS_NAME",
+    "PAY_TYPE",
+    "REIN_AFTER31_MARK",
+    "MED_REC_QUALITY",
+    "MED_REC_DATE",
+    "FEE_TOTAL"
+   ],
+   "n_columns": 38,
+   "n_rows": 5,
+   "n_parsed": 5,
+   "columns": [
+    {
+     "column": "ID",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": [REDACTED-06].0,
+      "max": [REDACTED-10].0,
+      "mean": 575800.8
+     },
+     "top_values": [
+      [
+       "[REDACTED-06]",
+       1
+      ],
+      [
+       "[REDACTED-07]",
+       1
+      ],
+      [
+       "[REDACTED-08]",
+       1
+      ],
+      [
+       "[REDACTED-09]",
+       1
+      ],
+      [
+       "[REDACTED-10]",
+       1
+      ]
+     ],
+     "sample": [
+      [REDACTED-06],
+      [REDACTED-07],
+      [REDACTED-08],
+      [REDACTED-09],
+      [REDACTED-10]
+     ]
+    },
+    {
+     "column": "PATIENT_ID",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 3,
+      "str": 2
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 216359.0,
+      "max": [REDACTED-05].0,
+      "mean": 8143485.2
+     },
+     "top_values": [
+      [
+       "[REDACTED-04]",
+       1
+      ],
+      [
+       "[REDACTED-02]",
+       1
+      ],
+      [
+       "[REDACTED-03]",
+       1
+      ],
+      [
+       "[REDACTED-01]",
+       1
+      ],
+      [
+       "[REDACTED-05]",
+       1
+      ]
+     ],
+     "sample": [
+      [REDACTED-04],
+      "[REDACTED-02]",
+      [REDACTED-03],
+      "[REDACTED-01]",
+      [REDACTED-05]
+     ]
+    },
+    {
+     "column": "CASE_NO",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": [REDACTED-06].0,
+      "max": [REDACTED-10].0,
+      "mean": 575800.8
+     },
+     "top_values": [
+      [
+       "[REDACTED-06]",
+       1
+      ],
+      [
+       "[REDACTED-07]",
+       1
+      ],
+      [
+       "[REDACTED-08]",
+       1
+      ],
+      [
+       "[REDACTED-09]",
+       1
+      ],
+      [
+       "[REDACTED-10]",
+       1
+      ]
+     ],
+     "sample": [
+      [REDACTED-06],
+      [REDACTED-07],
+      [REDACTED-08],
+      [REDACTED-09],
+      [REDACTED-10]
+     ]
+    },
+    {
+     "column": "CURRENT_TIMES",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 1.0,
+      "max": 19.0,
+      "mean": 5.8
+     },
+     "top_values": [
+      [
+       "3",
+       1
+      ],
+      [
+       "19",
+       1
+      ],
+      [
+       "4",
+       1
+      ],
+      [
+       "2",
+       1
+      ],
+      [
+       "1",
+       1
+      ]
+     ],
+     "sample": [
+      3,
+      19,
+      4,
+      2,
+      1
+     ]
+    },
+    {
+     "column": "SEX",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 2,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 1.0,
+      "max": 2.0,
+      "mean": 1.8
+     },
+     "top_values": [
+      [
+       "2",
+       4
+      ],
+      [
+       "1",
+       1
+      ]
+     ],
+     "sample": [
+      2,
+      2,
+      2,
+      1,
+      2
+     ]
+    },
+    {
+     "column": "AGE",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "56岁",
+       1
+      ],
+      [
+       "29岁",
+       1
+      ],
+      [
+       "23岁",
+       1
+      ],
+      [
+       "21岁",
+       1
+      ],
+      [
+       "26岁",
+       1
+      ]
+     ],
+     "sample": [
+      "56岁",
+      "29岁",
+      "23岁",
+      "21岁",
+      "26岁"
+     ]
+    },
+    {
+     "column": "AGE_UNIT",
+     "n": 5,
+     "n_non_null": 0,
+     "missing_rate": 1.0,
+     "types": {},
+     "n_unique": 0,
+     "numeric_stats": null,
+     "top_values": [],
+     "sample": []
+    },
+    {
+     "column": "BIRTHDATE",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "18/6/1964",
+       1
+      ],
+      [
+       "23/5/1991",
+       1
+      ],
+      [
+       "3/6/1997",
+       1
+      ],
+      [
+       "16/5/1999",
+       1
+      ],
+      [
+       "19/7/1994",
+       1
+      ]
+     ],
+     "sample": [
+      "18/6/1964",
+      "23/5/1991",
+      "3/6/1997",
+      "16/5/1999",
+      "19/7/1994"
+     ]
+    },
+    {
+     "column": "NATIONALS",
+     "n": 5,
+     "n_non_null": 4,
+     "missing_rate": 0.2,
+     "types": {
+      "str": 4
+     },
+     "n_unique": 1,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "汉族",
+       4
+      ]
+     ],
+     "sample": [
+      "汉族",
+      "汉族",
+      "汉族",
+      "汉族"
+     ]
+    },
+    {
+     "column": "BLOOD_TYPE",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 3,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 2.0,
+      "max": 6.0,
+      "mean": 4.6
+     },
+     "top_values": [
+      [
+       "6",
+       3
+      ],
+      [
+       "2",
+       1
+      ],
+      [
+       "3",
+       1
+      ]
+     ],
+     "sample": [
+      2,
+      6,
+      6,
+      3,
+      6
+     ]
+    },
+    {
+     "column": "BLOOD_RH",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 2,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 2.0,
+      "max": 4.0,
+      "mean": 3.2
+     },
+     "top_values": [
+      [
+       "4",
+       3
+      ],
+      [
+       "2",
+       2
+      ]
+     ],
+     "sample": [
+      2,
+      4,
+      4,
+      2,
+      4
+     ]
+    },
+    {
+     "column": "MED_REC_NO",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 3,
+      "str": 2
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 216359.0,
+      "max": [REDACTED-05].0,
+      "mean": 8143485.2
+     },
+     "top_values": [
+      [
+       "[REDACTED-04]",
+       1
+      ],
+      [
+       "[REDACTED-02]",
+       1
+      ],
+      [
+       "[REDACTED-03]",
+       1
+      ],
+      [
+       "[REDACTED-01]",
+       1
+      ],
+      [
+       "[REDACTED-05]",
+       1
+      ]
+     ],
+     "sample": [
+      [REDACTED-04],
+      "[REDACTED-02]",
+      [REDACTED-03],
+      "[REDACTED-01]",
+      [REDACTED-05]
+     ]
+    },
+    {
+     "column": "IN_DATE",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "28/11/2020 11:19:14",
+       1
+      ],
+      [
+       "25/12/2020 11:40:02",
+       1
+      ],
+      [
+       "25/12/2020 13:56:19",
+       1
+      ],
+      [
+       "27/2/2021 10:54:25",
+       1
+      ],
+      [
+       "4/3/2021 21:29:49",
+       1
+      ]
+     ],
+     "sample": [
+      "28/11/2020 11:19:14",
+      "25/12/2020 11:40:02",
+      "25/12/2020 13:56:19",
+      "27/2/2021 10:54:25",
+      "4/3/2021 21:29:49"
+     ]
+    },
+    {
+     "column": "ADM_DEPT_CODE",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 3,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 1014001.0,
+      "max": 1014007.0,
+      "mean": 1014005.2
+     },
+     "top_values": [
+      [
+       "1014007",
+       3
+      ],
+      [
+       "1014004",
+       1
+      ],
+      [
+       "1014001",
+       1
+      ]
+     ],
+     "sample": [
+      1014007,
+      1014007,
+      1014004,
+      1014001,
+      1014007
+     ]
+    },
+    {
+     "column": "ADM_DEPT_NAME",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 5
+     },
+     "n_unique": 3,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "医学观察病房(闲林)(历史)",
+       3
+      ],
+      [
+       "精四科病房(闲林)",
+       1
+      ],
+      [
+       "精一科病房(闲林)",
+       1
+      ]
+     ],
+     "sample": [
+      "医学观察病房(闲林)(历史)",
+      "医学观察病房(闲林)(历史)",
+      "精四科病房(闲林)",
+      "精一科病房(闲林)",
+      "医学观察病房(闲林)(历史)"
+     ]
+    },
+    {
+     "column": "ADM_WAY",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 1,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 2.0,
+      "max": 2.0,
+      "mean": 2.0
+     },
+     "top_values": [
+      [
+       "2",
+       5
+      ]
+     ],
+     "sample": [
+      2,
+      2,
+      2,
+      2,
+      2
+     ]
+    },
+    {
+     "column": "CONDITION_STATUS",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 1,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 3.0,
+      "max": 3.0,
+      "mean": 3.0
+     },
+     "top_values": [
+      [
+       "3",
+       5
+      ]
+     ],
+     "sample": [
+      3,
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    {
+     "column": "OUTP_DIAGNOSIS_NAME",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       " 癫病 ",
+       1
+      ],
+      [
+       " 双相情感障碍,目前为轻躁狂发作 ",
+       1
+      ],
+      [
+       " 郁病 ",
+       1
+      ],
+      [
+       " 未分化型精神分裂症 ",
+       1
+      ],
+      [
+       " 双相情感障碍 ",
+       1
+      ]
+     ],
+     "sample": [
+      " 癫病 ",
+      " 双相情感障碍,目前为轻躁狂发作 ",
+      " 郁病 ",
+      " 未分化型精神分裂症 ",
+      " 双相情感障碍 "
+     ]
+    },
+    {
+     "column": "OUTP_DIAGNOSIS_CODE",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "BNX071",
+       1
+      ],
+      [
+       "F31.000x001",
+       1
+      ],
+      [
+       "BNG110",
+       1
+      ],
+      [
+       "F20.300",
+       1
+      ],
+      [
+       "F31.900x001",
+       1
+      ]
+     ],
+     "sample": [
+      "BNX071",
+      "F31.000x001",
+      "BNG110",
+      "F20.300",
+      "F31.900x001"
+     ]
+    },
+    {
+     "column": "PATHOLOGY_DIAGNOSIS_CODE",
+     "n": 5,
+     "n_non_null": 0,
+     "missing_rate": 1.0,
+     "types": {},
+     "n_unique": 0,
+     "numeric_stats": null,
+     "top_values": [],
+     "sample": []
+    },
+    {
+     "column": "PATHOLOGY_DIAGNOSIS_NAME",
+     "n": 5,
+     "n_non_null": 0,
+     "missing_rate": 1.0,
+     "types": {},
+     "n_unique": 0,
+     "numeric_stats": null,
+     "top_values": [],
+     "sample": []
+    },
+    {
+     "column": "MAIN_DIAGNOSIS_CODE",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "F20.400",
+       1
+      ],
+      [
+       "F31.000",
+       1
+      ],
+      [
+       "Z03.200",
+       1
+      ],
+      [
+       "F20.300",
+       1
+      ],
+      [
+       "F31.500x001",
+       1
+      ]
+     ],
+     "sample": [
+      "F20.400",
+      "F31.000",
+      "Z03.200",
+      "F20.300",
+      "F31.500x001"
+     ]
+    },
+    {
+     "column": "MAIN_DIAGNOSIS_NAME",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "精神分裂症后抑郁",
+       1
+      ],
+      [
+       "双相情感障碍，目前为轻躁狂发作",
+       1
+      ],
+      [
+       "可疑精神和行为障碍的观察",
+       1
+      ],
+      [
+       "未分化型精神分裂症",
+       1
+      ],
+      [
+       "双相情感障碍,目前为伴有精神病性症状的重度抑郁发作",
+       1
+      ]
+     ],
+     "sample": [
+      "精神分裂症后抑郁",
+      "双相情感障碍，目前为轻躁狂发作",
+      "可疑精神和行为障碍的观察",
+      "未分化型精神分裂症",
+      "双相情感障碍,目前为伴有精神病性症状的重度抑郁发作"
+     ]
+    },
+    {
+     "column": "OTHER_DIAGNOSIS_CODE",
+     "n": 5,
+     "n_non_null": 4,
+     "missing_rate": 0.2,
+     "types": {
+      "str": 4
+     },
+     "n_unique": 4,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "B18.101|E22.100x001|F41.900|G24.901|H11.300|K72.905",
+       1
+      ],
+      [
+       "F41.101",
+       1
+      ],
+      [
+       "G24.900x003",
+       1
+      ],
+      [
+       "E87.600",
+       1
+      ]
+     ],
+     "sample": [
+      "B18.101|E22.100x001|F41.900|G24.901|H11.300|K72.905",
+      "F41.101",
+      "G24.900x003",
+      "E87.600"
+     ]
+    },
+    {
+     "column": "OTHER_DIAGNOSIS_NAME",
+     "n": 5,
+     "n_non_null": 4,
+     "missing_rate": 0.2,
+     "types": {
+      "str": 4
+     },
+     "n_unique": 4,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "迟发性运动障碍|肝功能不全|高泌乳素血症|焦虑障碍|慢性活动型乙型病毒性肝炎|右眼 结膜出血",
+       1
+      ],
+      [
+       "焦虑状态",
+       1
+      ],
+      [
+       "肌张力障碍",
+       1
+      ],
+      [
+       "低钾血症",
+       1
+      ]
+     ],
+     "sample": [
+      "迟发性运动障碍|肝功能不全|高泌乳素血症|焦虑障碍|慢性活动型乙型病毒性肝炎|右眼 结膜出血",
+      "焦虑状态",
+      "肌张力障碍",
+      "低钾血症"
+     ]
+    },
+    {
+     "column": "DIS_DATE",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "16/1/2021 09:35:44",
+       1
+      ],
+      [
+       "22/1/2021 09:04:17",
+       1
+      ],
+      [
+       "12/1/2021 11:36:46",
+       1
+      ],
+      [
+       "16/3/2021 15:06:16",
+       1
+      ],
+      [
+       "19/3/2021 10:08:44",
+       1
+      ]
+     ],
+     "sample": [
+      "16/1/2021 09:35:44",
+      "22/1/2021 09:04:17",
+      "12/1/2021 11:36:46",
+      "16/3/2021 15:06:16",
+      "19/3/2021 10:08:44"
+     ]
+    },
+    {
+     "column": "DIS_DEPT_CODE",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 4,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 1002047.0,
+      "max": 1014004.0,
+      "mean": 1011212.0
+     },
+     "top_values": [
+      [
+       "1014004",
+       2
+      ],
+      [
+       "1012004",
+       1
+      ],
+      [
+       "1014001",
+       1
+      ],
+      [
+       "1002047",
+       1
+      ]
+     ],
+     "sample": [
+      1012004,
+      1014004,
+      1014004,
+      1014001,
+      1002047
+     ]
+    },
+    {
+     "column": "DIS_DEPT_NAME",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 5
+     },
+     "n_unique": 4,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "精四科病房(闲林)",
+       2
+      ],
+      [
+       "心身二科(闲林)(历史)",
+       1
+      ],
+      [
+       "精一科病房(闲林)",
+       1
+      ],
+      [
+       "综合内科病房(闲林)(历史)",
+       1
+      ]
+     ],
+     "sample": [
+      "心身二科(闲林)(历史)",
+      "精四科病房(闲林)",
+      "精四科病房(闲林)",
+      "精一科病房(闲林)",
+      "综合内科病房(闲林)(历史)"
+     ]
+    },
+    {
+     "column": "DIS_WAY",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 1,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 1.0,
+      "max": 1.0,
+      "mean": 1.0
+     },
+     "top_values": [
+      [
+       "1",
+       5
+      ]
+     ],
+     "sample": [
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "column": "DIS_RESULT",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 1,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 0.0,
+      "max": 0.0,
+      "mean": 0.0
+     },
+     "top_values": [
+      [
+       "0",
+       5
+      ]
+     ],
+     "sample": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "column": "DAY_TOTAL",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 15.0,
+      "max": 49.0,
+      "mean": 25.4
+     },
+     "top_values": [
+      [
+       "49",
+       1
+      ],
+      [
+       "28",
+       1
+      ],
+      [
+       "18",
+       1
+      ],
+      [
+       "17",
+       1
+      ],
+      [
+       "15",
+       1
+      ]
+     ],
+     "sample": [
+      49,
+      28,
+      18,
+      17,
+      15
+     ]
+    },
+    {
+     "column": "DRUG_ALLERGY_MARK",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 1,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 1.0,
+      "max": 1.0,
+      "mean": 1.0
+     },
+     "top_values": [
+      [
+       "1",
+       5
+      ]
+     ],
+     "sample": [
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "column": "DRUG_ALLERGENS_NAME",
+     "n": 5,
+     "n_non_null": 0,
+     "missing_rate": 1.0,
+     "types": {},
+     "n_unique": 0,
+     "numeric_stats": null,
+     "top_values": [],
+     "sample": []
+    },
+    {
+     "column": "PAY_TYPE",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 2,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 1.0,
+      "max": 2.0,
+      "mean": 1.6
+     },
+     "top_values": [
+      [
+       "2",
+       3
+      ],
+      [
+       "1",
+       2
+      ]
+     ],
+     "sample": [
+      2,
+      1,
+      2,
+      1,
+      2
+     ]
+    },
+    {
+     "column": "REIN_AFTER31_MARK",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 1,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 1.0,
+      "max": 1.0,
+      "mean": 1.0
+     },
+     "top_values": [
+      [
+       "1",
+       5
+      ]
+     ],
+     "sample": [
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "column": "MED_REC_QUALITY",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 1,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 1.0,
+      "max": 1.0,
+      "mean": 1.0
+     },
+     "top_values": [
+      [
+       "1",
+       5
+      ]
+     ],
+     "sample": [
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "column": "MED_REC_DATE",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "16/1/2021",
+       1
+      ],
+      [
+       "22/1/2021",
+       1
+      ],
+      [
+       "13/1/2021",
+       1
+      ],
+      [
+       "17/3/2021",
+       1
+      ],
+      [
+       "19/3/2021",
+       1
+      ]
+     ],
+     "sample": [
+      "16/1/2021",
+      "22/1/2021",
+      "13/1/2021",
+      "17/3/2021",
+      "19/3/2021"
+     ]
+    },
+    {
+     "column": "FEE_TOTAL",
+     "n": 5,
+     "n_non_null": 5,
+     "missing_rate": 0.0,
+     "types": {
+      "float": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": 8674.16,
+      "max": 29185.157,
+      "mean": 16211.3574
+     },
+     "top_values": [
+      [
+       "29185.157",
+       1
+      ],
+      [
+       "21020.07",
+       1
+      ],
+      [
+       "11774.65",
+       1
+      ],
+      [
+       "10402.75",
+       1
+      ],
+      [
+       "8674.16",
+       1
+      ]
+     ],
+     "sample": [
+      29185.157,
+      21020.07,
+      11774.65,
+      10402.75,
+      8674.16
+     ]
+    }
+   ]
+  },
+  "医嘱记录": {
+   "header": [
+    "DOCTOR_ORDER_ID",
+    "PATIENT_ID",
+    "CASE_NO",
+    "ORDER_NO",
+    "ORDER_SUB_NO",
+    "LONG_D_NO",
+    "ORDER_TYPE",
+    "ORDER_CONTENT",
+    "OPEN_DEPT_NAME",
+    "DRUG_CODE",
+    "DRUG_NAME",
+    "AMOUNT",
+    "UNIT",
+    "DRUG_SPEC",
+    "DOSAGE",
+    "DOSAGE_UNIT",
+    "FREQUENCY",
+    "MEDICATION_WAY",
+    "START_DATETIME",
+    "END_DATETIME",
+    "DRUG_FLAG",
+    "ORDER_STATE"
+   ],
+   "n_columns": 22,
+   "n_rows": 915,
+   "n_parsed": 915,
+   "columns": [
+    {
+     "column": "DOCTOR_ORDER_ID",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 915
+     },
+     "n_unique": 915,
+     "numeric_stats": {
+      "n_numeric": 915,
+      "min": 73543258.0,
+      "max": 75936893.0,
+      "mean": 74593636.526776
+     },
+     "top_values": [
+      [
+       "74629824",
+       1
+      ],
+      [
+       "74619978",
+       1
+      ],
+      [
+       "74619986",
+       1
+      ],
+      [
+       "74620003",
+       1
+      ],
+      [
+       "74620014",
+       1
+      ],
+      [
+       "74620017",
+       1
+      ],
+      [
+       "74620022",
+       1
+      ],
+      [
+       "74620044",
+       1
+      ]
+     ],
+     "sample": [
+      74629824,
+      74619978,
+      74619986,
+      74620003,
+      74620014
+     ]
+    },
+    {
+     "column": "PATIENT_ID",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 584,
+      "str": 331
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 915,
+      "min": 216359.0,
+      "max": [REDACTED-05].0,
+      "mean": 8917740.617486
+     },
+     "top_values": [
+      [
+       "[REDACTED-04]",
+       255
+      ],
+      [
+       "[REDACTED-02]",
+       229
+      ],
+      [
+       "[REDACTED-05]",
+       175
+      ],
+      [
+       "[REDACTED-03]",
+       154
+      ],
+      [
+       "[REDACTED-01]",
+       102
+      ]
+     ],
+     "sample": [
+      [REDACTED-04],
+      [REDACTED-04],
+      [REDACTED-04],
+      [REDACTED-04],
+      [REDACTED-04]
+     ]
+    },
+    {
+     "column": "CASE_NO",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 915
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 915,
+      "min": [REDACTED-06].0,
+      "max": [REDACTED-10].0,
+      "mean": 574461.255738
+     },
+     "top_values": [
+      [
+       "[REDACTED-06]",
+       255
+      ],
+      [
+       "[REDACTED-07]",
+       229
+      ],
+      [
+       "[REDACTED-10]",
+       175
+      ],
+      [
+       "[REDACTED-08]",
+       154
+      ],
+      [
+       "[REDACTED-09]",
+       102
+      ]
+     ],
+     "sample": [
+      [REDACTED-06],
+      [REDACTED-06],
+      [REDACTED-06],
+      [REDACTED-06],
+      [REDACTED-06]
+     ]
+    },
+    {
+     "column": "ORDER_NO",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 915
+     },
+     "n_unique": 915,
+     "numeric_stats": {
+      "n_numeric": 915,
+      "min": 73543258.0,
+      "max": 75936893.0,
+      "mean": 74593636.526776
+     },
+     "top_values": [
+      [
+       "74629824",
+       1
+      ],
+      [
+       "74619978",
+       1
+      ],
+      [
+       "74619986",
+       1
+      ],
+      [
+       "74620003",
+       1
+      ],
+      [
+       "74620014",
+       1
+      ],
+      [
+       "74620017",
+       1
+      ],
+      [
+       "74620022",
+       1
+      ],
+      [
+       "74620044",
+       1
+      ]
+     ],
+     "sample": [
+      74629824,
+      74619978,
+      74619986,
+      74620003,
+      74620014
+     ]
+    },
+    {
+     "column": "ORDER_SUB_NO",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 915
+     },
+     "n_unique": 554,
+     "numeric_stats": {
+      "n_numeric": 915,
+      "min": 73543258.0,
+      "max": 75936893.0,
+      "mean": 74593336.375956
+     },
+     "top_values": [
+      [
+       "73545829",
+       18
+      ],
+      [
+       "74684632",
+       18
+      ],
+      [
+       "74654570",
+       18
+      ],
+      [
+       "74500050",
+       18
+      ],
+      [
+       "75690077",
+       18
+      ],
+      [
+       "73724686",
+       17
+      ],
+      [
+       "73545852",
+       17
+      ],
+      [
+       "75689856",
+       17
+      ]
+     ],
+     "sample": [
+      74629824,
+      74619978,
+      74619986,
+      74620003,
+      74620014
+     ]
+    },
+    {
+     "column": "LONG_D_NO",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 915
+     },
+     "n_unique": 2,
+     "numeric_stats": {
+      "n_numeric": 915,
+      "min": 0.0,
+      "max": 1.0,
+      "mean": 0.312568
+     },
+     "top_values": [
+      [
+       "0",
+       629
+      ],
+      [
+       "1",
+       286
+      ]
+     ],
+     "sample": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "column": "ORDER_TYPE",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 915
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 915,
+      "min": 1.0,
+      "max": 5.0,
+      "mean": 1.791257
+     },
+     "top_values": [
+      [
+       "1",
+       497
+      ],
+      [
+       "2",
+       268
+      ],
+      [
+       "4",
+       104
+      ],
+      [
+       "5",
+       26
+      ],
+      [
+       "3",
+       20
+      ]
+     ],
+     "sample": [
+      2,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "column": "ORDER_CONTENT",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 915
+     },
+     "n_unique": 275,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "一般专项护理",
+       21
+      ],
+      [
+       "石菖蒲",
+       17
+      ],
+      [
+       "薄荷(J)",
+       13
+      ],
+      [
+       "珍珠母(J)[煅珍珠母(J)]",
+       13
+      ],
+      [
+       "阿立哌唑口崩片(国产)[博思清]",
+       12
+      ],
+      [
+       "制远志[远志]",
+       12
+      ],
+      [
+       "穴位贴敷治疗",
+       10
+      ],
+      [
+       "玫瑰花",
+       10
+      ]
+     ],
+     "sample": [
+      "出院",
+      "*富马酸替诺福韦二吡呋酯片",
+      "异丙嗪片",
+      "阿立哌唑口崩片(国产)[博思清]",
+      "甘草酸二胺肠溶胶囊（天晴甘平）[天晴"
+     ]
+    },
+    {
+     "column": "OPEN_DEPT_NAME",
+     "n": 915,
+     "n_non_null": 912,
+     "missing_rate": 0.0033,
+     "types": {
+      "str": 912
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "精四科病房(闲林)",
+       335
+      ],
+      [
+       "医学观察病房(闲林)(历史)",
+       195
+      ],
+      [
+       "心身二科(闲林)(历史)",
+       162
+      ],
+      [
+       "综合内科病房(闲林)(历史)",
+       118
+      ],
+      [
+       "精一科病房(闲林)",
+       102
+      ]
+     ],
+     "sample": [
+      "心身二科(闲林)(历史)",
+      "心身二科(闲林)(历史)",
+      "心身二科(闲林)(历史)",
+      "心身二科(闲林)(历史)",
+      "心身二科(闲林)(历史)"
+     ]
+    },
+    {
+     "column": "DRUG_CODE",
+     "n": 915,
+     "n_non_null": 497,
+     "missing_rate": 0.4568,
+     "types": {
+      "int": 497
+     },
+     "n_unique": 130,
+     "numeric_stats": {
+      "n_numeric": 497,
+      "min": 5546.0,
+      "max": 21747.0,
+      "mean": 8852.207243
+     },
+     "top_values": [
+      [
+       "6803",
+       17
+      ],
+      [
+       "6770",
+       16
+      ],
+      [
+       "7140",
+       13
+      ],
+      [
+       "7095",
+       13
+      ],
+      [
+       "7255",
+       10
+      ],
+      [
+       "6715",
+       10
+      ],
+      [
+       "6895",
+       10
+      ],
+      [
+       "6962",
+       10
+      ]
+     ],
+     "sample": [
+      15868,
+      7440,
+      11757,
+      14379,
+      5962
+     ]
+    },
+    {
+     "column": "DRUG_NAME",
+     "n": 915,
+     "n_non_null": 497,
+     "missing_rate": 0.4568,
+     "types": {
+      "str": 497
+     },
+     "n_unique": 120,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "石菖蒲",
+       17
+      ],
+      [
+       "薄荷(J)",
+       13
+      ],
+      [
+       "珍珠母(J)",
+       13
+      ],
+      [
+       "制远志",
+       12
+      ],
+      [
+       "阿立哌唑口崩片(国产)",
+       10
+      ],
+      [
+       "玫瑰花",
+       10
+      ],
+      [
+       "菊花",
+       10
+      ],
+      [
+       "夜交藤",
+       10
+      ]
+     ],
+     "sample": [
+      "*富马酸替诺福韦二吡呋酯片",
+      "异丙嗪片",
+      "阿立哌唑口崩片(国产)",
+      "天晴甘平",
+      "(杜秘克)乳果糖口服液"
+     ]
+    },
+    {
+     "column": "AMOUNT",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 875,
+      "float": 40
+     },
+     "n_unique": 34,
+     "numeric_stats": {
+      "n_numeric": 915,
+      "min": 0.1,
+      "max": 500.0,
+      "mean": 17.624809
+     },
+     "top_values": [
+      [
+       "1",
+       399
+      ],
+      [
+       "10",
+       90
+      ],
+      [
+       "15",
+       88
+      ],
+      [
+       "12",
+       47
+      ],
+      [
+       "30",
+       43
+      ],
+      [
+       "9",
+       31
+      ],
+      [
+       "2",
+       28
+      ],
+      [
+       "20",
+       27
+      ]
+     ],
+     "sample": [
+      1,
+      0.3,
+      25,
+      10,
+      100
+     ]
+    },
+    {
+     "column": "UNIT",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 915
+     },
+     "n_unique": 6,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "无",
+       418
+      ],
+      [
+       "g",
+       389
+      ],
+      [
+       "mg",
+       81
+      ],
+      [
+       "ml",
+       24
+      ],
+      [
+       "支",
+       2
+      ],
+      [
+       "瓶",
+       1
+      ]
+     ],
+     "sample": [
+      "无",
+      "g",
+      "mg",
+      "mg",
+      "mg"
+     ]
+    },
+    {
+     "column": "DRUG_SPEC",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 915
+     },
+     "n_unique": 53,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "无",
+       418
+      ],
+      [
+       "*1g",
+       326
+      ],
+      [
+       "1g",
+       28
+      ],
+      [
+       "5mg*1片",
+       10
+      ],
+      [
+       "25mg*1",
+       9
+      ],
+      [
+       "0.5mg*1片",
+       7
+      ],
+      [
+       "0.3g*1",
+       7
+      ],
+      [
+       "0.3g*30片",
+       6
+      ]
+     ],
+     "sample": [
+      "无",
+      "0.3g*30片",
+      "25mg*100片",
+      "5mg*20片",
+      "50mg*63粒"
+     ]
+    },
+    {
+     "column": "DOSAGE",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 875,
+      "float": 40
+     },
+     "n_unique": 33,
+     "numeric_stats": {
+      "n_numeric": 915,
+      "min": 0.0,
+      "max": 500.0,
+      "mean": 17.051038
+     },
+     "top_values": [
+      [
+       "0",
+       418
+      ],
+      [
+       "10",
+       89
+      ],
+      [
+       "15",
+       88
+      ],
+      [
+       "12",
+       47
+      ],
+      [
+       "30",
+       43
+      ],
+      [
+       "9",
+       31
+      ],
+      [
+       "20",
+       27
+      ],
+      [
+       "5",
+       24
+      ]
+     ],
+     "sample": [
+      0,
+      0.3,
+      25,
+      10,
+      100
+     ]
+    },
+    {
+     "column": "DOSAGE_UNIT",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 915
+     },
+     "n_unique": 6,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "无",
+       418
+      ],
+      [
+       "g",
+       389
+      ],
+      [
+       "mg",
+       81
+      ],
+      [
+       "ml",
+       24
+      ],
+      [
+       "支",
+       2
+      ],
+      [
+       "瓶",
+       1
+      ]
+     ],
+     "sample": [
+      "无",
+      "g",
+      "mg",
+      "mg",
+      "mg"
+     ]
+    },
+    {
+     "column": "FREQUENCY",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 915
+     },
+     "n_unique": 30,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "ONCE",
+       629
+      ],
+      [
+       "QD",
+       82
+      ],
+      [
+       "ALWAYS",
+       40
+      ],
+      [
+       "QN",
+       33
+      ],
+      [
+       "W4D8",
+       18
+      ],
+      [
+       "BID4",
+       11
+      ],
+      [
+       "QOD",
+       11
+      ],
+      [
+       "BID",
+       10
+      ]
+     ],
+     "sample": [
+      "ONCE",
+      "ONCE",
+      "ONCE",
+      "ONCE",
+      "ONCE"
+     ]
+    },
+    {
+     "column": "MEDICATION_WAY",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 915
+     },
+     "n_unique": 15,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "无",
+       314
+      ],
+      [
+       "外用",
+       216
+      ],
+      [
+       "煎服",
+       116
+      ],
+      [
+       "化验",
+       104
+      ],
+      [
+       "口服",
+       79
+      ],
+      [
+       "出院带药",
+       25
+      ],
+      [
+       "副药",
+       19
+      ],
+      [
+       "静滴",
+       12
+      ]
+     ],
+     "sample": [
+      "无",
+      "出院带药",
+      "出院带药",
+      "出院带药",
+      "出院带药"
+     ]
+    },
+    {
+     "column": "START_DATETIME",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 915
+     },
+     "n_unique": 197,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "28/11/2020 15:25:00",
+       35
+      ],
+      [
+       "9/1/2021 14:37:30",
+       35
+      ],
+      [
+       "25/12/2020 14:07:00",
+       34
+      ],
+      [
+       "18/1/2021 07:59:01",
+       33
+      ],
+      [
+       "17/12/2020 10:11:00",
+       32
+      ],
+      [
+       "8/3/2021 15:09:00",
+       32
+      ],
+      [
+       "1/1/2021 10:55:00",
+       29
+      ],
+      [
+       "3/1/2021 09:25:41",
+       29
+      ]
+     ],
+     "sample": [
+      "16/1/2021 09:24:00",
+      "15/1/2021 14:40:00",
+      "15/1/2021 14:41:00",
+      "15/1/2021 14:41:00",
+      "15/1/2021 14:41:00"
+     ]
+    },
+    {
+     "column": "END_DATETIME",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 915
+     },
+     "n_unique": 149,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "0/0/0 00:00:00",
+       105
+      ],
+      [
+       "22/1/2021 08:00:00",
+       39
+      ],
+      [
+       "16/1/2021 09:24:00",
+       35
+      ],
+      [
+       "28/11/2020 15:25:00",
+       35
+      ],
+      [
+       "9/1/2021 14:37:30",
+       35
+      ],
+      [
+       "12/1/2021 11:16:00",
+       34
+      ],
+      [
+       "17/12/2020 08:39:00",
+       33
+      ],
+      [
+       "18/1/2021 07:59:01",
+       33
+      ]
+     ],
+     "sample": [
+      "16/1/2021 09:24:00",
+      "15/1/2021 14:40:00",
+      "15/1/2021 14:41:00",
+      "15/1/2021 14:41:00",
+      "15/1/2021 14:41:00"
+     ]
+    },
+    {
+     "column": "DRUG_FLAG",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 915
+     },
+     "n_unique": 2,
+     "numeric_stats": {
+      "n_numeric": 915,
+      "min": 0.0,
+      "max": 1.0,
+      "mean": 0.543169
+     },
+     "top_values": [
+      [
+       "1",
+       497
+      ],
+      [
+       "0",
+       418
+      ]
+     ],
+     "sample": [
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "column": "ORDER_STATE",
+     "n": 915,
+     "n_non_null": 915,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 915
+     },
+     "n_unique": 2,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "已停止",
+       913
+      ],
+      [
+       "已作废",
+       2
+      ]
+     ],
+     "sample": [
+      "已停止",
+      "已停止",
+      "已停止",
+      "已停止",
+      "已停止"
+     ]
+    }
+   ]
+  },
+  "检验": {
+   "header": [
+    "PATIENT_ID",
+    "CASE_NO",
+    "AGE",
+    "TEST_PURPOSE",
+    "APPLY_DATE",
+    "TEST_DATE",
+    "SAMPLENO",
+    "DEPT_NAME",
+    "PROJECT_CODE",
+    "PROJECT_NAME",
+    "TEST_RESULT",
+    "REFFR_SCOPE"
+   ],
+   "n_columns": 12,
+   "n_rows": 22,
+   "n_parsed": 22,
+   "columns": [
+    {
+     "column": "PATIENT_ID",
+     "n": 22,
+     "n_non_null": 22,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 12,
+      "str": 10
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 22,
+      "min": 216359.0,
+      "max": [REDACTED-05].0,
+      "mean": 8040410.545455
+     },
+     "top_values": [
+      [
+       "[REDACTED-04]",
+       6
+      ],
+      [
+       "[REDACTED-02]",
+       6
+      ],
+      [
+       "[REDACTED-01]",
+       4
+      ],
+      [
+       "[REDACTED-03]",
+       3
+      ],
+      [
+       "[REDACTED-05]",
+       3
+      ]
+     ],
+     "sample": [
+      [REDACTED-03],
+      [REDACTED-03],
+      [REDACTED-03],
+      [REDACTED-04],
+      [REDACTED-04]
+     ]
+    },
+    {
+     "column": "CASE_NO",
+     "n": 22,
+     "n_non_null": 22,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 22
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 22,
+      "min": [REDACTED-06].0,
+      "max": [REDACTED-10].0,
+      "mean": 574579.863636
+     },
+     "top_values": [
+      [
+       "[REDACTED-06]",
+       6
+      ],
+      [
+       "[REDACTED-07]",
+       6
+      ],
+      [
+       "[REDACTED-09]",
+       4
+      ],
+      [
+       "[REDACTED-08]",
+       3
+      ],
+      [
+       "[REDACTED-10]",
+       3
+      ]
+     ],
+     "sample": [
+      [REDACTED-08],
+      [REDACTED-08],
+      [REDACTED-08],
+      [REDACTED-06],
+      [REDACTED-06]
+     ]
+    },
+    {
+     "column": "AGE",
+     "n": 22,
+     "n_non_null": 22,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 22
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 22,
+      "min": 21.0,
+      "max": 56.0,
+      "mean": 33.681818
+     },
+     "top_values": [
+      [
+       "56",
+       6
+      ],
+      [
+       "29",
+       6
+      ],
+      [
+       "21",
+       4
+      ],
+      [
+       "23",
+       3
+      ],
+      [
+       "26",
+       3
+      ]
+     ],
+     "sample": [
+      23,
+      23,
+      23,
+      56,
+      56
+     ]
+    },
+    {
+     "column": "TEST_PURPOSE",
+     "n": 22,
+     "n_non_null": 22,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 22
+     },
+     "n_unique": 3,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "阿立哌唑",
+       12
+      ],
+      [
+       "阿立哌唑+氯硝西泮+帕利哌酮（帕潘立酮）+氯氮平",
+       6
+      ],
+      [
+       "阿立哌唑+奥氮平",
+       4
+      ]
+     ],
+     "sample": [
+      "阿立哌唑",
+      "阿立哌唑",
+      "阿立哌唑",
+      "阿立哌唑",
+      "阿立哌唑"
+     ]
+    },
+    {
+     "column": "APPLY_DATE",
+     "n": 22,
+     "n_non_null": 22,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 22
+     },
+     "n_unique": 6,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "25/12/2020",
+       6
+      ],
+      [
+       "27/2/2021",
+       4
+      ],
+      [
+       "3/1/2021",
+       3
+      ],
+      [
+       "1/1/2021",
+       3
+      ],
+      [
+       "18/12/2020",
+       3
+      ],
+      [
+       "17/3/2021",
+       3
+      ]
+     ],
+     "sample": [
+      "3/1/2021",
+      "3/1/2021",
+      "3/1/2021",
+      "1/1/2021",
+      "1/1/2021"
+     ]
+    },
+    {
+     "column": "TEST_DATE",
+     "n": 22,
+     "n_non_null": 22,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 22
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "4/1/2021",
+       6
+      ],
+      [
+       "30/12/2020",
+       6
+      ],
+      [
+       "1/3/2021",
+       4
+      ],
+      [
+       "21/12/2020",
+       3
+      ],
+      [
+       "19/3/2021",
+       3
+      ]
+     ],
+     "sample": [
+      "4/1/2021",
+      "4/1/2021",
+      "4/1/2021",
+      "4/1/2021",
+      "4/1/2021"
+     ]
+    },
+    {
+     "column": "SAMPLENO",
+     "n": 22,
+     "n_non_null": 22,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 22
+     },
+     "n_unique": 6,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "20201226TDM022",
+       6
+      ],
+      [
+       "20210301TDM008",
+       4
+      ],
+      [
+       "20210104TDM014",
+       3
+      ],
+      [
+       "20210104TDM006",
+       3
+      ],
+      [
+       "20201221TDM013",
+       3
+      ],
+      [
+       "20210319TDM006",
+       3
+      ]
+     ],
+     "sample": [
+      "20210104TDM014",
+      "20210104TDM014",
+      "20210104TDM014",
+      "20210104TDM006",
+      "20210104TDM006"
+     ]
+    },
+    {
+     "column": "DEPT_NAME",
+     "n": 22,
+     "n_non_null": 22,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 22
+     },
+     "n_unique": 5,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "闲1-2南病区",
+       6
+      ],
+      [
+       "闲1-6北病区",
+       6
+      ],
+      [
+       "闲1-2北病区",
+       4
+      ],
+      [
+       "闲1-5北病区",
+       3
+      ],
+      [
+       "闲3-1、2病区",
+       3
+      ]
+     ],
+     "sample": [
+      "闲1-5北病区",
+      "闲1-5北病区",
+      "闲1-5北病区",
+      "闲1-2南病区",
+      "闲1-2南病区"
+     ]
+    },
+    {
+     "column": "PROJECT_CODE",
+     "n": 22,
+     "n_non_null": 22,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 10,
+      "str": 12
+     },
+     "n_unique": 7,
+     "numeric_stats": {
+      "n_numeric": 22,
+      "min": 448.0,
+      "max": 8001.0,
+      "mean": 1908.0
+     },
+     "top_values": [
+      [
+       "3018",
+       6
+      ],
+      [
+       "0449",
+       6
+      ],
+      [
+       "0448",
+       6
+      ],
+      [
+       "4241",
+       1
+      ],
+      [
+       "2008",
+       1
+      ],
+      [
+       "8001",
+       1
+      ],
+      [
+       "4236",
+       1
+      ]
+     ],
+     "sample": [
+      3018,
+      "0449",
+      "0448",
+      3018,
+      "0449"
+     ]
+    },
+    {
+     "column": "PROJECT_NAME",
+     "n": 22,
+     "n_non_null": 22,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 22
+     },
+     "n_unique": 7,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "阿立哌唑",
+       6
+      ],
+      [
+       "脱氢阿立哌唑",
+       6
+      ],
+      [
+       "总阿立哌唑",
+       6
+      ],
+      [
+       "奥氮平",
+       1
+      ],
+      [
+       "氯氮平",
+       1
+      ],
+      [
+       "氯硝西泮",
+       1
+      ],
+      [
+       "帕利哌酮（帕潘立酮）",
+       1
+      ]
+     ],
+     "sample": [
+      "阿立哌唑",
+      "脱氢阿立哌唑",
+      "总阿立哌唑",
+      "阿立哌唑",
+      "脱氢阿立哌唑"
+     ]
+    },
+    {
+     "column": "TEST_RESULT",
+     "n": 22,
+     "n_non_null": 22,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 16,
+      "float": 6
+     },
+     "n_unique": 22,
+     "numeric_stats": {
+      "n_numeric": 22,
+      "min": 26.6,
+      "max": 721.0,
+      "mean": 190.004545
+     },
+     "top_values": [
+      [
+       "354",
+       1
+      ],
+      [
+       "79",
+       1
+      ],
+      [
+       "433",
+       1
+      ],
+      [
+       "400",
+       1
+      ],
+      [
+       "103",
+       1
+      ],
+      [
+       "503",
+       1
+      ],
+      [
+       "55",
+       1
+      ],
+      [
+       "372",
+       1
+      ]
+     ],
+     "sample": [
+      354,
+      79,
+      433,
+      400,
+      103
+     ]
+    },
+    {
+     "column": "REFFR_SCOPE",
+     "n": 22,
+     "n_non_null": 16,
+     "missing_rate": 0.2727,
+     "types": {
+      "str": 16
+     },
+     "n_unique": 6,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "100.0-350.0",
+       6
+      ],
+      [
+       "150.0-500.0",
+       6
+      ],
+      [
+       "20.0-80.0",
+       1
+      ],
+      [
+       "350.0-600.0",
+       1
+      ],
+      [
+       "4.0-80.0",
+       1
+      ],
+      [
+       "20.0-60.0",
+       1
+      ]
+     ],
+     "sample": [
+      "100.0-350.0",
+      "150.0-500.0",
+      "100.0-350.0",
+      "150.0-500.0",
+      "150.0-500.0"
+     ]
+    }
+   ]
+  },
+  "诊断记录": {
+   "header": [
+    "DIAGNOSTIC_RECORD_ID",
+    "PATIENT_ID",
+    "CASE_NO",
+    "RECORD_DATE",
+    "TCM_TYPE",
+    "TCM_TYPE1",
+    "DIAGNOSTIC_TYPE",
+    "IS_PRIMARY",
+    "DIAGNOSIS_CODE",
+    "DIAGNOSTIC_NAME",
+    "DIAGNOSTIC_CONTENT"
+   ],
+   "n_columns": 11,
+   "n_rows": 56,
+   "n_parsed": 56,
+   "columns": [
+    {
+     "column": "DIAGNOSTIC_RECORD_ID",
+     "n": 56,
+     "n_non_null": 56,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 56
+     },
+     "n_unique": 56,
+     "numeric_stats": {
+      "n_numeric": 56,
+      "min": 4546351.0,
+      "max": 4751358.0,
+      "mean": 4633436.375
+     },
+     "top_values": [
+      [
+       "4546351",
+       1
+      ],
+      [
+       "4546352",
+       1
+      ],
+      [
+       "4546355",
+       1
+      ],
+      [
+       "4585186",
+       1
+      ],
+      [
+       "4585187",
+       1
+      ],
+      [
+       "4585173",
+       1
+      ],
+      [
+       "4585174",
+       1
+      ],
+      [
+       "4585176",
+       1
+      ]
+     ],
+     "sample": [
+      4546351,
+      4546352,
+      4546355,
+      4585186,
+      4585187
+     ]
+    },
+    {
+     "column": "PATIENT_ID",
+     "n": 56,
+     "n_non_null": 0,
+     "missing_rate": 1.0,
+     "types": {},
+     "n_unique": 0,
+     "numeric_stats": null,
+     "top_values": [],
+     "sample": []
+    },
+    {
+     "column": "CASE_NO",
+     "n": 56,
+     "n_non_null": 56,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 56
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 56,
+      "min": [REDACTED-06].0,
+      "max": [REDACTED-10].0,
+      "mean": 574858.642857
+     },
+     "top_values": [
+      [
+       "[REDACTED-06]",
+       17
+      ],
+      [
+       "[REDACTED-07]",
+       10
+      ],
+      [
+       "[REDACTED-10]",
+       10
+      ],
+      [
+       "[REDACTED-09]",
+       10
+      ],
+      [
+       "[REDACTED-08]",
+       9
+      ]
+     ],
+     "sample": [
+      [REDACTED-07],
+      [REDACTED-07],
+      [REDACTED-07],
+      [REDACTED-06],
+      [REDACTED-06]
+     ]
+    },
+    {
+     "column": "RECORD_DATE",
+     "n": 56,
+     "n_non_null": 56,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 56
+     },
+     "n_unique": 35,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "4/1/2021 14:36:37",
+       4
+      ],
+      [
+       "17/1/2021 19:49:48",
+       4
+      ],
+      [
+       "13/1/2021 10:20:30",
+       4
+      ],
+      [
+       "23/3/2021 16:52:05",
+       4
+      ],
+      [
+       "17/3/2021 10:23:43",
+       4
+      ],
+      [
+       "17/1/2021 19:47:09",
+       2
+      ],
+      [
+       "17/1/2021 19:47:20",
+       2
+      ],
+      [
+       "4/1/2021 14:36:54",
+       2
+      ]
+     ],
+     "sample": [
+      "1/1/2021 15:14:36",
+      "1/1/2021 15:14:42",
+      "1/1/2021 15:14:54",
+      "17/1/2021 19:51:55",
+      "17/1/2021 19:51:59"
+     ]
+    },
+    {
+     "column": "TCM_TYPE",
+     "n": 56,
+     "n_non_null": 56,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 56
+     },
+     "n_unique": 2,
+     "numeric_stats": {
+      "n_numeric": 56,
+      "min": 1.0,
+      "max": 2.0,
+      "mean": 1.392857
+     },
+     "top_values": [
+      [
+       "1",
+       34
+      ],
+      [
+       "2",
+       22
+      ]
+     ],
+     "sample": [
+      1,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "column": "TCM_TYPE1",
+     "n": 56,
+     "n_non_null": 56,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 56
+     },
+     "n_unique": 2,
+     "numeric_stats": {
+      "n_numeric": 56,
+      "min": 1.0,
+      "max": 2.0,
+      "mean": 1.839286
+     },
+     "top_values": [
+      [
+       "2",
+       47
+      ],
+      [
+       "1",
+       9
+      ]
+     ],
+     "sample": [
+      2,
+      2,
+      2,
+      1,
+      1
+     ]
+    },
+    {
+     "column": "DIAGNOSTIC_TYPE",
+     "n": 56,
+     "n_non_null": 56,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 56
+     },
+     "n_unique": 3,
+     "numeric_stats": {
+      "n_numeric": 56,
+      "min": 1.0,
+      "max": 3.0,
+      "mean": 1.964286
+     },
+     "top_values": [
+      [
+       "2",
+       24
+      ],
+      [
+       "1",
+       17
+      ],
+      [
+       "3",
+       15
+      ]
+     ],
+     "sample": [
+      2,
+      2,
+      2,
+      2,
+      2
+     ]
+    },
+    {
+     "column": "IS_PRIMARY",
+     "n": 56,
+     "n_non_null": 56,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 56
+     },
+     "n_unique": 2,
+     "numeric_stats": {
+      "n_numeric": 56,
+      "min": 0.0,
+      "max": 1.0,
+      "mean": 0.535714
+     },
+     "top_values": [
+      [
+       "1",
+       30
+      ],
+      [
+       "0",
+       26
+      ]
+     ],
+     "sample": [
+      0,
+      1,
+      1,
+      0,
+      0
+     ]
+    },
+    {
+     "column": "DIAGNOSIS_CODE",
+     "n": 56,
+     "n_non_null": 45,
+     "missing_rate": 0.1964,
+     "types": {
+      "str": 45
+     },
+     "n_unique": 24,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "BNX071",
+       7
+      ],
+      [
+       "F41.101",
+       3
+      ],
+      [
+       "BNG110",
+       3
+      ],
+      [
+       "Z03.200",
+       3
+      ],
+      [
+       "A05.01",
+       3
+      ],
+      [
+       "F20.300",
+       3
+      ],
+      [
+       "A04.01.20.01",
+       3
+      ],
+      [
+       "ZZXP60",
+       2
+      ]
+     ],
+     "sample": [
+      "BNX071",
+      "ZZXP60",
+      "F31.000",
+      "B18.101",
+      "K72.905"
+     ]
+    },
+    {
+     "column": "DIAGNOSTIC_NAME",
+     "n": 56,
+     "n_non_null": 56,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 56
+     },
+     "n_unique": 27,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "心脾两虚证",
+       9
+      ],
+      [
+       " 癫病 ",
+       7
+      ],
+      [
+       " 郁病 ",
+       4
+      ],
+      [
+       "癫病",
+       3
+      ],
+      [
+       "痰气互结证",
+       3
+      ],
+      [
+       "肝郁脾虚证",
+       3
+      ],
+      [
+       " 焦虑状态 ",
+       2
+      ],
+      [
+       " 双相情感障碍,目前为轻躁狂发作 ",
+       2
+      ]
+     ],
+     "sample": [
+      "癫病",
+      "心脾两虚证",
+      "双相情感障碍，目前为轻躁狂发作",
+      "慢性活动型乙型病毒性肝炎",
+      "肝功能不全"
+     ]
+    },
+    {
+     "column": "DIAGNOSTIC_CONTENT",
+     "n": 56,
+     "n_non_null": 0,
+     "missing_rate": 1.0,
+     "types": {},
+     "n_unique": 0,
+     "numeric_stats": null,
+     "top_values": [],
+     "sample": []
+    }
+   ]
+  },
+  "体征": {
+   "header": [
+    "RECORD_ID",
+    "PATIENT_ID",
+    "CASE_NO",
+    "RECORD_DATE",
+    "SIGN_TYPE",
+    "RECORD_CONTENT",
+    "RECORD_UNIT",
+    "col_7",
+    "col_8",
+    "col_9"
+   ],
+   "n_columns": 10,
+   "n_rows": 537,
+   "n_parsed": 537,
+   "columns": [
+    {
+     "column": "RECORD_ID",
+     "n": 537,
+     "n_non_null": 537,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 537
+     },
+     "n_unique": 537,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "15c49ff6-e2c8-428a-8482-11bc281213ad",
+       1
+      ],
+      [
+       "e33b83e9-ade4-4512-9da6-cd5cb62331fb",
+       1
+      ],
+      [
+       "9af0b590-fc22-4bad-81cb-2f5676cd0191",
+       1
+      ],
+      [
+       "52ebac29-bb77-422e-bb5c-8a68046e7ef0",
+       1
+      ],
+      [
+       "0431eb6c-0c6e-46f6-83b1-4d0cfff36696",
+       1
+      ],
+      [
+       "180eca2c-330d-4947-98b4-70433f23c003",
+       1
+      ],
+      [
+       "d1da14f6-b60f-4a76-8109-5b044ad194fe",
+       1
+      ],
+      [
+       "1b693b4a-62cb-4ba5-a1f9-a35b6f864967",
+       1
+      ]
+     ],
+     "sample": [
+      "15c49ff6-e2c8-428a-8482-11bc281213ad",
+      "e33b83e9-ade4-4512-9da6-cd5cb62331fb",
+      "9af0b590-fc22-4bad-81cb-2f5676cd0191",
+      "52ebac29-bb77-422e-bb5c-8a68046e7ef0",
+      "0431eb6c-0c6e-46f6-83b1-4d0cfff36696"
+     ]
+    },
+    {
+     "column": "PATIENT_ID",
+     "n": 537,
+     "n_non_null": 537,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 336,
+      "str": 201
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 537,
+      "min": 216359.0,
+      "max": [REDACTED-05].0,
+      "mean": 8782919.832402
+     },
+     "top_values": [
+      [
+       "[REDACTED-04]",
+       189
+      ],
+      [
+       "[REDACTED-02]",
+       134
+      ],
+      [
+       "[REDACTED-05]",
+       77
+      ],
+      [
+       "[REDACTED-03]",
+       70
+      ],
+      [
+       "[REDACTED-01]",
+       67
+      ]
+     ],
+     "sample": [
+      [REDACTED-04],
+      [REDACTED-04],
+      [REDACTED-04],
+      [REDACTED-04],
+      [REDACTED-04]
+     ]
+    },
+    {
+     "column": "CASE_NO",
+     "n": 537,
+     "n_non_null": 537,
+     "missing_rate": 0.0,
+     "types": {
+      "int": 537
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 537,
+      "min": [REDACTED-06].0,
+      "max": [REDACTED-10].0,
+      "mean": 573716.994413
+     },
+     "top_values": [
+      [
+       "[REDACTED-06]",
+       189
+      ],
+      [
+       "[REDACTED-07]",
+       134
+      ],
+      [
+       "[REDACTED-10]",
+       77
+      ],
+      [
+       "[REDACTED-08]",
+       70
+      ],
+      [
+       "[REDACTED-09]",
+       67
+      ]
+     ],
+     "sample": [
+      [REDACTED-06],
+      [REDACTED-06],
+      [REDACTED-06],
+      [REDACTED-06],
+      [REDACTED-06]
+     ]
+    },
+    {
+     "column": "RECORD_DATE",
+     "n": 537,
+     "n_non_null": 537,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 537
+     },
+     "n_unique": 126,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "7/1/2021 14:00:00",
+       13
+      ],
+      [
+       "1/1/2021 14:00:00",
+       12
+      ],
+      [
+       "31/12/2020 14:00:00",
+       11
+      ],
+      [
+       "4/1/2021 14:00:00",
+       11
+      ],
+      [
+       "11/1/2021 14:00:00",
+       11
+      ],
+      [
+       "28/12/2020 14:00:00",
+       10
+      ],
+      [
+       "26/12/2020 14:00:00",
+       9
+      ],
+      [
+       "27/12/2020 14:00:00",
+       9
+      ]
+     ],
+     "sample": [
+      "28/11/2020 11:16:00",
+      "28/11/2020 11:16:00",
+      "28/11/2020 11:16:00",
+      "28/11/2020 11:16:00",
+      "28/11/2020 11:16:00"
+     ]
+    },
+    {
+     "column": "SIGN_TYPE",
+     "n": 537,
+     "n_non_null": 537,
+     "missing_rate": 0.0,
+     "types": {
+      "str": 537
+     },
+     "n_unique": 7,
+     "numeric_stats": null,
+     "top_values": [
+      [
+       "体温",
+       150
+      ],
+      [
+       "脉搏",
+       150
+      ],
+      [
+       "呼吸",
+       150
+      ],
+      [
+       "血压",
+       53
+      ],
+      [
+       "体重",
+       22
+      ],
+      [
+       "血氧饱和度",
+       6
+      ],
+      [
+       "身高",
+       6
+      ]
+     ],
+     "sample": [
+      "体温",
+      "脉搏",
+      "呼吸",
+      "血压",
+      "血氧饱和度"
+     ]
+    },
+    {
+     "column": "RECORD_CONTENT",
+     "n": 537,
+     "n_non_null": 537,
+     "missing_rate": 0.0,
+     "types": {
+      "float": 141,
+      "int": 343,
+      "str": 53
+     },
+     "n_unique": 126,
+     "numeric_stats": {
+      "n_numeric": 484,
+      "min": 14.0,
+      "max": 170.0,
+      "mean": 47.097521
+     },
+     "top_values": [
+      [
+       "16",
+       63
+      ],
+      [
+       "18",
+       36
+      ],
+      [
+       "36.5",
+       27
+      ],
+      [
+       "36.8",
+       25
+      ],
+      [
+       "36.7",
+       20
+      ],
+      [
+       "15",
+       20
+      ],
+      [
+       "36.6",
+       19
+      ],
+      [
+       "17",
+       16
+      ]
+     ],
+     "sample": [
+      36.8,
+      73,
+      18,
+      "129/74",
+      99
+     ]
+    },
+    {
+     "column": "RECORD_UNIT",
+     "n": 537,
+     "n_non_null": 0,
+     "missing_rate": 1.0,
+     "types": {},
+     "n_unique": 0,
+     "numeric_stats": null,
+     "top_values": [],
+     "sample": []
+    },
+    {
+     "column": "col_7",
+     "n": 537,
+     "n_non_null": 0,
+     "missing_rate": 1.0,
+     "types": {},
+     "n_unique": 0,
+     "numeric_stats": null,
+     "top_values": [],
+     "sample": []
+    },
+    {
+     "column": "col_8",
+     "n": 537,
+     "n_non_null": 0,
+     "missing_rate": 1.0,
+     "types": {},
+     "n_unique": 0,
+     "numeric_stats": null,
+     "top_values": [],
+     "sample": []
+    },
+    {
+     "column": "col_9",
+     "n": 537,
+     "n_non_null": 5,
+     "missing_rate": 0.9907,
+     "types": {
+      "int": 5
+     },
+     "n_unique": 5,
+     "numeric_stats": {
+      "n_numeric": 5,
+      "min": [REDACTED-06].0,
+      "max": [REDACTED-10].0,
+      "mean": 575800.8
+     },
+     "top_values": [
+      [
+       "[REDACTED-06]",
+       1
+      ],
+      [
+       "[REDACTED-07]",
+       1
+      ],
+      [
+       "[REDACTED-08]",
+       1
+      ],
+      [
+       "[REDACTED-09]",
+       1
+      ],
+      [
+       "[REDACTED-10]",
+       1
+      ]
+     ],
+     "sample": [
+      [REDACTED-06],
+      [REDACTED-07],
+      [REDACTED-08],
+      [REDACTED-09],
+      [REDACTED-10]
+     ]
+    }
+   ]
+  }
+ }
+}

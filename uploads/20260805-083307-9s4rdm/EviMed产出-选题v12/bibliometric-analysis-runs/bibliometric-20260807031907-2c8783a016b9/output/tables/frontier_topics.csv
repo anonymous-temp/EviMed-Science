@@ -1,0 +1,21 @@
+topic,frontier_score,growth_rate,burst_score,novelty_score,centrality,evidence
+East Asian People,0.555,0.5,0.0,0.818,0.0,相对新颖的主题
+Pharmacogenetics,0.415,0.333,0.0,0.727,0.0,相对新颖的主题
+Psychotropic Drugs,0.395,0.5,0.0,0.182,0.0,中等信号
+Clozapine,0.371,0.4,0.0,0.364,0.0,中等信号
+Delayed-Action Preparations,0.347,0.333,0.0,0.455,0.0,中等信号
+Valproic Acid,0.336,0.333,0.0,0.409,0.0,中等信号
+Bipolar Disorder,0.336,0.333,0.0,0.409,0.0,中等信号
+Antimanic Agents,0.279,0.333,0.0,0.182,0.0,中等信号
+Quinolones,0.279,0.04,18.0,0.0,0.004,检测到突现（得分=18.0）
+Cytochrome P-450 CYP3A,0.267,0.333,0.0,0.136,0.0,中等信号
+Positron-Emission Tomography,0.267,0.333,0.0,0.136,0.0,中等信号
+therapeutic drug monitoring,0.252,0.182,0.0,0.5,0.0,中等信号
+TDM,0.25,0.0,0.0,1.0,0.0,相对新颖的主题
+Obsessive-compulsive disorder,0.25,0.0,0.0,1.0,0.0,相对新颖的主题
+Tolerability,0.25,0.0,0.0,1.0,0.0,相对新颖的主题
+Psychotropic medications,0.25,0.0,0.0,1.0,0.0,相对新颖的主题
+"Injections, Intramuscular",0.25,0.0,0.0,1.0,0.0,相对新颖的主题
+Alinity C,0.25,0.0,0.0,1.0,0.0,相对新颖的主题
+minimum effective dose,0.25,0.0,0.0,1.0,0.0,相对新颖的主题
+SARS-CoV-2,0.25,0.0,0.0,1.0,0.0,相对新颖的主题

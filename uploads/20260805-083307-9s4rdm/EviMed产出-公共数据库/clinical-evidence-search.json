@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-05T08:10:00Z",
+  "databases": [
+    "PubMed (EviMed适配器)",
+    "指南与共识源",
+    "DailyMed",
+    "OpenFDA/NMPA标签索引",
+    "RxNorm",
+    "Europe PMC"
+  ],
+  "queries": [
+    {
+      "database": "PubMed (EviMed适配器)",
+      "query": "aripiprazole therapeutic drug monitoring concentration dose relationship",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed (EviMed适配器)",
+      "query": "AGNP consensus guidelines therapeutic drug monitoring neuropsychopharmacology",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed (EviMed适配器)",
+      "query": "aripiprazole dehydro-aripiprazole metabolic ratio CYP2D6",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed (EviMed适配器)",
+      "query": "抗精神病药物 治疗药物监测 专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "指南与共识源",
+      "query": "therapeutic drug monitoring antipsychotics",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "指南与共识源(中文)",
+      "query": "治疗药物监测 抗精神病药物 共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "DailyMed",
+      "query": "aripiprazole",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "OpenFDA/NMPA标签索引",
+      "query": "aripiprazole",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "RxNorm",
+      "query": "aripiprazole",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PubMed (EviMed适配器)",
+      "query": "clozapine olanzapine concentration dose ratio therapeutic drug monitoring",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed (EviMed适配器)",
+      "query": "aripiprazole plasma concentration Chinese Han patients",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed (EviMed适配器)",
+      "query": "dehydroaripiprazole aripiprazole ratio population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed (EviMed适配器)",
+      "query": "Chinese expert consensus therapeutic drug monitoring psychotropic drugs",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 12
+    },
+    {
+      "database": "Europe PMC",
+      "query": "aripiprazole CYP2D6 therapeutic drug monitoring",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Europe PMC",
+      "query": "clozapine concentration dose ratio smoking therapeutic drug monitoring",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Europe PMC",
+      "query": "CPIC guideline aripiprazole CYP2D6 dosing",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "OpenFDA FAERS antipsychotic adverse event reporting",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 286,
+    "recordsAfterDeduplication": 269,
+    "sourcesIncluded": 8
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 3,
+      "citationKey": "Lenk2024Rapid",
+      "identifier": "PMC11098931",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "外部基准方法学(C/D百分位、LCD/NCD定义、亚治疗下限)"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Soria2021Genetic",
+      "identifier": "PMC8316766",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "药物基因组学综述(脱氢比值、CPIC/DPWG、吸烟-奥氮平)"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Toja2024Precision",
+      "identifier": "PMC10820753",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "测定方法比对(AGNP范围、免疫法偏倚、活性部分口径)"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Yin2023Survey",
+      "identifier": "PMC10013164",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "中国TDM现状(范围不一致、常用项目、中文共识、EQA)"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Tveit2020Antidepressants",
+      "identifier": "PMC7473958",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "外部基准结局定义(超范围比例)、伦理先例"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Moschny2021TDM",
+      "identifier": "PMC8230242",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "吸烟/炎症对浓度影响、AGNP 154药范围、氯氮平范围"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Wang2024Parkinson",
+      "identifier": "PMC11739097",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "FAERS信号方法学与阿立哌唑ROR"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Zhu2022Prolactin",
+      "identifier": "PMC9606398",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "中国EHR回顾性+OpenVigil/openFDA、奥氮平范围"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Hiemke2018AGNP",
+      "identifier": "PMID:28910830",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "AGNP共识2017(付费墙，经开放获取二次文献转引)"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Schoretsanitis2020Blood",
+      "identifier": "PMID:32433836",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "ASCP/AGNP联合共识(付费墙)"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Guo2013China",
+      "identifier": "PMID:24263641",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "中国2013年精神药物TDM调查(题录级)"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Zhang2019CYP2D6",
+      "identifier": "PMID:30565279",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "CYP2D6表型-阿立哌唑荟萃分析(题录级)"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Jukic2019CYP2D6",
+      "identifier": "PMID:31000417",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "CYP2D6基因型-阿立哌唑队列(题录级)"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Suzuki2011CYP2D6star10",
+      "identifier": "PMID:21157400",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "CYP2D6*10-阿立哌唑日本研究(题录级)"
+    },
+    {
+      "referenceNumber": 22,
+      "citationKey": "DailyMed2026Aripiprazole",
+      "identifier": "setid:7bf7d35e-46a1-4e8f-aeb5-8a93223a4abc",
+      "accessLevel": "structured_record",
+      "included": false,
+      "role": "DailyMed阿立哌唑标签记录(存在性确认)"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "CTgov2026TDM",
+      "identifier": "clinicaltrials.gov检索",
+      "accessLevel": "structured_record",
+      "included": false,
+      "role": "CT.gov注册研究检索(427条命中，研究空白定位)"
+    },
+    {
+      "referenceNumber": 21,
+      "citationKey": "RxNorm2026Aripiprazole",
+      "identifier": "RXCUI记录",
+      "accessLevel": "structured_record",
+      "included": false,
+      "role": "RxNorm阿立哌唑RXCUI体系(连接键解析)"
+    }
+  ]
+}

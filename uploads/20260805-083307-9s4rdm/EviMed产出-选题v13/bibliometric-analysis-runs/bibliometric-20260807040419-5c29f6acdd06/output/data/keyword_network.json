@@ -1,0 +1,3721 @@
+{
+  "nodes": [
+    {
+      "id": "Weight Gain",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.4286,
+      "betweenness": 0.0,
+      "closeness": 1.6411,
+      "weighted_degree": 28
+    },
+    {
+      "id": "chemistry",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.4286,
+      "betweenness": 0.0,
+      "closeness": 1.6409,
+      "weighted_degree": 32
+    },
+    {
+      "id": "chemically induced",
+      "weight": 5,
+      "cluster": 0,
+      "degree": 0.4082,
+      "betweenness": 0.0,
+      "closeness": 2.0742,
+      "weighted_degree": 37
+    },
+    {
+      "id": "metabolism",
+      "weight": 4,
+      "cluster": 1,
+      "degree": 0.6735,
+      "betweenness": 0.0,
+      "closeness": 1.8778,
+      "weighted_degree": 42
+    },
+    {
+      "id": "Amisulpride",
+      "weight": 4,
+      "cluster": 2,
+      "degree": 0.7347,
+      "betweenness": 0.0,
+      "closeness": 2.0793,
+      "weighted_degree": 66
+    },
+    {
+      "id": "Drug Interactions",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.2449,
+      "betweenness": 0.0,
+      "closeness": 1.6347,
+      "weighted_degree": 19
+    },
+    {
+      "id": "administration & dosage",
+      "weight": 6,
+      "cluster": 0,
+      "degree": 0.3673,
+      "betweenness": 0.0,
+      "closeness": 2.2371,
+      "weighted_degree": 45
+    },
+    {
+      "id": "pharmacology",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.2449,
+      "betweenness": 0.0,
+      "closeness": 1.625,
+      "weighted_degree": 17
+    },
+    {
+      "id": "Drug Monitoring",
+      "weight": 13,
+      "cluster": 1,
+      "degree": 0.7551,
+      "betweenness": 0.0,
+      "closeness": 2.7602,
+      "weighted_degree": 98
+    },
+    {
+      "id": "Tandem Mass Spectrometry",
+      "weight": 11,
+      "cluster": 1,
+      "degree": 0.6531,
+      "betweenness": 0.0028,
+      "closeness": 2.7444,
+      "weighted_degree": 97
+    },
+    {
+      "id": "Psychotic Disorders",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.1224,
+      "betweenness": 0.0,
+      "closeness": 1.2885,
+      "weighted_degree": 9
+    },
+    {
+      "id": "antipsychotic",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.2449,
+      "betweenness": 0.0,
+      "closeness": 1.2867,
+      "weighted_degree": 14
+    },
+    {
+      "id": "therapeutic drug monitoring",
+      "weight": 8,
+      "cluster": 1,
+      "degree": 0.6327,
+      "betweenness": 0.0,
+      "closeness": 2.3633,
+      "weighted_degree": 67
+    },
+    {
+      "id": "antipsychotic drugs",
+      "weight": 3,
+      "cluster": 2,
+      "degree": 0.4286,
+      "betweenness": 0.0,
+      "closeness": 1.2843,
+      "weighted_degree": 22
+    },
+    {
+      "id": "Quality Control",
+      "weight": 2,
+      "cluster": 1,
+      "degree": 0.4694,
+      "betweenness": 0.0,
+      "closeness": 1.3,
+      "weighted_degree": 28
+    },
+    {
+      "id": "Databases, Factual",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.3061,
+      "betweenness": 0.0,
+      "closeness": 1.6497,
+      "weighted_degree": 25
+    },
+    {
+      "id": "epidemiology",
+      "weight": 4,
+      "cluster": 0,
+      "degree": 0.4898,
+      "betweenness": 0.0,
+      "closeness": 1.8841,
+      "weighted_degree": 39
+    },
+    {
+      "id": "iloperidone",
+      "weight": 2,
+      "cluster": 2,
+      "degree": 0.4898,
+      "betweenness": 0.0,
+      "closeness": 1.421,
+      "weighted_degree": 36
+    },
+    {
+      "id": "Antipsychotics",
+      "weight": 10,
+      "cluster": 1,
+      "degree": 0.7347,
+      "betweenness": 0.0,
+      "closeness": 2.538,
+      "weighted_degree": 76
+    },
+    {
+      "id": "Benzodiazepines",
+      "weight": 3,
+      "cluster": 2,
+      "degree": 0.4694,
+      "betweenness": 0.0,
+      "closeness": 1.7153,
+      "weighted_degree": 42
+    },
+    {
+      "id": "pharmacokinetics",
+      "weight": 8,
+      "cluster": 0,
+      "degree": 0.5102,
+      "betweenness": 0.0,
+      "closeness": 2.4481,
+      "weighted_degree": 55
+    },
+    {
+      "id": "atypical antipsychotics",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.2653,
+      "betweenness": 0.0,
+      "closeness": 1.2919,
+      "weighted_degree": 17
+    },
+    {
+      "id": "paliperidone",
+      "weight": 2,
+      "cluster": 2,
+      "degree": 0.4898,
+      "betweenness": 0.0,
+      "closeness": 1.421,
+      "weighted_degree": 36
+    },
+    {
+      "id": "Risperidone",
+      "weight": 7,
+      "cluster": 2,
+      "degree": 0.7959,
+      "betweenness": 0.011,
+      "closeness": 2.6045,
+      "weighted_degree": 92
+    },
+    {
+      "id": "drug therapy",
+      "weight": 14,
+      "cluster": 0,
+      "degree": 0.7347,
+      "betweenness": 0.0018,
+      "closeness": 2.8422,
+      "weighted_degree": 103
+    },
+    {
+      "id": "Olanzapine",
+      "weight": 6,
+      "cluster": 2,
+      "degree": 0.7755,
+      "betweenness": 0.0049,
+      "closeness": 2.4624,
+      "weighted_degree": 84
+    },
+    {
+      "id": "blood",
+      "weight": 11,
+      "cluster": 1,
+      "degree": 0.7347,
+      "betweenness": 0.0,
+      "closeness": 2.6911,
+      "weighted_degree": 88
+    },
+    {
+      "id": "Aripiprazole",
+      "weight": 6,
+      "cluster": 2,
+      "degree": 0.7755,
+      "betweenness": 0.002,
+      "closeness": 2.4088,
+      "weighted_degree": 82
+    },
+    {
+      "id": "Reproducibility of Results",
+      "weight": 3,
+      "cluster": 1,
+      "degree": 0.5918,
+      "betweenness": 0.0,
+      "closeness": 1.6505,
+      "weighted_degree": 45
+    },
+    {
+      "id": "statistics & numerical data",
+      "weight": 3,
+      "cluster": 0,
+      "degree": 0.3061,
+      "betweenness": 0.0,
+      "closeness": 1.6341,
+      "weighted_degree": 21
+    },
+    {
+      "id": "Dose-Response Relationship, Drug",
+      "weight": 4,
+      "cluster": 0,
+      "degree": 0.3265,
+      "betweenness": 0.0,
+      "closeness": 1.8796,
+      "weighted_degree": 31
+    },
+    {
+      "id": "lurasidone",
+      "weight": 2,
+      "cluster": 2,
+      "degree": 0.4898,
+      "betweenness": 0.0,
+      "closeness": 1.421,
+      "weighted_degree": 36
+    },
+    {
+      "id": "Antipsychotic Agents",
+      "weight": 34,
+      "cluster": 0,
+      "degree": 1.0,
+      "betweenness": 0.8354,
+      "closeness": 3.4621,
+      "weighted_degree": 259
+    },
+    {
+      "id": "quetiapine",
+      "weight": 2,
+      "cluster": 2,
+      "degree": 0.4898,
+      "betweenness": 0.0,
+      "closeness": 1.421,
+      "weighted_degree": 36
+    },
+    {
+      "id": "Dibenzothiazepines",
+      "weight": 2,
+      "cluster": 2,
+      "degree": 0.4082,
+      "betweenness": 0.0,
+      "closeness": 1.337,
+      "weighted_degree": 27
+    },
+    {
+      "id": "haloperidol",
+      "weight": 3,
+      "cluster": 2,
+      "degree": 0.6531,
+      "betweenness": 0.0,
+      "closeness": 1.7938,
+      "weighted_degree": 51
+    },
+    {
+      "id": "Piperazines",
+      "weight": 2,
+      "cluster": 2,
+      "degree": 0.4082,
+      "betweenness": 0.0,
+      "closeness": 1.337,
+      "weighted_degree": 27
+    },
+    {
+      "id": "methods",
+      "weight": 8,
+      "cluster": 1,
+      "degree": 0.8163,
+      "betweenness": 0.0,
+      "closeness": 2.4538,
+      "weighted_degree": 79
+    },
+    {
+      "id": "Chromatography, High Pressure Liquid",
+      "weight": 6,
+      "cluster": 1,
+      "degree": 0.5102,
+      "betweenness": 0.0,
+      "closeness": 2.2651,
+      "weighted_degree": 55
+    },
+    {
+      "id": "United States Food and Drug Administration",
+      "weight": 2,
+      "cluster": 0,
+      "degree": 0.1837,
+      "betweenness": 0.0,
+      "closeness": 1.2864,
+      "weighted_degree": 11
+    },
+    {
+      "id": "Chromatography, Liquid",
+      "weight": 5,
+      "cluster": 1,
+      "degree": 0.4898,
+      "betweenness": 0.0,
+      "closeness": 2.0737,
+      "weighted_degree": 41
+    },
+    {
+      "id": "asenapine",
+      "weight": 2,
+      "cluster": 2,
+      "degree": 0.4898,
+      "betweenness": 0.0,
+      "closeness": 1.421,
+      "weighted_degree": 36
+    },
+    {
+      "id": "therapeutic use",
+      "weight": 19,
+      "cluster": 0,
+      "degree": 0.7959,
+      "betweenness": 0.0018,
+      "closeness": 2.9886,
+      "weighted_degree": 132
+    },
+    {
+      "id": "Schizophrenia",
+      "weight": 10,
+      "cluster": 0,
+      "degree": 0.7143,
+      "betweenness": 0.0,
+      "closeness": 2.619,
+      "weighted_degree": 85
+    },
+    {
+      "id": "Quetiapine Fumarate",
+      "weight": 4,
+      "cluster": 2,
+      "degree": 0.4898,
+      "betweenness": 0.0006,
+      "closeness": 1.9745,
+      "weighted_degree": 50
+    },
+    {
+      "id": "sertindole",
+      "weight": 2,
+      "cluster": 2,
+      "degree": 0.4898,
+      "betweenness": 0.0,
+      "closeness": 1.421,
+      "weighted_degree": 36
+    },
+    {
+      "id": "Paliperidone Palmitate",
+      "weight": 3,
+      "cluster": 2,
+      "degree": 0.4898,
+      "betweenness": 0.0,
+      "closeness": 1.6699,
+      "weighted_degree": 38
+    },
+    {
+      "id": "Clozapine",
+      "weight": 10,
+      "cluster": 2,
+      "degree": 0.7959,
+      "betweenness": 0.0049,
+      "closeness": 2.7207,
+      "weighted_degree": 101
+    },
+    {
+      "id": "drug effects",
+      "weight": 5,
+      "cluster": 0,
+      "degree": 0.4694,
+      "betweenness": 0.0,
+      "closeness": 2.0815,
+      "weighted_degree": 35
+    },
+    {
+      "id": "adverse effects",
+      "weight": 16,
+      "cluster": 0,
+      "degree": 0.8367,
+      "betweenness": 0.0021,
+      "closeness": 2.9085,
+      "weighted_degree": 122
+    }
+  ],
+  "edges": [
+    {
+      "source": "Weight Gain",
+      "target": "adverse effects",
+      "weight": 3
+    },
+    {
+      "source": "Weight Gain",
+      "target": "drug effects",
+      "weight": 3
+    },
+    {
+      "source": "Weight Gain",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Weight Gain",
+      "target": "chemically induced",
+      "weight": 2
+    },
+    {
+      "source": "Weight Gain",
+      "target": "pharmacokinetics",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "Aripiprazole",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "asenapine",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "Amisulpride",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "quetiapine",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "iloperidone",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "lurasidone",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "Risperidone",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "sertindole",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "paliperidone",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "Drug Interactions",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "Weight Gain",
+      "target": "drug therapy",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 3
+    },
+    {
+      "source": "chemistry",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "chemistry",
+      "target": "Antipsychotics",
+      "weight": 2
+    },
+    {
+      "source": "chemistry",
+      "target": "therapeutic drug monitoring",
+      "weight": 2
+    },
+    {
+      "source": "chemistry",
+      "target": "blood",
+      "weight": 2
+    },
+    {
+      "source": "chemistry",
+      "target": "methods",
+      "weight": 2
+    },
+    {
+      "source": "chemistry",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "chemistry",
+      "target": "Aripiprazole",
+      "weight": 2
+    },
+    {
+      "source": "chemistry",
+      "target": "Chromatography, Liquid",
+      "weight": 2
+    },
+    {
+      "source": "chemistry",
+      "target": "Piperazines",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "metabolism",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Amisulpride",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Dibenzothiazepines",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "chemistry",
+      "target": "Risperidone",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "Antipsychotic Agents",
+      "weight": 5
+    },
+    {
+      "source": "chemically induced",
+      "target": "adverse effects",
+      "weight": 5
+    },
+    {
+      "source": "chemically induced",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "chemically induced",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "chemically induced",
+      "target": "drug effects",
+      "weight": 2
+    },
+    {
+      "source": "chemically induced",
+      "target": "epidemiology",
+      "weight": 2
+    },
+    {
+      "source": "chemically induced",
+      "target": "Databases, Factual",
+      "weight": 2
+    },
+    {
+      "source": "chemically induced",
+      "target": "administration & dosage",
+      "weight": 2
+    },
+    {
+      "source": "chemically induced",
+      "target": "drug therapy",
+      "weight": 2
+    },
+    {
+      "source": "chemically induced",
+      "target": "pharmacokinetics",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "blood",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "Antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "statistics & numerical data",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "United States Food and Drug Administration",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "atypical antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "Drug Interactions",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "chemically induced",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Antipsychotic Agents",
+      "weight": 4
+    },
+    {
+      "source": "metabolism",
+      "target": "therapeutic drug monitoring",
+      "weight": 3
+    },
+    {
+      "source": "metabolism",
+      "target": "Antipsychotics",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "blood",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Aripiprazole",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 2
+    },
+    {
+      "source": "metabolism",
+      "target": "atypical antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "pharmacokinetics",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "drug therapy",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "pharmacology",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Amisulpride",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "iloperidone",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "asenapine",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "paliperidone",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Quality Control",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "quetiapine",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "lurasidone",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "sertindole",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "metabolism",
+      "target": "Risperidone",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Clozapine",
+      "weight": 4
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Risperidone",
+      "weight": 4
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Olanzapine",
+      "weight": 4
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Antipsychotic Agents",
+      "weight": 4
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Aripiprazole",
+      "weight": 4
+    },
+    {
+      "source": "Amisulpride",
+      "target": "haloperidol",
+      "weight": 3
+    },
+    {
+      "source": "Amisulpride",
+      "target": "methods",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Benzodiazepines",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Paliperidone Palmitate",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Quetiapine Fumarate",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "asenapine",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "iloperidone",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "lurasidone",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "paliperidone",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "quetiapine",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "sertindole",
+      "weight": 2
+    },
+    {
+      "source": "Amisulpride",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "epidemiology",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "drug therapy",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "therapeutic drug monitoring",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Quality Control",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "blood",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "antipsychotic drugs",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Dibenzothiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Amisulpride",
+      "target": "Piperazines",
+      "weight": 1
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "pharmacokinetics",
+      "weight": 3
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "pharmacology",
+      "weight": 1
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "Antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "Drug Interactions",
+      "target": "drug therapy",
+      "weight": 1
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Antipsychotic Agents",
+      "weight": 6
+    },
+    {
+      "source": "administration & dosage",
+      "target": "adverse effects",
+      "weight": 4
+    },
+    {
+      "source": "administration & dosage",
+      "target": "therapeutic use",
+      "weight": 4
+    },
+    {
+      "source": "administration & dosage",
+      "target": "drug therapy",
+      "weight": 3
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Schizophrenia",
+      "weight": 3
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Drug Monitoring",
+      "weight": 3
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 3
+    },
+    {
+      "source": "administration & dosage",
+      "target": "methods",
+      "weight": 3
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Databases, Factual",
+      "weight": 3
+    },
+    {
+      "source": "administration & dosage",
+      "target": "statistics & numerical data",
+      "weight": 2
+    },
+    {
+      "source": "administration & dosage",
+      "target": "epidemiology",
+      "weight": 2
+    },
+    {
+      "source": "administration & dosage",
+      "target": "pharmacokinetics",
+      "weight": 2
+    },
+    {
+      "source": "administration & dosage",
+      "target": "pharmacology",
+      "weight": 1
+    },
+    {
+      "source": "administration & dosage",
+      "target": "antipsychotic",
+      "weight": 1
+    },
+    {
+      "source": "administration & dosage",
+      "target": "United States Food and Drug Administration",
+      "weight": 1
+    },
+    {
+      "source": "administration & dosage",
+      "target": "Antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "administration & dosage",
+      "target": "blood",
+      "weight": 1
+    },
+    {
+      "source": "pharmacology",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "pharmacology",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "pharmacology",
+      "target": "pharmacokinetics",
+      "weight": 2
+    },
+    {
+      "source": "pharmacology",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "pharmacology",
+      "target": "Drug Monitoring",
+      "weight": 1
+    },
+    {
+      "source": "pharmacology",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "pharmacology",
+      "target": "drug therapy",
+      "weight": 1
+    },
+    {
+      "source": "pharmacology",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "pharmacology",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Antipsychotic Agents",
+      "weight": 13
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Tandem Mass Spectrometry",
+      "weight": 7
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "therapeutic use",
+      "weight": 6
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "blood",
+      "weight": 6
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "methods",
+      "weight": 5
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "pharmacokinetics",
+      "weight": 5
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "therapeutic drug monitoring",
+      "weight": 5
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 5
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "adverse effects",
+      "weight": 4
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Schizophrenia",
+      "weight": 3
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 3
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "drug therapy",
+      "weight": 3
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Antipsychotics",
+      "weight": 3
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Quetiapine Fumarate",
+      "weight": 2
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Risperidone",
+      "weight": 2
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Databases, Factual",
+      "weight": 2
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Chromatography, Liquid",
+      "weight": 2
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "atypical antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "antipsychotic drugs",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "antipsychotic",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Quality Control",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "statistics & numerical data",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Piperazines",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Aripiprazole",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Dibenzothiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "Drug Monitoring",
+      "target": "epidemiology",
+      "weight": 1
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Antipsychotic Agents",
+      "weight": 11
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "blood",
+      "weight": 8
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "therapeutic drug monitoring",
+      "weight": 6
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Antipsychotics",
+      "weight": 6
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 6
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Chromatography, Liquid",
+      "weight": 5
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "methods",
+      "weight": 5
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Aripiprazole",
+      "weight": 4
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Clozapine",
+      "weight": 3
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Reproducibility of Results",
+      "weight": 3
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Risperidone",
+      "weight": 3
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "pharmacokinetics",
+      "weight": 2
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Quetiapine Fumarate",
+      "weight": 2
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Paliperidone Palmitate",
+      "weight": 2
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Olanzapine",
+      "weight": 2
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Quality Control",
+      "weight": 2
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "antipsychotic drugs",
+      "weight": 1
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "asenapine",
+      "weight": 1
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "iloperidone",
+      "weight": 1
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "lurasidone",
+      "weight": 1
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "paliperidone",
+      "weight": 1
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "quetiapine",
+      "weight": 1
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "sertindole",
+      "weight": 1
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Piperazines",
+      "weight": 1
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Tandem Mass Spectrometry",
+      "target": "Dibenzothiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Psychotic Disorders",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    },
+    {
+      "source": "Psychotic Disorders",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "Psychotic Disorders",
+      "target": "drug therapy",
+      "weight": 2
+    },
+    {
+      "source": "Psychotic Disorders",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "Psychotic Disorders",
+      "target": "blood",
+      "weight": 1
+    },
+    {
+      "source": "Psychotic Disorders",
+      "target": "statistics & numerical data",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    },
+    {
+      "source": "antipsychotic",
+      "target": "drug therapy",
+      "weight": 2
+    },
+    {
+      "source": "antipsychotic",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic",
+      "target": "Risperidone",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic",
+      "target": "Databases, Factual",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic",
+      "target": "statistics & numerical data",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Antipsychotic Agents",
+      "weight": 7
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "blood",
+      "weight": 6
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Antipsychotics",
+      "weight": 4
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 4
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "methods",
+      "weight": 3
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "pharmacokinetics",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Chromatography, Liquid",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Aripiprazole",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "atypical antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "antipsychotic drugs",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "drug therapy",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "asenapine",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "iloperidone",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "lurasidone",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "paliperidone",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Quality Control",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "quetiapine",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "Risperidone",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic drug monitoring",
+      "target": "sertindole",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "blood",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "epidemiology",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "Risperidone",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "drug therapy",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "Aripiprazole",
+      "weight": 1
+    },
+    {
+      "source": "antipsychotic drugs",
+      "target": "atypical antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    },
+    {
+      "source": "Quality Control",
+      "target": "Antipsychotics",
+      "weight": 2
+    },
+    {
+      "source": "Quality Control",
+      "target": "blood",
+      "weight": 2
+    },
+    {
+      "source": "Quality Control",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 2
+    },
+    {
+      "source": "Quality Control",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "iloperidone",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "lurasidone",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "Aripiprazole",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "asenapine",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "paliperidone",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "quetiapine",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "Risperidone",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "sertindole",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "Quality Control",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "Databases, Factual",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Databases, Factual",
+      "target": "epidemiology",
+      "weight": 2
+    },
+    {
+      "source": "Databases, Factual",
+      "target": "statistics & numerical data",
+      "weight": 2
+    },
+    {
+      "source": "Databases, Factual",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "Databases, Factual",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "Databases, Factual",
+      "target": "drug therapy",
+      "weight": 1
+    },
+    {
+      "source": "Databases, Factual",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "Databases, Factual",
+      "target": "Antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "Databases, Factual",
+      "target": "United States Food and Drug Administration",
+      "weight": 1
+    },
+    {
+      "source": "Databases, Factual",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 1
+    },
+    {
+      "source": "Databases, Factual",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "Antipsychotic Agents",
+      "weight": 4
+    },
+    {
+      "source": "epidemiology",
+      "target": "adverse effects",
+      "weight": 4
+    },
+    {
+      "source": "epidemiology",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "epidemiology",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "epidemiology",
+      "target": "drug therapy",
+      "weight": 2
+    },
+    {
+      "source": "epidemiology",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "epidemiology",
+      "target": "Antipsychotics",
+      "weight": 2
+    },
+    {
+      "source": "epidemiology",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "Risperidone",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "Aripiprazole",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "Benzodiazepines",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "statistics & numerical data",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "United States Food and Drug Administration",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 1
+    },
+    {
+      "source": "epidemiology",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "iloperidone",
+      "target": "Risperidone",
+      "weight": 2
+    },
+    {
+      "source": "iloperidone",
+      "target": "sertindole",
+      "weight": 2
+    },
+    {
+      "source": "iloperidone",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    },
+    {
+      "source": "iloperidone",
+      "target": "haloperidol",
+      "weight": 2
+    },
+    {
+      "source": "iloperidone",
+      "target": "lurasidone",
+      "weight": 2
+    },
+    {
+      "source": "iloperidone",
+      "target": "Olanzapine",
+      "weight": 2
+    },
+    {
+      "source": "iloperidone",
+      "target": "paliperidone",
+      "weight": 2
+    },
+    {
+      "source": "iloperidone",
+      "target": "quetiapine",
+      "weight": 2
+    },
+    {
+      "source": "iloperidone",
+      "target": "asenapine",
+      "weight": 2
+    },
+    {
+      "source": "iloperidone",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "iloperidone",
+      "target": "Aripiprazole",
+      "weight": 2
+    },
+    {
+      "source": "iloperidone",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "iloperidone",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "iloperidone",
+      "target": "Antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "iloperidone",
+      "target": "blood",
+      "weight": 1
+    },
+    {
+      "source": "iloperidone",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "iloperidone",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "iloperidone",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "Antipsychotic Agents",
+      "weight": 9
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "blood",
+      "weight": 5
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 4
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "Clozapine",
+      "weight": 3
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "Chromatography, Liquid",
+      "weight": 3
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "methods",
+      "weight": 3
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "Aripiprazole",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "drug therapy",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "pharmacokinetics",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "statistics & numerical data",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "United States Food and Drug Administration",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "lurasidone",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "Olanzapine",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "paliperidone",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "quetiapine",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "Risperidone",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "sertindole",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotics",
+      "target": "asenapine",
+      "weight": 1
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Olanzapine",
+      "weight": 3
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Quetiapine Fumarate",
+      "weight": 3
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Risperidone",
+      "weight": 3
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Clozapine",
+      "weight": 3
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Dibenzothiazepines",
+      "weight": 2
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Piperazines",
+      "weight": 2
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Aripiprazole",
+      "weight": 2
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Paliperidone Palmitate",
+      "weight": 2
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "drug therapy",
+      "weight": 2
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "Benzodiazepines",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Antipsychotic Agents",
+      "weight": 8
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "therapeutic use",
+      "weight": 6
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Schizophrenia",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "adverse effects",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "drug therapy",
+      "weight": 3
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 2
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "methods",
+      "weight": 2
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Risperidone",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Aripiprazole",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "atypical antipsychotics",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "blood",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "pharmacokinetics",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "atypical antipsychotics",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "atypical antipsychotics",
+      "target": "drug therapy",
+      "weight": 2
+    },
+    {
+      "source": "atypical antipsychotics",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    },
+    {
+      "source": "atypical antipsychotics",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "atypical antipsychotics",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 1
+    },
+    {
+      "source": "atypical antipsychotics",
+      "target": "blood",
+      "weight": 1
+    },
+    {
+      "source": "atypical antipsychotics",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "paliperidone",
+      "target": "quetiapine",
+      "weight": 2
+    },
+    {
+      "source": "paliperidone",
+      "target": "Risperidone",
+      "weight": 2
+    },
+    {
+      "source": "paliperidone",
+      "target": "sertindole",
+      "weight": 2
+    },
+    {
+      "source": "paliperidone",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    },
+    {
+      "source": "paliperidone",
+      "target": "lurasidone",
+      "weight": 2
+    },
+    {
+      "source": "paliperidone",
+      "target": "Olanzapine",
+      "weight": 2
+    },
+    {
+      "source": "paliperidone",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "paliperidone",
+      "target": "haloperidol",
+      "weight": 2
+    },
+    {
+      "source": "paliperidone",
+      "target": "asenapine",
+      "weight": 2
+    },
+    {
+      "source": "paliperidone",
+      "target": "Aripiprazole",
+      "weight": 2
+    },
+    {
+      "source": "paliperidone",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "paliperidone",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "paliperidone",
+      "target": "blood",
+      "weight": 1
+    },
+    {
+      "source": "paliperidone",
+      "target": "Reproducibility of Results",
+      "weight": 1
+    },
+    {
+      "source": "paliperidone",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "paliperidone",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Antipsychotic Agents",
+      "weight": 7
+    },
+    {
+      "source": "Risperidone",
+      "target": "Clozapine",
+      "weight": 6
+    },
+    {
+      "source": "Risperidone",
+      "target": "Olanzapine",
+      "weight": 6
+    },
+    {
+      "source": "Risperidone",
+      "target": "Aripiprazole",
+      "weight": 5
+    },
+    {
+      "source": "Risperidone",
+      "target": "Quetiapine Fumarate",
+      "weight": 4
+    },
+    {
+      "source": "Risperidone",
+      "target": "adverse effects",
+      "weight": 4
+    },
+    {
+      "source": "Risperidone",
+      "target": "haloperidol",
+      "weight": 3
+    },
+    {
+      "source": "Risperidone",
+      "target": "drug therapy",
+      "weight": 3
+    },
+    {
+      "source": "Risperidone",
+      "target": "Paliperidone Palmitate",
+      "weight": 3
+    },
+    {
+      "source": "Risperidone",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "Risperidone",
+      "target": "Piperazines",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "Dibenzothiazepines",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "methods",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "sertindole",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "quetiapine",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "lurasidone",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "asenapine",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "Risperidone",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "blood",
+      "weight": 1
+    },
+    {
+      "source": "Risperidone",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Antipsychotic Agents",
+      "weight": 14
+    },
+    {
+      "source": "drug therapy",
+      "target": "therapeutic use",
+      "weight": 13
+    },
+    {
+      "source": "drug therapy",
+      "target": "Schizophrenia",
+      "weight": 10
+    },
+    {
+      "source": "drug therapy",
+      "target": "adverse effects",
+      "weight": 8
+    },
+    {
+      "source": "drug therapy",
+      "target": "Clozapine",
+      "weight": 5
+    },
+    {
+      "source": "drug therapy",
+      "target": "Olanzapine",
+      "weight": 3
+    },
+    {
+      "source": "drug therapy",
+      "target": "blood",
+      "weight": 3
+    },
+    {
+      "source": "drug therapy",
+      "target": "drug effects",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "Quetiapine Fumarate",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "statistics & numerical data",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 2
+    },
+    {
+      "source": "drug therapy",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Aripiprazole",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Dibenzothiazepines",
+      "weight": 1
+    },
+    {
+      "source": "drug therapy",
+      "target": "Piperazines",
+      "weight": 1
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Clozapine",
+      "weight": 6
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Antipsychotic Agents",
+      "weight": 6
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Aripiprazole",
+      "weight": 4
+    },
+    {
+      "source": "Olanzapine",
+      "target": "adverse effects",
+      "weight": 4
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Quetiapine Fumarate",
+      "weight": 3
+    },
+    {
+      "source": "Olanzapine",
+      "target": "haloperidol",
+      "weight": 3
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Piperazines",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Dibenzothiazepines",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "methods",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "quetiapine",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "sertindole",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "lurasidone",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "asenapine",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Paliperidone Palmitate",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "Olanzapine",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Olanzapine",
+      "target": "blood",
+      "weight": 1
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Olanzapine",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "blood",
+      "target": "Antipsychotic Agents",
+      "weight": 11
+    },
+    {
+      "source": "blood",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 6
+    },
+    {
+      "source": "blood",
+      "target": "methods",
+      "weight": 4
+    },
+    {
+      "source": "blood",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "blood",
+      "target": "Chromatography, Liquid",
+      "weight": 3
+    },
+    {
+      "source": "blood",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "blood",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "blood",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "blood",
+      "target": "Aripiprazole",
+      "weight": 2
+    },
+    {
+      "source": "blood",
+      "target": "Dose-Response Relationship, Drug",
+      "weight": 1
+    },
+    {
+      "source": "blood",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "blood",
+      "target": "asenapine",
+      "weight": 1
+    },
+    {
+      "source": "blood",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "blood",
+      "target": "quetiapine",
+      "weight": 1
+    },
+    {
+      "source": "blood",
+      "target": "lurasidone",
+      "weight": 1
+    },
+    {
+      "source": "blood",
+      "target": "sertindole",
+      "weight": 1
+    },
+    {
+      "source": "blood",
+      "target": "statistics & numerical data",
+      "weight": 1
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Antipsychotic Agents",
+      "weight": 6
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Clozapine",
+      "weight": 4
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "haloperidol",
+      "weight": 3
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Paliperidone Palmitate",
+      "weight": 3
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Quetiapine Fumarate",
+      "weight": 3
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "methods",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Reproducibility of Results",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "asenapine",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "lurasidone",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "quetiapine",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "sertindole",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Chromatography, Liquid",
+      "weight": 2
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Dibenzothiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Aripiprazole",
+      "target": "Piperazines",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "methods",
+      "weight": 3
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 2
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Piperazines",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "asenapine",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "haloperidol",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "lurasidone",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "quetiapine",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "sertindole",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Dibenzothiazepines",
+      "weight": 1
+    },
+    {
+      "source": "Reproducibility of Results",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "statistics & numerical data",
+      "target": "Antipsychotic Agents",
+      "weight": 3
+    },
+    {
+      "source": "statistics & numerical data",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "statistics & numerical data",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "statistics & numerical data",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "statistics & numerical data",
+      "target": "United States Food and Drug Administration",
+      "weight": 1
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "Antipsychotic Agents",
+      "weight": 4
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "adverse effects",
+      "weight": 3
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "therapeutic use",
+      "weight": 3
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "methods",
+      "weight": 2
+    },
+    {
+      "source": "Dose-Response Relationship, Drug",
+      "target": "Schizophrenia",
+      "weight": 2
+    },
+    {
+      "source": "lurasidone",
+      "target": "quetiapine",
+      "weight": 2
+    },
+    {
+      "source": "lurasidone",
+      "target": "sertindole",
+      "weight": 2
+    },
+    {
+      "source": "lurasidone",
+      "target": "Antipsychotic Agents",
+      "weight": 2
+    },
+    {
+      "source": "lurasidone",
+      "target": "haloperidol",
+      "weight": 2
+    },
+    {
+      "source": "lurasidone",
+      "target": "asenapine",
+      "weight": 2
+    },
+    {
+      "source": "lurasidone",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "lurasidone",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "lurasidone",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "lurasidone",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "lurasidone",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "therapeutic use",
+      "weight": 19
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "adverse effects",
+      "weight": 16
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Schizophrenia",
+      "weight": 10
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Clozapine",
+      "weight": 9
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "methods",
+      "weight": 8
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 6
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Chromatography, Liquid",
+      "weight": 5
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "drug effects",
+      "weight": 5
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Quetiapine Fumarate",
+      "weight": 4
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "haloperidol",
+      "weight": 3
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Paliperidone Palmitate",
+      "weight": 3
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Dibenzothiazepines",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "Piperazines",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "sertindole",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "quetiapine",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "asenapine",
+      "weight": 2
+    },
+    {
+      "source": "Antipsychotic Agents",
+      "target": "United States Food and Drug Administration",
+      "weight": 2
+    },
+    {
+      "source": "quetiapine",
+      "target": "sertindole",
+      "weight": 2
+    },
+    {
+      "source": "quetiapine",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "quetiapine",
+      "target": "haloperidol",
+      "weight": 2
+    },
+    {
+      "source": "quetiapine",
+      "target": "asenapine",
+      "weight": 2
+    },
+    {
+      "source": "quetiapine",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "quetiapine",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "quetiapine",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "quetiapine",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Dibenzothiazepines",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "Dibenzothiazepines",
+      "target": "Piperazines",
+      "weight": 2
+    },
+    {
+      "source": "Dibenzothiazepines",
+      "target": "Quetiapine Fumarate",
+      "weight": 2
+    },
+    {
+      "source": "Dibenzothiazepines",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "Dibenzothiazepines",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "Dibenzothiazepines",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "Dibenzothiazepines",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Dibenzothiazepines",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "Dibenzothiazepines",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "haloperidol",
+      "target": "Clozapine",
+      "weight": 3
+    },
+    {
+      "source": "haloperidol",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "haloperidol",
+      "target": "sertindole",
+      "weight": 2
+    },
+    {
+      "source": "haloperidol",
+      "target": "asenapine",
+      "weight": 2
+    },
+    {
+      "source": "haloperidol",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "haloperidol",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "haloperidol",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "haloperidol",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "haloperidol",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "haloperidol",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "haloperidol",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "Quetiapine Fumarate",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "Piperazines",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "methods",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "Piperazines",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "methods",
+      "target": "Chromatography, High Pressure Liquid",
+      "weight": 4
+    },
+    {
+      "source": "methods",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "methods",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "methods",
+      "target": "therapeutic use",
+      "weight": 2
+    },
+    {
+      "source": "methods",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "methods",
+      "target": "Schizophrenia",
+      "weight": 1
+    },
+    {
+      "source": "methods",
+      "target": "asenapine",
+      "weight": 1
+    },
+    {
+      "source": "methods",
+      "target": "sertindole",
+      "weight": 1
+    },
+    {
+      "source": "methods",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "methods",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Chromatography, High Pressure Liquid",
+      "target": "Chromatography, Liquid",
+      "weight": 1
+    },
+    {
+      "source": "Chromatography, High Pressure Liquid",
+      "target": "asenapine",
+      "weight": 1
+    },
+    {
+      "source": "Chromatography, High Pressure Liquid",
+      "target": "Clozapine",
+      "weight": 1
+    },
+    {
+      "source": "Chromatography, High Pressure Liquid",
+      "target": "sertindole",
+      "weight": 1
+    },
+    {
+      "source": "United States Food and Drug Administration",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "United States Food and Drug Administration",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "Chromatography, Liquid",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "Chromatography, Liquid",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Chromatography, Liquid",
+      "target": "Quetiapine Fumarate",
+      "weight": 1
+    },
+    {
+      "source": "Chromatography, Liquid",
+      "target": "therapeutic use",
+      "weight": 1
+    },
+    {
+      "source": "asenapine",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "asenapine",
+      "target": "sertindole",
+      "weight": 2
+    },
+    {
+      "source": "asenapine",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "asenapine",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "therapeutic use",
+      "target": "adverse effects",
+      "weight": 10
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Schizophrenia",
+      "weight": 10
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Clozapine",
+      "weight": 5
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Quetiapine Fumarate",
+      "weight": 3
+    },
+    {
+      "source": "therapeutic use",
+      "target": "Paliperidone Palmitate",
+      "weight": 2
+    },
+    {
+      "source": "therapeutic use",
+      "target": "drug effects",
+      "weight": 2
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "adverse effects",
+      "weight": 7
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Clozapine",
+      "weight": 3
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Quetiapine Fumarate",
+      "weight": 2
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Schizophrenia",
+      "target": "Paliperidone Palmitate",
+      "weight": 1
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Clozapine",
+      "weight": 3
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "Paliperidone Palmitate",
+      "weight": 3
+    },
+    {
+      "source": "Quetiapine Fumarate",
+      "target": "adverse effects",
+      "weight": 2
+    },
+    {
+      "source": "sertindole",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "sertindole",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "sertindole",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "Paliperidone Palmitate",
+      "target": "Clozapine",
+      "weight": 2
+    },
+    {
+      "source": "Paliperidone Palmitate",
+      "target": "adverse effects",
+      "weight": 1
+    },
+    {
+      "source": "Clozapine",
+      "target": "adverse effects",
+      "weight": 5
+    },
+    {
+      "source": "Clozapine",
+      "target": "drug effects",
+      "weight": 1
+    },
+    {
+      "source": "drug effects",
+      "target": "adverse effects",
+      "weight": 4
+    }
+  ]
+}

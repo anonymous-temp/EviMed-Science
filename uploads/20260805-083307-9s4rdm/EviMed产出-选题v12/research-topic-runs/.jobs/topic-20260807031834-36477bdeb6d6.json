@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "kind": "research-topic-selection",
+  "jobId": "topic-20260807031834-36477bdeb6d6",
+  "status": "failed",
+  "request": {
+    "researchDirection": "Aripiprazole therapeutic drug monitoring (TDM) in Chinese psychiatric inpatients: reference-range attainment, dose-normalized concentration variability, active-moiety (dehydroaripiprazole) ratio, antipsychotic polypharmacy with clozapine/paliperidone, and TDM sampling practice (steady-state attainment, sampling-time documentation) in Chinese hospitals",
+    "outputLanguage": "zh"
+  },
+  "workspace": "/data/users/scoping-v12/projects/scoping-v12-0807-031514/workspace",
+  "outputRoot": "/data/users/scoping-v12/projects/scoping-v12-0807-031514/workspace/research-topic-runs/topic-20260807031834-36477bdeb6d6/output",
+  "sourceEvidence": {
+    "algorithm": "sha256",
+    "digest": "aee9870b7aecb34dcc398f3937d82a600cf10215924016b31304e66073c0982f"
+  },
+  "createdAt": "2026-08-07T03:18:34.670564Z",
+  "updatedAt": "2026-08-07T03:21:50.687973Z",
+  "artifacts": [],
+  "workerPid": 252149,
+  "startedAt": "2026-08-07T03:18:35.538299Z",
+  "finishedAt": "2026-08-07T03:21:50.687986Z",
+  "returnCode": 1,
+  "retryable": false,
+  "error": "未检索到相关文献。可能原因：检索词过于具体、术语拼写有误、或该领域文献极少。"
+}

@@ -1,0 +1,13 @@
+source,target,weight,source_freq,target_freq
+Italy,United Kingdom,3,6,6
+Germany,United States,2,3,10
+United Kingdom,United States,2,6,10
+Italy,United States,2,6,10
+China,United States,1,7,10
+Canada,United States,1,2,10
+Spain,United States,1,2,10
+Canada,United Kingdom,1,2,6
+Canada,Italy,1,2,6
+Canada,Spain,1,2,2
+Spain,United Kingdom,1,2,6
+Italy,Spain,1,6,2

@@ -1,0 +1,63 @@
+{
+  "jobId": "topic-20260806140528-3f21404d46f1",
+  "jobStatus": "running",
+  "terminal": false,
+  "provenance": {
+    "tool": "evimed_research_topic_selection",
+    "startedAt": "2026-08-06T14:05:28.890695Z",
+    "updatedAt": "2026-08-06T14:05:29.815273Z",
+    "scope": {
+      "tenantId": "tdm-scoping",
+      "userId": "tdm-scoping",
+      "projectId": "tdmrerun-0806-140512",
+      "workspaceDir": "/workspace"
+    }
+  },
+  "polls": [
+    {"time": "2026-08-06T14:08:39.307436Z", "status": "running", "waitSeconds": 45},
+    {"time": "2026-08-06T14:11:02.281887Z", "status": "running", "waitSeconds": 45},
+    {"time": "2026-08-06T14:13:17.045825Z", "status": "running", "waitSeconds": 45},
+    {"time": "2026-08-06T14:16:57.103386Z", "status": "running", "waitSeconds": 45},
+    {"time": "2026-08-06T14:18:10.942470Z", "status": "running", "waitSeconds": 45},
+    {"time": "2026-08-06T14:19:01.023778Z", "status": "running", "waitSeconds": 45}
+  ],
+  "artifactsReturned": [],
+  "workerLog": {
+    "file": "/workspace/research-topic-runs/.jobs/topic-20260806140528-3f21404d46f1.log",
+    "content": [
+      "matplotlib not available, charts will not be generated",
+      "PubMed 限流(429), 2s 后重试...",
+      "PubMed efetch 限流(429), 2s 后重试..."
+    ],
+    "interpretation": "托管任务 worker 已启动但卡在 PubMed 429 限流重试循环,未产出任何 artifact;任务状态为 running 是限流所致,不代表分析结论。"
+  },
+  "honestStateNote": "托管选题任务在轮询窗口（约14分钟、6次轮询）内未到达终态，updatedAt 未变化，未返回任何中间或最终产物。本报告的科研选题分析（数据逐列剖析、派生量计算、文献调研、可行性量纲计算、课题判定与研究方案）由分析员基于工作区数据集与 EviMed 检索证据独立完成，不以托管任务产物为事实依据。任务状态为 running，不代表其结论。",
+  "evidenceRetrievedDuringTask": {
+    "literatureSearches": 9,
+    "biomedicalSourceSearches": 8,
+    "keyRecords": [
+      "PMID 42392224 (AGNP 2026 update)",
+      "PMID 32433836 (ASCP/AGNP 2020 consensus)",
+      "PMID 28922669 (AGNP 2017 commentary)",
+      "PMID 37315254 (routine psychiatric TDM, C/D framework)",
+      "PMID 34417726 (clozapine C/D, nonadherence filter)",
+      "PMID 36286707 (Chinese olanzapine C/D benchmark 2.73)",
+      "PMID 18641558 (adolescent aripiprazole TDM, r=0.548)",
+      "PMID 19032724 (aripiprazole popPK, CYP2D6)",
+      "PMID 33560096 (metabolic ratio as CYP2D6 PM tool)",
+      "PMID 39996570 (age/sex C/D, 19926 patients)",
+      "PMID 32194411 (sampling-time documentation impact)",
+      "PMID 38446630 (clozapine popPK external validation failure)",
+      "PMID 25569120 (TRIPOD), PMID 38626948 (TRIPOD+AI)",
+      "PMID 39324399 (GARMED trial)",
+      "PMID 40662264, 30604050, 26514968, 21157400, 17828532, 24682161, 31000417, 33851072, 36863030, 32691329, 33615419, 40990036, 31025986"
+    ]
+  },
+  "workspaceArtifacts": [
+    "research-topic-report.md",
+    "tdm_profile.py", "tdm_profile_result.json",
+    "tdm_derived.py", "tdm_derived_result.json",
+    "tdm_dose_timeline.py", "tdm_signal_result.json",
+    "tdm_feasibility.py", "tdm_feasibility_result.json"
+  ]
+}

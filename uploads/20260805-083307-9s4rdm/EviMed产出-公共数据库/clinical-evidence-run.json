@@ -1,0 +1,60 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "在只做回顾性研究、且本院 TDM 数据不再新增任何字段的前提下，把工作区数据集 20260803TDM.xlsx（5 例精神专科住院患者）与公开数据库、文献数据库结合，还能做哪些研究？",
+  "title": "回顾性约束下本院 TDM 数据集与公开数据库、文献数据库结合的研究方向分析报告",
+  "startedAt": "2026-08-05T08:09:41Z",
+  "completedAt": "2026-08-05T08:25:58Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+    "evimed_clinical_trial_search",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC11098931/fulltext.md",
+    ".evimed-sources/PMC8316766/fulltext.md",
+    ".evimed-sources/PMC10820753/fulltext.md",
+    ".evimed-sources/PMC10013164/fulltext.md",
+    ".evimed-sources/PMC7473958/fulltext.md",
+    ".evimed-sources/PMC8230242/fulltext.md",
+    ".evimed-sources/PMC11739097/fulltext.md",
+    ".evimed-sources/PMC9606398/fulltext.md"
+  ],
+  "failedSources": [
+    "PMID:28910830 AGNP 2017 共识（付费墙，无开放获取）",
+    "PMID:32433836 ASCP/AGNP 2020 联合共识（付费墙）",
+    "PMID:31000417 Jukic 2019（付费墙）",
+    "PMID:17164689 Molden 2006（付费墙）",
+    "PMID:17828532 Hendset 2007（付费墙）",
+    "PMID:21157400 Suzuki 2011（付费墙）",
+    "PMID:30604050 Kiss 2019 表型转化（付费墙）",
+    "PMID:33586456 中国健康人 CYP2D6-阿立哌唑（付费墙）",
+    "PMID:29493375 AGNP 共识摘要版（付费墙）",
+    "PMID:24263641 中国 2013 年 TDM 调查（付费墙）",
+    "PMID:30565279 Zhang 2019 荟萃（付费墙，Wiley 403）",
+    "PMID:41848691 氯氮平剂量相关参考范围 2025（付费墙）",
+    "PharmGKB 连接器（source=pharmgkb 与 clinpgx-pharmgkb 均 HTTP 404）",
+    "SIDER 连接器（已验证缓存未安装）",
+    "指南库中文检索未命中精神科 TDM 共识原文（存在性经 Yin 2023 转引确认）"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionOrArithmeticChecks": true,
+    "deduplicationPerformed": true,
+    "patientIdentifiersPseudonymized": true
+  },
+  "stats": {
+    "totalSearches": 17,
+    "recordsIdentified": 286,
+    "recordsAfterDeduplication": 269,
+    "sourcesIncluded": 8,
+    "distinctPreservedSources": 8
+  },
+  "status": "succeeded"
+}

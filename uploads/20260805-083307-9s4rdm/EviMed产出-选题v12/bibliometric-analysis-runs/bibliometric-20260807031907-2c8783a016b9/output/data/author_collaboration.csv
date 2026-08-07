@@ -1,0 +1,93 @@
+source,target,weight,source_freq,target_freq
+Mihara Kazuo,Nakamura Akifumi,6,6,6
+Nakamura Akifumi,Suzuki Takeshi,6,6,6
+Mihara Kazuo,Nagai Goyo,6,6,6
+Nagai Goyo,Nakamura Akifumi,6,6,6
+Kondo Tsuyoshi,Nakamura Akifumi,6,6,6
+Kondo Tsuyoshi,Suzuki Takeshi,6,6,6
+Kondo Tsuyoshi,Nagai Goyo,6,6,6
+Nagai Goyo,Suzuki Takeshi,6,6,6
+Mihara Kazuo,Suzuki Takeshi,6,6,6
+Kondo Tsuyoshi,Mihara Kazuo,6,6,6
+Nakamura Akifumi,Nemoto Kenji,5,6,5
+Kagawa Shoko,Nagai Goyo,5,5,6
+Kagawa Shoko,Nakamura Akifumi,5,5,6
+Kagawa Shoko,Mihara Kazuo,5,5,6
+Nagai Goyo,Nemoto Kenji,5,6,5
+Mihara Kazuo,Nemoto Kenji,5,6,5
+Kagawa Shoko,Kondo Tsuyoshi,5,5,6
+Kagawa Shoko,Nemoto Kenji,5,5,5
+Kondo Tsuyoshi,Nemoto Kenji,5,6,5
+Nemoto Kenji,Suzuki Takeshi,5,5,6
+Kagawa Shoko,Suzuki Takeshi,5,5,6
+Mondelo-García Cristina,Zarra-Ferro Irene,3,3,3
+Koch Birgit C P,de Winter Brenda C M,3,3,3
+Fernández-Ferreiro Anxo,Mondelo-García Cristina,3,3,3
+Fernández-Ferreiro Anxo,Toja-Camba Francisco José,3,3,3
+Mondelo-García Cristina,Toja-Camba Francisco José,3,3,3
+Toja-Camba Francisco José,Zarra-Ferro Irene,3,3,3
+Fernández-Ferreiro Anxo,Zarra-Ferro Irene,3,3,3
+Gründer Gerhard,Hiemke Christoph,3,4,5
+Dierckx Bram,Koch Birgit C P,3,3,3
+Dierckx Bram,de Winter Brenda C M,3,3,3
+Zhang Suo,Zhang Yan,2,2,2
+Hermans Rebecca A,Hillegers Manon H J,2,2,2
+Bandín-Vilar Enrique,Mondelo-García Cristina,2,2,3
+Meng Zhuocheng,Zhang Yan,2,2,2
+Hillegers Manon H J,Koch Birgit C P,2,2,3
+Yang Liu,Zhang Yan,2,2,2
+Bandín-Vilar Enrique,Toja-Camba Francisco José,2,2,3
+Fernández-Ferreiro Anxo,Maroñas Olalla,2,3,2
+Maroñas Olalla,Mondelo-García Cristina,2,2,3
+Maroñas Olalla,Zarra-Ferro Irene,2,2,3
+Fernández-Ferreiro Anxo,Hermelo-Vidal Gonzalo,2,3,2
+Bandín-Vilar Enrique,Fernández-Ferreiro Anxo,2,2,3
+Hermans Rebecca A,Koch Birgit C P,2,2,3
+Hiemke Christoph,Paulzen Michael,2,5,3
+Paulzen Michael,Schoretsanitis Georgios,2,3,2
+Hermelo-Vidal Gonzalo,Toja-Camba Francisco José,2,2,3
+Hermelo-Vidal Gonzalo,Mondelo-García Cristina,2,2,3
+Maroñas Olalla,Toja-Camba Francisco José,2,2,3
+Hermelo-Vidal Gonzalo,Zarra-Ferro Irene,2,2,3
+Dierckx Bram,Hermans Rebecca A,2,3,2
+Hermans Rebecca A,de Winter Brenda C M,2,2,3
+Bandín-Vilar Enrique,Zarra-Ferro Irene,2,2,3
+Ding Jing,Yang Liu,2,2,2
+Ding Jing,Zhang Suo,2,2,2
+Hillegers Manon H J,de Winter Brenda C M,2,2,3
+Dierckx Bram,Hillegers Manon H J,2,3,2
+Haen Ekkehard,Paulzen Michael,2,2,3
+Kloosterboer Sanne M,Koch Birgit C P,2,2,3
+Kloosterboer Sanne M,de Winter Brenda C M,2,2,3
+Hiemke Christoph,Vernaleken Ingo,2,5,2
+Hiemke Christoph,Kirschbaum Katrin M,2,5,2
+Hiemke Christoph,Müller Matthias J,2,5,2
+Ding Jing,Meng Zhuocheng,2,2,2
+Ding Jing,Zhang Yan,2,2,2
+Dierckx Bram,Kloosterboer Sanne M,2,3,2
+Fisher Danielle S,Flanagan Robert J,2,2,2
+Baldelli Sara,Clementi Emilio,2,2,2
+Abad-Santos Francisco,Zubiaur Pablo,2,2,2
+Koller Dora,Zubiaur Pablo,2,2,2
+Meng Zhuocheng,Zhang Suo,2,2,2
+Meng Zhuocheng,Yang Liu,2,2,2
+Yang Liu,Zhang Suo,2,2,2
+Baldelli Sara,Cattaneo Dario,2,2,2
+Abad-Santos Francisco,Koller Dora,2,2,2
+Cattaneo Dario,Clementi Emilio,2,2,2
+Gründer Gerhard,Vernaleken Ingo,2,4,2
+Bandín-Vilar Enrique,Hermelo-Vidal Gonzalo,1,2,2
+Hiemke Christoph,Schoretsanitis Georgios,1,5,2
+Hermelo-Vidal Gonzalo,Maroñas Olalla,1,2,2
+Hermans Rebecca A,Kloosterboer Sanne M,1,2,2
+Haen Ekkehard,Schoretsanitis Georgios,1,2,2
+Hillegers Manon H J,Kloosterboer Sanne M,1,2,2
+Bandín-Vilar Enrique,Maroñas Olalla,1,2,2
+Gründer Gerhard,Haen Ekkehard,1,4,2
+Haen Ekkehard,Hiemke Christoph,1,2,5
+Gründer Gerhard,Paulzen Michael,1,4,3
+Gründer Gerhard,Kirschbaum Katrin M,1,4,2
+Kirschbaum Katrin M,Vernaleken Ingo,1,2,2
+Kirschbaum Katrin M,Müller Matthias J,1,2,2
+Gründer Gerhard,Müller Matthias J,1,4,2
+Müller Matthias J,Vernaleken Ingo,1,2,2

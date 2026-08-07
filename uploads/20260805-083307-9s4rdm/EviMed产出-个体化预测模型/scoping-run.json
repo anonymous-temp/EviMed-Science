@@ -1,0 +1,86 @@
+{
+  "run": {
+    "id": "tdmmodel-0806-093252",
+    "startedAt": "2026-08-06T09:32:52Z",
+    "finishedAt": "2026-08-06T09:46:00Z",
+    "tenantId": "tdm-scoping",
+    "projectId": "tdmmodel-0806-093252"
+  },
+  "priorDataContact": {
+    "writtenBeforeProfiling": true,
+    "filesReceived": ["20260803TDM.xlsx"],
+    "partsInspected": "None at declaration time. No sheet, column, or cell value had been read before Phase 1 profiling. Prior knowledge limited to the file's existence (149,991 bytes) and the researcher's description of five tables and the intended question.",
+    "outcomeDistributionSeen": false,
+    "implication": "Candidate-question selection and feasibility verdicts were formed from the mechanical profile and the literature landscape, not from observed associations. The feasibility matrix and portfolio are a scoping contract, not findings."
+  },
+  "pseudonymizationPolicy": {
+    "subjects": "P1..P5 assigned in stable order: distinct CASE_NO sorted ascending. Source CASE_NO values are used internally for joins but never emitted.",
+    "neverEmitted": ["any value copied from identifier-shaped columns", "case numbers", "admission numbers", "medical record numbers (MED_REC_NO)", "sample numbers (SAMPLENO)", "order/record ids (DOCTOR_ORDER_ID, ORDER_NO, ORDER_SUB_NO, RECORD_ID, DIAGNOSTIC_RECORD_ID)", "unnamed numeric columns", "dates of birth", "names"],
+    "identifiersOfSources": "PMID, PMCID, DOI, DailyMed setids are citations and are emitted as-is.",
+    "audit": "data-profile.py masks IDENTIFIER_ALWAYS_MASK columns and unnamed_* columns; a value-level leak scan across the deliverables found none."
+  },
+  "dataFingerprint": "sha256:5b52d6d8ee644e798e1017b78923004648c6936f7157d401529c163205a8f585",
+  "phases": {
+    "phase0PriorContact": "done",
+    "phase1Profile": "done (5 tables, 93 columns, 9 empty, 20 candidate joins, 1 type conflict; all numbers recomputable via data-profile.py)",
+    "phase2DomainQuantities": "done (5 patients/6 samples; 1 patient with 2 samples, 0 with 3+; no sampling clock time; 1/6 samples steady-state; total aripiprazole C/D 10.7-50.3 incl. decode ambiguity, 10.7-28.9 unambiguous; M/P ratio 0.17-0.49)",
+    "phase3Literature": "done (PubMed/europe-pmc/dailymed/openFDA/guideline; full texts read: TRIPOD+AI editorial, tacrolimus ML, DeepTDM vancomycin, neonatal beta-lactam CDSS; abstracts: Riley series, AGNP, clozapine external eval, IWPC, CYP2D6-aripiprazole, vancomycin pediatric MIPD)",
+    "phase4ExternalLinkage": "done (9 resources; join keys in external-linkage.md)",
+    "phase5Matrix": "done (8 candidate questions; verdicts with named missing fields in feasibility-matrix.md)",
+    "phase6Design": "done (feasible: descriptive C/D audit + conditional external-model MAP demonstration; MDE/CI planning quantities in data-profile.json->planningQuantities)"
+  },
+  "searchRecord": [
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "model-informed precision dosing antipsychotics therapeutic drug monitoring psychiatry", "count": 2, "keyIds": ["35385439", "29194718"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "population pharmacokinetics aripiprazole CYP2D6 Bayesian individual dose", "count": 0, "keyIds": []},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "vancomycin AUC-guided Bayesian dosing population pharmacokinetics precision", "count": 4, "keyIds": ["35170243", "41760398", "40152654", "39647905"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "warfarin pharmacogenetic dosing randomized trial IWPC", "count": 1, "keyIds": ["41321667"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "precision dosing psychiatry psychotropic drugs therapeutic drug monitoring consensus", "count": 3, "keyIds": ["41547365", "41233083", "28437764"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "tacrolimus population pharmacokinetic model external validation kidney transplantation", "count": 20, "keyIds": ["40588615", "38018879", "37328271", "37714740", "31654367", "41599762", "41531243"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "minimum sample size prediction model development Riley events per variable", "count": 0, "keyIds": []},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "TRIPOD AI reporting guideline prediction model", "count": 20, "keyIds": ["38626949", "34244270", "41448505", "41664130"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "AGNP consensus guidelines therapeutic drug monitoring neuropsychopharmacotherapy Hiemke", "count": 3, "keyIds": ["28910830", "42392224", "28922669"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "Riley minimum sample size developing multivariable prediction model", "count": 7, "keyIds": ["30357870", "30347470", "34031906", "36660777"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "Bayesian maximum a posteriori estimation sparse sampling population pharmacokinetic individual prediction", "count": 5, "keyIds": ["38465725", "41358610", "35112390", "8723446"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "machine learning dose individualization prediction clinical decision support", "count": 15, "keyIds": ["38917512", "35228813", "37939541", "41220794", "34170480"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "warfarin genotype-guided dosing pharmacogenetics randomized controlled trial", "count": 15, "keyIds": ["24251363", "32510984", "29986700"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "therapeutic drug monitoring aripiprazole dose normalized concentration CYP2D6 poor metabolizer", "count": 2, "keyIds": ["31637453", "31000417"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "barriers implementation model-informed precision dosing clinical practice adoption", "count": 1, "keyIds": ["41854777"]},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "sample size population pharmacokinetic model building number of subjects observations", "count": 0, "keyIds": []},
+    {"tool": "evimed_literature_search", "source": "pubmed", "query": "Bayesian prior information borrowing external data small sample clinical pharmacology bridging", "count": 0, "keyIds": []},
+    {"tool": "evimed_biomedical_source_search", "source": "europe-pmc", "query": "population pharmacokinetic model aripiprazole", "count": 10, "keyIds": ["42411181", "40845208"]},
+    {"tool": "evimed_biomedical_source_search", "source": "europe-pmc", "query": "dose-normalized concentrations antipsychotics therapeutic drug monitoring database quartiles", "count": 10, "keyIds": ["39487894"]},
+    {"tool": "evimed_biomedical_source_search", "source": "pubmed", "query": "30347470[PMID] OR Riley Part I continuous outcomes", "count": 1, "keyIds": ["30347470"]},
+    {"tool": "evimed_biomedical_source_search", "source": "pubmed", "query": "35385439[PMID] OR clozapine external evaluation", "count": 1, "keyIds": ["35385439"]},
+    {"tool": "evimed_biomedical_source_search", "source": "pubmed", "query": "40152654[PMID] OR vancomycin Vietnamese children Bayesian", "count": 1, "keyIds": ["40152654"]},
+    {"tool": "evimed_biomedical_source_search", "source": "pubmed", "query": "CYP2D6 antipsychotic pharmacogenomics guideline dosing", "count": 4, "keyIds": ["33967790", "24523097", "42442668", "23059146"]},
+    {"tool": "evimed_biomedical_source_search", "source": "pubmed", "query": "International Warfarin Pharmacogenetics Consortium estimation warfarin dose", "count": 4, "keyIds": ["19228618", "28083852"]},
+    {"tool": "evimed_biomedical_source_search", "source": "europe-pmc", "query": "therapeutic reference range aripiprazole 100-350 olanzapine 20-80 clozapine 350-600 AGNP", "count": 3, "keyIds": ["34071813"]},
+    {"tool": "evimed_biomedical_source_search", "source": "europe-pmc", "query": "PMID-queries (Riley 34031906, clozapine, vancomycin)", "count": 0, "keyIds": [], "note": "europe-pmc did not index PMID-prefixed queries; re-run via pubmed connector"},
+    {"tool": "evimed_biomedical_source_search", "source": "dailymed", "query": "aripiprazole", "count": 5, "keyIds": ["1d593ada-256d-4dec-9a26-2a6a67d97205"]},
+    {"tool": "evimed_drug_label_search", "source": "openfda-label", "query": "aripiprazole (US)", "count": 2, "keyIds": ["02a4af27-c83c-4166-950c-7a1cb12d198d", "042b725c-1c17-4cfb-80b2-c841226d795e"]},
+    {"tool": "evimed_open_access_full_text", "identifier": "PMID:38626949", "status": "full text read", "note": "TRIPOD+AI editorial, BMJ 2024;385:q824"},
+    {"tool": "evimed_open_access_full_text", "identifier": "PMID:35228813", "status": "full text read", "note": "tacrolimus ML C0/D, PMC8881964"},
+    {"tool": "evimed_open_access_full_text", "identifier": "PMID:41220794", "status": "full text read", "note": "DeepTDM vancomycin, PMC12599904"},
+    {"tool": "evimed_open_access_full_text", "identifier": "PMID:38917512", "status": "full text read", "note": "neonatal beta-lactam ML CDSS, PMC467072"},
+    {"tool": "evimed_open_access_full_text", "identifier": "PMID:35112390", "status": "failed (not OA; 403)", "note": "MAP Bayesian antipsychotic; cited at bibliographic level only"},
+    {"tool": "evimed_open_access_full_text", "identifier": "PMID:35385439", "status": "failed (not OA)", "note": "clozapine external evaluation; cited from abstract"},
+    {"tool": "evimed_open_access_full_text", "identifier": "PMID:28910830", "status": "failed (not OA)", "note": "AGNP 2017 consensus; cited from abstract"},
+    {"tool": "evimed_guideline_search", "query": "therapeutic drug monitoring psychiatry antipsychotic", "count": 10, "keyIds": ["EVIMED-GUIDE:0..9"], "note": "no AGNP TDM guideline in index; used PubMed consensus instead"}
+  ],
+  "verdicts": [
+    {"question": "A external-model individual Bayesian (MAP) posterior estimation", "verdict": "conditionally feasible (estimation only, not development/validation)", "missingFields": ["sampling clock time", "administration timestamps"]},
+    {"question": "B de-novo population pharmacokinetic model", "verdict": "infeasible", "missingFields": ["patient count (>=100-200)", ">=2-3 timed steady-state samples per patient", "administration event timestamps", "sampling clock time"]},
+    {"question": "C machine-learning dose/concentration prediction", "verdict": "infeasible", "missingFields": ["development cohort (hundreds)", "external validation cohort (>=100-level)", "event timestamps (dose-sampling grid)"]},
+    {"question": "D pharmacogenomic-guided dosing (local modelling)", "verdict": "infeasible locally; external rules applicable without local data", "missingFields": ["CYP2D6/CYP3A4 genotype field"]},
+    {"question": "E concentration-outcome association", "verdict": "infeasible", "missingFields": ["outcome scales (efficacy + ADR)", "event timestamps", "administered dose"]},
+    {"question": "F descriptive C/D audit vs literature", "verdict": "feasible (descriptive only)", "missingFields": []},
+    {"question": "G steady-state/reference-range attainment audit", "verdict": "feasible (descriptive only)", "missingFields": []},
+    {"question": "H adherence-concentration relationship", "verdict": "infeasible", "missingFields": ["administration/adherence records", "sampling clock time"]}
+  ],
+  "completionGates": {
+    "preflightOk": true,
+    "identifiedLeak": false,
+    "postHocPower": false,
+    "notes": "Preflight (2026-08-06, ok:true, 0 issues, 0 warnings): identifier leak scan clean; data-profile.json recomputable from data-profile.py; every infeasible verdict names its missing field; no observed-power computation anywhere (MDE and expected interval widths are reported from closed-form planning quantities in data-profile.json->planningQuantities)."
+  }
+}

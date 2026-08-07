@@ -1,0 +1,11 @@
+source,target,weight,source_freq,target_freq
+Antipsychotic Agents,therapeutic use,2,2,2
+Antipsychotic Agents,Aripiprazole,2,2,2
+Antipsychotic Agents,drug therapy,2,2,2
+Aripiprazole,therapeutic use,2,2,2
+drug therapy,therapeutic use,2,2,2
+Aripiprazole,drug therapy,2,2,2
+Aripiprazole,Drug Monitoring,1,2,2
+Antipsychotic Agents,Drug Monitoring,1,2,2
+Drug Monitoring,therapeutic use,1,2,2
+Drug Monitoring,drug therapy,1,2,2

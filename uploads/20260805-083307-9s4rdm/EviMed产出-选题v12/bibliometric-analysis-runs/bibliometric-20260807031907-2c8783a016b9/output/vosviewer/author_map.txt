@@ -1,0 +1,31 @@
+id	label	x	y	cluster	weight<Occurrences>	weight<Total link strength>
+1	Kagawa Shoko	0.263629	0.039252	3	5	30
+2	Paulzen Michael	0.120581	-0.066141	4	3	7
+3	Toja-Camba Francisco José	-0.562845	-0.785761	1	3	15
+4	Hermans Rebecca A	-0.162335	0.525700	2	2	9
+5	Meng Zhuocheng	0.242623	0.867692	5	2	8
+6	Haen Ekkehard	-0.602635	0.200850	4	2	5
+7	Koch Birgit C P	0.520516	0.347100	2	3	12
+8	Hermelo-Vidal Gonzalo	-0.408251	-0.843332	1	2	10
+9	Nagai Goyo	0.268892	-0.219832	3	6	34
+10	Fernández-Ferreiro Anxo	-0.277090	-0.669359	1	3	15
+11	Suzuki Takeshi	0.440316	-0.321697	3	6	34
+12	Zarra-Ferro Irene	-0.612236	-0.634866	1	3	15
+13	Dierckx Bram	0.097902	0.911716	2	3	12
+14	de Winter Brenda C M	0.085993	0.609400	2	3	12
+15	Mondelo-García Cristina	-0.103385	-0.886095	1	3	15
+16	Gründer Gerhard	0.250894	-0.737904	4	4	5
+17	Nemoto Kenji	0.057466	-0.122538	3	5	30
+18	Kloosterboer Sanne M	0.710920	0.700319	2	2	8
+19	Mihara Kazuo	0.200248	-0.366129	3	6	34
+20	Maroñas Olalla	0.187531	-0.580349	1	2	10
+21	Kondo Tsuyoshi	0.060317	-0.258348	3	6	34
+22	Bandín-Vilar Enrique	-0.626712	-0.184127	1	2	10
+23	Yang Liu	-0.365145	0.883550	5	2	8
+24	Ding Jing	0.151939	0.700981	5	2	8
+25	Schoretsanitis Georgios	-0.226535	-0.852846	4	2	4
+26	Nakamura Akifumi	0.455507	-0.151101	3	6	34
+27	Hillegers Manon H J	0.536276	0.901651	2	2	9
+28	Zhang Yan	0.113591	1.000000	5	2	8
+29	Hiemke Christoph	-0.379089	-0.440821	4	5	7
+30	Zhang Suo	-0.438883	0.433033	5	2	8

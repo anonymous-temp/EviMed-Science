@@ -1,0 +1,12 @@
+source,target,weight,source_freq,target_freq
+Germany,United States,2,9,8
+Switzerland,United States,2,3,8
+Germany,Switzerland,2,9,3
+Italy,United Kingdom,2,7,5
+Italy,United States,1,7,8
+Italy,Switzerland,1,7,3
+Germany,Italy,1,9,7
+China,Japan,1,10,11
+Germany,Japan,1,9,11
+Germany,Spain,1,9,7
+Belgium,United States,1,2,8

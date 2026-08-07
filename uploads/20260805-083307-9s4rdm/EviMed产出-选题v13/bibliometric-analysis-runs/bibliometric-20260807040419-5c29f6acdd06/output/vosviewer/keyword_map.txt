@@ -1,0 +1,51 @@
+id	label	x	y	cluster	weight<Occurrences>	weight<Total link strength>
+1	Weight Gain	-0.162588	0.521452	1	3	28
+2	chemistry	0.534923	0.405354	2	3	32
+3	chemically induced	-0.537215	-0.300740	1	5	37
+4	metabolism	-0.181237	0.196547	2	4	42
+5	Amisulpride	0.281326	0.400777	3	4	66
+6	Drug Interactions	-0.713522	0.099665	1	3	19
+7	administration & dosage	-0.146737	-0.546910	1	6	45
+8	pharmacology	-0.483449	-0.629307	1	3	17
+9	Drug Monitoring	-0.032831	-0.236294	2	13	98
+10	Tandem Mass Spectrometry	0.287809	0.006954	2	11	97
+11	Psychotic Disorders	0.134349	-0.976165	1	2	9
+12	antipsychotic	-0.804328	-0.331339	1	2	14
+13	therapeutic drug monitoring	0.084371	0.029607	2	8	67
+14	antipsychotic drugs	-0.404535	0.419173	3	3	22
+15	Quality Control	0.467328	-0.347041	2	2	28
+16	Databases, Factual	-0.106319	-0.734343	1	3	25
+17	epidemiology	-0.422237	-0.134546	1	4	39
+18	iloperidone	0.648238	0.338474	3	2	36
+19	Antipsychotics	0.198698	-0.253624	2	10	76
+20	Benzodiazepines	0.294009	0.241093	3	3	42
+21	pharmacokinetics	-0.322211	-0.264970	1	8	55
+22	atypical antipsychotics	-0.840321	0.024203	1	3	17
+23	paliperidone	0.443551	0.543654	3	2	36
+24	Risperidone	-0.013886	0.287524	3	7	92
+25	drug therapy	-0.250468	-0.136881	1	14	103
+26	Olanzapine	0.061988	0.345805	3	6	84
+27	blood	0.121575	-0.187328	2	11	88
+28	Aripiprazole	0.217017	0.307076	3	6	82
+29	Reproducibility of Results	0.001803	0.129009	2	3	45
+30	statistics & numerical data	-0.587678	-0.683782	1	3	21
+31	Dose-Response Relationship, Drug	-0.393827	-0.499496	1	4	31
+32	lurasidone	0.666824	0.174314	3	2	36
+33	Antipsychotic Agents	-0.032502	-0.064801	1	34	259
+34	quetiapine	0.334334	0.588391	3	2	36
+35	Dibenzothiazepines	0.022886	0.703641	3	2	27
+36	haloperidol	0.436858	0.070992	3	3	51
+37	Piperazines	-0.222032	0.619439	3	2	27
+38	methods	0.177273	-0.107270	2	8	79
+39	Chromatography, High Pressure Liquid	0.504793	-0.134079	2	6	55
+40	United States Food and Drug Administration	-0.268664	-1.000000	1	2	11
+41	Chromatography, Liquid	0.501852	0.220400	2	5	41
+42	asenapine	0.390088	-0.160776	3	2	36
+43	therapeutic use	-0.164758	-0.186534	1	19	132
+44	Schizophrenia	-0.331395	0.010953	1	10	85
+45	Quetiapine Fumarate	0.141307	0.260406	3	4	50
+46	sertindole	0.101107	0.522515	3	2	36
+47	Paliperidone Palmitate	0.406607	0.168192	3	3	38
+48	Clozapine	0.135928	0.111186	3	10	101
+49	drug effects	-0.000440	0.205245	1	5	35
+50	adverse effects	-0.173660	-0.035815	1	16	122

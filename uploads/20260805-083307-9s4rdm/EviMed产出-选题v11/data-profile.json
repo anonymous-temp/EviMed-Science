@@ -1,0 +1,3800 @@
+{
+  "joins": [
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#体征.CASE_NO",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#医嘱记录.CASE_NO"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#体征.CASE_NO",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#检验.CASE_NO"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#体征.CASE_NO",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#病案首页.CASE_NO"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#体征.CASE_NO",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#诊断记录.CASE_NO"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#体征.PATIENT_ID",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#医嘱记录.PATIENT_ID"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#体征.PATIENT_ID",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#检验.PATIENT_ID"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#体征.PATIENT_ID",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#病案首页.PATIENT_ID"
+    },
+    {
+      "containment": 0.0,
+      "left": "20260803TDM.xlsx#体征.PATIENT_ID",
+      "reachable": false,
+      "reason": "one side has no values at all",
+      "right": "20260803TDM.xlsx#诊断记录.PATIENT_ID"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#医嘱记录.CASE_NO",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#检验.CASE_NO"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#医嘱记录.CASE_NO",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#病案首页.CASE_NO"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#医嘱记录.CASE_NO",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#诊断记录.CASE_NO"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#医嘱记录.PATIENT_ID",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#检验.PATIENT_ID"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#医嘱记录.PATIENT_ID",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#病案首页.PATIENT_ID"
+    },
+    {
+      "containment": 0.0,
+      "left": "20260803TDM.xlsx#医嘱记录.PATIENT_ID",
+      "reachable": false,
+      "reason": "one side has no values at all",
+      "right": "20260803TDM.xlsx#诊断记录.PATIENT_ID"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#检验.CASE_NO",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#病案首页.CASE_NO"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#检验.CASE_NO",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#诊断记录.CASE_NO"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#检验.PATIENT_ID",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#病案首页.PATIENT_ID"
+    },
+    {
+      "containment": 0.0,
+      "left": "20260803TDM.xlsx#检验.PATIENT_ID",
+      "reachable": false,
+      "reason": "one side has no values at all",
+      "right": "20260803TDM.xlsx#诊断记录.PATIENT_ID"
+    },
+    {
+      "containment": 1.0,
+      "left": "20260803TDM.xlsx#病案首页.CASE_NO",
+      "reachable": true,
+      "reason": "",
+      "right": "20260803TDM.xlsx#诊断记录.CASE_NO"
+    },
+    {
+      "containment": 0.0,
+      "left": "20260803TDM.xlsx#病案首页.PATIENT_ID",
+      "reachable": false,
+      "reason": "one side has no values at all",
+      "right": "20260803TDM.xlsx#诊断记录.PATIENT_ID"
+    }
+  ],
+  "schemaVersion": 1,
+  "tables": [
+    {
+      "columns": [
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "ID",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "PATIENT_ID",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "CASE_NO",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "CURRENT_TIMES",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "1",
+                1
+              ],
+              [
+                "19",
+                1
+              ],
+              [
+                "2",
+                1
+              ],
+              [
+                "3",
+                1
+              ],
+              [
+                "4",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 2,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "SEX",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "2",
+                4
+              ],
+              [
+                "1",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "text",
+          "name": "AGE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "21岁",
+                1
+              ],
+              [
+                "23岁",
+                1
+              ],
+              [
+                "26岁",
+                1
+              ],
+              [
+                "29岁",
+                1
+              ],
+              [
+                "56岁",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.0,
+          "distinct": 0,
+          "filled": 0,
+          "inferredType": "empty",
+          "name": "AGE_UNIT",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "date",
+          "name": "BIRTHDATE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.8,
+          "distinct": 1,
+          "filled": 4,
+          "inferredType": "text",
+          "name": "NATIONALS",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "汉族",
+                4
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 3,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "BLOOD_TYPE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "6",
+                3
+              ],
+              [
+                "2",
+                1
+              ],
+              [
+                "3",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 2,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "BLOOD_RH",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "4",
+                3
+              ],
+              [
+                "2",
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "MED_REC_NO",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "date",
+          "name": "IN_DATE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "25/12/2020 11:40:02",
+                1
+              ],
+              [
+                "25/12/2020 13:56:19",
+                1
+              ],
+              [
+                "27/2/2021 10:54:25",
+                1
+              ],
+              [
+                "28/11/2020 11:19:14",
+                1
+              ],
+              [
+                "4/3/2021 21:29:49",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 3,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "ADM_DEPT_CODE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "1014007",
+                3
+              ],
+              [
+                "1014001",
+                1
+              ],
+              [
+                "1014004",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 3,
+          "filled": 5,
+          "inferredType": "text",
+          "name": "ADM_DEPT_NAME",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "医学观察病房(闲林)(历史)",
+                3
+              ],
+              [
+                "精一科病房(闲林)",
+                1
+              ],
+              [
+                "精四科病房(闲林)",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 1,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "ADM_WAY",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "2",
+                5
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 1,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "CONDITION_STATUS",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "3",
+                5
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "text",
+          "name": "OUTP_DIAGNOSIS_NAME",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "双相情感障碍",
+                1
+              ],
+              [
+                "双相情感障碍,目前为轻躁狂发作",
+                1
+              ],
+              [
+                "未分化型精神分裂症",
+                1
+              ],
+              [
+                "癫病",
+                1
+              ],
+              [
+                "郁病",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "text",
+          "name": "OUTP_DIAGNOSIS_CODE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "BNG110",
+                1
+              ],
+              [
+                "BNX071",
+                1
+              ],
+              [
+                "F20.300",
+                1
+              ],
+              [
+                "F31.000x001",
+                1
+              ],
+              [
+                "F31.900x001",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.0,
+          "distinct": 0,
+          "filled": 0,
+          "inferredType": "empty",
+          "name": "PATHOLOGY_DIAGNOSIS_CODE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.0,
+          "distinct": 0,
+          "filled": 0,
+          "inferredType": "empty",
+          "name": "PATHOLOGY_DIAGNOSIS_NAME",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "text",
+          "name": "MAIN_DIAGNOSIS_CODE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "F20.300",
+                1
+              ],
+              [
+                "F20.400",
+                1
+              ],
+              [
+                "F31.000",
+                1
+              ],
+              [
+                "F31.500x001",
+                1
+              ],
+              [
+                "Z03.200",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "text",
+          "name": "MAIN_DIAGNOSIS_NAME",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "双相情感障碍,目前为伴有精神病性症状的重度抑郁发作",
+                1
+              ],
+              [
+                "双相情感障碍，目前为轻躁狂发作",
+                1
+              ],
+              [
+                "可疑精神和行为障碍的观察",
+                1
+              ],
+              [
+                "未分化型精神分裂症",
+                1
+              ],
+              [
+                "精神分裂症后抑郁",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 1,
+            "examples": [
+              "B18.101|E22.100x001|F41.900|G24.901|H11.300|K72.905"
+            ]
+          },
+          "densityCompleteness": 0.8,
+          "distinct": 4,
+          "filled": 4,
+          "inferredType": "text",
+          "name": "OTHER_DIAGNOSIS_CODE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "B18.101|E22.100x001|F41.900|G24.901|H11.300|K72.905",
+                1
+              ],
+              [
+                "E87.600",
+                1
+              ],
+              [
+                "F41.101",
+                1
+              ],
+              [
+                "G24.900x003",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 1,
+            "examples": [
+              "迟发性运动障碍|肝功能不全|高泌乳素血症|焦虑障碍|慢性活动型乙型病毒性肝炎|右眼 结膜出血"
+            ]
+          },
+          "densityCompleteness": 0.8,
+          "distinct": 4,
+          "filled": 4,
+          "inferredType": "text",
+          "name": "OTHER_DIAGNOSIS_NAME",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "低钾血症",
+                1
+              ],
+              [
+                "焦虑状态",
+                1
+              ],
+              [
+                "肌张力障碍",
+                1
+              ],
+              [
+                "迟发性运动障碍|肝功能不全|高泌乳素血症|焦虑障碍|慢性活动型乙型病毒性肝炎|右眼 结膜出血",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "date",
+          "name": "DIS_DATE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "12/1/2021 11:36:46",
+                1
+              ],
+              [
+                "16/1/2021 09:35:44",
+                1
+              ],
+              [
+                "16/3/2021 15:06:16",
+                1
+              ],
+              [
+                "19/3/2021 10:08:44",
+                1
+              ],
+              [
+                "22/1/2021 09:04:17",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 4,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "DIS_DEPT_CODE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "1014004",
+                2
+              ],
+              [
+                "1002047",
+                1
+              ],
+              [
+                "1012004",
+                1
+              ],
+              [
+                "1014001",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 4,
+          "filled": 5,
+          "inferredType": "text",
+          "name": "DIS_DEPT_NAME",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "精四科病房(闲林)",
+                2
+              ],
+              [
+                "心身二科(闲林)(历史)",
+                1
+              ],
+              [
+                "精一科病房(闲林)",
+                1
+              ],
+              [
+                "综合内科病房(闲林)(历史)",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 1,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "DIS_WAY",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "1",
+                5
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 1,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "DIS_RESULT",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "0",
+                5
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "DAY_TOTAL",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "15",
+                1
+              ],
+              [
+                "17",
+                1
+              ],
+              [
+                "18",
+                1
+              ],
+              [
+                "28",
+                1
+              ],
+              [
+                "49",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 1,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "DRUG_ALLERGY_MARK",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "1",
+                5
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.0,
+          "distinct": 0,
+          "filled": 0,
+          "inferredType": "empty",
+          "name": "DRUG_ALLERGENS_NAME",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 2,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "PAY_TYPE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "2",
+                3
+              ],
+              [
+                "1",
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 1,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "REIN_AFTER31_MARK",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "1",
+                5
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 1,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "MED_REC_QUALITY",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "1",
+                5
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "date",
+          "name": "MED_REC_DATE",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "13/1/2021",
+                1
+              ],
+              [
+                "16/1/2021",
+                1
+              ],
+              [
+                "17/3/2021",
+                1
+              ],
+              [
+                "19/3/2021",
+                1
+              ],
+              [
+                "22/1/2021",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "number",
+          "name": "FEE_TOTAL",
+          "rows": 5,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "10402.75",
+                1
+              ],
+              [
+                "11774.65",
+                1
+              ],
+              [
+                "21020.07",
+                1
+              ],
+              [
+                "29185.157",
+                1
+              ],
+              [
+                "8674.16",
+                1
+              ]
+            ]
+          }
+        }
+      ],
+      "name": "20260803TDM.xlsx#病案首页",
+      "rows": 5,
+      "sourceFile": "20260803TDM.xlsx",
+      "sourceFingerprint": "sha256:5b52d6d8ee644e798e1017b78923004648c6936f7157d401529c163205a8f585"
+    },
+    {
+      "columns": [
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 915,
+          "filled": 915,
+          "inferredType": "integer",
+          "name": "DOCTOR_ORDER_ID",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 915,
+          "inferredType": "integer",
+          "name": "PATIENT_ID",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 915,
+          "inferredType": "integer",
+          "name": "CASE_NO",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 915,
+          "filled": 915,
+          "inferredType": "integer",
+          "name": "ORDER_NO",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 554,
+          "filled": 915,
+          "inferredType": "integer",
+          "name": "ORDER_SUB_NO",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 2,
+          "filled": 915,
+          "inferredType": "integer",
+          "name": "LONG_D_NO",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "0",
+                629
+              ],
+              [
+                "1",
+                286
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 915,
+          "inferredType": "integer",
+          "name": "ORDER_TYPE",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "1",
+                497
+              ],
+              [
+                "2",
+                268
+              ],
+              [
+                "4",
+                104
+              ],
+              [
+                "5",
+                26
+              ],
+              [
+                "3",
+                20
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 7,
+            "examples": [
+              "拔罐疗法(真空拔罐)（3罐/次）",
+              "静脉输液（住院/不含输液器）"
+            ]
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 275,
+          "filled": 915,
+          "inferredType": "text",
+          "name": "ORDER_CONTENT",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": false,
+            "values": [
+              [
+                "一般专项护理",
+                21
+              ],
+              [
+                "石菖蒲",
+                17
+              ],
+              [
+                "珍珠母(J)[煅珍珠母(J)]",
+                13
+              ],
+              [
+                "薄荷(J)",
+                13
+              ],
+              [
+                "制远志[远志]",
+                12
+              ],
+              [
+                "阿立哌唑口崩片(国产)[博思清]",
+                12
+              ],
+              [
+                "决明子",
+                10
+              ],
+              [
+                "北柴胡[柴胡]",
+                10
+              ],
+              [
+                "玫瑰花",
+                10
+              ],
+              [
+                "碳酸锂缓释片",
+                10
+              ],
+              [
+                "穴位贴敷治疗",
+                10
+              ],
+              [
+                "菊花[白菊花]",
+                10
+              ],
+              [
+                "首乌藤[夜交藤]",
+                10
+              ],
+              [
+                "刺五加",
+                9
+              ],
+              [
+                "合欢花[合欢米]",
+                9
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.9967,
+          "distinct": 5,
+          "filled": 912,
+          "inferredType": "text",
+          "name": "OPEN_DEPT_NAME",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "精四科病房(闲林)",
+                335
+              ],
+              [
+                "医学观察病房(闲林)(历史)",
+                195
+              ],
+              [
+                "心身二科(闲林)(历史)",
+                162
+              ],
+              [
+                "综合内科病房(闲林)(历史)",
+                118
+              ],
+              [
+                "精一科病房(闲林)",
+                102
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.5432,
+          "distinct": 130,
+          "filled": 497,
+          "inferredType": "integer",
+          "name": "DRUG_CODE",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": false,
+            "values": [
+              [
+                "6803",
+                17
+              ],
+              [
+                "6770",
+                16
+              ],
+              [
+                "7095",
+                13
+              ],
+              [
+                "7140",
+                13
+              ],
+              [
+                "6715",
+                10
+              ],
+              [
+                "6783",
+                10
+              ],
+              [
+                "6895",
+                10
+              ],
+              [
+                "6962",
+                10
+              ],
+              [
+                "7255",
+                10
+              ],
+              [
+                "12310",
+                9
+              ],
+              [
+                "12875",
+                9
+              ],
+              [
+                "17779",
+                9
+              ],
+              [
+                "6680",
+                9
+              ],
+              [
+                "6729",
+                9
+              ],
+              [
+                "6758",
+                9
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.5432,
+          "distinct": 120,
+          "filled": 497,
+          "inferredType": "text",
+          "name": "DRUG_NAME",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": false,
+            "values": [
+              [
+                "石菖蒲",
+                17
+              ],
+              [
+                "珍珠母(J)",
+                13
+              ],
+              [
+                "薄荷(J)",
+                13
+              ],
+              [
+                "制远志",
+                12
+              ],
+              [
+                "决明子",
+                10
+              ],
+              [
+                "北柴胡",
+                10
+              ],
+              [
+                "夜交藤",
+                10
+              ],
+              [
+                "玫瑰花",
+                10
+              ],
+              [
+                "碳酸锂缓释片",
+                10
+              ],
+              [
+                "菊花",
+                10
+              ],
+              [
+                "阿立哌唑口崩片(国产)",
+                10
+              ],
+              [
+                "刺五加",
+                9
+              ],
+              [
+                "合欢花",
+                9
+              ],
+              [
+                "当归",
+                9
+              ],
+              [
+                "绿梅花",
+                9
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 34,
+          "filled": 915,
+          "inferredType": "number",
+          "name": "AMOUNT",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": false,
+            "values": [
+              [
+                "1",
+                399
+              ],
+              [
+                "10",
+                90
+              ],
+              [
+                "15",
+                88
+              ],
+              [
+                "12",
+                47
+              ],
+              [
+                "30",
+                43
+              ],
+              [
+                "9",
+                31
+              ],
+              [
+                "2",
+                28
+              ],
+              [
+                "20",
+                27
+              ],
+              [
+                "5",
+                25
+              ],
+              [
+                "6",
+                22
+              ],
+              [
+                "0.3",
+                19
+              ],
+              [
+                "3",
+                16
+              ],
+              [
+                "500",
+                14
+              ],
+              [
+                "25",
+                11
+              ],
+              [
+                "0.5",
+                8
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 6,
+          "filled": 915,
+          "inferredType": "text",
+          "name": "UNIT",
+          "rows": 915,
+          "sentinelSuspects": [
+            "无"
+          ],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "无",
+                418
+              ],
+              [
+                "g",
+                389
+              ],
+              [
+                "mg",
+                81
+              ],
+              [
+                "ml",
+                24
+              ],
+              [
+                "支",
+                2
+              ],
+              [
+                "瓶",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 13,
+            "examples": [
+              "0.1g/2ml*1支",
+              "0.3mg/1ml*1支",
+              "1.0g/5ml*1支"
+            ]
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 53,
+          "filled": 915,
+          "inferredType": "text",
+          "name": "DRUG_SPEC",
+          "rows": 915,
+          "sentinelSuspects": [
+            "无"
+          ],
+          "vocabulary": {
+            "complete": false,
+            "identifying": false,
+            "values": [
+              [
+                "无",
+                418
+              ],
+              [
+                "*1g",
+                326
+              ],
+              [
+                "1g",
+                28
+              ],
+              [
+                "5mg*1片",
+                10
+              ],
+              [
+                "25mg*1",
+                9
+              ],
+              [
+                "0.3g*1",
+                7
+              ],
+              [
+                "0.5mg*1片",
+                7
+              ],
+              [
+                "0.3g*30片",
+                6
+              ],
+              [
+                "10% 10ml*1支",
+                6
+              ],
+              [
+                "2mg*1",
+                5
+              ],
+              [
+                "5.00% 500ml*1袋",
+                5
+              ],
+              [
+                "500mg*1粒",
+                5
+              ],
+              [
+                "0.1g/2ml*1支",
+                4
+              ],
+              [
+                "0.3g*1片",
+                4
+              ],
+              [
+                "1.0g/5ml*1支",
+                4
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 33,
+          "filled": 915,
+          "inferredType": "number",
+          "name": "DOSAGE",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": false,
+            "values": [
+              [
+                "0",
+                418
+              ],
+              [
+                "10",
+                89
+              ],
+              [
+                "15",
+                88
+              ],
+              [
+                "12",
+                47
+              ],
+              [
+                "30",
+                43
+              ],
+              [
+                "9",
+                31
+              ],
+              [
+                "20",
+                27
+              ],
+              [
+                "5",
+                24
+              ],
+              [
+                "6",
+                22
+              ],
+              [
+                "0.3",
+                19
+              ],
+              [
+                "2",
+                14
+              ],
+              [
+                "3",
+                14
+              ],
+              [
+                "500",
+                14
+              ],
+              [
+                "25",
+                11
+              ],
+              [
+                "0.5",
+                8
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 6,
+          "filled": 915,
+          "inferredType": "text",
+          "name": "DOSAGE_UNIT",
+          "rows": 915,
+          "sentinelSuspects": [
+            "无"
+          ],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "无",
+                418
+              ],
+              [
+                "g",
+                389
+              ],
+              [
+                "mg",
+                81
+              ],
+              [
+                "ml",
+                24
+              ],
+              [
+                "支",
+                2
+              ],
+              [
+                "瓶",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 30,
+          "filled": 915,
+          "inferredType": "text",
+          "name": "FREQUENCY",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "ONCE",
+                629
+              ],
+              [
+                "QD",
+                82
+              ],
+              [
+                "ALWAYS",
+                40
+              ],
+              [
+                "QN",
+                33
+              ],
+              [
+                "W4D8",
+                18
+              ],
+              [
+                "BID4",
+                11
+              ],
+              [
+                "QOD",
+                11
+              ],
+              [
+                "BID",
+                10
+              ],
+              [
+                "W5D8",
+                9
+              ],
+              [
+                "QD12",
+                8
+              ],
+              [
+                "W1D8",
+                7
+              ],
+              [
+                "W2D8",
+                7
+              ],
+              [
+                "W3D8",
+                7
+              ],
+              [
+                "W5D",
+                6
+              ],
+              [
+                "BID8",
+                5
+              ],
+              [
+                "QD15",
+                4
+              ],
+              [
+                "QD9",
+                4
+              ],
+              [
+                "TID",
+                4
+              ],
+              [
+                "TID4",
+                4
+              ],
+              [
+                "QD16",
+                3
+              ],
+              [
+                "BID5",
+                2
+              ],
+              [
+                "PRN",
+                2
+              ],
+              [
+                "W1D",
+                2
+              ],
+              [
+                "ALWAYS1",
+                1
+              ],
+              [
+                "BID1",
+                1
+              ],
+              [
+                "QD11",
+                1
+              ],
+              [
+                "QD20",
+                1
+              ],
+              [
+                "W2D",
+                1
+              ],
+              [
+                "W2D1",
+                1
+              ],
+              [
+                "W6D8",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 15,
+          "filled": 915,
+          "inferredType": "text",
+          "name": "MEDICATION_WAY",
+          "rows": 915,
+          "sentinelSuspects": [
+            "无"
+          ],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "无",
+                314
+              ],
+              [
+                "外用",
+                216
+              ],
+              [
+                "煎服",
+                116
+              ],
+              [
+                "化验",
+                104
+              ],
+              [
+                "口服",
+                79
+              ],
+              [
+                "出院带药",
+                25
+              ],
+              [
+                "副药",
+                19
+              ],
+              [
+                "先煎",
+                12
+              ],
+              [
+                "静滴",
+                12
+              ],
+              [
+                "另包",
+                9
+              ],
+              [
+                "领药",
+                4
+              ],
+              [
+                "退药",
+                2
+              ],
+              [
+                "冲服",
+                1
+              ],
+              [
+                "塞肛",
+                1
+              ],
+              [
+                "肌注+注射器5ml",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 197,
+          "filled": 915,
+          "inferredType": "date",
+          "name": "START_DATETIME",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": false,
+            "values": [
+              [
+                "28/11/2020 15:25:00",
+                35
+              ],
+              [
+                "9/1/2021 14:37:30",
+                35
+              ],
+              [
+                "25/12/2020 14:07:00",
+                34
+              ],
+              [
+                "18/1/2021 07:59:01",
+                33
+              ],
+              [
+                "17/12/2020 10:11:00",
+                32
+              ],
+              [
+                "8/3/2021 15:09:00",
+                32
+              ],
+              [
+                "1/1/2021 10:55:00",
+                29
+              ],
+              [
+                "3/1/2021 09:25:41",
+                29
+              ],
+              [
+                "4/3/2021 22:07:00",
+                29
+              ],
+              [
+                "27/2/2021 11:05:00",
+                22
+              ],
+              [
+                "5/12/2020 13:01:00",
+                22
+              ],
+              [
+                "11/1/2021 09:10:32",
+                18
+              ],
+              [
+                "19/1/2021 08:06:11",
+                18
+              ],
+              [
+                "25/12/2020 12:19:00",
+                18
+              ],
+              [
+                "8/3/2021 15:11:00",
+                18
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 149,
+          "filled": 915,
+          "inferredType": "text",
+          "name": "END_DATETIME",
+          "rows": 915,
+          "sentinelSuspects": [
+            "0/0/0 00:00:00"
+          ],
+          "vocabulary": {
+            "complete": false,
+            "identifying": false,
+            "values": [
+              [
+                "0/0/0 00:00:00",
+                105
+              ],
+              [
+                "22/1/2021 08:00:00",
+                39
+              ],
+              [
+                "16/1/2021 09:24:00",
+                35
+              ],
+              [
+                "28/11/2020 15:25:00",
+                35
+              ],
+              [
+                "9/1/2021 14:37:30",
+                35
+              ],
+              [
+                "12/1/2021 11:16:00",
+                34
+              ],
+              [
+                "17/12/2020 08:39:00",
+                33
+              ],
+              [
+                "18/1/2021 07:59:01",
+                33
+              ],
+              [
+                "8/3/2021 15:09:00",
+                32
+              ],
+              [
+                "3/1/2021 09:25:41",
+                29
+              ],
+              [
+                "1/1/2021 07:50:00",
+                25
+              ],
+              [
+                "16/3/2021 15:00:00",
+                23
+              ],
+              [
+                "19/3/2021 09:52:00",
+                23
+              ],
+              [
+                "11/1/2021 09:10:32",
+                18
+              ],
+              [
+                "19/1/2021 08:06:11",
+                18
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 2,
+          "filled": 915,
+          "inferredType": "integer",
+          "name": "DRUG_FLAG",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "1",
+                497
+              ],
+              [
+                "0",
+                418
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 2,
+          "filled": 915,
+          "inferredType": "text",
+          "name": "ORDER_STATE",
+          "rows": 915,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "已停止",
+                913
+              ],
+              [
+                "已作废",
+                2
+              ]
+            ]
+          }
+        }
+      ],
+      "name": "20260803TDM.xlsx#医嘱记录",
+      "rows": 915,
+      "sourceFile": "20260803TDM.xlsx",
+      "sourceFingerprint": "sha256:5b52d6d8ee644e798e1017b78923004648c6936f7157d401529c163205a8f585"
+    },
+    {
+      "columns": [
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 22,
+          "inferredType": "integer",
+          "name": "PATIENT_ID",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 22,
+          "inferredType": "integer",
+          "name": "CASE_NO",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 22,
+          "inferredType": "integer",
+          "name": "AGE",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "29",
+                6
+              ],
+              [
+                "56",
+                6
+              ],
+              [
+                "21",
+                4
+              ],
+              [
+                "23",
+                3
+              ],
+              [
+                "26",
+                3
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 3,
+          "filled": 22,
+          "inferredType": "text",
+          "name": "TEST_PURPOSE",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "阿立哌唑",
+                12
+              ],
+              [
+                "阿立哌唑+氯硝西泮+帕利哌酮（帕潘立酮）+氯氮平",
+                6
+              ],
+              [
+                "阿立哌唑+奥氮平",
+                4
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 6,
+          "filled": 22,
+          "inferredType": "date",
+          "name": "APPLY_DATE",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "25/12/2020",
+                6
+              ],
+              [
+                "27/2/2021",
+                4
+              ],
+              [
+                "1/1/2021",
+                3
+              ],
+              [
+                "17/3/2021",
+                3
+              ],
+              [
+                "18/12/2020",
+                3
+              ],
+              [
+                "3/1/2021",
+                3
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 22,
+          "inferredType": "date",
+          "name": "TEST_DATE",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "30/12/2020",
+                6
+              ],
+              [
+                "4/1/2021",
+                6
+              ],
+              [
+                "1/3/2021",
+                4
+              ],
+              [
+                "19/3/2021",
+                3
+              ],
+              [
+                "21/12/2020",
+                3
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 6,
+          "filled": 22,
+          "inferredType": "text",
+          "name": "SAMPLENO",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 22,
+          "inferredType": "text",
+          "name": "DEPT_NAME",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "闲1-2南病区",
+                6
+              ],
+              [
+                "闲1-6北病区",
+                6
+              ],
+              [
+                "闲1-2北病区",
+                4
+              ],
+              [
+                "闲1-5北病区",
+                3
+              ],
+              [
+                "闲3-1、2病区",
+                3
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 7,
+          "filled": 22,
+          "inferredType": "integer",
+          "name": "PROJECT_CODE",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "0448",
+                6
+              ],
+              [
+                "0449",
+                6
+              ],
+              [
+                "3018",
+                6
+              ],
+              [
+                "2008",
+                1
+              ],
+              [
+                "4236",
+                1
+              ],
+              [
+                "4241",
+                1
+              ],
+              [
+                "8001",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 7,
+          "filled": 22,
+          "inferredType": "text",
+          "name": "PROJECT_NAME",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "总阿立哌唑",
+                6
+              ],
+              [
+                "脱氢阿立哌唑",
+                6
+              ],
+              [
+                "阿立哌唑",
+                6
+              ],
+              [
+                "奥氮平",
+                1
+              ],
+              [
+                "帕利哌酮（帕潘立酮）",
+                1
+              ],
+              [
+                "氯氮平",
+                1
+              ],
+              [
+                "氯硝西泮",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 22,
+          "filled": 22,
+          "inferredType": "number",
+          "name": "TEST_RESULT",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "100",
+                1
+              ],
+              [
+                "103",
+                1
+              ],
+              [
+                "107",
+                1
+              ],
+              [
+                "127",
+                1
+              ],
+              [
+                "26.6",
+                1
+              ],
+              [
+                "27.4",
+                1
+              ],
+              [
+                "31",
+                1
+              ],
+              [
+                "317",
+                1
+              ],
+              [
+                "354",
+                1
+              ],
+              [
+                "372",
+                1
+              ],
+              [
+                "400",
+                1
+              ],
+              [
+                "433",
+                1
+              ],
+              [
+                "46.6",
+                1
+              ],
+              [
+                "503",
+                1
+              ],
+              [
+                "54.2",
+                1
+              ],
+              [
+                "55",
+                1
+              ],
+              [
+                "63",
+                1
+              ],
+              [
+                "721",
+                1
+              ],
+              [
+                "79",
+                1
+              ],
+              [
+                "79.9",
+                1
+              ],
+              [
+                "86.4",
+                1
+              ],
+              [
+                "94",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.7273,
+          "distinct": 6,
+          "filled": 16,
+          "inferredType": "text",
+          "name": "REFFR_SCOPE",
+          "rows": 22,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "100.0-350.0",
+                6
+              ],
+              [
+                "150.0-500.0",
+                6
+              ],
+              [
+                "20.0-60.0",
+                1
+              ],
+              [
+                "20.0-80.0",
+                1
+              ],
+              [
+                "350.0-600.0",
+                1
+              ],
+              [
+                "4.0-80.0",
+                1
+              ]
+            ]
+          }
+        }
+      ],
+      "name": "20260803TDM.xlsx#检验",
+      "rows": 22,
+      "sourceFile": "20260803TDM.xlsx",
+      "sourceFingerprint": "sha256:5b52d6d8ee644e798e1017b78923004648c6936f7157d401529c163205a8f585"
+    },
+    {
+      "columns": [
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 56,
+          "filled": 56,
+          "inferredType": "integer",
+          "name": "DIAGNOSTIC_RECORD_ID",
+          "rows": 56,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.0,
+          "distinct": 0,
+          "filled": 0,
+          "inferredType": "empty",
+          "name": "PATIENT_ID",
+          "rows": 56,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 56,
+          "inferredType": "integer",
+          "name": "CASE_NO",
+          "rows": 56,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 35,
+          "filled": 56,
+          "inferredType": "date",
+          "name": "RECORD_DATE",
+          "rows": 56,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": false,
+            "values": [
+              [
+                "13/1/2021 10:20:30",
+                4
+              ],
+              [
+                "17/1/2021 19:49:48",
+                4
+              ],
+              [
+                "17/3/2021 10:23:43",
+                4
+              ],
+              [
+                "23/3/2021 16:52:05",
+                4
+              ],
+              [
+                "4/1/2021 14:36:37",
+                4
+              ],
+              [
+                "13/1/2021 10:18:50",
+                2
+              ],
+              [
+                "17/1/2021 19:47:09",
+                2
+              ],
+              [
+                "17/1/2021 19:47:20",
+                2
+              ],
+              [
+                "17/3/2021 10:24:00",
+                2
+              ],
+              [
+                "23/3/2021 16:52:17",
+                2
+              ],
+              [
+                "4/1/2021 14:36:54",
+                2
+              ],
+              [
+                "1/1/2021 15:14:36",
+                1
+              ],
+              [
+                "1/1/2021 15:14:42",
+                1
+              ],
+              [
+                "1/1/2021 15:14:54",
+                1
+              ],
+              [
+                "13/1/2021 10:21:04",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 2,
+          "filled": 56,
+          "inferredType": "integer",
+          "name": "TCM_TYPE",
+          "rows": 56,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "1",
+                34
+              ],
+              [
+                "2",
+                22
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 2,
+          "filled": 56,
+          "inferredType": "integer",
+          "name": "TCM_TYPE1",
+          "rows": 56,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "2",
+                47
+              ],
+              [
+                "1",
+                9
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 3,
+          "filled": 56,
+          "inferredType": "integer",
+          "name": "DIAGNOSTIC_TYPE",
+          "rows": 56,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "2",
+                24
+              ],
+              [
+                "1",
+                17
+              ],
+              [
+                "3",
+                15
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 2,
+          "filled": 56,
+          "inferredType": "integer",
+          "name": "IS_PRIMARY",
+          "rows": 56,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "1",
+                30
+              ],
+              [
+                "0",
+                26
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.8036,
+          "distinct": 24,
+          "filled": 45,
+          "inferredType": "text",
+          "name": "DIAGNOSIS_CODE",
+          "rows": 56,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "BNX071",
+                7
+              ],
+              [
+                "A04.01.20.01",
+                3
+              ],
+              [
+                "A05.01",
+                3
+              ],
+              [
+                "BNG110",
+                3
+              ],
+              [
+                "F20.300",
+                3
+              ],
+              [
+                "F41.101",
+                3
+              ],
+              [
+                "Z03.200",
+                3
+              ],
+              [
+                "F31.000x001",
+                2
+              ],
+              [
+                "F31.900x001",
+                2
+              ],
+              [
+                "ZZXP60",
+                2
+              ],
+              [
+                "B04.06.01.03.02",
+                1
+              ],
+              [
+                "B04.06.02.03.01.02",
+                1
+              ],
+              [
+                "B18.101",
+                1
+              ],
+              [
+                "E22.100x001",
+                1
+              ],
+              [
+                "E87.600",
+                1
+              ],
+              [
+                "F20.400",
+                1
+              ],
+              [
+                "F31.000",
+                1
+              ],
+              [
+                "F31.500x001",
+                1
+              ],
+              [
+                "F41.900",
+                1
+              ],
+              [
+                "G24.900x003",
+                1
+              ],
+              [
+                "G24.901",
+                1
+              ],
+              [
+                "H11.300",
+                1
+              ],
+              [
+                "K72.905",
+                1
+              ],
+              [
+                "ZYTV10",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 22,
+          "filled": 56,
+          "inferredType": "text",
+          "name": "DIAGNOSTIC_NAME",
+          "rows": 56,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "癫病",
+                10
+              ],
+              [
+                "心脾两虚证",
+                9
+              ],
+              [
+                "郁病",
+                6
+              ],
+              [
+                "可疑精神和行为障碍的观察",
+                3
+              ],
+              [
+                "未分化型精神分裂症",
+                3
+              ],
+              [
+                "焦虑状态",
+                3
+              ],
+              [
+                "痰气互结证",
+                3
+              ],
+              [
+                "肝郁脾虚证",
+                3
+              ],
+              [
+                "双相情感障碍",
+                2
+              ],
+              [
+                "双相情感障碍,目前为轻躁狂发作",
+                2
+              ],
+              [
+                "低钾血症",
+                1
+              ],
+              [
+                "双相情感障碍,目前为伴有精神病性症状的重度抑郁发作",
+                1
+              ],
+              [
+                "双相情感障碍，目前为轻躁狂发作",
+                1
+              ],
+              [
+                "右眼 结膜出血",
+                1
+              ],
+              [
+                "慢性活动型乙型病毒性肝炎",
+                1
+              ],
+              [
+                "焦虑障碍",
+                1
+              ],
+              [
+                "痰气郁结证",
+                1
+              ],
+              [
+                "精神分裂症后抑郁",
+                1
+              ],
+              [
+                "肌张力障碍",
+                1
+              ],
+              [
+                "肝功能不全",
+                1
+              ],
+              [
+                "迟发性运动障碍",
+                1
+              ],
+              [
+                "高泌乳素血症",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.0,
+          "distinct": 0,
+          "filled": 0,
+          "inferredType": "empty",
+          "name": "DIAGNOSTIC_CONTENT",
+          "rows": 56,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": []
+          }
+        }
+      ],
+      "name": "20260803TDM.xlsx#诊断记录",
+      "rows": 56,
+      "sourceFile": "20260803TDM.xlsx",
+      "sourceFingerprint": "sha256:5b52d6d8ee644e798e1017b78923004648c6936f7157d401529c163205a8f585"
+    },
+    {
+      "columns": [
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 537,
+          "filled": 537,
+          "inferredType": "text",
+          "name": "RECORD_ID",
+          "rows": 537,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 537,
+          "inferredType": "integer",
+          "name": "PATIENT_ID",
+          "rows": 537,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 5,
+          "filled": 537,
+          "inferredType": "integer",
+          "name": "CASE_NO",
+          "rows": 537,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 126,
+          "filled": 537,
+          "inferredType": "date",
+          "name": "RECORD_DATE",
+          "rows": 537,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": false,
+            "values": [
+              [
+                "7/1/2021 14:00:00",
+                13
+              ],
+              [
+                "1/1/2021 14:00:00",
+                12
+              ],
+              [
+                "11/1/2021 14:00:00",
+                11
+              ],
+              [
+                "31/12/2020 14:00:00",
+                11
+              ],
+              [
+                "4/1/2021 14:00:00",
+                11
+              ],
+              [
+                "28/12/2020 14:00:00",
+                10
+              ],
+              [
+                "10/1/2021 14:00:00",
+                9
+              ],
+              [
+                "2/1/2021 14:00:00",
+                9
+              ],
+              [
+                "26/12/2020 14:00:00",
+                9
+              ],
+              [
+                "27/12/2020 14:00:00",
+                9
+              ],
+              [
+                "29/12/2020 14:00:00",
+                9
+              ],
+              [
+                "3/1/2021 14:00:00",
+                9
+              ],
+              [
+                "30/12/2020 14:00:00",
+                9
+              ],
+              [
+                "5/1/2021 14:00:00",
+                9
+              ],
+              [
+                "6/1/2021 14:00:00",
+                9
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 7,
+          "filled": 537,
+          "inferredType": "text",
+          "name": "SIGN_TYPE",
+          "rows": 537,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": [
+              [
+                "体温",
+                150
+              ],
+              [
+                "呼吸",
+                150
+              ],
+              [
+                "脉搏",
+                150
+              ],
+              [
+                "血压",
+                53
+              ],
+              [
+                "体重",
+                22
+              ],
+              [
+                "血氧饱和度",
+                6
+              ],
+              [
+                "身高",
+                6
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 53,
+            "examples": [
+              "101/62",
+              "102/59",
+              "102/60"
+            ]
+          },
+          "densityCompleteness": 1.0,
+          "distinct": 126,
+          "filled": 537,
+          "inferredType": "text",
+          "name": "RECORD_CONTENT",
+          "rows": 537,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": false,
+            "values": [
+              [
+                "16",
+                63
+              ],
+              [
+                "18",
+                36
+              ],
+              [
+                "36.5",
+                27
+              ],
+              [
+                "36.8",
+                25
+              ],
+              [
+                "15",
+                20
+              ],
+              [
+                "36.7",
+                20
+              ],
+              [
+                "36.6",
+                19
+              ],
+              [
+                "17",
+                16
+              ],
+              [
+                "36.9",
+                15
+              ],
+              [
+                "76",
+                11
+              ],
+              [
+                "82",
+                11
+              ],
+              [
+                "36.4",
+                10
+              ],
+              [
+                "80",
+                10
+              ],
+              [
+                "65",
+                8
+              ],
+              [
+                "19",
+                7
+              ]
+            ]
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.0,
+          "distinct": 0,
+          "filled": 0,
+          "inferredType": "empty",
+          "name": "RECORD_UNIT",
+          "rows": 537,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": true,
+            "identifying": false,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.0,
+          "distinct": 0,
+          "filled": 0,
+          "inferredType": "empty",
+          "name": "",
+          "rows": 537,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.0,
+          "distinct": 0,
+          "filled": 0,
+          "inferredType": "empty",
+          "name": "",
+          "rows": 537,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        },
+        {
+          "compositeSuspects": {
+            "count": 0,
+            "examples": []
+          },
+          "densityCompleteness": 0.0093,
+          "distinct": 5,
+          "filled": 5,
+          "inferredType": "integer",
+          "name": "",
+          "rows": 537,
+          "sentinelSuspects": [],
+          "vocabulary": {
+            "complete": false,
+            "identifying": true,
+            "values": []
+          }
+        }
+      ],
+      "name": "20260803TDM.xlsx#体征",
+      "rows": 537,
+      "sourceFile": "20260803TDM.xlsx",
+      "sourceFingerprint": "sha256:5b52d6d8ee644e798e1017b78923004648c6936f7157d401529c163205a8f585"
+    }
+  ],
+  "typeConflicts": [
+    {
+      "column": "AGE",
+      "types": {
+        "20260803TDM.xlsx#检验": "integer",
+        "20260803TDM.xlsx#病案首页": "text"
+      }
+    }
+  ]
+}

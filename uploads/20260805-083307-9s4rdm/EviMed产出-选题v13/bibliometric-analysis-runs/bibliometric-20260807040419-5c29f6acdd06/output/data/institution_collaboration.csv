@@ -1,0 +1,5 @@
+source,target,weight,source_freq,target_freq
+Institute of Psychiatry,National Health Service,2,3,3
+Toxicological Centre,University of Antwerp,2,3,2
+Laboratory for TDM and Toxicology,University of Antwerp,2,2,2
+Laboratory for TDM and Toxicology,Toxicological Centre,2,2,3

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "kind": "research-topic-selection",
+  "jobId": "topic-20260807060601-0af22ff5e73c",
+  "status": "failed",
+  "request": {
+    "researchDirection": "基于真实世界住院数据的抗精神病药治疗药物监测：剂量校正浓度分布、CYP2D6 代谢比作为表型代理、中药-西药共处方对浓度的影响、纵向体重轨迹作为代谢不良反应结局",
+    "outputLanguage": "zh"
+  },
+  "workspace": "/data/users/scoping-v12/projects/scoping-v14-0807-060144/workspace",
+  "outputRoot": "/data/users/scoping-v12/projects/scoping-v14-0807-060144/workspace/research-topic-runs/topic-20260807060601-0af22ff5e73c/output",
+  "sourceEvidence": {
+    "algorithm": "sha256",
+    "digest": "aee9870b7aecb34dcc398f3937d82a600cf10215924016b31304e66073c0982f"
+  },
+  "createdAt": "2026-08-07T06:06:01.879685Z",
+  "updatedAt": "2026-08-07T06:09:57.182825Z",
+  "artifacts": [],
+  "workerPid": 254154,
+  "startedAt": "2026-08-07T06:06:02.704488Z",
+  "finishedAt": "2026-08-07T06:09:57.182840Z",
+  "returnCode": 1,
+  "retryable": false,
+  "error": "未检索到相关文献。可能原因：检索词过于具体、术语拼写有误、或该领域文献极少。"
+}
