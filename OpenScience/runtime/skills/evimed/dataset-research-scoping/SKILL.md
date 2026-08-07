@@ -203,11 +203,13 @@ record — and if it is published literature, re-found through
 `evimed_biomedical_source_search` so it carries an identifier. A page cited as
 though it were evidence is worse than no page.
 
-The tool reports which engines answered. This host reaches Bing, 360, Baidu,
-Sogou, and Marginalia; Google, DuckDuckGo, Brave, and Wikipedia do not resolve
-from it. **A thin result set therefore means few engines answered, not that
-little exists** — never write "nothing found on the open web" as a novelty
-argument. If the tool reports that open-web search is not configured, say so
+The tool reports which engines answered. From this host that is 360search,
+Baidu, and Marginalia; Google, DuckDuckGo, Brave, and Wikipedia do not resolve
+at all, and Bing answers the host but yields nothing the aggregator can parse.
+**A thin result set therefore means few engines answered, not that little
+exists** — never write "nothing found on the open web" as a novelty argument.
+The coverage is also skewed: two of the three are Chinese-language indexes, so
+an English-only query under-samples what is there. If the tool reports that open-web search is not configured, say so
 and carry on with the bibliographic channels; an unavailable search is not an
 empty field.
 
