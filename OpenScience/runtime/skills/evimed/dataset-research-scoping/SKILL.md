@@ -149,19 +149,92 @@ TDM data it was this step — not the field inventory — that found a 2.7-fold
 spread in dose-normalized concentration, and that only 1 of 6 samples could be
 confidently called steady-state.
 
-## Phase 3 — Literature landscape, including how others handled *this* gap
+## Phase 3 — Evidence expansion
 
 Go to the literature carrying the concrete findings of Phases 1–2, not the
 general topic.
 
-**Search the methodology as hard as the subject.** For every gap Phase 1 found,
-someone has already faced it and published what they did: unknown sampling times,
-coded or ambiguous dose regimens, unwitnessed administration, no outcome scale,
-n in the single digits. Find those papers and take the method. A gap you have
-only reasoned about is a gap you are guessing at; a gap with a published
-treatment is a design choice with a citation. This is what makes the difference
-between "the field is missing so the study is impossible" and "here is how three
-groups handled the same missing field, and which transfers."
+**One database is not a landscape.** The run this phase was rewritten for
+searched PubMed and nothing else, retrieved twelve works, and produced a
+portfolio that was defensible and unremarkable: no argument that any direction
+in it was new, and not one citation a reader could open. Breadth is not
+decoration. Whether a question is worth asking is a claim about the *field*, and
+a claim about the field made from one index is a guess.
+
+### The channels that are actually reachable
+
+There is no open-web search and no browser. Everything outside the workspace
+arrives through the MCP tools — and they reach considerably more than PubMed.
+Verified against the deployed host:
+
+| Channel | Tool call | What only this one gives you |
+|---|---|---|
+| PubMed | `evimed_literature_search`, or `evimed_biomedical_source_search` with `sourceId: pubmed` | MeSH-indexed subject search; publication types (RCT, guideline, review) |
+| Europe PMC | `sourceId: europe-pmc` | **Full-text** search — a method buried in a Methods section that no title or abstract mentions |
+| OpenAlex | `sourceId: openalex` | Citation counts, concepts, publication year — how large a topic is and how fast it is moving |
+| Semantic Scholar | `sourceId: semantic-scholar` | References and citing works: the ancestry and the descendants of a method. Rate-limited without a key — retry with backoff |
+| Crossref | `sourceId: crossref` | Very recent DOIs, ahead of MEDLINE indexing |
+| Preprints | `sourceId: biorxiv` / `medrxiv` | Work the peer-reviewed record does not carry yet |
+| Full text | `evimed_open_access_full_text` | The actual Methods paragraph rather than its abstract |
+| Guidelines | `evimed_guideline_search`, `evimed_official_page_fetch` | The standard this institution's data has to be judged against |
+| Drug and gene facts | `sourceId: dailymed` / `openfda` / `rxnorm` / `clinpgx-pharmgkb` / `mesh` | Label text, adverse-event counts, ingredient normalization, pharmacogenomic annotation |
+| Trend analysis | `evimed_bibliometric_analysis` | Publication-volume curve, author and institution clusters, emergent terms |
+| Direction analysis | `evimed_research_topic_selection` | Contradictions and breakthrough points across a whole direction |
+
+`clinicaltrials.gov` and `arxiv.org` do not resolve from the deployed host. Do
+not spend the run retrying them; `isrctn` and Europe PMC carry some of the same
+registered work.
+
+### Four axes, not one
+
+Search every candidate direction four ways. A missing axis is what makes a
+portfolio thin:
+
+1. **Subject** — the clinical question as asked.
+2. **Method for the gap** — the missing field itself as the search term.
+   Unknown sampling time, coded dose regimen, unwitnessed administration, no
+   outcome scale, single-digit n: for each of these someone has published what
+   they did. A gap you have only reasoned about is a gap you are guessing at; a
+   gap with a published treatment is a design choice with a citation. This is
+   the difference between "the field is missing so the study is impossible" and
+   "here is how three groups handled the same missing field, and which
+   transfers."
+3. **Comparator** — the number your result will be placed against: reference
+   ranges, population percentiles, registry distributions. Without one a finding
+   has nothing to be compared to and cannot be interpreted.
+4. **Absence** — what is registered, preprinted, or called for in a review but
+   not yet answered. An unoccupied question shows up here and nowhere else.
+
+### The novelty ledger
+
+For every candidate question, write down **what already answers it, at what n,
+in which population, published where and when — and what precisely is left.**
+That is the publishability argument. Without it a direction is only something
+that can be computed. Three outcomes are all legitimate and each has to be said
+out loud:
+
+- **Unoccupied** — nothing addresses it. Say what makes that credible given the
+  searches actually run, and name the closest neighbours you did find.
+- **Occupied, but not in this population, setting, or era** — name the closest
+  work and the exact axis of difference. This is where most real papers live.
+- **Answered** — drop it, and say so. A direction removed because the field has
+  already settled it is a finding, not a failure.
+
+### Floors
+
+Floors, not targets. A package under any of them is not a landscape:
+
+- **≥ 30 distinct works** across the deliverables, each with an identifier and a
+  URL a reader can open. Bare `PMID 12345678` with no link makes the reader do
+  the retrieval you were asked to do.
+- **≥ 5 distinct channels** from the table above.
+- **≥ 5 full texts** actually retrieved and read, marked as such.
+- **≥ 2 methodological citations** for every surviving question — papers about
+  how to do it, not about the disease.
+
+Do not pad. A work is cited because a sentence depends on it. A bibliography of
+things nobody used is worse than a short one, which is why the map has to say
+what each work was used for.
 
 Then answer:
 
@@ -175,6 +248,17 @@ The single most valuable finding of the real run was of this kind: a national
 TDM registry stratifies by the **25th/75th percentile of population
 dose-normalized concentration** — a directly reusable comparator that answers
 "how do I avoid treating a published mean as a gold standard".
+
+Write the landscape into `evidence-map.md`, one row per work:
+
+```
+| Work | Identifier | URL | Channel | Axis | Used for | Full text |
+|---|---|---|---|---|---|---|
+| Jönsson 2019, national TDM registry | PMID 31000417 | https://pubmed.ncbi.nlm.nih.gov/31000417/ | pubmed | comparator | 25th/75th percentile C/D comparator for Q1 | yes |
+```
+
+`Used for` is the column that keeps this honest: a row that cannot say which
+sentence depends on it should not be in the table.
 
 ## Phase 4 — External linkage map
 
@@ -266,8 +350,13 @@ and an answer that cannot be handed to someone else to execute has not answered
 it. Each surviving question therefore needs all three:
 
 - **What** — the scientific question, stated so it could be pre-registered.
-- **Why** — what makes it worth doing given what Phase 3 found others have done,
-  and what it adds that the literature does not already have.
+- **Why** — carried over from the Phase 3 novelty ledger and written on its own
+  labelled line, `新颖性：` or `Novelty:`, in `research-portfolio.md`: the
+  closest published work with its citation, the axis on which this differs, and
+  what a reader gets that they could not already get. Every question that
+  survives owes one. "Clinically important" is not a novelty statement — the
+  field agreeing that a topic matters is the reason the question may already be
+  answered.
 - **How** — an executable protocol: eligibility, the construction algorithm for
   every variable naming the exact source field and derivation rule, the analysis
   plan with its estimator and its handling of missing and sentinel values, the
@@ -320,6 +409,7 @@ these is unreportable however good its numbers look.**
 | `data-profile.json` | The same profile, machine-readable — what the preflight recomputes and compares |
 | `data-profile.py` | The script that produced both, runnable again |
 | `data-quality.md` | Findings classified by Kahn category, ending in the mandatory preprocessing list |
+| `evidence-map.md` | One row per work: identifier, URL, channel, axis, what it was used for, full text read |
 | `feasibility-matrix.md` | Candidate question × the seven target-trial elements, with a verdict each |
 | `external-linkage.md` | Resource, join key, granularity, and what it adds |
 | `research-portfolio.md` | Full design per feasible question + the infeasible list with named missing fields |
@@ -336,13 +426,18 @@ returns `ok`:
 python3 "$XDG_CONFIG_HOME/opencode/skills/dataset-research-scoping/scripts/preflight.py" --workspace .
 ```
 
-It blocks on the four things a reader cannot check for themselves: an identifier
-copied out of the source data, profile numbers that do not match the script that
-claims to produce them, an infeasible verdict that does not name its missing
-field, and a post-hoc power calculation. It warns on four more that a reader can
-see: an unqualified fill rate, an unexplained blank in the seven-element matrix,
-an external resource with no join key, and a preprocessing item with no stated
-consequence.
+It blocks on what a reader cannot check for themselves: an identifier copied out
+of the source data, profile numbers that do not match the script that claims to
+produce them, an infeasible verdict that does not name its missing field, a
+post-hoc power calculation, and the Phase 3 floors — how many works, how many
+channels, how many full texts, how many of them a reader can open, and whether
+every surviving question carries a novelty statement. Nobody holding the report
+can see which searches were never run.
+
+It warns on four a reader can see: an unqualified fill rate, an unexplained
+blank in the seven-element matrix, an external resource with no join key, and a
+preprocessing item with no stated consequence.
 
 It does not check how many questions you produced. The right number depends on
-the data.
+the data. It does check how much of the field you looked at before deciding,
+because that number does not depend on the data at all.

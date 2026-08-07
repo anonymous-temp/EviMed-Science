@@ -6,7 +6,7 @@
 // numbers into data-profile.md, and the identifier gate caught its own toolchain.
 import assert from "node:assert/strict";
 import { execFile, spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -55,12 +55,45 @@ const QUALITY = [
   "## 预处理必做清单",
   "- 拆分 BP 复合值：否则无法计算收缩压",
 ].join("\n");
-const PORTFOLIO = "# 课题组合\n课题 A 的最小可检出效应 MDE=0.6 SD，预期 CI 宽度 0.8。\n";
+const PORTFOLIO = [
+  "# 课题组合",
+  "课题 A 的最小可检出效应 MDE=0.6 SD，预期 CI 宽度 0.8。",
+  "新颖性：最接近的已发表工作是 PMID 30000001，差异轴为人群（该文为门诊，本数据为住院）。",
+].join("\n");
 const LINKAGE = "# 外部资源接驳\n- LOINC：通过 `LOINC_CODE` 连接，检验项粒度，单位需配 UCUM\n";
 const PROTOCOL = "# 研究方案\n## 课题 A\n变量构造：VALUE 取自 labs.VALUE。分析计划：描述统计 + Bootstrap 区间。\n";
 
+// One row per work, across the channels Phase 3 names. A run that searched a
+// single index produced twelve unmapped, unlinkable citations and a portfolio
+// nobody could tell was new; these are the floors that answer for that.
+const EVIDENCE_CHANNEL_ROWS = [
+  (n) => [`PMID ${30000000 + n}`, `https://pubmed.ncbi.nlm.nih.gov/${30000000 + n}/`, "pubmed"],
+  (n) => [`PMC${7000000 + n}`, `https://europepmc.org/article/PMC/PMC${7000000 + n}`, "europe-pmc"],
+  (n) => [`W${2000000000 + n}`, `https://openalex.org/W${2000000000 + n}`, "openalex"],
+  (n) => [`10.1234/s2.${n}`, `https://www.semanticscholar.org/paper/${n}`, "semantic-scholar"],
+  (n) => [`10.5555/cr.${n}`, `https://doi.org/10.5555/cr.${n}`, "crossref"],
+  (n) => [`10.1101/2026.01.${n}`, `https://www.biorxiv.org/content/10.1101/2026.01.${n}`, "biorxiv"],
+];
+
+function evidenceMap(works = 32) {
+  const rows = ["| 文献 | 标识符 | URL | 渠道 | 检索轴 | 用于 | 全文 |", "|---|---|---|---|---|---|---|"];
+  for (let index = 0; index < works; index += 1) {
+    const [id, url, channel] = EVIDENCE_CHANNEL_ROWS[index % EVIDENCE_CHANNEL_ROWS.length](index + 1);
+    rows.push(`| 文献 ${index + 1} | ${id} | ${url} | ${channel} | 方法学 | 课题 A 的比较基准 | 是 |`);
+  }
+  return `# 证据地图\n\n${rows.join("\n")}\n`;
+}
+
 async function buildWorkspace() {
   const root = await mkdtemp(path.join(tmpdir(), "dataset-scoping-"));
+  await writeFile(path.join(root, "evidence-map.md"), evidenceMap(), "utf8");
+  // Full texts are counted from disk, not from the "全文" column: the tool
+  // writes each retrieved article into .evimed-sources/<slug>/.
+  for (let index = 0; index < 5; index += 1) {
+    const slug = path.join(root, ".evimed-sources", `article-${index + 1}`);
+    await mkdir(slug, { recursive: true });
+    await writeFile(path.join(slug, "fulltext.md"), "# Methods\n", "utf8");
+  }
   await writeFile(path.join(root, "orders.csv"), ORDERS, "utf8");
   await writeFile(path.join(root, "diagnosis.csv"), DIAGNOSIS, "utf8");
   await writeFile(path.join(root, "labs.csv"), LABS, "utf8");
@@ -245,6 +278,58 @@ test("each blocking gate rejects what it exists to catch", { skip: !hasPython3 }
         await writeFile(file, `${await readFile(file, "utf8")}\n事后功效为 0.42。\n`, "utf8");
       },
       expect: /post-hoc power is uninformative/,
+    },
+    {
+      name: "a landscape assembled from too little of the field",
+      apply: async (root) => {
+        await writeFile(path.join(root, "evidence-map.md"), evidenceMap(12), "utf8");
+      },
+      expect: /cite 12 distinct works; the floor is 30/,
+    },
+    {
+      name: "a landscape assembled from one index",
+      apply: async (root) => {
+        const rows = ["| 文献 | 标识符 | URL | 渠道 |", "|---|---|---|---|"];
+        for (let index = 1; index <= 32; index += 1) {
+          rows.push(
+            `| 文献 ${index} | PMID ${30000000 + index} | https://pubmed.ncbi.nlm.nih.gov/${30000000 + index}/ | pubmed |`,
+          );
+        }
+        await writeFile(path.join(root, "evidence-map.md"), `# 证据地图\n${rows.join("\n")}\n`, "utf8");
+      },
+      expect: /draws on 1 channels/,
+    },
+    {
+      name: "a design transferred from abstracts alone",
+      apply: async (root) => {
+        await rm(path.join(root, ".evimed-sources"), { recursive: true, force: true });
+      },
+      expect: /0 full texts were retrieved/,
+    },
+    {
+      name: "a work cited in the report but absent from the map",
+      apply: async (root) => {
+        const file = path.join(root, "research-portfolio.md");
+        await writeFile(file, `${await readFile(file, "utf8")}\n阈值取自 PMID 29999999。\n`, "utf8");
+      },
+      expect: /cited in the report but absent from evidence-map\.md/,
+    },
+    {
+      name: "a citation a reader cannot open",
+      apply: async (root) => {
+        const file = path.join(root, "evidence-map.md");
+        const text = (await readFile(file, "utf8"))
+          .replace("https://pubmed.ncbi.nlm.nih.gov/30000001/", "见 PubMed");
+        await writeFile(file, text, "utf8");
+      },
+      expect: /carry an identifier with no URL/,
+    },
+    {
+      name: "a surviving question with no novelty statement",
+      apply: async (root) => {
+        await writeFile(path.join(root, "research-portfolio.md"), "# 课题组合\n课题 A 的 MDE=0.6 SD。\n", "utf8");
+      },
+      expect: /0 novelty statements for 1 feasible questions/,
     },
     {
       name: "a prior data contact declaration written after the fact",
