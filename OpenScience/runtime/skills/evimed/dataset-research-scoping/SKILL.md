@@ -296,6 +296,34 @@ portfolio thin:
    has nothing to be compared to and cannot be interpreted.
 4. **Absence** — what is registered, preprinted, or called for in a review but
    not yet answered. An unoccupied question shows up here and nowhere else.
+5. **Another field entirely** — the same *methodological* problem, solved
+   somewhere with no clinical overlap at all. This is the axis runs skip, and
+   skipping it is what makes a bibliography look narrow even at fifty works: all
+   fifty are about the same disease.
+
+### Search the method outside its specialty
+
+A run assembled forty-nine works on psychiatric drug monitoring and the reader's
+verdict was still that the literature was thin — correctly, because every one of
+them was about psychiatric drug monitoring. Breadth of *works* is not breadth of
+*thinking*.
+
+The methodological problems in a dataset are almost never specialty-specific.
+Concentration-guided dosing is solved daily in oncology, infectious disease, and
+transplantation; unknown sampling times are routine in population
+pharmacokinetics; sparse repeated measures are the whole of pharmacometrics;
+irregular longitudinal outcomes are core to critical-care informatics; small-n
+inference with a phenotype proxy is standard in pharmacogenomics. **For each
+method a design depends on, run one search in a field that does not share this
+one's disease**, and say in the evidence map which field it came from.
+
+The transfer is what you are looking for, not the paper: the estimator, the
+validation scheme, the way that field handles the gap this dataset has. Name
+what transfers and name what does not — a method borrowed without its
+assumptions is worse than a method not borrowed.
+
+Mark the field of origin on every row of the map. If every row says the same
+specialty, axis 5 was not run.
 
 ### The novelty ledger
 
@@ -344,9 +372,10 @@ dose-normalized concentration** — a directly reusable comparator that answers
 Write the landscape into `evidence-map.md`, one row per work:
 
 ```
-| Work | Identifier | URL | Channel | Axis | Used for | Full text |
-|---|---|---|---|---|---|---|
-| Jönsson 2019, national TDM registry | PMID 31000417 | https://pubmed.ncbi.nlm.nih.gov/31000417/ | pubmed | comparator | 25th/75th percentile C/D comparator for Q1 | yes |
+| Work | Identifier | URL | Channel | Axis | Field | Used for | Full text |
+|---|---|---|---|---|---|---|---|
+| Jönsson 2019, national TDM registry | PMID 31000417 | https://pubmed.ncbi.nlm.nih.gov/31000417/ | pubmed | comparator | psychiatry | 25th/75th percentile C/D comparator for Q1 | yes |
+| Neely 2014, sparse-sampling Bayesian dose control | PMID 24936813 | https://pubmed.ncbi.nlm.nih.gov/24936813/ | pubmed | another field | infectious disease | the estimator Q1 borrows for unknown draw times | yes |
 ```
 
 `Used for` is the column that keeps this honest: a row that cannot say which
@@ -487,9 +516,37 @@ it. Each surviving question therefore needs all three:
   sensitivity analyses that carry the Phase 5 assumptions, the tables and figures
   with what each one answers, and the reporting-guideline mapping.
 
-Write the protocol into `study-protocol.md`, one section per feasible question.
-It must be specific enough that a second analyst could execute it without asking
-you anything: field names, thresholds, and decision rules, not "an appropriate
+### One topic, three pieces, in `research-portfolio.md`
+
+The researcher reads this file to decide what to work on, so it is organised by
+topic and not by artefact. **Give each surviving topic its own section carrying
+all three of these, in this order:**
+
+1. **小综述 / Mini-review** — 400 to 800 words of actual prose, not a table.
+   What the field has established, where it disagrees with itself, what the
+   closest works found and at what n, and which method from *another field*
+   (Phase 3 axis 5) this design borrows. Cite as you go, every citation
+   resolvable. This is the section that tells the researcher whether the topic
+   is worth their year, and it is the one a reader notices is missing.
+2. **思路 / The reasoning** — how the topic was arrived at from this data: which
+   derived quantity made it visible, what the alternative framings were, why
+   this one, and what would change the answer. Written as reasoning, in
+   sentences. A design whose origin cannot be retraced cannot be argued for in
+   front of a reviewer.
+3. **研究方案 / The design** — the estimator, the variable construction against
+   named fields, the validation scheme, the minimum detectable effect and
+   expected interval width, the principal biases and their handling, the sample
+   size needed at scale, the novelty statement, and the target journal.
+
+**Aim for five or six topics, not nine and not two.** Nine is a list nobody
+prioritises; two is a refusal. Merge topics that share an estimator and a data
+path — they are one paper with two analyses, not two papers — and drop what the
+mini-review shows is answered. Say what you merged and what you dropped.
+
+The full executable protocol still goes into `study-protocol.md`, one section per
+feasible question. It must be specific enough that a second analyst could execute
+it without asking you anything: field names, thresholds, and decision rules, not
+"an appropriate
 sensitivity analysis should be performed".
 
 State each protocol's **preconditions and stopping conditions** — what must be
@@ -533,10 +590,10 @@ these is unreportable however good its numbers look.**
 | `data-profile.json` | The same profile, machine-readable — what the preflight recomputes and compares |
 | `data-profile.py` | The script that produced both, runnable again |
 | `data-quality.md` | Findings classified by Kahn category, ending in the mandatory preprocessing list |
-| `evidence-map.md` | One row per work: identifier, URL, channel, axis, what it was used for, full text read |
+| `evidence-map.md` | One row per work: identifier, URL, channel, axis, **field of origin**, what it was used for, full text read |
 | `feasibility-matrix.md` | Candidate question × the seven target-trial elements, with a verdict each |
 | `external-linkage.md` | Resource, join key, granularity, and what it adds |
-| `research-portfolio.md` | Full design per feasible question + the infeasible list with named missing fields |
+| `research-portfolio.md` | Five or six topics, each with its 小综述, its 思路, and its 研究方案 — plus the infeasible list with named missing fields |
 | `scoping-run.json` | Run receipt: data fingerprint, search record, **prior data contact declaration** |
 
 Phases 0–4 feed Phases 5–6. Do not skip ahead to candidate questions.
