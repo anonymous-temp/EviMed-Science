@@ -2565,4 +2565,4 @@ test("an unreachable open web does not fail a complete package", () => {
   // A malformed request from the agent is still the agent's problem.
   assert.equal(recoverableEvidenceSourceErrorCodes.has("web_search_query_invalid"), false);
 });
-;
+

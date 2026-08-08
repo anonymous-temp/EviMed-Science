@@ -1,5 +1,5 @@
 id: dataset-research-scoping
-version: 1.6.0
+version: 1.7.0
 title: Dataset Research Scoping
 category: Research Planning
 description: Start from a dataset the researcher already holds, profile it mechanically, map it against the published literature, and decide which research questions it can and cannot support — naming the missing field for every question it cannot.
