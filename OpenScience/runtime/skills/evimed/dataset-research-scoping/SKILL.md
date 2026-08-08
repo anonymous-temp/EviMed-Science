@@ -219,6 +219,37 @@ and a run that skipped all three produced a report with nothing in it:**
 This phase is what decides whether there is anything here at all. Report every
 derived quantity **as a number**, not as an intention.
 
+## Phase 2b — Make the expansion visible
+
+A list of derived quantities is not a research programme, and a report that
+presents one reads as a menu. What the researcher wants to see is **how one
+measurement opens into a field** — and the honest way to show it is to write the
+expansion down as a structure, layer by layer, each layer opened by a named
+quantity or a named join.
+
+The real one, from the TDM extract, ran six layers deep from a single number:
+
+| Layer | The move | What it opened |
+|---|---|---|
+| 0 | one concentration measurement | a scalar, and nothing else |
+| 1 | the assay also reports the metabolite | parent–metabolite pair, so a ratio exists |
+| 2 | the ratio is the enzyme's activity phenotype | a stratifying variable that no field inventory shows |
+| 3 | join to the order in force on the sampling date | dose-normalised exposure; between- separates from within-subject |
+| 4 | the same subject sampled twice; the order that follows a result | cross-section becomes an individual time series |
+| 5 | vitals as longitudinal outcome; dated diagnosis codes as events | the drug's effect on the person becomes observable |
+| 6 | reference ranges, registry percentiles, spontaneous reports | an external coordinate system for every internal number |
+
+Two properties make this worth writing rather than merely doing. **Each layer is
+a claim that can be checked** — layer 2 stands or falls on whether that ratio is
+an accepted phenotype marker, and that is a citation, not an opinion. And **the
+layers are what connect the topics**: the questions in the portfolio are not a
+list of unrelated ideas, they are the layers cashed out, which is why they share
+variable constructions and why one of them is usually a prerequisite for the
+others.
+
+Write it as its own section. If the expansion stops at layer two, the report is
+thin and the structure will show that before a reader has to.
+
 ## Phase 3 — Evidence expansion
 
 Go to the literature carrying the concrete findings of Phases 1–2, not the
@@ -720,6 +751,33 @@ statement is one sentence long.
 | `scoping-run.json` | Run receipt: data fingerprint, search record, **prior data contact declaration** |
 
 Phases 0–4 feed Phases 5–6. Do not skip ahead to candidate questions.
+
+### The deliverables are sections of one document
+
+The files are how the work is stored; a document is how it is read. A researcher
+handed nine markdown files reads none of them. Assemble the portfolio so it can
+be printed and circulated, in this order, and say so in its opening lines:
+
+1. **摘要** — the three findings that unlocked everything, with their numbers,
+   and the count of directions that follow.
+2. **数据与字段** — what the schema is, table by table, and what each carries.
+3. **编码规范与治理发现** — the traps, each with its count. This belongs early:
+   it tells the reader which of the later numbers they can trust.
+4. **派生量与一致性校验** — the identities, the mechanism proxy, the
+   reconstructed exposure. Every number recomputable from the shipped script.
+5. **展开结构** — Phase 2b, one measurement to a field.
+6. **研究方向** — five or six, each with 小综述 / 思路 / 研究方案.
+7. **投稿目标** — Phase 7, with partitions verified and comparables named.
+8. **跨领域方法借鉴** — what was borrowed, from where, and what does not transfer.
+9. **字段使用总表** — the attachment for the information department.
+10. **全量数据需求** — what to ask for, ordered by what it unlocks.
+11. **局限** — specific, and never used as a reason to refuse a design.
+12. **实施次序** — which direction to run first and why, and which is
+    prerequisite to which.
+
+The order is not arbitrary: it puts what can be checked before what rests on it,
+so a sceptical reader can stop at any point and know exactly how much of the
+report they have accepted.
 
 ## Before claiming completion
 

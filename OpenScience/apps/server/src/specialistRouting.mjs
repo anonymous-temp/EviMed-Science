@@ -115,7 +115,7 @@ export function routeOpenDomainSpecialist(query, agents) {
   const literatureOnly = new Set(["research-topic-selection", "clinical-evidence-synthesis"]);
   for (const [id, pattern] of routeRules) {
     if (!(/** @type {RegExp} */ (pattern).test(query))) continue;
-    if (literatureOnly.has(id) && dataInHand) break;
+    if (literatureOnly.has(/** @type {string} */ (id)) && dataInHand) break;
     return selection(byId.get(id), `matched:${id}`);
   }
   if (positiveMetaIntent.test(query) && !negatedMetaIntent.test(query)) {
