@@ -21,6 +21,7 @@ const dispatchFields = new Set([
   "effectiveAgentId",
   "effectiveAgentVersion",
   "effectiveRuntimeAgent",
+  "effectiveRouteReason",
 ]);
 const dispatchStatuses = new Set(["dispatching", "accepted", "unknown", "rejected"]);
 const defaultMaxRuns = 1000;
@@ -28,6 +29,13 @@ const defaultMaxBytes = 1024 * 1024;
 const maxArtifacts = 64;
 const maxQualityNotices = 40;
 const maxQualityNoticeLength = 300;
+
+// Which rule picked the agent: `matched:adr-analysis`, `matched:named:peer-review`
+// or `llm:0.83`. Recording the decision without the reason makes a wrong route
+// indistinguishable from a right one taken for the wrong reason — the regex
+// firing on a stray word and the classifier answering at 0.76 look identical in
+// the ledger, and there is no way to tell which layer to fix.
+const routeReasonPattern = /^[a-z][a-z0-9_.:-]{0,63}$/;
 
 function invalid(message) {
   return new HttpError(400, "invalid_agent_run", message);
@@ -78,6 +86,9 @@ function normalizeDispatchInput(input) {
   if (input.effectiveRuntimeAgent != null && !/^evimed-[a-z0-9][a-z0-9-]{1,62}$/.test(input.effectiveRuntimeAgent)) {
     throw invalid("Effective runtime agent is invalid.");
   }
+  if (input.effectiveRouteReason != null && !routeReasonPattern.test(input.effectiveRouteReason)) {
+    throw invalid("Effective route reason is invalid.");
+  }
   return {
     sessionId: safeId(input.sessionId, "research session id"),
     dispatchId: safeId(input.dispatchId, "agent run dispatch id"),
@@ -88,6 +99,7 @@ function normalizeDispatchInput(input) {
     effectiveAgentId: input.effectiveAgentId ?? null,
     effectiveAgentVersion: input.effectiveAgentVersion ?? null,
     effectiveRuntimeAgent: input.effectiveRuntimeAgent ?? null,
+    effectiveRouteReason: input.effectiveRouteReason ?? null,
   };
 }
 
@@ -195,6 +207,10 @@ function foldEvents(events) {
         || effectiveAgentVersion !== event.agentVersion
         || effectiveRuntimeAgent !== event.runtimeAgent
       )) throw corrupt("Specialist run effective identity does not match its session binding.");
+      const effectiveRouteReason = event.effectiveRouteReason ?? null;
+      if (effectiveRouteReason !== null && !(typeof effectiveRouteReason === "string" && routeReasonPattern.test(effectiveRouteReason))) {
+        throw corrupt("Agent run effective route reason is invalid.");
+      }
       if (typeof event.model !== "string" || !event.model) throw corrupt("Agent run model is invalid.");
       const startedAt = storedTimestamp(event.startedAt, "startedAt");
       const dispatchId = event.dispatchId == null ? null : safeStoredId(event.dispatchId, "dispatchId");
@@ -212,6 +228,7 @@ function foldEvents(events) {
         effectiveAgentId,
         effectiveAgentVersion,
         effectiveRuntimeAgent,
+        effectiveRouteReason,
         model: event.model,
         question: typeof event.question === "string" && event.question ? event.question : null,
         status: "running",
@@ -1309,6 +1326,7 @@ export class AgentRunStore {
     effectiveAgentId = session.mode === "specialist" ? session.agentId : null,
     effectiveAgentVersion = session.mode === "specialist" ? session.agentVersion : null,
     effectiveRuntimeAgent = session.mode === "specialist" ? session.runtimeAgent : null,
+    effectiveRouteReason = session.mode === "specialist" ? "session-binding" : null,
   } = {}) {
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
@@ -1339,6 +1357,7 @@ export class AgentRunStore {
         effectiveAgentId,
         effectiveAgentVersion,
         effectiveRuntimeAgent,
+        effectiveRouteReason,
         model: this.model,
         question,
         createdAt: now,
@@ -1375,6 +1394,7 @@ export class AgentRunStore {
       effectiveAgentId,
       effectiveAgentVersion,
       effectiveRuntimeAgent,
+      effectiveRouteReason,
     } = normalizeDispatchInput(input);
     if (typeof sendPrompt !== "function") throw new TypeError("Agent run dispatch requires a prompt sender.");
     const existing = (await this.list(project)).find((run) => run.dispatchId === dispatchId);
@@ -1388,8 +1408,9 @@ export class AgentRunStore {
           effectiveAgentId: session.agentId,
           effectiveAgentVersion: session.agentVersion,
           effectiveRuntimeAgent: session.runtimeAgent,
+          effectiveRouteReason: "session-binding",
         }
-      : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent };
+      : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
     const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, question, ...selected });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);

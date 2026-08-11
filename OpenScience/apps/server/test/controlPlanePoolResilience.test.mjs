@@ -15,14 +15,39 @@ import { EventEmitter } from "node:events";
 import test from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 
+class FakeClient extends EventEmitter {
+  constructor() {
+    super();
+    this.released = false;
+  }
+
+  async query() {
+    return { rows: [] };
+  }
+
+  release() {
+    this.released = true;
+  }
+}
+
 class FakePool extends EventEmitter {
   constructor() {
     super();
     this.queries = [];
+    this.clients = [];
+    // How many connect() calls to fail before the first success, and with what.
+    this.connectFailures = 0;
+    this.connectError = null;
   }
 
   async connect() {
-    return { query: async () => ({ rows: [] }), release() {} };
+    if (this.connectFailures > 0) {
+      this.connectFailures -= 1;
+      throw this.connectError ?? new Error("connect failed");
+    }
+    const client = new FakeClient();
+    this.clients.push(client);
+    return client;
   }
 
   async query(text, values) {
@@ -64,4 +89,54 @@ test("after a dropped connection the next query re-establishes rather than trust
   await database.query("select 1");
   assert.ok(database.ready);
   assert.equal(pool.queries.filter(([text]) => text === "select 1").length, 2);
+});
+
+// The second production incident, two days long. A database still starting up
+// refuses with 57P03, "the database system is not yet accepting connections".
+// That rejection came from pool.connect(), which sat outside the try whose catch
+// clears the cache — so the rejected promise stayed in this.ready and
+// `if (this.ready) return this.ready` served it to every request that followed.
+// Postgres accepted connections again within seconds; the API refused every
+// login for two days, and only a restart could have cleared it.
+test("a database that was not yet accepting connections is retried, not cached forever", async () => {
+  const pool = new FakePool();
+  pool.connectFailures = 1;
+  pool.connectError = Object.assign(
+    new Error("the database system is not yet accepting connections"),
+    { code: "57P03" },
+  );
+  const database = databaseWith(pool);
+
+  await assert.rejects(() => database.query("select 1"), /not yet accepting connections/);
+  assert.equal(database.ready, null, "a failed connect must not leave a rejected promise cached");
+
+  // The very next call succeeds against the same instance, no restart involved.
+  await database.query("select 1");
+  assert.ok(database.ready);
+  assert.equal(pool.queries.filter(([text]) => text === "select 1").length, 1);
+});
+
+test("a connection dropped while checked out is absorbed instead of killing the process", async () => {
+  const pool = new FakePool();
+  const database = databaseWith(pool);
+  await database.migrate();
+  const [client] = pool.clients;
+  assert.ok(client, "migrate checks a client out of the pool");
+  assert.equal(client.released, true);
+
+  // pg moves its own listener off a client on checkout, so during the window
+  // this covers there is nobody else to hear this.
+  await database.transaction(async (checkedOut) => {
+    assert.doesNotThrow(() => checkedOut.emit(
+      "error",
+      Object.assign(new Error("Connection terminated unexpectedly"), { code: "57P03" }),
+    ));
+  });
+
+  // The listener is removed on release: a client back in the pool is pg's to
+  // guard again, and leaving ours attached would leak one per checkout.
+  for (const used of pool.clients) {
+    assert.equal(used.released, true);
+    assert.equal(used.listenerCount("error"), 0);
+  }
 });

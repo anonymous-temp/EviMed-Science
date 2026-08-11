@@ -258,6 +258,64 @@ test("open-domain clinical evidence questions record and dispatch the selected s
   });
 });
 
+// Which rule chose the agent, not just which agent. A run routed by a regex on a
+// stray word and one the classifier answered at 0.76 are the same record without
+// it, and they need different fixes.
+test("the ledger records why each run was routed where it was", async () => {
+  const specialistClassifierFetch = async (_url, init) => {
+    // "none" is the verdict a real classifier returns for a plain question; the
+    // stub has to give it, or every query reaches a specialist and the answer
+    // line is never exercised.
+    const plain = String(init?.body ?? "").includes("阿司匹林是什么药");
+    return {
+      ok: true,
+      headers: { get: () => null },
+      text: async () => JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify(plain
+              ? { agentId: "none", confidence: 0.95 }
+              : { agentId: "meta-analysis", confidence: 0.91 }),
+          },
+        }],
+      }),
+    };
+  };
+  await withApp(async ({ base }) => {
+    for (const id of ["ses_reason_regex", "ses_reason_llm", "ses_reason_answer"]) {
+      assert.equal((await bind(base, id, { mode: "open-domain" })).status, 200);
+    }
+    const regex = await dispatchRun(base, "ses_reason_regex", "turn_reason_regex", "分析奥希替尼的 FAERS 药物警戒信号");
+    assert.equal(regex.body.data.effectiveRouteReason, "matched:adr-analysis");
+
+    const classified = await dispatchRun(
+      base,
+      "ses_reason_llm",
+      "turn_reason_llm",
+      "帮我把这个研究方向整理成一个可执行的分析计划",
+    );
+    assert.equal(classified.body.data.effectiveRouteReason, "llm:0.91");
+
+    // Falling through to the answer line is a routing outcome, and the one most
+    // often misread as a failure to route.
+    const answered = await dispatchRun(base, "ses_reason_answer", "turn_reason_answer", "阿司匹林是什么药");
+    assert.equal(answered.body.data.effectiveAgentId, "open-domain-answer");
+    assert.equal(answered.body.data.effectiveRouteReason, "unrouted:open-domain");
+
+    // It survives a reload: the reason is in the ledger, not only in the response.
+    const listed = await listRuns(base);
+    const reasons = new Map(listed.body.data.map((run) => [run.dispatchId, run.effectiveRouteReason]));
+    assert.equal(reasons.get("turn_reason_regex"), "matched:adr-analysis");
+    assert.equal(reasons.get("turn_reason_llm"), "llm:0.91");
+    assert.equal(reasons.get("turn_reason_answer"), "unrouted:open-domain");
+  }, {
+    llmRoutingEnabled: true,
+    deepseekProviderEnabled: true,
+    deepseekApiKey: "sk-test",
+    specialistClassifierFetch,
+  });
+});
+
 test("LLM routing augments but never overrides the deterministic router", async () => {
   const calls = [];
   const specialistClassifierFetch = async (_url, _init) => {
