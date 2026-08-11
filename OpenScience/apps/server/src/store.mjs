@@ -331,8 +331,13 @@ export class InMemoryStore {
       });
     }
     const bootstrapId = this.config.bootstrapUser ? safeId(this.config.bootstrapUser, "username") : "";
+    // Seed whenever the configured account is absent, not only into an empty
+    // set — the Postgres store was changed for exactly this reason and this one
+    // was left behind. Gating on emptiness means one unrelated account is enough
+    // for the configured administrator never to be created, with the user, the
+    // password and the configuration all in place and nothing reporting it.
     if (
-      this.users.size === 0 &&
+      !this.users.has(bootstrapId) &&
       bootstrapId &&
       this.config.bootstrapPassword &&
       !this.deletedUsers.has(bootstrapId)
@@ -642,6 +647,18 @@ export class InMemoryStore {
     return [...this.users.values()].filter((user) => user.passwordHash).length;
   }
 
+  /** "present" | "deleted" | "absent" for the configured bootstrap account.
+   *  Counting logins is not the same question: three unrelated accounts make the
+   *  count non-zero while the administrator this deployment is configured for
+   *  cannot log in at all. */
+  async bootstrapUserState() {
+    const id = this.config.bootstrapUser;
+    if (!id) return "unconfigured";
+    await this.loadUsers();
+    if (this.users.has(id)) return "present";
+    return this.deletedUsers.has(id) ? "deleted" : "absent";
+  }
+
   async close() {}
 }
 
@@ -928,6 +945,25 @@ export class PostgresStore extends InMemoryStore {
       `SELECT count(*)::integer AS count FROM ${CONTROL_PLANE_SCHEMA}.users WHERE password_hash IS NOT NULL`,
     );
     return Number(result.rows[0]?.count ?? 0);
+  }
+
+  /** Deletion is deliberate and seeding refuses to undo it, so "deleted" is a
+   *  third state and not a failure — but it has to be visible, because the
+   *  deployment is then configured for an administrator who will never exist. */
+  async bootstrapUserState() {
+    const id = this.config.bootstrapUser;
+    if (!id) return "unconfigured";
+    await this.loadUsers();
+    const present = await this.database.query(
+      `SELECT 1 FROM ${CONTROL_PLANE_SCHEMA}.users WHERE id = $1`,
+      [id],
+    );
+    if (present.rowCount) return "present";
+    const removed = await this.database.query(
+      `SELECT 1 FROM ${CONTROL_PLANE_SCHEMA}.deleted_users WHERE id = $1`,
+      [id],
+    );
+    return removed.rowCount ? "deleted" : "absent";
   }
 
   async projectFromRow(user, row) {
