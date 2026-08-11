@@ -125,24 +125,61 @@ export class ControlPlaneDatabase {
     });
   }
 
+  /** A client is only guarded against connection loss while it sits idle in the
+   *  pool: pg moves its own error listener off on checkout and back on release.
+   *  In between, a dropped connection emits "error" on a Client nobody listens
+   *  to, and an EventEmitter with no error listener throws — which killed the
+   *  API process in production with "Unhandled 'error' event ... Emitted 'error'
+   *  event on Client instance", mid-migration, taking every in-flight request
+   *  with it. The checked-out window needs its own listener; the query already
+   *  in flight rejects on its own and carries the real failure.
+   *  @param {(client: Record<string, any>) => Promise<any>} operation */
+  async withClient(operation) {
+    const client = await this.pool.connect();
+    const absorb = (error) => {
+      process.stderr.write(
+        `control-plane database client error: ${error?.code ?? "unknown"} ${error?.message ?? error}\n`,
+      );
+    };
+    client.on("error", absorb);
+    try {
+      return await operation(client);
+    } finally {
+      client.off("error", absorb);
+      client.release();
+    }
+  }
+
   async migrate() {
     if (this.ready) return this.ready;
-    this.ready = (async () => {
-      const client = await this.pool.connect();
+    // Everything that can fail belongs inside the promise whose rejection clears
+    // the cache. pool.connect() used to sit outside it, so a database that was
+    // still starting — 57P03, "the database system is not yet accepting
+    // connections" — stored a rejected promise in this.ready that no later call
+    // could ever displace: `if (this.ready) return this.ready` handed the same
+    // dead rejection to every request from then on. Production spent two days
+    // refusing every login with a database that had been accepting connections
+    // the whole time, and only a process restart could clear it.
+    const attempt = (async () => {
       try {
-        await client.query("BEGIN");
-        await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-science-control-plane-v1'))");
-        await client.query(migrationSql);
-        await client.query("COMMIT");
+        return await this.withClient(async (client) => {
+          try {
+            await client.query("BEGIN");
+            await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-science-control-plane-v1'))");
+            await client.query(migrationSql);
+            await client.query("COMMIT");
+          } catch (error) {
+            await client.query("ROLLBACK").catch(() => {});
+            throw error;
+          }
+          return true;
+        });
       } catch (error) {
-        await client.query("ROLLBACK").catch(() => {});
-        this.ready = null;
+        if (this.ready === attempt) this.ready = null;
         throw error;
-      } finally {
-        client.release();
       }
-      return true;
     })();
+    this.ready = attempt;
     return this.ready;
   }
 
@@ -153,18 +190,17 @@ export class ControlPlaneDatabase {
 
   async transaction(operation) {
     await this.migrate();
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      const result = await operation(client);
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => {});
-      throw error;
-    } finally {
-      client.release();
-    }
+    return this.withClient(async (client) => {
+      try {
+        await client.query("BEGIN");
+        const result = await operation(client);
+        await client.query("COMMIT");
+        return result;
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      }
+    });
   }
 
   async health() {

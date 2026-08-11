@@ -259,6 +259,9 @@ export interface WebAgentRun {
   effectiveAgentId?: string | null;
   effectiveAgentVersion?: string | null;
   effectiveRuntimeAgent?: string | null;
+  // Which rule chose that agent: `matched:<id>`, `llm:<confidence>`,
+  // `unrouted:open-domain`, or `session-binding`.
+  effectiveRouteReason?: string | null;
   model: string;
   status: WebAgentRunStatus;
   createdAt: string;

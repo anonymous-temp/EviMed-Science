@@ -821,7 +821,14 @@ export function createWebApiApp(overrides = {}) {
           ? registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID)
           : null;
         const effectiveAgent = routedSpecialist ?? (answerAgent
-          ? { agentId: answerAgent.id, agentVersion: answerAgent.version, runtimeAgent: answerAgent.runtimeAgent }
+          ? {
+              agentId: answerAgent.id,
+              agentVersion: answerAgent.version,
+              runtimeAgent: answerAgent.runtimeAgent,
+              // Falling through to the answer line is a routing outcome like any
+              // other, and the one most often mistaken for a failure to route.
+              reason: "unrouted:open-domain",
+            }
           : null);
         const run = await agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
@@ -830,6 +837,7 @@ export function createWebApiApp(overrides = {}) {
           effectiveAgentId: effectiveAgent?.agentId ?? null,
           effectiveAgentVersion: effectiveAgent?.agentVersion ?? null,
           effectiveRuntimeAgent: effectiveAgent?.runtimeAgent ?? null,
+          effectiveRouteReason: effectiveAgent?.reason ?? null,
         }, async (session, _run, repairText = null) => {
           const promptText = typeof repairText === "string" && repairText.trim() ? repairText : text;
           let memories = [];
