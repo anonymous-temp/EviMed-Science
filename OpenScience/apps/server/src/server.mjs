@@ -2314,7 +2314,17 @@ async function readinessAuth(config, store) {
   }
   const users = await store.loginUserCount();
   if (users === 0) throw readinessFailure("no_login_users");
-  return { mode: "local", sessionTtlMs, bootstrapPasswordSource: config.bootstrapPasswordSource };
+  // A non-zero count is not the same as "the configured administrator can log
+  // in". Production ran with three unrelated accounts and OPEN_SCIENCE_BOOTSTRAP_USER
+  // naming one that had been deleted: seeding refuses to resurrect a deleted id,
+  // by design, so the account never came back, every login as that user returned
+  // invalid_credentials, and this check reported ok throughout. "absent" means
+  // seeding should have created it and did not, which is a fault; "deleted"
+  // means an operator removed it on purpose, which is not — but both have to be
+  // visible, because either way the configured administrator does not exist.
+  const bootstrapUser = await store.bootstrapUserState();
+  if (bootstrapUser === "absent") throw readinessFailure("bootstrap_user_missing", { bootstrapUser });
+  return { mode: "local", sessionTtlMs, bootstrapPasswordSource: config.bootstrapPasswordSource, bootstrapUser };
 }
 
 function readinessSecurity(config) {

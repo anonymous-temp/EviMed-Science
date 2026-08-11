@@ -892,6 +892,79 @@ test("readiness rejects login mode with no configured users", async () => {
   );
 });
 
+// Counting logins answers a different question than "can the administrator this
+// deployment is configured for log in". Production ran two days with three
+// unrelated accounts and a bootstrap user that had been deleted: seeding refuses
+// to resurrect a deleted id, so it never came back, every login as that user was
+// invalid_credentials, and readiness reported auth ok the whole time.
+test("readiness reports the configured bootstrap account, not just that some account exists", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-bootstrap-user-"));
+  const start = async (overrides) => {
+    const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, ...overrides });
+    const address = await app.listen(0, "127.0.0.1");
+    return { app, base: `http://127.0.0.1:${address.port}` };
+  };
+  try {
+    const seeded = await start({ bootstrapUser: "evimed", bootstrapPassword: "a-sufficiently-long-password" });
+    try {
+      const body = (await (await fetch(`${seeded.base}/api/ready`)).json()).data;
+      assert.equal(body.checks.auth.ok, true);
+      assert.equal(body.checks.auth.bootstrapUser, "present");
+    } finally {
+      await seeded.app.close();
+    }
+
+    // Same data directory, a different configured administrator, and no password
+    // with which to create one. The seeded account is still there, so the login
+    // count stays non-zero and the old check would have reported ok while the
+    // configured administrator did not exist.
+    const renamed = await start({ bootstrapUser: "site-admin", bootstrapPassword: "" });
+    try {
+      const body = (await (await fetch(`${renamed.base}/api/ready`)).json()).data;
+      assert.equal(body.checks.auth.ok, false);
+      assert.equal(body.checks.auth.code, "bootstrap_user_missing");
+      assert.equal(body.checks.auth.bootstrapUser, "absent");
+    } finally {
+      await renamed.app.close();
+    }
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+// Seeding into an empty set only: one unrelated account was enough for the
+// configured administrator never to be created. The Postgres store was fixed for
+// this; the file store kept the old gate.
+test("the configured bootstrap account is created when it is absent, not only when nothing exists", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-bootstrap-seed-"));
+  const start = async (overrides) => {
+    const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, ...overrides });
+    const address = await app.listen(0, "127.0.0.1");
+    return { app, base: `http://127.0.0.1:${address.port}` };
+  };
+  try {
+    const first = await start({ bootstrapUser: "first-admin", bootstrapPassword: "a-sufficiently-long-password" });
+    await first.app.close();
+
+    const second = await start({ bootstrapUser: "second-admin", bootstrapPassword: "another-long-password-x" });
+    try {
+      const body = (await (await fetch(`${second.base}/api/ready`)).json()).data;
+      assert.equal(body.checks.auth.bootstrapUser, "present");
+      // And it is a real account, not just a row: it can log in.
+      const login = await fetch(`${second.base}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "second-admin", password: "another-long-password-x" }),
+      });
+      assert.equal(login.status, 200);
+    } finally {
+      await second.app.close();
+    }
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
 test("local authentication bootstraps from a no-follow password file", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-web-bootstrap-secret-"));
   const dataDir = path.join(root, "data");
