@@ -102,11 +102,87 @@ NAMED_APPRAISAL_INSTRUMENT = re.compile(
     re.I,
 )
 # The paper talking about itself as the thing being delivered and checked,
-# rather than about the evidence.
+# rather than about the evidence. Declaring the readership is the same class and
+# was the shape no pattern covered: 本文以临床医师与药师为读者 opened a delivered
+# report. Every reader branch is anchored to the paper as its subject, because
+# the same words describe studied material — 以急性胸痛患者为研究对象 is a
+# population and 该科普材料的受众对象为老年人 is a finding.
 SELF_REFERENTIAL_NARRATION = re.compile(
     r"学术化版本|作为被评价对象"
     r"|(?:本报告|本文)[^。；\n]{0,16}(?:判定条件|交付判据|达标判据|验收依据|任务书|评分口径)"
     r"|(?:本报告|本文)[^。；\n]{0,10}拒绝[^。；\n]{0,24}(?:判据|验收|达标|指标)"
+    r"|(?:本文|本报告|本研究|本综述|全文)[^。；\n]{0,16}"
+    r"(?:以[^。；\n]{0,16}为(?:读者|受众|阅读对象)"
+    r"|面向[^。；\n]{0,14}(?:读者|受众|医师|医生|药师|同行|从业者)"
+    r"|写给[^。；\n]{0,14}(?:读者|受众|医师|医生|药师|同行|参考|阅读)"
+    r"|(?:目标)?(?:读者|受众)(?:群体?|对象)?\s*(?:为|是|包括))"
+)
+# A verbatim support quote is a traceability device: its home is supportQuote in
+# clinical-evidence-matrix.json and citation-ledger.csv, where it is checked
+# against the preserved artifact. Behind a 原文： label in the body it is checked
+# by nobody; one delivered report carried nine, three in a single paragraph.
+PASTED_SOURCE_QUOTE = re.compile(r"(?:原文|原句)\s*[:：]")
+# Latin-script function words stay lowercase inside a proper name, so a title is
+# not read as a sentence merely because it contains them.
+PROPER_NAME_FUNCTION_WORDS = frozenset(
+    {"a", "an", "and", "at", "de", "for", "from", "in", "of", "on", "or", "the", "to", "van", "versus", "vs", "with"}
+)
+# A database search strategy is Boolean syntax, not prose, and PRISMA asks for it
+# verbatim. Two or more uppercase operators, or a field tag, identify one.
+DATABASE_FIELD_TAG = re.compile(r"\[(?:mesh|majr|tiab|ti|ab|tw|all fields|title/abstract|pt|la|dp)[^\]]*\]", re.I)
+BOOLEAN_OPERATOR = re.compile(r"(?<![A-Za-z])(?:AND|OR|NOT)(?![A-Za-z])")
+# Everything a Latin sentence may contain without interruption. Any other
+# character — a CJK glyph, CJK punctuation, a table pipe — ends the run, so
+# English words threaded through a Chinese sentence never accumulate.
+RUN_INTERRUPT = re.compile(r"[^A-Za-z0-9\s.,;:'’()\[\]%/&+\-–—<>=\"*#]")
+LATIN_WORD = re.compile(r"[A-Za-z][A-Za-z'’]*(?:-[A-Za-z][A-Za-z'’]*)*")
+SHORT_QUOTED_SPAN = re.compile(r"[“\"「『]([^”\"」』]{0,600})[”\"」』]")
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+INLINE_CODE = re.compile(r"`[^`]*`")
+MARKDOWN_LINK = re.compile(r"!?\[([^\]\n]*)\]\([^)\s]*\)")
+WEB_ADDRESS = re.compile(r"https?://\S+|www\.[A-Za-z0-9.-]+\S*", re.I)
+DOI_ADDRESS = re.compile(r"\b10\.\d{4,9}/\S+")
+CODE_FENCE = re.compile(r"^\s*(?:```|~~~)")
+TABLE_ROW = re.compile(r"^\s*\|")
+# A quotation the body may carry: a short phrase or a single sentence, inside
+# quotation marks, grammatically inside the Chinese sentence around it. Twenty
+# words is a generous sentence; past it the "quotation" is a paragraph.
+PERMITTED_QUOTED_WORDS = 20
+# The run length that separates a name from a sentence. The longest strings a
+# Chinese manuscript legitimately carries untranslated are proper names and their
+# expansions — PRISMA and STROBE at 8 words, the 2021 chest-pain guideline title
+# at 9 — and those are exempt as Title Case anyway. Every pasted source sentence
+# in the report that prompted this rule ran 15 words or longer.
+UNTRANSLATED_PROSE_WORDS = 12
+# Absent evidence is a gap, not a counter-finding. The three parts are required
+# in this order and in one sentence — the failed search, a causal connective, and
+# a verdict on the intervention — because the gap stated on its own is the
+# correct writing: 未检索到支持其用于该场景的直接证据 is what the run is asked to
+# write, and 未检索到直接证据，故该药无效 is the error. Only causal connectives
+# count: 未检索到证据表明其无效 puts the verdict inside the scope of the search.
+ABSENT_EVIDENCE = re.compile(
+    r"(?:未检索到|未能检索到|未检索出|未发现|未找到|未见|尚未检索到|缺乏|缺少|尚无|没有)"
+    r"[^。；\n]{0,24}(?:直接证据|随机对照(?:试验)?证据|随机对照试验|头对头(?:比较|研究|试验)?|对照研究|临床证据|循证证据|RCT)"
+)
+EVIDENCE_INFERENCE_MARKER = re.compile(r"(?:因此|因而|所以|故|可见|由此|据此|从而|于是)")
+# A verdict on the intervention, not on the evidence. 不足以支持 / 不足以判断 are
+# the wordings the skill prescribes for a gap, so every recommendation verb here
+# requires its object (使用/应用/将…).
+NEGATIVE_VERDICT = re.compile(
+    r"(?:无效|无疗效|没有疗效|无临床(?:价值|获益)|不(?:推荐|建议)(?:使用|应用|采用|服用|将)"
+    r"|不(?:应|宜|得)(?:使用|应用|服用)|应(?:避免|停止)使用|不支持(?:使用|将))"
+)
+# Reporting the recommendation somebody else made is citation, not inference.
+ATTRIBUTED_RECOMMENDATION = re.compile(r"(?:指南|共识|说明书|标签|药监|监管|批准|建议书|WHO|FDA|EMA|NMPA|NICE)")
+# Advisory only (see notes in main): one arm graded, another vouched for by
+# tradition, is the asymmetry "One ruler for every arm" exists to prevent — but
+# which nouns are the compared arms is not decidable from the text, so this is
+# reported to the run and never blocks.
+COMPARISON_QUESTION = re.compile(r"比较|对比|头对头|优劣|孰优|versus|\bvs\.?\b", re.I)
+CERTAINTY_APPRAISAL = re.compile(r"GRADE|确定性|证据等级|证据质量|证据体质量")
+TRADITION_APPRAISAL = re.compile(
+    r"长期(?:临床)?(?:使用|应用|实践|经验)|广泛(?:使用|应用|采用)|指南(?:推荐|支持|建议)"
+    r"|久经(?:临床)?(?:使用|考验)|临床经验支持|沿用已久|一线(?:用药|药物)地位"
 )
 SENTENCE_SPLIT = re.compile(r"(?<=[。！？；;])")
 
@@ -239,6 +315,75 @@ def self_graded_verdict(line: str) -> str:
     return ""
 
 
+def reads_as_proper_name(words: list[str]) -> bool:
+    """A run of Latin words is a name rather than a sentence when every word that
+    is not a lowercase connective carries a capital, as journal, organisation,
+    instrument, guideline and trial names do and prose does not."""
+    carried = [word for word in words if word.lower() not in PROPER_NAME_FUNCTION_WORDS]
+    return bool(carried) and all(word[:1].isupper() for word in carried)
+
+
+def reads_as_database_query(segment: str) -> bool:
+    return bool(DATABASE_FIELD_TAG.search(segment)) or len(BOOLEAN_OPERATOR.findall(segment)) >= 2
+
+
+def untranslated_prose_run(line: str) -> tuple[int, str] | None:
+    """A run of untranslated source prose on one line of the body, or None when
+    the line's Latin script is names, identifiers, units, statistics, or a short
+    quoted phrase carried inside a Chinese sentence.
+
+    The body states each finding in Chinese with its numbered citation; a reader
+    who wants the original wording follows the citation and an auditor reads the
+    matrix. A paragraph of source sentences in the body is the traceability
+    device pasted where nothing checks it."""
+    # Anything removed rather than measured leaves a break behind it, so two
+    # separate Latin fragments never merge into one run.
+    cut = "\x00"
+    text = HTML_COMMENT.sub(cut, line)
+    text = INLINE_CODE.sub(cut, text)
+    text = MARKDOWN_LINK.sub(lambda match: match.group(1) + cut, text)
+    text = WEB_ADDRESS.sub(cut, text)
+    text = DOI_ADDRESS.sub(cut, text)
+    # A short direct quotation is allowed: the exact wording is sometimes itself
+    # the object of analysis — an indication clause, a recommendation class, a
+    # contested definition. Past a sentence it is no longer a short quotation, so
+    # the span stays in and is measured with everything else.
+    text = SHORT_QUOTED_SPAN.sub(
+        lambda match: cut if len(LATIN_WORD.findall(match.group(1))) <= PERMITTED_QUOTED_WORDS else match.group(0),
+        text,
+    )
+    for segment in RUN_INTERRUPT.sub(cut, text).split(cut):
+        words = LATIN_WORD.findall(segment)
+        if len(words) < UNTRANSLATED_PROSE_WORDS:
+            continue
+        if reads_as_proper_name(words) or reads_as_database_query(segment):
+            continue
+        return len(words), excerpt(segment)
+    return None
+
+
+def absent_evidence_as_counter_finding(line: str) -> str:
+    """A sentence that answers the question with the failure of its own search,
+    or "" when the sentence states the gap and stops there."""
+    for sentence in SENTENCE_SPLIT.split(line):
+        absent = ABSENT_EVIDENCE.search(sentence)
+        if not absent:
+            continue
+        after = sentence[absent.end():]
+        marker = EVIDENCE_INFERENCE_MARKER.search(after)
+        if not marker:
+            continue
+        if not NEGATIVE_VERDICT.search(after[marker.end():]):
+            continue
+        # Reporting the recommendation somebody else made is citation, not
+        # inference. The split is per clause, so naming a body in a neighbouring
+        # clause does not license the inference in this one.
+        if ATTRIBUTED_RECOMMENDATION.search(sentence):
+            continue
+        return excerpt(sentence)
+    return ""
+
+
 def check_register(report: str, issues: list[str]) -> None:
     """The report is a scientific paper about a clinical question, never a paper
     about the task that produced it. Three registers give that away — the
@@ -265,14 +410,26 @@ def check_register(report: str, issues: list[str]) -> None:
         )
         break
 
-    body = without_sections(report, "参考文献|参考来源|References?").split("\n")
+    body_text = without_sections(report, "参考文献|参考来源|References?")
+    body = body_text.split("\n")
+    # A database search strategy is written in the source language by design and
+    # belongs in 资料与方法, so the untranslated-prose rule alone reads a copy with
+    # that section blanked. Line numbers survive the blanking, as everywhere else.
+    prose = without_sections(body_text, "检索|方法|Methods?").split("\n")
     named_terms: set[str] = set()
     proposition_lines: list[int] = []
     proposition_sample = ""
     headings = 0
     verdicts = 0
     narrations = 0
+    quotations = 0
+    untranslated = 0
+    counter_findings = 0
+    inside_code_fence = False
     for line_number, line in enumerate(body, 1):
+        fence = bool(CODE_FENCE.match(line))
+        if fence:
+            inside_code_fence = not inside_code_fence
         for term in COMMISSIONING_VOCABULARY:
             if term not in line or term in named_terms:
                 continue
@@ -314,7 +471,47 @@ def check_register(report: str, issues: list[str]) -> None:
                 f"about the evidence ({excerpt(line)}). The paper describes evidence and reasoning, never what "
                 "this report is, what it refuses to do, or what it was checked against. State the objective "
                 "plainly in 引言 (本文旨在评价……) and delete the rest; if a scientific question is buried in the "
-                "sentence, ask it scientifically"
+                "sentence, ask it scientifically. A paper never announces whom it is written for: state in "
+                "资料与方法 which population and care setting the evidence applies to, and discuss extrapolation in 讨论"
+            )
+        if quotations < 4 and PASTED_SOURCE_QUOTE.search(line):
+            quotations += 1
+            issues.append(
+                f"clinical-evidence-report.md line {line_number}: a source quotation is pasted into the body "
+                f"behind a 原文： label ({excerpt(line)}). A verbatim quote is a traceability device: it lives in "
+                "the supportQuote field of clinical-evidence-matrix.json and the supportQuote column of "
+                "citation-ledger.csv, where it is checked against the preserved artifact — in the body it is "
+                "checked by nobody and adds no verifiability. State the finding in Chinese in the paper's own "
+                "voice with its numbered citation, and where the exact wording is itself the object of analysis, "
+                'quote a short phrase inside quotation marks, grammatically inside the Chinese sentence '
+                '(该说明书将适应症限定为"气滞血瘀型冠心病心绞痛"[7])'
+            )
+        foreign = (
+            untranslated_prose_run(prose[line_number - 1] if line_number <= len(prose) else "")
+            if untranslated < 4 and not inside_code_fence and not fence and not TABLE_ROW.match(line)
+            else None
+        )
+        if foreign:
+            untranslated += 1
+            words, sample = foreign
+            issues.append(
+                f"clinical-evidence-report.md line {line_number}: {words} consecutive words of untranslated "
+                f"source prose ({sample}). The body states each finding in Chinese with its numbered citation; a "
+                "reader who wants the original wording follows the citation and an auditor reads the matrix. "
+                "Restate the passage in Chinese with its citation, and keep any genuinely necessary quotation to "
+                "a short phrase inside quotation marks — names, identifiers, units and statistics (ALDH2、rs671、"
+                "GRADE、Naranjo、P < 0.01、RR 0.82) are unaffected"
+            )
+        counter_finding = absent_evidence_as_counter_finding(line) if counter_findings < 4 else ""
+        if counter_finding:
+            counter_findings += 1
+            issues.append(
+                f"clinical-evidence-report.md line {line_number}: absent evidence is turned into a "
+                f"counter-finding ({counter_finding}). A search that returned nothing is insufficient evidence to "
+                "judge, never evidence of no effect, so it cannot carry 无效／不推荐使用／不支持使用. Write the gap "
+                "as a gap and name the study that would close it — design, population, comparator, outcome, order "
+                "of magnitude of sample (未检索到在该场景中以临床结局为终点的随机对照研究，现有证据不足以判断其在"
+                "该场景的效能). If a body actually recommended against use, name the body and cite it"
             )
     if len(proposition_lines) >= 2:
         listed = ", ".join(str(number) for number in proposition_lines[:8])
@@ -325,6 +522,47 @@ def check_register(report: str, issues: list[str]) -> None:
             "as continuous methods prose, and what each line of evidence established belongs in 结果 and 讨论 as "
             "a finding — never carried forward as a per-proposition verdict"
         )
+
+
+def appraisal_symmetry_notes(report: str) -> list[str]:
+    """Advice, never a blocking issue.
+
+    When the question compares two interventions, the first thing a reviewer
+    checks is whether they were appraised the same way. The asymmetry is almost
+    never deliberate: the familiar arm attracts the language of clinical
+    tradition (长期临床使用, 指南推荐) and the less studied arm attracts the
+    language of grading (按 GRADE 为低确定性), and a conclusion ends up reporting
+    one as supported and the other as uncertain when both stand in the same
+    evidentiary position for the question actually asked.
+
+    Which nouns in a sentence are the compared arms is not decidable from the
+    text — the two vocabularies can also belong to one arm across two
+    indications, which is correct writing. So this is reported to the run and
+    never fails the preflight; the server has no counterpart, because a rule
+    that cannot be decided must not be able to withhold a finished package."""
+    title = re.search(r"^#\s+(.+)$", report, re.M)
+    abstract = section(report, "摘要")
+    conclusion = section(report, "结论")
+    if not COMPARISON_QUESTION.search("\n".join([title.group(1) if title else "", abstract, conclusion])):
+        return []
+    notes: list[str] = []
+    for name, text in (("摘要", abstract), ("结论", conclusion)):
+        graded = [line for line in SENTENCE_SPLIT.split(text) if CERTAINTY_APPRAISAL.search(line)]
+        vouched = [
+            line for line in SENTENCE_SPLIT.split(text)
+            if TRADITION_APPRAISAL.search(line) and not CERTAINTY_APPRAISAL.search(line)
+        ]
+        if not graded or not vouched:
+            continue
+        notes.append(
+            f"clinical-evidence-report.md {name}: one arm is vouched for by clinical tradition "
+            f"({excerpt(vouched[0])}) while another's certainty is graded ({excerpt(graded[0])}). Check that every "
+            "compared arm is appraised with the same instrument, for the same indication, population, care setting "
+            "and outcome, and that a gap the arms share is stated for both — 长期使用、指南推荐与批准上市各自是某件"
+            "事的证据，都不是确定性等级。If one arm's evidence really is stronger for the question asked, say so in "
+            "the same vocabulary you used for the other"
+        )
+    return notes
 
 
 def citation_numbers(line: str) -> set[int]:
@@ -589,6 +827,9 @@ def main() -> int:
     payload = {
         "ok": not issues,
         "workspace": str(root),
+        # Advice the run should read and act on where it applies. It never
+        # decides "ok", because it cannot be decided mechanically.
+        "notes": appraisal_symmetry_notes(report),
         "metrics": {
             "reportCharacters": len(report.strip()),
             "queries": len(query_values),

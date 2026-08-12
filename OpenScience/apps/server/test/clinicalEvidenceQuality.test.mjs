@@ -329,6 +329,21 @@ test("each register rule reports its own reason and names the sentence to fix", 
       write: "该来源的访问层级为摘要，相关工件已保存于本环境。",
       expect: /runtime or retrieval-process prose .*line \d+ reads/,
     },
+    {
+      label: "the traceability device pasted into the body",
+      write: "该说明书对给药途径有明确表述。原文：sublingual administration is preferred",
+      expect: /line \d+ pastes a source quotation into the body behind a 原文： label/,
+    },
+    {
+      label: "a paragraph of the source's own language",
+      write: "the relief of chest pain by nitroglycerin should not be used as a diagnostic factor in the evaluation of undifferentiated chest pain",
+      expect: /line \d+ carries \d+ consecutive words of untranslated source prose/,
+    },
+    {
+      label: "a gap answered as a counter-finding",
+      write: "未检索到该药在院外自救场景的直接证据，因此不推荐使用。",
+      expect: /line \d+ turns absent evidence into a counter-finding/,
+    },
   ];
 
   const clean = validateClinicalEvidencePackage(validPackage()).issues.join("\n");
@@ -343,6 +358,114 @@ test("each register rule reports its own reason and names the sentence to fix", 
       if (other === scenario) continue;
       assert.doesNotMatch(issues, other.expect, `${scenario.label} was also reported as ${other.label}`);
     }
+  }
+});
+
+test("a paper does not announce whom it is written for", () => {
+  // 本文以临床医师与药师为读者 opened a delivered report and no rule here saw it:
+  // it is the same self-reference as 本报告检验……的学术化版本, in the one shape
+  // the pattern did not cover. What a reader needs is which population and
+  // setting the conclusions apply to, which is 资料与方法 and 讨论.
+  const declared = validPackage();
+  declared.reportText = declared.reportText.replace(
+    "## 药物角色\n",
+    "## 药物角色\n本文以临床医师与药师为读者，系统检索并评价上述问题所依赖的证据。\n",
+  );
+  const issues = validateClinicalEvidencePackage(declared).issues.join("\n");
+  assert.match(issues, /line \d+ writes about itself rather than about the evidence/);
+  assert.match(issues, /never announces whom it is written for/);
+
+  // The same words describe a study population, studied material, and ordinary
+  // methods prose. Rejecting those sends the run back to break something right.
+  for (const write of [
+    "本研究以急性胸痛患者为研究对象，以症状缓解时间为主要结局。",
+    "该科普材料的受众对象为老年人，其阅读理解水平限制了信息传递效果。",
+    "本文提示读者注意个体差异对结论外推的影响。",
+    "本文面向未分化急性胸痛这一临床场景，讨论两种自救用药的证据位置。",
+    "本文以内容正确性（指南符合度、误分诊率、漏诊比例）为评价终点。",
+    "本文系统检索并评价上述问题所依赖的证据，并给出可支持的结论边界。",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);
+    assert.equal(validateClinicalEvidencePackage(input).valid, true, write);
+  }
+});
+
+test("untranslated source prose is rejected; names, statistics and short quotations are not", () => {
+  // A verbatim quote is checked against its artifact in the matrix and the
+  // ledger. In the body nothing checks it, and nine of them stood in one
+  // delivered report — three in a single paragraph, introduced by 原文：.
+  //
+  // The threshold is twelve consecutive Latin words. The longest strings a
+  // Chinese manuscript legitimately carries untranslated are proper names and
+  // their expansions (PRISMA and STROBE at eight words, a chest-pain guideline
+  // title at nine), and those are exempt as Title Case as well.
+  for (const write of [
+    "该说明书将适应症限定为“气滞血瘀型冠心病心绞痛”，未涵盖未分化急性胸痛。",
+    "主要终点为主要不良心血管事件（major adverse cardiovascular events, MACE）。",
+    "报告规范遵循 Preferred Reporting Items for Systematic Reviews and Meta-Analyses (PRISMA) 流程。",
+    "观察性研究报告遵循 Strengthening the Reporting of Observational Studies in Epidemiology (STROBE) 声明。",
+    "2021 AHA/ACC/ASE/CHEST/SAEM/SCCT/SCMR Guideline for the Evaluation and Diagnosis of Chest Pain in the Emergency Department 将胸痛缓解排除在诊断依据之外。",
+    "该研究发表于 New England Journal of Medicine，采用双盲设计。",
+    "不良反应因果关系采用 Naranjo 量表与 WHO-UMC 标准评定。",
+    "硝酸甘油（glyceryl trinitrate, nitroglycerin, GTN）经舌下黏膜吸收。",
+    "ALDH2 rs671 变异在东亚人群中的携带率显著高于欧洲人群。",
+    "原文报告 Jadad 评分较低，随机方法与分配隐藏均未描述。",
+    "该指南原文为英文，本文按术语表统一译名后引用。",
+    "检索式为 (\"acute chest pain\"[MeSH] OR \"chest discomfort\"[tiab]) AND (\"nitroglycerin\"[MeSH] OR \"prehospital\"[tiab]) NOT \"review\"[pt]。",
+    "说明书适应症英文原句为 “for the treatment of angina pectoris due to coronary artery disease”，未涵盖未分化胸痛。",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, true, `${write}: ${result.issues.join("\n")}`);
+  }
+
+  // A quotation long enough to be a paragraph is not a short quotation, and
+  // quotation marks do not make it one.
+  const quoted = validPackage();
+  quoted.reportText = quoted.reportText.replace(
+    "## 药物角色\n",
+    "## 药物角色\n说明书写道 “the recommended doses of nitroglycerin include sublingual or spray administration every five "
+      + "minutes up to a maximum of three doses in patients with ongoing ischemic symptoms”。\n",
+  );
+  assert.match(
+    validateClinicalEvidencePackage(quoted).issues.join("\n"),
+    /carries \d+ consecutive words of untranslated source prose/,
+  );
+});
+
+test("absent evidence may be written as a gap but never as a counter-finding", () => {
+  // 未检索到直接证据 is insufficient evidence to judge. Summarised into 无效 or
+  // 不推荐使用 it states a negative finding the report never made — and the
+  // correct writing contains the same words, so the rule reads the sentence:
+  // the failed search, then a causal connective, then a verdict on the drug.
+  for (const write of [
+    "未检索到支持其用于该场景的直接证据。",
+    "未检索到在未分化急性胸痛院外自救场景中以临床结局为终点的随机对照研究，现有证据不足以判断其在该场景的效能。",
+    "缺乏头对头比较研究，因此两药的相对效能尚不能判断。",
+    "现有报告仅提供用药与症状的时间关联，缺少去激发与再激发观察及标准化因果关系评定，故不足以支持因果归因。",
+    "未检索到证据表明该药在该场景无效，也未检索到证据支持其有效。",
+    "该指南因缺乏随机对照证据，不推荐将其常规用于未分化胸痛。",
+    "未检索到两者在该场景的头对头比较，因此本文不推荐读者据此排序两药。",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, true, `${write}: ${result.issues.join("\n")}`);
+  }
+  for (const write of [
+    "未检索到直接证据，故该药无效。",
+    "未检索到该药在院外自救场景的直接证据，因此不推荐使用。",
+    "缺乏头对头随机对照证据，因而不推荐将其用于急性胸痛自救。",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);
+    assert.match(
+      validateClinicalEvidencePackage(input).issues.join("\n"),
+      /turns absent evidence into a counter-finding/,
+      write,
+    );
   }
 });
 

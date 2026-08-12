@@ -187,6 +187,142 @@ For every included source, record:
 
 Separate findings for emergency triage from findings for chronic stable disease. Evidence that a medicine may help diagnosed stable angina does not establish a role in self-diagnosing undifferentiated acute chest pressure.
 
+## Comparative appraisal and evidence bridging
+
+When the question compares two or more interventions, the first thing a reviewer
+checks is whether they were appraised the same way. The asymmetry is almost never
+deliberate: the familiar arm attracts the language of clinical tradition (`长期临床使用`,
+`指南推荐`, `已广泛应用`), the less studied arm attracts the language of grading
+(`按 GRADE 为低确定性`), and a paragraph ends up reporting one as supported and the
+other as uncertain when the two stand in the same evidentiary position for the
+question actually asked. That is a methodological defect, not a matter of tone.
+
+None of what follows levels the arms upward. Symmetry belongs to the appraisal,
+not to the conclusion: where one arm's evidence really is stronger *for the
+question asked*, the conclusion says so, in the same vocabulary it used for the
+other.
+
+### One ruler for every arm
+
+Report every arm's evidence with the same appraisal instrument, for the same
+indication, the same population, the same care setting, and the same outcome. If
+one arm's certainty is stated by GRADE, every arm's is. If one arm is appraised in
+the scenario the question asks about, no arm may be appraised in an adjacent
+scenario where its evidence happens to be stronger. Long clinical use, guideline
+mention, and regulatory approval are each evidence of something specific; none of
+them is a certainty rating and none substitutes for one.
+
+- 反例（结论段，同一场景两把尺子）：`（1）舌下含服硝酸甘油缓解心绞痛发作的疗效有长期临床使用与指南推荐支持，但其用于未分化急性胸痛院外自救的适应症内随机对照证据缺乏……（2）速效救心丸的随机对照证据确定性按 GRADE 为低至极低，未检索到其在急性胸痛院外自救场景中与硝酸甘油的头对头比较……`
+  为什么是反例："有长期临床使用与指南推荐支持"评的是另一个适应症（已确诊心绞痛发作），"按 GRADE 为低至极低"评的是本场景（院外自救、未分化胸痛）；在本场景中两者同样没有适应症内随机对照证据，却被写成一方有支持、一方确定性低。
+  正例：`在未分化急性胸痛的院外自救场景中，两者均未检索到适应症内随机对照证据。硝酸甘油的缓解疗效证据来自已确诊心绞痛发作人群 [2]，外推至未分化自救人群受人群间接性与结局间接性双重限制，按 GRADE 为极低确定性；速效救心丸的随机对照证据集中于气滞血瘀型冠心病心绞痛，样本量小、盲法与分配隐藏报告不全，同一外推按 GRADE 为低至极低确定性 [11,12]。未检索到两者在该场景的头对头比较。`
+
+Where an arm genuinely holds evidence the other lacks, keep the indication and
+population attached to it, so the reader can see that a different question is
+being answered: `硝酸甘油在已确诊心绞痛发作中的缓解疗效证据充分 [2]，该证据不覆盖未分化胸痛的自救决策`.
+
+### Absent evidence is a gap, not a counter-finding
+
+Three states stay distinct in every sentence, table cell, abstract line, and
+conclusion:
+
+1. **evidence of no effect** — direct studies were done and were negative or
+   bounded by an equivalence margin; give the estimate and its interval;
+2. **insufficient evidence to judge** — no directly applicable study was
+   retrieved; give what was searched and what is missing;
+3. **evidence of effect** — direct studies support it; give the estimate and its
+   certainty.
+
+`未检索到直接证据` is the second state and may never be summarised into the first.
+It is written as a gap, and a gap is complete only when it names the study that
+would close it: design, population, comparator, outcome, and the order of
+magnitude of sample that outcome requires.
+
+- 反例：`该药在急性胸痛院外自救中无效，不推荐使用。`、`现有证据不支持该药用于院外自救。`
+  正例：`未检索到在未分化急性胸痛院外自救场景中以临床结局为终点的随机对照研究，现有证据不足以判断其在该场景的效能。可回答该问题的研究为：以院外发作的未分化胸痛人群为对象、以舌下含服硝酸甘油为对照、以症状缓解时间与 30 天主要心血管事件为结局的随机对照试验；按该人群的事件率，事件驱动的样本量在千例量级。`
+  （`不支持` 是对证据方向的陈述，检索落空时的正确写法是 `不足以支持` 或 `未检索到……的证据`；见"Register: what a manuscript never says"中的证据动词。）
+
+A summary compresses, and that is where this error does the most damage: an
+abstract or `结论` line that turns a gap into `无效`／`不推荐`／`不支持使用` states a
+negative finding the report never made. The prohibition runs in the other
+direction too — a gap is not permission to conclude that an arm works. The gap is
+the finding, and the sentence stops there.
+
+### The bridging ladder
+
+When direct evidence for an arm is thin or absent, **attempt the bridge before
+reporting the gap.** Stopping at `证据不足` is the failure this subsection exists to
+prevent: it is the answer the reader could have reached without the search. The
+rungs below are the moves of "Argue a thesis; do not answer a questionnaire",
+ordered for a comparison. Work down them, and for each rung state the certainty
+it carries and what it cannot reach:
+
+1. **机制与药理学** — receptor, pathway, pharmacokinetics, measured constants.
+   Supports a direction of effect and sometimes an order of magnitude; never a
+   clinical effect size, never a safety margin.
+2. **替代终点与中间结局** — ECG change, exercise tolerance, ischemic burden,
+   biomarkers. Supports that the mechanism operates in humans; supports a clinical
+   outcome only where the surrogate is validated for that outcome, and the
+   validation is cited.
+3. **间接人群** — adjacent indication, adjacent severity, adjacent care setting.
+   Supports transfer with the indirectness named and its direction of bias
+   argued; the certainty is downgraded for it, not assumed to survive.
+4. **同类药物或同类制剂的类效应** — supports a class-level expectation only where
+   the shared property is the one doing the work; a shared class name with a
+   different route, formulation, or pharmacokinetic profile is not a bridge.
+5. **真实世界数据与登记研究** — utilisation data, registries, pharmacovigilance
+   databases, cohorts. Supports exposure patterns, frequencies, and safety
+   signals; confounding by indication puts effectiveness out of reach unless the
+   design addresses it.
+6. **反向与不利证据** — negative trials, failed replications, regulatory warnings
+   and non-approvals, and what would already have been observed if the
+   proposition were false. This rung is not optional, and it is reported at the
+   same length as the favourable ones.
+
+Bridge every arm you compare, or bridge none. One arm carried across four rungs
+while the other is dismissed at the gap is the first subsection's asymmetry in
+another form. Every rung you reach is a derived claim in the matrix with its
+`derivedFrom`, `method`, `assumptions`, and `sensitivity`, and is marked `〔推导〕`
+in the report (see "Derived results"); a bridge never reaches `临床实践要点`.
+
+**A bridge attempted and not built is a result.** Say which rung failed and why —
+the surrogate is not validated for this outcome, the class shares a name but not
+the mechanism, the registry has no denominator — so the reader learns what the
+literature currently cannot support. Silence at a rung reads as a rung never
+tried.
+
+### The conclusion answers the question that was asked
+
+`结论` follows the order of the research questions, and each answer leads with the
+finding rather than with the appraisal of a neighbouring arm. Where a question
+asks about the limits of one intervention's effect in a defined population, the
+conclusion states the magnitude and the share of the population it applies to —
+an effect limited to a genotype carried by half the target population is a
+different result from one carried by one in a thousand, and the conclusion must
+say which. **A correct qualifier may not stand in place of the finding it
+qualifies.**
+
+- 反例（把核心发现压平为一句限定语）：`ALDH2 rs671 变异降低但不消除对硝酸甘油的反应。`
+  正例（发现与人群占比在前，限定语在后，推导另起一行并标注）：
+  `ALDH2 rs671 变异型在东亚人群的携带率约 40%，中国汉族为 45% 至 49% [8]。携带者舌下含服硝酸甘油后的心绞痛缓解率为 50.6%，野生型为 79.4% [9]。`
+  `〔推导〕以汉族携带率 45% 至 49% 与上述两组缓解率计算，人群平均缓解率约为 65% 至 66%，即每两名患者中约有一名属于低反应基因型；含服后未缓解在该亚群中更可能反映酶活性不足而非病因不同，"含服后缓解"这一现象据此不能用于区分病因。变异降低但不消除反应，携带者仍可能获益，故该发现限定的是对缓解现象的解读，不构成停用理由。`
+
+### Symmetry never softens a safety statement
+
+This subsection ranks below "Safety boundaries" and may never be cited against
+it. Appraising two arms evenly does not even out their risks.
+
+- The instruction not to let self-administered medicine delay emergency contact is
+  written at full strength for every arm, whatever its evidence grade.
+- An out-of-indication scenario is stated as out-of-indication for every arm that
+  is out of indication, the familiar one included.
+- Contraindications, interactions (nitrates with PDE5 inhibitors, among others),
+  and known harms are reported in full regardless of how symmetric the efficacy
+  evidence turned out; an arm with less efficacy evidence does not receive less
+  harm reporting.
+- Symmetry is a floor under the weaker-looking arm's appraisal, never a ceiling on
+  the stronger one's. Unfavourable evidence about either arm is reported in full,
+  and no bridge, gap, or ordering rule above may be used to omit it.
+
 ## Citation and traceability integrity
 
 ### Reader-visible citations
@@ -202,6 +338,32 @@ Use standard numbered citations in order of first appearance:
   with the matching numbered citation and hidden claim marker.
 - Every factual numeral and every practical action needs a directly applicable citation and claim marker.
 - Never use a broad citation to cover a sample size, effect estimate, timing threshold, indication, contraindication, or recommendation absent from its source passage.
+
+### Quotation placement
+
+A verbatim support quote is a traceability device, and its home is the
+`supportQuote` field of `clinical-evidence-matrix.json` and the `supportQuote`
+column of `citation-ledger.csv`, where it is checked against the preserved
+artifact. **It does not go into the report body.** The body states the finding in
+Chinese, in the paper's own voice, with its numbered citation; a reader who wants
+the original wording follows the citation, and an auditor reads the matrix.
+
+Quotation inside the body is reserved for the case where the exact wording is
+itself the object of analysis — a regulatory indication clause being parsed, a
+recommendation class, a definition the dispute turns on. It is then a short
+phrase or a single sentence, inside quotation marks, grammatically inside a
+Chinese sentence, with its source cited in place. **Never a run of untranslated
+source sentences, and never introduced by the label `原文：`.** Two `原文：` in one
+paragraph is the signature of a matrix pasted into a manuscript.
+
+- 反例：`……其推荐含服剂量为 0.3 至 0.6 mg [2]。原文：the recommended doses of NTG include sublingual or spray (0.3 to 0.6 mg) every 5 minutes up to a maximum of 3 doses 原文：the 2020 European Society of Cardiology recommends (Class I, Level C) the use of sublingual or IV nitrates in patients with ongoing ischemic symptoms`
+  正例：`指南推荐舌下含服 0.3 至 0.6 mg，每 5 分钟可重复，最多 3 次 [2]；对仍有缺血症状者，2020 年欧洲心脏病学会给出 I 类 C 级推荐 [3]。`
+- 正例（确有必要直引时）：`该说明书将适应症限定为"气滞血瘀型冠心病心绞痛"[7]，未涵盖未分化急性胸痛。`
+
+Pasting the device into the body adds no verifiability: verifiability is carried
+by the matrix and the ledger, which are machine-checked against the artifacts,
+while a quotation in the body is checked by nobody. What it does add is a
+paragraph that reads as assembled by copying rather than written.
 
 ### Evidence matrix
 
@@ -442,10 +604,14 @@ Never structure the paper as a specification being checked off.
 ### Self-referential meta-narration
 
 The paper describes evidence and reasoning, not itself. Do not write about what
-this report is, what it refuses to do, or what role something plays in it.
+this report is, what it refuses to do, what role something plays in it, or whom
+it is addressed to.
 
 - 反例：`本报告检验……的学术化版本`、`……只作为被评价对象出现`、`本报告的判定条件（与任务书一致）`
   正例：`本文的目的是评价……`（其余删去）。
+- 反例（声明读者对象）：`本文以临床医师与药师为读者，系统检索并评价上述问题所依赖的证据……`、`本文面向基层全科医师`、`本文写给临床药师参考`、`本文的受众为……`
+  正例：`本文系统检索并评价上述问题所依赖的证据……`（直接说做了什么）。
+  （论文不宣布自己写给谁看——读者对象由题目、载体与内容本身决定。读者需要知道的是结论适用于哪一人群、哪一诊疗场景，那是 `资料与方法` 的适用性与 `讨论` 的外推性问题，不是一句面向谁的声明。）
 - 反例：`本报告拒绝以任何提及率或强调率百分比作为结论或验收依据。`
   正例：`本文以内容正确性（指南符合度、误分诊率、漏诊比例）为评价终点。`
 - 反例（把工作流程当小标题）：`### 角度一：说明书适应症边界（命题 A）`、`**该角度确立了什么、不能确立什么**`
@@ -568,6 +734,12 @@ python "$XDG_CONFIG_HOME/opencode/skills/clinical-evidence-synthesis/scripts/pre
 If it exits non-zero, fix every listed issue and run it again. Do not finish
 until it returns `"ok": true`. The server performs a stricter independent
 evidence and source-integrity gate after this preflight.
+
+The payload also carries `notes`: advice that does not decide `"ok"`, because it
+cannot be settled mechanically. Read it and act where it applies. Today it
+reports one arm appraised with the language of clinical tradition while another's
+certainty is graded — see "One ruler for every arm", where the asymmetry is
+almost always accidental and is a methodological defect all the same.
 
 Once the preflight is clean, make one editing pass over the report with the
 `manuscript-humanize` companion skill. A report assembled section by section

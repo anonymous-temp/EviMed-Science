@@ -125,7 +125,72 @@ const selfGradedSubjectPattern = /命题|该角度|本角度|各角度|逐条判
 const namedAppraisalInstrumentPattern = /GRADE|WHO[-‑\s]?UMC|Naranjo|诺氏|RoB\s?2|ROBINS[-‑]?I|QUADAS[-‑]?2|AMSTAR|Newcastle[-‑\s]?Ottawa|纽卡斯尔|Jadad|Cochrane|CONSORT|PRISMA|STROBE|CTCAE/i;
 // Self-referential meta-narration: the paper talking about itself as the thing
 // being delivered and checked, rather than about the evidence.
-const selfReferentialNarrationPattern = /学术化版本|作为被评价对象|(?:本报告|本文)[^。；\n]{0,16}(?:判定条件|交付判据|达标判据|验收依据|任务书|评分口径)|(?:本报告|本文)[^。；\n]{0,10}拒绝[^。；\n]{0,24}(?:判据|验收|达标|指标)/;
+//
+// Declaring the readership belongs to the same class and was the one shape no
+// pattern here covered: 本文以临床医师与药师为读者 stood in the opening line of a
+// delivered report. A paper does not announce whom it is written for — who its
+// conclusions apply to is the applicability of 资料与方法 and the extrapolation
+// of 讨论, which is what a reader actually needs.
+//
+// Every reader branch is anchored to the paper as its subject (本文/本报告/…),
+// because the same words describe studied material: 以急性胸痛患者为研究对象 is a
+// population, 该科普材料的受众对象为老年人 is a finding, and 本文以结构化临床问题
+// 为起点 (in the repository fixture) is ordinary methods prose.
+const selfReferentialNarrationPattern = /学术化版本|作为被评价对象|(?:本报告|本文)[^。；\n]{0,16}(?:判定条件|交付判据|达标判据|验收依据|任务书|评分口径)|(?:本报告|本文)[^。；\n]{0,10}拒绝[^。；\n]{0,24}(?:判据|验收|达标|指标)|(?:本文|本报告|本研究|本综述|全文)[^。；\n]{0,16}(?:以[^。；\n]{0,16}为(?:读者|受众|阅读对象)|面向[^。；\n]{0,14}(?:读者|受众|医师|医生|药师|同行|从业者)|写给[^。；\n]{0,14}(?:读者|受众|医师|医生|药师|同行|参考|阅读)|(?:目标)?(?:读者|受众)(?:群体?|对象)?\s*(?:为|是|包括))/;
+// A verbatim support quote is a traceability device. Its home is supportQuote in
+// the evidence matrix and in the citation ledger, where it is machine-checked
+// against the preserved artifact; pasted into the body behind a 原文： label it
+// is checked by nobody and reads as a matrix copied into a manuscript. One
+// delivered report carried nine of them, three in a single paragraph.
+const pastedSourceQuotePattern = /(?:原文|原句)\s*[:：]/;
+// Latin-script function words stay lowercase inside a proper name, so a title is
+// not read as a sentence merely because it contains them.
+const properNameFunctionWords = new Set([
+  "a", "an", "and", "at", "de", "for", "from", "in", "of", "on", "or", "the", "to", "van", "versus", "vs", "with",
+]);
+// A database search strategy is Boolean syntax, not prose, and PRISMA asks for
+// it verbatim. Two or more uppercase operators, or a field tag, identify one.
+const databaseFieldTagPattern = /\[(?:mesh|majr|tiab|ti|ab|tw|all fields|title\/abstract|pt|la|dp)[^\]]*\]/i;
+const booleanOperatorPattern = /(?<![A-Za-z])(?:AND|OR|NOT)(?![A-Za-z])/g;
+// Everything a Latin sentence may contain without interruption. Any other
+// character — a CJK glyph, CJK punctuation, a table pipe — ends the run, so
+// English words threaded through a Chinese sentence never accumulate.
+const runInterruptPattern = /[^A-Za-z0-9\s.,;:'’()[\]%/&+\-–—<>="*#]/g;
+const latinWordPattern = /[A-Za-z][A-Za-z'’]*(?:-[A-Za-z][A-Za-z'’]*)*/g;
+const shortQuotedSpanPattern = /[“"「『]([^”"」』]{0,600})[”"」』]/g;
+// A quotation the body is allowed to carry: a short phrase or a single sentence,
+// inside quotation marks, grammatically inside the Chinese sentence around it.
+// Twenty words is a generous sentence; past it the "quotation" is a paragraph.
+const permittedQuotedWords = 20;
+// The run length that separates a name from a sentence. The longest strings a
+// Chinese manuscript legitimately carries untranslated are proper names and
+// their expansions — PRISMA (Preferred Reporting Items for Systematic Reviews
+// and Meta-Analyses) and STROBE at 8 words, the 2021 chest-pain guideline title
+// at 9 — and those are exempt as Title Case anyway. Every one of the nine
+// pasted source sentences in the report that prompted this rule ran 15 words or
+// longer, so 12 clears the names with margin and catches the prose.
+const untranslatedProseWords = 12;
+// Absent evidence is a gap, not a counter-finding. "No directly applicable study
+// was retrieved" is insufficient evidence to judge; it may never be summarised
+// into evidence of no effect. The three parts are required in this order and in
+// one sentence — the failed search, an inference connective, and a verdict on
+// the intervention — because the gap stated on its own is the correct writing:
+// 未检索到支持其用于该场景的直接证据 is exactly what the run is asked to write,
+// and 未检索到直接证据，故该药无效 is the error.
+//
+// Only causal connectives count. 表明/提示/说明 would put the verdict inside the
+// scope of the search instead of after it, and 未检索到证据表明其无效 reports a
+// search that came back empty, which is the opposite of the error.
+const absentEvidencePattern = /(?:未检索到|未能检索到|未检索出|未发现|未找到|未见|尚未检索到|缺乏|缺少|尚无|没有)[^。；\n]{0,24}(?:直接证据|随机对照(?:试验)?证据|随机对照试验|头对头(?:比较|研究|试验)?|对照研究|临床证据|循证证据|RCT)/;
+const evidenceInferenceMarkerPattern = /(?:因此|因而|所以|故|可见|由此|据此|从而|于是)/;
+// A verdict on the intervention, not on the evidence. 不足以支持 / 不足以判断 are
+// the wordings the skill prescribes for a gap and must never be caught here, so
+// every recommendation verb requires its object (使用/应用/将…).
+const negativeVerdictPattern = /(?:无效|无疗效|没有疗效|无临床(?:价值|获益)|不(?:推荐|建议)(?:使用|应用|采用|服用|将)|不(?:应|宜|得)(?:使用|应用|服用)|应(?:避免|停止)使用|不支持(?:使用|将))/;
+// Reporting the recommendation somebody else made is not inferring one: a body
+// that names its own evidence bar and recommends against use has made a
+// recommendation, and the paper is citing it.
+const attributedRecommendationPattern = /(?:指南|共识|说明书|标签|药监|监管|批准|建议书|WHO|FDA|EMA|NMPA|NICE)/;
 const deepResearchProfile = "academic_deep_research_v1";
 // What separates a package that must be withheld from one that may be delivered
 // with its gaps declared is whether a reader could tell.
@@ -805,23 +870,111 @@ function selfGradedVerdict(line) {
   return "";
 }
 
-/** Commissioning vocabulary, acceptance-specification structure, and
- *  self-referential narration — the three ways the request's own register
- *  survives into the manuscript. Read outside the reference list, where a cited
- *  title may legitimately carry any of these words.
+/** Is this run of Latin words a name rather than a sentence? Every word that is
+ *  not a lowercase connective carries a capital in a journal, organisation,
+ *  instrument, guideline, or trial name; prose does not.
+ *  @param {string[]} words
+ */
+function readsAsProperName(words) {
+  const carried = words.filter((word) => !properNameFunctionWords.has(word.toLowerCase()));
+  return carried.length > 0 && carried.every((word) => /^[A-Z]/.test(word));
+}
+
+/** @param {string} segment */
+function readsAsDatabaseQuery(segment) {
+  return databaseFieldTagPattern.test(segment) || (segment.match(booleanOperatorPattern)?.length ?? 0) >= 2;
+}
+
+/** A run of untranslated source prose on one line of the body, or "" when the
+ *  line's Latin script is names, identifiers, units, statistics, or a short
+ *  quoted phrase carried inside a Chinese sentence.
+ *
+ *  The report states its findings in Chinese with numbered citations; a reader
+ *  who wants the original wording follows the citation and an auditor reads the
+ *  matrix. A paragraph of source sentences in the body is the traceability
+ *  device pasted where nothing checks it.
+ *  @param {string} line
+ *  @returns {{ words: number, text: string } | null}
+ */
+function untranslatedProseRun(line) {
+  // Anything removed rather than measured leaves a break behind it, so two
+  // separate Latin fragments never merge into one run.
+  const cut = "\u0000";
+  const text = String(line ?? "")
+    .replace(/<!--[\s\S]*?-->/g, cut)
+    .replace(/`[^`]*`/g, cut)
+    .replace(/!?\[([^\]\n]*)\]\([^)\s]*\)/g, `$1${cut}`)
+    .replace(/https?:\/\/\S+|www\.[A-Za-z0-9.-]+\S*/gi, cut)
+    .replace(/\b10\.\d{4,9}\/\S+/g, cut)
+    // A short direct quotation is allowed: the exact wording is sometimes itself
+    // the object of analysis — an indication clause, a recommendation class, a
+    // contested definition. Past a sentence it is no longer a short quotation,
+    // so the span stays in and is measured with everything else.
+    .replace(shortQuotedSpanPattern, (whole, inner) => (
+      (String(inner).match(latinWordPattern)?.length ?? 0) <= permittedQuotedWords ? cut : whole
+    ))
+    .replace(runInterruptPattern, cut);
+  for (const segment of text.split(cut)) {
+    const words = segment.match(latinWordPattern);
+    if (!words || words.length < untranslatedProseWords) continue;
+    if (readsAsProperName(words) || readsAsDatabaseQuery(segment)) continue;
+    return { words: words.length, text: excerpt(segment) };
+  }
+  return null;
+}
+
+/** A sentence that answers the question with the failure of its own search, or
+ *  "" when the sentence states the gap and stops there.
+ *  @param {string} line
+ */
+function absentEvidenceAsCounterFinding(line) {
+  for (const sentence of String(line ?? "").split(/(?<=[。！？；;])/)) {
+    const absent = absentEvidencePattern.exec(sentence);
+    if (!absent) continue;
+    const after = sentence.slice(absent.index + absent[0].length);
+    const marker = evidenceInferenceMarkerPattern.exec(after);
+    if (!marker) continue;
+    const conclusion = after.slice(marker.index + marker[0].length);
+    if (!negativeVerdictPattern.test(conclusion)) continue;
+    // Reporting the recommendation somebody else made is citation, not
+    // inference: a sentence that names the guideline, consensus or label it is
+    // reporting is doing that, and the citation checks hold it to the source.
+    // The split is per clause, so naming a body in a neighbouring clause does
+    // not license the inference in this one.
+    if (attributedRecommendationPattern.test(sentence)) continue;
+    return excerpt(sentence);
+  }
+  return "";
+}
+
+/** Commissioning vocabulary, acceptance-specification structure,
+ *  self-referential narration, pasted source quotations, and a gap written as a
+ *  counter-finding — the ways a manuscript stops reading like one. Read outside
+ *  the reference list, where a cited title may legitimately carry any of these
+ *  words and is untranslated by definition.
  *  @param {any} reportText
  */
 function manuscriptRegisterIssues(reportText) {
   const issues = [];
   const body = withoutReportSections(reportText, "参考文献|参考来源|References?");
+  // A database search strategy is written in the source language by design and
+  // belongs in 资料与方法, so the untranslated-prose rule alone reads a copy with
+  // that section blanked. Line numbers survive the blanking, as everywhere else.
+  const proseLines = withoutReportSections(body, "检索|方法|Methods?").split("\n");
   const namedTerms = new Set();
   const propositionLines = [];
   let propositionSample = "";
   let headings = 0;
   let verdicts = 0;
   let narrations = 0;
+  let quotations = 0;
+  let untranslated = 0;
+  let counterFindings = 0;
+  let insideCodeFence = false;
   for (const [index, line] of body.split("\n").entries()) {
     const lineNumber = index + 1;
+    const fence = /^\s*(?:```|~~~)/.test(line);
+    if (fence) insideCodeFence = !insideCodeFence;
     for (const term of commissioningVocabulary) {
       if (!line.includes(term) || namedTerms.has(term)) continue;
       namedTerms.add(term);
@@ -860,7 +1013,41 @@ function manuscriptRegisterIssues(reportText) {
       issues.push(
         `The academic report line ${lineNumber} writes about itself rather than about the evidence: ${excerpt(line)}. `
         + "The paper describes evidence and reasoning, never what this report is, what it refuses to do, or what it was checked against. "
-        + "State the objective plainly in 引言 (本文旨在评价……) and delete the rest; if a scientific question is buried in the sentence, ask it scientifically.",
+        + "State the objective plainly in 引言 (本文旨在评价……) and delete the rest; if a scientific question is buried in the sentence, ask it scientifically. "
+        + "A paper never announces whom it is written for: state in 资料与方法 which population and care setting the evidence applies to, and discuss extrapolation in 讨论.",
+      );
+    }
+    if (quotations < 4 && pastedSourceQuotePattern.test(line)) {
+      quotations += 1;
+      issues.push(
+        `The academic report line ${lineNumber} pastes a source quotation into the body behind a 原文： label: ${excerpt(line)}. `
+        + "A verbatim quote is a traceability device: it lives in the evidence matrix's supportQuote field and the citation ledger's supportQuote column, "
+        + "where it is checked against the preserved artifact — in the body it is checked by nobody and adds no verifiability. "
+        + "State the finding in Chinese in the paper's own voice with its numbered citation, and where the exact wording is itself the object of analysis, "
+        + 'quote a short phrase inside quotation marks, grammatically inside the Chinese sentence (该说明书将适应症限定为"气滞血瘀型冠心病心绞痛"[7]).',
+      );
+    }
+    const foreign = untranslated < 4 && !insideCodeFence && !fence && !/^\s*\|/.test(line)
+      ? untranslatedProseRun(proseLines[index] ?? "")
+      : null;
+    if (foreign) {
+      untranslated += 1;
+      issues.push(
+        `The academic report line ${lineNumber} carries ${foreign.words} consecutive words of untranslated source prose: ${foreign.text}. `
+        + "The body states each finding in Chinese with its numbered citation; a reader who wants the original wording follows the citation and an auditor reads the matrix. "
+        + "Restate the passage in Chinese with its citation, and keep any genuinely necessary quotation to a short phrase inside quotation marks — "
+        + "names, identifiers, units and statistics (ALDH2、rs671、GRADE、Naranjo、P < 0.01、RR 0.82) are unaffected.",
+      );
+    }
+    const counterFinding = counterFindings < 4 ? absentEvidenceAsCounterFinding(line) : "";
+    if (counterFinding) {
+      counterFindings += 1;
+      issues.push(
+        `The academic report line ${lineNumber} turns absent evidence into a counter-finding: ${counterFinding}. `
+        + "A search that returned nothing is insufficient evidence to judge, never evidence of no effect, so it cannot carry 无效／不推荐使用／不支持使用. "
+        + "Write the gap as a gap and name the study that would close it — design, population, comparator, outcome, order of magnitude of sample "
+        + "(未检索到在该场景中以临床结局为终点的随机对照研究，现有证据不足以判断其在该场景的效能). "
+        + "If a body actually recommended against use, name the body and cite it.",
       );
     }
   }

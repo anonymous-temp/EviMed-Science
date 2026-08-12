@@ -268,6 +268,47 @@ test("whatever the server gate rejects, the preflight already caught", async () 
       },
     },
     {
+      // The traceability device pasted where nothing checks it. Verbatim in the
+      // body of a delivered report, nine times, three of them in one paragraph.
+      label: "a source quotation pasted into the body behind a 原文： label",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n其推荐含服剂量见指南 [2]。原文：sublingual administration is preferred\n",
+        );
+      },
+    },
+    {
+      label: "a paragraph of the source's own language in the body",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\nrecent chest pain guidelines suggest that the relief of chest pain by nitroglycerin should not be used as a diagnostic factor\n",
+        );
+      },
+    },
+    {
+      label: "the readership declared in the opening line",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n本文以临床医师与药师为读者，系统检索并评价上述问题所依赖的证据。\n",
+        );
+      },
+    },
+    {
+      // A search that returned nothing is insufficient evidence to judge. The
+      // summary is where this error does its damage: 结论 and 摘要 compress, and
+      // a gap compressed into 不推荐使用 states a finding the report never made.
+      label: "a gap summarised into a recommendation against use",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n未检索到该药在院外自救场景的直接证据，因此不推荐使用。\n",
+        );
+      },
+    },
+    {
       label: "derived result asserted without its 〔推导〕 mark",
       break: (input) => {
         input.matrix.claims.push({
@@ -358,6 +399,49 @@ test("the register rules read the sentence, not the word", async () => {
       label: "a single lettered proposition, which is a reference and not a checklist",
       write: "命题 A（发生率可定量）需要分母明确的前瞻性主动监测研究支持。",
     },
+    // Latin script in a Chinese manuscript is normal: instrument names, reporting
+    // guidelines, journals, genes, drug names and statistics are all written in
+    // it. What is banned is a paragraph of the source's own sentences, so the
+    // rule counts a run of twelve consecutive words — longer than any of these.
+    {
+      label: "reporting-guideline expansions, which are names and not sentences",
+      write: "报告规范遵循 Preferred Reporting Items for Systematic Reviews and Meta-Analyses (PRISMA) 与 Strengthening the Reporting of Observational Studies in Epidemiology (STROBE)。",
+    },
+    {
+      label: "a guideline title carried in full",
+      write: "2021 AHA/ACC/ASE/CHEST/SAEM/SCCT/SCMR Guideline for the Evaluation and Diagnosis of Chest Pain in the Emergency Department 将胸痛缓解排除在诊断依据之外。",
+    },
+    {
+      label: "statistics, identifiers, scales and drug names",
+      write: "ALDH2 rs671 变异携带者的缓解率较低；因果关系按 Naranjo 量表与 WHO-UMC 标准评定；硝酸甘油（glyceryl trinitrate, nitroglycerin, GTN）经舌下黏膜吸收。",
+    },
+    {
+      label: "a short quotation inside a Chinese sentence, which the skill allows",
+      write: "说明书适应症英文原句为 “for the treatment of angina pectoris due to coronary artery disease”，未涵盖未分化胸痛。",
+    },
+    {
+      label: "a database search strategy, which is Boolean syntax and not prose",
+      write: "检索式为 (\"acute chest pain\"[MeSH] OR \"chest discomfort\"[tiab]) AND (\"nitroglycerin\"[MeSH] OR \"prehospital\"[tiab]) NOT \"review\"[pt]。",
+    },
+    {
+      label: "原文 without the label's colon, reporting what a source says",
+      write: "原文报告 Jadad 评分较低；该指南原文为英文，本文按术语表统一译名后引用。",
+    },
+    {
+      label: "a study population and studied material, which are not a readership",
+      write: "本研究以急性胸痛患者为研究对象；该科普材料的受众对象为老年人，其阅读理解水平限制了信息传递效果。",
+    },
+    {
+      // The compliant half of the gap rule. Every one of these contains the
+      // words the rule reads — a failed search, a connective, a negation — and
+      // none of them turns the gap into a finding about the drug.
+      label: "a gap stated as a gap, with what would close it",
+      write: "未检索到支持其用于该场景的直接证据；缺乏头对头比较研究，因此两药的相对效能尚不能判断。",
+    },
+    {
+      label: "a recommendation reported with the body that made it",
+      write: "该指南因缺乏随机对照证据，不推荐将其常规用于未分化胸痛 [3]。",
+    },
   ];
   for (const scenario of cases) {
     const input = deepResearchPackage();
@@ -383,6 +467,15 @@ test("the sentences the skill prescribes as the repair are not themselves reject
     "现有证据为观察性研究且未校正觉醒时点与晨间活动量，仅支持“事件时间分布不均”这一较弱表述，尚不足以支持因果性解释。",
     // Subject-matter subsection titles, which replace the workflow ones.
     "### 不良反应归因评定\n各来源的归因强度依据去激发观察与替代解释的排除程度。",
+    // The finding restated in the paper's own voice, replacing the two 原文：
+    // quotations that carried it in the delivered report.
+    "指南推荐对仍有缺血症状者舌下含服硝酸甘油 [2]；欧洲心脏病学会给出 I 类 C 级推荐 [3]。",
+    // Quotation where the exact wording is itself the object of analysis.
+    "该说明书将适应症限定为“气滞血瘀型冠心病心绞痛”[7]，未涵盖未分化急性胸痛。",
+    // One ruler for both arms, with the gap they share stated for both.
+    "在未分化急性胸痛的院外自救场景中，两者均未检索到适应症内随机对照证据，同一外推按 GRADE 均为极低确定性 [2,11]。",
+    // The gap written as a gap, naming the study that would close it.
+    "未检索到在该场景中以临床结局为终点的随机对照研究，现有证据不足以判断其在该场景的效能；可回答该问题的研究为以院外未分化胸痛人群为对象的随机对照试验。",
   ];
   for (const write of prescribed) {
     const input = deepResearchPackage();
