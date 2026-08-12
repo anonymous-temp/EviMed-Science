@@ -1223,9 +1223,11 @@ test("RuntimeManager cleans stale containers before bootstrap and records bootst
     maxLogFileBytes: 1024 * 1024,
   }, { agentRegistry: registry });
   try {
+    // The specific cause reaches the caller; the ledger keeps recording the
+    // stage, so an operator can see both what failed and where.
     await assert.rejects(
       () => manager.startOpenCode(runtimeProject),
-      (error) => error?.code === "runtime_bootstrap_failed",
+      (error) => error?.code === "runtime_skill_symlink",
     );
     assert.equal(await readFile(orderLog, "utf8"), "rm\n");
     const state = JSON.parse(await readFile(path.join(runtimeProject.metaDir, "runtime-state.json"), "utf8"));

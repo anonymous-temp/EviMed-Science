@@ -161,6 +161,51 @@ test("EviMed workload tokens bind audience, project, expiry, and signature", () 
 });
 
 
+// A project starts its runtime once and keeps it, so a config the platform
+// wrote and then refuses to recognise stays invisible until something forces a
+// second start — a container recreate, a host reboot. It did: the web-search
+// work added EVIMED_WEB_SEARCH_GATEWAY_URL to what gets written without adding
+// it to the set the ownership check allows, and every project that had started
+// a runtime could never start one again, reporting only that bootstrap failed.
+//
+// Writing twice is the whole test. Whatever the writer emits, the checker must
+// accept, and no list of variable names can guarantee that by inspection.
+test("a runtime config the platform wrote survives its own ownership check", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-rewrite-"));
+  try {
+    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
+    const config = {
+      evimedMcpSourceDir: sourceDir,
+      evimedAdapterUrls: { literatureSearch: "https://evidence.internal/literature" },
+      evimedWorkloadSigningSecret: signingSecret,
+      publicSourceGatewayInternalUrl: "https://gateway.internal/internal/sources/v1/fetch",
+      // The variable is only written when the deployment actually has a
+      // metasearch backend, which is why the defect needed a configured one to
+      // reproduce and why every deployment that has one was affected.
+      webSearchUrl: "http://open-science-web-search:8080/search",
+      webSearchGatewayInternalUrl: "https://gateway.internal/internal/search/v1/query",
+      unpaywallEmail: "evimed@example.test",
+    };
+    const plan = { sandboxMode: "docker", xdgConfigDir, proxyWorkspaceDir: "/workspace" };
+    await syncRuntimeEviMedMcp(config, project, plan);
+
+    const opencodeDir = path.join(xdgConfigDir, "opencode");
+    const written = JSON.parse(await readFile(path.join(opencodeDir, "opencode.json"), "utf8"));
+    assert.equal(
+      written.mcp["evimed-research"].environment.EVIMED_WEB_SEARCH_GATEWAY_URL,
+      "https://gateway.internal/internal/search/v1/query",
+      "the writer emits the search gateway address",
+    );
+
+    // The second start is where it broke.
+    await syncRuntimeEviMedMcp(config, project, plan);
+    const again = JSON.parse(await readFile(path.join(opencodeDir, "opencode.json"), "utf8"));
+    assert.deepEqual(again.mcp["evimed-research"].environment, written.mcp["evimed-research"].environment);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("syncRuntimeEviMedMcp atomically copies the server and safely merges docker config", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-"));
   try {
@@ -831,9 +876,12 @@ test("runtime startup fails closed before spawn when EviMed MCP bootstrap fails"
       maxLogFileBytes: 1024 * 1024,
     });
     try {
+      // The caller gets the cause, not the stage. Every bootstrap failure used
+      // to arrive as runtime_bootstrap_failed, with the real code readable only
+      // in a ledger inside a Docker volume.
       await assert.rejects(
         () => manager.startOpenCode(project),
-        (error) => error?.code === "runtime_bootstrap_failed",
+        (error) => error?.code === "runtime_mcp_symlink",
       );
       await assert.rejects(() => access(marker), /ENOENT/);
       const state = JSON.parse(await readFile(path.join(project.metaDir, "runtime-state.json"), "utf8"));
