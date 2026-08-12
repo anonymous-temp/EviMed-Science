@@ -22,7 +22,10 @@ export function deepResearchPackage() {
     const source = sources[index % sources.length];
     return {
       claimId: `CLM-${String(index + 1).padStart(3, "0")}`,
-      claim: "This bounded clinical statement is supported by inspected evidence.",
+      // The report body is Chinese, as a manuscript for these readers is; the
+      // English support quote stays in the matrix and the ledger, which is
+      // exactly where a verbatim quote belongs and where it is checked.
+      claim: "该有界临床结论由已检查的证据支持。",
       sourceUrl: source.sourceUrl,
       sourceTitle: source.sourceTitle,
       artifactPath: source.artifactPath,
