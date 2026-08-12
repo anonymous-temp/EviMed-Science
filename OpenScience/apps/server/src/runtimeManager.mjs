@@ -2385,6 +2385,13 @@ function assertReservedMcpOwnership(existing, targetExists, config, project, pla
     "EVIMED_META_AGENT_PYTHON",
     "EVIMED_MODEL_CONFIG_FILE",
     "EVIMED_PHARMACY_REFERENCE_DB",
+    // Written by this same module when a search backend is configured. Adding
+    // it to the writer without adding it here meant the first start wrote a
+    // variable the second start refused to recognise, so the ownership check
+    // read the platform's own config as tampered-with and the project could
+    // never start a runtime again — the failure surfaced only after a container
+    // recreate, because a project starts its runtime once and keeps it.
+    "EVIMED_WEB_SEARCH_GATEWAY_URL",
     ...Object.values(evimedSpecialistEnvironment).flatMap((specialist) => [specialist.root, specialist.python]),
     ...Object.values(evimedAdapterEnvironment),
   ]);
@@ -3332,7 +3339,18 @@ export class RuntimeManager {
         mcpServersConfigured: mcpSync.configured,
         error: "runtime_bootstrap_failed",
       });
-      throw new HttpError(500, "runtime_bootstrap_failed", "Runtime configuration bootstrap failed before startup.");
+      // Carry the specific cause. Bootstrap has half a dozen distinct failures —
+      // a config entry that does not look platform-managed, a skill directory
+      // that will not copy, a missing model config — and collapsing them all to
+      // runtime_bootstrap_failed left the real code only in a ledger file inside
+      // a Docker volume. A project that could not start its runtime reported the
+      // same sentence whatever was wrong with it.
+      const cause = typeof error?.code === "string" && error.code ? error.code : "runtime_bootstrap_failed";
+      throw new HttpError(
+        error?.status === 409 ? 409 : 500,
+        cause,
+        `Runtime configuration bootstrap failed before startup (${cause}).`,
+      );
     }
     await appendRuntimeEvent(project, "starting", {
       kind: "opencode",
