@@ -569,4 +569,18 @@ If it exits non-zero, fix every listed issue and run it again. Do not finish
 until it returns `"ok": true`. The server performs a stricter independent
 evidence and source-integrity gate after this preflight.
 
+Once the preflight is clean, make one editing pass over the report with the
+`manuscript-humanize` companion skill. A report assembled section by section
+reads like one: paragraphs of the same length, every one opening the same way,
+transitions that announce what the next sentence will do. The pass rewrites that
+prose and nothing else — quotations, numbers, citation indices, claim markers,
+`〔推导〕`, the section headings and the hedges that carry evidence strength are
+fixed points, and its `verify_preserved.py` proves afterwards that they did not
+move. Hedging is the case worth understanding: a `可能` in front of a claim
+resting on one small trial is the finding, not weak writing, and sharpening it
+is fabrication.
+
+Then run the preflight once more, because prose edits can still break a
+section-level rule.
+
 If these integrity requirements cannot be met, write an honest failed run receipt and do not present the report as publication-grade.
