@@ -9,6 +9,7 @@ import { createWebApiApp } from "../src/server.mjs";
 import {
   AgentRunStore,
   recoverableEvidenceSourceErrorCodes,
+  repairableEvidencePackageErrorCodes,
   terminalEvidenceSourceErrorCodes,
 } from "../src/agentRuns.mjs";
 import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
@@ -882,6 +883,11 @@ test("clinical evidence source artifacts must come from successful retrieval too
         model: "deepseek/deepseek-v4-pro",
         monitorIntervalMs: 60_000,
         monitorMaxPolls: 20,
+        // What this test pins is the gate's verdict. Provenance and integrity
+        // rejections are now repairable, so leaving repair on would have the
+        // run come back for another turn instead of settling, which the repair
+        // loop's own tests cover.
+        maxClinicalRepairAttempts: 0,
         readSessionHistory: async () => history,
         readSessionStatus: async () => "idle",
       });
@@ -2481,6 +2487,130 @@ test("tolerated source error codes are real codes, not typos", async () => {
   // A malformed request is still the run's own problem.
   assert.ok(!recoverableEvidenceSourceErrorCodes.has("public_source_query_invalid"));
   assert.ok(!recoverableEvidenceSourceErrorCodes.has("invalid_input"));
+});
+
+// A rejection with no issues is unfixable, not merely unhelpful: the repair path
+// has nothing to hand back, so a package that is complete on disk is discarded.
+// The file says so in a comment and then did it anyway in nine more places —
+// including two, provenance and integrity, sitting directly under that comment.
+// Listing them here would lag the same way; what does not lag is that a bare
+// rejection is a test failure.
+// The whole point of widening the category: a complete package rejected for
+// provenance now gets the same second chance as one rejected for traceability.
+// Two production runs, 42 kB and 40 kB of finished report, were discarded
+// because their code was not the single one the repair loop named.
+test("a provenance rejection is repaired rather than discarded", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-repair-provenance-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_repair_provenance",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    let history = [];
+    const repairPrompts = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      maxClinicalRepairAttempts: 1,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_repair_provenance",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async (_session, _record, repairText = null) => {
+      if (repairText) repairPrompts.push(repairText);
+      return { accepted: true };
+    });
+
+    // A receipt naming a source no retrieval tool reported preserving: the
+    // package is otherwise written and on disk.
+    const source = ".evimed-sources/official-pages/source-a/page.md";
+    await mkdir(path.join(project.workspaceDir, path.dirname(source)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, source), "Preserved source text.", "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# 报告\n\n正文。", "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
+    await writeFile(
+      path.join(project.workspaceDir, "clinical-evidence-run.json"),
+      JSON.stringify({ successfulSourceArtifacts: [source] }),
+      "utf8",
+    );
+    history = [{
+      info: { id: "msg_repair_provenance", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath } },
+        })),
+        { type: "text", text: "Completed." },
+      ],
+    }];
+
+    // The monitor scheduled at dispatch polls immediately and reconciles on its
+    // own, so under load it can be the one that spends the repair attempt.
+    // Either way the observable behaviour is the same and is what this pins: a
+    // repair prompt goes back naming the path to correct, instead of the
+    // finished package being discarded.
+    const first = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(first.id, run.id);
+    assert.equal(repairPrompts.length, 1, "a repair prompt was sent");
+    assert.match(repairPrompts[0], /\.evimed-sources\/official-pages\/source-a\/page\.md/);
+    assert.match(repairPrompts[0], /no evidence tool reported preserving that file/);
+
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("no package rejection is returned without issues to act on", async () => {
+  const source = await readFile(new URL("../src/agentRuns.mjs", import.meta.url), "utf8");
+  const bare = [...source.matchAll(/return\s*\{\s*artifacts,\s*errorCode:\s*"([a-z_]+)"\s*\}/g)].map((m) => m[1]);
+  assert.deepEqual(bare, [], `these rejections hand back no qualityIssues: ${bare.join(", ")}`);
+});
+
+// The repair loop named one error code while several mean the same thing: the
+// package is finished and the defect is inside it. A package rejected for
+// provenance was thrown away while an otherwise identical one rejected for
+// traceability was repaired and delivered.
+test("every repairable rejection is a code the gate actually returns", async () => {
+  const source = await readFile(new URL("../src/agentRuns.mjs", import.meta.url), "utf8");
+  const returned = new Set([...source.matchAll(/errorCode:\s*"(specialist_[a-z_]+)"/g)].map((m) => m[1]));
+  const dead = [...repairableEvidencePackageErrorCodes].filter((code) => !returned.has(code)).sort();
+  assert.deepEqual(dead, [], `listed as repairable but never returned: ${dead.join(", ")}`);
+  // The one that motivated widening it, held explicitly.
+  assert.ok(repairableEvidencePackageErrorCodes.has("specialist_evidence_provenance_failed"));
+  assert.ok(repairableEvidencePackageErrorCodes.has("specialist_evidence_traceability_failed"));
 });
 
 test("every fetch-tool error code is classified, so a new one cannot default to failing runs", async () => {

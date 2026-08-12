@@ -385,6 +385,27 @@ const evidenceSourceToolSuffixes = Object.freeze([
   "evimed_clinical_trial_search",
   "evimed_patent_search",
 ]);
+// A finished package the gate rejected for something the package itself can
+// fix: a receipt naming the wrong path, a citation whose source was never
+// recorded, a preserved file that was edited. The run has already done the
+// work — the report and every deliverable are on disk — and the repair loop
+// hands the specific issues back rather than regenerating anything.
+//
+// This used to name one code, so a package rejected for provenance was thrown
+// away while an otherwise identical package rejected for traceability was
+// repaired and delivered. Two production runs died that way with complete
+// reports of 42 and 40 kB. The category is "the package is complete and the
+// issue is actionable inside it", not any single member of it.
+export const repairableEvidencePackageErrorCodes = new Set([
+  "specialist_evidence_traceability_failed",
+  "specialist_evidence_provenance_failed",
+  "specialist_evidence_integrity_failed",
+  "specialist_cited_source_unrecorded",
+  "specialist_citation_invalid",
+  "specialist_evidence_snapshot_missing",
+  "specialist_evidence_snapshot_invalid",
+  "specialist_evidence_snapshot_empty",
+]);
 // A source the run could not read is a limitation to report, not a defect in
 // the run. These codes all mean "this document was not obtainable", which the
 // skill already instructs the agent to record in failedSources and work around.
@@ -1000,10 +1021,22 @@ async function specialistCompletionOutcome(
   for (const relative of required) {
     const file = await readRequiredFile(project, relative);
     if (!file) {
-      return { artifacts, errorCode: "specialist_required_output_missing" };
+      return {
+        artifacts,
+        errorCode: "specialist_required_output_missing",
+        qualityIssues: [
+          `The required deliverable ${relative} is not in the workspace. Write it at exactly that path, at the workspace root, before finishing.`,
+        ],
+      };
     }
     if (file.stat.mtimeMs + 1_000 < Date.parse(run.startedAt)) {
-      return { artifacts, errorCode: "specialist_required_output_stale" };
+      return {
+        artifacts,
+        errorCode: "specialist_required_output_stale",
+        qualityIssues: [
+          `${relative} predates this run, so it is a previous run's file rather than this one's output. Regenerate it from this run's own work.`,
+        ],
+      };
     }
     files.set(relative, file.text);
     artifacts.push(relative);
@@ -1040,26 +1073,55 @@ async function specialistCompletionOutcome(
   if (agent.completionChecks.includes("citedSourcesRecorded")) {
     const snapshotEntry = [...files].find(([relative]) => relative.endsWith("evidence-snapshot.json"));
     if (!snapshotEntry) {
-      return { artifacts, errorCode: "specialist_evidence_snapshot_missing" };
+      return {
+        artifacts,
+        errorCode: "specialist_evidence_snapshot_missing",
+        qualityIssues: [
+          "This package must include evidence-snapshot.json — the frozen record of every source the report cites. Write it before finishing.",
+        ],
+      };
     }
     let snapshot;
     try {
       snapshot = JSON.parse(snapshotEntry[1]);
     } catch {
-      return { artifacts, errorCode: "specialist_evidence_snapshot_invalid" };
+      return {
+        artifacts,
+        errorCode: "specialist_evidence_snapshot_invalid",
+        qualityIssues: ["evidence-snapshot.json must contain strict valid JSON; escape quotation marks correctly inside string values."],
+      };
     }
     if (!snapshot || typeof snapshot !== "object") {
-      return { artifacts, errorCode: "specialist_evidence_snapshot_invalid" };
+      return {
+        artifacts,
+        errorCode: "specialist_evidence_snapshot_invalid",
+        qualityIssues: ["evidence-snapshot.json must be a JSON object or array of source records, not a bare string or number."],
+      };
     }
     const recordedUrls = new Set(citedHttpUrls(snapshotEntry[1]));
     if (!recordedUrls.size) {
-      return { artifacts, errorCode: "specialist_evidence_snapshot_empty" };
+      return {
+        artifacts,
+        errorCode: "specialist_evidence_snapshot_empty",
+        qualityIssues: [
+          "evidence-snapshot.json records no source URL at all. Every source the report cites must appear there with the address it was retrieved from.",
+        ],
+      };
     }
     const citedUrls = [...files]
       .filter(([relative]) => relative.endsWith(".md"))
       .flatMap(([, text]) => citedHttpUrls(text));
-    if (citedUrls.some((url) => !recordedUrls.has(url))) {
-      return { artifacts, errorCode: "specialist_cited_source_unrecorded" };
+    const unrecorded = [...new Set(citedUrls.filter((url) => !recordedUrls.has(url)))];
+    if (unrecorded.length > 0) {
+      // Naming them. Told only that some citation was unrecorded, a run has no
+      // way to find which of forty it is, and the repair loop has nothing to
+      // hand back.
+      return {
+        artifacts,
+        errorCode: "specialist_cited_source_unrecorded",
+        qualityIssues: unrecorded.slice(0, 12).map((url) =>
+          `The report cites ${url}, which is absent from evidence-snapshot.json. Record the source there as retrieved, or drop the claim that rests on it.`),
+      };
     }
   }
   if (agent.completionChecks.includes("evidenceClaimsTraceable")) {
@@ -1154,7 +1216,18 @@ async function specialistCompletionOutcome(
       }
       const expectedDigest = sourceArtifactProvenance.get(relative);
       if (!expectedDigest) {
-        return { artifacts, errorCode: "specialist_evidence_provenance_failed" };
+        // The receipt names a file no preserving tool reported writing in this
+        // run — a path typed from memory, a leftover from an earlier run, or a
+        // file the run created itself. Whatever the cause, the run needs to be
+        // told which path, and this returned bare: two production packages died
+        // here with a complete report on disk and nothing to act on.
+        return {
+          artifacts,
+          errorCode: "specialist_evidence_provenance_failed",
+          qualityIssues: [
+            `clinical-evidence-run.json lists ${relative}, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.`,
+          ],
+        };
       }
       const sourceFile = await readRequiredFile(project, relative);
       if (!sourceFile) {
@@ -1174,7 +1247,13 @@ async function specialistCompletionOutcome(
         };
       }
       if (createHash("sha256").update(sourceFile.text, "utf8").digest("hex") !== expectedDigest) {
-        return { artifacts, errorCode: "specialist_evidence_integrity_failed" };
+        return {
+          artifacts,
+          errorCode: "specialist_evidence_integrity_failed",
+          qualityIssues: [
+            `${relative} no longer matches what the preserving tool wrote, so quotations taken from it are not the source's wording. Do not edit, truncate or reformat preserved sources; retrieve the document again if it must be refreshed.`,
+          ],
+        };
       }
       sourceArtifacts.set(relative, sourceFile.text);
     }
@@ -1589,7 +1668,7 @@ export class AgentRunStore {
         const repairSender = this.clinicalRepairSenders.get(run.id);
         const repairAttempts = this.clinicalRepairAttempts.get(run.id) ?? 0;
         const canRepair = run.effectiveAgentId === "clinical-evidence-synthesis"
-          && completion.errorCode === "specialist_evidence_traceability_failed"
+          && repairableEvidencePackageErrorCodes.has(completion.errorCode)
           && Array.isArray(completion.qualityIssues)
           && completion.qualityIssues.length > 0
           && repairAttempts < this.maxClinicalRepairAttempts
