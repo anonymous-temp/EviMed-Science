@@ -292,6 +292,60 @@ test("rejects runtime-process prose and combined claim markers in the academic r
   assert.match(result.issues.join("\n"), /exactly one claim ID/);
 });
 
+test("each register rule reports its own reason and names the sentence to fix", () => {
+  // A run repairs the sentence a notice names; "this report is written in the
+  // wrong register" is not a repairable instruction, and each of these rules is
+  // repaired differently. So each has to fire on its own reason and on nobody
+  // else's — if one broadens until it swallows a neighbour, the run is told to
+  // rename a heading when what it must do is rewrite a verdict.
+  const cases = [
+    {
+      label: "the brief's vocabulary",
+      write: "该问题取自题库，目标答案为可自行常备。",
+      expect: /line \d+ uses commissioning vocabulary "题库"/,
+    },
+    {
+      label: "a section named after a pass/fail condition",
+      write: "## 论点与判定条件\n证据门槛见下。",
+      expect: /line \d+ names a section after an acceptance condition/,
+    },
+    {
+      label: "the acceptance form itself, as a list",
+      write: "- 命题 A（可定量）：需分母明确的前瞻性研究。\n- 命题 B（可归因）：需去激发与再激发观察。",
+      expect: /lettered propositions with their own pass\/fail conditions at lines \d+, \d+/,
+    },
+    {
+      label: "a verdict on the report's own proposition",
+      write: "该角度判定为不足以支持因果归因。",
+      expect: /line \d+ delivers a verdict on its own proposition/,
+    },
+    {
+      label: "the report as its own subject",
+      write: "本报告检验该问题的学术化版本。",
+      expect: /line \d+ writes about itself rather than about the evidence/,
+    },
+    {
+      label: "the runtime's vocabulary",
+      write: "该来源的访问层级为摘要，相关工件已保存于本环境。",
+      expect: /runtime or retrieval-process prose .*line \d+ reads/,
+    },
+  ];
+
+  const clean = validateClinicalEvidencePackage(validPackage()).issues.join("\n");
+  for (const scenario of cases) {
+    assert.doesNotMatch(clean, scenario.expect, `${scenario.label}: fired on a report that is in register`);
+
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${scenario.write}\n`);
+    const issues = validateClinicalEvidencePackage(input).issues.join("\n");
+    assert.match(issues, scenario.expect, scenario.label);
+    for (const other of cases) {
+      if (other === scenario) continue;
+      assert.doesNotMatch(issues, other.expect, `${scenario.label} was also reported as ${other.label}`);
+    }
+  }
+});
+
 test("rejects explanatory objects where the run receipt requires path strings and boolean checks", () => {
   const input = validPackage();
   input.runReceipt.successfulSourceArtifacts = [
@@ -814,6 +868,26 @@ test("keeps derived results out of the practical safety advice", () => {
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
   assert.match(result.blockingIssues.join("\n"), /practical advice must rest on measured evidence/);
+});
+
+test("the practical section keeps its audits under every name it is written with", () => {
+  // The rename is the dangerous kind of change: 临床实践要点 shares no substring
+  // with the old 实际处置|实用|怎么办|Practical, so the section would not have
+  // failed to match — it would have been absent, and a section that is absent
+  // has nothing in it to audit. The derived-result ban is the check to watch,
+  // because it is the one that stops an estimate being read as an instruction.
+  for (const heading of ["## 安全优先的实际处置", "## 临床实践要点", "## 临床要点"]) {
+    const input = packageWithDerivedClaim();
+    input.reportText = input.reportText
+      .replace(" <!-- claim:CLM-101 -->\n", "\n")
+      .replace(
+        "## 实际处置",
+        `${heading}\n〔推导〕按估算 6 个月后残余约 78%，可据此更换。 <!-- claim:CLM-101 -->`,
+      );
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, false, heading);
+    assert.match(result.blockingIssues.join("\n"), /practical advice must rest on measured evidence/, heading);
+  }
 });
 
 test("refuses a derivation that never reaches measured evidence", () => {

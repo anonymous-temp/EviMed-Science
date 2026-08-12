@@ -37,6 +37,79 @@ DERIVED_BASE_FIELDS = ("claimId", "claim", "method", "assumptions", "sensitivity
 CLAIM_ID_PATTERN = re.compile(r"^CLM-[0-9]{3,6}$")
 DERIVED_REPORT_LABEL = re.compile(r"[〔［【(（\[]\s*(?:推导|推算|估算|derived|estimated)\s*[〕］】)）\]]", re.I)
 
+# The heading the safety-first practical answer sits under. It was
+# 安全优先的实际处置 and the manuscript rewrite renames it 临床实践要点; both
+# names resolve to the same section on both sides, so a rename cannot silently
+# turn every check on that section into "section not present".
+PRACTICAL_SECTION_HEADING = "安全优先的实际处置|实际处置|实用回答|临床实践要点|临床要点|实用|怎么办|Practical"
+
+# Register checks, mirrored field for field from clinicalEvidenceQuality.mjs.
+# The server rejects a report written in the runtime's vocabulary, in the
+# commissioning party's vocabulary, or as an acceptance specification; all three
+# have to be catchable here, while the run can still edit the report.
+OPERATIONAL_FAILURE = re.compile(
+    r"(?:Transport error|Runtime configuration bootstrap|网页访问失败|工具调用失败"
+    r"|public[_ -]source[_ -]gateway.*(?:failed|error))",
+    re.I,
+)
+# 工件 / 访问层级 / 本环境 / 本轮检索 / 检索环境 are the runtime's own nouns for a
+# preserved artifact, an accessLevel field, the container, and one retrieval
+# pass; 加工件 and 基本环境/日本环境/样本环境 are ordinary words that contain
+# them, so each is anchored away from its innocent compounds.
+RUNTIME_LEAKAGE = re.compile(
+    r"(?:clinical-evidence-synthesis|\bevimed_[a-z_]+\b|EviMed.{0,24}(?:引擎|网关|工具)|证据追溯契约"
+    r"|\.evimed-sources/|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单抓取|工具调用"
+    r"|(?<!加)工件|访问层级|(?<![基日样标根成])本环境|本轮检索|检索环境"
+    r"|(?:未触及|未读取|未检索).{0,16}(?:完整|全文|文件|页面))",
+    re.I,
+)
+# A material limit on evidence accessibility is a legitimate property of the
+# evidence base inside 局限性, and retrieval-process prose everywhere else.
+EVIDENCE_ACCESS_LIMITATION = re.compile(
+    r"(?:全文|页面|文件).{0,12}(?:不可及|无法获取|无法获得|未能获取|未能获得|不可得)",
+    re.I,
+)
+# The commissioning party's vocabulary: the brief, the item bank, its metrics,
+# the answer the run was scored against. A paper never says who asked for it.
+COMMISSIONING_VOCABULARY = (
+    "题库",
+    "语义群",
+    "语义问题",
+    "KPI",
+    "达标率",
+    "提及率",
+    "强调率",
+    "交付判据",
+    "派发题面",
+    "目标答案",
+    "任务书",
+)
+ACCEPTANCE_CONDITION_HEADING = re.compile(r"^#{2,4}\s*[^\n]*判定条件")
+# `命题 A（发生率可定量）：……`. One such line can be a genuine reference to
+# someone else's numbered proposition; a list of them is the acceptance form.
+LETTERED_PROPOSITION = re.compile(r"^\s*(?:[-*+·•]\s*|\d+[.、)]\s*)?命题\s*[A-Za-z\d一二三四五六七八九十]{1,3}\s*[（(]")
+# 判为/判定为 delivering a verdict. 判定 alone is ordinary clinical vocabulary
+# (因果关系判定, 偏倚风险判定) and 误判为/错判为/研判为 are ordinary prose, so the
+# verb alone proves nothing: what is rejected is a quoted verdict string, or a
+# sentence scoring one of this report's own propositions — and even then only
+# when no published grading instrument is named in the same sentence.
+GRADING_VERB = re.compile(r"(?<![误错研])判定?为")
+QUOTED_VERDICT = re.compile(r"(?<![误错研])判定?为\s*[「『“”\"'‘’]")
+SELF_GRADED_SUBJECT = re.compile(r"命题|该角度|本角度|各角度|逐条判定|本报告|判定条件|交付判据|达标判据")
+NAMED_APPRAISAL_INSTRUMENT = re.compile(
+    r"GRADE|WHO[-‑\s]?UMC|Naranjo|诺氏|RoB\s?2|ROBINS[-‑]?I|QUADAS[-‑]?2|AMSTAR"
+    r"|Newcastle[-‑\s]?Ottawa|纽卡斯尔|Jadad|Cochrane|CONSORT|PRISMA|STROBE|CTCAE",
+    re.I,
+)
+# The paper talking about itself as the thing being delivered and checked,
+# rather than about the evidence.
+SELF_REFERENTIAL_NARRATION = re.compile(
+    r"学术化版本|作为被评价对象"
+    r"|(?:本报告|本文)[^。；\n]{0,16}(?:判定条件|交付判据|达标判据|验收依据|任务书|评分口径)"
+    r"|(?:本报告|本文)[^。；\n]{0,10}拒绝[^。；\n]{0,24}(?:判据|验收|达标|指标)"
+)
+SENTENCE_SPLIT = re.compile(r"(?<=[。！？；;])")
+
 
 def check_claim(index: int, claim: dict, issues: list[str]) -> None:
     if claim.get("claimType", "direct") == "synthesized":
@@ -136,6 +209,124 @@ def section(report: str, heading: str) -> str:
     return match.group(1) if match else ""
 
 
+def without_sections(report: str, heading: str) -> str:
+    """Blank the named sections, keeping the line count so reported line numbers
+    still point at the line the author will find in the file."""
+    return re.sub(
+        rf"(?:^|\n)##\s+[^\n]*(?:{heading})[^\n]*\n[\s\S]*?(?=\n##\s+|$)",
+        lambda match: "\n" * match.group(0).count("\n"),
+        report,
+        flags=re.I,
+    )
+
+
+def excerpt(line: str) -> str:
+    trimmed = line.strip()
+    return trimmed if len(trimmed) <= 96 else trimmed[:96] + "…"
+
+
+def self_graded_verdict(line: str) -> str:
+    """A verdict verb used to score this report's own proposition, or "" when
+    the sentence is ordinary clinical prose or the report of a named instrument."""
+    for sentence in SENTENCE_SPLIT.split(line):
+        if not GRADING_VERB.search(sentence):
+            continue
+        if NAMED_APPRAISAL_INSTRUMENT.search(sentence):
+            continue
+        if not QUOTED_VERDICT.search(sentence) and not SELF_GRADED_SUBJECT.search(sentence):
+            continue
+        return excerpt(sentence)
+    return ""
+
+
+def check_register(report: str, issues: list[str]) -> None:
+    """The report is a scientific paper about a clinical question, never a paper
+    about the task that produced it. Three registers give that away — the
+    runtime's, the commissioning party's, and an acceptance specification's —
+    and the server rejects all three, so they are caught here first."""
+    lines = report.split("\n")
+    for line_number, line in enumerate(lines, 1):
+        if OPERATIONAL_FAILURE.search(line):
+            issues.append(
+                f"clinical-evidence-report.md line {line_number}: operational failure prose "
+                f"({excerpt(line)}) belongs only in the run receipt, not in the academic report"
+            )
+            break
+    outside_limitations = without_sections(report, "局限|Limitations?").split("\n")
+    for line_number, (line, outside) in enumerate(zip(lines, outside_limitations), 1):
+        if not RUNTIME_LEAKAGE.search(line) and not EVIDENCE_ACCESS_LIMITATION.search(outside):
+            continue
+        issues.append(
+            f"clinical-evidence-report.md line {line_number}: runtime or retrieval-process prose "
+            f"({excerpt(line)}). Write what the evidence shows, not how it was obtained — the run's tools, "
+            "gateways, preserved artifacts (工件), access levels (访问层级), environment (本环境) and "
+            "retrieval passes (本轮检索) belong in the run receipt; a source you could not obtain is stated "
+            "as a limitation of the evidence base inside 局限性, in the reader's terms"
+        )
+        break
+
+    body = without_sections(report, "参考文献|参考来源|References?").split("\n")
+    named_terms: set[str] = set()
+    proposition_lines: list[int] = []
+    proposition_sample = ""
+    headings = 0
+    verdicts = 0
+    narrations = 0
+    for line_number, line in enumerate(body, 1):
+        for term in COMMISSIONING_VOCABULARY:
+            if term not in line or term in named_terms:
+                continue
+            named_terms.add(term)
+            issues.append(
+                f"clinical-evidence-report.md line {line_number}: commissioning vocabulary {term!r} "
+                f"({excerpt(line)}). A paper never names the brief it was written for, the item bank the "
+                "question came from, the metrics it was scored against, or the answer that was expected. "
+                "Restate the underlying clinical proposition in the literature's own words and evaluate that "
+                'instead — 例如把"题库目标答案X无证据支持"改写为"对于X这一说法，未检索到以临床结局为终点的研究"'
+            )
+        if headings < 4 and ACCEPTANCE_CONDITION_HEADING.search(line):
+            headings += 1
+            issues.append(
+                f"clinical-evidence-report.md line {line_number}: section named after an acceptance condition "
+                f"({excerpt(line)}). A reader judges what kind of document this is from the section names, and "
+                "判定条件 announces a reviewer's checklist. Use the manuscript sections (摘要 / 引言 / 资料与方法 / "
+                "结果 / 讨论 / 局限性 / 结论 / 临床实践要点 / 参考文献): state the question and the objective in "
+                "引言, and write the evidence bar as the evidence-appraisal criteria in 资料与方法"
+            )
+        if LETTERED_PROPOSITION.search(line):
+            proposition_lines.append(line_number)
+            if not proposition_sample:
+                proposition_sample = excerpt(line)
+        verdict = self_graded_verdict(line) if verdicts < 4 else ""
+        if verdict:
+            verdicts += 1
+            issues.append(
+                f"clinical-evidence-report.md line {line_number}: 判为/判定为 delivers a verdict on the report's "
+                f"own proposition ({verdict}). Grading your own conclusions against a scale you invented prints "
+                "the acceptance form into the paper. Use the verbs of evidence — 提示、支持、不足以支持、"
+                "未检索到……的证据 — or, when you are applying a published instrument, name it and report its own "
+                'level (按 WHO-UMC 评定为"可能有关"、按 GRADE 为低确定性)'
+            )
+        if narrations < 4 and SELF_REFERENTIAL_NARRATION.search(line):
+            narrations += 1
+            issues.append(
+                f"clinical-evidence-report.md line {line_number}: the report writes about itself rather than "
+                f"about the evidence ({excerpt(line)}). The paper describes evidence and reasoning, never what "
+                "this report is, what it refuses to do, or what it was checked against. State the objective "
+                "plainly in 引言 (本文旨在评价……) and delete the rest; if a scientific question is buried in the "
+                "sentence, ask it scientifically"
+            )
+    if len(proposition_lines) >= 2:
+        listed = ", ".join(str(number) for number in proposition_lines[:8])
+        issues.append(
+            f"clinical-evidence-report.md lines {listed}: lettered propositions with their own pass/fail "
+            f"conditions ({proposition_sample}). That is the reviewer's acceptance form printed inside the "
+            "manuscript. Dissolve it: what evidence a conclusion of each kind must rest on belongs in 资料与方法 "
+            "as continuous methods prose, and what each line of evidence established belongs in 结果 and 讨论 as "
+            "a finding — never carried forward as a per-proposition verdict"
+        )
+
+
 def citation_numbers(line: str) -> set[int]:
     numbers: set[int] = set()
     for match in re.finditer(r"\[(\d+(?:\s*[-,]\s*\d+)*)\]", line):
@@ -172,19 +363,21 @@ def main() -> int:
         issues.append("clinical-evidence-report.md: title is missing")
     for heading in (
         "摘要",
-        "临床问题",
+        # The manuscript states the clinical question in 引言; earlier reports
+        # headed that section 临床问题. Either name carries the same content.
+        "临床问题|引言|Introduction",
         "检索|方法",
         "结果",
         "讨论",
         "局限",
         "结论",
-        "实际处置|实用回答",
+        PRACTICAL_SECTION_HEADING,
         "参考文献",
     ):
         if not re.search(rf"(?:^|\n)##\s+[^\n]*(?:{heading})", report, re.I):
             issues.append(f"clinical-evidence-report.md: missing level-two section {heading}")
     practical_matches = list(
-        re.finditer(r"(?:^|\n)##\s+[^\n]*(?:实际处置|实用回答|Practical)[^\n]*", report, re.I)
+        re.finditer(rf"(?:^|\n)##\s+[^\n]*(?:{PRACTICAL_SECTION_HEADING})[^\n]*", report, re.I)
     )
     references_matches = list(
         re.finditer(r"(?:^|\n)##\s+[^\n]*(?:参考文献|References)[^\n]*", report, re.I)
@@ -193,6 +386,7 @@ def main() -> int:
     references_position = references_matches[-1].start() if references_matches else -1
     if practical_position < 0 or references_position < practical_position:
         issues.append("clinical-evidence-report.md: practical section must precede final references")
+    check_register(report, issues)
 
     queries = search_log.get("queries")
     query_values = [
@@ -273,7 +467,7 @@ def main() -> int:
                     f"{', '.join(sorted(cited))} must be marked 〔推导〕"
                 )
 
-    practical = section(report, "实际处置|实用回答|Practical")
+    practical = section(report, PRACTICAL_SECTION_HEADING)
     practical_derived = sorted(claim_id for claim_id in derived_ids if f"claim:{claim_id}" in practical)
     if practical_derived:
         issues.append(
