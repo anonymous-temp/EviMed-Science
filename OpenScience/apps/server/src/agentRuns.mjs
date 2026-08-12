@@ -439,6 +439,23 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "public_source_gateway_rate_limited",
   "public_source_gateway_response_invalid",
   "public_source_gateway_response_too_large",
+  // The specialist adapter boundary — the Python agents this platform fronts.
+  // These mean the downstream service was unreachable, erroring, or absent from
+  // this deployment, which is the same fact as an unreachable public source: a
+  // limitation to record, not a defect in the run. A pharmacovigilance run that
+  // had written both of its declared deliverables was failed here, because no
+  // adapter code was classified at all and the default is to fail.
+  "adapter_unavailable",
+  "adapter_http_error",
+  "adapter_circuit_open",
+  "adapter_unconfigured",
+  "adapter_workload_token_unavailable",
+  // The open-web gateway's own codes. Only the MCP tool's codes were classified
+  // when this was built; the gateway module was never scanned, so the deployment
+  // lacking a search backend, or the aggregator being down, killed runs that had
+  // found their evidence elsewhere.
+  "web_search_gateway_failed",
+  "web_search_gateway_token_missing",
   // The open web is the one channel that is expected to be partly unreachable:
   // engines rate-limit, serve CAPTCHAs, and suspend themselves, and a
   // deployment may have no metasearch backend at all. Every one of these means
@@ -546,6 +563,30 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "full_text_xml_invalid",
   "official_page_too_large",
   "official_page_response_invalid",
+  // The adapter was reached and the request or the answer was wrong. A
+  // malformed call is the run's to correct; a response without provenance
+  // cannot be quoted, whatever it contains.
+  "adapter_url_invalid",
+  "adapter_contract_invalid",
+  "adapter_invalid_response",
+  "adapter_redirect_forbidden",
+  "adapter_missing_provenance",
+  // The MCP server refusing the call itself: a tool that does not exist, input
+  // that does not validate, an assessment request that is not well formed.
+  "unknown_tool",
+  "invalid_input",
+  "invalid_assessment",
+  "invalid_assessment_action",
+  "invalid_assessment_requirements",
+  // A search the gateway could not parse: the query, its bounds, or its size.
+  // The run rewrites and asks again.
+  "web_search_query_invalid",
+  "web_search_request_invalid",
+  "web_search_request_too_large",
+  "web_search_categories_invalid",
+  "web_search_language_invalid",
+  "web_search_limit_invalid",
+  "web_search_time_range_invalid",
 ]);
 
 // Transport died before either side could say anything. The MCP client reports

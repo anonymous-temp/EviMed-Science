@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -2623,19 +2623,23 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
   // Listing codes cannot stop a list lagging. What stops it is that an
   // unclassified code is a test failure: whoever adds one to the MCP server has
   // to say which it is, rather than inheriting "fails the run" by silence.
-  const sources = [
-    "../../../runtime/mcp/evimed-research/public_sources.py",
-    "../../../runtime/mcp/evimed-research/open_access_fulltext.py",
-    "../../../runtime/mcp/evimed-research/official_pages.py",
-    "../src/publicSourceGateway.mjs",
-  ].map((relative) => new URL(relative, import.meta.url));
-
+  // Naming the files and the prefixes was itself a list that lagged. It covered
+  // three modules and three prefixes, so the ten adapter_* codes — the boundary
+  // every specialist agent calls through — were outside it, unclassified, and
+  // therefore fatal: a pharmacovigilance run that had written both declared
+  // deliverables was failed by adapter_http_error. What does not lag is the
+  // exit itself. failure() is the only way an MCP tool reports an error, so
+  // every code passed to it is in scope by construction.
+  const mcpDir = new URL("../../../runtime/mcp/evimed-research/", import.meta.url);
   const emitted = new Set();
-  for (const source of sources) {
-    const text = await readFile(source, "utf8");
-    for (const [, code] of text.matchAll(/"((?:public_source|full_text|official_page)_[a-z0-9_]+)"/g)) {
-      emitted.add(code);
-    }
+  for (const entry of await readdir(mcpDir)) {
+    if (!entry.endsWith(".py")) continue;
+    const text = await readFile(new URL(entry, mcpDir), "utf8");
+    for (const [, code] of text.matchAll(/\bfailure\(\s*\n?\s*"([a-z0-9_]+)"/g)) emitted.add(code);
+  }
+  for (const relative of ["../src/publicSourceGateway.mjs", "../src/webSearchGateway.mjs"]) {
+    const text = await readFile(new URL(relative, import.meta.url), "utf8");
+    for (const [, code] of text.matchAll(/"((?:public_source|web_search)_[a-z0-9_]+)"/g)) emitted.add(code);
   }
   assert.ok(emitted.size > 30, `expected the real code set, found ${emitted.size}`);
 
@@ -2659,6 +2663,94 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
   // could not even parse is the run's own defect.
   assert.ok(recoverableEvidenceSourceErrorCodes.has("official_page_url_forbidden"));
   assert.ok(terminalEvidenceSourceErrorCodes.has("official_page_url_invalid"));
+  // The same distinction at the specialist-adapter boundary, which the earlier
+  // version of this test could not see at all.
+  assert.ok(recoverableEvidenceSourceErrorCodes.has("adapter_http_error"));
+  assert.ok(terminalEvidenceSourceErrorCodes.has("adapter_contract_invalid"));
+});
+
+// A pharmacovigilance run wrote both declared deliverables and was failed
+// because the downstream specialist service answered with an HTTP error. An
+// unreachable adapter is the same fact as an unreachable source: something to
+// record, not a reason to throw away finished work.
+test("an unreachable specialist adapter does not fail a run that produced its deliverables", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-adapter-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_adapter",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "adr-analysis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-adr-analysis",
+          outputs: [
+            { path: "safety-report.md", required: true },
+            { path: "signals.csv", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-flash",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_adapter",
+      effectiveAgentId: "adr-analysis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-adr-analysis",
+    }, async () => ({ accepted: true }));
+
+    await writeFile(path.join(project.workspaceDir, "safety-report.md"), "# 安全性分析\n\n正文。", "utf8");
+    await writeFile(path.join(project.workspaceDir, "signals.csv"), "drug,event,ror\nA,B,2.1\n", "utf8");
+    history = [{
+      info: { id: "msg_adapter", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed-research_evimed_drug_safety_signal",
+          state: {
+            status: "error",
+            error: JSON.stringify({ code: "adapter_http_error", message: "downstream returned 502" }),
+          },
+        },
+        ...["safety-report.md", "signals.csv"].map((filePath) => ({
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath } },
+        })),
+        { type: "text", text: "Completed." },
+      ],
+    }];
+
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.id, run.id);
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.errorCode, null);
+    assert.deepEqual(finished.artifacts, ["safety-report.md", "signals.csv"]);
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("delegating the reading of retrieved evidence is named as the fault, not left to the quote check", async () => {
