@@ -55,7 +55,15 @@ const operationalFailurePattern = /(?:Transport error|Runtime configuration boot
 // Runtime/retrieval-process leakage — banned anywhere in the report. Tool and
 // gateway names, artifact paths, and first-person retrieval diaries are never
 // scientific analysis.
-const runtimeLeakagePattern = /(?:clinical-evidence-synthesis|\bevimed_[a-z_]+\b|EviMed.{0,24}(?:引擎|网关|工具)|证据追溯契约|\.evimed-sources\/|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单抓取|工具调用|(?:未触及|未读取|未检索).{0,16}(?:完整|全文|文件|页面))/i;
+//
+// 工件 / 访问层级 / 本环境 / 本轮检索 / 检索环境 are the runtime's own nouns for
+// a preserved artifact, an accessLevel field, the container, and one retrieval
+// pass. They were the most common Chinese wording of this leak and none of them
+// was matched: nine of fifteen production reports carried one (工件 19 times,
+// 本环境 13, 访问层级 12) and every one of them was delivered.
+// 基本环境/日本环境/样本环境 and 加工件 are ordinary words that contain these,
+// so each is anchored away from its innocent compounds.
+const runtimeLeakagePattern = /(?:clinical-evidence-synthesis|\bevimed_[a-z_]+\b|EviMed.{0,24}(?:引擎|网关|工具)|证据追溯契约|\.evimed-sources\/|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单抓取|工具调用|(?<!加)工件|访问层级|(?<![基日样标根成])本环境|本轮检索|检索环境|(?:未触及|未读取|未检索).{0,16}(?:完整|全文|文件|页面))/i;
 // A material limit on evidence accessibility (e.g. a guideline whose full text
 // is not openly available) is a legitimate property of the evidence base. It is
 // banned in the analysis body but permitted inside the Limitations section.
@@ -65,6 +73,59 @@ const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(
 // Generic (non-drug-specific) safety rule. Drug- and scenario-specific rules
 // live in clinical-safety-rules.json so pharmacists can maintain them as data.
 const exclusiveSafetyPattern = /(?:唯一.{0,24}(?:安全|可靠|正确|一致|策略|方法|途径)|(?:安全|可靠|正确).{0,24}唯一)/i;
+// The heading the safety-first practical answer sits under. It was
+// 安全优先的实际处置; the manuscript rewrite renames it 临床实践要点. Every
+// safety check on that section finds it by name, so a rename that stopped
+// matching would take those checks with it silently — the section would simply
+// be "not present" and nothing in it would be audited. Both names, and the
+// shapes runs have used in between, resolve to the same section.
+const practicalSectionHeading = "安全优先的实际处置|实际处置|实用回答|临床实践要点|临床要点|实用|怎么办|Practical";
+const practicalHeadingLinePattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${practicalSectionHeading})[^\\n]*$`, "im");
+// The manuscript register. The report is a scientific paper about a clinical
+// question; it is never a paper about the task that produced it. Two
+// vocabularies give that away, and both arrive the same way — copied out of a
+// request that was written as an acceptance specification.
+//
+// The first is the commissioning party's: the item bank, its metrics, the
+// answer the run was scored against. A paper never says who asked for it.
+const commissioningVocabulary = Object.freeze([
+  "题库",
+  "语义群",
+  "语义问题",
+  "KPI",
+  "达标率",
+  "提及率",
+  "强调率",
+  "交付判据",
+  "派发题面",
+  "目标答案",
+  "任务书",
+]);
+// The second is the acceptance form itself, printed inside the manuscript: a
+// section named after a pass/fail condition, a lettered list of propositions
+// with the conditions that would settle each, and a verdict verb applied to the
+// report's own proposition. Fifteen delivered production reports were written in
+// this register and read as a work record rather than as analysis.
+const acceptanceConditionHeadingPattern = /^#{2,4}\s*[^\n]*判定条件/;
+// `命题 A（发生率可定量）：……`. A single line like this can be a genuine
+// reference to someone else's numbered proposition, so one is allowed and a
+// list is not: the list is the acceptance form.
+const letteredPropositionPattern = /^\s*(?:[-*+·•]\s*|\d+[.、)]\s*)?命题\s*[A-Za-z\d一二三四五六七八九十]{1,3}\s*[（(]/;
+// 判为/判定为 delivering a verdict. 判定 by itself is ordinary clinical
+// vocabulary (因果关系判定, 偏倚风险判定) and 误判为/错判为/研判为 are ordinary
+// prose, so the verb alone proves nothing. What is rejected is the verb used to
+// score the report's own proposition: a quoted verdict string, or a sentence
+// whose subject is one of this report's propositions/angles/criteria — and even
+// then only when no published grading instrument is named in the same sentence,
+// because applying someone else's scale and reporting its level is exactly what
+// the method requires.
+const gradingVerbPattern = /(?<![误错研])判定?为/;
+const quotedVerdictPattern = /(?<![误错研])判定?为\s*[「『“”"'‘’]/;
+const selfGradedSubjectPattern = /命题|该角度|本角度|各角度|逐条判定|本报告|判定条件|交付判据|达标判据/;
+const namedAppraisalInstrumentPattern = /GRADE|WHO[-‑\s]?UMC|Naranjo|诺氏|RoB\s?2|ROBINS[-‑]?I|QUADAS[-‑]?2|AMSTAR|Newcastle[-‑\s]?Ottawa|纽卡斯尔|Jadad|Cochrane|CONSORT|PRISMA|STROBE|CTCAE/i;
+// Self-referential meta-narration: the paper talking about itself as the thing
+// being delivered and checked, rather than about the evidence.
+const selfReferentialNarrationPattern = /学术化版本|作为被评价对象|(?:本报告|本文)[^。；\n]{0,16}(?:判定条件|交付判据|达标判据|验收依据|任务书|评分口径)|(?:本报告|本文)[^。；\n]{0,10}拒绝[^。；\n]{0,24}(?:判据|验收|达标|指标)/;
 const deepResearchProfile = "academic_deep_research_v1";
 // What separates a package that must be withheld from one that may be delivered
 // with its gaps declared is whether a reader could tell.
@@ -710,6 +771,109 @@ function withoutReportSections(reportText, headingPattern) {
   );
 }
 
+/** The offending line, so the notice names the sentence to fix rather than the
+ *  document. "There is retrieval prose somewhere in your report" is not a
+ *  repairable instruction.
+ *  @param {string} text @param {RegExp} pattern
+ *  @returns {{ line: number, text: string } | null}
+ */
+function firstMatchingLine(text, pattern) {
+  const lines = String(text ?? "").split("\n");
+  for (const [index, line] of lines.entries()) {
+    if (pattern.test(line)) return { line: index + 1, text: excerpt(line) };
+  }
+  return null;
+}
+
+/** @param {string} line */
+function excerpt(line) {
+  const trimmed = String(line ?? "").trim();
+  return trimmed.length > 96 ? `${trimmed.slice(0, 96)}…` : trimmed;
+}
+
+/** A verdict verb used to score this report's own proposition, or "" when the
+ *  sentence is ordinary clinical prose or the report of a named instrument.
+ *  @param {string} line
+ */
+function selfGradedVerdict(line) {
+  for (const sentence of String(line ?? "").split(/(?<=[。！？；;])/)) {
+    if (!gradingVerbPattern.test(sentence)) continue;
+    if (namedAppraisalInstrumentPattern.test(sentence)) continue;
+    if (!quotedVerdictPattern.test(sentence) && !selfGradedSubjectPattern.test(sentence)) continue;
+    return excerpt(sentence);
+  }
+  return "";
+}
+
+/** Commissioning vocabulary, acceptance-specification structure, and
+ *  self-referential narration — the three ways the request's own register
+ *  survives into the manuscript. Read outside the reference list, where a cited
+ *  title may legitimately carry any of these words.
+ *  @param {any} reportText
+ */
+function manuscriptRegisterIssues(reportText) {
+  const issues = [];
+  const body = withoutReportSections(reportText, "参考文献|参考来源|References?");
+  const namedTerms = new Set();
+  const propositionLines = [];
+  let propositionSample = "";
+  let headings = 0;
+  let verdicts = 0;
+  let narrations = 0;
+  for (const [index, line] of body.split("\n").entries()) {
+    const lineNumber = index + 1;
+    for (const term of commissioningVocabulary) {
+      if (!line.includes(term) || namedTerms.has(term)) continue;
+      namedTerms.add(term);
+      issues.push(
+        `The academic report line ${lineNumber} uses commissioning vocabulary ${JSON.stringify(term)}: ${excerpt(line)}. `
+        + "A paper never names the brief it was written for, the item bank the question came from, the metrics it was scored against, or the answer that was expected. "
+        + "Restate the underlying clinical proposition in the literature's own words and evaluate that instead — "
+        + '例如把"题库目标答案X无证据支持"改写为"对于X这一说法，未检索到以临床结局为终点的研究"。',
+      );
+    }
+    if (headings < 4 && acceptanceConditionHeadingPattern.test(line)) {
+      headings += 1;
+      issues.push(
+        `The academic report line ${lineNumber} names a section after an acceptance condition: ${excerpt(line)}. `
+        + "A reader judges what kind of document this is from the section names, and 判定条件 announces a reviewer's checklist. "
+        + "Use the manuscript sections (摘要 / 引言 / 资料与方法 / 结果 / 讨论 / 局限性 / 结论 / 临床实践要点 / 参考文献): "
+        + "state the question and the objective in 引言, and write the evidence bar as the evidence-appraisal criteria in 资料与方法.",
+      );
+    }
+    if (letteredPropositionPattern.test(line)) {
+      propositionLines.push(lineNumber);
+      if (!propositionSample) propositionSample = excerpt(line);
+    }
+    const verdict = verdicts < 4 ? selfGradedVerdict(line) : "";
+    if (verdict) {
+      verdicts += 1;
+      issues.push(
+        `The academic report line ${lineNumber} delivers a verdict on its own proposition with 判为/判定为: ${verdict}. `
+        + "Grading your own conclusions against a scale you invented prints the acceptance form into the paper. "
+        + "Use the verbs of evidence — 提示、支持、不足以支持、未检索到……的证据 — or, when you are applying a published instrument, "
+        + 'name it and report its own level (按 WHO-UMC 评定为"可能有关"、按 GRADE 为低确定性).',
+      );
+    }
+    if (narrations < 4 && selfReferentialNarrationPattern.test(line)) {
+      narrations += 1;
+      issues.push(
+        `The academic report line ${lineNumber} writes about itself rather than about the evidence: ${excerpt(line)}. `
+        + "The paper describes evidence and reasoning, never what this report is, what it refuses to do, or what it was checked against. "
+        + "State the objective plainly in 引言 (本文旨在评价……) and delete the rest; if a scientific question is buried in the sentence, ask it scientifically.",
+      );
+    }
+  }
+  if (propositionLines.length >= 2) {
+    issues.push(
+      `The academic report states lettered propositions with their own pass/fail conditions at lines ${propositionLines.slice(0, 8).join(", ")}: ${propositionSample}. `
+      + "That is the reviewer's acceptance form printed inside the manuscript. Dissolve it: what evidence a conclusion of each kind must rest on belongs in "
+      + "资料与方法 as continuous methods prose, and what each line of evidence established belongs in 结果 and 讨论 as a finding — never carried forward as a per-proposition verdict.",
+    );
+  }
+  return issues;
+}
+
 // A CSV record is not a line: a quoted support quote may hold commas, doubled
 // quotes, and newlines, and the ledger is written by a csv writer that quotes
 // exactly that way. Counting lines therefore counted the wrong thing.
@@ -929,7 +1093,7 @@ export function validateClinicalEvidencePackage({
         issues.push(`The deep-research report is missing a required academic section matching ${section}.`);
       }
     }
-    const practicalHeading = String(reportText ?? "").search(/(?:^|\n)##\s+[^\n]*(?:安全优先的实际处置|实际处置|实用回答|Practical)[^\n]*$/im);
+    const practicalHeading = String(reportText ?? "").search(practicalHeadingLinePattern);
     const referencesHeading = String(reportText ?? "").search(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$/im);
     if (practicalHeading < 0) {
       issues.push("The deep-research report must contain a dedicated safety-first practical-answer section.");
@@ -945,12 +1109,18 @@ export function validateClinicalEvidencePackage({
   if (operationalFailurePattern.test(reportText ?? "")) {
     issues.push("The academic report contains operational failure prose that belongs only in the run receipt.");
   }
-  if (
-    runtimeLeakagePattern.test(reportText ?? "")
-    || evidenceAccessLimitationPattern.test(withoutReportSections(reportText, "局限|Limitations?"))
-  ) {
-    issues.push("The academic report contains runtime or retrieval-process prose instead of scientific analysis.");
+  const leakageLine = firstMatchingLine(reportText, runtimeLeakagePattern)
+    ?? firstMatchingLine(withoutReportSections(reportText, "局限|Limitations?"), evidenceAccessLimitationPattern);
+  if (leakageLine) {
+    issues.push(
+      "The academic report contains runtime or retrieval-process prose instead of scientific analysis: "
+      + `line ${leakageLine.line} reads ${leakageLine.text}. `
+      + "Write what the evidence shows, not how it was obtained — the run's tools, gateways, preserved artifacts (工件), "
+      + "access levels (访问层级), environment (本环境), and retrieval passes (本轮检索) belong in the run receipt. "
+      + "A source you could not obtain is stated as a limitation of the evidence base inside 局限性, in the reader's terms.",
+    );
   }
+  issues.push(...manuscriptRegisterIssues(reportText));
   if (/\[claim:CLM-[0-9]{3,6}[^\]]+\]/.test(reportText ?? "")) {
     issues.push("Each claim marker must contain exactly one claim ID.");
   }
@@ -1166,7 +1336,7 @@ export function validateClinicalEvidencePackage({
     );
   }
 
-  const practical = reportSection(reportText, "实际处置|实用|怎么办|Practical");
+  const practical = reportSection(reportText, practicalSectionHeading);
   // The analysis may reason as far as the evidence allows. What a reader is
   // told to actually do may not rest on the analyst's own estimate: this
   // section is read as instruction, and an estimate read as instruction is the

@@ -240,7 +240,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.1.0",
+      effectiveAgentVersion: "2.2.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
 
@@ -2635,7 +2635,13 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
   for (const entry of await readdir(mcpDir)) {
     if (!entry.endsWith(".py")) continue;
     const text = await readFile(new URL(entry, mcpDir), "utf8");
+    // Two exits, and scanning only one is how this test lagged the second time.
+    // failure() is the direct return; the six *Error(Exception) classes are
+    // raised with a code that server.py hands to failure() unchanged, so
+    // pharmacy_reference_* and evimed_evidence_invalid_response reach a run's
+    // verdict without ever appearing in a failure( call.
     for (const [, code] of text.matchAll(/\bfailure\(\s*\n?\s*"([a-z0-9_]+)"/g)) emitted.add(code);
+    for (const [, code] of text.matchAll(/\b[A-Z][A-Za-z]*Error\(\s*\n?\s*"([a-z0-9_]+)"/g)) emitted.add(code);
   }
   for (const relative of ["../src/publicSourceGateway.mjs", "../src/webSearchGateway.mjs"]) {
     const text = await readFile(new URL(relative, import.meta.url), "utf8");

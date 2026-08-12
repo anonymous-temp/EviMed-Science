@@ -456,6 +456,22 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // found their evidence elsewhere.
   "web_search_gateway_failed",
   "web_search_gateway_token_missing",
+  // The long-running specialist workers (meta-analysis, the six Python agents)
+  // and the science connectors. Absent, unconfigured, or not running is this
+  // deployment's state, not the run's mistake: it records that the analysis
+  // could not be produced and works with what it has.
+  "meta_agent_unavailable",
+  "meta_agent_unconfigured",
+  "meta_agent_worker_unavailable",
+  "meta_agent_python_unavailable",
+  "meta_model_config_unavailable",
+  "specialist_agent_unavailable",
+  "specialist_agent_unconfigured",
+  "specialist_worker_unavailable",
+  "specialist_python_unavailable",
+  "specialist_model_config_unavailable",
+  "pharmacy_reference_unconfigured",
+  "evimed_evidence_invalid_response",
   // The open web is the one channel that is expected to be partly unreachable:
   // engines rate-limit, serve CAPTCHAs, and suspend themselves, and a
   // deployment may have no metasearch backend at all. Every one of these means
@@ -587,6 +603,53 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "web_search_language_invalid",
   "web_search_limit_invalid",
   "web_search_time_range_invalid",
+  // Malformed calls into the specialist workers and the science connectors:
+  // a bad action, an id that is not one, a path outside the workspace, an
+  // argument the schema rejects. The run rewrites the call.
+  "meta_action_invalid",
+  "meta_topic_required",
+  "meta_job_id_invalid",
+  "meta_job_state_invalid",
+  "meta_job_state_too_large",
+  "meta_input_path_invalid",
+  "meta_output_scope_invalid",
+  "meta_workspace_invalid",
+  "meta_agent_root_invalid",
+  "specialist_action_invalid",
+  "specialist_input_required",
+  "specialist_input_path_invalid",
+  "specialist_job_id_invalid",
+  "specialist_job_state_invalid",
+  "specialist_job_state_too_large",
+  "specialist_output_scope_invalid",
+  "specialist_workspace_invalid",
+  "specialist_agent_root_invalid",
+  "specialist_project_env_invalid",
+  "science_connector_unknown",
+  "science_connector_tool_invalid",
+  "science_connector_site_invalid",
+  "science_connector_query_invalid",
+  "science_connector_request_invalid",
+  "science_connector_request_too_large",
+  "science_connector_schema_invalid",
+  "science_connector_series_invalid",
+  "science_connector_period_invalid",
+  "science_connector_database_invalid",
+  "science_connector_arguments_invalid",
+  "science_connector_argument_required",
+  "science_connector_argument_unknown",
+  "science_connector_enum_invalid",
+  "science_connector_integer_invalid",
+  "science_connector_number_invalid",
+  "science_connector_string_invalid",
+  "science_connector_string_pattern_invalid",
+  "science_connector_value_above_maximum",
+  "science_connector_value_below_minimum",
+  "pharmacy_reference_invalid",
+  // The worker finished but its output does not match the evidence it claims.
+  // Delivering that is exactly what this gate exists to prevent.
+  "meta_source_evidence_mismatch",
+  "specialist_source_evidence_mismatch",
 ]);
 
 // Transport died before either side could say anything. The MCP client reports

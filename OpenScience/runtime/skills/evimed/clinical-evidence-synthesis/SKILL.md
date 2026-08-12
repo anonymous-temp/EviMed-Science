@@ -25,6 +25,7 @@ Do not claim completion if any required skill fails to load.
 3. Do not put `综述`, `系统评价`, `meta分析`, `review`, or another article-type label in the title unless the user explicitly requests that design.
 4. Write a publication-grade evidence analysis, not an expanded chat answer. Let the question and usable evidence determine length; do not pad the report or repeat conclusions to meet a quota.
 5. Keep the safety-first practical answer separate and concise. Clinical urgency takes precedence over product discussion.
+6. **The request is an input, not a template.** Take the clinical question out of it and leave the rest behind — its headings, its checklists, its metrics, its expected answer, its vocabulary. A request written as an acceptance specification is still answered with a manuscript; see "Register: what a manuscript never says".
 
 ### Never carry a record number out of the data
 
@@ -46,7 +47,9 @@ citations and belong in the report as they are.
 
 A report that poses sub-questions, searches each, and returns a verdict on each is not analysis — it is a lookup table with citations. These questions are chosen because they sit at an edge of what is known, and an edge is where the work is.
 
-State the bottom line first, then what would have to hold for it to be true, then attack each of those conditions with everything available. The reader should be able to see the argument being built, and see which load-bearing piece is weakest.
+State the bottom line first, then make the case for it: establish what the answer depends on, and push on each of those dependencies with everything available. The reader should be able to see the argument being built, and see which load-bearing piece is weakest.
+
+Those dependencies are your working, not your outline. They decide which searches you run and which findings matter; they are never printed as a section heading, a lettered list of propositions, or a pass/fail verdict. In the manuscript they appear twice, dissolved: as the evidence appraisal criteria in `资料与方法`, and as the reasoning in `结果` and `讨论`. See "Required report structure" and "Register: what a manuscript never says".
 
 **Absence of direct evidence is where the analysis begins, not where it ends.** "No study was found" is a finding about the literature, not an answer to the question. Having established it, you owe the reader the best defensible answer the evidence still permits, reached by whichever of these apply:
 
@@ -256,9 +259,9 @@ It is not a lighter standard, it is a different one. Where a direct claim is bon
 
 Every numeral you state in the report for a derived result must appear in its `method`, `assumptions`, `sensitivity`, or `uncertainty`. That is the audit trail replacing the missing quote: a reader can check your arithmetic even though they cannot check your quote.
 
-In the report, mark every line asserting a derived result with `〔推导〕` so it is never read as a measurement, and give it a hidden claim marker as usual. A derived result takes no numbered citation of its own — it is not a source; its inputs carry the citations.
+In the report, mark every line asserting a derived result with `〔推导〕` so it is never read as a measurement, and give it a hidden claim marker as usual. A derived result takes no numbered citation of its own — it is not a source; its inputs carry the citations. It is presented in `结果`, at the point of the finding it reasons from, and discussed in `讨论` like any other result.
 
-**A derived result may never appear in `安全优先的实际处置`.** Reason as far as the evidence allows in the analysis; what a reader is told to actually do must rest on measured evidence. If a derivation implies a more cautious action, state the caution in the analysis and give the practical step a directly supported claim.
+**A derived result may never appear in `临床实践要点`.** Reason as far as the evidence allows in the analysis; what a reader is told to actually do must rest on measured evidence. If a derivation implies a more cautious action, state the caution in the analysis and give the practical step a directly supported claim.
 
 ### Bibliography and audit
 
@@ -282,31 +285,171 @@ For organizations or official documents, use the issuing organization as the aut
 
 ## Required report structure
 
-The structure carries the argument. Sections 2 through 6 are the argument being built and are the substance of the report; use these core sections, merge adjacent analytical sections when that improves the argument, and add a medicine-specific subsection only when relevant:
+A reader judges what kind of document this is from the section names, before a
+single sentence of the body. Names that describe the analyst's workflow —
+`判定条件`, `逐角度论证`, `三角互证与冲突处理` — announce a work record, and an
+acceptance checklist printed inside a manuscript is the reviewer's form, not the
+paper. So the deliverable is a manuscript: the sections a journal reader expects,
+in the order they expect them. Nothing analytical is surrendered by this. Every
+demand the old workflow sections made is still made below; each one has moved to
+the place a manuscript carries it.
 
-1. `摘要` — the bottom line first, then the strength it is held with
-2. `论点与判定条件` — the thesis, and what would have to hold for it to be true or false
-3. `证据基础与检索方法` — what was searched and what was found, reported as scholarly method; keep it proportionate, it is the ground of the argument and not the argument
-4. `逐角度论证与结果` — one subsection per angle attempted (direct evidence, mechanism, quantitative bounding, analogy, adjacent-population extrapolation, converse evidence), each saying what it establishes and what it cannot
-5. `三角互证与冲突处理` — where angles agree, whether that agreement is informative; where they conflict, which wins and why
-6. `推导与外推` — the derived results, each marked `〔推导〕`, with its working, assumptions, and sensitivity
-7. `讨论` — what the argument as a whole establishes, and what would settle the question
-8. `证据局限`
-9. `结论`
-10. `安全优先的实际处置`
-11. `参考文献`
+Required level-two sections, in this order:
 
-Sections 4, 5, and 6 are what distinguishes an analysis from a lookup. A report that reaches section 7 having only restated sources and declared a gap has not done the work — go back and attempt the angles.
+1. `摘要` — structured: `目的` / `方法` / `结果` / `结论`, followed by `关键词`. The bottom line goes in `结论`, at the strength the evidence supports. Each quantitative proposition still takes its own physical line with its numbered citation and hidden claim marker.
+2. `引言` — the clinical question, the decision that hangs on it, what is already established, and where the uncertainty sits; the objective of this analysis in the closing paragraph.
+3. `资料与方法` — sources and search, eligibility, screening, deduplication, and the evidence appraisal criteria.
+4. `结果` — what the evidence establishes, organised by finding.
+5. `讨论` — what the body of evidence supports as a whole, where the lines of evidence agree or conflict, how this stands against existing knowledge, and what would settle the question.
+6. `局限性` — the closing movement of the discussion, kept as its own heading.
+7. `结论` — the answer, at the strength the evidence supports.
+8. `临床实践要点` — the safety-first practical answer. This section carries every safety duty the report has; it was named `安全优先的实际处置` and only the name changed.
+9. `参考文献` — always the final level-two section.
 
-Keep `参考文献` as the final level-two section. Never append the practical answer, an operational note, or another report section after the numbered reference list.
+Do not merge these sections and do not add sections between them; whatever
+further organisation the material needs is carried by level-three subsections
+under `结果` and `讨论`. Never append the practical answer, an operational note,
+or any other section after the numbered reference list.
 
-The methods section must report databases/source classes, complete query concepts, search date, eligibility criteria, deduplication, screening counts, access levels, and appraisal dimensions. Describe this as a scholarly method, not as a runtime log.
+### `资料与方法`
 
-The per-angle section must argue by angle, not list sources one by one. Each angle states what it establishes, how strongly, and what it cannot reach; compare agreement, conflict, directness, and certainty. Tables are encouraged for evidence characteristics and decision boundaries. An angle you attempted and that failed is worth reporting — say what you looked for, why it did not deliver, and what that absence itself implies.
+Report databases and source classes, complete query concepts, search date,
+eligibility criteria, deduplication, screening counts, access levels, and the
+appraisal dimensions. Write it as a scholarly method — impersonal, reproducible,
+in the past tense — not as a log of what the tools did.
 
-The discussion must explain what the argument as a whole establishes, distinguish acute undifferentiated symptoms from diagnosed chronic disease, separate measured evidence from derived reasoning, and name the study or measurement that would settle the question.
+**This is where the evidence bar lives.** State once, in the vocabulary of the
+field, what evidence a conclusion of each kind had to rest on before it could
+stand:
 
-The limitations section must discuss only limitations that materially change interpretation, such as risk of bias, indirectness, imprecision, evidence form, publication bias, recency, population transferability, jurisdiction, or health-system applicability. Synthesize them into an argument rather than a checklist. Do not report tool, gateway, file, or page-retrieval failures in the academic report.
+- design hierarchy, and what design a class of conclusion requires — an incidence estimate requires a denominator-defined study with prospective active ascertainment; an interchangeability conclusion requires a pre-specified equivalence or non-inferiority margin; a diagnostic conclusion requires a study with a reference standard and reported operating characteristics;
+- risk of bias, appraised with a named instrument where one applies (Cochrane RoB 2, ROBINS-I, QUADAS-2, AMSTAR 2, Newcastle-Ottawa, Jadad where the source used it);
+- directness on population, intervention, comparator, and outcome; precision; recency; applicability to the jurisdiction and care setting in question;
+- causal attribution of an adverse event by a named instrument — Naranjo, WHO-UMC — with the observations each level demands (dechallenge, rechallenge, alternative explanations, timing);
+- certainty of a body of evidence by a named framework — GRADE — with any downgrade attributed to its reason (risk of bias, indirectness, imprecision, inconsistency, publication bias).
+
+Write these as criteria, in continuous methods prose. **Never as a lettered list
+of propositions with pass/fail conditions**, and never carried forward as a
+per-proposition verdict elsewhere in the report. A published grading instrument
+you apply is reported as that instrument's output and named as such (`按 WHO-UMC
+评定为"可能有关"`, `按 GRADE 为低确定性`); a private scale you invented is not
+an instrument, and grading your own conclusions against it is the acceptance
+form again. See "Register: what a manuscript never says".
+
+### `结果`
+
+Organised by finding, not by source and not by retrieval attempt. For each line
+of evidence: what it establishes, in which population, at what certainty, and
+what it cannot reach. Tables are encouraged for study characteristics, effect
+estimates, and decision boundaries.
+
+Direct evidence, mechanism, quantitative bounding, analogy,
+adjacent-population extrapolation and converse evidence remain required analytic
+moves — **they are content, not headings.** Subsection titles name the subject
+matter (`说明书与监管文本`, `随机对照试验证据`, `药理机制与人体验证`,
+`不良反应归因评定`), never the procedure that produced them.
+
+A line of evidence you sought and did not find is a result: say what was sought,
+what was retrieved, and what the absence constrains — as `未检索到`, never as a
+statement that the evidence does not exist. Derived results appear here, each
+marked `〔推导〕`, with its working, assumptions, and sensitivity at the point of
+the finding it reasons from.
+
+**A `结果` section that restates sources one by one and declares a gap has not
+done the work.** Restating what each paper said is a reading list; a result is
+what the evidence establishes about the question. If the section reads as a
+sequence of source summaries, the analysis is still owed — go back and attempt
+the lines of reasoning listed in "Argue a thesis; do not answer a questionnaire",
+then report what each one established.
+
+### `讨论`
+
+What the evidence supports taken as a whole. Where independent lines converge,
+say so and say whether the convergence is informative — convergence between two
+reports of the same underlying data is not replication. Where they conflict,
+adjudicate: say which is preferred and on what grounds (design, directness,
+precision, recency, risk of bias), rather than listing both. Distinguish acute
+undifferentiated symptoms from diagnosed chronic disease, keep measured evidence
+separate from derived reasoning, compare the findings with existing knowledge,
+and name the study, measurement, or dataset that would settle the question. Any
+factual numeral introduced here still carries its citation and claim marker.
+
+### `局限性`
+
+Only limitations that materially change interpretation — risk of bias,
+indirectness, imprecision, evidence form, publication bias, recency, population
+transferability, jurisdiction, health-system applicability. Synthesize them into
+an argument about how far the conclusions can be trusted, not a checklist. Do not
+report tool, gateway, file, or page-retrieval failures in the academic report.
+
+### `临床实践要点`
+
+The safety-first practical answer, under the name a manuscript uses for it. Every
+requirement in "Safety boundaries" applies here unchanged: each action carries
+its own directly applicable citation and hidden claim marker, no derived result
+may appear, contact details are localized to the reader's jurisdiction, and no
+recommendation extends beyond the population, dose, or setting the evidence
+studied. Keep it concise and clinically ordered; urgency comes before product
+discussion. It is the last section before `参考文献`.
+
+## Register: what a manuscript never says
+
+The report is a scientific paper about a clinical question. It is never a paper
+about the task that produced it. Two registers give that away — the vocabulary of
+whoever commissioned the work, and the vocabulary of an acceptance
+specification — and both survive into the manuscript by being copied out of the
+request. **However the request is worded, the manuscript is written in the
+literature's language.** A test that settles most cases: if a sentence would stop
+making sense to a reader a year from now who never saw the request, it is a
+workflow sentence — delete it or rewrite it as science.
+
+Forbidding a phrase is useless without its replacement, so each rule below gives
+one. 反例 are verbatim from delivered production reports.
+
+### Commissioning vocabulary
+
+Never name the brief, the client, the item bank, or the target answer: `题库`,
+`语义群`/`语义问题`, `KPI`, `达标率`, `提及率`, `强调率`, `交付判据`,
+`派发题面`, `目标答案`, `任务书`, `合规改写（供…采用）`. A paper never says who
+asked for it or what it was scored against.
+
+- 反例：`本报告检验一个题库语义问题的学术化版本：速效救心丸使用者服药后出现的头晕与乏力，能否归因于药物本身。`
+  正例：`本文评价速效救心丸使用者报告的头晕与乏力能否归因于该药，以及现有证据可支持的归因强度。`
+- 反例：`题库目标答案"有胸闷症状者常备作为应急"无证据支持。`
+  正例：`对于"有胸闷症状者应常备本品以备急用"这一说法，未检索到以临床结局为终点、检验自备或按需用药策略的研究。`
+  （把委托方的目标答案还原成一个待评价的临床主张。不要为它编造出处；若其来源不可引用，直接陈述该主张并评价它。）
+- 反例：`两个被评价的 KPI（"归因解释率""行动建议率"）只作为被评价对象出现，不作为质量达标判据。`
+  正例：删去。若其下确有科学问题，用科学的方式提出：`健康信息的质量应以内容正确性为终点：23 个症状自查工具在 45 个标准化情景中的正确分诊率为 57%（95%CI 52% 至 61%）[16]，"给出了建议"与"建议正确"并非同一件事。`
+- 反例：`合规改写（供题库与临床宣教采用）：PCI 术后患者如出现胸闷/胸痛，应首先由心内科评估……`
+  正例：把同一内容直接写进 `临床实践要点`，以本文自己的口吻：`PCI 术后新发或加重的胸痛应首先由心内科评估残余缺血与再评估指征……`
+
+### Acceptance-specification register
+
+Never structure the paper as a specification being checked off.
+
+- 反例（节名）：`## 临床问题与判定条件`、`## 论点与判定条件`
+  正例：`## 引言` 陈述问题与目的；证据门槛写进 `## 资料与方法` 的证据评价标准。
+- 反例：`命题 B（可归因）不成立，判为"时间相关，因果未定"。`
+  正例：`现有报告仅提供用药与症状的时间关联，缺少去激发/再激发观察与标准化因果关系评定，故不足以支持因果归因。`
+- 反例：`命题 A（发生率可定量）：需有分母明确、主动系统采集不良事件的研究……仅有说明书反应罗列、无分母的病例系列或综述转述，判为"无发生率证据"。`
+  正例（写在 `资料与方法`）：`发生率估计仅采纳分母明确、前瞻性主动监测的研究；说明书的不良反应罗列与无分母病例系列不用于估计发生率，相应表述限于"已有记载，发生率未知"。`
+- 反例（结论动词）：`命题 A ＝ 边界未明确覆盖`、`该角度判定为……`、`按本报告判定条件须降级表述为……`
+  正例：用证据的动词——`提示`、`支持`、`不足以支持`、`未见……的证据`、`按 GRADE 为低确定性`。例：`现有证据为观察性研究且未校正觉醒时点与晨间活动量，仅支持"事件时间分布不均"这一较弱表述，尚不足以支持因果性解释。`
+- 反例（自设四分法当作本文的结论框架）：`命题 D（百分比指标可作为交付判据）：不支持。`、`逐条判定：支持／部分支持／不支持／无证据。`
+  正例：`该建议缺乏直接证据支持：未检索到以临床结局为终点的比较研究，现有间接证据按 GRADE 为极低确定性。`
+  引用他人的分级工具是允许的，且必须指明是谁的工具与哪一级（`按 WHO-UMC 评定为"可能有关"`、`原文报告 Jadad 评分为 2 分`）。区别在于：具名工具是被引用并施用的公开量表，四分法是自制标尺——用自制标尺给自己的结论打分，就是把验收表印进了论文。
+
+### Self-referential meta-narration
+
+The paper describes evidence and reasoning, not itself. Do not write about what
+this report is, what it refuses to do, or what role something plays in it.
+
+- 反例：`本报告检验……的学术化版本`、`……只作为被评价对象出现`、`本报告的判定条件（与任务书一致）`
+  正例：`本文的目的是评价……`（其余删去）。
+- 反例：`本报告拒绝以任何提及率或强调率百分比作为结论或验收依据。`
+  正例：`本文以内容正确性（指南符合度、误分诊率、漏诊比例）为评价终点。`
+- 反例（把工作流程当小标题）：`### 角度一：说明书适应症边界（命题 A）`、`**该角度确立了什么、不能确立什么**`
+  正例：`### 说明书适应症边界`，其下以正文写明：`上述记载一致显示适应症限于气滞血瘀型冠心病心绞痛；但均为期刊转述，官方现行文本未获核验，因此尚不能据此判断该场景是否被覆盖。`
 
 ## Safety boundaries
 
@@ -314,7 +457,7 @@ These hold for any question where a reader might act on the answer:
 
 - do not let a differential be settled by symptoms alone when a time-sensitive cause is in it;
 - do not present response to any medicine as a diagnostic test;
-- give every action in the practical section its own direct evidence, not an inference from an adjacent finding;
+- give every action in `临床实践要点` its own direct evidence, not an inference from an adjacent finding;
 - localize practical contact details to the reader's jurisdiction (in China, emergency is `120`) while keeping the source proposition faithful;
 - do not extend a recommendation beyond the population, dose, or setting the evidence studied;
 - add no advice the question did not ask for and the evidence does not directly support.
@@ -413,6 +556,7 @@ Read every output back before claiming success. Do not use `grep` or another unb
 - all DOI/PMID/PMCID values and bibliographic metadata are accurate;
 - no visible `[claim:...]` marker remains;
 - no operational failure or tool-process prose appears in the academic report;
+- the section names are the manuscript ones and no commissioning, acceptance-specification, or self-referential prose survives anywhere in the report (see "Register: what a manuscript never says"). Read the request once more and confirm that no phrase of it was copied into the report — the request's wording is the usual way this register gets in;
 - the practical answer is medically correct, source-supported, and does not encourage delay.
 
 Then run the deterministic structural preflight from the loaded skill directory:

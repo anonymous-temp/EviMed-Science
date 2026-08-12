@@ -116,6 +116,157 @@ test("whatever the server gate rejects, the preflight already caught", async () 
         input.citationLedgerText = [rows[0], ...rows.slice(2)].join("\n");
       },
     },
+    // The register the fifteen speed-of-heart-rescue-pill reports were written
+    // in. Each line below is verbatim from one of them. They passed every
+    // structural check and were delivered, and the reader who commissioned them
+    // read a technical work record instead of a paper.
+    {
+      label: "commissioning vocabulary in the analysis",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          '## 讨论\n题库目标答案"有胸闷症状者常备作为应急"无证据支持。\n',
+        );
+      },
+    },
+    {
+      label: "a section named after an acceptance condition",
+      break: (input) => {
+        input.reportText = input.reportText.replace("## 讨论\n", "## 临床问题与判定条件\n本节说明证据门槛。\n\n## 讨论\n");
+      },
+    },
+    {
+      label: "lettered propositions with pass/fail conditions",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n"
+            + "- 命题 A（发生率可定量）：需有分母明确、主动系统采集不良事件的研究。\n"
+            + "- 命题 B（可归因）：仅有时间先后关系时不成立。\n",
+        );
+      },
+    },
+    {
+      label: "判为 delivering a verdict on the report's own proposition",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          '## 讨论\n仅有说明书反应罗列、无分母的病例系列或综述转述，判为"无发生率证据"。\n',
+        );
+      },
+    },
+    {
+      label: "the report narrating itself as the thing being delivered",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          '## 讨论\n两个被评价的指标只作为被评价对象出现，不作为质量达标判据。\n',
+        );
+      },
+    },
+    {
+      label: "the runtime's own nouns for artifacts, access levels and its environment",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n该来源的访问层级为摘要，全文未能经本环境取得，相关工件已保存。\n",
+        );
+      },
+    },
+    {
+      // The other half of the runtime's Chinese vocabulary: one retrieval pass
+      // and the container it ran in. A methods section describes a search, not
+      // the pass that performed it.
+      label: "the runtime's nouns for one retrieval pass and its search environment",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n本轮检索未覆盖中文数据库，检索环境仅可访问公开摘要。\n",
+        );
+      },
+    },
+    {
+      // The eleven commissioning terms are one list on each side, and only 题库
+      // and 目标答案 are exercised above. These three carry the rest of the
+      // brief's vocabulary: the group the question was drawn from, the prompt
+      // that was dispatched, and the rate the answer was scored at.
+      label: "the item bank's semantic group, dispatched prompt and pass rate",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n派发题面要求给出可执行建议，达标率按语义群统计。\n",
+        );
+      },
+    },
+    {
+      label: "the metrics the run was scored against, named as the subject of the analysis",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          '## 讨论\n两个被评价的 KPI（"归因解释率""行动建议率"）只作为被评价对象出现，不作为质量达标判据。\n',
+        );
+      },
+    },
+    {
+      label: "the report announcing which of the brief's percentages it refuses",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n本报告拒绝以任何提及率或强调率百分比作为结论或验收依据。\n",
+        );
+      },
+    },
+    {
+      label: "the brief named alongside the report's own conditions",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n本报告的判定条件（与任务书一致）如下。\n",
+        );
+      },
+    },
+    {
+      label: "the clinical question restated as an item-bank semantic question",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n本报告检验一个题库语义问题的学术化版本：使用者服药后出现的头晕与乏力，能否归因于药物本身。\n",
+        );
+      },
+    },
+    {
+      // The heading rule spans levels two to four, and the level-two case above
+      // only proves one of them. A run that was told to stop naming a section
+      // 判定条件 will demote it to a subsection first — which is the shape the
+      // superseded skill itself prescribed as section 2.
+      label: "an acceptance-condition heading demoted to a subsection",
+      break: (input) => {
+        input.reportText = input.reportText.replace("## 讨论\n", "## 讨论\n### 论点与判定条件\n本节列出证据门槛。\n");
+      },
+    },
+    {
+      // The bulleted case above proves the bullet prefix; a numbered list is the
+      // other form production used, and 交付判据 is the term the fourth
+      // proposition was scored against.
+      label: "numbered propositions scored against a delivery criterion",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n"
+            + "1. 命题 C（可外推至老年人群）：需有年龄分层数据。\n"
+            + "2. 命题 D（百分比指标可作为交付判据）：不支持。\n",
+        );
+      },
+    },
+    {
+      // The verdict rule has two doors: a quoted verdict string, exercised
+      // above, and a sentence whose subject is one of this report's own angles.
+      // Only the second one catches a verdict written as plain prose.
+      label: "an unquoted verdict on one of the report's own angles",
+      break: (input) => {
+        input.reportText = input.reportText.replace("## 讨论\n", "## 讨论\n该角度判定为不足以支持因果归因。\n");
+      },
+    },
     {
       label: "derived result asserted without its 〔推导〕 mark",
       break: (input) => {
@@ -149,5 +300,125 @@ test("whatever the server gate rejects, the preflight already caught", async () 
       `${scenario.label}: the gate rejects this package but the preflight returned ok=true, `
         + "so a run would be told it is finished and then failed for it",
     );
+  }
+});
+
+test("the register rules read the sentence, not the word", async () => {
+  // 判定, 命题, 本环境 and 工件 all occur inside ordinary clinical and
+  // bibliographic prose. A rule that fires on the word instead of its use would
+  // fail correct analysis — the most expensive kind of false positive here,
+  // because the run is sent back to break something that was right.
+  const cases = [
+    {
+      label: "因果关系判定 and 误判为 as ordinary clinical vocabulary",
+      write: "不良反应的因果关系判定需要去激发与再激发观察；急性冠脉综合征可能被误判为胃食管反流。",
+    },
+    {
+      label: "a published grading instrument applied and named",
+      write: '按 WHO-UMC 因果关系评定标准判定为"可能有关"，证据体按 GRADE 判定为低确定性。',
+    },
+    {
+      label: "a reference standard defining what counts as positive",
+      write: "以冠脉造影显著狭窄判定为阳性，作为参考标准。",
+    },
+    {
+      label: "a single 命题 referred to in reasoning",
+      write: "该推理依赖命题（若无分母则无法估计发生率）这一前提。",
+    },
+    {
+      label: "本环境 inside 基本环境, 日本环境 and 样本环境",
+      write: "遗传与基本环境因素共同作用，日本环境省公布的数据与样本环境条件一致。",
+    },
+    {
+      // The instrument the skill names for adverse-event attribution. 因果关系判定
+      // is the standard phrase for it, so a rule reading 判定 as a verdict verb
+      // would reject the appraisal criterion the method is required to state.
+      label: "Naranjo applied as the attribution criterion",
+      write: "不良反应的因果关系判定采用 Naranjo 量表进行，并结合去激发与再激发观察。",
+    },
+    {
+      // 判定为 attached to a certainty level rather than to a proposition of the
+      // report's own — the exact wording the skill prescribes as the replacement.
+      label: "GRADE certainty reported with 判定 in the sentence",
+      write: "该结局的证据体按 GRADE 判定证据等级为低，降级理由为间接性与不精确性。",
+    },
+    {
+      label: "命题 as the term of art in 命题逻辑",
+      write: "命题逻辑与因果推断的区别在于前提是否可被经验检验。",
+    },
+    {
+      label: "工件 inside 加工件 and 本环境 inside 标本环境",
+      write: "职业流行病学研究报告了金属加工件粉尘暴露与呼吸道症状的关联，标本环境温度亦被记录。",
+    },
+    {
+      // Deliberate threshold, not an oversight: one such line can be a reference
+      // to someone else's numbered proposition, and it is the list of them with
+      // their pass/fail conditions that is the acceptance form. Two of these
+      // lines are rejected above; this pins where the boundary was drawn.
+      label: "a single lettered proposition, which is a reference and not a checklist",
+      write: "命题 A（发生率可定量）需要分母明确的前瞻性主动监测研究支持。",
+    },
+  ];
+  for (const scenario of cases) {
+    const input = deepResearchPackage();
+    input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${scenario.write}\n`);
+    const { gate, preflight } = await verdicts(input, scenario.label);
+    assert.equal(gate.valid, true, `${scenario.label}: ${gate.issues.join("\n")}`);
+    assert.equal(preflight.ok, true, `${scenario.label}: ${JSON.stringify(preflight.issues)}`);
+  }
+});
+
+test("the sentences the skill prescribes as the repair are not themselves rejected", async () => {
+  // Every ban above is stated in the skill with the wording that replaces it.
+  // If a replacement trips the rule it was written to satisfy, the run has
+  // nowhere to go: it is sent back, writes the prescribed sentence, and is sent
+  // back again. Each line here is the 正例 the skill gives for one of the 反例
+  // rejected above.
+  const prescribed = [
+    "本文评价使用者报告的头晕与乏力能否归因于该药，以及现有证据可支持的归因强度。",
+    "对于该说法，未检索到以临床结局为终点、检验自备或按需用药策略的研究。",
+    "现有报告仅提供用药与症状的时间关联，缺少去激发与再激发观察及标准化因果关系评定，故不足以支持因果归因。",
+    "发生率估计仅采纳分母明确、前瞻性主动监测的研究；说明书的不良反应罗列与无分母病例系列不用于估计发生率，"
+      + "相应表述限于“已有记载，发生率未知”。",
+    "现有证据为观察性研究且未校正觉醒时点与晨间活动量，仅支持“事件时间分布不均”这一较弱表述，尚不足以支持因果性解释。",
+    // Subject-matter subsection titles, which replace the workflow ones.
+    "### 不良反应归因评定\n各来源的归因强度依据去激发观察与替代解释的排除程度。",
+  ];
+  for (const write of prescribed) {
+    const input = deepResearchPackage();
+    input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${write}\n`);
+    const { gate, preflight } = await verdicts(input, write);
+    assert.equal(gate.valid, true, `${write}: ${gate.issues.join("\n")}`);
+    assert.equal(preflight.ok, true, `${write}: ${JSON.stringify(preflight.issues)}`);
+  }
+});
+
+test("both sides name the same line of the report the author has", async () => {
+  // A repair edits the line the notice names, so the number has to survive both
+  // sides blanking sections before they read. Collapsing a blanked section
+  // instead of preserving its newlines moves every later line up, and a notice
+  // pointing at the wrong line is a repair with nowhere to go — which has
+  // already happened once, to the numeric audit.
+  const input = deepResearchPackage();
+  const offender = "该角度判定为不足以支持因果归因。";
+  // Placed after the reference-free sections both sides blank, where a shifted
+  // line count would show.
+  input.reportText = input.reportText.replace("## 局限与不确定性\n", `## 局限与不确定性\n${offender}\n`);
+  const expected = input.reportText.split("\n").findIndex((line) => line.includes(offender)) + 1;
+  const { gate, preflight } = await verdicts(input, "line agreement");
+  assert.match(gate.issues.join("\n"), new RegExp(`report line ${expected} delivers a verdict`));
+  assert.match(preflight.issues.join("\n"), new RegExp(`line ${expected}: 判为/判定为 delivers a verdict`));
+});
+
+test("the practical answer is found under its old and its manuscript name", async () => {
+  // The section carries every safety duty the report has, and every check on it
+  // finds it by heading. A rename that stopped matching would not fail loudly —
+  // the section would simply be absent and nothing in it would be audited.
+  for (const heading of ["## 安全优先的实际处置", "## 临床实践要点", "## 临床要点"]) {
+    const input = deepResearchPackage();
+    input.reportText = input.reportText.replace("## 实际处置", heading);
+    const { gate, preflight } = await verdicts(input, heading);
+    assert.equal(gate.valid, true, `${heading}: ${gate.issues.join("\n")}`);
+    assert.equal(preflight.ok, true, `${heading}: ${JSON.stringify(preflight.issues)}`);
   }
 });
