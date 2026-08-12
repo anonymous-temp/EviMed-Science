@@ -127,6 +127,27 @@ PASTED_SOURCE_QUOTE = re.compile(r"(?:原文|原句)\s*[:：]")
 PROPER_NAME_FUNCTION_WORDS = frozenset(
     {"a", "an", "and", "at", "de", "for", "from", "in", "of", "on", "or", "the", "to", "van", "versus", "vs", "with"}
 )
+# English sentences are held together by closed-class words; enumerations of
+# technical terms have none. A pharmacology manuscript legitimately lists drugs by
+# INN, a mechanism paragraph names a signalling cascade, and an outcome definition
+# lists its endpoints — all in lowercase Latin, all comma-separated, none of it a
+# sentence: 硝酸酯类包括 isosorbide dinitrate, isosorbide mononitrate,
+# nitroglycerin, glyceryl trinitrate, pentaerythritol tetranitrate, erythrityl
+# tetranitrate, amyl nitrite, sodium nitroprusside 等 runs to fifteen words
+# without one. Title Case exempts the named entities; this exempts the unnamed
+# ones, and it costs no real detection — every pasted source sentence this rule
+# exists for is ordinary prose and carries several of these.
+PROSE_FUNCTION_WORDS = frozenset(
+    {
+        "a", "an", "the", "and", "or", "but", "not", "no", "of", "in", "on", "at", "to", "for", "from", "with",
+        "without", "by", "as", "into", "than", "that", "which", "who", "whom", "whose", "this", "these", "those",
+        "it", "its", "they", "their", "we", "our", "is", "are", "was", "were", "be", "been", "being", "has", "have",
+        "had", "do", "does", "did", "can", "could", "should", "would", "may", "might", "must", "will", "shall", "if",
+        "when", "while", "because", "although", "however", "therefore", "between", "among", "during", "after",
+        "before", "over", "under", "per", "via", "such", "both", "either", "neither", "all", "any", "each", "more",
+        "most", "less", "least", "only", "also", "other", "same", "then", "there", "up", "out", "about",
+    }
+)
 # A database search strategy is Boolean syntax, not prose, and PRISMA asks for it
 # verbatim. Two or more uppercase operators, or a field tag, identify one.
 DATABASE_FIELD_TAG = re.compile(r"\[(?:mesh|majr|tiab|ti|ab|tw|all fields|title/abstract|pt|la|dp)[^\]]*\]", re.I)
@@ -323,6 +344,13 @@ def reads_as_proper_name(words: list[str]) -> bool:
     return bool(carried) and all(word[:1].isupper() for word in carried)
 
 
+def reads_as_term_list(words: list[str]) -> bool:
+    """A run of Latin words is an enumeration of technical terms rather than a
+    sentence when it carries no closed-class word: prose is held together by
+    them, a list of drug INNs, pathway molecules or endpoints is not."""
+    return not any(word.lower() in PROSE_FUNCTION_WORDS for word in words)
+
+
 def reads_as_database_query(segment: str) -> bool:
     return bool(DATABASE_FIELD_TAG.search(segment)) or len(BOOLEAN_OPERATOR.findall(segment)) >= 2
 
@@ -356,7 +384,7 @@ def untranslated_prose_run(line: str) -> tuple[int, str] | None:
         words = LATIN_WORD.findall(segment)
         if len(words) < UNTRANSLATED_PROSE_WORDS:
             continue
-        if reads_as_proper_name(words) or reads_as_database_query(segment):
+        if reads_as_proper_name(words) or reads_as_term_list(words) or reads_as_database_query(segment):
             continue
         return len(words), excerpt(segment)
     return None

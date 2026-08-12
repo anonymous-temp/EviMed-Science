@@ -148,6 +148,25 @@ const pastedSourceQuotePattern = /(?:原文|原句)\s*[:：]/;
 const properNameFunctionWords = new Set([
   "a", "an", "and", "at", "de", "for", "from", "in", "of", "on", "or", "the", "to", "van", "versus", "vs", "with",
 ]);
+// English sentences are held together by closed-class words; enumerations of
+// technical terms have none. A pharmacology manuscript legitimately lists drugs
+// by INN, a mechanism paragraph names a signalling cascade, and an outcome
+// definition lists its endpoints — all in lowercase Latin, all comma-separated,
+// none of it a sentence: 硝酸酯类包括 isosorbide dinitrate, isosorbide
+// mononitrate, nitroglycerin, glyceryl trinitrate, pentaerythritol tetranitrate,
+// erythrityl tetranitrate, amyl nitrite, sodium nitroprusside 等 runs to fifteen
+// words without one. Title Case exempts the named entities; this exempts the
+// unnamed ones, and it costs no real detection — every pasted source sentence
+// this rule exists for is ordinary prose and carries several of these.
+const proseFunctionWords = new Set([
+  "a", "an", "the", "and", "or", "but", "not", "no", "of", "in", "on", "at", "to", "for", "from", "with", "without",
+  "by", "as", "into", "than", "that", "which", "who", "whom", "whose", "this", "these", "those", "it", "its", "they",
+  "their", "we", "our", "is", "are", "was", "were", "be", "been", "being", "has", "have", "had", "do", "does", "did",
+  "can", "could", "should", "would", "may", "might", "must", "will", "shall", "if", "when", "while", "because",
+  "although", "however", "therefore", "between", "among", "during", "after", "before", "over", "under", "per", "via",
+  "such", "both", "either", "neither", "all", "any", "each", "more", "most", "less", "least", "only", "also", "other",
+  "same", "then", "there", "up", "out", "about",
+]);
 // A database search strategy is Boolean syntax, not prose, and PRISMA asks for
 // it verbatim. Two or more uppercase operators, or a field tag, identify one.
 const databaseFieldTagPattern = /\[(?:mesh|majr|tiab|ti|ab|tw|all fields|title\/abstract|pt|la|dp)[^\]]*\]/i;
@@ -880,6 +899,15 @@ function readsAsProperName(words) {
   return carried.length > 0 && carried.every((word) => /^[A-Z]/.test(word));
 }
 
+/** Is this run an enumeration of technical terms rather than a sentence? Prose
+ *  is held together by closed-class words; a list of drug INNs, pathway
+ *  molecules, or endpoint definitions carries none.
+ *  @param {string[]} words
+ */
+function readsAsTermList(words) {
+  return !words.some((word) => proseFunctionWords.has(word.toLowerCase()));
+}
+
 /** @param {string} segment */
 function readsAsDatabaseQuery(segment) {
   return databaseFieldTagPattern.test(segment) || (segment.match(booleanOperatorPattern)?.length ?? 0) >= 2;
@@ -917,7 +945,7 @@ function untranslatedProseRun(line) {
   for (const segment of text.split(cut)) {
     const words = segment.match(latinWordPattern);
     if (!words || words.length < untranslatedProseWords) continue;
-    if (readsAsProperName(words) || readsAsDatabaseQuery(segment)) continue;
+    if (readsAsProperName(words) || readsAsTermList(words) || readsAsDatabaseQuery(segment)) continue;
     return { words: words.length, text: excerpt(segment) };
   }
   return null;

@@ -391,6 +391,122 @@ test("a paper does not announce whom it is written for", () => {
   }
 });
 
+test("every door of the readership rule is anchored to the paper", () => {
+  // 本文以临床医师与药师为读者 is the production line, rejected above. These are
+  // the same declaration in the shapes a run reaches for once it is told to
+  // delete that one — 面向, 写给, and the target-reader field a template leaves
+  // behind. Each is a separate branch of the pattern; a branch that is missing
+  // reads as "fixed" to the run and comes back in the next report.
+  for (const write of [
+    "本文面向临床医师与药师，说明两种院外自救用药的证据位置。",
+    "本报告的目标读者为基层全科医师。",
+    "本综述写给临床药师参考。",
+    "本研究的受众对象为急诊科医师。",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);
+    const issues = validateClinicalEvidencePackage(input).issues.join("\n");
+    assert.match(issues, /line \d+ writes about itself rather than about the evidence/, write);
+    assert.match(issues, /never announces whom it is written for/, write);
+  }
+
+  // The same verbs with something other than this paper as their subject. Whom a
+  // guideline was written for is a property of the guideline, and whom a leaflet
+  // is aimed at is a finding about the leaflet — both are analysis, and both
+  // would be destroyed by a rule that read the verb instead of the subject.
+  for (const write of [
+    "该指南面向基层医疗机构医师制定，其推荐强度与证据等级分列。",
+    "该科普手册写给患者家属参考，其内容未经系统评价。",
+    "该问卷的目标读者为门诊候诊患者，与本文纳入人群不一致。",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, true, `${write}: ${result.issues.join("\n")}`);
+  }
+});
+
+test("the pasted quotation is rejected under either label and either colon", () => {
+  // The first line is verbatim from the returned report. Nine passages arrived
+  // like this, three of them in one paragraph, and the label is what makes them
+  // trivially repairable: 原句 and an ASCII colon are the two spellings a run
+  // reaches for once it is told to stop writing 原文：, so the rule reads all of
+  // them or the same paragraph comes back wearing a different label.
+  for (const write of [
+    "原文：the recommended doses of NTG include sublingual or spray (0.3 to 0.6 mg) every 5 minutes up to a maximum of 3 doses",
+    "原句：sublingual administration is preferred",
+    "该说明书对给药途径有明确表述。原文: sublingual administration is preferred",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);
+    assert.match(
+      validateClinicalEvidencePackage(input).issues.join("\n"),
+      /pastes a source quotation into the body behind a 原文： label/,
+      write,
+    );
+  }
+
+  // The repair the skill prescribes for exactly these lines: the finding in the
+  // paper's own voice with its citation, and the wording quoted only where the
+  // wording is itself what is being analysed.
+  for (const write of [
+    "指南推荐对仍有缺血症状者舌下含服硝酸甘油。[claim:CLM-003]",
+    "该说明书将适应症限定为“气滞血瘀型冠心病心绞痛”，未涵盖未分化急性胸痛。[claim:CLM-004]",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, true, `${write}: ${result.issues.join("\n")}`);
+  }
+});
+
+test("a results paragraph keeps the Latin script the field writes in", () => {
+  // The cases above test one construction per report. A real results paragraph
+  // carries several at once — two appraisal instruments, a journal, an INN
+  // beside its Chinese name, an abbreviation expanded at first use, a variant
+  // identifier, and the statistics themselves — and a rule that counted Latin
+  // words across the paragraph rather than within one uninterrupted run would
+  // reject it. The figures cite the claim that states them, as any number in the
+  // body must.
+  const input = validPackage();
+  const quote = "In this cohort the response rate was 50.6% among carriers and 79.4% among non-carriers "
+    + "(RR 0.82, 95% CI 0.75-0.90, P < 0.01).";
+  input.matrix.claims[0].supportQuote = quote;
+  input.sourceArtifacts[".evimed-sources/a/page.md"] += `\n${quote}`;
+  input.reportText = input.reportText.replace(
+    "## 药物角色\n",
+    "## 药物角色\n"
+      + "证据体按 GRADE 判定证据确定性为低，不良反应因果关系采用 Naranjo 量表进行因果关系判定。\n"
+      + "该研究发表于 Frontiers in Pharmacology，评价硝酸甘油（nitroglycerin, NTG）在急性冠脉综合征"
+      + "（acute coronary syndrome, ACS）中的症状缓解。\n"
+      + "携带 ALDH2 rs671 变异者的缓解率为 50.6%，非携带者为 79.4%（RR 0.82，95%CI 0.75–0.90，P < 0.01）。"
+      + "[claim:CLM-001]\n",
+  );
+  const result = validateClinicalEvidencePackage(input);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+});
+
+test("the reference list is untranslated by definition, and it is the only section that is", () => {
+  // A bibliography is written in the sources' language; that is what a
+  // bibliography is. The exemption is therefore the section and not the string —
+  // the same title one section earlier is precisely the pasted source prose the
+  // rule exists for, and exempting the words would leave no rule behind.
+  const title = "Sublingual nitroglycerin versus placebo for the relief of ischaemic chest pain in the "
+    + "prehospital setting: a multicentre randomised controlled trial";
+
+  const listed = validPackage();
+  listed.reportText += `\n\n## 参考文献\n1. Zhang L, Wang Y, et al. ${title}. Lancet. 2023. https://doi.org/10.1000/prehospital.ntg\n`;
+  const cited = validateClinicalEvidencePackage(listed);
+  assert.equal(cited.valid, true, cited.issues.join("\n"));
+
+  const body = validPackage();
+  body.reportText = body.reportText.replace("## 药物角色\n", `## 药物角色\n${title}。\n`);
+  assert.match(
+    validateClinicalEvidencePackage(body).issues.join("\n"),
+    /carries \d+ consecutive words of untranslated source prose/,
+  );
+});
+
 test("untranslated source prose is rejected; names, statistics and short quotations are not", () => {
   // A verbatim quote is checked against its artifact in the matrix and the
   // ledger. In the body nothing checks it, and nine of them stood in one
@@ -414,6 +530,16 @@ test("untranslated source prose is rejected; names, statistics and short quotati
     "该指南原文为英文，本文按术语表统一译名后引用。",
     "检索式为 (\"acute chest pain\"[MeSH] OR \"chest discomfort\"[tiab]) AND (\"nitroglycerin\"[MeSH] OR \"prehospital\"[tiab]) NOT \"review\"[pt]。",
     "说明书适应症英文原句为 “for the treatment of angina pectoris due to coronary artery disease”，未涵盖未分化胸痛。",
+    // Enumerations of technical terms run past twelve words without being a
+    // sentence, and they are lowercase, so Title Case does not exempt them.
+    // A drug class listed by INN, a signalling cascade named molecule by
+    // molecule, and a list of endpoint definitions are all ordinary manuscript
+    // content — the mechanism list especially, since the report is asked to
+    // bridge from mechanism when direct evidence is thin.
+    "硝酸酯类包括 isosorbide dinitrate, isosorbide mononitrate, nitroglycerin, glyceryl trinitrate, pentaerythritol tetranitrate, erythrityl tetranitrate, amyl nitrite, sodium nitroprusside 等。",
+    "该通路依次涉及 nitric oxide, cyclic guanosine monophosphate, soluble guanylate cyclase, protein kinase G, myosin light chain phosphatase 等分子。",
+    "结局指标包括 major adverse cardiovascular events, all-cause mortality, cardiovascular mortality, recurrent myocardial infarction, target-vessel revascularization。",
+    "该制剂主要成分为 borneol, notoginseng total saponins, ginsenoside Rb1, ginsenoside Rg1, notoginsenoside R1, panax notoginseng extract 等。",
   ]) {
     const input = validPackage();
     input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);
@@ -448,6 +574,11 @@ test("absent evidence may be written as a gap but never as a counter-finding", (
     "未检索到证据表明该药在该场景无效，也未检索到证据支持其有效。",
     "该指南因缺乏随机对照证据，不推荐将其常规用于未分化胸痛。",
     "未检索到两者在该场景的头对头比较，因此本文不推荐读者据此排序两药。",
+    // The repair the skill prescribes, verbatim: the failed search, then the
+    // study that would answer the question. It contains every word the rejected
+    // form contains, so a run that follows the instruction and is rejected for
+    // it is sent back to write the same sentence again.
+    "未检索到支持其用于该场景的直接随机对照证据；能够回答该问题的研究应为以院外未分化胸痛人群为对象、以临床结局为终点的随机对照试验。",
   ]) {
     const input = validPackage();
     input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);
@@ -458,6 +589,11 @@ test("absent evidence may be written as a gap but never as a counter-finding", (
     "未检索到直接证据，故该药无效。",
     "未检索到该药在院外自救场景的直接证据，因此不推荐使用。",
     "缺乏头对头随机对照证据，因而不推荐将其用于急性胸痛自救。",
+    // The flat form of the verdict, and one where the recommendation verb keeps
+    // its object elsewhere in the clause: the error is the inference from an
+    // empty search, not any single verb.
+    "未检索到直接证据，所以该药无疗效。",
+    "未检索到随机对照试验证据，故不应使用于院外自救。",
   ]) {
     const input = validPackage();
     input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);

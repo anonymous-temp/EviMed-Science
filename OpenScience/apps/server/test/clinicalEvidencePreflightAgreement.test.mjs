@@ -297,6 +297,64 @@ test("whatever the server gate rejects, the preflight already caught", async () 
       },
     },
     {
+      // Verbatim from the returned report, label and all. Both rules fire on
+      // this one line because that is how it arrived: nine of them stood in the
+      // delivered document, three in a single paragraph.
+      label: "the source's own dosing sentence pasted behind the label, as delivered",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n院前给药剂量见指南 [2]。"
+            + "原文：the recommended doses of NTG include sublingual or spray (0.3 to 0.6 mg) every 5 minutes up to a maximum of 3 doses\n",
+        );
+      },
+    },
+    {
+      // 原句 is the label's other word and an ASCII colon its other
+      // punctuation. A run told to stop writing 原文： reaches for the nearest
+      // spelling, and a spelling only one side reads is a package failed for a
+      // sentence its own preflight accepted. The quoted clause is deliberately
+      // short, so the label alone is what decides this case.
+      label: "the same device relabelled 原句 with an ASCII colon",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n该说明书对给药途径有明确表述。原句: sublingual administration is preferred\n",
+        );
+      },
+    },
+    {
+      // The finding the question was built on, left in the source's sentences
+      // instead of being stated in the paper's own voice with its citation.
+      // No label introduces it, so only the length of the run identifies it.
+      label: "the pivotal finding left in the source's own language",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\ncarriers of the ALDH2 rs671 variant showed a lower response rate than non-carriers, "
+            + "and the difference persisted after adjustment for age and sex\n",
+        );
+      },
+    },
+    {
+      // 本文以……为读者 is above, verbatim from line 21 of the returned report.
+      // These are the same declaration in the shapes a run reaches for next, and
+      // each is a separate branch of the pattern on both sides.
+      label: "the readership declared with 面向 instead of 以……为读者",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n本文面向临床医师与药师，说明两种院外自救用药的证据位置。\n",
+        );
+      },
+    },
+    {
+      label: "the readership declared as a target-reader field",
+      break: (input) => {
+        input.reportText = input.reportText.replace("## 讨论\n", "## 讨论\n本报告的目标读者为基层全科医师。\n");
+      },
+    },
+    {
       // A search that returned nothing is insufficient evidence to judge. The
       // summary is where this error does its damage: 结论 and 摘要 compress, and
       // a gap compressed into 不推荐使用 states a finding the report never made.
@@ -306,6 +364,15 @@ test("whatever the server gate rejects, the preflight already caught", async () 
           "## 讨论\n",
           "## 讨论\n未检索到该药在院外自救场景的直接证据，因此不推荐使用。\n",
         );
+      },
+    },
+    {
+      // The flatter form of the same error, and the one the skill names first:
+      // the verdict verb changes from a recommendation to a property of the
+      // drug, while the evidence behind it is still an empty search.
+      label: "a gap summarised into a statement that the drug does not work",
+      break: (input) => {
+        input.reportText = input.reportText.replace("## 讨论\n", "## 讨论\n未检索到直接证据，所以该药无疗效。\n");
       },
     },
     {
@@ -424,6 +491,19 @@ test("the register rules read the sentence, not the word", async () => {
       write: "检索式为 (\"acute chest pain\"[MeSH] OR \"chest discomfort\"[tiab]) AND (\"nitroglycerin\"[MeSH] OR \"prehospital\"[tiab]) NOT \"review\"[pt]。",
     },
     {
+      // Lowercase, so Title Case does not exempt it, and past twelve words. It
+      // is still not a sentence: English prose is held together by closed-class
+      // words and an enumeration of technical terms carries none.
+      label: "a drug class listed by INN",
+      write: "硝酸酯类包括 isosorbide dinitrate, isosorbide mononitrate, nitroglycerin, glyceryl trinitrate, pentaerythritol tetranitrate, erythrityl tetranitrate, amyl nitrite, sodium nitroprusside 等。",
+    },
+    {
+      // The report is asked to bridge from mechanism where direct evidence is
+      // thin, and a signalling cascade is named in Latin molecule by molecule.
+      label: "a signalling cascade named molecule by molecule",
+      write: "该通路依次涉及 nitric oxide, cyclic guanosine monophosphate, soluble guanylate cyclase, protein kinase G, myosin light chain phosphatase 等分子。",
+    },
+    {
       label: "原文 without the label's colon, reporting what a source says",
       write: "原文报告 Jadad 评分较低；该指南原文为英文，本文按术语表统一译名后引用。",
     },
@@ -439,8 +519,40 @@ test("the register rules read the sentence, not the word", async () => {
       write: "未检索到支持其用于该场景的直接证据；缺乏头对头比较研究，因此两药的相对效能尚不能判断。",
     },
     {
+      // The gap in the exact form the skill prescribes as the repair: the failed
+      // search, then the study that would answer the question. It carries every
+      // word the rejected form carries, so a run that follows the instruction
+      // and is rejected for it has nowhere left to go.
+      label: "a gap stated with the study that would close it",
+      write: "未检索到支持其用于该场景的直接随机对照证据；能够回答该问题的研究应为以院外未分化胸痛人群为对象、"
+        + "以临床结局为终点的随机对照试验。",
+    },
+    {
       label: "a recommendation reported with the body that made it",
       write: "该指南因缺乏随机对照证据，不推荐将其常规用于未分化胸痛 [3]。",
+    },
+    {
+      // The two instruments the method is required to name, in the sentences the
+      // skill prescribes for them. Both carry 判定, and neither delivers a
+      // verdict on a proposition of this report's own.
+      label: "the appraisal instruments named the way the method must name them",
+      write: "证据体按 GRADE 判定证据确定性为低；不良反应因果关系采用 Naranjo 量表进行因果关系判定。",
+    },
+    {
+      // The Latin script a Chinese manuscript carries by convention, three kinds
+      // on one line: a journal, an INN beside its Chinese name, and an
+      // abbreviation expanded at first use. Each sits inside a Chinese sentence,
+      // which is what keeps every run short.
+      label: "a journal name, an INN, and an abbreviation expanded at first use",
+      write: "该研究发表于 Frontiers in Pharmacology；硝酸甘油（nitroglycerin, NTG）用于急性冠脉综合征"
+        + "（acute coronary syndrome, ACS）的症状缓解。",
+    },
+    {
+      // 面向 and 写给 with something other than the paper as their subject. A
+      // guideline states whom it was written for and that is a property of the
+      // guideline; a leaflet's audience is a finding about the leaflet.
+      label: "another document's readership, which is a finding and not self-reference",
+      write: "该指南面向基层医疗机构医师制定，其推荐强度与证据等级分列；该科普手册写给患者家属参考，其内容未经系统评价。",
     },
   ];
   for (const scenario of cases) {
@@ -501,6 +613,129 @@ test("both sides name the same line of the report the author has", async () => {
   const { gate, preflight } = await verdicts(input, "line agreement");
   assert.match(gate.issues.join("\n"), new RegExp(`report line ${expected} delivers a verdict`));
   assert.match(preflight.issues.join("\n"), new RegExp(`line ${expected}: 判为/判定为 delivers a verdict`));
+
+  // The untranslated-prose notice is read off a second blanked copy — 参考文献
+  // gone, and 检索与方法 gone as well, because a search strategy is in the
+  // source language by design. That is two blanking passes per side that have
+  // to stay aligned with each other and with the file the author is editing.
+  for (const [write, gateReason, preflightReason] of [
+    ["原文：sublingual administration is preferred", "pastes a source quotation", "a source quotation is pasted"],
+    [
+      "the recommended doses of NTG include sublingual or spray every 5 minutes up to a maximum of 3 doses",
+      "carries \\d+ consecutive words of untranslated source prose",
+      "\\d+ consecutive words of untranslated source prose",
+    ],
+  ]) {
+    const shifted = deepResearchPackage();
+    shifted.reportText = shifted.reportText.replace("## 局限与不确定性\n", `## 局限与不确定性\n${write}\n`);
+    const line = shifted.reportText.split("\n").findIndex((text) => text.includes(write)) + 1;
+    const named = await verdicts(shifted, write);
+    assert.match(named.gate.issues.join("\n"), new RegExp(`report line ${line} ${gateReason}`));
+    assert.match(named.preflight.issues.join("\n"), new RegExp(`line ${line}: ${preflightReason}`));
+  }
+});
+
+test("statistics are Latin script the manuscript cannot translate, and both sides read them as statistics", async () => {
+  // The comparison the returned report was built on is a table of figures: a
+  // variant identifier, two response rates, a risk ratio with its interval, a p
+  // value. None of it can be written in Chinese and all of it is Latin script,
+  // so a run of consecutive Latin words is the wrong thing to count here — which
+  // is why the run is cut at every CJK character and the count only ever sees
+  // one fragment. The figures are wired to the claim that states them, which is
+  // what the numeric audit asks of any number in the body.
+  const input = deepResearchPackage();
+  const quote = "In this cohort the response rate was 50.6% among carriers and 79.4% among non-carriers "
+    + "(RR 0.82, 95% CI 0.75-0.90, P < 0.01).";
+  const [first] = input.matrix.claims;
+  first.supportQuote = quote;
+  input.sourceArtifacts[first.artifactPath] += `\n${quote}`;
+  input.citationLedgerText = input.citationLedgerText
+    .split("\n")
+    .map((row) => (row.startsWith(`${first.claimId},`) ? `${first.claimId},${first.referenceNumber},"${quote}"` : row))
+    .join("\n");
+  input.reportText = input.reportText.replace(
+    "## 讨论\n",
+    "## 讨论\n携带 ALDH2 rs671 变异者的缓解率为 50.6%，非携带者为 79.4%（RR 0.82，95%CI 0.75–0.90，P < 0.01）。"
+      + `[${first.referenceNumber}](${first.sourceUrl}) <!-- claim:${first.claimId} -->\n`,
+  );
+  const { gate, preflight } = await verdicts(input, "statistics");
+  assert.equal(gate.valid, true, gate.issues.join("\n"));
+  assert.equal(preflight.ok, true, JSON.stringify(preflight.issues));
+});
+
+test("the reference list is untranslated by definition, and it is the only section that is", async () => {
+  // A bibliography is written in the sources' language — that is what a
+  // bibliography is — so both sides blank the whole section before reading
+  // register. The exemption has to be the section and not the string: the same
+  // title one section earlier is exactly the pasted source prose the rule exists
+  // for, and a rule that exempted the words would have no rule left.
+  const title = "Sublingual nitroglycerin versus placebo for the relief of ischaemic chest pain in the "
+    + "prehospital setting: a multicentre randomised controlled trial";
+
+  const listed = deepResearchPackage();
+  listed.reportText = listed.reportText.replace(
+    "1. Author group. Verified clinical source 1.",
+    `1. Author group. ${title}. Verified clinical source 1.`,
+  );
+  const cited = await verdicts(listed, "an untranslated title in the reference list");
+  assert.equal(cited.gate.valid, true, cited.gate.issues.join("\n"));
+  assert.equal(cited.preflight.ok, true, JSON.stringify(cited.preflight.issues));
+
+  const body = deepResearchPackage();
+  body.reportText = body.reportText.replace("## 讨论\n", `## 讨论\n${title}。\n`);
+  const inBody = await verdicts(body, "the same title in the discussion");
+  assert.equal(inBody.gate.valid, false, "the exemption is the section, not the title");
+  assert.equal(inBody.preflight.ok, false, JSON.stringify(inBody.preflight.issues));
+});
+
+test("appraisal asymmetry is advice the run can act on, and never withholds a package", async () => {
+  // Two arms of one comparison appraised with two instruments is the defect the
+  // returned report was sent back for: the familiar arm was vouched for by
+  // 长期临床使用与指南推荐 while the other was graded 按 GRADE 为低至极低, when
+  // both stood in the same position — neither had in-indication randomised
+  // evidence for out-of-hospital self-rescue. (The second arm is unnamed here:
+  // naming a medicine the question never raised is its own violation.)
+  //
+  // Which nouns in a sentence are the compared arms is not decidable from the
+  // text: the same two vocabularies can belong to one arm across two
+  // indications, which is correct writing. So this is reported and never blocks,
+  // and it has no server counterpart — a rule that cannot be decided must not be
+  // able to withhold a finished package.
+  const asymmetric = deepResearchPackage();
+  asymmetric.reportText = asymmetric.reportText
+    .replace("## 摘要", "## 摘要\n本文比较两种院外自救用药在同一场景中的证据位置。")
+    .replace(
+      "## 结论\n",
+      "## 结论\n舌下含服硝酸甘油缓解心绞痛发作的疗效有长期临床使用与指南推荐支持。"
+        + "该中成药制剂的随机对照证据确定性按 GRADE 为低至极低。\n",
+    );
+  const asymmetricRun = await verdicts(asymmetric, "asymmetric appraisal");
+  assert.equal(
+    asymmetricRun.preflight.ok,
+    true,
+    `advice must not fail the preflight: ${JSON.stringify(asymmetricRun.preflight.issues)}`,
+  );
+  assert.equal(asymmetricRun.gate.valid, true, asymmetricRun.gate.issues.join("\n"));
+  assert.match(asymmetricRun.preflight.notes.join("\n"), /one arm is vouched for by clinical tradition/);
+  assert.match(asymmetricRun.preflight.notes.join("\n"), /same instrument, for the same indication/);
+
+  // One ruler for both arms, with the gap they share stated for both: the
+  // repair the note asks for must not draw the note again.
+  const symmetric = deepResearchPackage();
+  symmetric.reportText = symmetric.reportText
+    .replace("## 摘要", "## 摘要\n本文比较两种院外自救用药在同一场景中的证据位置。")
+    .replace(
+      "## 结论\n",
+      "## 结论\n在未分化急性胸痛的院外自救场景中，两者均未检索到适应症内随机对照证据，同一外推按 GRADE 均为极低确定性。\n",
+    );
+  const symmetricRun = await verdicts(symmetric, "one ruler for both arms");
+  assert.equal(symmetricRun.preflight.ok, true, JSON.stringify(symmetricRun.preflight.issues));
+  assert.deepEqual(symmetricRun.preflight.notes, []);
+
+  // A report that compares nothing is not asked about symmetry, however both
+  // vocabularies are used across its sections.
+  const { preflight: clean } = await verdicts(deepResearchPackage(), "clean");
+  assert.deepEqual(clean.notes, []);
 });
 
 test("the practical answer is found under its old and its manuscript name", async () => {
