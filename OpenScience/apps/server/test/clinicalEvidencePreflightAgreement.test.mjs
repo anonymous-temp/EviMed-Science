@@ -688,6 +688,313 @@ test("the reference list is untranslated by definition, and it is the only secti
   assert.equal(inBody.preflight.ok, false, JSON.stringify(inBody.preflight.issues));
 });
 
+// The axis table the comparison rule asks for, written the way the skill writes
+// it. No cell carries a quantity, so the numeric audit has nothing to wire up
+// and the table is testing the comparison rule and nothing else.
+const comparisonAxes = [
+  "| 维度 | 舌下含服硝酸甘油 | 该中成药制剂 | 该维度可支持的结论边界 |",
+  "| --- | --- | --- | --- |",
+  "| 核准适用场景 | 心绞痛发作的急性缓解与预防 [1] | 气滞血瘀型冠心病心绞痛 [7] | 只能判断某一用法是否落在核准范围内 |",
+  "| 急性按需使用证据 | 已确诊心绞痛发作人群，结局为症状缓解与血流动力学 [2] | 未检索到以急性发作缓解时间为结局的随机对照研究 | 可分别陈述，不足以排序 |",
+  "| 人群反应差异 | 按基因型分层的缓解率差异已被测得 [9] | 未检索到按基因型分层的反应数据 | 一方为已测得的异质性，另一方为未测量 |",
+].join("\n");
+
+test("a comparison the title announces is carried out on fixed axes, on both sides", async () => {
+  // The commissioned report's own defect: the title promised a comparison of two
+  // medicines and the body reviewed each one's literature in turn, then closed
+  // with a shared verdict. The two accounts never met, so the verdict came from
+  // whichever arm had the thinner file — which is how "both lack evidence in
+  // out-of-hospital self-rescue" got written over an arm with an approved
+  // indication and an established use.
+  //
+  // Only the absence of the matrix is decidable: which columns are the arms is
+  // not readable from the text, so what is required is a table with an axis
+  // column and one column per arm, and nothing is asserted about its rows.
+  const missing = deepResearchPackage();
+  missing.reportText = missing.reportText.replace(
+    "# 急性胸部压迫感的鉴别与处置",
+    "# 急性胸痛院外自救用药的证据评价：两种含服制剂的比较",
+  );
+  const withoutMatrix = await verdicts(missing, "a comparative title with no matrix");
+  assert.equal(withoutMatrix.gate.valid, false);
+  assert.match(withoutMatrix.gate.issues.join("\n"), /titled as a comparison .* but no table in the analysis body/s);
+  assert.equal(
+    withoutMatrix.preflight.ok,
+    false,
+    `the gate rejects this package but the preflight accepted it: ${JSON.stringify(withoutMatrix.preflight.issues)}`,
+  );
+  assert.match(withoutMatrix.preflight.issues.join("\n"), /the title announces a comparison/);
+
+  // The same title over a body that fills the axes. This is the repair the
+  // notice asks for, so it must clear both sides.
+  const filled = deepResearchPackage();
+  filled.reportText = filled.reportText
+    .replace("# 急性胸部压迫感的鉴别与处置", "# 急性胸痛院外自救用药的证据评价：两种含服制剂的比较")
+    .replace("## 讨论\n", `## 讨论\n${comparisonAxes}\n`);
+  const withMatrix = await verdicts(filled, "a comparative title with its matrix");
+  assert.equal(withMatrix.gate.valid, true, withMatrix.gate.issues.join("\n"));
+  assert.equal(withMatrix.preflight.ok, true, JSON.stringify(withMatrix.preflight.issues));
+
+  // A title is not a comparison merely because it contains 对比: 对比剂 is an
+  // ordinary pharmacology noun, and a paper about contrast-induced nephropathy
+  // compares nothing.
+  const contrastAgent = deepResearchPackage();
+  contrastAgent.reportText = contrastAgent.reportText.replace(
+    "# 急性胸部压迫感的鉴别与处置",
+    "# 碘对比剂相关急性肾损伤的证据评价",
+  );
+  const unrelated = await verdicts(contrastAgent, "对比剂 in a title");
+  assert.equal(unrelated.gate.valid, true, unrelated.gate.issues.join("\n"));
+  assert.equal(unrelated.preflight.ok, true, JSON.stringify(unrelated.preflight.issues));
+});
+
+test("a substitution claim the report says it has no comparison for is rejected on both sides", async () => {
+  // The bridge the commissioned report walked in silence: a variant lowers one
+  // arm's response, therefore switch to the other. Links 3 to 6 — that the other
+  // arm is untouched by the same pathway, that switching improves outcomes, that
+  // it substitutes at all, that the genotype is a selection rule — were never
+  // established, and an arm never tested for a mechanism is untested rather than
+  // immune.
+  //
+  // What is decidable is not how strong the evidence should have been. It is
+  // that the report states there is no direct comparison and then concludes one
+  // anyway; the licence a substitution claim needs is exactly the comparison it
+  // has just said does not exist.
+  const declared = "未检索到两者在该场景的头对头随机对照比较。";
+  for (const write of [
+    "此类人群可改用该中成药制剂。",
+    "对低反应人群，该中成药制剂可能是更合适的选择。",
+    "就院外自救而言后者更为可靠。",
+    // A link asserted 已建立 is the conclusion itself, and a source noun in
+    // front of the verb does not turn a claim about the medicines into a claim
+    // about the literature. Neither exemption may become a way through.
+    "低反应者改用该中成药制剂后结局更好，该环已建立。",
+    "现有研究表明该中成药制剂优于硝酸甘油。",
+  ]) {
+    const input = deepResearchPackage();
+    input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${declared}\n${write}\n`);
+    const { gate, preflight } = await verdicts(input, write);
+    assert.equal(gate.valid, false, `${write}: the gate accepted a substitution claim it has no comparison for`);
+    assert.match(gate.issues.join("\n"), /concludes that one arm can take the other's place/);
+    assert.equal(
+      preflight.ok,
+      false,
+      `${write}: the gate rejects this package but the preflight returned ok=true, `
+        + JSON.stringify(preflight.issues),
+    );
+    assert.match(preflight.issues.join("\n"), /can take the other's place/);
+  }
+
+  // Every one of these carries the words the rule reads, beside the same
+  // declared absence, and none of them is a substitution claim. Rejecting one
+  // would send the run back to break a sentence the skill prescribes.
+  for (const write of [
+    // The skill's own 正例 for the bridge that does not close.
+    "ALDH2 相关反应差异提示，院外心绞痛用药效果可能存在显著个体差异，不宜将硝酸甘油视为对所有中国患者反应完全一致的单一标准。"
+      + "另一药具有不同的药物组成和证据路径，但其在低反应人群中的相对价值仍需直接临床研究验证。",
+    // The skill's 正例 for the merged PICO, whose 替代 is the safety statement.
+    "两药在已确诊冠心病心绞痛患者中均有相应应用依据，但在首次发生或病因未明的院外急性胸痛中，现有证据不能支持患者自行选择药物替代专业评估。",
+    // A trial's own control arm, which is not the other arm of this comparison.
+    "该试验中试验组的症状缓解率优于对照组 [11]。",
+    // Somebody else's recommendation, reported with the body that made it.
+    "该指南建议含服无效者改用静脉给药 [2]。",
+    // The safety instruction, at the full strength the practical section owes it.
+    "任何自救药物都不能替代及时呼救与心电图评估。",
+    // The gap stated as a gap, which is the sentence the notice asks for.
+    "两药的相对效能尚不能判断，缺乏可回答该问题的随机对照研究。",
+    // The bridge written out link by link, which is the repair this rule's own
+    // notice asks for: the link that has not been shown is word for word the
+    // sentence the rule reads as a conclusion, so the 未建立 mark licenses it
+    // whether it sits in the same clause, a clause away, or in the short
+    // sentence that follows.
+    "低反应者改用该中成药制剂后结局更好：未建立，未检索到以临床结局为终点的研究。",
+    "链条的第四环是低反应者改用该中成药制剂后结局更好。该环未建立。",
+    // Asking the question this rule exists to keep open is not answering it.
+    "低反应人群是否应换用该中成药制剂，目前尚无研究可以回答。",
+    // Which evidence base is stronger is a statement about the literature: an
+    // axis may hold measured evidence on one arm and nothing on the other
+    // without any head-to-head study existing anywhere.
+    "该维度上硝酸甘油的证据强度优于该中成药制剂 [2]。",
+  ]) {
+    const input = deepResearchPackage();
+    input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${declared}\n${write}\n`);
+    const { gate, preflight } = await verdicts(input, write);
+    assert.equal(gate.valid, true, `${write}: ${gate.issues.join("\n")}`);
+    assert.equal(preflight.ok, true, `${write}: ${JSON.stringify(preflight.issues)}`);
+  }
+});
+
+test("the merged PICO, the unanswered question and the unlicensed substitution are advice", async () => {
+  // Three more defects the commissioning reviewers named, none of them
+  // decidable. Whether 结论 answered a question in prose, whether this
+  // question's population has strata at all, and whether a comparison the
+  // report never mentions exists in the literature are all judgements a pattern
+  // cannot make — so each is reported to the run while it can still act, none
+  // of them decides ok, and none has a server counterpart.
+  const drifted = deepResearchPackage();
+  drifted.reportText = drifted.reportText
+    .replace(
+      "## 摘要\n",
+      "## 摘要\n目的：（1）比较两种含服制剂在同一场景中的证据位置；（2）评价基因型相关的人群反应差异；"
+        + "（3）界定自救用药的安全边界。方法：系统检索并按主张逐条对应。\n",
+    )
+    .replace("## 结论\n", "## 结论\n（1）两者的证据位置以固定维度分别陈述。（2）人群反应差异已被测得，其外推受到限制。\n");
+  const questions = await verdicts(drifted, "three questions, two answers");
+  assert.equal(questions.preflight.ok, true, JSON.stringify(questions.preflight.issues));
+  assert.equal(questions.gate.valid, true, questions.gate.issues.join("\n"));
+  assert.match(questions.preflight.notes.join("\n"), /目的 lists 3 research questions and 结论 gives 2 numbered answers/);
+
+  // One verdict for every arm at once, over a report that never names a
+  // stratum: the shape a merged PICO takes in a sentence. The stratum with the
+  // least evidence sets the verdict for all of them, and the uses that do have
+  // an established basis are never asked about on their own.
+  const merged = deepResearchPackage();
+  merged.reportText = merged.reportText.replace("## 讨论\n", "## 讨论\n两药在院外自救场景中均缺乏证据。\n");
+  const mergedRun = await verdicts(merged, "one verdict for every arm");
+  assert.equal(mergedRun.preflight.ok, true, JSON.stringify(mergedRun.preflight.issues));
+  assert.equal(mergedRun.gate.valid, true, mergedRun.gate.issues.join("\n"));
+  assert.match(mergedRun.preflight.notes.join("\n"), /one verdict is given for every arm at once/);
+
+  // The same sentence with its stratum named is the repair, and the repair must
+  // not draw the note again.
+  const stratified = deepResearchPackage();
+  stratified.reportText = stratified.reportText.replace(
+    "## 讨论\n",
+    "## 讨论\n两药在已确诊冠心病心绞痛患者中均有相应应用依据，但在首次发生或病因未明的院外急性胸痛中，"
+      + "现有证据不能支持患者自行选择药物替代专业评估。\n",
+  );
+  const stratifiedRun = await verdicts(stratified, "the stratum named");
+  assert.equal(stratifiedRun.preflight.ok, true, JSON.stringify(stratifiedRun.preflight.issues));
+  assert.deepEqual(stratifiedRun.preflight.notes, []);
+
+  // A substitution claim over a report that never says whether a direct
+  // comparison exists. The gate stays silent — it rejects the contradiction,
+  // not the silence — so this one has to reach the run as advice or not at all.
+  const unlicensed = deepResearchPackage();
+  unlicensed.reportText = unlicensed.reportText.replace("## 讨论\n", "## 讨论\n此类人群可改用该中成药制剂。\n");
+  const unlicensedRun = await verdicts(unlicensed, "a substitution claim with nothing said about comparison");
+  assert.equal(unlicensedRun.preflight.ok, true, JSON.stringify(unlicensedRun.preflight.issues));
+  assert.equal(unlicensedRun.gate.valid, true, unlicensedRun.gate.issues.join("\n"));
+  assert.match(unlicensedRun.preflight.notes.join("\n"), /never says whether a direct comparison between them exists/);
+
+  // Length is a claim about importance, and which section serves which question
+  // is not decidable either — so the shares are measured and handed over, and
+  // the run applies the rule.
+  const { preflight } = await verdicts(deepResearchPackage(), "section shares");
+  const shares = preflight.metrics.sectionShares;
+  assert.ok(Object.keys(shares).length >= 6, JSON.stringify(shares));
+  assert.ok(!Object.keys(shares).some((heading) => heading.includes("参考文献")), JSON.stringify(shares));
+  assert.ok(Math.abs(Object.values(shares).reduce((total, share) => total + share, 0) - 100) <= 5, JSON.stringify(shares));
+});
+
+test("both sides look for the matrix in the analysis body, and both read it as a matrix", async () => {
+  // Two judgements are duplicated in two languages here: which sections are the
+  // analysis (both blank 参考文献 and 检索与方法 before looking) and what counts
+  // as a matrix (three columns, two filled rows). A run that satisfies one side
+  // and not the other is told it is done and then failed for the table it just
+  // wrote — the exact failure this file exists to prevent.
+  const comparativeTitle = "# 急性胸痛院外自救用药的证据评价：两种含服制剂的优劣";
+  const oneArmColumn = [
+    "| 维度 | 该中成药制剂 |",
+    "| --- | --- |",
+    "| 核准适用场景 | 气滞血瘀型冠心病心绞痛 [7] |",
+    "| 急性按需使用证据 | 未检索到以急性发作缓解时间为结局的随机对照研究 |",
+  ].join("\n");
+  for (const [placement, anchor, table] of [
+    // A table under 检索与方法 is a search strategy and a table under 参考文献 is
+    // somebody else's paper. Neither shows this report's arms meeting, and both
+    // sections are blanked before either side looks.
+    ["the matrix left in 检索与方法", "## 检索与方法\n", comparisonAxes],
+    ["the matrix left in 参考文献", "## 参考文献\n", comparisonAxes],
+    // One arm's column with the other's missing is a summary of one medicine.
+    ["one arm's column, the other's missing", "## 讨论\n", oneArmColumn],
+  ]) {
+    const input = deepResearchPackage();
+    input.reportText = input.reportText
+      .replace("# 急性胸部压迫感的鉴别与处置", comparativeTitle)
+      .replace(anchor, `${anchor}${table}\n`);
+    const { gate, preflight } = await verdicts(input, placement);
+    assert.equal(gate.valid, false, `${placement}: the gate accepted a comparison with no matrix in its body`);
+    assert.match(gate.issues.join("\n"), /but no table in the analysis body/, placement);
+    assert.equal(
+      preflight.ok,
+      false,
+      `${placement}: the gate rejects this package but the preflight accepted it: ${JSON.stringify(preflight.issues)}`,
+    );
+    assert.match(preflight.issues.join("\n"), /the title announces a comparison/, placement);
+  }
+});
+
+test("the absence may be declared after the conclusion it contradicts, and both sides name the same two lines", async () => {
+  // 讨论 concludes and 局限 declares the gap — the order a manuscript is written
+  // in, and the reverse of the order the check reads in. Both sides scan the
+  // whole body for the declaration before judging any sentence, and both count
+  // lines over their own blanked copy, so a notice that names a line the author
+  // cannot find is a repair with nowhere to go.
+  const input = deepResearchPackage();
+  const conclusion = "低反应者可换用该中成药制剂。";
+  const absence = "两药之间缺乏头对头随机对照比较。";
+  input.reportText = input.reportText
+    .replace("## 讨论\n", `## 讨论\n${conclusion}\n`)
+    .replace("## 局限与不确定性\n", `## 局限与不确定性\n${absence}\n`);
+  const lines = input.reportText.split("\n");
+  const conclusionLine = lines.findIndex((line) => line.includes(conclusion)) + 1;
+  const absenceLine = lines.findIndex((line) => line.includes(absence)) + 1;
+  const { gate, preflight } = await verdicts(input, "the absence declared after the conclusion");
+  assert.equal(gate.valid, false, "the gate accepted a swap it has just said it has no comparison for");
+  assert.match(gate.issues.join("\n"), new RegExp(`report line ${conclusionLine} concludes that one arm`));
+  assert.match(gate.issues.join("\n"), new RegExp(`while line ${absenceLine} states`));
+  assert.equal(
+    preflight.ok,
+    false,
+    `the gate rejects this package but the preflight accepted it: ${JSON.stringify(preflight.issues)}`,
+  );
+  assert.match(preflight.issues.join("\n"), new RegExp(`line ${conclusionLine}: the report concludes`));
+  assert.match(preflight.issues.join("\n"), new RegExp(`while line ${absenceLine} states`));
+});
+
+test("the sentences the reviewers wrote as the repair pass both sides unchanged", async () => {
+  // A false rejection costs more than a missed one here: the run is sent back to
+  // break a sentence the reviewers themselves wrote as the correct form, and it
+  // has no way to say what the evidence says. Each of these carries the words
+  // the rule reads, beside the declared absence that arms it.
+  const declared = "未检索到两者在该场景的头对头随机对照比较。";
+  for (const write of [
+    // Refusing the swap, written with the verb the rule blocks. The reviewers'
+    // wording names both medicines; this fixture's question names none, and a
+    // medicine-free question may not have one introduced into its report, so the
+    // arms are written the way this report writes them. The reviewers' exact
+    // sentence is pinned in clinicalEvidenceQuality.test.mjs, whose question is
+    // about that medicine.
+    "尚无证据支持以该中成药制剂替代含服硝酸酯。",
+    // The bridge that stops at the last established link, standing on its own
+    // line rather than inside the paragraph the earlier test writes it in.
+    "其在 ALDH2 低反应人群中的相对价值仍需直接临床研究验证。",
+    // Somebody else's comparison, under the two source nouns the attributed
+    // pattern carries besides 指南 and 该试验 — which is how most cross-arm
+    // sentences in a review get there at all.
+    "该系统评价报告含服硝酸酯的缓解率优于该中成药制剂 [3]。",
+    "该 Meta 分析显示该中成药制剂优于安慰剂 [5]。",
+  ]) {
+    const input = deepResearchPackage();
+    input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${declared}\n${write}\n`);
+    const { gate, preflight } = await verdicts(input, write);
+    assert.equal(gate.valid, true, `${write}: ${gate.issues.join("\n")}`);
+    assert.equal(preflight.ok, true, `${write}: ${JSON.stringify(preflight.issues)}`);
+  }
+
+  // The merged-PICO note reads a verdict given for every arm at once, and one
+  // verdict is legitimately true of every stratum at once: that no head-to-head
+  // study exists. Drawing the note there would teach the run to stratify a
+  // sentence that has nothing to stratify.
+  const shared = deepResearchPackage();
+  shared.reportText = shared.reportText.replace("## 讨论\n", "## 讨论\n两药之间均未检索到头对头随机对照研究证据。\n");
+  const sharedRun = await verdicts(shared, "a shared absence of head-to-head evidence");
+  assert.equal(sharedRun.gate.valid, true, sharedRun.gate.issues.join("\n"));
+  assert.equal(sharedRun.preflight.ok, true, JSON.stringify(sharedRun.preflight.issues));
+  assert.deepEqual(sharedRun.preflight.notes, []);
+});
+
 test("appraisal asymmetry is advice the run can act on, and never withholds a package", async () => {
   // Two arms of one comparison appraised with two instruments is the defect the
   // returned report was sent back for: the familiar arm was vouched for by

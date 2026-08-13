@@ -93,19 +93,23 @@ function selection(agent, reason) {
  *  @param {any} query
  *  @param {any} agents
  */
+/** Naming the package is an instruction, not a guess at intent, so it is the one
+ *  signal that outranks the classifier — a request saying
+ *  "请按 dataset-research-scoping 出一份报告" was once routed elsewhere because
+ *  the name matched no topic pattern and nothing looked at it.
+ *  @param {any} query @param {any} agents */
+export function routeNamedSpecialist(query, agents) {
+  if (typeof query !== "string" || !query.trim() || !Array.isArray(agents)) return null;
+  const lowered = query.toLowerCase();
+  const named = agents.find((agent) => lowered.includes(agent.id));
+  return named ? selection(named, `matched:named:${named.id}`) : null;
+}
+
 export function routeOpenDomainSpecialist(query, agents) {
   if (typeof query !== "string" || !query.trim() || !Array.isArray(agents)) return null;
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
-  // A researcher who says 科研选题 while holding a dataset wants the topic
-  // analysis grounded in that data. research-topic-selection starts from a
-  // direction and never opens the file, so taking this on the word alone sends
-  // the one request that must read the data to the one skill that cannot.
-  // Naming the package is an instruction. A request that says
-  // "请按 dataset-research-scoping 出一份报告" was routed elsewhere because the
-  // name matched no topic pattern — the one unambiguous signal in the prompt
-  // was the only one nothing looked at.
-  const named = agents.find((agent) => query.toLowerCase().includes(agent.id));
-  if (named) return selection(named, `matched:named:${named.id}`);
+  const named = routeNamedSpecialist(query, agents);
+  if (named) return named;
   const dataInHand = datasetSubject.test(query) && datasetScopingIntent.test(query);
   // Both of these start from a question and never open the file. Naming a
   // mini-review or a literature landscape inside a scoping request is normal —

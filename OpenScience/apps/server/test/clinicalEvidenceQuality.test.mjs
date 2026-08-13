@@ -605,6 +605,259 @@ test("absent evidence may be written as a gap but never as a counter-finding", (
   }
 });
 
+test("a comparison the title announces is carried out on fixed axes", () => {
+  // The defect the commissioned report was returned for: the title promised a
+  // comparison of two medicines, the body reviewed each one's literature in
+  // turn, and the closing verdict came from whichever arm had the thinner file.
+  // Only the absence of the matrix is decidable — which columns are the arms is
+  // not readable from the text — so a table with an axis column and one column
+  // per arm is what is required, and nothing is asserted about its rows.
+  const missing = validPackage();
+  missing.reportText = missing.reportText.replace(
+    "# 急性胸部压迫感与速效救心丸的证据边界",
+    "# 急性胸痛院外自救用药的证据评价：速效救心丸与含服硝酸酯的比较",
+  );
+  const result = validateClinicalEvidencePackage(missing);
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join("\n"), /titled as a comparison .* but no table in the analysis body/s);
+  assert.match(result.issues.join("\n"), /核准适用场景/);
+
+  // The repair, in both layouts a comparison table is written in: axes as rows
+  // with an arm per column, and the transposed form with the arms as rows.
+  for (const table of [
+    [
+      "| 维度 | 速效救心丸 | 含服硝酸酯 | 该维度可支持的结论边界 |",
+      "| --- | --- | --- | --- |",
+      "| 核准适用场景 | 气滞血瘀型冠心病心绞痛 | 心绞痛发作的急性缓解 | 只能判断用法是否落在核准范围内 |",
+      "| 急性按需使用证据 | 未检索到以急性缓解时间为结局的随机对照研究 | 已确诊心绞痛发作人群 | 可分别陈述，不足以排序 |",
+      "| 是否存在直接比较研究 | 未检索到头对头研究 | 同上 | 该空缺本身是结果 |",
+    ],
+    [
+      "| 干预 | 核准适用场景 | 急性按需使用证据 | 是否存在直接比较研究 |",
+      "| --- | --- | --- | --- |",
+      "| 速效救心丸 | 气滞血瘀型冠心病心绞痛 | 未检索到急性缓解时间的随机对照研究 | 未检索到头对头研究 |",
+      "| 含服硝酸酯 | 心绞痛发作的急性缓解 | 已确诊心绞痛发作人群 | 同上 |",
+    ],
+  ]) {
+    const filled = validPackage();
+    filled.reportText = filled.reportText
+      .replace("# 急性胸部压迫感与速效救心丸的证据边界", "# 急性胸痛院外自救用药的证据评价：速效救心丸与含服硝酸酯的比较")
+      .replace("## 药物角色\n", `## 药物角色\n${table.join("\n")}\n`);
+    const filledResult = validateClinicalEvidencePackage(filled);
+    assert.equal(filledResult.valid, true, filledResult.issues.join("\n"));
+  }
+
+  // A title that compares nothing is not asked for a comparison matrix, and
+  // 对比剂 is an ordinary pharmacology noun rather than an announcement.
+  for (const write of [
+    "# 急性胸部压迫感与速效救心丸的证据边界",
+    "# 碘对比剂相关急性肾损伤的证据评价",
+    "# 速效救心丸用于急性胸痛院外自救的证据评价",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("# 急性胸部压迫感与速效救心丸的证据边界", write);
+    assert.equal(validateClinicalEvidencePackage(input).valid, true, write);
+  }
+});
+
+test("a substitution claim the report says it has no comparison for is rejected", () => {
+  // The bridge walked in silence: a variant lowers one arm's response,
+  // therefore switch to the other — with the links in between (the other arm is
+  // untouched by the same pathway, switching improves outcomes, it substitutes
+  // at all) never established. An arm never tested for a mechanism is untested,
+  // not immune.
+  //
+  // What is decidable is not how strong the evidence should have been, but that
+  // the report states there is no direct comparison and concludes one anyway.
+  const declared = "未检索到两者在该场景的头对头随机对照比较。";
+  for (const write of [
+    "此类人群可改用另一制剂。",
+    "对低反应人群，另一制剂可能是更合适的选择。",
+    "就院外自救而言后者更为可靠。",
+    "在该场景中另一制剂优于含服硝酸酯。",
+    "低反应者可用另一制剂取代原有用药。",
+    // What is being compared is named a clause away, which is where a run puts
+    // it once it is told not to write 后者更可靠.
+    "两者相比，该制剂在该场景中更安全。",
+    // The exemptions below must not become a way through. A link asserted
+    // 已建立 is the conclusion itself; a source noun in front of the verb does
+    // not make a claim about the medicines into a claim about the literature;
+    // and an interrogative in a neighbouring clause licenses nothing.
+    "低反应者改用另一制剂后结局更好，该环已建立。",
+    "现有资料显示该制剂优于含服硝酸酯。",
+    "现有研究表明该制剂优于含服硝酸酯。",
+    "该制剂的疗效优于含服硝酸酯，证据充分。",
+    "无论是否首诊，均可改用另一制剂。",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${declared}\n${write}\n`);
+    const issues = validateClinicalEvidencePackage(input).issues.join("\n");
+    assert.match(issues, /concludes that one arm can take the other's place/, write);
+    assert.match(issues, /已建立 or 未建立/, write);
+  }
+
+  // Each of these carries the words the rule reads, beside the same declared
+  // absence. None is a substitution claim, and rejecting one would send the run
+  // back to break a sentence the skill prescribes.
+  for (const write of [
+    "ALDH2 相关反应差异提示，院外心绞痛用药效果可能存在显著个体差异，不宜将含服硝酸酯视为对所有患者反应完全一致的单一标准。"
+      + "另一药具有不同的药物组成和证据路径，但其在低反应人群中的相对价值仍需直接临床研究验证。",
+    "两药在已确诊冠心病心绞痛患者中均有相应应用依据，但在首次发生或病因未明的院外急性胸痛中，现有证据不能支持患者自行选择药物替代专业评估。",
+    "该试验中试验组的症状缓解率优于对照组。",
+    "该指南建议含服无效者改用静脉给药。",
+    "任何自救药物都不能替代及时呼救与心电图评估。",
+    "两药的相对效能尚不能判断，缺乏可回答该问题的随机对照研究。",
+    "该试验报告该制剂的缓解率优于另一制剂。",
+    // A comparative adjective attached to a property of one population or one
+    // formulation, which is what most 更好 in a manuscript is. Reading it as a
+    // conclusion about the arms would reject ordinary results prose.
+    "该人群的依从性更好，随访完成率更高。",
+    "该缓释制剂的耐受性更好，不良反应报告较少。",
+    // The bridge written out link by link, which is the repair this rule's own
+    // notice asks for. The link that has not been shown is word for word the
+    // sentence the rule reads as a conclusion, so the 未建立 mark has to
+    // license it — in the same clause, a clause away, or as the short sentence
+    // that follows it.
+    "低反应者改用另一制剂后结局更好：未建立，未检索到以临床结局为终点的研究。",
+    "第四环为低反应者改用另一制剂后结局更好，该环未建立。",
+    "链条的第四环是低反应者改用另一制剂后结局更好。该环未建立。",
+    // Asking the question this rule exists to keep open is not answering it.
+    "低反应人群是否应换用其他制剂，目前尚无研究可以回答。",
+    // Which evidence base is stronger is a statement about the literature, and
+    // an axis may hold measured evidence on one arm and nothing on the other
+    // without any head-to-head study existing.
+    "该维度上含服硝酸酯的证据强度优于该制剂。",
+    "在急性按需使用这一维度上，含服硝酸酯的证据更可靠。",
+    "两者相比，含服硝酸酯在急性按需使用维度的证据更充分。",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${declared}\n${write}\n`);
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, true, `${write}: ${result.issues.join("\n")}`);
+  }
+
+  // Silence is not the contradiction. A substitution claim over a report that
+  // never says whether a direct comparison exists is preflight advice, because
+  // whether one exists in the literature is not decidable from the document —
+  // and a rule that cannot be decided must not withhold a finished package.
+  const silent = validPackage();
+  silent.reportText = silent.reportText.replace("## 药物角色\n", "## 药物角色\n此类人群可改用另一制剂。\n");
+  assert.equal(validateClinicalEvidencePackage(silent).valid, true);
+});
+
+test("a comparison is announced in more words than 比较, and in none of the words that merely contain one", () => {
+  // The promise is made in the title, so that is where it is read — and a run
+  // sent back for 比较 reaches for the next word before it reaches for the
+  // table. Every spelling below announces the same duty and owes the same
+  // matrix; if only one of them is read, the rule is a word filter rather than
+  // a rule about comparisons.
+  for (const title of [
+    "# 速效救心丸与含服硝酸酯的优劣评价",
+    "# 两种含服制剂孰优孰劣：院外自救用药的证据评价",
+    "# 速效救心丸 versus 含服硝酸酯的证据评价",
+    "# 速效救心丸 vs. 含服硝酸酯的证据评价",
+    "# 两种含服制剂的头对头证据评价",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("# 急性胸部压迫感与速效救心丸的证据边界", title);
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, false, `${title}: a comparative title was accepted with no matrix under it`);
+    assert.match(result.issues.join("\n"), /titled as a comparison .* but no table in the analysis body/s, title);
+  }
+
+  // A word that merely contains one of those spellings promises nothing. 随机
+  // 对照试验 is the design line of half the sources a review cites, and vs
+  // inside a word is not the comparison operator — demanding a comparison
+  // matrix from either would withhold a finished package over its vocabulary.
+  for (const title of [
+    "# 随机对照试验证据在院外胸痛处置中的适用边界",
+    "# CVS 连锁药房处方数据中的胸痛用药证据评价",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("# 急性胸部压迫感与速效救心丸的证据边界", title);
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, true, `${title}: ${result.issues.join("\n")}`);
+  }
+});
+
+test("the table that answers a comparative title has to put the arms side by side", () => {
+  // A run told to add a table adds a table. What the rule asks for is a matrix
+  // — an axis column, one column per arm, more than one axis filled — and the
+  // two shapes below are what a report writes when it complies with the letter:
+  // one arm's column with the other's missing, and a single axis standing in
+  // for the table. In neither does the reader see the two accounts meet, which
+  // is the whole point of asking for the table. The shapes that do satisfy it,
+  // in both layouts, are covered by the test above.
+  for (const [shape, table] of [
+    [
+      "one arm's column, the other's missing",
+      [
+        "| 维度 | 速效救心丸 |",
+        "| --- | --- |",
+        "| 核准适用场景 | 气滞血瘀型冠心病心绞痛 |",
+        "| 急性按需使用证据 | 未检索到以急性缓解时间为结局的随机对照研究 |",
+      ],
+    ],
+    [
+      "a single axis standing in for the table",
+      [
+        "| 维度 | 速效救心丸 | 含服硝酸酯 | 该维度可支持的结论边界 |",
+        "| --- | --- | --- | --- |",
+        "| 核准适用场景 | 气滞血瘀型冠心病心绞痛 | 心绞痛发作的急性缓解 | 只能判断用法是否落在核准范围内 |",
+      ],
+    ],
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText
+      .replace("# 急性胸部压迫感与速效救心丸的证据边界", "# 速效救心丸与含服硝酸酯的优劣评价")
+      .replace("## 药物角色\n", `## 药物角色\n${table.join("\n")}\n`);
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, false, `${shape}: this was accepted as a comparison matrix`);
+    assert.match(result.issues.join("\n"), /no table in the analysis body/, shape);
+  }
+});
+
+test("a swap is a swap under every verb the report reaches for, and refusing one is not making one", () => {
+  // 替代 and 改用 are exercised above; these are the words a run reaches for
+  // once it has been sent back for those, and the rule has to read the move
+  // rather than the wording. The last one carries no 前者/后者 anchor at all —
+  // what makes it a claim about the arms is that the clause is choosing between
+  // them.
+  const declared = "未检索到两者在该场景的头对头随机对照比较。";
+  for (const write of [
+    "低反应者可换用另一制剂。",
+    "该制剂可以代替含服硝酸酯用于院外自救。",
+    "对低反应人群，该制剂是更好的首选方案。",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${declared}\n${write}\n`);
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, false, `${write}: a swap between the arms was accepted`);
+    assert.match(result.issues.join("\n"), /concludes that one arm can take the other's place/, write);
+  }
+
+  // The reviewers' own sentences, verbatim where the fixture's question allows
+  // the medicines to be named. Refusing the swap is the finding this rule
+  // exists to protect, and it is written with the same verb the rule blocks;
+  // rejecting it would leave a run no way to say what the evidence says.
+  for (const write of [
+    "尚无证据支持以速效救心丸替代硝酸甘油。",
+    "其在 ALDH2 低反应人群中的相对价值仍需直接临床研究验证。",
+    // Somebody else's comparison, under the two source nouns the attributed
+    // pattern carries besides 指南 and 该试验.
+    "该系统评价报告含服硝酸酯的缓解率优于该制剂。",
+    "该 Meta 分析显示该制剂优于安慰剂。",
+    // An indication is not a swap: naming what is first-line inside one
+    // population says nothing about the other arm.
+    "在已确诊心绞痛发作中，含服硝酸酯是发作期的首选用药。",
+  ]) {
+    const input = validPackage();
+    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${declared}\n${write}\n`);
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, true, `${write}: ${result.issues.join("\n")}`);
+  }
+});
+
 test("rejects explanatory objects where the run receipt requires path strings and boolean checks", () => {
   const input = validPackage();
   input.runReceipt.successfulSourceArtifacts = [

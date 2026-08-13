@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import fsPromises from "node:fs/promises";
 import {
   HttpError,
   appendJsonLineNoFollow,
@@ -12,9 +13,42 @@ import {
   readFileNoFollow,
   resolveScopedPath,
   safeId,
+  directorySize,
   writeFileAtomicNoFollow,
   writeFileExclusiveNoFollow,
 } from "../src/security.mjs";
+
+// The quota monitor walks a workspace an analysis is actively writing to. A
+// file removed between readdir and lstat is that workspace being alive, not a
+// fault — but only the vanishing-directory case was tolerated, so a run
+// deleting its own scratch file raised a raw ENOENT, which is not an HttpError
+// and so read as "the check itself failed". The guard stopped the runtime, the
+// runtime does not return on its own, and seventeen queued analyses never ran.
+//
+// The window is between readdir listing a name and lstat reaching it, so the
+// only faithful reproduction is to remove the file inside that window.
+test("a file removed while the workspace is being measured does not fail the measurement", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-directory-size-race-"));
+  const realLstat = fsPromises.lstat;
+  try {
+    await writeFile(path.join(root, "keep.md"), "x".repeat(100), "utf8");
+    const doomed = path.join(root, "doomed.md");
+    await writeFile(doomed, "y".repeat(4096), "utf8");
+
+    fsPromises.lstat = async (target, ...rest) => {
+      if (String(target).endsWith("doomed.md")) {
+        await rm(doomed, { force: true });
+      }
+      return realLstat(target, ...rest);
+    };
+
+    const total = await directorySize(root, { maxEntries: 100 });
+    assert.equal(total, 100, "the file that survived is counted and the one that vanished is skipped");
+  } finally {
+    fsPromises.lstat = realLstat;
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("a hard link cannot read a file that lives outside the workspace", async () => {
   // Every other containment check is path-based, and the link's path is
