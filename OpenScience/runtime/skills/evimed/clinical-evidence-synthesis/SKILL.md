@@ -185,7 +185,7 @@ For every included source, record:
 - recency and jurisdictional applicability;
 - whether the source directly supports, qualifies, or conflicts with another source.
 
-Separate findings for emergency triage from findings for chronic stable disease. Evidence that a medicine may help diagnosed stable angina does not establish a role in self-diagnosing undifferentiated acute chest pressure.
+Separate findings for emergency triage from findings for chronic stable disease. Evidence that a medicine may help diagnosed stable angina does not establish a role in self-diagnosing undifferentiated acute chest pressure. The transfer fails in the other direction too, and a care setting is not a population — see "Stratify the population before you conclude".
 
 ## Comparative appraisal and evidence bridging
 
@@ -201,6 +201,105 @@ None of what follows levels the arms upward. Symmetry belongs to the appraisal,
 not to the conclusion: where one arm's evidence really is stronger *for the
 question asked*, the conclusion says so, in the same vocabulary it used for the
 other.
+
+A comparison also fails before the appraisal begins and after it ends: the object
+of study drifts toward a neighbouring question that is easier to answer, several
+populations are merged into one PICO, the arms are described along axes that never
+meet, a mechanism acting on one arm alone is walked all the way to a conclusion
+about the other, and a secondary caution grows until it is what the paper appears
+to be about. The subsections below run in the order a report is built — what is
+being asked, of whom, along which axes, how far each line of reasoning reaches,
+and at what length — and none of them may be used to weaken the last one.
+
+### The question asked is the question answered
+
+The object of study is fixed by the question and named in the title, and it stays
+fixed through `结果`, `讨论`, and `结论`. What displaces it is never a worse
+question — it is an easier one. `两种药物在院外自救中的证据比较` becomes
+`未分化胸痛患者能否自行判断病因`, because the second has a clean answer and the
+first does not, and the exchange happens a clause at a time: the population
+narrows to the hardest stratum, the comparison thins, and by `讨论` the paper is
+arguing something the title never claimed. No sentence in it need be false; the
+paper simply answers a question nobody asked and leaves the asked one unanswered.
+
+A question sometimes does have to be restated — its premise does not hold, the
+population as posed does not exist, a term in it turns out ambiguous. Restating
+it is a legitimate result, and it is **declared**: say which question was asked,
+what in it does not survive contact with the evidence, what it is being replaced
+with, and what the replacement can and cannot settle. A declared restatement is
+science; the same move undeclared is substitution.
+
+`摘要` `目的` lists the research questions; `结论` answers them in the same order,
+one answer per question. A question with no answer in `结论` was either not
+answerable — say so, as a gap — or was dropped, which requires the declaration
+above. A statement in `结论` answering nothing listed in `目的` is the drift above,
+caught late.
+
+**A secondary finding does not become the paper's thesis, and a safety caution is
+the one that most often tries.** A caution can be important without being the
+subject: it earns a full-strength statement in `临床实践要点` and, where it bears
+on interpretation, a sentence in `讨论`. It does not earn a research question of
+its own in `引言`, a diagnostic-performance passage sized like a primary finding,
+a repeat in every one of `摘要结果`, `摘要结论` and `结论`, or a compound thesis
+welded to an unrelated result. Nothing here removes content: everything "Safety
+boundaries" requires is still written, at full strength, in the section that
+carries it. What changes is rank.
+
+- 反例（把次级安全提示升格为研究问题与主结论）：`引言：本文提出三个研究问题……（三）服药后症状是否缓解能否用于鉴别胸痛病因。`，`摘要结果` 与 `摘要结论` 各重复一次，`讨论` 用一节讨论"含服后缓解"的敏感度与特异度，并与 ALDH2 合并为"双重失效"。
+  为什么是反例：题目问的是两药证据比较与人群差异，读者读完却认为本文的目的是反驳"服药诊断法"；一条风险提示占据了主问题的位置。
+  正例（内容不减，位置与次序归位）：`临床实践要点：服药后症状是否缓解不能用于鉴别胸痛病因，缓解与未缓解都不排除急性冠脉综合征；新发胸痛应立即拨打 120 并接受心电图与高敏肌钙蛋白评估 [1,4]。`，`讨论` 中一句说明其边界：`该提示限定的是对缓解现象的解读，不构成两药疗效比较的结论。`
+
+Each answer in `结论` leads with the finding rather than with the appraisal of a
+neighbouring arm. Where a question asks about the limits of one intervention's
+effect in a defined population, the answer states the magnitude and the share of
+the population it applies to — an effect limited to a genotype carried by half the
+target population is a different result from one carried by one in a thousand, and
+the conclusion must say which. **A correct qualifier may not stand in place of the
+finding it qualifies.**
+
+- 反例（把核心发现压平为一句限定语）：`ALDH2 rs671 变异降低但不消除对硝酸甘油的反应。`
+  正例（发现与人群占比在前，限定语在后，推导另起一行并标注）：
+  `ALDH2 rs671 变异型在东亚人群的携带率约 40%，中国汉族为 45% 至 49% [8]。携带者舌下含服硝酸甘油后的心绞痛缓解率为 50.6%，野生型为 79.4% [9]。`
+  `〔推导〕以汉族携带率 45% 至 49% 与上述两组缓解率计算，人群平均缓解率约为 65% 至 66%，即每两名患者中约有一名属于低反应基因型；含服后未缓解在该亚群中更可能反映酶活性不足而非病因不同，"含服后缓解"这一现象据此不能用于区分病因。变异降低但不消除反应，携带者仍可能获益，故该发现限定的是对缓解现象的解读，不构成停用理由。`
+
+### Stratify the population before you conclude
+
+A setting named in the question — `院外自救`, `术后随访`, `基层首诊`, `居家用药` —
+is not a population. Inside it sit groups whose evidentiary position differs so
+much that no single sentence is true of all of them. Identifying those strata is
+the first analytic step, not a refinement applied at the end: they decide which
+searches get run, and every conclusion attaches to one of them rather than to the
+setting.
+
+For an out-of-hospital self-management question the recurring partition is by what
+is already established about the patient:
+
+1. 已确诊冠心病或心绞痛、按既往医嘱处置；
+2. 既往有类似症状，但本次发作的性质或程度发生变化；
+3. 首次发生、病因不明。
+
+Derive the strata of the question in front of you the same way — by prior
+diagnosis, prior treatment, severity, genotype, care level, jurisdiction, whatever
+changes which evidence applies — and state the evidence for each stratum
+separately.
+
+**Merging the strata into one PICO produces a judgment true of none of them.** The
+stratum with the least evidence sets the verdict for all of them, and the uses
+that do have an established basis disappear from the report — not refuted, just
+never asked about on their own. Any judgment of the form 「在 X 场景下证据不足」
+must name the stratum it holds for, wherever it appears: `结果`, `讨论`, `结论`,
+and the abstract.
+
+- 反例：`两药在院外自救场景中均缺乏证据。`
+  为什么是反例：把三类人群合并成一个 PICO 后按最弱的一类给出统一判断，遮蔽了两药在已确诊冠心病心绞痛患者中的既有应用场景。
+  正例：`两药在已确诊冠心病心绞痛患者中均有相应应用依据，但在首次发生或病因未明的院外急性胸痛中，现有证据不能支持患者自行选择药物替代专业评估。`
+
+Stratification blocks transfer in both directions. The rule in "Evidence
+appraisal" — evidence that a medicine helps diagnosed stable angina does not
+establish a role in self-diagnosed undifferentiated chest pressure — runs the
+other way just as strictly: a finding about the undifferentiated stratum does not
+describe the diagnosed one. A stratum you put out of scope is excluded in
+`资料与方法` with its reason, and its evidence stays out of the conclusions.
 
 ### One ruler for every arm
 
@@ -219,6 +318,56 @@ them is a certainty rating and none substitutes for one.
 Where an arm genuinely holds evidence the other lacks, keep the indication and
 population attached to it, so the reader can see that a different question is
 being answered: `硝酸甘油在已确诊心绞痛发作中的缓解疗效证据充分 [2]，该证据不覆盖未分化胸痛的自救决策`.
+
+### Fix the comparison axes before filling them
+
+Decide the axes of comparison before writing about any arm, then fill every arm on
+every axis. Reviewing arm A's literature, then arm B's, then closing with a shared
+verdict is not a comparison: the two accounts never touch, and the verdict is
+supplied by whichever arm had the thinner file. **`分别介绍完再统一判定证据不足` is
+the shape this subsection forbids.**
+
+The axes are needed because evidence bases are not commensurable by default. One
+arm's evidence may be chronic coronary syndrome, continuous dosing, ECG and
+questionnaire endpoints; the other's acute as-needed sublingual use, symptom
+relief, haemodynamics and onset time. Both belong in one review. They are not two
+values of one variable, and a sentence ranking them is comparing a long-term
+treatment result against an acute relief result.
+
+Fix at least these axes, adapting the wording to the domain and dropping none:
+
+1. **核准适用场景** — the approved indication as written, and what it does not cover;
+2. **急性/按需使用证据** — population studied, outcome measured, onset time;
+3. **长期治疗证据** — population, outcome, duration;
+4. **人群反应差异** — genotype, age, comorbidity, ancestry, and whether a difference was measured or merely not measured;
+5. **安全性与禁忌** — contraindications, interactions, and known harms, in full for every arm;
+6. **是否存在直接比较研究** — head-to-head evidence, and its absence written as a cell;
+7. **该维度可支持的结论边界** — how far a conclusion may go on this axis alone.
+
+The last axis is the one that does the work. Write it per axis and before the
+cross-arm sentence, so each comparison inherits a stated ceiling instead of
+borrowing the highest ceiling in the table. An empty cell is a result, written
+`未检索到` with what was searched (see "Absent evidence is a gap, not a
+counter-finding"); it stays inside its axis and never becomes the verdict of the
+table. Cross-arm statements use one appraisal vocabulary ("One ruler for every
+arm") and one stratum ("Stratify the population before you conclude").
+
+A table is the natural form — axes as rows, arms as columns, the boundary as the
+last column — and each factual cell carries its numbered citation and hidden claim
+marker like any other line.
+
+- 反例（把不同维度的结果并列为优劣）：`速效救心丸可改善心绞痛发作频次与心电图缺血表现 [11]，硝酸甘油含服后 1 至 3 分钟起效 [2]，就院外自救而言后者更为可靠。`
+  为什么是反例：前者是慢性冠脉综合征人群连续用药、以发作频次与心电图为结局的结果，后者是急性按需含服的起效时间结果；两者不是同一维度上的两个取值，"更可靠"没有可比的量。
+- 正例（先固定维度，再逐一填充，并写明该维度允许写到哪一步）：
+
+  | 维度 | 硝酸甘油 | 速效救心丸 | 该维度可支持的结论边界 |
+  | --- | --- | --- | --- |
+  | 核准适用场景 | 心绞痛发作的急性缓解与预防 [2] | 气滞血瘀型冠心病心绞痛 [7] | 只能判断某一用法是否落在核准范围内，不能据此比较疗效 |
+  | 急性按需使用证据 | 已确诊心绞痛发作人群，结局为症状缓解与血流动力学，含服后 1 至 3 分钟起效 [2] | 未检索到以急性发作缓解时间为结局的随机对照研究 | 可分别陈述"在何人群、以何结局、多久起效"，不足以排序 |
+  | 长期治疗证据 | 未检索到以长期结局为终点的按需含服研究 | 气滞血瘀型冠心病心绞痛连续用药，心电图与发作频次改善，样本量小、盲法报告不全 [11,12] | 长期治疗结局不外推至单次自救用药 |
+  | 人群反应差异 | ALDH2 rs671 变异型缓解率 50.6%，野生型 79.4% [9] | 未检索到按基因型分层的反应数据 | 一方为已测得的异质性，另一方为未测量而非无差异 |
+  | 安全性与禁忌 | 与 PDE5 抑制剂合用为禁忌，低血压与晕厥风险 [2] | 说明书列有不良反应，无分母，发生率未知 [7] | 两侧均按全强度报告，不因证据量少而少报 |
+  | 是否存在直接比较研究 | 未检索到头对头随机对照研究 | 同上 | 该空缺本身是结果，不能替代上述各维度的比较 |
 
 ### Absent evidence is a gap, not a counter-finding
 
@@ -290,21 +439,78 @@ the mechanism, the registry has no denominator — so the reader learns what the
 literature currently cannot support. Silence at a rung reads as a rung never
 tried.
 
-### The conclusion answers the question that was asked
+### Enumerate the links a bridge needs
 
-`结论` follows the order of the research questions, and each answer leads with the
-finding rather than with the appraisal of a neighbouring arm. Where a question
-asks about the limits of one intervention's effect in a defined population, the
-conclusion states the magnitude and the share of the population it applies to —
-an effect limited to a genotype carried by half the target population is a
-different result from one carried by one in a thousand, and the conclusion must
-say which. **A correct qualifier may not stand in place of the finding it
-qualifies.**
+The ladder above rates how far a *kind* of evidence reaches. This rule is about a
+*chain*. When the comparison is driven by a mechanism acting on one arm only — a
+genotype, a metabolic pathway, a route, a formulation property — the step from
+`该机制影响 A` to `低反应者应改用 B` is not one inference but several, and each of
+them is a separate empirical proposition that either has been established or has
+not.
 
-- 反例（把核心发现压平为一句限定语）：`ALDH2 rs671 变异降低但不消除对硝酸甘油的反应。`
-  正例（发现与人群占比在前，限定语在后，推导另起一行并标注）：
-  `ALDH2 rs671 变异型在东亚人群的携带率约 40%，中国汉族为 45% 至 49% [8]。携带者舌下含服硝酸甘油后的心绞痛缓解率为 50.6%，野生型为 79.4% [9]。`
-  `〔推导〕以汉族携带率 45% 至 49% 与上述两组缓解率计算，人群平均缓解率约为 65% 至 66%，即每两名患者中约有一名属于低反应基因型；含服后未缓解在该亚群中更可能反映酶活性不足而非病因不同，"含服后缓解"这一现象据此不能用于区分病因。变异降低但不消除反应，携带者仍可能获益，故该发现限定的是对缓解现象的解读，不构成停用理由。`
+So list them. One link per line in `讨论`, each marked `已建立` or `未建立` with the
+evidence or the missing study behind the mark, and the conclusion then stops at
+the last established link and says that it stopped there.
+
+- 例（基因型驱动的比较，逐环列出与逐环状态）：
+  1. `该变异在目标人群中常见` — 已建立：东亚人群携带率约 40%，中国汉族 45% 至 49% [8]；
+  2. `携带者对 A 的反应降低` — 已建立：携带者缓解率 50.6%，野生型 79.4% [9]；
+  3. `B 的作用不经该通路，故不受同一变异影响` — 未建立：未检索到 B 的基因型分层研究，"未测量"不等于"不受影响"；
+  4. `低反应者改用 B 后的临床结局优于继续用 A` — 未建立：未检索到头对头或按基因型分层的比较研究；
+  5. `B 可在该场景替代 A` — 未建立，且不能由第 1 至 4 环推出；
+  6. `基因型差异足以构成两药之间的选择规则` — 未建立：需以基因型分层、以症状缓解与 30 天主要心血管事件为结局的前瞻性比较研究。
+
+An arm never tested for the mechanism is untested, not immune. One arm's
+susceptibility is not the other arm's advantage, and that is the link a chain
+skips most often — link 3 above, which is where the report must say `未测量`
+instead of letting silence read as `不受影响`.
+
+**A chain that does not close is a result, not a failure.** Links 1 and 2 built
+with 3 to 6 open is exactly a research hypothesis plus an evidence gap — both are
+publishable findings and both are worth more than an assertion — and the gap is
+complete only when it names the study that would build the next link: design,
+population, comparator, outcome, and the order of magnitude of sample that outcome
+requires (see "Absent evidence is a gap, not a counter-finding"). What is not
+permitted is walking the open links in silence and landing on a substitution
+claim. Any quantity you compute along the chain is a derived claim with its
+`derivedFrom`, `method`, `assumptions` and `sensitivity` (see "Derived results"),
+and no link of the chain reaches `临床实践要点`.
+
+- 反例：`ALDH2 rs671 变异者对硝酸甘油反应降低，此类人群可改用速效救心丸。`、`对 ALDH2 低反应人群，速效救心丸可能是更合适的选择。`
+  为什么是反例：`可能` 补不上第 3 至 6 环；把未建立的环写成推测性建议，读者读到的仍是替代性疗效结论。
+  正例：`ALDH2 相关反应差异提示，院外心绞痛用药效果可能存在显著个体差异，不宜将硝酸甘油视为对所有中国患者反应完全一致的单一标准。另一药具有不同的药物组成和证据路径，但其在 ALDH2 低反应人群中的相对价值仍需直接临床研究验证。`
+
+### Length in proportion to the question
+
+Length is a claim about importance. A reader infers what the paper is about from
+where its words are, so each section's share of the body must track the rank of
+the question it answers: the main question carries the body, while a secondary
+finding and the safety boundary are stated in full at their own rank.
+
+For a comparison question with a population-heterogeneity component and a safety
+boundary, the shares that fit are, as an order of magnitude and not a formula:
+
+- 干预间的证据比较 ≈50%;
+- 人群反应异质性 25% 至 30%;
+- 使用安全边界 10% 至 15%.
+
+Adapt them to the structure of the question actually asked — one with no
+heterogeneity component gives that share back to the comparison, not to the safety
+section. They are magnitudes to check against, never a quota to write toward: if
+the evidence on the main question is thin the report is shorter, and inflating a
+secondary section to fill the space is the defect this rule exists to catch (see
+"Academic scope", item 4).
+
+Before delivery, take each level-three subsection, name the research question it
+serves, and compare its share of the body against that question's position in
+`引言`. A section that outweighs its rank is either the wrong subject or an
+inflated one; the usual inflation is a caution or a methodological aside that was
+easy to write about. Compress the discussion, never the duty — `临床实践要点`
+states every action, contraindication, and emergency instruction at full strength
+however short the section is.
+
+- 反例：一条风险提示（`服药后是否缓解不能鉴别病因`）出现在 `摘要结果`、`摘要结论`、`引言` 的第三个研究问题、`讨论` 的诊断效能一节与 `结论`，合计约占正文三成，而两药的维度对照只有一节。
+  正例：该提示在 `临床实践要点` 中以完整强度陈述一次，`讨论` 中以一句说明其解读边界；正文主体是维度对照与人群反应异质性，两者的篇幅次序与 `引言` 中研究问题的次序一致。
 
 ### Symmetry never softens a safety statement
 
@@ -321,7 +527,10 @@ it. Appraising two arms evenly does not even out their risks.
   harm reporting.
 - Symmetry is a floor under the weaker-looking arm's appraisal, never a ceiling on
   the stronger one's. Unfavourable evidence about either arm is reported in full,
-  and no bridge, gap, or ordering rule above may be used to omit it.
+  and no rule above — bridge, gap, ruler, axis, chain of links, question fidelity,
+  stratification, or proportion — may be used to omit it. Demoting a caution from
+  thesis to boundary changes where it sits and how much room it takes, never what
+  it says: a shorter section states the same duties at the same strength.
 
 ## Citation and traceability integrity
 
@@ -722,6 +931,7 @@ Read every output back before claiming success. Do not use `grep` or another unb
 - all DOI/PMID/PMCID values and bibliographic metadata are accurate;
 - no visible `[claim:...]` marker remains;
 - no operational failure or tool-process prose appears in the academic report;
+- every research question in `摘要目的` has its answer in `结论` in the same order, every 「证据不足」 judgment names the population stratum it holds for, and no section's share of the body outweighs the rank of the question it serves (see "Comparative appraisal and evidence bridging");
 - the section names are the manuscript ones and no commissioning, acceptance-specification, or self-referential prose survives anywhere in the report (see "Register: what a manuscript never says"). Read the request once more and confirm that no phrase of it was copied into the report — the request's wording is the usual way this register gets in;
 - the practical answer is medically correct, source-supported, and does not encourage delay.
 

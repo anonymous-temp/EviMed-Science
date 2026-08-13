@@ -1444,6 +1444,10 @@ export async function syncRuntimeAgentPackages(project, plan, agentRegistry) {
 }
 
 const evimedMcpName = "evimed-research";
+// How many consecutive quota measurements must fail before the guard stops a
+// runtime. One failure is a busy workspace; three in a row is a workspace the
+// server genuinely cannot read.
+const quotaCheckFailureTolerance = 3;
 const scienceConnectors = Object.freeze([
   "paper-search",
   "biomcp",
@@ -4360,8 +4364,25 @@ export class RuntimeManager {
         return;
       }
       const error = err instanceof HttpError ? err.code : "runtime_quota_check_failed";
+      // Failing to measure is not the same as being over the limit. A transient
+      // read error — a file removed mid-walk, a momentary EMFILE — used to stop
+      // the runtime exactly as an exceeded quota does, and the runtime does not
+      // come back on its own. The guard still fires, but only once the same
+      // measurement has failed repeatedly, which is what distinguishes a
+      // genuinely unreadable workspace from a busy one.
+      const consecutive = (monitor.consecutiveCheckFailures ?? 0) + 1;
+      monitor.consecutiveCheckFailures = consecutive;
+      await appendRuntimeEvent(project, "quota_check_failed", {
+        kind: "opencode",
+        error,
+        consecutive,
+        stopping: consecutive >= quotaCheckFailureTolerance,
+      }, this.config);
+      if (consecutive < quotaCheckFailureTolerance) return;
       await this.stopQuotaGuardRuntime(project, "quota_check_failed", error);
+      return;
     }
+    monitor.consecutiveCheckFailures = 0;
   }
 
   beginProxy(project) {

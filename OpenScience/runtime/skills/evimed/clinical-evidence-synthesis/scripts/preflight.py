@@ -195,11 +195,109 @@ NEGATIVE_VERDICT = re.compile(
 )
 # Reporting the recommendation somebody else made is citation, not inference.
 ATTRIBUTED_RECOMMENDATION = re.compile(r"(?:指南|共识|说明书|标签|药监|监管|批准|建议书|WHO|FDA|EMA|NMPA|NICE)")
+# --- Comparative structure, mirrored from clinicalEvidenceQuality.mjs --------
+# Two defects of a comparison are decidable from the document alone and the
+# server rejects both, so both have to be catchable here.
+#
+# A title announcing a comparison over a body that never puts the arms side by
+# side: 对比剂 is an ordinary pharmacology noun containing 对比, so it is
+# anchored away from it.
+COMPARATIVE_TITLE = re.compile(
+    r"比较|对比(?!剂)|优劣|孰优|头对头|head[-\s]?to[-\s]?head|versus|(?<![A-Za-z])vs\.?(?![A-Za-z])",
+    re.I,
+)
+# A report that states no direct comparison was found and then concludes that
+# one arm may take the other's place has contradicted itself: the licence a
+# substitution claim needs is the comparison the report says does not exist.
+DIRECT_COMPARISON_ABSENT = re.compile(
+    r"(?:未检索到|未能检索到|未检索出|未发现|未找到|未见|尚未检索到|缺乏|缺少|尚无|没有|不存在)"
+    r"[^。；\n]{0,30}(?:头对头|直接比较|直接对比|head[-\s]?to[-\s]?head)"
+    r"|(?:头对头|直接比较|直接对比|head[-\s]?to[-\s]?head)"
+    r"[^。；\n]{0,30}(?:未检索到|未能检索到|缺乏|缺少|尚无|没有|不存在|空缺|阙如)",
+    re.I,
+)
+# Swapping one arm for the other is stated by the verb alone, and 优于 is
+# relational by itself. A bare comparative adjective is not: 该人群的依从性更好
+# compares a property of one population against nothing in particular. It counts
+# only where the sentence says what is being compared (前者/后者/两者/相比) or the
+# clause makes it a choice between arms (更合适的选择).
+SUBSTITUTION_VERB = re.compile(r"(?:替代|代替|取代|改用|换用|优于)")
+COMPARATIVE_QUALITY = re.compile(r"更(?:为|加)?(?:优|佳|好|可靠|安全|有效|适合|合适)")
+COMPARISON_ANCHOR = re.compile(r"前者|后者|两者|二者|相比|相较|较之")
+CHOICE_NOUN = re.compile(r"选择|方案|之选|首选")
+# What is not a substitution claim, read in the clause carrying the verb: a
+# negation, the comparator a trial uses inside itself, and the thing a medicine
+# may never replace — 任何药物都不能替代及时就医 is a safety instruction.
+SUBSTITUTION_NEGATION = re.compile(r"[不无未非勿]|尚(?:待|需)|缺乏|缺少|难以|有待|仍需|避免|除外|排除")
+# Asking is not answering. 低反应者是否应改用另一药 is the open question this
+# whole rule exists to keep open, and it carries the verb while concluding
+# nothing. Read in the clause, like the negation, so an interrogative frame
+# cannot license a conclusion standing beside it.
+OPEN_QUESTION = re.compile(r"是否|能否|可否|有无|[?？]")
+# Which evidence base is stronger is a statement about the literature, not about
+# the medicines, and stating it is what a fixed-axis comparison is for: an axis
+# may hold measured evidence on one arm and nothing on the other without any
+# head-to-head study existing anywhere. It counts only where the comparative
+# attaches to the evidence itself — 资料显示该制剂优于… is a claim about the
+# medicines that happens to open with a source noun.
+EVIDENCE_BASE_COMPARISON = re.compile(
+    r"(?:证据|研究|数据|文献|资料|报道|记录)(?:强度|质量|基础|数量|完整性|一致性|等级|确定性)?"
+    r"(?:[比较][^，。；\n]{0,12})?(?:更(?:为|加)?(?:充分|完整|可靠|一致|丰富|扎实)|优于)"
+)
+# The repair this rule asks for is the bridge written out one link per line,
+# each marked 已建立 or 未建立 — and the unestablished links are word for word
+# the sentences it would otherwise read as conclusions (低反应者改用 B 后结局更
+# 好). The mark licenses the link it marks: it may sit in a neighbouring clause
+# (……后结局更好，该环未建立) or in a following sentence that is nothing but the
+# mark (……后结局更好。该环未建立。). Only the unestablished mark licenses
+# anything — a link asserted 已建立 without the study behind it is the
+# conclusion itself.
+UNESTABLISHED_LINK = re.compile(r"(?:尚)?未(?:能|被|获)?(?:建立|证实|验证|确证)")
+BARE_LINK_MARK_CHARACTERS = 20
+INTERNAL_COMPARATOR = re.compile(r"安慰剂|placebo|空白|对照组|基线|常规治疗|标准治疗|假(?:手术|针刺)|治疗前", re.I)
+NON_MEDICINE_OBJECT = re.compile(
+    r"专业评估|规范评估|医疗评估|临床评估|系统评估|就医|就诊|急救|急诊|120|心电图|肌钙蛋白|检查|诊断|问诊|随访"
+)
+# Reporting the comparison somebody else made is citation, not inference.
+ATTRIBUTED_COMPARISON = re.compile(
+    r"指南|共识|说明书|标签|药监|监管|批准|建议书|WHO|FDA|EMA|NMPA|NICE"
+    r"|该(?:研究|试验|综述|分析|队列|荟萃)|一项[^。；\n]{0,12}(?:研究|试验)|荟萃分析|Meta\s?分析|系统评价|系统综述",
+    re.I,
+)
+CLAUSE_SPLIT = re.compile(r"[，,、]")
+TABLE_PIPE = re.compile(r"\|")
+TABLE_DELIMITER_ROW = re.compile(r"^[\s:|-]+$")
 # Advisory only (see notes in main): one arm graded, another vouched for by
 # tradition, is the asymmetry "One ruler for every arm" exists to prevent — but
 # which nouns are the compared arms is not decidable from the text, so this is
 # reported to the run and never blocks.
 COMPARISON_QUESTION = re.compile(r"比较|对比|头对头|优劣|孰优|versus|\bvs\.?\b", re.I)
+# Advisory only. A cross-arm blanket negation ("两药……均缺乏证据") is the shape a
+# merged PICO takes in a sentence, and the fallback test for the merge is that
+# the report never names a stratum anywhere. Both halves are heuristics — a
+# question whose population genuinely has no strata writes the same sentence
+# correctly — so this is reported and never blocks. A shared absence of
+# head-to-head evidence is excluded: that one is true of every stratum at once.
+CROSS_ARM_BLANKET_NEGATION = re.compile(
+    r"(?:两(?:药|者|种药物?|类药物?|型)|二者|双方|各药)[^。；\n]{0,40}(?:均|都)[^。；\n]{0,20}"
+    r"(?:缺乏|缺少|尚无|没有|无|未检索到|未见|未发现)[^。；\n]{0,20}(?:证据|研究|数据|试验)"
+)
+# A stratum is named by what is already established about the patient. 分层 on
+# its own is not one of these words: 分层评估的分析路径 and 危险分层 are ordinary
+# clinical prose about triage, and reading them as a named stratum silenced this
+# note on a report that had named none.
+POPULATION_STRATUM = re.compile(
+    r"已确诊|确诊|初发|首发|首次(?:发生|发作)|既往|病史|未分化|未确诊|病因(?:未明|不明)"
+    r"|稳定型|不稳定型|新发|亚组|按[^。；\n]{0,10}分层|分层[^。；\n]{0,2}人群|人群分层"
+)
+DIRECT_COMPARISON_MENTION = re.compile(r"头对头|直接比较|直接对比|head[-\s]?to[-\s]?head", re.I)
+# Advisory only. 摘要 目的 lists the research questions and 结论 answers them one
+# for one; when both are enumerated, the counts are comparable. Only then — a
+# prose 结论 may answer three questions in three sentences, and no count can say
+# whether it did.
+ABSTRACT_PURPOSE = re.compile(r"目的[:：]?\s*(.*?)(?=(?:方法|资料|材料|结果|结论)\s*[:：]|$)", re.S)
+CJK_ORDINALS = "一二三四五六七八九十"
+CIRCLED_DIGITS = "①②③④⑤⑥⑦⑧⑨⑩"
 CERTAINTY_APPRAISAL = re.compile(r"GRADE|确定性|证据等级|证据质量|证据体质量")
 TRADITION_APPRAISAL = re.compile(
     r"长期(?:临床)?(?:使用|应用|实践|经验)|广泛(?:使用|应用|采用)|指南(?:推荐|支持|建议)"
@@ -552,6 +650,240 @@ def check_register(report: str, issues: list[str]) -> None:
         )
 
 
+def table_cells(line: str) -> list[str]:
+    """The cells of a markdown table row, or [] when the line is not one."""
+    if len(TABLE_PIPE.findall(line)) < 2:
+        return []
+    text = line.strip()
+    if text.startswith("|"):
+        text = text[1:]
+    if text.endswith("|"):
+        text = text[:-1]
+    return [cell.strip() for cell in text.split("|")]
+
+
+def table_delimiter_row(line: str) -> bool:
+    text = line.strip()
+    return bool(TABLE_DELIMITER_ROW.match(text)) and "-" in text and len(TABLE_PIPE.findall(text)) >= 2
+
+
+def has_comparison_matrix(text: str) -> bool:
+    """Does the body carry a table that could be the comparison matrix — an axis
+    column plus one column per arm, filled for more than one row?
+
+    Three columns and two rows is the smallest such table, and it accepts the
+    transposed layout (arms as rows, axes as columns) as readily as the usual
+    one. A table of something else satisfies it too; that is the intended
+    direction of the error, since the alternative is guessing which columns are
+    the arms and withholding a package on the guess."""
+    lines = text.split("\n")
+    for index, line in enumerate(lines):
+        if index == 0 or not table_delimiter_row(line):
+            continue
+        if len(table_cells(lines[index - 1])) < 3:
+            continue
+        rows = 0
+        following = index + 1
+        while following < len(lines) and len(table_cells(lines[following])) >= 2:
+            rows += 1
+            following += 1
+        if rows >= 2:
+            return True
+    return False
+
+
+def substitution_conclusion(line: str) -> str:
+    """A sentence concluding that one arm may take the other's place or beats
+    it, or "" when the sentence writes a bridge link that is marked
+    unestablished, or the clause carrying the verb is negated, asks rather than
+    answers, compares the evidence bases, compares against a trial's own
+    control, names something a medicine may never replace, or reports the
+    comparison somebody else made."""
+    sentences = SENTENCE_SPLIT.split(line)
+    for index, sentence in enumerate(sentences):
+        if ATTRIBUTED_COMPARISON.search(sentence):
+            continue
+        following = sentences[index + 1] if index + 1 < len(sentences) else ""
+        if UNESTABLISHED_LINK.search(sentence) or (
+            len(following.strip()) <= BARE_LINK_MARK_CHARACTERS and UNESTABLISHED_LINK.search(following)
+        ):
+            continue
+        # What is being compared may be named a clause away (两者相比，该制剂更安全),
+        # but the negation that would license the clause may not: it has to sit
+        # in the clause that carries the claim.
+        anchored = bool(COMPARISON_ANCHOR.search(sentence))
+        for clause in CLAUSE_SPLIT.split(sentence):
+            claimed = bool(SUBSTITUTION_VERB.search(clause)) or (
+                bool(COMPARATIVE_QUALITY.search(clause)) and (anchored or bool(CHOICE_NOUN.search(clause)))
+            )
+            if not claimed:
+                continue
+            if SUBSTITUTION_NEGATION.search(clause) or OPEN_QUESTION.search(clause):
+                continue
+            if EVIDENCE_BASE_COMPARISON.search(clause):
+                continue
+            if INTERNAL_COMPARATOR.search(clause) or NON_MEDICINE_OBJECT.search(clause):
+                continue
+            return excerpt(sentence)
+    return ""
+
+
+def comparative_body(report: str) -> str:
+    """The report with the reference list and 检索与方法 blanked: a cited title
+    may announce anybody's comparison, and a search strategy names comparators
+    it searched for while concluding nothing. Line counts survive the blanking,
+    so a reported line number is the line the author will find in the file."""
+    return without_sections(without_sections(report, "参考文献|参考来源|References?"), "检索|方法|Methods?")
+
+
+def check_comparative_structure(report: str, issues: list[str]) -> None:
+    """The two defects of a comparison the server rejects: a comparison the
+    title announces and the body never carries out, and a substitution claim the
+    report has already said it has no evidence for."""
+    title_match = re.search(r"^#\s+(.+)$", report, re.M)
+    title = title_match.group(1).strip() if title_match else ""
+    body = comparative_body(report)
+    if title and COMPARATIVE_TITLE.search(title) and not has_comparison_matrix(body):
+        issues.append(
+            f"clinical-evidence-report.md: the title announces a comparison ({excerpt(title)}) but no table in the "
+            "analysis body sets the arms side by side. Reviewing one arm's literature, then the other's, and closing "
+            "with a shared verdict is not a comparison: the two accounts never meet, and the verdict comes from "
+            "whichever arm had the thinner file. Fix the axes first, then fill every arm on every axis — 核准适用场景 / "
+            "急性按需使用证据（研究对象、结局、起效时间）/ 长期治疗证据 / 人群反应差异 / 安全性与禁忌 / 是否存在直接比较研究 / "
+            "该维度可支持的结论边界 — as a table with one column per arm and the boundary as its last column. An axis with "
+            "nothing behind it is a result, written 未检索到 with what was searched; it stays inside its row and never "
+            "becomes the verdict of the table, and each factual cell carries its numbered citation and hidden claim marker"
+        )
+    absent_line = 0
+    absent_text = ""
+    for line_number, line in enumerate(body.split("\n"), 1):
+        if DIRECT_COMPARISON_ABSENT.search(line):
+            absent_line, absent_text = line_number, excerpt(line)
+            break
+    if not absent_line:
+        return
+    for line_number, line in enumerate(body.split("\n"), 1):
+        conclusion = substitution_conclusion(line)
+        if not conclusion:
+            continue
+        issues.append(
+            f"clinical-evidence-report.md line {line_number}: the report concludes that one arm can take the other's "
+            f"place ({conclusion}), while line {absent_line} states that the direct comparison behind such a "
+            f"conclusion was not found ({absent_text}). A mechanism that acts on one arm is not evidence about the "
+            "other, and an arm never tested for it is untested rather than immune. Write the chain out one link per "
+            "line in 讨论, each marked 已建立 or 未建立 with the evidence or the missing study behind the mark "
+            "(该变异在目标人群中常见 / 携带者对 A 的反应降低 / B 不经该通路 / 低反应者改用 B 后结局更好 / "
+            "B 可在该场景替代 A), and stop the conclusion at the last established link: 该差异提示院外用药效果可能存在"
+            "显著个体差异，另一药具有不同的组成与证据路径，其在该亚群中的相对价值仍需直接临床研究验证"
+        )
+        return
+
+
+def enumerated_count(text: str) -> int:
+    """How many items an enumeration lists, counting only markers that run 1, 2,
+    3 … from the start. A lone 「（3）」 inside a sentence is a cross-reference to
+    somebody else's third item, not a list of three."""
+    best = 0
+    for markers in (
+        lambda n: (f"（{n}）", f"({n})"),
+        lambda n: ((f"{CJK_ORDINALS[n - 1]}、", f"（{CJK_ORDINALS[n - 1]}）", f"({CJK_ORDINALS[n - 1]})")
+                   if n <= len(CJK_ORDINALS) else ()),
+        lambda n: (CIRCLED_DIGITS[n - 1],) if n <= len(CIRCLED_DIGITS) else (),
+    ):
+        count = 0
+        while count < 12 and any(marker in text for marker in markers(count + 1)):
+            count += 1
+        best = max(best, count)
+    count = 0
+    while count < 12 and re.search(rf"^\s*{count + 1}[.、)]\s*\S", text, re.M):
+        count += 1
+    return max(best, count)
+
+
+def section_shares(report: str) -> dict[str, int]:
+    """Each level-two section's share of the body, in percent of non-blank
+    characters, with the reference list left out. Length is a claim about
+    importance, and the shares that fit a comparison question are roughly 50%
+    for the comparison between arms, 25% to 30% for population heterogeneity and
+    10% to 15% for the safety boundary — magnitudes to check against, never a
+    quota to write toward. Which section serves which question is not decidable
+    here, so the run is given the measurement and applies the rule itself."""
+    body = without_sections(report, "参考文献|参考来源|References?")
+    sections: list[tuple[str, int]] = []
+    heading = ""
+    size = 0
+    for line in body.split("\n"):
+        match = re.match(r"^##\s+(.+?)\s*$", line)
+        if match:
+            if heading:
+                sections.append((heading, size))
+            heading, size = match.group(1), 0
+            continue
+        if heading:
+            size += len("".join(line.split()))
+    if heading:
+        sections.append((heading, size))
+    total = sum(size for _, size in sections)
+    if not total:
+        return {}
+    return {name: round(size * 100 / total) for name, size in sections}
+
+
+def comparative_structure_notes(report: str) -> list[str]:
+    """Advice, never a blocking issue.
+
+    Each of these reads a real defect the commissioning reviewers named, and
+    each rests on a judgement no pattern can make: which nouns are the compared
+    arms, whether a question in 目的 was answered in prose, whether the
+    population of this question has strata at all. A rule that cannot be decided
+    must not be able to withhold a finished package, so these are reported to
+    the run while it can still act, and the server has no counterpart."""
+    notes: list[str] = []
+    body = comparative_body(report)
+    purpose = ABSTRACT_PURPOSE.search(section(report, "摘要"))
+    questions = enumerated_count(purpose.group(1)) if purpose else 0
+    answers = enumerated_count(section(report, "结论"))
+    if questions >= 2 and answers >= 2 and questions != answers:
+        notes.append(
+            f"clinical-evidence-report.md: 摘要 目的 lists {questions} research questions and 结论 gives {answers} "
+            "numbered answers. 结论 answers the questions of 目的 in the same order, one answer per question. A "
+            "question with no answer was either unanswerable — write it as a gap, with the study that would close "
+            "it — or was dropped, which is a restatement and is declared: say which question was asked, what in it "
+            "does not survive contact with the evidence, what replaces it, and what the replacement can settle. An "
+            "answer matching no question in 目的 is the object of study drifting toward an easier question"
+        )
+    stratified = bool(POPULATION_STRATUM.search(body))
+    for line_number, line in enumerate(body.split("\n"), 1):
+        if stratified or not CROSS_ARM_BLANKET_NEGATION.search(line) or DIRECT_COMPARISON_MENTION.search(line):
+            continue
+        notes.append(
+            f"clinical-evidence-report.md line {line_number}: one verdict is given for every arm at once "
+            f"({excerpt(line)}) and no stratum is named anywhere in the report. A setting named in the question "
+            "(院外自救, 基层首诊, 居家用药) is not a population: inside it sit groups whose evidentiary position "
+            "differs — 已确诊冠心病或心绞痛按既往医嘱处置 / 既往有类似症状但本次性质或程度改变 / 首次发生、病因不明 — "
+            "and merging them produces a judgment true of none of them, because the stratum with the least evidence "
+            "sets the verdict for all of them and the uses that do have an established basis disappear. Name the "
+            "stratum wherever the judgment appears: 两药在已确诊冠心病心绞痛患者中均有相应应用依据，但在首次发生或"
+            "病因未明的院外急性胸痛中，现有证据不能支持患者自行选择药物替代专业评估"
+        )
+        break
+    if not DIRECT_COMPARISON_MENTION.search(body):
+        for line_number, line in enumerate(body.split("\n"), 1):
+            conclusion = substitution_conclusion(line)
+            if not conclusion:
+                continue
+            notes.append(
+                f"clinical-evidence-report.md line {line_number}: one arm is concluded to take the other's place or "
+                f"to beat it ({conclusion}), and the report never says whether a direct comparison between them "
+                "exists. Fill the 是否存在直接比较研究 axis either way — head-to-head evidence with its citation, or "
+                "未检索到 with what was searched — and if there is none, list the links the chain needs one per line "
+                "in 讨论 marked 已建立 or 未建立, and stop the conclusion at the last established link. 可能 does not "
+                "close an open link: a speculative recommendation still reads to the reader as a substitution conclusion"
+            )
+            break
+    return notes
+
+
 def appraisal_symmetry_notes(report: str) -> list[str]:
     """Advice, never a blocking issue.
 
@@ -653,6 +985,7 @@ def main() -> int:
     if practical_position < 0 or references_position < practical_position:
         issues.append("clinical-evidence-report.md: practical section must precede final references")
     check_register(report, issues)
+    check_comparative_structure(report, issues)
 
     queries = search_log.get("queries")
     query_values = [
@@ -857,13 +1190,16 @@ def main() -> int:
         "workspace": str(root),
         # Advice the run should read and act on where it applies. It never
         # decides "ok", because it cannot be decided mechanically.
-        "notes": appraisal_symmetry_notes(report),
+        "notes": appraisal_symmetry_notes(report) + comparative_structure_notes(report),
         "metrics": {
             "reportCharacters": len(report.strip()),
             "queries": len(query_values),
             "uniqueQueries": len(set(filter(None, query_values))),
             "claims": len(claims),
             "references": reference_count,
+            # Length is a claim about importance; these are the shares to check
+            # the rank of each section's question against.
+            "sectionShares": section_shares(report),
         },
         "issues": issues,
     }

@@ -12,7 +12,11 @@ import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore } from "./agentRuns.mjs";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
-import { OPEN_DOMAIN_ANSWER_AGENT_ID, routeOpenDomainSpecialist } from "./specialistRouting.mjs";
+import {
+  OPEN_DOMAIN_ANSWER_AGENT_ID,
+  routeNamedSpecialist,
+  routeOpenDomainSpecialist,
+} from "./specialistRouting.mjs";
 import { SpecialistClassifier } from "./specialistClassifier.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
@@ -805,14 +809,24 @@ export function createWebApiApp(overrides = {}) {
         // The default open-domain answer agent is the fallback handler, never
         // a routable specialist: exclude it from router/classifier candidates.
         const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
-        // Deterministic router first (safety floor); the optional LLM classifier
-        // only fills in when the regex rules find no match, and can never
-        // override a deterministic clinical/specialty route.
-        let routedSpecialist = boundSession?.mode === "open-domain"
-          ? routeOpenDomainSpecialist(text, routableAgents)
-          : null;
-        if (boundSession?.mode === "open-domain" && !routedSpecialist) {
-          routedSpecialist = await specialistClassifier.classify(text, routableAgents);
+        // Routing is a judgement about what deliverable the request commissions,
+        // and a word list cannot make it. Deciding by regex first sent six real
+        // requests for a clinical evidence review to other pipelines because
+        // they mentioned meta-analyses, adverse reactions, or a dataset — the
+        // classifier was never consulted, because a rule had already matched.
+        //
+        // So the model decides, and the regex keeps exactly one job: a safety
+        // net under the decision. It runs when the model declines or is not
+        // available, and it may only ADD a route, never replace one the model
+        // made. That preserves the property the old order was built for — a
+        // high-risk medicine asked about in a report request always reaches the
+        // clinical gate — without letting keyword matching outrank judgement.
+        let routedSpecialist = null;
+        if (boundSession?.mode === "open-domain") {
+          const named = routeNamedSpecialist(text, routableAgents);
+          // Naming the package is an instruction, not a guess at intent.
+          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents);
+          if (!routedSpecialist) routedSpecialist = routeOpenDomainSpecialist(text, routableAgents);
         }
         // Unrouted open-domain questions still run on a managed EviMed agent
         // (persona + proportional quality floor) instead of the bare coding

@@ -210,6 +210,76 @@ const negativeVerdictPattern = /(?:无效|无疗效|没有疗效|无临床(?:价
 // that names its own evidence bar and recommends against use has made a
 // recommendation, and the paper is citing it.
 const attributedRecommendationPattern = /(?:指南|共识|说明书|标签|药监|监管|批准|建议书|WHO|FDA|EMA|NMPA|NICE)/;
+// --- Comparative structure -------------------------------------------------
+// A comparison fails in ways no sentence-level rule can see, because the defect
+// is the shape of the document. Two of those are decidable from the document
+// alone; the rest — whether the arms were merged into one PICO, whether the
+// axes are commensurable, whether a section outweighs its rank — need to know
+// which nouns are the compared arms, which no pattern can read off the text.
+// They are reported to the run as preflight advice instead.
+//
+// The first decidable one: the title announces a comparison and the body never
+// puts the arms side by side. Reviewing arm A's literature, then arm B's, then
+// closing with a shared verdict is not a comparison — the two accounts never
+// meet, and the verdict is supplied by whichever arm had the thinner file. Only
+// the absence of the matrix is asserted here: a table with an axis column and
+// one column per arm. Nothing is claimed about its rows, since an axis's
+// wording belongs to the domain.
+//
+// 对比剂 (contrast agent) is an ordinary pharmacology noun that contains 对比,
+// so it is anchored away from it.
+const comparativeTitlePattern = /比较|对比(?!剂)|优劣|孰优|头对头|head[-\s]?to[-\s]?head|versus|(?<![A-Za-z])vs\.?(?![A-Za-z])/i;
+// The second: the report states that no direct comparison was found and then
+// concludes that one arm may take the other's place. That is not a judgement
+// about how strong evidence has to be — it is the report contradicting itself,
+// and the licence a substitution claim needs is exactly the comparison the
+// report has just said does not exist.
+const directComparisonAbsentPattern = /(?:未检索到|未能检索到|未检索出|未发现|未找到|未见|尚未检索到|缺乏|缺少|尚无|没有|不存在)[^。；\n]{0,30}(?:头对头|直接比较|直接对比|head[-\s]?to[-\s]?head)|(?:头对头|直接比较|直接对比|head[-\s]?to[-\s]?head)[^。；\n]{0,30}(?:未检索到|未能检索到|缺乏|缺少|尚无|没有|不存在|空缺|阙如)/i;
+// Swapping one arm for the other is stated by the verb alone, and 优于 is
+// relational by itself. A bare comparative adjective is not: 该人群的依从性更好
+// compares a property of one population against nothing in particular, and
+// reading it as a conclusion about the arms rejected ordinary prose. It counts
+// only where the sentence says what is being compared (前者/后者/两者/相比) or
+// the clause makes it a choice between arms (更合适的选择).
+const substitutionVerbPattern = /(?:替代|代替|取代|改用|换用|优于)/;
+const comparativeQualityPattern = /更(?:为|加)?(?:优|佳|好|可靠|安全|有效|适合|合适)/;
+const comparisonAnchorPattern = /前者|后者|两者|二者|相比|相较|较之/;
+const choiceNounPattern = /选择|方案|之选|首选/;
+// What is not a substitution claim, read in the clause that carries the verb so
+// a neighbouring clause can neither license nor condemn this one: a negation
+// (不能替代, 尚无……优于, 仍需直接研究验证), the comparator a trial uses inside
+// itself (安慰剂, 对照组), and the thing a medicine may never replace —
+// 任何药物都不能替代及时就医 is a safety instruction, not a comparison.
+const substitutionNegationPattern = /[不无未非勿]|尚(?:待|需)|缺乏|缺少|难以|有待|仍需|避免|除外|排除/;
+// Asking is not answering. 低反应者是否应改用另一药 is the open question this
+// whole rule exists to keep open, and it carries the verb while concluding
+// nothing. Read in the clause, like the negation, so an interrogative frame
+// cannot license a conclusion standing beside it.
+const openQuestionPattern = /是否|能否|可否|有无|[?？]/;
+// Which evidence base is stronger is a statement about the literature, not
+// about the medicines, and stating it is what a fixed-axis comparison is for:
+// an axis may hold measured evidence on one arm and nothing on the other
+// without any head-to-head study existing anywhere. It counts only where the
+// comparative attaches to the evidence itself — 资料显示该制剂优于… is a claim
+// about the medicines that happens to open with a source noun.
+const evidenceBaseComparisonPattern = /(?:证据|研究|数据|文献|资料|报道|记录)(?:强度|质量|基础|数量|完整性|一致性|等级|确定性)?(?:[比较][^，。；\n]{0,12})?(?:更(?:为|加)?(?:充分|完整|可靠|一致|丰富|扎实)|优于)/;
+// The repair this rule asks for is the bridge written out one link per line,
+// each marked 已建立 or 未建立 — and the unestablished links are word for word
+// the sentences it would otherwise read as conclusions (低反应者改用 B 后结局
+// 更好). The mark licenses the link it marks: it may sit in a neighbouring
+// clause (……后结局更好，该环未建立) or in a following sentence that is nothing
+// but the mark (……后结局更好。该环未建立。). Only the unestablished mark
+// licenses anything — a link asserted 已建立 without the study behind it is the
+// conclusion itself.
+const unestablishedLinkPattern = /(?:尚)?未(?:能|被|获)?(?:建立|证实|验证|确证)/;
+const bareLinkMarkCharacters = 20;
+const internalComparatorPattern = /安慰剂|placebo|空白|对照组|基线|常规治疗|标准治疗|假(?:手术|针刺)|治疗前/i;
+const nonMedicineObjectPattern = /专业评估|规范评估|医疗评估|临床评估|系统评估|就医|就诊|急救|急诊|120|心电图|肌钙蛋白|检查|诊断|问诊|随访/;
+// Reporting the comparison somebody else made is citation, not inference: a
+// guideline that prefers one arm, or a trial that measured one against the
+// other, is evidence the paper is passing on, and the citation checks hold it
+// to its source.
+const attributedComparisonPattern = /指南|共识|说明书|标签|药监|监管|批准|建议书|WHO|FDA|EMA|NMPA|NICE|该(?:研究|试验|综述|分析|队列|荟萃)|一项[^。；\n]{0,12}(?:研究|试验)|荟萃分析|Meta\s?分析|系统评价|系统综述/i;
 const deepResearchProfile = "academic_deep_research_v1";
 // What separates a package that must be withheld from one that may be delivered
 // with its gaps declared is whether a reader could tell.
@@ -1089,6 +1159,126 @@ function manuscriptRegisterIssues(reportText) {
   return issues;
 }
 
+/** The cells of a markdown table row, or [] when the line is not one.
+ *  @param {string} line
+ */
+function tableCells(line) {
+  const text = String(line ?? "");
+  if ((text.match(/\|/g)?.length ?? 0) < 2) return [];
+  return text.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+}
+
+/** @param {string} line */
+function tableDelimiterRow(line) {
+  const text = String(line ?? "").trim();
+  return /^[\s:|-]+$/.test(text) && text.includes("-") && (text.match(/\|/g)?.length ?? 0) >= 2;
+}
+
+/** Does the body carry a table that could be the comparison matrix — an axis
+ *  column plus one column per arm, filled for more than one row?
+ *
+ *  Three columns and two rows is the smallest such table, and it accepts the
+ *  transposed layout (arms as rows, axes as columns) as readily as the usual
+ *  one. A table of something else entirely satisfies this too; that is the
+ *  intended direction of the error, since the alternative is guessing which
+ *  columns are the arms and withholding a package on the guess.
+ *  @param {string} text
+ */
+function hasComparisonMatrix(text) {
+  const lines = String(text ?? "").split("\n");
+  for (const [index, line] of lines.entries()) {
+    if (index === 0 || !tableDelimiterRow(line)) continue;
+    if (tableCells(lines[index - 1]).length < 3) continue;
+    let rows = 0;
+    for (let next = index + 1; next < lines.length && tableCells(lines[next]).length >= 2; next += 1) rows += 1;
+    if (rows >= 2) return true;
+  }
+  return false;
+}
+
+/** A sentence concluding that one arm may take the other's place or beats it,
+ *  or "" when the sentence writes a bridge link that is marked unestablished,
+ *  or the clause carrying the verb is negated, asks rather than answers,
+ *  compares the evidence bases, compares against a trial's own control, names
+ *  something a medicine may never replace, or reports the comparison somebody
+ *  else made.
+ *  @param {string} line
+ */
+function substitutionConclusion(line) {
+  const sentences = String(line ?? "").split(/(?<=[。！？；;])/);
+  for (const [index, sentence] of sentences.entries()) {
+    if (attributedComparisonPattern.test(sentence)) continue;
+    const next = sentences[index + 1] ?? "";
+    if (
+      unestablishedLinkPattern.test(sentence)
+      || (next.trim().length <= bareLinkMarkCharacters && unestablishedLinkPattern.test(next))
+    ) continue;
+    // What is being compared may be named a clause away (两者相比，该制剂更安全),
+    // but the negation that would license the clause may not: it has to sit in
+    // the clause that carries the claim.
+    const anchored = comparisonAnchorPattern.test(sentence);
+    for (const clause of sentence.split(/[，,、]/)) {
+      const claimed = substitutionVerbPattern.test(clause)
+        || (comparativeQualityPattern.test(clause) && (anchored || choiceNounPattern.test(clause)));
+      if (!claimed) continue;
+      if (substitutionNegationPattern.test(clause) || openQuestionPattern.test(clause)) continue;
+      if (evidenceBaseComparisonPattern.test(clause)) continue;
+      if (internalComparatorPattern.test(clause) || nonMedicineObjectPattern.test(clause)) continue;
+      return excerpt(sentence);
+    }
+  }
+  return "";
+}
+
+/** The two defects of a comparison that are decidable from the document alone:
+ *  a comparison the title announces and the body never carries out, and a
+ *  substitution claim the report has already said it has no evidence for.
+ *
+ *  Read outside the reference list (a cited title may announce anybody's
+ *  comparison) and outside 检索与方法 (a search strategy names comparators it
+ *  searched for, and a methods sentence concludes nothing). Both sections are
+ *  blanked rather than removed, so a reported line number is the line the
+ *  author will find in the file.
+ *  @param {any} reportText
+ */
+function comparativeStructureIssues(reportText) {
+  const text = String(reportText ?? "");
+  const issues = [];
+  const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "";
+  const body = withoutReportSections(
+    withoutReportSections(text, "参考文献|参考来源|References?"),
+    "检索|方法|Methods?",
+  );
+  if (title && comparativeTitlePattern.test(title) && !hasComparisonMatrix(body)) {
+    issues.push(
+      `The academic report is titled as a comparison (${excerpt(title)}) but no table in the analysis body sets the arms side by side. `
+      + "Reviewing one arm's literature, then the other's, and closing with a shared verdict is not a comparison: the two accounts never meet, "
+      + "and the verdict comes from whichever arm had the thinner file. Fix the axes first, then fill every arm on every axis — "
+      + "核准适用场景 / 急性按需使用证据（研究对象、结局、起效时间）/ 长期治疗证据 / 人群反应差异 / 安全性与禁忌 / 是否存在直接比较研究 / 该维度可支持的结论边界 — "
+      + "as a table with one column per arm and the boundary as its last column. An axis with nothing behind it is a result, written 未检索到 with what was searched; "
+      + "it stays inside its row and never becomes the verdict of the table, and each factual cell carries its numbered citation and hidden claim marker.",
+    );
+  }
+  const absent = firstMatchingLine(body, directComparisonAbsentPattern);
+  if (absent) {
+    for (const [index, line] of body.split("\n").entries()) {
+      const conclusion = substitutionConclusion(line);
+      if (!conclusion) continue;
+      issues.push(
+        `The academic report line ${index + 1} concludes that one arm can take the other's place (${conclusion}), `
+        + `while line ${absent.line} states that the direct comparison behind such a conclusion was not found (${absent.text}). `
+        + "A mechanism that acts on one arm is not evidence about the other, and an arm never tested for it is untested rather than immune. "
+        + "Write the chain out one link per line in 讨论, each marked 已建立 or 未建立 with the evidence or the missing study behind the mark "
+        + "(该变异在目标人群中常见 / 携带者对 A 的反应降低 / B 不经该通路 / 低反应者改用 B 后结局更好 / B 可在该场景替代 A), "
+        + "and stop the conclusion at the last established link: 该差异提示院外用药效果可能存在显著个体差异，另一药具有不同的组成与证据路径，"
+        + "其在该亚群中的相对价值仍需直接临床研究验证。",
+      );
+      break;
+    }
+  }
+  return issues;
+}
+
 // A CSV record is not a line: a quoted support quote may hold commas, doubled
 // quotes, and newlines, and the ledger is written by a csv writer that quotes
 // exactly that way. Counting lines therefore counted the wrong thing.
@@ -1336,6 +1526,7 @@ export function validateClinicalEvidencePackage({
     );
   }
   issues.push(...manuscriptRegisterIssues(reportText));
+  issues.push(...comparativeStructureIssues(reportText));
   if (/\[claim:CLM-[0-9]{3,6}[^\]]+\]/.test(reportText ?? "")) {
     issues.push("Each claim marker must contain exactly one claim ID.");
   }

@@ -242,7 +242,17 @@ export async function directorySize(rootDir, options = {}) {
         entriesSeen += 1;
         assertProjectScanCapacity(entriesSeen, maxEntries);
         const full = path.join(dir, entry.name);
-        const stat = await fs.lstat(path.join(opened.path, entry.name));
+        // A file that vanished between readdir and lstat is a live workspace,
+        // not a fault. The directory case was already tolerated and the file
+        // case was not, so a run deleting its own scratch file while the quota
+        // monitor happened to be walking raised a raw ENOENT — which is not an
+        // HttpError, so it fell through to "the check itself failed" and the
+        // guard stopped the runtime. Seventeen queued analyses never ran.
+        const stat = await fs.lstat(path.join(opened.path, entry.name)).catch((err) => {
+          if (err?.code === "ENOENT") return null;
+          throw err;
+        });
+        if (!stat) continue;
         if (stat.isDirectory()) {
           await walkDir(full);
         } else if (stat.isFile()) {

@@ -240,7 +240,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.4.0",
+      effectiveAgentVersion: "2.5.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
 
@@ -286,8 +286,10 @@ test("the ledger records why each run was routed where it was", async () => {
     for (const id of ["ses_reason_regex", "ses_reason_llm", "ses_reason_answer"]) {
       assert.equal((await bind(base, id, { mode: "open-domain" })).status, 200);
     }
+    // The classifier answers first now, so its confidence is the reason on a
+    // route it made; the regex reason appears only where it acted as the net.
     const regex = await dispatchRun(base, "ses_reason_regex", "turn_reason_regex", "分析奥希替尼的 FAERS 药物警戒信号");
-    assert.equal(regex.body.data.effectiveRouteReason, "matched:adr-analysis");
+    assert.equal(regex.body.data.effectiveRouteReason, "llm:0.91");
 
     const classified = await dispatchRun(
       base,
@@ -306,7 +308,7 @@ test("the ledger records why each run was routed where it was", async () => {
     // It survives a reload: the reason is in the ledger, not only in the response.
     const listed = await listRuns(base);
     const reasons = new Map(listed.body.data.map((run) => [run.dispatchId, run.effectiveRouteReason]));
-    assert.equal(reasons.get("turn_reason_regex"), "matched:adr-analysis");
+    assert.equal(reasons.get("turn_reason_regex"), "llm:0.91");
     assert.equal(reasons.get("turn_reason_llm"), "llm:0.91");
     assert.equal(reasons.get("turn_reason_answer"), "unrouted:open-domain");
   }, {
@@ -317,40 +319,83 @@ test("the ledger records why each run was routed where it was", async () => {
   });
 });
 
-test("LLM routing augments but never overrides the deterministic router", async () => {
+test("the classifier decides and the regex is the net under it", async () => {
+  // The old order was regex-first, and a rule that matched ended the decision.
+  // Six real requests for a clinical evidence review went elsewhere because
+  // they mentioned meta-analyses, adverse reactions or a dataset — the
+  // classifier was never asked. Now the model decides; the regex may only add a
+  // route the model declined to make.
   const calls = [];
-  const specialistClassifierFetch = async (_url, _init) => {
-    calls.push(1);
+  const specialistClassifierFetch = async (_url, init) => {
+    calls.push(String(init?.body ?? ""));
+    // A brief that discusses published meta-analyses is a literature appraisal,
+    // and the classifier is the one able to tell that from a request to run a
+    // new meta-analysis. It answers "none" for the second query below.
+    const declines = calls.at(-1).includes("奥希替尼");
     return {
       ok: true,
       headers: { get: () => null },
       text: async () => JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({ agentId: "meta-analysis", confidence: 0.95 }) } }],
+        choices: [{
+          message: {
+            content: JSON.stringify(declines
+              ? { agentId: "none", confidence: 0.9 }
+              : { agentId: "meta-analysis", confidence: 0.95 }),
+          },
+        }],
       }),
     };
   };
   await withApp(async ({ base }) => {
-    await bind(base, "ses_llm_a", { mode: "open-domain" });
-    await bind(base, "ses_llm_b", { mode: "open-domain" });
-    // A deterministic regex match must not consult the LLM at all.
-    const deterministic = await dispatchRun(
-      base,
-      "ses_llm_a",
-      "turn_llm_a",
-      "分析奥希替尼的 FAERS 药物警戒信号",
-    );
-    assert.equal(deterministic.body.data.effectiveAgentId, "adr-analysis");
-    assert.equal(calls.length, 0);
-    // A query the regex does not match falls through to the LLM classifier.
+    for (const id of ["ses_llm_a", "ses_llm_b"]) await bind(base, id, { mode: "open-domain" });
+
+    // The classifier is consulted even where a regex rule would have matched.
+    const netted = await dispatchRun(base, "ses_llm_a", "turn_llm_a", "分析奥希替尼的 FAERS 药物警戒信号");
+    assert.equal(calls.length, 1, "the model was asked first");
+    // Having declined, the safety net still delivers the specialty route.
+    assert.equal(netted.body.data.effectiveAgentId, "adr-analysis");
+    assert.equal(netted.body.data.effectiveRouteReason, "matched:adr-analysis");
+
     const classified = await dispatchRun(
       base,
       "ses_llm_b",
       "turn_llm_b",
       "帮我把这个研究方向整理成一个可执行的分析计划",
     );
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, 2);
     assert.equal(classified.body.data.effectiveAgentId, "meta-analysis");
-    assert.equal(classified.body.data.effectiveRuntimeAgent, "evimed-meta-analysis");
+    assert.equal(classified.body.data.effectiveRouteReason, "llm:0.95");
+  }, {
+    llmRoutingEnabled: true,
+    deepseekProviderEnabled: true,
+    deepseekApiKey: "sk-test",
+    specialistClassifierFetch,
+  });
+});
+
+test("naming the package outranks the classifier, because it is an instruction", async () => {
+  let asked = 0;
+  const specialistClassifierFetch = async () => {
+    asked += 1;
+    return {
+      ok: true,
+      headers: { get: () => null },
+      text: async () => JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({ agentId: "meta-analysis", confidence: 0.99 }) } }],
+      }),
+    };
+  };
+  await withApp(async ({ base }) => {
+    await bind(base, "ses_named", { mode: "open-domain" });
+    const named = await dispatchRun(
+      base,
+      "ses_named",
+      "turn_named",
+      "请按 adr-analysis 出一份分析报告",
+    );
+    assert.equal(named.body.data.effectiveAgentId, "adr-analysis");
+    assert.equal(named.body.data.effectiveRouteReason, "matched:named:adr-analysis");
+    assert.equal(asked, 0, "an explicit name needs no classification");
   }, {
     llmRoutingEnabled: true,
     deepseekProviderEnabled: true,

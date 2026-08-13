@@ -66,6 +66,16 @@ const classifierInstructions = [
   "Choose only from the supplied specialists by their exact id. If none clearly fits, or the message is generic conversation, small talk, or a non-research request, return agentId \"none\".",
   "Every specialist in the catalog produces a heavy deliverable (a report, analysis package, or evaluation). Route only when the user actually wants that deliverable — a plain clinical or scientific QUESTION (mechanism, efficacy, safety, definition, dosing) stays open-domain even when it mentions a drug, disease, or symptom.",
   "In particular, choose a clinical evidence synthesis agent only when the user explicitly asks for a report, systematic review, or deep evidence analysis.",
+  // Topic words are the wrong signal, and they are the loudest one. Six real
+  // requests for a clinical evidence review were routed away from it because
+  // they mentioned what the review would have to discuss: briefs that said
+  // "existing meta-analyses report..." went to the meta-analysis pipeline,
+  // briefs asking whether an adverse reaction is attributable went to
+  // pharmacovigilance, and a brief mentioning a dataset went to dataset
+  // scoping. Each produced a deliverable nobody asked for.
+  "Decide by the DELIVERABLE the request commissions, never by the topics it mentions. A request that asks you to appraise what published meta-analyses show is a literature appraisal, not a request to run a new meta-analysis. A request that asks whether a reported adverse reaction can be attributed to a drug is an evidence question, not a request for a disproportionality signal analysis. Mentioning a data source is not the same as supplying one.",
+  "Refuse any specialist whose requiredInputs the request does not actually supply. A specialist that requires a dataset must not be chosen when the user has described data rather than provided it; a specialist that requires a defined PICO must not be chosen when the request is an open appraisal question.",
+  "The starterPrompts show what a request that belongs to a specialist looks like. If the request does not resemble any of them in KIND — not in vocabulary — that specialist is the wrong one.",
   "Never invent an id. Prefer \"none\" over a weak guess.",
   "Return JSON only: {\"agentId\": \"<id or none>\", \"confidence\": <0..1>}. Confidence is your calibrated probability that this specialist is the correct handler.",
 ].join(" ");
@@ -99,10 +109,16 @@ export class SpecialistClassifier {
     if (typeof query !== "string" || !query.trim()) return null;
     if (!Array.isArray(agents) || agents.length === 0) return null;
     const byId = new Map(agents.map((agent) => [agent.id, agent]));
+    // The catalog was an id, a title, and a third of a description — enough to
+    // match a topic and not enough to tell one deliverable from another. What
+    // separates these agents is what they produce, what a request that belongs
+    // to them looks like, and what they need supplied before they can run.
     const catalog = agents.map((agent) => ({
       id: agent.id,
       title: typeof agent.title === "string" ? agent.title : agent.id,
-      description: typeof agent.description === "string" ? agent.description.slice(0, 300) : "",
+      produces: typeof agent.description === "string" ? agent.description : "",
+      requiredInputs: Array.isArray(agent.requiredInputs) ? agent.requiredInputs : [],
+      requestsThatBelongHere: Array.isArray(agent.starterPrompts) ? agent.starterPrompts.slice(0, 4) : [],
     }));
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
