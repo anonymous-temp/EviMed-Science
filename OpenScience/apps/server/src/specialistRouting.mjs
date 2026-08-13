@@ -21,13 +21,33 @@ function loadClinicalRoutingPattern() {
 
 const clinicalRoutingMedicinePattern = loadClinicalRoutingPattern();
 
+// A specialty term appearing in a request is not a request for that specialty.
+// Every one of these rules fires on the vocabulary a *review of that field*
+// necessarily uses: an evidence appraisal of a drug's long-term safety says
+// 不良反应 and 药物警戒, one about an unapproved indication says 超说明书, one
+// weighing published syntheses says 荟萃分析. Six of thirty-three briefs
+// commissioning a clinical evidence review were routed away from it on exactly
+// these words, and produced deliverables nobody asked for.
+//
+// So a rule only fires when the request asks for that specialty's own
+// deliverable — the term together with a verb of commissioning — and the
+// classifier, which can read intent, decides everything else. This is the net
+// under the model, not a competing router.
+// Widening this list pulled a brief back into the wrong pipeline; narrowing it
+// dropped a real commission. That trade has no settling point, because the
+// distinction is between commissioning a deliverable and discussing the field
+// it belongs to, and no list of verbs encodes it. That is precisely the
+// judgement the classifier makes, so the net below no longer tries to make it
+// for the topical specialties — it fires on the terms a request uses when it
+// asks for that specialty's own artefact by name.
+const commissioningVerb = "(?:做|作|开展|进行|执行|完成|跑|出|写|撰写|生成|产出|给我|帮我|请|需要|评估|评价|conduct|run|perform|generate|produce|assess|evaluate)";
 const routeRules = Object.freeze([
-  ["adr-analysis", /(?:药物警戒|(?:药物|药品)安全性(?:信号)?分析|不良(?:反应|事件).{0,4}(?:信号|监测)|\bfaers\b|\bopenfda\b|(?:\bROR\b|\bPRR\b|\bEBGM\b).{0,20}(?:信号|不良|disproportional)|pharmacovigilance|disproportionality analysis)/i],
+  ["adr-analysis", new RegExp(`${commissioningVerb}[^。；;!?、，,\n]{0,16}(?:药物警戒|(?:药物|药品)安全性(?:信号)?分析|不良(?:反应|事件)[^。；;!?\n]{0,4}(?:信号|监测)|\\bfaers\\b|\\bopenfda\\b|pharmacovigilance|disproportionality analysis)|(?:药物警戒|\\bfaers\\b|\\bopenfda\\b|disproportionality)[^。；;!?\n]{0,12}(?:信号|分析报告|信号分析|评价报告)|(?:\\bROR\\b|\\bPRR\\b|\\bEBGM\\b)[^。；;!?\n]{0,20}(?:信号|disproportional)`, "i")],
   ["bibliometric-analysis", /(?:文献计量|科学计量|citespace|vosviewer|bibliometric)/i],
   ["comprehensive-drug-evaluation", /(?:药品综合评价|药物综合评价|综合评价.{0,20}(?:药|临床价值)|comprehensive drug evaluation)/i],
   ["drug-selection", /(?:药品遴选|药物遴选|院内目录.{0,12}(?:选择|评分)|formulary.{0,12}(?:selection|decision))/i],
   ["mendelian-randomization", /(?:孟德尔随机化|mendelian randomi[sz]ation|\btwo[- ]sample mr\b)/i],
-  ["off-label-analysis", /(?:超说明书|说明书外用药|off[- ]label)/i],
+  ["off-label-analysis", new RegExp(`${commissioningVerb}[^。；;!?、，,\n]{0,16}(?:超说明书|说明书外用药|off[- ]label)|(?:超说明书|说明书外用药|off[- ]label)[^。；;!?\n]{0,12}(?:证据(?:评价|报告)|分析报告|评估报告)`, "i")],
   ["peer-review", /(?:论文审稿|同行评审|审查.{0,12}(?:论文|稿件)|peer review.{0,20}(?:paper|manuscript))/i],
   ["research-topic-selection", /(?:科研选题|研究选题|选题设计|research topic selection)/i],
 ]);
@@ -45,7 +65,20 @@ const routeRules = Object.freeze([
 // The possessive and the data word are rarely adjacent — "我手上有一份住院数据"
 // puts five characters between them — so a bounded gap is allowed, stopping at
 // a sentence boundary so two unrelated clauses cannot combine into a match.
-const datasetSubject = /(?:(?:上传|我的|我们的|手上|手里|现有|已有|这份|那份|本院|院内|自己的)[^。；;!?\n]{0,12}?(?:数据集?|数据库|数据表|资料|表格)|数据集|数据抽取|抽取数据|数据导出|\.(?:xlsx?|csv|tsv|parquet)\b|dataset|data\s?set|data\s+extract)/i;
+// Every alternative here must mean "data the researcher is holding". Bare
+// 数据集 / 数据库 / 资料 do not: a brief that says 中文全文数据库（CNKI、万方等）
+// 无法访问, or names its own 资料与方法 section, was routed to dataset scoping
+// and failed for want of deliverables it was never asked to produce. A word
+// that appears in the methods section of every clinical paper cannot be the
+// evidence that someone uploaded a file, so possession has to be stated —
+// 上传/我的/手上/本院 — or the object has to be a file.
+// 资料 is out of the possessable set for the same reason: 现有资料只能"提示"某种
+// 关联 is how an evidence appraisal states its own limits, and it matched
+// 现有 + 资料 exactly. What survives here has to be a thing with rows.
+// 数据 alone is back, but only behind a possessive that means someone handed it
+// over — 上传/我的/手上/本院 — never behind 现有/已有, which is how a paper
+// describes the literature it found rather than a file it holds.
+const datasetSubject = /(?:(?:上传|我的|我们的|手上|手里|这份|那份|本院|院内|自己的)[^。；;!?\n]{0,12}?(?:数据集?|数据库|数据表|表格)|(?:现有|已有)[^。；;!?\n]{0,12}?(?:数据集|数据表|表格)|数据抽取|抽取数据|数据导出|\.(?:xlsx?|csv|tsv|parquet)\b|uploaded\s+(?:hospital\s+)?(?:data|dataset)|data\s+extract)/i;
 // The last clause is the model case, and it was missing. "这份数据能不能支撑一个
 // 个体化用药的预测模型" is the same question — what will this data carry — but
 // its object is a model rather than a 研究 or 课题, so the enumeration above did
@@ -75,7 +108,18 @@ const clinicalSubject = /(?:胸痛|胸口|心绞痛|急性冠脉|冠心病|胃�
 // Questions that merely contain 分析 or 研究 without asking for a document are
 // unaffected, which the routing tests hold.
 const explicitReportIntent = /(?:证据报告|证据综合|循证.{0,6}报告|综合.{0,6}证据.{0,4}报告|出一份|写一份|撰写|(?:生成|整理|写出|给我|出具|提供|输出|形成|产出|完成).{0,16}(?:报告|综述)|(?:分析|研究|评估|可行性|调研|论证|总结)报告|深度(?:研究|调研|报告)|systematic review|evidence report|evidence synthesis|clinical evidence report)/i;
-const positiveMetaIntent = /(?:(?:开展|进行|执行|完成|做|conduct|run).{0,24}(?:meta\s*分析|荟萃分析|系统评价|systematic review|meta-analysis)|(?:meta\s*分析|荟萃分析|systematic review|meta-analysis).{0,24}(?:开展|进行|执行|完成|研究|分析))/i;
+// Commissioning one, not citing one. The trailing half used to match any
+// mention followed by 分析 or 研究 within 24 characters, which is how
+// "优先采用大样本前瞻队列、注册登记及其 meta 分析" and "现有网络 meta 分析……
+// 表现如何" — both appraising published syntheses, in briefs asking for a
+// clinical evidence review — were routed to the meta-analysis pipeline. The
+// distinction is exactly the one the classifier is told to make; a pattern that
+// cannot make it should not try.
+// The verb and the object are rarely adjacent — 开展降压药对卒中结局的 meta 分析
+// puts a whole PICO between them — so a bounded gap is allowed. What is not
+// allowed is the reverse order without a commissioning word, which is how a
+// citation reads: 现有网络 meta 分析在传递性上表现如何.
+const positiveMetaIntent = /(?:(?:开展|进行|执行|完成|做|跑|conduct|run|perform)[^。；;!?\n]{0,24}?(?:meta\s*分析|荟萃分析|系统评价|systematic review|meta-analysis)|(?:meta\s*分析|荟萃分析|systematic review|meta-analysis)\s*(?:的)?\s*(?:任务|作业|流水线|pipeline|job))/i;
 const negatedMetaIntent = /(?:不要|不得|无需|不需要|避免|别|禁止|not|without).{0,48}(?:meta\s*分析|荟萃分析|系统评价|systematic review|meta-analysis)/i;
 
 function selection(agent, reason) {

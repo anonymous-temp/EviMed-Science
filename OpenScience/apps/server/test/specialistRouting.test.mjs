@@ -174,3 +174,47 @@ test("a dataset in hand outranks the review vocabulary", async () => {
   );
 });
 
+// The net fires on the vocabulary a field's own review necessarily uses, and
+// that is how six of thirty-three briefs commissioning a clinical evidence
+// review ended up in the meta-analysis, pharmacovigilance, off-label and
+// dataset-scoping pipelines, each producing a deliverable nobody asked for.
+// Every sentence below is lifted from one of those briefs.
+test("a review that discusses a specialty is not a request for it", async () => {
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+  const discussing = [
+    // Appraising published syntheses, not commissioning one.
+    "事件的昼夜分布优先采用大样本前瞻队列、注册登记及其 meta 分析，并说明混杂控制方式",
+    "现有网络 meta 分析或其他间接比较在传递性、一致性上表现如何",
+    // Asking whether pharmacovigilance evidence exists, not asking for a signal run.
+    "有无毒理学研究、不良反应监测记录或可定位的病例报告作为支撑",
+    // An enumeration inside a search-scope sentence, where a verb and a
+    // specialty term sit either side of a comma.
+    "国内外指南索引（含胸痛评估、医疗机构用药与超说明书用药相关规范文件）及临床试验注册库",
+    // The methods section of every clinical paper names databases and 资料.
+    "中文全文数据库（CNKI、万方等）无法访问，中文文献仅能通过国际数据库的收录部分获得",
+    "证据不足时结论须相应降级表述：现有资料只能\"提示\"某种关联",
+  ];
+  for (const query of discussing) {
+    const routed = routeOpenDomainSpecialist(query, agents);
+    assert.equal(
+      routed?.agentId ?? null,
+      null,
+      `the net claimed ${routed?.agentId} for a sentence that only discusses the field: ${query}`,
+    );
+  }
+});
+
+test("asking for a specialty's own deliverable still reaches it", async () => {
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+  const commissioning = [
+    ["开展降压药对卒中结局的 meta 分析", "meta-analysis"],
+    ["帮我做不良事件信号监测", "adr-analysis"],
+    ["分析奥希替尼的 FAERS 药物警戒信号", "adr-analysis"],
+    ["评估某药超说明书用于儿童感染的证据", "off-label-analysis"],
+    ["我上传了一份住院数据，能做哪些科学性研究？", "dataset-research-scoping"],
+    ["帮我做一篇论文审稿", "peer-review"],
+  ];
+  for (const [query, expected] of commissioning) {
+    assert.equal(routeOpenDomainSpecialist(query, agents)?.agentId, expected, query);
+  }
+});
