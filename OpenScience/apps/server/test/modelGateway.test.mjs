@@ -216,6 +216,51 @@ test("model gateway preserves streaming response content type and chunks", async
   assert.equal(await response.text(), "data: {\"id\":1}\n\ndata: [DONE]\n\n");
 });
 
+// The deadline used to be total time, armed before the request and left running
+// through the response, so a reasoning turn that streamed steadily for longer
+// than the limit was cut off while it was working — and because the abort lands
+// after writeHead(200), the caller saw a truncated stream with no status and no
+// log line. One measured production run spent 68 of its 87 minutes re-issuing
+// calls that had been killed mid-answer.
+//
+// The limit is idle time now: a stream still delivering is not a stalled one.
+test("a stream that keeps delivering outlives the idle deadline", async (t) => {
+  const idleMs = 120;
+  const upstream = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8" });
+    // Six chunks, each well inside the idle window, together far beyond it.
+    let sent = 0;
+    const tick = () => {
+      sent += 1;
+      if (sent > 6) {
+        res.end("data: [DONE]\n\n");
+        return;
+      }
+      res.write(`data: {"i":${sent}}\n\n`);
+      setTimeout(tick, idleMs / 2);
+    };
+    tick();
+  });
+  const upstreamBase = await listen(upstream);
+  t.after(() => close(upstream));
+  const gateway = createServer(
+    createModelGatewayHandler({ ...config(upstreamBase), modelGatewayTimeoutMs: idleMs }, runtimeManager()),
+  );
+  const gatewayBase = await listen(gateway);
+  t.after(() => close(gateway));
+
+  const response = await fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "stream" }], stream: true }),
+  });
+  assert.equal(response.status, 200);
+  const text = await response.text();
+  assert.match(text, /data: \[DONE\]/, "the stream completed instead of being aborted mid-answer");
+  assert.equal((text.match(/data: \{"i":/g) ?? []).length, 6, "every chunk arrived");
+});
+
 test("model gateway rejects stale tokens, unknown fields, and oversized collections without leaking secrets", async (t) => {
   let calls = 0;
   const upstream = createServer((_req, res) => {

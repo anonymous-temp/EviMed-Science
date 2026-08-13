@@ -826,6 +826,197 @@ it is addressed to.
 - 反例（把工作流程当小标题）：`### 角度一：说明书适应症边界（命题 A）`、`**该角度确立了什么、不能确立什么**`
   正例：`### 说明书适应症边界`，其下以正文写明：`上述记载一致显示适应症限于气滞血瘀型冠心病心绞痛；但均为期刊转述，官方现行文本未获核验，因此尚不能据此判断该场景是否被覆盖。`
 
+## Prose: written once, not repaired afterwards
+
+A manuscript assembled section by section reads like one — paragraphs of the
+same length, every one opening the same way, transitions that announce what the
+next sentence will do. That used to be repaired at the end, by a full
+`manuscript-humanize` pass over the finished report. Repairing it afterwards
+costs three things that writing it correctly the first time costs none of:
+
+- **A finished report may not be rewritten whole.** Every whole-file
+  regeneration measured in this project lost text — one shed 1,863 characters,
+  the next 4,125 — so the repair pass is restricted to passage-by-passage edits,
+  and a report has many passages.
+- **Every rewritten passage must be re-checked against the protected set**:
+  support quotes, numerals, citation indices, `<!-- claim:CLM-NNN -->`,
+  `〔推导〕`, the headings, and the hedges that carry evidence strength. A
+  sentence written correctly the first time never needs that check.
+- **It is charged to the run.** In an 87-minute run the finishing pass took a
+  visible share of the clock, spent restating sentences that could have been
+  written this way once.
+
+The rules below are the `humanizer` and `humanizer-zh` patterns converted from
+"see X, change it to Y" into "write Y". They govern the analyst's own prose
+only: quotations, numerals, citations, claim markers, `〔推导〕`, headings, and
+the reference list are evidence, and nothing here applies to them. Where a rule
+here meets an evidence, citation, safety, or register rule above, the rule above
+wins — no sentence becomes less accurate because it reads better.
+
+### 1. State what the evidence shows, then stop
+
+Importance in an evidence report is a quantity — an effect size, a share of the
+population, a decision that changes — never an adjective. Do not write that a
+finding `具有重要的临床意义`, `为……奠定了基础`, `填补了空白`, `疗效确切`,
+`安全有效`, `独具优势`, or `前景广阔`; write the number that would make a reader
+think so. The same holds at the close: `讨论` and `结论` end on the answer, or on
+the study that would settle the question ("Absent evidence is a gap, not a
+counter-finding"), never on `值得进一步研究`／`为临床实践提供了参考`.
+
+- 反例：`该研究首次揭示了 ALDH2 基因型对硝酸甘油反应的影响，具有重要的临床意义，为个体化用药奠定了基础。`
+  为什么是反例：`重要的临床意义` 与 `奠定了基础` 没有可核对的内容，也无法承载引文与 claim 标记；读者要判断的"重要到哪一步"恰恰被这两句挡住。
+  正例：`ALDH2 rs671 携带者含服硝酸甘油后的心绞痛缓解率为 50.6%，野生型为 79.4% [9]；中国汉族携带率为 45% 至 49% [8]，该差异涉及接近半数的目标人群。`
+
+### 2. A verb names a direction and a size
+
+`发挥重要作用`, `产生积极影响`, `具有良好效果` hide what changed and by how much.
+Write the outcome, the direction, and the magnitude, and use the plain verb
+(`降低`, `缩短`, `未改变`, `是`, `未检索到`). A sentence also ends at its finding:
+a trailing `，体现了……`／`，凸显了……`／`，为……提供了依据` is either a separate
+proposition — then write it as its own sentence with its own citation and claim
+marker — or it is decoration, and decoration is deleted.
+
+- 反例：`硝酸甘油在心绞痛急救中发挥着重要作用，体现了其不可替代的临床地位。`
+  为什么是反例：`发挥重要作用` 不说明是缓解症状还是降低事件率，也不说明幅度；`体现了……地位` 是给上一句加的尾巴，本身不是命题，给不出引文。
+  正例：`舌下含服硝酸甘油可在 1 至 3 分钟内缓解已确诊心绞痛发作的症状 [2]；未检索到其降低急性冠脉事件发生率的证据。`
+
+### 3. Name the study, not `研究表明`
+
+`研究表明`, `大量研究证实`, `有报道称`, `专家认为`, `业内普遍认为` attribute a
+finding to nobody. Name the design, the population, the size, and the numbered
+citation — those are what a reader appraises. Plural is part of the attribution:
+one paper cited three times is one study ("Synthesized (cross-source) claims").
+
+- 反例：`研究表明速效救心丸对冠心病心绞痛有效；也有专家认为其可用于院外急救。`
+  为什么是反例：无主体的"研究"承担不了确定性——读者无法分辨这是随机对照试验还是无对照病例系列，而两者在本文的评价标准里相差数级；`专家认为` 更是把一个无出处的意见写成了证据。
+  正例：`一项纳入 120 例气滞血瘀型冠心病心绞痛患者的随机对照试验报告用药组发作频次下降，样本量小、盲法与分配隐藏报告不全 [11]。未检索到以院外急救为场景的研究。`
+
+### 4. One name per thing, all the way through
+
+Synonym cycling is a style habit in ordinary prose and an accuracy defect here:
+`有效率`, `缓解率`, and `改善率` are three endpoints, and alternating them
+silently changes what was measured. Fix one name for each drug, endpoint,
+population, scale, and setting at the first mention and keep it in every section,
+table cell, and abstract line. Vary sentence structure instead; never vary a
+term.
+
+- 反例：`该药可改善心绞痛症状……本品的有效率为 76%……这一制剂的缓解率优于对照组。`
+  为什么是反例：三个名字读起来像三种药；`有效率` 与 `缓解率` 在原文中是两个终点，换词把终点也一起换掉了，而引文仍指向同一处。
+  正例：`速效救心丸组的心绞痛缓解率为 76%，对照组为 58% [11]。另一项试验报告速效救心丸组的缓解率为 68% [12]，两项试验的缓解率均以含服后 5 分钟内症状消失为判定标准。`
+
+### 5. One hedge, and it comes from the appraisal
+
+**This is the exception to the upstream rules, and the one that does harm if
+missed.** `humanizer`/`humanizer-zh` treat hedging as an AI tell to be deleted.
+In an evidence report, the `可能` in front of a conclusion resting on a single
+small unblinded trial **is the conclusion**; deleting it reports low-certainty
+evidence as a finding, which is fabrication, not editing. Choose the hedge from
+that claim's `uncertainty` and its GRADE level, write it once, and then give the
+reason for the grade rather than a second hedge. What the upstream rule does
+legitimately catch is the *stack* — four hedges in one sentence report no
+certainty level at all.
+
+- 反例（把低确定性写成结论）：`速效救心丸可缓解心绞痛发作。`（其支撑仅为一项小样本、盲法报告不全的随机对照试验）
+  为什么是反例：删去对冲不是把句子写得有力，而是把一项低确定性证据报成确定结论。
+- 反例（对冲叠加，等于没有评价）：`该药可能在一定程度上或许具有某种潜在的缓解作用。`
+  为什么是反例：四重对冲之后读者仍不知道确定性是低还是极低；对冲的功能是传达等级，叠加则把等级抹掉。
+  正例：`该试验提示速效救心丸可缓解气滞血瘀型冠心病心绞痛的发作，因样本量小与盲法报告不全，按 GRADE 为低确定性 [11]。`
+
+### 6. The number of items comes from the evidence
+
+Two items are fine, four are fine. Do not pad a list to three for balance, and
+do not drop a fourth item to make the sentence scan. Every item in an enumeration
+must be able to carry its own citation; an item that cannot is an advertisement.
+
+- 反例：`该药具有起效快、疗效确切、使用方便三大优势。`
+  为什么是反例：三项里只有起效时间有测量值 [2]，另两项没有可引的来源；凑成三项是为了句子整齐，不是为了内容。
+  正例：`该药舌下含服后 1 至 3 分钟起效 [2]；未检索到以给药便利性或患者依从性为结局的研究。`
+
+### 7. No escalation the evidence does not make
+
+`不仅……而且……`, `不仅仅是……更是……` assert that the second clause is the
+stronger case. In an evidence report the two clauses are almost always two
+endpoints with two different evidence bases, and the structure lends the first
+one's certainty to the second. Write them as separate sentences, each with its
+own evidence or its own gap.
+
+- 反例：`该药不仅能缓解症状，而且能改善预后。`
+  为什么是反例：症状缓解与预后是两个终点、两套证据；递进句式让"改善预后"借用了前半句的确定性，而本文并未检索到以主要心血管事件为结局的研究。
+  正例：`该药可缓解已确诊心绞痛发作的症状 [2]。未检索到以 30 天主要心血管事件为结局的研究，其对预后的影响不能由症状缓解推出。`
+
+### 8. A connective states a relation, or it goes
+
+Keep the connectives that carry logic — `因此`, `但`, `与之相反`, `据此`,
+`在此基础上` — where the relation they name actually holds. Do not write
+`此外`, `值得注意的是`, `不容忽视的是`, `总的来说`, `众所周知`,
+`随着……的不断发展` as pauses. `综上所述` belongs at most once, where a summary
+genuinely follows. A heading is not restated by the sentence under it either:
+the first sentence after `### 安全性与禁忌` begins reporting safety findings.
+
+- 反例：`此外，值得注意的是，该药的不良反应同样需要关注。综上所述，需要指出的是，现有证据仍不充分。`
+  为什么是反例：`此外` 之后不是并列，`值得注意的是` 没说出为什么值得注意，`综上所述` 之后不是对上文的归纳——三个连接词都只起了停顿作用，删去后信息量不变。
+  正例：`该药说明书列有头晕与心悸，但无分母，发生率未知 [7]；因此不能与硝酸甘油的低血压风险按同一量级比较。`
+
+### 9. Paragraph length and openings follow the content
+
+A paragraph is as long as its evidence. An endpoint supported by one 32-example
+observational study cannot fill the same space as one with four trials and a
+dose-response gradient, so do not split a long finding to balance the page or
+merge two short ones to fill it. Consecutive paragraphs must not open on the
+same template — three paragraphs beginning `关于两药的……证据，` or five
+beginning `研究显示` are the signature of section-by-section assembly — and the
+opening clause states that paragraph's finding rather than announcing its topic.
+Bullet lists whose items begin with a bolded lead-in (`- **人群差异：** ……`) are
+slide notes; structured comparison belongs in the axis table ("Fix the comparison
+axes before filling them") and argument belongs in prose.
+
+The apparatus is exempt: tables, the reference list, and the action items in
+`临床实践要点` are uniform by design, and evening out prose is never a reason to
+shorten a safety instruction ("Symmetry never softens a safety statement").
+
+- 反例：`结果` 一节六段，每段 4 句、180 至 200 字，依次以 `关于两药的急性期证据，`／`关于两药的长期证据，`／`关于两药的安全性，` 开头。
+  为什么是反例：六个证据基础不可能恰好等长，等长说明是按模板配额填充的；重复的段首把论证读成了目录。
+  正例：`两药在急性按需使用上的证据不在同一维度：硝酸甘油……`（两句，因该终点只有一项研究）；下一段 `长期治疗的证据方向相反。`（十句，含逐项数值比较与外推限制）。
+
+### What the humanizer rules do not govern here
+
+Loading `manuscript-humanize` also loads the upstream rules. Several of them are
+written for blog posts and encyclopedia articles and would damage an evidence
+report, so they do not apply, and this is why:
+
+- **对冲措辞一律删除** (`humanizer-zh` §23 过度限定, `humanizer` §24) — excluded
+  except for stacked hedges, per rule 5 above. A hedge that matches the
+  certainty grade is a finding.
+- **注入个性与灵魂** (`humanizer-zh` 个性与灵魂: 第一人称、观点、幽默、跑题、
+  "允许一些混乱") — excluded entirely. `humanizer` itself exempts encyclopedic,
+  technical, and reference text, where plain and impersonal *is* the human voice;
+  and `我一直在想…` in a clinical report is the first-person retrieval diary this
+  skill already bans ("Self-referential meta-narration").
+- **被动语态与无主语句改为主动** (`humanizer` §13) — excluded in `资料与方法`,
+  which is required to be impersonal, reproducible, past-tense methods prose
+  (`检索了 PubMed 与……，纳入标准为……`). It applies elsewhere only where the
+  actor is a named study or author, never where the actor would be the analyst.
+- **短句制造节奏** (`humanizer-zh` 变化节奏, `humanizer` §31) — transformed:
+  length varies because the content varies, not for effect. A run of clipped
+  declarative sentences is itself a tell, and in a report it reads as assertion
+  without evidence.
+- **破折号一律删除** (`humanizer` §14) — dropped as a hard rule. It is a weak tell
+  in Chinese medical prose, and rewriting sentences to remove punctuation moves
+  citation indices and claim markers relative to the clauses they support, which
+  is the exact damage the protected set exists to prevent. Keep only: no
+  破折号 used to set up a dramatic reveal.
+- **自评打分表** (`humanizer-zh` 质量评分 1 至 10 分, 总分 50) — dropped. Scoring
+  your own output against a scale you invented is the acceptance-specification
+  register this skill forbids; see "自制标尺" in "Acceptance-specification
+  register".
+- **知名度与媒体报道** (`humanizer` §2) — transformed into an appraisal rule:
+  `发表于顶级期刊`, `被多部指南推荐`, `临床广泛应用` are prestige, not certainty,
+  and none of them substitutes for a grade ("One ruler for every arm").
+- English-only mechanics — title case, hyphenated word pairs, curly quotes — do
+  not arise in a Chinese manuscript. Emoji, sycophancy, chat artifacts, and
+  knowledge-cutoff disclaimers are already refused by "Register: what a
+  manuscript never says" and by the `未检索到` rule.
+
 ## Safety boundaries
 
 These hold for any question where a reader might act on the answer:
@@ -951,18 +1142,91 @@ reports one arm appraised with the language of clinical tradition while another'
 certainty is graded — see "One ruler for every arm", where the asymmetry is
 almost always accidental and is a methodological defect all the same.
 
-Once the preflight is clean, make one editing pass over the report with the
-`manuscript-humanize` companion skill. A report assembled section by section
-reads like one: paragraphs of the same length, every one opening the same way,
-transitions that announce what the next sentence will do. The pass rewrites that
-prose and nothing else — quotations, numbers, citation indices, claim markers,
-`〔推导〕`, the section headings and the hedges that carry evidence strength are
-fixed points, and its `verify_preserved.py` proves afterwards that they did not
-move. Hedging is the case worth understanding: a `可能` in front of a claim
-resting on one small trial is the finding, not weak writing, and sharpening it
-is fabrication.
+### Finishing: check the prose mechanically, do not rewrite it
 
-Then run the preflight once more, because prose edits can still break a
-section-level rule.
+The report was written under "Prose: written once, not repaired afterwards", so
+by the time the preflight is clean the prose is finished, not a draft awaiting a
+rewrite. **The closing step is a self-check, not a reread**, and the point of
+having written the rules into the drafting stage is that this step usually
+changes nothing.
+
+1. Print the shape of the prose. This prints one short line per paragraph and a
+   count per watched phrase, so a long Markdown line cannot flood the tool
+   output — which is why `grep` is forbidden on the report and this is not:
+
+```bash
+python - <<'PY'
+import pathlib, re
+text = re.sub(r"<!--.*?-->", "", pathlib.Path("clinical-evidence-report.md").read_text(encoding="utf-8"))
+section, buf, rows = "", [], []
+def flush():
+    p = "".join(buf).strip()
+    buf.clear()
+    if p and p[0] not in "|>-*" and not p[0].isdigit():
+        rows.append((section, len(p), p[:14]))
+for line in text.splitlines():
+    s = line.strip()
+    if not s or s.startswith(("#", "|", ">", "-", "*")) or s[:1].isdigit():
+        flush()
+        if s.startswith("#"):
+            section = s.lstrip("# ")
+        continue
+    buf.append(s)
+flush()
+for s, n, head in rows:
+    print(f"{s[:8]:<8} {n:>4} {head}")
+watch = ["此外", "值得注意的是", "综上所述", "总的来说", "需要指出的是", "不容忽视", "众所周知",
+         "随着", "不仅", "研究表明", "研究显示", "大量研究", "专家认为", "疗效确切", "安全有效",
+         "广泛应用", "重要意义", "奠定", "新思路", "值得进一步", "发挥了重要作用", "前景广阔"]
+print({w: text.count(w) for w in watch if w in text})
+PY
+```
+
+2. Read the printout against four questions, each pointing at the rule that
+   answers it:
+   - **Are the paragraph lengths flat?** In `结果` and `讨论`, near-identical
+     lengths across a run of paragraphs means content was filled to a quota
+     (rule 9).
+   - **Do consecutive paragraphs open the same way?** Compare the printed
+     opening fragments of neighbouring rows in the same section (rule 9).
+   - **Did any watched phrase survive?** Every hit is a specific line to look
+     at: empty connectives (rule 8), `不仅` (rule 7), `研究表明`/`专家认为`
+     (rule 3), promotional adjectives and send-off endings (rule 1). A hit is
+     not automatically a defect — `随着` inside a quoted title, or `不仅` inside
+     a source's own wording, stays.
+   - **Is any endpoint or drug called by two names?** Scan the printed openings
+     for the same referent under different words (rule 4).
+
+3. **Edit only what the self-check named, and only there.** If it named nothing,
+   change nothing and go to step 5. A pass that "improves" a clean report is the
+   whole-document rewrite this procedure exists to avoid, and in this project
+   every whole-file rewrite lost content.
+
+4. If it did name something, snapshot the report before touching it
+   (`cp clinical-evidence-report.md clinical-evidence-report.pre-edit.md`), fix
+   those passages **with the edit tool, never by rewriting the file**, then prove
+   that only prose moved:
+
+```bash
+python "$XDG_CONFIG_HOME/opencode/skills/manuscript-humanize/scripts/verify_preserved.py" \
+  --before clinical-evidence-report.pre-edit.md \
+  --after clinical-evidence-report.md \
+  --matrix clinical-evidence-matrix.json
+```
+
+   A non-empty report means an edit broke a quotation, a numeral, a citation
+   index, a claim marker, `〔推导〕`, or a heading; fix it and rerun. Delete the
+   `.pre-edit.md` copy once the check is clean — it is not a deliverable and
+   must not survive into the delivered set.
+
+5. Run the preflight once more if you edited anything, because prose edits can
+   still break a section-level rule.
+
+`manuscript-humanize` stays loaded and keeps two jobs: it defines the protected
+set and ships the verifier used in step 4, and it remains the right tool for a
+**whole-document** pass on a manuscript that was not written under these rules —
+a draft brought in from elsewhere, or an older report being revised. On this
+line it is no longer the default finishing step, because prose written correctly
+does not need rewriting, and rewriting it is where content gets lost.
 
 If these integrity requirements cannot be met, write an honest failed run receipt and do not present the report as publication-grade.

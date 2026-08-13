@@ -3613,6 +3613,31 @@ export class RuntimeManager {
     return runtime?.proxyWorkspaceDir ?? project.workspaceDir;
   }
 
+  /** Every call into a runtime container needs a deadline. Without one, a socket
+   *  that accepts and never answers parks the caller forever, and every guard
+   *  built on counting polls stops counting. The connect timeout is the right
+   *  scale here: these are local reads of a container's own state, not model
+   *  work.
+   *  @param {(signal: AbortSignal) => Promise<any>} operation
+   *  @param {string} code @param {string} message */
+  async withRuntimeDeadline(operation, code, message) {
+    const timeoutMs = positiveLimit(this.config.runtimeProxyConnectTimeoutMs) ?? 30_000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error(message)), timeoutMs);
+    timer.unref?.();
+    try {
+      return await operation(controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted) {
+        process.stderr.write(`${code}: no answer within ${timeoutMs}ms\n`);
+        throw new HttpError(504, code, message);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async sessionMessages(project, sessionId, { wake = true } = {}) {
     const runtime = wake
       ? await this.start(project)
@@ -3629,7 +3654,19 @@ export class RuntimeManager {
       const target = new URL(`${runtime.url}/session/${encodeURIComponent(sessionId)}/message`);
       target.searchParams.set("directory", runtime.proxyWorkspaceDir ?? project.workspaceDir);
       const headers = runtime.password ? { authorization: basicAuth(runtime.password) } : {};
-      const response = await requestRuntime(runtime, target, { headers });
+      // This is the most frequent call the server makes into a runtime, and it
+      // had no deadline at all. A container socket that accepts and then never
+      // answers left the monitor awaiting it forever, which is worse than slow:
+      // monitorStallPolls and monitorMaxPolls both count polls, so neither
+      // advances while a poll is stuck, and the two guards that exist to end a
+      // dead run — runtime_monitor_stalled and runtime_monitor_timeout — became
+      // structurally unreachable. endProxy sits in the finally that never runs,
+      // so activeProxies stays above zero and the idle stop never fires either.
+      const response = await this.withRuntimeDeadline(
+        (signal) => requestRuntime(runtime, target, { headers, signal }),
+        "runtime_history_unavailable",
+        "Runtime session history did not answer in time.",
+      );
       if (response.status !== 200) {
         // The runtime said why and this discarded it, so every cause — an
         // unknown session, a workspace the runtime does not have, a rejected
@@ -3676,7 +3713,11 @@ export class RuntimeManager {
       const target = new URL(`${runtime.url}/session/status`);
       target.searchParams.set("directory", runtime.proxyWorkspaceDir ?? project.workspaceDir);
       const headers = runtime.password ? { authorization: basicAuth(runtime.password) } : {};
-      const response = await requestRuntime(runtime, target, { headers });
+      const response = await this.withRuntimeDeadline(
+        (signal) => requestRuntime(runtime, target, { headers, signal }),
+        "runtime_status_unavailable",
+        "Runtime session status did not answer in time.",
+      );
       if (response.status !== 200) {
         await response.body?.cancel().catch(() => {});
         throw new HttpError(502, "runtime_status_unavailable", "Runtime session status is unavailable.");

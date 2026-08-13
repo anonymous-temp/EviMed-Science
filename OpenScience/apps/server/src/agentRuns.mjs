@@ -1859,10 +1859,20 @@ export class AgentRunStore {
     let history;
     try {
       history = await this.readSessionHistory(project, run.sessionId, { wake: false });
-    } catch {
-      return false;
+    } catch (error) {
+      // "Could not read" is not "did not move". Returning false for both fed the
+      // stall counter on every failed read, so a run that was working normally
+      // through a spell of 502s from its runtime was closed as
+      // runtime_monitor_stalled — indistinguishable from one that had actually
+      // died, with nothing anywhere recording that a read had failed. Unknown is
+      // its own answer: the counter is left alone and the failure is said out
+      // loud.
+      process.stderr.write(
+        `agent run progress unreadable for ${run.id}: ${error?.code ?? (error instanceof Error ? error.message : String(error))}\n`,
+      );
+      return null;
     }
-    if (!Array.isArray(history)) return false;
+    if (!Array.isArray(history)) return null;
     const messages = history.length;
     const toolCalls = history.reduce(
       (total, message) => total + (message?.parts ?? []).filter((part) => part?.type === "tool").length,
@@ -1896,8 +1906,11 @@ export class AgentRunStore {
         // working from one that died an hour ago, so both wait out the full
         // timeout. Record what is observably happening, and stop early once
         // nothing has happened for long enough that nothing will.
-        const moved = await this.recordProgress(project, run).catch(() => false);
-        idlePolls = moved ? 0 : idlePolls + 1;
+        // Three outcomes, not two: it moved, it did not move, or we could not
+        // tell. Only the middle one is evidence of a stall.
+        const moved = await this.recordProgress(project, run).catch(() => null);
+        if (moved === true) idlePolls = 0;
+        else if (moved === false) idlePolls += 1;
         if (this.monitorStallPolls > 0 && idlePolls >= this.monitorStallPolls) {
           await this.finishInternal(project, runId, {
             status: "failed",

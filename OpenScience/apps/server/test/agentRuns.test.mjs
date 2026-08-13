@@ -240,7 +240,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.5.0",
+      effectiveAgentVersion: "2.6.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
 
@@ -2632,6 +2632,48 @@ test("a provenance rejection is repaired rather than discarded", async () => {
     assert.match(repairPrompts[0], /\.evimed-sources\/official-pages\/source-a\/page\.md/);
     assert.match(repairPrompts[0], /no evidence tool reported preserving that file/);
 
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// The stall guard exists to end a run that died. It counted a failed read as
+// evidence of a stall, so a run working normally through a spell of 502s from
+// its runtime was closed as runtime_monitor_stalled, with nothing recording
+// that any read had failed. Unknown has to be its own answer.
+test("a progress read that fails is not counted as a run standing still", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-unreadable-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_unreadable", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      // Dispatch reads history too; only the progress poll must fail here.
+      readSessionHistory: async (_project, _sessionId, { wake } = {}) => {
+        if (wake === false) throw Object.assign(new Error("unavailable"), { code: "runtime_history_unavailable" });
+        return [];
+      },
+      readSessionStatus: async () => "busy",
+    });
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_unreadable",
+    }, async () => ({ accepted: true }));
+
+    // Unreadable is null — neither "moved" nor "did not move".
+    const verdict = await store.recordProgress(project, run);
+    assert.equal(verdict, null, "an unreadable history must not be reported as no progress");
     await store.closeProject(project, "canceled");
   } finally {
     await rm(root, { recursive: true, force: true });

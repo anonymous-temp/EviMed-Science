@@ -722,6 +722,13 @@ export function loadConfig(overrides = {}) {
     webSearchTimeoutMs: Number(
       overrides.webSearchTimeoutMs ?? process.env.OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS ?? 30_000,
     ),
+    // Idle time, not total time: the deadline is re-armed on every streamed
+    // chunk. As a total it cut reasoning turns off mid-answer — one measured
+    // run spent 68 of 87 minutes re-issuing calls killed while they were
+    // streaming — and because the abort lands after the response has started,
+    // it left neither a status nor a log line. Raise this only if a model
+    // genuinely goes quiet for longer between chunks; it is not a cap on how
+    // long a turn may take.
     modelGatewayTimeoutMs: Number(
       overrides.modelGatewayTimeoutMs ?? process.env.OPEN_SCIENCE_MODEL_GATEWAY_TIMEOUT_MS ?? 300_000,
     ),
