@@ -272,7 +272,9 @@ function waitForDrain(res, signal) {
   });
 }
 
-export async function pipeModelGatewayBody(body, res, signal, maxBytes) {
+/** @param {any} body @param {any} res @param {any} signal @param {number} maxBytes
+ *  @param {(() => void) | null} onChunk */
+export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk = null) {
   const reader = body.getReader();
   let total = 0;
   try {
@@ -280,6 +282,11 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes) {
       if (signal.aborted) throw signal.reason;
       const { done, value } = await reader.read();
       if (done) break;
+      // A stream that is still delivering is not a stalled request. Without
+      // this the deadline set before the call kept running through the
+      // response, so a reasoning turn that streamed steadily for longer than
+      // the limit was aborted mid-answer.
+      onChunk?.();
       total += value.byteLength;
       if (total > maxBytes) {
         throw gatewayError(502, "model_gateway_response_too_large", "The model provider response exceeded the gateway limit.");
@@ -304,8 +311,24 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
     }
     const abortController = new AbortController();
     const timeoutMs = Math.max(1, Number(config.modelGatewayTimeoutMs) || 300_000);
-    const timeout = setTimeout(() => abortController.abort(new DOMException("Model gateway timed out.", "TimeoutError")), timeoutMs);
-    timeout.unref?.();
+    // The limit is now idle time, not total time. It was total, and set before
+    // the request: a reasoning model that streamed an answer for longer than
+    // the limit had the connection cut from underneath it. Measured on one
+    // production run, a single turn took fifteen minutes against a five-minute
+    // deadline, and the run spent 68 of its 87 minutes re-issuing calls that
+    // were killed while they were working. Nothing said so — the abort lands
+    // after writeHead(200), so the truncated stream carried no status and no
+    // log line.
+    let timeout = null;
+    const armIdleDeadline = () => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(
+        () => abortController.abort(new DOMException("Model gateway timed out.", "TimeoutError")),
+        timeoutMs,
+      );
+      timeout.unref?.();
+    };
+    armIdleDeadline();
     const onAborted = () => abortController.abort(new DOMException("Model gateway client disconnected.", "AbortError"));
     const onResponseClose = () => {
       if (!res.writableEnded) onAborted();
@@ -372,10 +395,19 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
         "cache-control": "no-store",
         "x-accel-buffering": "no",
       });
-      await pipeModelGatewayBody(upstream.body, res, abortController.signal, responseLimit);
+      await pipeModelGatewayBody(upstream.body, res, abortController.signal, responseLimit, armIdleDeadline);
     } catch (error) {
       const abortReason = abortController.signal.reason;
       const clientDisconnected = abortController.signal.aborted && abortReason?.name === "AbortError";
+      // Once the stream has started, sendError can no longer set a status: the
+      // response is truncated and the caller sees an incomplete answer with no
+      // reason anywhere. Say so on the way out, because a silent truncation is
+      // indistinguishable from a model that simply stopped talking.
+      if (res.headersSent && !res.writableEnded) {
+        process.stderr.write(
+          `model gateway stream truncated after ${res.getHeader?.("content-type") ?? "stream"}: ${abortReason?.name ?? (error instanceof Error ? error.message : String(error))}\n`,
+        );
+      }
       if (abortReason?.name === "TimeoutError") {
         sendError(res, gatewayError(504, "model_gateway_timeout", "The model gateway request timed out."));
       } else if (clientDisconnected && !res.headersSent) {
@@ -387,7 +419,7 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
         abortController.abort(error instanceof Error ? error : new Error("Model gateway failed."));
       }
     } finally {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       req.off("aborted", onAborted);
       res.off("close", onResponseClose);
     }

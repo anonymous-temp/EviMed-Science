@@ -140,9 +140,15 @@ export class SpecialistClassifier {
           // characters of reasoning_content — the verdict never got written.
           // The fallback that exists to catch what the regex misses was
           // therefore dead, and every miss fell to the answer line looking
-          // exactly like "no specialist fits". At 2000 the same six return a
-          // verdict every time.
-          max_tokens: 2_000,
+          // exactly like "no specialist fits". At 2000 the same six returned a
+          // verdict every time — on the flash model. Certifying the pro model
+          // put the deployment back where it started: production logged
+          // "produced no verdict: empty_content" and every route fell through
+          // to the regex net, which is the arrangement this was moved away
+          // from. A budget tuned against one model is not a budget; the ceiling
+          // has to leave room for the reasoning the model actually does, and a
+          // classification is a few dozen tokens of output whatever precedes it.
+          max_tokens: 8_000,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: classifierInstructions },
