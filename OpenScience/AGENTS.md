@@ -41,7 +41,11 @@ local workspace + SQLite + JSONL provenance.
   `apps/server/src/runtimeManager.mjs` and `apps/desktop/src-tauri/src/opencode_config.rs`),
   `mcp`, `skills` (`skills/evimed/` holds the specialist agent packages plus the
   default `open-domain-answer` agent that handles unrouted open-domain questions).
-- `docs/` — product and technical specs.
+- `docs/` — product and technical specs. `docs/REQUEST_PATH.md` traces one request
+  end to end (HTTP boundary → routing → run ledger → runtime → MCP → external
+  gateways → delivery gate → artifact retrieval) with each segment's timeout
+  semantics, the system-wide timeout table and its contradictions, and the list of
+  places a failure leaves no log, no changed return value, and no ledger entry.
 - `examples/bci-trends/` — the built-in demo project.
 - `scripts/` — release and dev scripts.
 
