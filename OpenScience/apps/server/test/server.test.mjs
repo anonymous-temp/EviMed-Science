@@ -6353,3 +6353,27 @@ test("a ledger that cannot be written says so instead of dropping the record", a
     { operatorMetricsToken: "metrics-secret" },
   );
 });
+
+test("an unreadable project directory is an error, not an empty account", async () => {
+  // fs.readdir(root).catch(() => []) returned the empty list plus a
+  // synthesised "default", which is exactly what a new user sees. Someone
+  // whose project directory lost its permissions was shown a fresh account
+  // and told, in effect, that their work was gone.
+  await withApp(async ({ base, dataDir }) => {
+    const listed = await fetch(`${base}/api/projects`);
+    assert.equal(listed.status, 200);
+
+    const root = path.join(dataDir, "users", "dev", "projects");
+    await chmod(root, 0o000);
+    try {
+      const response = await fetch(`${base}/api/projects`);
+      assert.notEqual(response.status, 200, "an unreadable directory must not answer like an empty one");
+      assert.equal((await response.json()).code, "projects_unreadable");
+    } finally {
+      await chmod(root, 0o700);
+    }
+
+    const recovered = await fetch(`${base}/api/projects`);
+    assert.equal(recovered.status, 200, "and it recovers once the directory is readable again");
+  });
+});

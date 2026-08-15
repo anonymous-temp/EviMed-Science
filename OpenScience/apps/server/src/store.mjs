@@ -430,7 +430,13 @@ export class InMemoryStore {
 
   async listProjects(user) {
     const root = await ensureProjectsRoot(this.config, user);
-    const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+    // An unreadable root used to become an empty list plus a synthesised
+    // "default", which is what a user with no projects sees. Someone whose
+    // project directory lost its permissions was told their work was gone.
+    const entries = await fs.readdir(root, { withFileTypes: true }).catch((error) => {
+      if (error?.code === "ENOENT") return [];
+      throw new HttpError(500, "projects_unreadable", "The project directory could not be read.");
+    });
     const projects = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;

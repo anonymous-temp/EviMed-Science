@@ -225,17 +225,17 @@ OpenCode 容器内部行为不在范围内。
 | S12 | `runtimeManager.mjs:656-667`、`:758-760` | `appendRuntimeEvent` / `recordRuntimeState` 写入失败 | 均 `.catch(() => {})`。`/api/logs/runtime` 与 `status()` 报出的是一个从未发生过的运行时状态 |
 | S13 | `runtimeManager.mjs:3790-3797` | `onRuntimeStop` → `agentRuns.closeProject` 抛异常 | `.catch(() => {})`。容器已经没了，账本里的 run 却永远停在 `running`，且没人知道关闭失败过 |
 | S14 | `runtimeManager.mjs:4136-4138`、`:4160-4164`、`:4226-4228` | 响应途中的配额探测失败 | 注释写明「a quota probe must not break a response already in flight」，异常被吞。目录缺执行位（`drw-r--r--`）导致 `directorySize`（`security.mjs:228-267`）EACCES 时，配额在整条代理路径上**静默失效** |
-| S15 | `store.mjs:433` | 项目根目录不可读 | `fs.readdir(root).catch(() => [])` → 返回空列表并补一个 default。用户看到的是「我的项目都被删了」 |
+| ~~S15~~ **已修** | `store.mjs`（`listProjects`） | 项目根目录不可读 | `fs.readdir(root).catch(() => [])` → 返回空列表并补一个 default。用户看到的是「我的项目都被删了」 |
 | ~~S16~~ **已修** | `specialist_jobs.py`（`_worker_is_alive`） | 后台 worker 被 SIGKILL / OOM | `status_job` 只读状态文件，**没有 `_worker_is_alive` 等价物**（对照 `meta_agent.py:365-380` 有）。状态永远停在 `running`，工具永远回答「还在跑，请继续轮询」 |
 | ~~S17~~ **已修** | `specialist_jobs.py`（写失败留 stderr，且由 S16 的存活检查兜底） | 写失败状态时再次出错 | `except Exception: pass`，随后 `SystemExit(1)`。作业被永久留在 `running`（与 S16 叠加） |
 | ~~S18~~ **已修** | `specialist_jobs.py`（`_execution_timeout_seconds`） | 专科 Python 进程挂死 | `subprocess.run` 无 `timeout=`，`start_job` 也无墙钟。唯一的上限是 4 小时的 run monitor，而 S2 可能让它也不生效 |
-| S19 | `public_sources.py:1084-1086` | 降级链中 legacy 端点也失败 | `except PublicSourceError: pass`，只把第一层的错误放进 `warnings`。运行看到的是「EviMed 不可用」，看不到「legacy 也不可用」 |
+| ~~S19~~ **已修** | `public_sources.py`（降级链两级都报） | 降级链中 legacy 端点也失败 | `except PublicSourceError: pass`，只把第一层的错误放进 `warnings`。运行看到的是「EviMed 不可用」，看不到「legacy 也不可用」 |
 | ~~S20~~ **已修** | `modelGateway.mjs`（`sendError` 的 `onFailure`） | 流已开始后出任何错 | `sendError` 只能 `res.destroy()`；唯一痕迹是 `:407-409` 的一行 stderr，不进 `errors.jsonl`、不进账本、不进指标。**截断的回答与「模型说完了」在下游完全一样** |
 | S21 | `memoryIntelligence.mjs:286-294` | 模型抽取失败/超时 | 静默降级为确定性抽取；`extractionError` 只流向 `server.mjs:389-401` 的 `securityAudit(...).catch(() => {})`，而后者本身是 S11。配合 C1，生产环境可能长期处于「记忆抽取全灭」且无症状 |
 | ~~S22~~ **已修** | `publicSourceGateway.mjs`、`webSearchGateway.mjs`（两处 `sendError` 的 `onFailure`） | 网关内任何异常 | `catch { sendError(res, error) }`，处理器自身**一行日志都不写**。错误码只回给容器；服务端侧无留痕（与 S1 叠加后是彻底不可观测） |
-| S23 | `index.mjs:11-14` | 关停时 `app.close()` 抛异常 | `.catch(() => {})` 后 `process.exit(0)`。未落盘的 run、未停的容器、未关的连接池都算「干净退出」，编排层看到的是成功 |
+| ~~S23~~ **已修** | `index.mjs`（关停按实际结果返回码） | 关停时 `app.close()` 抛异常 | `.catch(() => {})` 后 `process.exit(0)`。未落盘的 run、未停的容器、未关的连接池都算「干净退出」，编排层看到的是成功 |
 
-**合计 23 处静默点，已修 9 处（S1、S2、S3、S11、S16、S17、S18、S20、S22），余 14 处。**
+**合计 23 处静默点，已修 12 处（S1、S2、S3、S11、S15、S16、S17、S18、S19、S20、S22、S23），余 11 处。**
 
 已修的四处是同一处结构问题的四个出口：运行时的全部对外流量走三条 `/internal/*` 网关，而这三条在 `handle()` 的 try 之外应答，因此既不进错误账本、也拿不到真实的 route 标签。修法是给每条网关唯一的失败出口 `sendError` 加一个 `onFailure` 回调，由请求侧填账本与指标；流已开始后才失败的那一种（S20）单独记 `truncated`，因为它是**唯一一种下游无法与成功区分**的失败。
 
@@ -247,6 +247,14 @@ S16／S17／S18 是专科作业跑起来之后的同一处空洞：`status_job` 
 **判不出不等于死亡**），确认死亡时再读一次状态文件以避开竞态，然后落一个 `retryable` 的失败态。
 另给专科子进程加自己的墙钟（`EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS`，默认 10800 秒，60–14400 夹逼）——
 此前唯一的上限是服务端 4 小时 run monitor，而那个按轮次计数，挂死的子进程能活过平台以为存在的每一条限制。
+
+另外三处各自独立：S15 把不可读的项目根目录当成空目录，再补一个 default——用户看到的是一个崭新的账号，
+等于被告知「你的项目都没了」；现在 ENOENT 仍算空，其余一律 `projects_unreadable` 报错。
+S19 的降级链两级都失败时只报第一级，运行分不清「EviMed 不可用」和「连 legacy 也不可用」，
+而这一区分决定这个缺口值不值得重试；现在两级都写进警告。
+S23 关停时 `app.close()` 抛异常照样 `exit(0)`，编排层看到干净退出；现在按实际结果返回码，并留一行 stderr。
+同时给账本写入加了收尾：交付审计现在按**实际送出的字节**结算，因此写入会晚于请求本身，
+`close()` 必须等这些写完——否则最后发生的那件事正是唯一没被记下来的。
 
 ~~补充一条非「静默」但同源的结构问题：三条网关处理器若抛出未被自身捕获的异常，
 将成为 `void handle(req, res)` 上的未处理 Promise 拒绝，即进程级崩溃而不是 500。~~
