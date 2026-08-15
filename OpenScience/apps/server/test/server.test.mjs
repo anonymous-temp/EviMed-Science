@@ -6264,3 +6264,92 @@ test("the internal gateways are labelled and ledgered like every other route", a
     assert.ok(!records.some((entry) => entry.route === "/static"), "no gateway failure may be filed as static traffic");
   });
 });
+
+test("a download that does not finish is not audited as a completed delivery", async () => {
+  // The audit used to be written before the first byte moved, and a read error
+  // answered with a bare res.destroy(). A reader could be handed a truncated
+  // report while the audit recorded a successful delivery of the full size.
+  await withApp(async ({ base, dataDir }) => {
+    const big = "x".repeat(6 * 1024 * 1024);
+    const written = await command(base, "write_workspace_file", { path: "big.txt", content: big });
+    assert.equal(written.res.status, 200);
+
+    const auditFile = path.join(dataDir, "users", "dev", "projects", "default", ".openscience", "audit.jsonl");
+    const readAudit = async () => {
+      const text = await readFile(auditFile, "utf8").catch(() => "");
+      return text.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    };
+
+    const controller = new AbortController();
+    const response = await fetch(`${base}/api/files/download/big.txt`, { signal: controller.signal });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-length"), String(big.length));
+    const reader = response.body.getReader();
+    await reader.read();
+    controller.abort();
+    await reader.cancel().catch(() => {});
+
+    let record = null;
+    for (let attempt = 0; attempt < 100 && !record; attempt += 1) {
+      const rows = await readAudit();
+      record = rows.reverse().find((row) => row.action === "file.download" && row.target === "big.txt");
+      if (!record) await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.ok(record, "an interrupted download must still be audited");
+    assert.equal(record.status, "failed", "an interrupted download is not a completed delivery");
+    assert.ok(record.bytes < big.length, `only ${record.bytes} of ${big.length} bytes left the server`);
+
+    const complete = await fetch(`${base}/api/files/download/big.txt`);
+    assert.equal((await complete.text()).length, big.length);
+    let done = null;
+    for (let attempt = 0; attempt < 100 && !done; attempt += 1) {
+      const rows = await readAudit();
+      done = rows.reverse().find((row) => row.action === "file.download" && row.status === "completed");
+      if (!done) await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.ok(done, "a delivery that did finish is still audited as completed");
+    assert.equal(done.bytes, big.length);
+  });
+});
+
+test("a ledger that cannot be written says so instead of dropping the record", async () => {
+  // Every one of the three ledgers swallowed its own write failure, so the one
+  // failure the audit chain cannot record was its own: a full disk or a lost
+  // EACCES left the requests succeeding and the record simply absent.
+  await withApp(
+    async ({ base, dataDir }) => {
+      const ledgerDir = path.join(dataDir, ".openscience");
+      await mkdir(ledgerDir, { recursive: true });
+
+      // The counter is process-wide, so measure the delta rather than assume
+      // this test is the first thing to have written a ledger.
+      const readCount = async () => {
+        const res = await fetch(`${base}/api/ops/metrics`, { headers: { Authorization: "Bearer metrics-secret" } });
+        const body = await res.text();
+        const match = /^open_science_ledger_write_failures_total\{ledger="errors"\} (\d+)$/m.exec(body);
+        assert.ok(match, "the metric must be present whether or not anything has failed");
+        return Number(match[1]);
+      };
+      const before = await readCount();
+
+      await chmod(ledgerDir, 0o500);
+      try {
+        const rejected = await fetch(`${base}/api/projects/does-not-exist-at-all`);
+        assert.ok(rejected.status >= 400, "the request still answers even though its record cannot be filed");
+      } finally {
+        await chmod(ledgerDir, 0o700);
+      }
+
+      let after = before;
+      for (let attempt = 0; attempt < 50 && after === before; attempt += 1) {
+        after = await readCount();
+        if (after === before) await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.ok(
+        after > before,
+        `a ledger append that failed must be counted where an operator already looks (${before} → ${after})`,
+      );
+    },
+    { operatorMetricsToken: "metrics-secret" },
+  );
+});

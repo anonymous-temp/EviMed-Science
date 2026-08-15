@@ -213,7 +213,7 @@ OpenCode 容器内部行为不在范围内。
 |---|---|---|---|
 | ~~S1~~ **已修** | `server.mjs`（网关分派、`routePattern`、`appendErrorRecord`） | 三条 `/internal/*` 网关的任何失败 | ~~完全不进 `errors.jsonl`；Prometheus 里被标为 route=`/static`~~。三条网关处理器现接受 `onFailure` 回调，各自的 `sendError` 是唯一出口，失败进同一本 `errors.jsonl` 并带真实 route 标签；流已开始后被掐断的记为 `truncated: true`。分派也移进 try，处理器抛出不再是进程级未处理拒绝。测试：`server.test.mjs`「the internal gateways are labelled and ledgered」、`modelGateway.test.mjs`「a gateway failure is reported to the caller's ledger」 |
 | ~~S2~~ **已修** | `runtimeManager.mjs`（`withRuntimeDeadline`） | 容器 socket 挂起（不关不答） | ~~监控轮询永久阻塞在 `await`~~。`sessionMessages` / `sessionStatus` 现经 `withRuntimeDeadline` 传 signal，超时以具名失败码结案 |
-| S3 | `server.mjs:1635` | 文件流读取中途出错 | `audit` 已写 `completed`（`:1622`）、`200` 与 `Content-Length` 已发出（`:1626`），随后 `res.destroy()`。读者拿到**被截断的报告**，账本与审计都显示成功 |
+| ~~S3~~ **已修** | `server.mjs`（`sendWorkspaceFile` 的 `settle`） | 文件流读取中途出错 | `audit` 已写 `completed`（`:1622`）、`200` 与 `Content-Length` 已发出（`:1626`），随后 `res.destroy()`。读者拿到**被截断的报告**，账本与审计都显示成功 |
 | S4 | `agentRuns.mjs:1858-1864` | `readSessionHistory` 抛任何异常 | `catch { return false }`，而 `false` 的语义是「本轮无进展」（`:1899-1900`）。运行时 502/连接重置 → 累计 idlePolls → 最终以 `runtime_monitor_stalled` 结案（`:1901-1907`）。**一个还在干活的 run 被判定为「卡死」**，与真正卡死不可区分 |
 | S5 | `agentRuns.mjs:1739-1743` | `readSessionStatus` 抛任何异常 | `return run`，运行继续。OpenCode 对 `/session/status` 持续 500 与「会话确实 busy」在账本上完全一样 |
 | S6 | `agentRuns.mjs:1746-1751` | `runtimeWorkspaceRoot` 抛异常 | 静默回落到 `project.workspaceDir`。容器返回的绝对路径随后按错误的根做相对化，`artifactCandidates`（`:847-855`）逐条丢弃 → run 成功但 `artifacts: []`，看起来像「这次没写文件」 |
@@ -221,7 +221,7 @@ OpenCode 容器内部行为不在范围内。
 | S8 | `agentRuns.mjs:1800-1802` | 修复提示发送失败 | `catch {}` 后一律记 `specialist_evidence_repair_failed`。「模型拒绝修复」与「运行时已经没了」在账本上同码 |
 | S9 | `agentRuns.mjs:859-870` | 产物存在但打不开（EACCES / 符号链接 / 打开时被删） | `catch {}` 后从交付清单里剔除。run 仍成功，只是**产物比实际少**，没有任何一条记录说少了什么 |
 | S10 | `agentRuns.mjs:696-702`、`:847-855` | 工具返回的路径不合法 | `catch { /* untrusted tool metadata is omitted */ }` 静默丢弃。证据来源从 provenance map 里消失，后续以 `specialist_evidence_provenance_failed` 的形式**归咎于运行**（`:1322-1334`），而真实原因是这里丢掉了它 |
-| S11 | `server.mjs:1682`、`:1716`、`:1739` | `audit.jsonl` / `security.jsonl` / `errors.jsonl` 写入失败（配额、EACCES、轮转失败） | 三处都是 `.catch(() => {})`。请求照常成功。**审计链唯一无法记录的失败，就是它自己的失败** |
+| ~~S11~~ **已修** | `server.mjs`（`recordLedgerWriteFailure`） | `audit.jsonl` / `security.jsonl` / `errors.jsonl` 写入失败（配额、EACCES、轮转失败） | 三处都是 `.catch(() => {})`。请求照常成功。**审计链唯一无法记录的失败，就是它自己的失败** |
 | S12 | `runtimeManager.mjs:656-667`、`:758-760` | `appendRuntimeEvent` / `recordRuntimeState` 写入失败 | 均 `.catch(() => {})`。`/api/logs/runtime` 与 `status()` 报出的是一个从未发生过的运行时状态 |
 | S13 | `runtimeManager.mjs:3790-3797` | `onRuntimeStop` → `agentRuns.closeProject` 抛异常 | `.catch(() => {})`。容器已经没了，账本里的 run 却永远停在 `running`，且没人知道关闭失败过 |
 | S14 | `runtimeManager.mjs:4136-4138`、`:4160-4164`、`:4226-4228` | 响应途中的配额探测失败 | 注释写明「a quota probe must not break a response already in flight」，异常被吞。目录缺执行位（`drw-r--r--`）导致 `directorySize`（`security.mjs:228-267`）EACCES 时，配额在整条代理路径上**静默失效** |
@@ -235,9 +235,11 @@ OpenCode 容器内部行为不在范围内。
 | ~~S22~~ **已修** | `publicSourceGateway.mjs`、`webSearchGateway.mjs`（两处 `sendError` 的 `onFailure`） | 网关内任何异常 | `catch { sendError(res, error) }`，处理器自身**一行日志都不写**。错误码只回给容器；服务端侧无留痕（与 S1 叠加后是彻底不可观测） |
 | S23 | `index.mjs:11-14` | 关停时 `app.close()` 抛异常 | `.catch(() => {})` 后 `process.exit(0)`。未落盘的 run、未停的容器、未关的连接池都算「干净退出」，编排层看到的是成功 |
 
-**合计 23 处静默点，已修 4 处（S1、S2、S20、S22），余 19 处。**
+**合计 23 处静默点，已修 6 处（S1、S2、S3、S11、S20、S22），余 17 处。**
 
 已修的四处是同一处结构问题的四个出口：运行时的全部对外流量走三条 `/internal/*` 网关，而这三条在 `handle()` 的 try 之外应答，因此既不进错误账本、也拿不到真实的 route 标签。修法是给每条网关唯一的失败出口 `sendError` 加一个 `onFailure` 回调，由请求侧填账本与指标；流已开始后才失败的那一种（S20）单独记 `truncated`，因为它是**唯一一种下游无法与成功区分**的失败。
+
+S3 与 S11 是同一句话的另外两个位置：S3 的审计在第一个字节离开之前就写了 `completed`，读者拿到截断的报告而账本记录一次成功的交付——现在审计按**实际送出的字节**结算，未跑完的交付记 `failed`；S11 是三本账本各自吞掉自己的写入失败，于是磁盘满或权限丢失时请求照常成功、记录直接消失——现在按账本计数并经 `open_science_ledger_write_failures_total` 暴露，运维面板上非零即表示「这个进程已经不再产出用来查故障的那份记录」。
 
 ~~补充一条非「静默」但同源的结构问题：三条网关处理器若抛出未被自身捕获的异常，
 将成为 `void handle(req, res)` 上的未处理 Promise 拒绝，即进程级崩溃而不是 500。~~
