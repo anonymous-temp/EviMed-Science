@@ -1884,7 +1884,14 @@ export class AgentRunStore {
       const current = foldEvents(events).get(run.id);
       if (!current || current.status !== "running") return;
       const event = { event: "progress", id: run.id, at: this.now().toISOString(), messages, toolCalls };
-      const text = serializeNext(events, event, this.maxBytes);
+      // Only the latest observation of a run is worth keeping. Appending every
+      // one filled the ledger with 7,800 progress rows across 31 runs and left
+      // it 114 bytes under the limit, after which no further run could start at
+      // all: the ledger holds started/dispatch/finished, which cannot be
+      // dropped, in the same bounded file as progress, which is a live gauge
+      // and is replaced by its successor. Superseded rows for this run go.
+      const retained = events.filter((item) => !(item?.event === "progress" && item?.id === run.id));
+      const text = serializeNext(retained, event, this.maxBytes);
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
     });
     return true;
