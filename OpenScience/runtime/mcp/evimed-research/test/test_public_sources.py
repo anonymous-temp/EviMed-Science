@@ -874,15 +874,16 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertFalse(metrics["evansSignal"])
 
     def test_zero_faers_cells_are_reported_as_not_estimable_without_corrected_pseudo_signals(self):
+        # Both terms are in the vocabulary; they were simply never co-reported.
         totals = [
             (0, "https://source.test/joint"),
-            (0, "https://source.test/drug"),
+            (100, "https://source.test/drug"),
             (50, "https://source.test/event"),
             (1000, "https://source.test/total"),
         ]
         with mock.patch.object(sources, "_openfda_total", side_effect=totals):
             result = sources.adr_signal({
-                "drug": "unobserved drug",
+                "drug": "observed drug",
                 "adverseEvent": "observed event",
                 "metrics": ["ror", "prr", "ic"],
             })
@@ -890,6 +891,89 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertEqual(result["data"]["metricStatus"], "not_estimable")
         self.assertEqual(result["data"]["metrics"], {})
         self.assertTrue(any("not estimable" in item for item in result["warnings"]))
+
+    def test_a_term_that_matches_nothing_is_not_reported_as_an_absence_of_reports(self):
+        # openFDA answers an unmatched term with 404 and the reader turns that
+        # into a count of zero, so a misremembered MedDRA preferred term used to
+        # read exactly like a genuine null. Measured against the live API:
+        # "Takotsubo cardiomyopathy" returns 0 while the real preferred term,
+        # "Stress cardiomyopathy", has 5710 reports.
+        totals = [
+            (0, "https://source.test/joint"),
+            (53807, "https://source.test/drug"),
+            (0, "https://source.test/event"),
+            (20692690, "https://source.test/total"),
+        ]
+        candidates = [
+            {"term": "Stress cardiomyopathy", "reportCount": 5710},
+            {"term": "Cardiomyopathy", "reportCount": 20351},
+        ]
+        with mock.patch.object(sources, "_openfda_total", side_effect=totals), \
+                mock.patch.object(sources, "_openfda_term_candidates", return_value=(candidates, "https://source.test/candidates")):
+            result = sources.adr_signal({
+                "drug": "nitroglycerin",
+                "adverseEvent": "Takotsubo cardiomyopathy",
+                "metrics": ["ror", "prr", "ic"],
+            })
+        self.assertEqual(result["data"]["metricStatus"], "term_unmatched")
+        self.assertEqual(result["data"]["metrics"], {})
+        self.assertEqual(
+            result["data"]["unmatchedTerms"]["adverseEvent"]["searched"],
+            "Takotsubo cardiomyopathy",
+        )
+        self.assertNotIn("drug", result["data"]["unmatchedTerms"], "the drug term did match")
+        warning = next(item for item in result["warnings"] if "matched no FAERS record" in item)
+        self.assertIn("do not report it as a null finding", warning)
+        self.assertIn("Stress cardiomyopathy (5710 reports)", warning)
+
+    def test_candidate_lookup_reads_the_vocabulary_rather_than_guessing(self):
+        asked = []
+
+        def fake_get_json(url, **kwargs):
+            asked.append(url)
+            return {"results": [
+                {"term": "Paraesthesia", "count": 402113},
+                {"term": "Paraesthesia oral", "count": 14184},
+                {"term": "Oral pain", "count": 30112},
+            ]}
+
+        with mock.patch.object(sources, "_get_json", side_effect=fake_get_json):
+            found, url = sources._openfda_term_candidates(
+                "https://api.fda.gov", "patient.reaction.reactionmeddrapt", "Oral paraesthesia",
+            )
+        # Ranked by how many of the searched words the term contains, not by
+        # size: ranking by size alone puts Paraesthesia (402113) above the term
+        # actually being looked for.
+        self.assertEqual(found[0], {"term": "Paraesthesia oral", "reportCount": 14184})
+        self.assertEqual(len(asked), 1, "the narrow query answered; the broad one is not needed")
+        self.assertIn("count=patient.reaction.reactionmeddrapt.exact", asked[0])
+        self.assertIn("AND", asked[0])
+        self.assertEqual(url, asked[0])
+
+    def test_candidate_lookup_widens_when_a_word_is_not_in_the_vocabulary(self):
+        # "takotsubo" appears in no preferred term at all, so requiring every
+        # word matches nothing and only the broad query reaches the answer.
+        asked = []
+
+        def fake_get_json(url, **kwargs):
+            asked.append(url)
+            if "AND" in url:
+                return {"results": []}
+            return {"results": [{"term": "Stress cardiomyopathy", "count": 5710}]}
+
+        with mock.patch.object(sources, "_get_json", side_effect=fake_get_json):
+            found, _ = sources._openfda_term_candidates(
+                "https://api.fda.gov", "patient.reaction.reactionmeddrapt", "Takotsubo cardiomyopathy",
+            )
+        self.assertEqual(len(asked), 2)
+        self.assertIn("AND", asked[0])
+        self.assertIn("OR", asked[1])
+        self.assertEqual(found, [{"term": "Stress cardiomyopathy", "reportCount": 5710}])
+
+        # A term with no usable words asks nothing at all rather than querying
+        # the whole database.
+        with mock.patch.object(sources, "_get_json", side_effect=AssertionError("must not query")):
+            self.assertEqual(sources._openfda_term_candidates("https://api.fda.gov", "field", "x 12"), ([], None))
 
     def test_ebgm_is_never_fabricated(self):
         totals = [(1, "https://source.test/a"), (10, "https://source.test/b"), (20, "https://source.test/c"), (100, "https://source.test/d")]

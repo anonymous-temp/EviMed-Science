@@ -1371,6 +1371,59 @@ def _openfda_total(base, search=None):
     return int(total or 0), url
 
 
+def _openfda_term_candidates(base, field, term, limit=5):
+    """Nearest real vocabulary terms for one that matched nothing.
+
+    openFDA answers an unmatched term with 404, and ``allow_not_found`` turns
+    that into a count of zero, so a misremembered MedDRA preferred term reads
+    exactly like a genuine absence of reports. "Takotsubo cardiomyopathy"
+    returns 0 while the real term, "Stress cardiomyopathy", has thousands --
+    and a run would report the confident null. Search the term's own words and
+    return what the vocabulary actually calls it.
+    """
+    tokens = [token for token in re.findall(r"[A-Za-z]{4,}", term or "")][:4]
+    if not tokens:
+        return [], None
+    # Every word first, any word second. Requiring all of them puts the real
+    # term at the top -- "oral AND paraesthesia" leads with PARAESTHESIA ORAL --
+    # while requiring any of them returns a pool so large that the answer sits
+    # below twenty commoner terms. The broad query is still worth asking when a
+    # word is not in the vocabulary at all: "takotsubo AND cardiomyopathy"
+    # matches nothing, and only the broad one reaches STRESS CARDIOMYOPATHY.
+    url = None
+    results = []
+    for joiner in (" AND ", " OR "):
+        if len(tokens) == 1 and joiner == " OR ":
+            break
+        url = _url(base, "drug/event.json", {
+            "search": joiner.join("%s:%s" % (field, token.lower()) for token in tokens),
+            "count": "%s.exact" % field,
+            "limit": 20,
+        })
+        try:
+            results = _get_json(url, allow_not_found=True).get("results", [])
+        except PublicSourceError:
+            return [], url
+        if isinstance(results, list) and results:
+            break
+    if not isinstance(results, list):
+        return [], url
+    wanted = {token.lower() for token in tokens}
+    candidates = []
+    for record in results:
+        name = record.get("term") if isinstance(record, dict) else None
+        count = record.get("count") if isinstance(record, dict) else None
+        if isinstance(name, str) and isinstance(count, int):
+            present = len(wanted & {word.lower() for word in re.findall(r"[A-Za-z]{4,}", name)})
+            candidates.append({"term": name, "reportCount": count, "_overlap": present})
+    # Rank by how many of the searched words the term actually contains, then by
+    # size. Ranking by size alone buries the answer: searching "Oral
+    # paraesthesia" returns PARAESTHESIA (155623) far above the real preferred
+    # term, PARAESTHESIA ORAL (14184).
+    candidates.sort(key=lambda item: (-item["_overlap"], -item["reportCount"]))
+    return [{"term": item["term"], "reportCount": item["reportCount"]} for item in candidates[:limit]], url
+
+
 def adr_signal(arguments):
     base = _base("EVIMED_OPENFDA_BASE_URL", "https://api.fda.gov")
     event = arguments.get("adverseEvent")
@@ -1405,6 +1458,30 @@ def adr_signal(arguments):
     values = {}
     warnings = ["Disproportionality is a screening signal and does not establish causality or incidence."]
     estimable = all(value > 0 for value in (a, b, c, d))
+    # A term that matches nothing anywhere in FAERS is a query that missed the
+    # vocabulary, not a drug-event pair that was never reported. Those two used
+    # to arrive as the same zero.
+    unmatched = []
+    candidates = {}
+    if event_total == 0:
+        unmatched.append("adverseEvent")
+        found, candidate_url = _openfda_term_candidates(base, "patient.reaction.reactionmeddrapt", event)
+        candidates["adverseEvent"] = {"searched": event, "candidates": found, "candidateQuery": candidate_url}
+    if drug_total == 0:
+        unmatched.append("drug")
+        found, candidate_url = _openfda_term_candidates(base, "patient.drug.medicinalproduct", arguments["drug"])
+        candidates["drug"] = {"searched": arguments["drug"], "candidates": found, "candidateQuery": candidate_url}
+    for field in unmatched:
+        found = candidates[field]["candidates"]
+        suggestion = (
+            " The vocabulary's nearest terms are: %s."
+            % ", ".join("%s (%d reports)" % (item["term"], item["reportCount"]) for item in found[:5])
+            if found else " No near term was found either."
+        )
+        warnings.append(
+            "The %s term %r matched no FAERS record at all, so this is an unmatched query rather than an absence of "
+            "reports; do not report it as a null finding.%s" % (field, candidates[field]["searched"], suggestion)
+        )
     if estimable:
         n = a + b + c + d
         ror = (a * d) / (b * c)
@@ -1447,10 +1524,17 @@ def adr_signal(arguments):
             "adverseEvent": event,
             "cells": {"a": a, "b": b, "c": c, "d": d},
             "metrics": values,
-            "metricStatus": "estimated" if estimable else "not_estimable",
+            "metricStatus": (
+                "term_unmatched" if unmatched else ("estimated" if estimable else "not_estimable")
+            ),
+            **({"unmatchedTerms": candidates} if unmatched else {}),
         },
         "sources": sources,
-        **({"warnings": warnings, "next_actions": ["Broaden or correct the query until every contingency-table cell is non-zero, then interpret any signal with labels, trials, and clinical literature."]} if unsupported or not estimable else {"warnings": warnings}),
+        **({"warnings": warnings, "next_actions": [
+            "Correct the unmatched term to one the vocabulary actually uses, then re-run."
+            if unmatched
+            else "Broaden or correct the query until every contingency-table cell is non-zero, then interpret any signal with labels, trials, and clinical literature."
+        ]} if unsupported or not estimable else {"warnings": warnings}),
     }
 
 
