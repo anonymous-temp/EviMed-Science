@@ -168,13 +168,19 @@ function gatewayError(status, code, message) {
   return new PublicSourceGatewayError(status, code, message);
 }
 
-function sendError(res, error) {
+function sendError(res, error, onFailure) {
+  const status = Number.isSafeInteger(error?.status) ? error.status : 502;
+  const code = typeof error?.code === "string" ? error.code : "public_source_gateway_unavailable";
+  // See the note in modelGateway.sendError: report before answering, so that a
+  // wave of upstream 502s leaves a trace on this side and not only in the
+  // container that asked.
+  if (typeof onFailure === "function") {
+    onFailure({ code, status, truncated: res.headersSent && !res.writableEnded });
+  }
   if (res.headersSent || res.destroyed) {
     if (!res.destroyed) res.destroy();
     return;
   }
-  const status = Number.isSafeInteger(error?.status) ? error.status : 502;
-  const code = typeof error?.code === "string" ? error.code : "public_source_gateway_unavailable";
   const message = error instanceof PublicSourceGatewayError
     ? error.message
     : "The public-source gateway is temporarily unavailable.";
@@ -639,9 +645,9 @@ async function serveOpenAccessPdf(request, { config, res, fetchImpl, signal }) {
 }
 
 export function createPublicSourceGatewayHandler(config, runtimeManager, { fetchImpl = fetch } = {}) {
-  return async function publicSourceGatewayHandler(req, res) {
+  return async function publicSourceGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
-      sendError(res, gatewayError(404, "not_found", "Not found."));
+      sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
       return;
     }
     const controller = new AbortController();
@@ -734,7 +740,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
       });
       res.end(buffer);
     } catch (error) {
-      sendError(res, error);
+      sendError(res, error, onFailure);
     } finally {
       clearTimeout(timeout);
     }

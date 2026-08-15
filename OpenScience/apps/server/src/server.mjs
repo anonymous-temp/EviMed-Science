@@ -192,6 +192,15 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/files/download/")) return "/api/files/download/:path";
   if (pathname === "/api/files/upload") return pathname;
   if (pathname.startsWith("/api/")) return "/api/:route";
+  // The three internal gateways carry the runtime's entire outbound traffic —
+  // every model call, every source fetch, every search. They used to fall
+  // through to "/static", so a provider 401 storm and a wave of images were the
+  // same line on the dashboard.
+  if (
+    pathname === MODEL_GATEWAY_PATH ||
+    pathname === PUBLIC_SOURCE_GATEWAY_PATH ||
+    pathname === WEB_SEARCH_GATEWAY_PATH
+  ) return pathname;
   return pathname === "/" ? "/" : "/static";
 }
 
@@ -452,16 +461,43 @@ export function createWebApiApp(overrides = {}) {
     res.setHeader("X-Open-Science-Request-Id", requestId);
     applySecurityHeaders(res, config);
     applyCors(req, res, config);
-    if (pathname === MODEL_GATEWAY_PATH) {
-      await modelGatewayHandler(req, res);
-      return;
-    }
-    if (pathname === PUBLIC_SOURCE_GATEWAY_PATH) {
-      await publicSourceGatewayHandler(req, res);
-      return;
-    }
-    if (pathname === WEB_SEARCH_GATEWAY_PATH) {
-      await webSearchGatewayHandler(req, res);
+    // The gateways answer before the try block below, so nothing they do
+    // reaches errorAudit. Give them the same ledger and the same metric label
+    // the API routes get, through the one funnel each of them already has.
+    const recordGatewayFailure = (failure) => {
+      operationErrorCode = typeof failure?.code === "string" ? failure.code : "gateway_failed";
+      void appendErrorRecord(config, req, pathname, {
+        status: Number.isSafeInteger(failure?.status) ? failure.status : 502,
+        code: operationErrorCode,
+        requestId,
+        truncated: failure?.truncated === true,
+      });
+    };
+    const gateway = pathname === MODEL_GATEWAY_PATH
+      ? modelGatewayHandler
+      : pathname === PUBLIC_SOURCE_GATEWAY_PATH
+        ? publicSourceGatewayHandler
+        : pathname === WEB_SEARCH_GATEWAY_PATH
+          ? webSearchGatewayHandler
+          : null;
+    if (gateway) {
+      try {
+        await gateway(req, res, recordGatewayFailure);
+      } catch (error) {
+        // These handlers answer before the try below, so anything they throw
+        // past their own catch used to land as an unhandled rejection on
+        // `void handle(req, res)` — the process exiting rather than a 502.
+        recordGatewayFailure({
+          code: "gateway_handler_failed",
+          status: 502,
+          truncated: res.headersSent && !res.writableEnded,
+        });
+        if (res.headersSent || res.destroyed) {
+          if (!res.destroyed) res.destroy();
+        } else {
+          sendJson(res, 502, { error: { code: "gateway_handler_failed", message: "The gateway failed." } });
+        }
+      }
       return;
     }
     if (req.method === "OPTIONS") {
@@ -1720,23 +1756,33 @@ function safeLogId(value) {
   return typeof value === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(value) ? value : null;
 }
 
-async function errorAudit(config, req, pathname, err, details = {}) {
-  if (!pathname.startsWith("/api/")) return;
-  const status = err instanceof HttpError ? err.status : 500;
-  const code = err instanceof HttpError ? err.code : "internal_error";
+async function appendErrorRecord(config, req, pathname, { status, code, requestId = null, truncated = false }) {
   const projectHeader = req.headers["x-open-science-project"];
   const projectId = safeLogId(Array.isArray(projectHeader) ? projectHeader[0] : projectHeader);
   const record = {
     createdAt: new Date().toISOString(),
-    requestId: details.requestId ?? null,
+    requestId,
     method: req.method ?? null,
     route: routePattern(pathname),
     status,
     code,
     projectId,
+    // A stream that was cut after its 200 is the one failure a caller cannot
+    // tell from success, so it is recorded as a property of the record rather
+    // than left to be inferred from the status.
+    ...(truncated ? { truncated: true } : {}),
   };
   const file = path.join(config.dataDir, ".openscience", "errors.jsonl");
   await appendJsonLineNoFollow(config.dataDir, file, record, { maxBytes: config.maxLogFileBytes }).catch(() => {});
+}
+
+async function errorAudit(config, req, pathname, err, details = {}) {
+  if (!pathname.startsWith("/api/")) return;
+  await appendErrorRecord(config, req, pathname, {
+    status: err instanceof HttpError ? err.status : 500,
+    code: err instanceof HttpError ? err.code : "internal_error",
+    requestId: details.requestId ?? null,
+  });
 }
 
 async function metricsSnapshot(ctx, taskManager) {

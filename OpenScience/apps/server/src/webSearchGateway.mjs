@@ -51,10 +51,14 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
-function sendError(res, error) {
+function sendError(res, error, onFailure) {
   const status = error instanceof WebSearchGatewayError ? error.status : 500;
   const code = error instanceof WebSearchGatewayError ? error.code : "web_search_gateway_failed";
   const message = error instanceof WebSearchGatewayError ? error.message : "Web search failed.";
+  // See the note in modelGateway.sendError.
+  if (typeof onFailure === "function") {
+    onFailure({ code, status, truncated: res.headersSent && !res.writableEnded });
+  }
   sendJson(res, status, { error: message, code });
 }
 
@@ -190,9 +194,9 @@ async function readBoundedJson(response, maxBytes) {
 }
 
 export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl = fetch } = {}) {
-  return async function webSearchGatewayHandler(req, res) {
+  return async function webSearchGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
-      sendError(res, gatewayError(404, "not_found", "Not found."));
+      sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
       return;
     }
     const controller = new AbortController();
@@ -265,7 +269,7 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
         ],
       });
     } catch (error) {
-      sendError(res, error);
+      sendError(res, error, onFailure);
     } finally {
       clearTimeout(timeout);
     }

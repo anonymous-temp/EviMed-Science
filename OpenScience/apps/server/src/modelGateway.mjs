@@ -72,13 +72,22 @@ function gatewayError(status, code, message) {
   return new GatewayError(status, code, message);
 }
 
-function sendError(res, error) {
+function sendError(res, error, onFailure) {
+  const status = Number.isSafeInteger(error?.status) ? error.status : 502;
+  const code = typeof error?.code === "string" ? error.code : "model_gateway_unavailable";
+  // Report before answering. A gateway failure used to end at this function:
+  // the code went back to the container and nowhere else, so a 401 storm from
+  // the provider and a quiet afternoon looked the same from outside. The
+  // truncated case matters most — headers are already out, the only answer
+  // left is a destroyed socket, and that is the one failure a caller cannot
+  // tell from success.
+  if (typeof onFailure === "function") {
+    onFailure({ code, status, truncated: res.headersSent && !res.writableEnded });
+  }
   if (res.headersSent || res.destroyed) {
     if (!res.destroyed) res.destroy();
     return;
   }
-  const status = Number.isSafeInteger(error?.status) ? error.status : 502;
-  const code = typeof error?.code === "string" ? error.code : "model_gateway_unavailable";
   const message = error instanceof GatewayError
     ? error.message
     : "The model gateway is temporarily unavailable.";
@@ -304,9 +313,9 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
 }
 
 export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = fetch } = {}) {
-  return async function modelGatewayHandler(req, res) {
+  return async function modelGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
-      sendError(res, gatewayError(404, "not_found", "Not found."));
+      sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
       return;
     }
     const abortController = new AbortController();
@@ -409,11 +418,11 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
         );
       }
       if (abortReason?.name === "TimeoutError") {
-        sendError(res, gatewayError(504, "model_gateway_timeout", "The model gateway request timed out."));
+        sendError(res, gatewayError(504, "model_gateway_timeout", "The model gateway request timed out."), onFailure);
       } else if (clientDisconnected && !res.headersSent) {
-        sendError(res, gatewayError(499, "model_gateway_client_closed", "The model gateway client disconnected."));
+        sendError(res, gatewayError(499, "model_gateway_client_closed", "The model gateway client disconnected."), onFailure);
       } else {
-        sendError(res, error);
+        sendError(res, error, onFailure);
       }
       if (!abortController.signal.aborted) {
         abortController.abort(error instanceof Error ? error : new Error("Model gateway failed."));
