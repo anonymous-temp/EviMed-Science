@@ -33,7 +33,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-tar -czf "$tmp" -C "$DATA_DIR" .
+# A running runtime leaves unix sockets in the data directory, and tar warns on
+# every one and exits non-zero. The archive is complete and verifies — the
+# restore drill passes on it — but the scheduler read that exit code as a failed
+# backup, on every single cycle, because a runtime always leaves sockets. They
+# are live endpoints, not data, and nothing restores from them.
+#
+# --exclude removes the only reason tar had to complain, so a non-zero exit
+# again means a real failure. Warnings that remain (a file changing as it is
+# read) still fail the backup, which is the intended behaviour.
+tar --exclude=".runtime-sockets" --exclude="*.sock" -czf "$tmp" -C "$DATA_DIR" .
 mv "$tmp" "$archive"
 
 if [ -n "${OPEN_SCIENCE_BACKUP_PASSPHRASE:-}" ] || [ -n "${OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE:-}" ]; then
