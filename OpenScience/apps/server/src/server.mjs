@@ -1655,20 +1655,41 @@ async function sendWorkspaceFile(req, res, ctx, rel, download) {
     } else {
       headers["Content-Security-Policy"] = previewSandboxCsp();
     }
-    await audit(ctx, download ? "file.download" : "file.preview", "completed", {
-      target: rel,
-      bytes: stat.size,
-    });
+    // The audit used to say "completed" here, before a single byte had moved,
+    // and a read error further down answered with a bare res.destroy(). The
+    // reader got a truncated report while the ledger and the audit both
+    // recorded a successful delivery. Settle the audit on what actually left.
+    const action = download ? "file.download" : "file.preview";
+    let settled = false;
+    let delivered = 0;
+    const settle = (status, error = null) => {
+      if (settled) return;
+      settled = true;
+      void audit(ctx, action, status, { target: rel, bytes: delivered, error });
+    };
     res.writeHead(200, headers);
     if (stat.size === 0) {
       await opened.handle.close();
       opened = null;
       res.end();
+      settle("completed");
       return;
     }
     const stream = opened.handle.createReadStream({ start: 0, end: stat.size - 1, autoClose: true });
     opened = null;
-    stream.on("error", () => res.destroy());
+    stream.on("data", (chunk) => {
+      delivered += chunk.length;
+    });
+    stream.on("error", (error) => {
+      settle("failed", /** @type {NodeJS.ErrnoException} */ (error)?.code ?? "stream_error");
+      res.destroy();
+    });
+    res.once("finish", () => {
+      settle(delivered === stat.size ? "completed" : "failed", delivered === stat.size ? null : "short_read");
+    });
+    res.once("close", () => {
+      settle("failed", "delivery_incomplete");
+    });
     stream.pipe(res);
   } finally {
     await opened?.handle.close();
@@ -1715,7 +1736,8 @@ async function audit(ctx, action, status, details = {}) {
     error: details.error ?? null,
   };
   const file = path.join(ctx.project.metaDir, "audit.jsonl");
-  await appendJsonLineNoFollow(ctx.project.rootDir, file, record, { maxBytes: ctx.config.maxLogFileBytes }).catch(() => {});
+  await appendJsonLineNoFollow(ctx.project.rootDir, file, record, { maxBytes: ctx.config.maxLogFileBytes })
+    .catch((error) => recordLedgerWriteFailure("audit", error));
 }
 
 async function auditRuntimeLifecycle(ctx, command, status, err = null) {
@@ -1739,6 +1761,26 @@ async function auditRuntimeLifecycle(ctx, command, status, err = null) {
   });
 }
 
+// The three ledgers below each swallowed their own write failure. A full disk,
+// a lost EACCES, a rotation that did not complete — the request succeeded, and
+// the one failure the audit chain cannot record is its own. Count them and put
+// the count where an operator already looks.
+const ledgerWriteFailures = { audit: 0, security: 0, errors: 0 };
+
+function recordLedgerWriteFailure(ledger, error) {
+  ledgerWriteFailures[ledger] += 1;
+  const count = ledgerWriteFailures[ledger];
+  // Loud once, then sparse: a failing disk would otherwise write the storm it
+  // is failing to write.
+  if (count === 1 || count % 100 === 0) {
+    process.stderr.write(`${ledger}.jsonl write failed (${count} so far): ${error?.code ?? error?.message ?? "unknown"}\n`);
+  }
+}
+
+export function ledgerWriteFailureCounts() {
+  return { ...ledgerWriteFailures };
+}
+
 async function securityAudit(config, action, status, details = {}) {
   const record = {
     createdAt: new Date().toISOString(),
@@ -1749,7 +1791,8 @@ async function securityAudit(config, action, status, details = {}) {
     code: details.code ?? null,
   };
   const file = path.join(config.dataDir, ".openscience", "security.jsonl");
-  await appendJsonLineNoFollow(config.dataDir, file, record, { maxBytes: config.maxLogFileBytes }).catch(() => {});
+  await appendJsonLineNoFollow(config.dataDir, file, record, { maxBytes: config.maxLogFileBytes })
+    .catch((error) => recordLedgerWriteFailure("security", error));
 }
 
 function safeLogId(value) {
@@ -1773,7 +1816,8 @@ async function appendErrorRecord(config, req, pathname, { status, code, requestI
     ...(truncated ? { truncated: true } : {}),
   };
   const file = path.join(config.dataDir, ".openscience", "errors.jsonl");
-  await appendJsonLineNoFollow(config.dataDir, file, record, { maxBytes: config.maxLogFileBytes }).catch(() => {});
+  await appendJsonLineNoFollow(config.dataDir, file, record, { maxBytes: config.maxLogFileBytes })
+    .catch((error) => recordLedgerWriteFailure("errors", error));
 }
 
 async function errorAudit(config, req, pathname, err, details = {}) {
@@ -1996,6 +2040,13 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
     "open_science_http_request_duration_seconds",
     "HTTP request duration by normalized route and method.",
     httpStats.durations,
+  );
+  addMetric(
+    lines,
+    "open_science_ledger_write_failures_total",
+    "Appends the audit, security, and error ledgers could not write. Nonzero means this process is no longer producing the record an operator would read to find out what went wrong.",
+    "counter",
+    Object.entries(ledgerWriteFailureCounts()).map(([ledger, value]) => ({ labels: { ledger }, value })),
   );
   addMetric(lines, "open_science_command_active", "Synchronous command requests currently running.", "gauge", {
     value: activeCommands,
