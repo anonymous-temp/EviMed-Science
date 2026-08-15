@@ -418,3 +418,59 @@ test("only a certified DeepSeek model is served, and it is the one configured", 
     assert.equal(config.deepseekModel, model);
   }
 });
+
+test("a gateway failure is reported to the caller's ledger, including one that arrives after the stream started", async (t) => {
+  // Every failure below used to end at sendError: the code went back to the
+  // container and nowhere else. The truncated case is the one that matters —
+  // headers are already out, so the answer is a destroyed socket, and to the
+  // reader that is indistinguishable from a model that stopped talking.
+  const failures = [];
+  const onFailure = (failure) => failures.push(failure);
+
+  const rejecting = createServer(createModelGatewayHandler(config("http://127.0.0.1:1"), runtimeManager()));
+  const rejectingBase = await listen(rejecting);
+  t.after(() => close(rejecting));
+  const unauthorized = await fetch(`${rejectingBase}/internal/model/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: "Bearer wrong-token", "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "x" }] }),
+  });
+  assert.equal(unauthorized.status, 401);
+  assert.equal(failures.length, 0, "a handler invoked without the hook must still answer");
+
+  const withHook = createServer((req, res) =>
+    createModelGatewayHandler(config("http://127.0.0.1:1"), runtimeManager())(req, res, onFailure));
+  const withHookBase = await listen(withHook);
+  t.after(() => close(withHook));
+  const reported = await fetch(`${withHookBase}/internal/model/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: "Bearer wrong-token", "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "x" }] }),
+  });
+  assert.equal(reported.status, 401);
+  assert.deepEqual(failures, [{ code: "model_gateway_token_invalid", status: 401, truncated: false }]);
+
+  failures.length = 0;
+  const stalling = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write("data: {}\n\n");
+    // and then never another byte, which is what an idle deadline is for
+  });
+  const stallingBase = await listen(stalling);
+  t.after(() => close(stalling));
+  const streaming = createServer((req, res) =>
+    createModelGatewayHandler(config(stallingBase, { modelGatewayTimeoutMs: 200 }), runtimeManager())(req, res, onFailure));
+  const streamingBase = await listen(streaming);
+  t.after(() => close(streaming));
+  const truncated = await fetch(`${streamingBase}/internal/model/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "x" }], stream: true }),
+  });
+  assert.equal(truncated.status, 200, "the status was already sent; only the body is cut");
+  await assert.rejects(truncated.text());
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].code, "model_gateway_timeout");
+  assert.equal(failures[0].truncated, true, "a stream cut after its 200 must say so");
+});

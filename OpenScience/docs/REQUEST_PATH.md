@@ -211,8 +211,8 @@ OpenCode 容器内部行为不在范围内。
 
 | # | 位置 | 触发条件 | 会被误读成什么 |
 |---|---|---|---|
-| S1 | `server.mjs:455-466`（配合 `:170-196`、`:1723-1740`） | 三条 `/internal/*` 网关的任何失败 | 完全不进 `errors.jsonl`；Prometheus 里被标为 route=`/static`。模型网关 401 风暴、证据网关 502 潮，在运维面板上等同于静态文件流量 |
-| S2 | `runtimeManager.mjs:3616-3661`、`:3663-3706`，根因 `requestRuntime` `:172-233` | 容器 socket 挂起（不关不答） | `requestRuntime` 无 socket 超时、这两个调用不传 signal → 监控轮询永久阻塞在 `await`。`monitorStallPolls`/`monitorMaxPolls` 永不递增，run 永远 `running`；`endProxy` 在 `finally` 里也永不执行，`activeProxies` 卡在 ≥1，空闲停机永不启动 → 容器永不回收。全程零日志 |
+| ~~S1~~ **已修** | `server.mjs`（网关分派、`routePattern`、`appendErrorRecord`） | 三条 `/internal/*` 网关的任何失败 | ~~完全不进 `errors.jsonl`；Prometheus 里被标为 route=`/static`~~。三条网关处理器现接受 `onFailure` 回调，各自的 `sendError` 是唯一出口，失败进同一本 `errors.jsonl` 并带真实 route 标签；流已开始后被掐断的记为 `truncated: true`。分派也移进 try，处理器抛出不再是进程级未处理拒绝。测试：`server.test.mjs`「the internal gateways are labelled and ledgered」、`modelGateway.test.mjs`「a gateway failure is reported to the caller's ledger」 |
+| ~~S2~~ **已修** | `runtimeManager.mjs`（`withRuntimeDeadline`） | 容器 socket 挂起（不关不答） | ~~监控轮询永久阻塞在 `await`~~。`sessionMessages` / `sessionStatus` 现经 `withRuntimeDeadline` 传 signal，超时以具名失败码结案 |
 | S3 | `server.mjs:1635` | 文件流读取中途出错 | `audit` 已写 `completed`（`:1622`）、`200` 与 `Content-Length` 已发出（`:1626`），随后 `res.destroy()`。读者拿到**被截断的报告**，账本与审计都显示成功 |
 | S4 | `agentRuns.mjs:1858-1864` | `readSessionHistory` 抛任何异常 | `catch { return false }`，而 `false` 的语义是「本轮无进展」（`:1899-1900`）。运行时 502/连接重置 → 累计 idlePolls → 最终以 `runtime_monitor_stalled` 结案（`:1901-1907`）。**一个还在干活的 run 被判定为「卡死」**，与真正卡死不可区分 |
 | S5 | `agentRuns.mjs:1739-1743` | `readSessionStatus` 抛任何异常 | `return run`，运行继续。OpenCode 对 `/session/status` 持续 500 与「会话确实 busy」在账本上完全一样 |
@@ -230,16 +230,19 @@ OpenCode 容器内部行为不在范围内。
 | S17 | `specialist_jobs.py:575-578` | 写失败状态时再次出错 | `except Exception: pass`，随后 `SystemExit(1)`。作业被永久留在 `running`（与 S16 叠加） |
 | S18 | `specialist_jobs.py:540` | 专科 Python 进程挂死 | `subprocess.run` 无 `timeout=`，`start_job` 也无墙钟。唯一的上限是 4 小时的 run monitor，而 S2 可能让它也不生效 |
 | S19 | `public_sources.py:1084-1086` | 降级链中 legacy 端点也失败 | `except PublicSourceError: pass`，只把第一层的错误放进 `warnings`。运行看到的是「EviMed 不可用」，看不到「legacy 也不可用」 |
-| S20 | `modelGateway.mjs:75-79`（配合 `:399-420`） | 流已开始后出任何错 | `sendError` 只能 `res.destroy()`；唯一痕迹是 `:407-409` 的一行 stderr，不进 `errors.jsonl`、不进账本、不进指标。**截断的回答与「模型说完了」在下游完全一样** |
+| ~~S20~~ **已修** | `modelGateway.mjs`（`sendError` 的 `onFailure`） | 流已开始后出任何错 | `sendError` 只能 `res.destroy()`；唯一痕迹是 `:407-409` 的一行 stderr，不进 `errors.jsonl`、不进账本、不进指标。**截断的回答与「模型说完了」在下游完全一样** |
 | S21 | `memoryIntelligence.mjs:286-294` | 模型抽取失败/超时 | 静默降级为确定性抽取；`extractionError` 只流向 `server.mjs:389-401` 的 `securityAudit(...).catch(() => {})`，而后者本身是 S11。配合 C1，生产环境可能长期处于「记忆抽取全灭」且无症状 |
-| S22 | `publicSourceGateway.mjs:736-737`、`webSearchGateway.mjs:267-268` | 网关内任何异常 | `catch { sendError(res, error) }`，处理器自身**一行日志都不写**。错误码只回给容器；服务端侧无留痕（与 S1 叠加后是彻底不可观测） |
+| ~~S22~~ **已修** | `publicSourceGateway.mjs`、`webSearchGateway.mjs`（两处 `sendError` 的 `onFailure`） | 网关内任何异常 | `catch { sendError(res, error) }`，处理器自身**一行日志都不写**。错误码只回给容器；服务端侧无留痕（与 S1 叠加后是彻底不可观测） |
 | S23 | `index.mjs:11-14` | 关停时 `app.close()` 抛异常 | `.catch(() => {})` 后 `process.exit(0)`。未落盘的 run、未停的容器、未关的连接池都算「干净退出」，编排层看到的是成功 |
 
-**合计 23 处静默点。**
+**合计 23 处静默点，已修 4 处（S1、S2、S20、S22），余 19 处。**
 
-补充一条非「静默」但同源的结构问题：`server.mjs:455-466` 位于 `handle()` 的 `try` 之外，
-三条网关处理器若抛出未被自身捕获的异常，将成为 `void handle(req, res)`（`:1221`）上的
-未处理 Promise 拒绝，即进程级崩溃而不是 500。
+已修的四处是同一处结构问题的四个出口：运行时的全部对外流量走三条 `/internal/*` 网关，而这三条在 `handle()` 的 try 之外应答，因此既不进错误账本、也拿不到真实的 route 标签。修法是给每条网关唯一的失败出口 `sendError` 加一个 `onFailure` 回调，由请求侧填账本与指标；流已开始后才失败的那一种（S20）单独记 `truncated`，因为它是**唯一一种下游无法与成功区分**的失败。
+
+~~补充一条非「静默」但同源的结构问题：三条网关处理器若抛出未被自身捕获的异常，
+将成为 `void handle(req, res)` 上的未处理 Promise 拒绝，即进程级崩溃而不是 500。~~
+**已修**：三条网关的分派合并进一个 try，抛出记 `gateway_handler_failed` 并按 502 收尾；
+若响应头已发出则销毁连接，与网关自身的语义一致。
 
 ---
 

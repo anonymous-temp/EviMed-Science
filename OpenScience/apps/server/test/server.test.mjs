@@ -87,7 +87,7 @@ async function withApp(fn, overrides = {}) {
   const address = await app.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;
   try {
-    await fn({ app, base });
+    await fn({ app, base, dataDir });
   } finally {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });
@@ -6231,4 +6231,36 @@ test("readiness rejects symlinked static index", async () => {
     await rm(dataDir, { recursive: true, force: true });
     await rm(staticDir, { recursive: true, force: true });
   }
+});
+
+test("the internal gateways are labelled and ledgered like every other route", async () => {
+  // The runtime's entire outbound traffic — every model call, every source
+  // fetch, every search — leaves through three paths that answered before the
+  // error ledger and were labelled "/static" in the metrics. A provider 401
+  // storm and a wave of images were the same line on the dashboard.
+  await withApp(async ({ base, dataDir }) => {
+    const paths = [
+      "/internal/model/v1/chat/completions",
+      "/internal/sources/v1/fetch",
+      "/internal/search/v1/query",
+    ];
+    for (const pathname of paths) {
+      const response = await fetch(`${base}${pathname}`);
+      assert.equal(response.status, 404, `${pathname} answers its own 404 on a wrong method`);
+    }
+    const file = path.join(dataDir, ".openscience", "errors.jsonl");
+    let records = [];
+    for (let attempt = 0; attempt < 50 && records.length < paths.length; attempt += 1) {
+      const text = await readFile(file, "utf8").catch(() => "");
+      records = text.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+      if (records.length < paths.length) await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    for (const pathname of paths) {
+      const record = records.find((entry) => entry.route === pathname);
+      assert.ok(record, `${pathname} must reach the ledger the API routes already use`);
+      assert.equal(record.code, "not_found");
+      assert.equal(record.status, 404);
+    }
+    assert.ok(!records.some((entry) => entry.route === "/static"), "no gateway failure may be filed as static traffic");
+  });
 });
