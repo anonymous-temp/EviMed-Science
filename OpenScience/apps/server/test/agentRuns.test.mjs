@@ -240,7 +240,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.6.0",
+      effectiveAgentVersion: "2.7.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
 
@@ -2753,6 +2753,14 @@ test("no package rejection is returned without issues to act on", async () => {
 test("every repairable rejection is a code the gate actually returns", async () => {
   const source = await readFile(new URL("../src/agentRuns.mjs", import.meta.url), "utf8");
   const returned = new Set([...source.matchAll(/errorCode:\s*"(specialist_[a-z_]+)"/g)].map((m) => m[1]));
+  // The delivery gate names its own defects through clinicalEvidencePackageErrorCode
+  // rather than as a literal here, so the classification table is the second
+  // place a code is returned from. A code listed as repairable and present in
+  // neither is dead, which is what this test exists to catch.
+  const gate = await readFile(new URL("../src/clinicalEvidenceQuality.mjs", import.meta.url), "utf8");
+  const table = /const clinicalEvidenceIssueCodes = Object\.freeze\(\[([\s\S]*?)\n\]\);/.exec(gate);
+  assert.ok(table, "the gate's error-code table moved");
+  for (const [, code] of table[1].matchAll(/code:\s*"([a-z_-]+)"/g)) returned.add(code);
   const dead = [...repairableEvidencePackageErrorCodes].filter((code) => !returned.has(code)).sort();
   assert.deepEqual(dead, [], `listed as repairable but never returned: ${dead.join(", ")}`);
   // The one that motivated widening it, held explicitly.

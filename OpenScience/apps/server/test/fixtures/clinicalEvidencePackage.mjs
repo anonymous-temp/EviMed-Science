@@ -102,8 +102,12 @@ export function deepResearchPackage() {
       recordsAfterDeduplication: 24,
       sourcesIncluded: 12,
     },
+    // referenceNumber is what makes the numbered reference list checkable
+    // against the included source set: the list a reader sees must be exactly
+    // the records this run read.
     sourceRecords: sources.map((source, index) => ({
       sourceUrl: source.sourceUrl,
+      referenceNumber: source.referenceNumber,
       included: true,
       accessLevel: index < 10 ? "full_text" : "official_page",
     })),

@@ -78,6 +78,48 @@ Decompose the question into the evidence domains it actually needs. Derive them 
 
 Do not carry a previous question's domains into this one. If the question is about drug stability, ECG and troponin are not its domains; if it is about triage, formulation chemistry is not.
 
+### The question ledger: one entry per asked question, and a declared gap stays a gap
+
+Decomposition is also a deliverable. Write `question-coverage.json` next to the
+files listed under "Required outputs". Copy the task's 「需要回答的问题」 section
+into `taskQuestionBlock` verbatim, then create exactly one `questions[]` entry per
+numbered item, in the task's own order and under the task's own numbering — never
+merge two items into one, never renumber. Inside each item, split on 顿号,
+破折号, 「或」, and parallel clauses into atomic sub-questions; an item needs at
+least as many sub-questions as it has 「？」. A 「若 X 检索不足则回到 Y」 fallback
+branch is itself a sub-question.
+
+Give every sub-question exactly one status:
+
+- `answered` — list `reportLines`, the 1-indexed lines of
+  `clinical-evidence-report.md` where you actually answer it. Point at body
+  prose, not at a heading, not at the abstract, not at the reference list. A line
+  that only says 「未检索到…」 is not an answer; that sub-question is a gap.
+- `gap` — give the `searchQuery`, `database`, and `searchDate` you actually ran.
+  The query and the database must appear in `clinical-evidence-search.json`'s
+  `queries[]`, and the date must be that entry's `searchedAt` date. Also list one
+  to five `gapTopicTerms`, each copied verbatim out of that sub-question's own
+  wording, each at least four Chinese characters, and none of them a phrase from
+  the report title.
+
+The ledger then binds the prose. Where `摘要` or `引言` restates the scope of the
+work, it may not name fewer items than the ledger holds. And once a sub-question
+is registered as a gap, its topic may not reappear in `摘要`, `结论`, or
+`临床实践要点` as a ranking, a composition share, a 「最常见」, a threshold, a
+「证据为阴性／已证实无效」, or a 「已有数据显示」. A premise you could not verify
+downgrades the sub-questions that depend on it; it does not delete the ones that
+do not.
+
+- 正例（`结论`，缺口在结论里仍然是缺口，依赖它的论断降级、不依赖它的照常给出）：
+  `（一）速效救心丸按处方药还是非处方药（甲类/乙类）管理、其出处、不同规格与批准文号之间分类是否一致、以及分类沿革，均无法从本研究可及的任何权威来源核实；原因是官方登记与公告不可及、标签索引副本不含分类字段、中文全文数据库不可访问。凡以某一具体分类属性为前提的渠道论断，只能以条件句表述。`
+- 反例（同一段先声明缺口，再把缺口当已知构成使用）：
+  `其三，高原暴露人群的急性冠脉事件、心绞痛与心血管死亡发生率相对平原的差异，缺乏前瞻性对照数据；以胸闷、心慌、气短为主诉者的病因构成比例亦无分母明确的研究。现有证据仅支持"急性高原病是最常见病因、高原肺水肿与高原脑水肿罕见但致命、肺栓塞可与高原肺水肿混淆、心源性猝死以既往心肌梗死与不习惯运动为要"这一较弱表述。`
+  为什么是反例：「病因构成比例无分母明确的研究」是一条缺口，紧接着的「最常见病因」
+  却是一个构成排序。要么把该子问登记为 `answered` 并指向承载分母的正文行，要么删掉
+  排序断言。同一批交付里的另一种写法是把五问的题面在 `摘要` 重述成三问
+  （`……回答三个问题：（1）…（2）…（3）…`），第五问此后全文不再出现——重述的条目数
+  不得少于台账。
+
 ### Reproducible search
 
 Search iteratively across at least two relevant source classes. Use English and Chinese synonyms when relevant. Continue until every material section has usable evidence and further query variation is no longer changing the conclusion; do not stop because a numeric query target was reached.
@@ -186,6 +228,60 @@ For every included source, record:
 - whether the source directly supports, qualifies, or conflicts with another source.
 
 Separate findings for emergency triage from findings for chronic stable disease. Evidence that a medicine may help diagnosed stable angina does not establish a role in self-diagnosing undifferentiated acute chest pressure. The transfer fails in the other direction too, and a care setting is not a population — see "Stratify the population before you conclude".
+
+### An instrument you name in `资料与方法` should be executed once in `结果` or `讨论`
+
+Naming RoB 2, ROBINS-I, ROBINS-E, QUADAS-2, AMSTAR 2, AGREE II,
+Newcastle-Ottawa, Naranjo, WHO-UMC, Jadad, or GRADE in the methods section is a
+promise that a rating follows, not a statement of your qualifications. For each
+instrument you name, `结果` or `讨论` should carry at least one sentence that
+applies it — to a specific study, in a paragraph that carries that study's `[n]`;
+or as a certainty verdict on a body of evidence, which legitimately stands a
+paragraph below the `[n]`s of the studies it summarises; or as an explicit
+statement that no study exists to apply it to. Hedging an instrument with
+思路 / 精神 / 理念 / 参照…要点 is not using it — write what you actually did
+instead.
+
+**This one is advice, not a gate.** The reason is that pre-specifying an
+instrument per design stratum is exactly what the methods section is for, and a
+stratum your search returned nothing for owes no sentence retiring its
+instrument: 「诊断准确性研究以 QUADAS-2 评价偏倚风险」 stays correct in a run that
+included no diagnostic-accuracy study. So **do not delete an instrument name from
+`资料与方法` in order to clear a notice** — the pre-specification is the
+methodological transparency the notice exists to protect. Delete it only if it
+was never part of your plan. The gate reports the gap and delivers the package.
+
+A GRADE level must agree with the downgrade reasons written next to it, and this
+one *is* a gate. Any downgrade at all excludes 高, so a sentence that **asserts a
+deficiency** in the evidence — 方法学质量偏低, 偏倚风险高/严重/不明确,
+存在不一致/间接性/不精确, or a downgrade actually taken — may not give a level that
+reaches 高, including ranges such as 中至高. Naming the five domains in order to
+say you did *not* downgrade for them is the standard way to justify 高 and is not
+this error: 「偏倚风险低、结果一致、估计精确、无发表偏倚证据，按 GRADE 评为高确定性」
+and 「未对任何领域降级，按 GRADE 评为高确定性」 both pass. Naming GRADE's starting
+point (从"高"起步…降一级…评为低确定性) is correct and is not this error either.
+Beyond what a check can measure, the level must match the *number* of downgrades
+you state, not merely avoid 高; and every population stratum you declare in
+`资料与方法` needs an identifiable subsection or label in `结果` and one appearance
+in `结论` and in `临床实践要点`, or an explicit 该层未检索到证据.
+
+- 正例（工具落在一篇具体文献上，与该文献编号同段）：
+  `按 QUADAS-2，该研究排除了初始心电图明确心肌梗死与已行急诊导管检查者，存在选择偏倚风险，且"非心源性"以检查阴性定义、随访期短，但结论方向与既往同类研究一致 [6]。`
+  正例（无文献可评时的正确写法）：
+  `未检索到针对本品的 Naranjo 或 WHO-UMC 因果关系评定，也未检索到去激发与再激发观察的个案或系列。`
+  正例（证据体级评级，独占一段，编号在它汇总的各研究上）：
+  `综合而言，机制层面可支持"本品含川芎嗪，具有钙拮抗与血管舒张作用"的方向性结论，按 GRADE 属低确定性，降级理由为间接性（离体组织与动物而非目标人群、静脉而非含服给药）。`
+  正例（GRADE 等级与降级理由自洽）：
+  `按 GRADE 评估，该证据体从"高"起步，因偏倚风险（单个试验、结果仅为摘要层级，RoB 2 无法完整评估）降一级，因不精确（单个试验，长期时点无合并效应量及置信区间）再降一级，评为**低确定性** 〔推导〕。`
+  正例（判为"高"时，逐个点名五个领域并说明未降级——不触发本条）：
+  `两项大型随机对照试验偏倚风险低、结果一致、估计精确、无发表偏倚证据，按 GRADE 评为高确定性 [1]。`
+- 提示例（`资料与方法`宣告一整套工具，全文再无一次落地；只提示，不阻断交付）：
+  `鉴别要点的诊断效能以诊断准确性研究及其系统评价为准，用 QUADAS-2 评价；干预性研究用 Cochrane RoB 2，非随机干预研究用 ROBINS-I，系统评价用 AMSTAR 2，指南方法学质量用 AGREE II 说明。……药物与不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定。`
+  提示例（弱化词等同于未使用）：
+  `干预性研究以 Cochrane RoB 2 / ROBINS-I 思路评估偏倚风险；指南与共识以 AGREE II 思路说明方法学质量。`
+  反例（同句断言"方法学质量偏低"，等级却给到含"高"的区间——这一条阻断交付）：
+  `但纳入研究整体方法学质量偏低、多数为中文单中心小样本试验，按 GRADE 在中至高之间`
+  ——同一证据体在 `结果` 中已写为「低或极低确定性」。
 
 ## Comparative appraisal and evidence bridging
 
@@ -534,6 +630,204 @@ it. Appraising two arms evenly does not even out their risks.
 
 ## Citation and traceability integrity
 
+### Screening numbers and the source set are rendered from the log, never written by hand
+
+`clinical-evidence-search.json` is the ledger of what this run actually did.
+Four quantities live there and nowhere else — `queries.length`,
+`screening.recordsIdentified`, `screening.recordsAfterDeduplication`,
+`screening.sourcesIncluded` — together with the identity of every record you
+included. When the report states one of those quantities, copy it out of the
+file; do not restate it from memory and do not round, re-count or re-estimate
+it. If the sentence and the file disagree, the file is not the thing that is
+wrong.
+
+The numbered reference list is the same fact seen from the reader's side. **It
+must be exactly the set of `sourceRecords` whose `included` is `true`** — same
+count, same reference numbers. A record you never read to an inspectable level
+(`full_text`, `abstract`, `official_page`, `structured_record`) may not be
+numbered in 参考文献 and may not carry an in-text `[n]`, not even as background
+colour, and not even if you label it 「题录层级」. Read it, or drop it. Keeping
+the record at `included: false` while still citing it does not make the citation
+honest; it makes the count a lie.
+
+When an identifier resolves and a bibliographic field does not come back, leave
+the field empty and mark it 未解析. Never fill it from what the title suggests,
+and never reuse another paper's author list.
+
+- 正例（流程句逐字取自检索日志，编号表与之一致）：
+  `共执行 21 条检索，命中 194 条记录，去重后 148 条，纳入 15 份来源。`
+  该次运行的日志正是 `queries.length = 21`、`screening = {recordsIdentified: 194,
+  recordsAfterDeduplication: 148, sourcesIncluded: 15}`，`参考文献` 恰为 15 条，
+  编号 1–15，且正是那 15 条 `included: true` 的记录。
+- 反例（四个数字都是手写的，没有一个能对上日志）：
+  `以 PMID、DOI、稳定 URL 及规范化题名去重后，共获得 191 条记录，去重并剔除无关记录后余 116 条，最终纳入 25 个来源。`
+  同一次运行的日志写着 `203 / 125 / 24`，`参考文献` 有 24 条，连它自己的
+  `citation-audit.md` 开篇都写着「核查范围：全部 24 条编号参考文献」——正确的数字
+  就在同一交付里，只是没有被渲染出来。
+- 反例（另一条腿：编号表里坐着从未读到可核查层级的记录）：
+  `2018 ACC/AHA/HRS 心动过缓和心脏传导延迟评估与管理指南[6]、窦房结功能障碍综述[7]、2022 年 JCS/JHRS 心律失常诊断与风险评估指南[8]，均以窦房结功能障碍的评估与管理为主题，其全文在本次检索中不可获取，仅能列为题录。`
+  这三条在日志里是 `"accessLevel": "bibliographic", "included": false`，而同一份报告
+  写着「最终纳入 7 个来源」，`参考文献` 却编了 12 条。在正文里标注「仅能列为题录」
+  并不能修复它：读者看到的仍然是十二个编号来源，方法学写的是七个。
+
+A per-query hit count is not the flow and is fine to state on its own —
+「临床试验注册库以"速效救心丸"检索命中 0 条」 is a result, not a screening total,
+and it is not compared against `recordsIdentified`.
+
+### Reference-table closure (nothing floats, no number is an orphan)
+
+The numbered list and the body must close on each other in both directions.
+
+- **Every numbered entry in `参考文献` must be cited at least once by a `[n]` in
+  the body**, and every `[n]` in the body must resolve to an entry. Table cells
+  and the abstract count as body.
+- **A source you retrieved but did not use is not a reference.** Record it in
+  `clinical-evidence-search.json` as a `sourceRecords` entry with
+  `"included": false` and a non-empty `exclusionReason`, then drop it from the
+  numbered list and renumber. Naming it once in `局限性` as "full text
+  unavailable" is not a use.
+- **Never put a bibliographic identifier in the citation slot.**
+  `[PMID 22897413]` resolves to nothing a reader can follow and to no claim. If
+  the source is worth naming it earns a number and a claim; if it is not, it
+  goes to the excluded list.
+- **Every line carrying a `<!-- claim:CLM-NNN -->` marker must also carry that
+  claim's own `referenceNumber`** (or, for a synthesized claim, one of its
+  `referenceNumbers`). Having paired the marker correctly earlier in the report
+  does not exempt a later line. Derived results are exempt: they carry 〔推导〕
+  and no number of their own.
+
+- 正例（两个 claim 的 `referenceNumber` 都是 6，句内编号含 6；表格单元格里的
+  `[6]` 同样算作「已被引用」）：
+  `连续高敏肌钙蛋白 0/1 小时算法灵敏度 99.3%、假阴性约 2/1,000，是现行指南以客观检查完成排除的节点 [6,10]<!-- claim:CLM-015 --><!-- claim:CLM-016 -->。`
+- 反例（参考表里的孤儿条目）：
+  `11. Walker NJ, Sites FD, Shofer FS, Hollander JE. Characteristics and outcomes of young adults who present to the emergency department with chest pain. Acad Emerg Med. 2001;8(7):703-708. PMID:11435184.`
+  全文没有任何 `[11]`：这条青年胸痛队列只在 `局限性` 里被顺带提了一句「全文未获」，
+  而它恰恰是该报告要回答的问题所需的队列。一个零引用的编号条目几乎总是指向一个没答
+  完的问题；要么真正引用它，要么以 `included: false` 加 `exclusionReason` 记入检索
+  日志并退出编号表。
+- 反例（行内标识符绕过参考表）：
+  `……针对膝骨关节炎患者的中医诊断变量信度研究……[题录，PMID 22897413，全文未获]；冠心病痰瘀互结证中医诊断量表研究方案……[题录，PMID 29721788，全文未获]。`
+  这句话承载的是一条否定性断言（「未检索到……的实证研究」），却把两条来源塞进方括号
+  里当引用用，既不在参考表中，也没有对应 claim。
+- 反例（锚点编号与句内编号不符）：
+  `- 发作频率增加、含服后缓解不如既往或症状加重时，及时就医评估而非自行调整剂量 [6]；心绞痛持续发作者，说明书提示宜加用硝酸酯类药 [6]。<!-- claim:CLM-021 -->`
+  `CLM-021` 的 `referenceNumber` 是 22，内容是一条中成药系统评价的结局概述；这条临床
+  实践要点挂在一条支持不了它的 claim 上。同一个 marker 在报告前半部分配对正确，不豁免
+  这一行。
+
+### A quotation carries the predicate, not just the number
+
+A citation check can verify that a figure appears in the quotation. That is not
+enough: the **predicate** attached to the figure — its direction, its metric
+type, its frequency grade — must be visible in the same quoted breath.
+
+1. **Direction.** An OR/RR/HR and the direction word in its clause must agree; a
+   ratio above 1 means the event became *more* likely. If the source really does
+   report the odd caliber, say so in the same clause — which arm is the
+   numerator, which group is the reference. An effect size with no interval
+   estimate may not appear in `摘要` or `结论`: write it in `结果` only, as a point
+   estimate with the interval marked unreported.
+2. **Likelihood-ratio type.** Print the type word your `supportQuote` prints.
+   `pLR`/`LR+` is a *positive* likelihood ratio even when its value is below 1.
+   Any post-test-probability derivation states in `method` which class of LR it
+   consumes, and whether it applies to the feature being present or absent.
+3. **Non-knowledge.** If the quoted sentence's whole content is that something is
+   unknown, no claim anchored to it may assert that the effect is established.
+   Find the sentence that reports the result.
+4. **Ellipsis.** A `…` inside a quote is a high-risk mark. A threshold
+   (temperature, dose, time point) and the direction word bound to it must sit
+   inside **one** unelided run of the quote. Each fragment being verbatim is not
+   enough, and that is exactly how a reversed finding gets through.
+5. **Frequency grade.** 罕见/偶见/常见/十分常见 may only be printed alongside the
+   rate that grounds it, in the same sentence. Bare case counts are not a rate.
+6. **The title is not a quotation.** `supportQuote` is a statement from the
+   source's body, never its title, running head, or reference entry.
+
+- 正例（类型词、数值、区间三者与引文逐一对上；引文原文为 `negative DLR, 0.04
+  (0.02−0.09)`）：
+  `EDACS-ADP 的系统评价（12 项研究、14 290 例）报告合并灵敏度 0.97（0.95–0.99）、特异度 0.58（0.53–0.63）、阴性似然比 0.04（0.02–0.09）`
+- 反例（数值全部对得上，谓语反了）：
+  `其判别效能集中于"按压可复现"：其阴性似然比在 0.13 至 0.41 之间 [4]`
+  该行锚定的 `CLM-006`，其 `supportQuote` 是
+  `pain reproducible by palpation might be helpful for ruling out myocardial ischemia, with pLR ranging from 0.13 to 0.41`
+  ——这是**阳性**似然比。改写之后，随之而来的整段排除能力论证与
+  〔推导〕（post-test odds = pretest odds × LR(−)）全部建在这个改写上。同型反例：
+  `1 年 MACE 下降（p<0.05，OR 1.916）`（比值大于 1 却写成下降，且没有区间就进了
+  `摘要` 与 `结论`）；`制备加热至 70 ℃ 以上即出现龙脑的挥发损失`（引文里 70 ℃
+  那一段写的是 `markedly increased release`，`decline` 在省略号的另一侧）。
+
+### Attribution rests on the quote, never on the number
+
+An entity or a stance is carried by the wording of the quote, not by the figure
+standing next to it.
+
+1. **Do not narrow the entity a number belongs to.** If the source reports an
+   umbrella category — 全因猝死, 全部胸痛, 「娱乐活动或运动」 — you may not restate
+   its figure under a narrower one (心源性猝死, 急性冠脉综合征, 「运动中」) unless
+   you also give the subset fraction and recompute. Name a compound category by
+   both of its parts.
+2. **Do not add attributes the quote does not state.** A cohort name, database,
+   exposure measure, country, or design label may only be used as the quote
+   itself words it, and an attribute you supplied may never be the thing that
+   dissolves a conflict between two results. A 「建议摄入上限」 is a dietary or
+   regulatory recommendation; it is not a threshold below which some outcome does
+   not rise.
+3. **An attributed position must be quoted, not inferred from data.** 作者指出 /
+   作者认为 / 作者将…视为 / 该研究强调 / 原文提醒 — every such sentence cites a
+   claim whose `supportQuote` states that position in the source's own words. A
+   quote that only reports measurements cannot carry one: numbers are what a
+   study found, not what its authors concluded. If no preserved passage says it,
+   either quote the passage or drop the attribution and own the reading
+   (本研究认为…). Writing the position into the claim's `claim` /
+   `applicability` / `uncertainty` field and then citing that claim does not
+   work — those are your words, and only `supportQuote` is checked against the
+   preserved artifact.
+
+- 正例（归属句与引文逐字对得上，数值和结论各有各的出处）：
+  `在以聚乙二醇 6000 为载体熔融制备固体分散体的过程中，加热温度升至 70 ℃ 以上、延长加热时间均使龙脑的释放量下降，作者将其归因于升温下的挥发损失 [3]。<!-- claim:CLM-004 -->`
+  `CLM-004` 的 `supportQuote` 里就写着这句归因：
+  `This decline was likely due to volatilization losses of L-borneol at elevated temperatures.`
+- 反例（数字全对，立场是造的，而这条被伪造的立场是一条给医师的操作建议）：
+  `……女性以焦虑（校正 OR 2.9，95% CI 1.1–8.1）、心悸、恶心为表现者更多，作者指出这些症状"常被误释为焦虑或惊恐障碍，导致诊断延迟"，并主张对以心悸、焦虑、恶心就诊者行心电图以排除心律失常 [7]。<!-- claim:CLM-008 -->`
+  `CLM-008` 的 `supportQuote` 全文只有
+  `278 were included … anxiety (OR 2.9 (95% CI 1.1 –8.1, p=0.031)) were more frequent in women when presenting in the ED.`
+  ——引号里那句「常被误释…」和「主张行心电图」这条建议，来源一个字都没说。
+- 反例（上位实体换成下位实体，数值原样搬过去）：
+  `第三，青年心源性猝死少见（约 2,4/10 万人·年）[5]<!-- claim:CLM-012 -->`
+  `CLM-012` 的引文是
+  `159 SD were identified, corresponding to an annual incidence of 2,4 … per 100.000 people-years. … There were 70,4% cardiac`
+  ——2,4 是**全部**突发死亡的发生率，心源性只占其中 70,4%。同一份报告在正文三处都
+  正确写作「突发死亡」，只有结论这一行换成了「心源性猝死」，量级因此错了三成。要么
+  写「突发死亡」，要么写「心源性猝死约 1,7/10 万人·年（2,4 × 70,4%）」并标为推算。
+
+### Article-level regulatory citations need the regulator's own text
+
+An article locator — `《…法/条例/办法/规定/细则/准则/规范/决定/命令/公告/通知/药典》…第 N 条`
+— asserts what a normative text says at clause granularity. Only the issuing
+authority's own published text can carry that. On any body line (before
+`## 参考文献`) containing such a locator, at least one source cited on that line
+must be a matrix claim whose `sourceUrl` host sits in a government namespace
+(`.gov`, `.gov.<cc>`, `.go.<cc>`, `.gouv.fr`, `.europa.eu`, `.int`), whose
+`artifactPath` is in this run's `successfulSourceArtifacts`, and whose
+`supportQuote` or `claim` names the same article number (第二十九条 and
+Article 29 both count).
+
+A journal article, a review, a law-school commentary, a portal reprint, or a
+bare reference-list entry with no preserved artifact cannot carry an article
+number, however accurately it paraphrases the law. If you cannot preserve the
+statute, you have not lost the point — you have lost the locator. Drop the
+article number and state what your source actually is. Naming a statute without
+a clause locator (`《药品管理法》将"超过有效期的药品"列为劣药情形之一`) is always
+allowed, and so is citing the fact that a document was issued, together with its
+document number, while saying its clauses were not obtained.
+
+- 正例（条款不可及时的正确降级写法）：
+  `检索所及的监管门户显示，国家药监局综合司于 2026 年印发《处方药网络零售合规指南》（药监综药管函〔2026〕282 号）[18]<!-- claim:CLM-019 -->，但其正文与处方药销售记录、药师指导、网络销售及追溯的具体条款未能获取核对`
+- 反例（`[13]` 是一篇发表于 Front Pharmacol 的法学综述，不是法条原文）：
+  `《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点：无有效或更优治疗手段、有循证医学证据支持、患者知情同意、医疗机构内部审查批准 [13]`
+  改法之一，不需要任何新检索：
+  `一篇分析《医师法》（2021）实施后超说明书用药的法学综述将其合法前提归纳为四点：无有效或更优治疗手段、有循证医学证据支持、患者知情同意、医疗机构内部审查批准 [13]`
+
 ### Reader-visible citations
 
 Use standard numbered citations in order of first appearance:
@@ -592,6 +886,8 @@ Write `clinical-evidence-matrix.json` with a top-level `claims` array containing
 
 `referenceNumber` must resolve to the numbered reference list. `supportQuote` must be a verbatim passage present in the preserved source artifact. Every numeral in a claim must also appear in the quote, source title, or identifier.
 
+Every claim also carries `pico`, `picoMatch`, `denominatorKind`, and `requiredCaveats`, and the matrix root carries `questionPico` — see "A claim's caveats travel with it".
+
 Quote contiguously by default. You may elide a passage you do not need by marking the gap with `…`, as any scholarly quotation does; each side of the gap is then checked on its own and must appear in the source in the order you wrote it. Never join two passages without marking the gap, and never elide across a qualification — a quote reading "the effect was significant … in the subgroup analysis" that hides "not" is a misquotation whether or not the words are all in the document. Copy sentences as they read: an inline citation marker the extractor left mid-sentence ("…in coronary spasm patients.23 Li Jin et al…") is not part of the sentence and may be left out.
 
 **`artifactPath` is copied from a tool result — never typed by hand.** Only two tools preserve an artifact you may cite: `evimed_open_access_full_text` (papers, by DOI or PMCID) and `evimed_official_page_fetch` (labels, guidelines, regulatory and institutional pages). Each returns the workspace path it wrote under `.evimed-sources/`; that exact string is the `artifactPath`. A search hit is not an artifact — search tells you what exists, preservation is a second call.
@@ -615,6 +911,47 @@ A weighed cross-source conclusion — "across these four trials the evidence lea
 - `supportingSources`: at least two distinct sources — distinct meaning different documents, so the same `artifactPath` listed twice is one source, not two. Each entry carries `sourceUrl`, `sourceTitle`, `artifactPath`, `accessLevel`, and its own contiguous verbatim `supportQuote` from its own preserved artifact — every entry is checked exactly like a direct claim's source.
 
 Numerals in a synthesized claim must either appear in one of the supporting quotes/titles/identifiers, or be a count of the supporting sources themselves ("4 项研究中 3 项…" — the gate counts). **A claim that says "three independent studies" needs three different documents behind it.** One paper cited three times is one study, and writing it as three overstates the evidence in the direction that matters most — a reader takes independent replication as far stronger than a single finding. Count the distinct artifactPaths before you write the number. Do not use the synthesized type to smuggle in numbers no source states, and do not use it for claims a single source does support — those stay direct claims.
+
+### A claim's caveats travel with it
+
+Every `direct` and `synthesized` claim registers, alongside `applicability` and
+`uncertainty`:
+
+- `pico` — the `{population, intervention, outcome}` the claim actually measured;
+- `picoMatch` — each of those three judged `"same"` or `"different"` against the
+  matrix root's `questionPico`;
+- `denominatorKind` — one of `exposed_population_prevalence`,
+  `presenting_population_share`, `trial_enrollment_share`, `not_applicable`;
+- `requiredCaveats` — **at least one** entry, each
+  `{ "id": <slug>, "forms": [...] }`. A caveat is the shortest form of a limit
+  you already stated for this claim in `结果`; `forms` lists the interchangeable
+  spellings you use for that one limit, so a caveat written as 「撒哈拉以南非洲」
+  in `结果` and 「坦桑尼亚」 in `摘要` is one caveat with two forms, not two
+  caveats. Every form must appear somewhere in the report body — you register
+  what you wrote, you do not invent a label.
+
+Wherever that claim is restated in `摘要`, `结论`, or `临床实践要点`, one form of
+each registered caveat appears in the same sentence, or in the sentence
+immediately before or after it. The same holds anywhere one sentence cites claims
+with two different `denominatorKind` values. A conclusion written in negative
+voice (无效 / 不推荐 / 无获益) rests on at least one claim whose `picoMatch` is
+`"same"` on all three fields; with no such claim, the sentence is downgraded to
+「未检索到该人群（或该终点）的直接证据」.
+
+Registering caveats you then have to reproduce is the point. If reproducing one
+makes a practice point unwriteable, the practice point was never supported.
+
+- 正例（动物与 16 倍剂量两条限定都随主张走到了行动指令一层）：
+  `- 孕妇禁用 [1]；川芎在 16 倍临床剂量下于动物中显示弱胚胎毒性，与该妊娠禁忌方向一致 [10]。<!-- claim:CLM-010 -->`
+  `CLM-010` 的 `requiredCaveats` 登记为 `{"id":"population","forms":["动物","小鼠"]}`
+  与 `{"id":"dose","forms":["16 倍","16倍"]}`，读者不会把动物高剂量信号读成人体剂量
+  风险。
+- 反例（限定在实践要点这一层一个不剩）：
+  `- 家庭备置本品应置于儿童不可及处；家庭贮存药品的风险包括儿童误服，儿童中毒登记中药物为仅次于农药的常见毒物 [13][15]。<!-- claim:CLM-015 -->`
+  `结果` 一节写得很清楚：「上述均为跨药品类别的家庭药箱与中毒研究……儿童中毒登记未
+  单独列出本品」。到了实践要点，「药物为仅次于农药的常见毒物」于是读起来像是在说本
+  品。同一份报告的 `摘要` 还把 62.4% 那条的「埃塞俄比亚 Dessie」抹掉只留数字——数值
+  与矩阵完全一致，丢掉的是它的分母属于谁。
 
 ### Derived results (your own estimate, bound, or inference)
 
@@ -754,6 +1091,48 @@ an argument about how far the conclusions can be trusted, not a checklist. Do no
 report tool, gateway, file, or page-retrieval failures in the academic report.
 
 ### `临床实践要点`
+
+**Emergency-call triggers may never be conditioned on how a self-administered
+medicine performed.** An item that tells the reader to call emergency services
+must state its trigger in terms of **symptoms and signs only**. A trigger
+phrased as "the drug did not work" — 含药不缓解 / 服药后无效 / 含服 N 分钟后不缓解
+/ 未完全缓解即呼叫 — is forbidden, **even when a guideline you cited says exactly
+that**. It is forbidden because this section always also carries the
+unconditional rule (「服药不是等待的理由，应在服药的同时呼叫急救」), and a reader
+cannot execute both. The only permitted register is unconditional: 无论服药与否、
+无论是否缓解. If a source does state a drug-response threshold, restate it
+faithfully in **结果** with its citation; 结果 describes what the literature says,
+and 临床实践要点 is the one section a reader executes.
+
+Writing the forbidden order in order to reject it is fine. The negation
+(而非/不得/不应/无论/不宜/不因/不构成/不等同…) may stand in the clause that carries
+the phrase **or anywhere later in the same sentence** — 「若含服后…不缓解，应立即
+呼叫急救，不得因已服药而推迟」 rejects the delay in its last clause and is
+compliant. It must be in that sentence: a rejection in a neighbouring sentence
+licenses nothing.
+
+The medication word and the non-relief word must also stand in **one clause** to
+count as one trigger. 「症状经首次含服明显改善后，方可每间隔 5 分钟重复给药；未完全
+缓解即呼叫 120」 is compliant — the clause after 「；」 names no medicine and points
+at calling 120 *sooner*. So is 「已服药者，出现新发晕厥、意识不清且症状不缓解，立即
+呼叫 120」, where 已服药者 is a population qualifier and the trigger is the signs.
+
+- 正例（同句里出现了「含服」「无效」「呼叫 120」，但「无效」被同一小句里的「而非」
+  判为错误做法，触发条件仍然只是症状）：
+  `含服速效救心丸不是等待的理由：如需服用，应与呼叫 120 同时进行，而非先含服、无效再呼叫。`
+- 反例（前半句刚写完「无论…均不得作为推迟呼叫 120 的理由」，后半句就把「含药不缓解」
+  并列进了呼叫急救的触发条件枚举）：
+  `**急救底线（不可弱化）**：心绞痛/可疑急性冠脉综合征发作时，无论含服速效救心丸还是复方丹参滴丸，均**不得作为推迟呼叫 120 / 就医的理由**；胸痛持续、伴大汗、气促、含药不缓解者应立即拨打急救电话并按现行急救指南处理。`
+  等于告诉读者：药还没试出无效之前，这一条不成立。改法是删掉该枚举项，只留症状项，
+  并保持无条件口径：
+  `胸痛持续、伴大汗、气促者应立即拨打急救电话；是否服药、服药后是否缓解，均不改变这一处置。`
+  同类反例还有 `或含服 1 次后 5 分钟不缓解、加重，应立即呼叫 120，之后再决定是否追加`
+  ——先服一次、等五分钟、再呼叫，正是同一份交付的 `结论` 所否定的次序。
+- 正例（同一句里把「缓解」明确判为不能作为放心的依据）：
+  `含服后 20 分钟以上胸痛不缓解符合急性心肌梗死的警示特征，应立即呼叫 120 并接受心电图
+  与高敏心肌肌钙蛋白评估，症状自觉缓解不等同于心肌缺血解除。`
+  注意：把末句删掉就变成反例——句子里没有任何一处否认「药效可以决定是否呼叫」时，
+  它读起来就是「等二十分钟再说」。
 
 The safety-first practical answer, under the name a manuscript uses for it. Every
 requirement in "Safety boundaries" applies here unchanged: each action carries
@@ -1076,7 +1455,12 @@ Write strict JSON to `clinical-evidence-search.json`:
 }
 ```
 
-Counts must reflect actual tool results and screening decisions.
+Counts must reflect actual tool results and screening decisions, and they are
+the only place those four quantities are written: the report renders them.
+
+Every `sourceRecords` entry carries a `referenceNumber`. A record that is not
+included carries `"included": false` **and** a non-empty `exclusionReason`, and
+does not appear in the report's numbered reference list.
 
 ## Run receipt
 
@@ -1111,6 +1495,7 @@ Escape quotation marks correctly inside JSON strings; do not alter the scientifi
 - `references.bib`
 - `citation-audit.md`
 - `clinical-evidence-run.json`
+- `question-coverage.json` — see "The question ledger"
 
 Read every output back before claiming success. Do not use `grep` or another unbounded line-oriented search on a generated report; long Markdown lines can exceed tool-output limits and invalidate an otherwise complete run. Use bounded `read` ranges and the platform's deterministic completion validator instead. Verify:
 
@@ -1123,6 +1508,7 @@ Read every output back before claiming success. Do not use `grep` or another unb
 - no visible `[claim:...]` marker remains;
 - no operational failure or tool-process prose appears in the academic report;
 - every research question in `摘要目的` has its answer in `结论` in the same order, every 「证据不足」 judgment names the population stratum it holds for, and no section's share of the body outweighs the rank of the question it serves (see "Comparative appraisal and evidence bridging");
+- every numbered item of the task has its entry in `question-coverage.json`, each `answered` sub-question points at body prose that answers it, and no topic registered as a gap reappears as a ranking, a share, a threshold, or a negative finding in `摘要`, `结论`, or `临床实践要点`;
 - the section names are the manuscript ones and no commissioning, acceptance-specification, or self-referential prose survives anywhere in the report (see "Register: what a manuscript never says"). Read the request once more and confirm that no phrase of it was copied into the report — the request's wording is the usual way this register gets in;
 - the practical answer is medically correct, source-supported, and does not encourage delay.
 
@@ -1141,6 +1527,40 @@ cannot be settled mechanically. Read it and act where it applies. Today it
 reports one arm appraised with the language of clinical tradition while another's
 certainty is graded — see "One ruler for every arm", where the asymmetry is
 almost always accidental and is a methodological defect all the same.
+
+### The package follows the deliverable, not the pipeline
+
+Which artifacts a run owes is decided by what it shipped, not by which line
+produced it. A deliverable is an evidence-evaluation academic report if either
+(a) at least **5** of the numbered `[n]` markers in its body resolve to entries in
+its own `参考文献 / 参考来源 / References` section, or (b) it carries a level-2 or
+level-3 section headed `安全优先的实际处置 / 实际处置 / 临床实践要点 / 临床要点`.
+A run that writes such a deliverable — under any filename — writes
+`clinical-evidence-matrix.json`, `citation-ledger.csv`, `citation-audit.md`,
+`clinical-evidence-search.json`, and `clinical-evidence-run.json` alongside it
+(plus `references.bib` when marker (a) fired), and the package is then held to
+this file's contract in full. If a line cannot produce those artifacts, it may
+not ship a numbered bibliography or clinical advice: it ships a deliverable that
+has neither. The number of quantitative statements in a document is not the
+trigger — an internal engineering note scores higher on that measure than a real
+evidence report does.
+
+- 反例（`comprehensive-evaluation-report.md`，15 条编号参考文献、一节
+  `## 7 临床实践要点`，五份台账一个都没有）：
+  `1. **急救底线（不可弱化）**：心绞痛/可疑急性冠脉综合征发作时，无论含服速效救心丸还是复方丹参滴丸，均**不得作为推迟呼叫 120 / 就医的理由**……`
+  `8. 李旭东, 申延琴. 复方丹参滴丸与速效救心丸疗效观察. 基层医学论坛. 2014.（仅摘要）`
+  八条参考文献没有 DOI、PMID 或任何可核验标识，表 1 里每个数字都无法回查——因为这条
+  线没有引文台账，也没有引文审计。
+- 正例（两条出路，任选其一）。其一，报告与台账一起写，使每个编号都有一行台账承载它
+  的逐字引文：
+  `comprehensive-evaluation-report.md`、`clinical-evidence-matrix.json`、
+  `citation-ledger.csv`、`citation-audit.md`、`clinical-evidence-search.json`、
+  `clinical-evidence-run.json`、`references.bib`。
+  其二，若这条线本就不检索也不保全来源，则两个标志都不要，交付一件不主张任何引文装置
+  的工作产物：
+  `## 说明书条目对照（依据：国家药监局公开索引件，检索日 2026-08-13）`，表内逐条列出
+  批准文号与成分，并写明 `本文不提供编号参考文献，也不给出临床用药建议；条目差异请以
+  NMPA 现行文本为准。`
 
 ### Finishing: check the prose mechanically, do not rewrite it
 

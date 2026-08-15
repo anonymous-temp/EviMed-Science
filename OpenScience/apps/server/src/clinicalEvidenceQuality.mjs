@@ -81,6 +81,742 @@ const exclusiveSafetyPattern = /(?:唯一.{0,24}(?:安全|可靠|正确|一致|�
 // shapes runs have used in between, resolve to the same section.
 const practicalSectionHeading = "安全优先的实际处置|实际处置|实用回答|临床实践要点|临床要点|实用|怎么办|Practical";
 const practicalHeadingLinePattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${practicalSectionHeading})[^\\n]*$`, "im");
+// --- Emergency dispatch is never conditioned on a medicine's effect --------
+// Inside the practical section an emergency-call instruction states its trigger
+// in symptoms and signs. A trigger phrased as "the drug did not work" —
+// 含药不缓解, 服药后无效, 含服 20 分钟不缓解 — cancels the unconditional rule the
+// same section always also carries (服药不是等待的理由，应在服药的同时呼叫急救),
+// and a reader cannot execute both. It is forbidden even when a guideline says
+// exactly that: the guideline's conditional wording is restated in 结果, where
+// this check does not run, and the practice point stays unconditional.
+//
+// The existing safety rules cannot see it. `medication-response-not-diagnostic`
+// needs the drug response tied to a triage verdict, and this sends the reader
+// TO care; `suxiao-must-not-delay-emergency` checks the required sentence is
+// present and never that a contradicting one is absent — every offending report
+// carries the required sentence too, which is why they read as compliant.
+const emergencyDrugWords = "含服|含药|服药|服用|用药|口服|舌下|给药|服下";
+const emergencyFailureWords = "不缓解|未缓解|未完全缓解|无缓解|不见缓解|不能缓解|缓解不明显|缓解不佳|无效|不见效|无改善|未改善|不奏效|不起效";
+// Writing the forbidden order in order to forbid it is the compliant shape, so
+// the negation is what separates the two. 不等同/不代表/不意味 belong to the same
+// family as 不构成: they deny that the medicine's response settles anything,
+// which is the inference this rule exists to ban.
+const emergencyRejectWords = "不宜|而非|而不是|不是|并非|不得|不应|不能|不可|不要|勿|无论|不论|均不|都不|不因|不以|不作为|不构成|不等同|不代表|不意味";
+const emergencyDispatchPattern = /(?:呼叫|拨打|呼救|叫)[^。！？\n]{0,8}(?:120|999|急救|救护)|(?:急救|120|999)[^。！？\n]{0,8}(?:呼叫|拨打|呼救)/;
+// One notion of a clause, shared by both halves of this check. It used to read
+// the span with one boundary set (。！？：\n) and look for the licensing
+// rejection with another (；：;:), so 「症状经首次含服明显改善后，方可每间隔 5
+// 分钟重复给药；未完全缓解即呼叫 120」 was read as a single condition spanning
+// 「给药；未完全缓解」 — while the clause after the semicolon contains no
+// medication word at all and points at calling 120 *sooner*. A medication word
+// and a non-relief word state one trigger only when they stand in one clause.
+//
+// The gap stays tempered against rejection words on top of that: without it
+// 用药 reaches across 而非 to 无效 and the compliant sentence
+// 而非服药后观察无效再呼叫 is read as the violation it rejects.
+const emergencyClauseBoundary = /[。！？；：、，;:,\n]/g;
+const emergencyClauseGap = `(?:(?!${emergencyRejectWords}|[。！？；：、，;:,\\n]).){0,20}`;
+const medicationConditionedTrigger = new RegExp(`(?:${emergencyDrugWords})${emergencyClauseGap}(?:${emergencyFailureWords})`, "g");
+const timedObservationTrigger = new RegExp(
+  `(?:观察|等待|等)\\s*[0-9０-９一二三四五六七八九十]{1,3}\\s*(?:分钟|分|小时|min)`
+  + `(?:(?!${emergencyRejectWords}|[。！？；：、，;:,\\n]).){0,10}(?:${emergencyFailureWords})`,
+  "g",
+);
+const emergencyRejectClause = new RegExp(emergencyRejectWords);
+
+/** The practical section with claim markers, emphasis and numbered citations
+ *  taken out, so neither can inflate the gap between a medication word and a
+ *  non-relief word. Line count is preserved: the notice names a line.
+ *  @param {any} practical
+ */
+function normalizedPracticalText(practical) {
+  return String(practical ?? "")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/\*\*|__|`/g, "")
+    .replace(/\[\s*\d+(?:\s*[,\-–]\s*\d+)*\s*\]/g, " ")
+    .replace(/[ \t\u3000]+/g, " ");
+}
+
+/** The index of the last clause boundary in a passage, or -1.
+ *  @param {string} passage
+ */
+function lastClauseBoundary(passage) {
+  let index = -1;
+  emergencyClauseBoundary.lastIndex = 0;
+  for (const match of passage.matchAll(emergencyClauseBoundary)) index = match.index;
+  return index;
+}
+
+/** Every emergency-call sentence in the practical section whose trigger is how
+ *  a self-administered medicine performed.
+ *  @param {any} practical
+ *  @returns {{ line: number, span: string, sentence: string }[]}
+ */
+function medicationConditionedEmergencyTriggers(practical) {
+  const found = [];
+  for (const [lineIndex, rawLine] of normalizedPracticalText(practical).split("\n").entries()) {
+    for (const sentence of rawLine.split(/[。！？]/)) {
+      if (!emergencyDispatchPattern.test(sentence)) continue;
+      for (const pattern of [medicationConditionedTrigger, timedObservationTrigger]) {
+        for (const match of sentence.matchAll(pattern)) {
+          const before = sentence.slice(0, match.index);
+          // The clause boundary, not a character count: the rejection that
+          // licenses RQ-06 sits 35 characters back, in the preceding clause.
+          const boundary = lastClauseBoundary(before);
+          // Both sides of the phrase, because Chinese puts the rejection after
+          // the instruction as often as before it: 「若含服后心绞痛持续不缓解或
+          // 性质改变，应立即呼叫急救，不得因已服药而推迟」 rejects the delay in
+          // its last clause, and reading only what precedes the phrase called
+          // that sentence the very thing it forbids. Everything after the
+          // phrase is in scope up to the end of the sentence — a rejection
+          // there governs the whole instruction; anything past 。！？ is a
+          // different instruction and still licenses nothing.
+          const after = sentence.slice(match.index + match[0].length);
+          if (emergencyRejectClause.test(before.slice(boundary + 1)) || emergencyRejectClause.test(after)) continue;
+          found.push({ line: lineIndex + 1, span: match[0], sentence: excerpt(sentence) });
+        }
+      }
+    }
+  }
+  return found;
+}
+
+// --- A named appraisal instrument is a promise, not a qualification --------
+// The closed vocabulary already exists on both sides, and it is used only as an
+// *exemption*: selfGradedVerdict skips any sentence naming an instrument,
+// because applying someone else's scale and reporting its level is what the
+// method requires. Nothing ever verified that the named instrument was in fact
+// applied, so today the vocabulary only ever licenses text. This is the other
+// half: an instrument named in 资料与方法 and never used again is a gap worth
+// showing the reader.
+//
+// It is a NOTICE, not a gate, and the reason is that the question it asks is
+// not decidable from the prose. Pre-specifying an instrument per design stratum
+// ("RCT 用 RoB 2、非随机干预用 ROBINS-I、诊断准确性研究用 QUADAS-2") is the
+// method section PRISMA asks for, and a stratum that this round's search
+// returned nothing for carries no obligation to write a sentence retiring its
+// instrument. Distinguishing "promised and skipped" from "stratum came back
+// empty" needs the design of every included study, which the report states in
+// prose and not in a field. Run blocking over thirty delivered packages and it
+// rejects twenty-nine of them, of which the read-through confirmed three
+// (RQ-07 AMSTAR 2, RQ-21 five bias tools, RQ-29 QUADAS-2/RoB 2/GRADE) — and
+// the cheapest way past it is to delete the instrument names from 资料与方法,
+// i.e. to buy delivery with methodological transparency. A check that pays that
+// price is wrong even when its underlying rule is right.
+//
+// namedAppraisalInstrumentPattern is deliberately left alone. Widening it would
+// widen the exemption it guards, which would relax an existing check.
+/** @type {readonly [string, RegExp][]} */
+const appraisalInstruments = Object.freeze([
+  ["RoB 2", /RoB\s?[-‑]?\s?2/i],
+  ["ROBINS-I", /ROBINS[-‑\s]?I(?![A-Za-z])/i],
+  ["ROBINS-E", /ROBINS[-‑\s]?E(?![A-Za-z])/i],
+  ["QUADAS-2", /QUADAS[-‑\s]?2/i],
+  ["AMSTAR 2", /AMSTAR\s?[-‑]?\s?2/i],
+  ["AGREE II", /AGREE\s?(?:II|2|Ⅱ)/i],
+  // Bare NOS is nitric oxide synthase — eNOS-NO 通路 appears in two delivered
+  // reports — so it is an instrument only when a scale noun follows it.
+  ["Newcastle-Ottawa", /Newcastle[-‑\s]?Ottawa|纽卡斯尔[-‑\s]?渥太华|(?<![A-Za-z])NOS(?=\s*(?:量表|评分|评价|清单))/i],
+  ["Naranjo", /Naranjo|诺氏(?=\s*(?:量表|评分))/i],
+  ["WHO-UMC", /WHO[-‑\s]?UMC/i],
+  ["Jadad", /Jadad/i],
+  ["GRADE", /(?<![A-Za-z])GRADE(?![A-Za-z])/i],
+]);
+// Bare Cochrane is not in the vocabulary: 2008 年 Cochrane 系统评价 is a
+// publication, and Cochrane 偏倚风险评价工具 does not say which version.
+const appraisalHedgePattern = /思路|精神|理念|大意|(?:参照|参考)[^，。；\n]{0,20}要点/;
+const appraisalDeclinedPattern = /未(?:使用|采用|执行|做|作)|不(?:适用|使用|采用)|无从(?:评定|评价)/;
+// An instrument the literature never applied, or that could not be scored, is
+// executed by saying so.
+const appraisalNotAppliedPattern = /未(?:检索到|获得|见|能|报告|提供|开展|进行|作|做|给出)|无法(?:完整)?(?:获得|检索|评定|评价|评估|应用|实施)|不适用|无从(?:评定|评价|判断)|(?:资料|信息)不(?:足|全|完整)/;
+const appraisalCitationPattern = /\[\d+/;
+// A rating of a *body* of evidence is by construction a summary of studies that
+// were cited before it, and it is routinely written as its own paragraph — the
+// individual [n]s sit in the paragraphs above. Reading "applied" as "a bracket
+// stands in the same paragraph" therefore called RQ-10's 结果 rating,
+// 「综合而言，机制层面……按 GRADE 属低确定性，降级理由为间接性」, an unexecuted
+// instrument over a single newline, and said so in the notice. A sentence that
+// hands down a level is the instrument being used; it only needs the section it
+// stands in to cite anything at all.
+const appraisalVerdictPattern = /(?:为|评为|定为|判为|属|记为|评定为)\s*["“”'‘’]?(?:极|很|较)?(?:高|中等?|低|严重|不明确|high|moderate|low|serious|critical|some\s+concerns)/i;
+const gradeLevelPattern =/(?:为|评为|定为|判为|确定性为|在)\s*["“”'‘’]?((?:极|很|较)?(?:高|中等?|低|high|moderate|low)(?:\s*(?:至|到|~|～|-|–)\s*(?:极|很|较)?(?:高|中等?|低|high|moderate|low))?)["“”'‘’]?\s*(?:确定性|质量|等级|之间|certainty)/i;
+// A downgrade reason is an assertion that something is *wrong* with the
+// evidence, and the five GRADE domains are neutral nouns. 偏倚风险 / 不一致 /
+// 间接性 / 不精确 / 发表偏倚 appear in the sentence that justifies a HIGH rating
+// at least as often as in one that justifies a downgrade — 「两项大型随机对照试验
+// 偏倚风险低、结果一致、估计精确、无发表偏倚证据，按 GRADE 评为高确定性」 is the
+// textbook wording — so matching the bare noun made 高 unwritable. What counts
+// is a stated deficiency, or a downgrade actually performed, and it has to be
+// in the clause that states it: 未对任何领域降级 is not a downgrade.
+const gradeDowngradePattern = new RegExp([
+  "降(?:级|一级|两级|一个等级|两个等级)",
+  "(?:偏倚风险|risk of bias)(?:较|很)?(?:高|严重|不明确|不清楚)",
+  "存在(?:严重|明显|较大|一定)?(?:偏倚风险|不一致性?|间接性|不精确性?|发表偏倚)",
+  "(?:不一致性?|间接性|不精确性?|发表偏倚)(?:明显|严重|突出|较大)",
+  "(?:估计|效应量?|结果)(?:很|较|明显)?不(?:精确|一致)",
+  "(?:方法学质量|证据质量|研究质量|质量)\\s*(?:普遍|整体|多数|大多|总体)?\\s*(?:偏低|较低|低|差|不高)",
+].join("|"), "i");
+// 未对任何领域降级 / 无需降级 / 不因不一致性降级: the deficiency word is present
+// because it is being ruled out.
+const gradeDowngradeNegationPattern = /[不未无没][^，。；\n]{0,6}$/;
+// 从"高"起步 names GRADE's starting point, not the verdict.
+const gradeBaselinePattern = /(?:从|自|起[点始]为|基线为|起步于)\s*["“”'‘’]?(?:高|中)/;
+const appraisalSentenceSplit = /(?<=[。！？；;])/;
+const appraisalClauseSplit = /[，,；;：:、\n]/;
+
+/** METHODS / BODY / TAIL as the check reads them: every matching level-two
+ *  section concatenated (reportSection returns only the first, and one report
+ *  writes `## 2 资料与方法`), plus the abstract's 方法 field, with emphasis
+ *  markers stripped — one delivery writes 评为**低确定性**, and the markers
+ *  would break level parsing.
+ *  @param {any} reportText
+ */
+function appraisalSections(reportText) {
+  const text = String(reportText ?? "");
+  const abstractMethods = /\*\*方法\*\*(.*?)(?=\n?\*\*(?:结果|结论)|$)/s.exec(reportSection(text, "摘要|Abstract"))?.[1] ?? "";
+  const buckets = { methods: [abstractMethods.replace(/\*\*|__/g, "")], body: [], tail: [] };
+  let current = null;
+  for (const line of text.replace(/\*\*|__/g, "").split("\n")) {
+    const heading = /^##\s+(.+)$/.exec(line);
+    if (heading) {
+      const name = heading[1];
+      if (/参考文献|参考来源|References?/i.test(name)) current = null;
+      else if (/资料|材料|方法|Methods/i.test(name)) current = "methods";
+      else if (/结果|讨论|Results?|Discussion/i.test(name)) current = "body";
+      else if (/局限|结论|临床实践要点|Limitations?|Conclusion/i.test(name)) current = "tail";
+      else current = null;
+      continue;
+    }
+    if (current) buckets[current].push(line);
+  }
+  return { methods: buckets.methods.join("\n"), body: buckets.body.join("\n"), tail: buckets.tail.join("\n") };
+}
+
+/** Whether a sentence asserts a GRADE downgrade — a deficiency in the evidence,
+ *  or a downgrade performed — rather than ruling one out. Clause-scoped,
+ *  because a sentence that grades a body says both things: 偏倚风险低、结果一致、
+ *  估计精确 names three domains and downgrades for none of them.
+ *  @param {string} sentence
+ */
+function assertedGradeDeficiency(sentence) {
+  for (const clause of sentence.split(appraisalClauseSplit)) {
+    const match = gradeDowngradePattern.exec(clause);
+    if (!match) continue;
+    if (gradeDowngradeNegationPattern.test(clause.slice(0, match.index))) continue;
+    return true;
+  }
+  return false;
+}
+
+/** The 1-indexed line of the unmodified report that carries a passage.
+ *  @param {any} reportText @param {string} passage
+ */
+function reportLineCarrying(reportText, passage) {
+  const needle = passage.trim();
+  if (!needle) return 0;
+  for (const [index, line] of String(reportText ?? "").split("\n").entries()) {
+    if (line.replace(/\*\*|__/g, "").includes(needle)) return index + 1;
+  }
+  return 0;
+}
+
+/** Instruments declared in 资料与方法 and never executed in 结果 or 讨论, and
+ *  GRADE levels that reach 高 beside a downgrade reason.
+ *  @param {any} reportText
+ *  @returns {{ branch: string, instrument?: string, line: number, text: string }[]}
+ */
+function declaredAppraisalIssues(reportText) {
+  const { methods, body, tail } = appraisalSections(reportText);
+  const findings = [];
+  for (const [instrument, pattern] of appraisalInstruments) {
+    const declarations = methods.split(appraisalClauseSplit).filter((clause) => pattern.test(clause));
+    if (!declarations.length) continue;
+    // Declared as *not* used: nothing has to land.
+    if (declarations.every((clause) => appraisalDeclinedPattern.test(clause))) continue;
+    const first = declarations[0].trim();
+    const line = reportLineCarrying(reportText, first);
+    if (declarations.every((clause) => appraisalHedgePattern.test(clause))) {
+      findings.push({ branch: "hedged-declaration", instrument, line, text: excerpt(first) });
+      continue;
+    }
+    // Three ways a declaration lands, widest scope last: on a study cited in
+    // the same paragraph; as an explicit statement that nothing could be
+    // scored; or as a verdict on a body of evidence, which summarises studies
+    // cited in the paragraphs before it and needs only that 结果/讨论 cite
+    // something.
+    const bodyCites = appraisalCitationPattern.test(body);
+    const landed = body.split("\n").some((paragraph) => {
+      if (!pattern.test(paragraph)) return false;
+      return paragraph.split(appraisalSentenceSplit).some((sentence) => {
+        if (!pattern.test(sentence)) return false;
+        const carrying = sentence.split(appraisalClauseSplit).filter((clause) => pattern.test(clause));
+        if (!carrying.length || carrying.every((clause) => appraisalHedgePattern.test(clause))) return false;
+        return appraisalCitationPattern.test(paragraph)
+          || appraisalNotAppliedPattern.test(sentence)
+          || (bodyCites && appraisalVerdictPattern.test(sentence));
+      });
+    });
+    if (landed) continue;
+    findings.push({
+      branch: pattern.test(tail) ? "appraisal-tail-only" : "appraisal-declared-not-executed",
+      instrument,
+      line,
+      text: excerpt(first),
+    });
+  }
+  // Any downgrade at all excludes 高, so only that case is decidable. GRADE
+  // legitimately reaches 中 after one downgrade, and observational bodies start
+  // at 低, so counting downgrade domains from prose is not reliable.
+  for (const sentence of `${body}\n${tail}`.split(appraisalSentenceSplit)) {
+    if (!/(?<![A-Za-z])GRADE(?![A-Za-z])/i.test(sentence)) continue;
+    const level = gradeLevelPattern.exec(sentence);
+    if (!level || !/高|high/i.test(level[1])) continue;
+    if (gradeBaselinePattern.test(sentence)) continue;
+    if (!assertedGradeDeficiency(sentence)) continue;
+    findings.push({
+      branch: "grade-level-contradicts-downgrade",
+      line: reportLineCarrying(reportText, sentence.trim()),
+      text: excerpt(sentence),
+    });
+  }
+  return findings;
+}
+
+// --- Screening numbers and the source set are rendered, never restated -----
+// clinical-evidence-search.json is checked against itself and against the run
+// receipt — two machine-written files — and never against the two things a
+// reader actually sees: the sentence stating the flow, and the numbered
+// reference list. One delivered report wrote 191/116/25 while its own log said
+// 203/125/24 and its own citation audit said 24; every existing check passed,
+// because nobody read the prose. Six others kept a record at included:false
+// while numbering it in 参考文献 and citing it in the body, which
+// sourcesIncluded === includedRecords.length still satisfies.
+//
+// A flow term is a run-flow number only when the clause anchors it: two or more
+// flow terms together, or a term carrying its noun (记录/题录/文献, 来源), or a
+// verb with no per-study reading (完成 N 次检索, 去重后 N 条). Without that,
+// 「注册临床试验命中 0 条」 (a per-query hit count) and 「纳入 46 篇系统评价」 (a
+// cited review's own count) are read as the run's screening totals.
+const screeningFlowPatterns = Object.freeze([
+  { key: "totalSearches", anchored: true, pattern: /(?:共|合计|总计)?\s*(?:完成|执行|进行)\s*(?<n>\d+)\s*(?:次|条|组)\s*(?<noun>检索式?|查询)/g },
+  { key: "recordsIdentified", anchored: false, pattern: /(?:命中|获得|检出|检索到|识别)\s*(?<n>\d+)\s*条\s*(?<noun>记录|题录|文献)?/g },
+  { key: "recordsAfterDeduplication", anchored: true, pattern: /去重(?:[^，。；\n]{0,14})?后(?:余|剩余|保留|得到)?\s*(?<n>\d+)\s*(?<noun>条|篇|个)/g },
+  { key: "sourcesIncluded", anchored: false, pattern: /纳入\s*(?<n>\d+)\s*(?:条|个|篇|份)\s*(?<noun>来源|证据来源)?/g },
+]);
+const screeningFlowNames = Object.freeze({
+  totalSearches: "检索式条数",
+  recordsIdentified: "命中记录数",
+  recordsAfterDeduplication: "去重后记录数",
+  sourcesIncluded: "纳入来源数",
+});
+
+/** A stated flow quantity that disagrees with the ledger, and the source set
+ *  the numbered reference list does not match.
+ *  @param {any} reportText @param {any} searchLog
+ *  @returns {{ leg: string, key?: string, stated?: number, held?: number, clause?: string, numbers?: number[], listed?: number, included?: number }[]}
+ */
+function screeningLedgerFindings(reportText, searchLog) {
+  const text = String(reportText ?? "");
+  const headings = [...text.matchAll(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*/gi)];
+  const referencesStart = headings.length ? headings.at(-1).index : text.length;
+  const body = text.slice(0, referencesStart);
+  // From just past the heading line to the next level-two heading: the entries
+  // themselves, never the heading and never whatever follows the list.
+  const referenceBlock = headings.length
+    ? text.slice(referencesStart + headings.at(-1)[0].length).split(/\n##\s+/)[0]
+    : "";
+  const held = {
+    totalSearches: Array.isArray(searchLog?.queries) ? searchLog.queries.length : null,
+    recordsIdentified: Number.isInteger(searchLog?.screening?.recordsIdentified) ? searchLog.screening.recordsIdentified : null,
+    recordsAfterDeduplication: Number.isInteger(searchLog?.screening?.recordsAfterDeduplication) ? searchLog.screening.recordsAfterDeduplication : null,
+    sourcesIncluded: Number.isInteger(searchLog?.screening?.sourcesIncluded) ? searchLog.screening.sourcesIncluded : null,
+  };
+  const findings = [];
+  for (const clause of proseWithoutCode(body).split(/[。；;!?\n]/)) {
+    const matches = [];
+    for (const { key, anchored, pattern } of screeningFlowPatterns) {
+      for (const match of clause.matchAll(pattern)) {
+        matches.push({ key, value: Number(match.groups.n), anchored: anchored || Boolean(match.groups.noun) });
+      }
+    }
+    if (matches.length < 2 && !matches.some((match) => match.anchored)) continue;
+    for (const match of matches) {
+      if (held[match.key] == null || held[match.key] === match.value) continue;
+      // Only the disagreeing quantity is named: a report whose other three
+      // numbers are right must not be sent back to rewrite a correct sentence.
+      findings.push({ leg: "A", key: match.key, stated: match.value, held: held[match.key], clause: excerpt(clause) });
+    }
+  }
+  const includedRefs = new Set();
+  for (const record of Array.isArray(searchLog?.sourceRecords) ? searchLog.sourceRecords : []) {
+    if (record?.included === true && Number.isInteger(record?.referenceNumber)) includedRefs.add(record.referenceNumber);
+  }
+  const listed = new Set();
+  for (const line of referenceBlock.split("\n")) {
+    const match = /^\s*(\d+)[.、]\s+\S/.exec(line);
+    if (match) listed.add(Number(match[1]));
+  }
+  if (!listed.size || !includedRefs.size) return findings;
+  const cited = new Set();
+  for (const line of proseWithoutCode(body).split("\n")) {
+    for (const number of closureCitationNumbers(line)) cited.add(number);
+  }
+  const uncovered = [...new Set([...listed, ...cited])].filter((number) => !includedRefs.has(number)).sort((a, b) => a - b);
+  if (uncovered.length) findings.push({ leg: "B1", numbers: uncovered });
+  // The raw listed set, not the de-duplicated count: padding is already its own
+  // finding, and de-duplicating here would let a padded list satisfy both.
+  if (held.sourcesIncluded != null && listed.size !== held.sourcesIncluded) {
+    findings.push({ leg: "B2", listed: listed.size, included: held.sourcesIncluded });
+  }
+  return findings;
+}
+
+// --- Reference-table closure: nothing floats, no number is an orphan -------
+// citationIntegrityIssues() already computes the orphan and dangling
+// directions, and it is dead code for this product line: it runs only when an
+// agent lists citationIntegrity in completionChecks, and the
+// clinical-evidence-synthesis agent lists requiredOutputsExist /
+// citationsResolvable / evidenceClaimsTraceable / skillsLoaded. The gate itself
+// checks only matrix→reference and duplicate padding, and preflight compared
+// counts, which rewards padding. These clauses close the loop in both
+// directions and hold the excluded set to its own bookkeeping.
+const citationNumberListPattern = /\[(\d{1,3}(?:\s*[,，、\-–—]\s*\d{1,3})*)\]/g;
+const bareCitationNumberList = /^\s*\d{1,3}(?:\s*[,，、\-–—]\s*\d{1,3})*\s*$/;
+const bracketSpanPattern = /\[([^[\]\n]{1,200})\]/g;
+// A bibliographic identifier occupying the citation slot resolves to nothing a
+// reader can follow and to no claim. Identifiers in running prose or in
+// （full-width parens） are untouched — a trial registration named in a sentence
+// is not a citation.
+const bibliographicIdentifierPattern = /(?:(?<![A-Za-z0-9_])10\.\d{4,9}\/[^\s\]，。；、]+|(?<![A-Za-z0-9_])PMID:?\s*\d{5,9}(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])PMC\d{5,9}(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])NCT\d{8}(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])ChiCTR[-A-Za-z0-9]+(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])ISRCTN\d{8}(?![A-Za-z0-9_]))/i;
+
+/** Citation numbers in a passage, with the full-width separators a Chinese
+ *  manuscript uses. "[2.2.1]" is a von Baeyer ring descriptor, not citation 2:
+ *  the dot breaks the pattern, which is why the bracket must be numbers only.
+ *  @param {any} text
+ */
+function closureCitationNumbers(text) {
+  const numbers = new Set();
+  for (const match of String(text ?? "").matchAll(citationNumberListPattern)) {
+    for (const part of match[1].split(/[,，、]/)) {
+      const range = part.trim().match(/^(\d+)\s*[-–—]\s*(\d+)$/);
+      if (range) {
+        const start = Number(range[1]);
+        const end = Number(range[2]);
+        if (end >= start && end - start <= 100) {
+          for (let number = start; number <= end; number += 1) numbers.add(number);
+        }
+      } else if (part.trim()) {
+        numbers.add(Number(part.trim()));
+      }
+    }
+  }
+  return numbers;
+}
+
+/** The prose with fenced blocks and inline code spans blanked, line count
+ *  preserved so a reported line is the line the author will find.
+ *  @param {string} prose
+ */
+function proseWithoutCode(prose) {
+  let insideFence = false;
+  return String(prose ?? "").split("\n").map((line) => {
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      insideFence = !insideFence;
+      return "";
+    }
+    return insideFence ? "" : line.replace(/`[^`\n]*`/g, "");
+  }).join("\n");
+}
+
+/** The reference numbers a claim is allowed to carry on a line: its own, plus
+ *  every number a synthesized claim lists.
+ *  @param {any} claim
+ */
+function allowedReferenceNumbers(claim) {
+  const numbers = new Set();
+  if (Number.isInteger(claim?.referenceNumber)) numbers.add(claim.referenceNumber);
+  for (const number of Array.isArray(claim?.referenceNumbers) ? claim.referenceNumbers : []) {
+    if (Number.isInteger(number)) numbers.add(number);
+  }
+  return numbers;
+}
+
+/** Reference-table closure in both directions, identifiers standing in for
+ *  citations, per-line anchor/number pairing, and the excluded set's own
+ *  bookkeeping.
+ *  @param {any} reportText @param {Map<any, any>} claimsById @param {any} searchLog
+ *  @returns {{ clause: string, line?: number, number?: number, body?: string, bracket?: string, claimId?: string, cited?: number[], allowed?: number[], index?: number }[]}
+ */
+function citationClosureFindings(reportText, claimsById, searchLog) {
+  const text = String(reportText ?? "");
+  // The LAST reference heading, as preflight already does: reportSection uses
+  // the first, and a report naming its reference list twice would be cut in
+  // the wrong place.
+  const headings = [...text.matchAll(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*/gi)];
+  const referencesStart = headings.length ? headings.at(-1).index : text.length;
+  const prose = text.slice(0, referencesStart);
+  const entries = new Map();
+  for (const line of text.slice(referencesStart).split("\n")) {
+    const match = referenceEntryPattern.exec(line);
+    if (!match) continue;
+    const number = Number(match[1] ?? match[2]);
+    if (!Number.isInteger(number) || entries.has(number)) continue;
+    entries.set(number, match[3].trim());
+  }
+  const proseForCitations = proseWithoutCode(prose);
+  const lines = proseForCitations.split("\n");
+  const cited = new Set();
+  for (const line of lines) for (const number of closureCitationNumbers(line)) cited.add(number);
+  const findings = [];
+  if (entries.size) {
+    for (const number of [...entries.keys()].sort((a, b) => a - b)) {
+      if (!cited.has(number)) findings.push({ clause: "A", number, body: excerpt(entries.get(number)) });
+    }
+    for (const number of [...cited].sort((a, b) => a - b)) {
+      if (!entries.has(number)) findings.push({ clause: "B", number });
+    }
+  }
+  const firstMarkerLine = new Map();
+  for (const [index, line] of lines.entries()) {
+    for (const id of reportClaimIds(line)) {
+      if (!firstMarkerLine.has(id)) firstMarkerLine.set(id, index);
+    }
+  }
+  for (const [index, line] of lines.entries()) {
+    for (const match of line.matchAll(bracketSpanPattern)) {
+      const inner = match[1];
+      if (bareCitationNumberList.test(inner) || /^\s*claim:/.test(inner)) continue;
+      if (bibliographicIdentifierPattern.test(inner)) {
+        findings.push({ clause: "C", line: index + 1, bracket: excerpt(match[0]) });
+      }
+    }
+    const onLine = closureCitationNumbers(line);
+    for (const id of new Set(reportClaimIds(line))) {
+      const claim = claimsById.get(id);
+      // A derived result carries no reference number of its own; its inputs do.
+      if (!claim || (claim.claimType ?? "direct") === "derived") continue;
+      // The claim that is paired nowhere is already reported once, per claim,
+      // by the matrix-side pairing check. This clause adds the later lines it
+      // never looked at — which is where a repeated marker goes wrong.
+      if (firstMarkerLine.get(id) === index) continue;
+      const allowed = allowedReferenceNumbers(claim);
+      if (!allowed.size) continue;
+      if ([...allowed].some((number) => onLine.has(number))) continue;
+      findings.push({
+        clause: "D",
+        line: index + 1,
+        claimId: id,
+        cited: [...onLine].sort((a, b) => a - b),
+        allowed: [...allowed].sort((a, b) => a - b),
+      });
+    }
+  }
+  const sourceRecords = Array.isArray(searchLog?.sourceRecords) ? searchLog.sourceRecords : [];
+  for (const [index, record] of sourceRecords.entries()) {
+    if (record?.included === true) continue;
+    if (typeof record?.exclusionReason !== "string" || !record.exclusionReason.trim()) {
+      findings.push({ clause: "E1", index });
+    }
+    if (Number.isInteger(record?.referenceNumber) && entries.has(record.referenceNumber)) {
+      findings.push({ clause: "E2", index, number: record.referenceNumber });
+    }
+  }
+  return findings;
+}
+
+// --- An attributed position must be quoted, not inferred from data ---------
+// 作者指出 / 作者认为 / 该研究强调 attributes a position to a source. The
+// report-line numeric audit already walks every line and resolves its claims —
+// and compares numbers only, so a fabricated authorial position is invisible to
+// it: on every real case the figures on the line ARE in the cited quotes, and
+// the delivered citation-audit could truthfully write 「声明中的阿拉伯数字均出现
+// 于引文」. Worse, claimEvidenceText includes the agent-authored `claim` field,
+// so a stance written there counts as its own support. That is the laundering
+// path this reads around: only supportQuote and sourceTitle are consulted.
+//
+// The subject→verb window is one clause and at most 25 characters — the longest
+// real gap in the corpus is 11 (作者将血管舒缩症状视为) — and 报告/报道/说明/描述
+// are deliberately not stance verbs: they are ordinary reporting verbs.
+const attributedStancePattern = /(?<!本)(?:作者|研究者|研究人员|原作者|综述作者|原文|该文|文中|该研究|该综述|该试验|该队列|该分析|研究团队)[^。！？；;\n]{0,25}?(?:认为|指出|强调|视为|归因|主张|推测|承认|坦承|警告|提醒|解释为|理解为|注意到|倾向)/;
+// A permit-list, so adding a token can only silence a trigger and never create
+// one: a stance the quote does carry, in the wordings sources use for it.
+// Deliberately excluded — but, not, only, significant, potential, established —
+// each occurs inside purely numeric result sentences, and admitting them would
+// silence the check. sufficient/reliab/however earn their place: they are what
+// a source writes when it warns about its own measurement.
+const quotedStancePattern = new RegExp([
+  "(?<![A-Za-z])(?:we|our|the authors?|authors?)(?![A-Za-z])",
+  "suggest|conclude|conclusion|argu|propose|hypothes|speculat|acknowledg|caution|recommend|interpret|consider|believ|assum|attribut|postulat|reflect",
+  "(?<![A-Za-z])(?:may|might|could|likely|unlikely|probably|possibly|presumabl|should|cannot|can not|need to|appears? to|seems? to)(?![A-Za-z])",
+  "(?<![A-Za-z])(?:bias|confound|limitation|uncertain|caveat|due to|because of|owing to|explained by)(?![A-Za-z])",
+  "sufficient|reliab|adequat|justif|warrant|necessar|useful|prudent|advis|however|nevertheless|nonetheless|whereas|although|despite|questionab|debatab|controvers|unclear|unknown|remains to be",
+  "认为|指出|推测|归因|提示|建议|主张|强调|局限|偏倚|混杂|可能|或许|解释为",
+].join("|"), "i");
+
+/** The quote-side text of a claim: what the source itself says, never what the
+ *  agent wrote about it. `claim`, `applicability` and `uncertainty` are the
+ *  agent's own words and are excluded on purpose.
+ *  @param {any} claim @param {"stance" | "quantity"} part
+ */
+function claimQuoteText(claim, part) {
+  const sources = claim?.claimType === "synthesized" && Array.isArray(claim?.supportingSources)
+    ? claim.supportingSources
+    : [claim];
+  return sources
+    .flatMap((source) => (part === "stance" ? [source?.supportQuote, source?.sourceTitle] : [source?.supportQuote]))
+    .filter((value) => typeof value === "string")
+    .join(" ");
+}
+
+/** Lines that attribute a position to a source while every claim they cite
+ *  states only measurements.
+ *  @param {any} body @param {Map<any, any>} claimsById
+ *  @returns {{ line: number, attribution: string, claimIds: string[], anchored: boolean }[]}
+ */
+function attributedStanceIssues(body, claimsById) {
+  const found = [];
+  for (const [index, line] of String(body ?? "").split("\n").entries()) {
+    if (/^\s*#{1,6}\s+/.test(line)) continue;
+    const attribution = attributedStancePattern.exec(line);
+    if (!attribution) continue;
+    // Line-level, not sentence-level: the corpus uses both marker conventions —
+    // trailing and paragraph-leading — and a sentence splitter attributes a
+    // trailing marker to the preceding claim and manufactures a false positive.
+    const ids = [...new Set(reportClaimIds(line))];
+    const claims = ids.map((id) => claimsById.get(id)).filter((claim) => claim && claim.claimType !== "derived");
+    if (!ids.length) {
+      found.push({ line: index + 1, attribution: excerpt(attribution[0]), claimIds: [], anchored: false });
+      continue;
+    }
+    if (!claims.length) continue;
+    if (claims.some((claim) => quotedStancePattern.test(claimQuoteText(claim, "stance")))) continue;
+    // The "every" conjunct is load-bearing: an attribution anchored to a claim
+    // whose quote is a plain non-numeric sentence is a faithful restatement,
+    // and a line that mixes a stance claim with a data claim is ordinary
+    // writing. Only a position resting entirely on measurements is the defect.
+    if (!claims.every((claim) => conclusoryQuantities(claimQuoteText(claim, "quantity")).size > 0)) continue;
+    found.push({
+      line: index + 1,
+      attribution: excerpt(attribution[0]),
+      claimIds: claims.map((claim) => claim.claimId),
+      anchored: true,
+    });
+  }
+  return found;
+}
+
+// --- An article-level regulatory citation needs the regulator's own text ----
+// 《XX法/条例/办法…》第 N 条 asserts what a normative text says at clause
+// granularity, and only the issuing authority's published text can carry that.
+// Nothing in this file models the *class* of a source: accessLevel records how
+// much of an artifact was read, never what kind of document it is, and the one
+// place regulatory attribution is reasoned about —
+// attributedRecommendationPattern — uses it as an *exemption*, so today the
+// string 《医师法》 makes the gate more permissive and never more demanding.
+const statuteTitlePattern = "《[^》\\n]{2,40}(?:法|条例|办法|规定|细则|准则|规范|决定|命令|公告|通知|药典)(?:[（(][^）)\\n]{0,20}[）)])?》";
+const statuteArticleNumber = "[一二三四五六七八九十百廿卅零〇0-9]{1,6}";
+const statuteArticleLocator = new RegExp(
+  `${statuteTitlePattern}(?:[（(][^）)\\n]{0,24}[）)])?[^。；！？\\n]{0,24}?第\\s*(${statuteArticleNumber})\\s*条`,
+  "g",
+);
+// A registry fact, not a tuned list: these namespaces are restricted by their
+// registries to government entities, .int to intergovernmental treaty
+// organisations, and .europa.eu to EU institutions. It covers npc.gov.cn,
+// nmpa.gov.cn, legislation.gov.uk, accessdata.fda.gov, ema.europa.eu, who.int
+// without a hand-curated allowlist and without a network call.
+const governmentHostPattern = /(?:\.gov|\.gov\.[a-z]{2}|\.go\.[a-z]{2}|\.gouv\.fr|\.europa\.eu|\.int)$/;
+
+/** @param {string} run */
+function canonicalArticleNumber(run) {
+  const text = String(run ?? "").trim();
+  if (/^[0-9]+$/.test(text)) return String(Number(text));
+  const value = cjkNumberValue(text);
+  return value == null ? text : String(value);
+}
+
+/** Every article number a passage names, in both the Chinese and the English
+ *  wording — a statute preserved from npc.gov.cn carries 第二十九条, its
+ *  English rendering carries "Article 29", and both are the same article.
+ *  @param {any} text
+ */
+function articleNumbersNamed(text) {
+  const found = new Set();
+  const source = String(text ?? "");
+  for (const match of source.matchAll(new RegExp(`第\\s*(${statuteArticleNumber})\\s*条`, "g"))) {
+    found.add(canonicalArticleNumber(match[1]));
+  }
+  for (const match of source.matchAll(/article\s+(\d{1,4})/gi)) found.add(String(Number(match[1])));
+  return found;
+}
+
+/** The (sourceUrl, artifactPath, supportQuote, claim) tuples a claim offers. A
+ *  synthesized claim offers one per supporting source; a derived result offers
+ *  none, since it has no source of its own.
+ *  @param {any} claim
+ */
+function claimSourceTuples(claim) {
+  if (!claim || typeof claim !== "object") return [];
+  if (claim.claimType === "derived") return [];
+  if (claim.claimType === "synthesized" && Array.isArray(claim.supportingSources)) {
+    return claim.supportingSources.map((source) => ({
+      sourceUrl: source?.sourceUrl,
+      artifactPath: source?.artifactPath,
+      supportQuote: source?.supportQuote,
+      claim: claim.claim,
+    }));
+  }
+  return [{
+    sourceUrl: claim.sourceUrl,
+    artifactPath: claim.artifactPath,
+    supportQuote: claim.supportQuote,
+    claim: claim.claim,
+  }];
+}
+
+/** Article-level regulatory citations resting on something other than the
+ *  issuing authority's own preserved text.
+ *  @param {any} reportText @param {any[]} claims @param {Set<string>} successfulArtifacts
+ *  @returns {{ line: number, locator: string, article: string, refs: number[], hosts: string[] }[]}
+ */
+function regulatoryArticleIssues(reportText, claims, successfulArtifacts) {
+  const text = String(reportText ?? "");
+  const referencesAt = text.search(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$/im);
+  const body = referencesAt < 0 ? text : text.slice(0, referencesAt);
+  const byReference = new Map();
+  const byId = new Map();
+  for (const claim of claims) {
+    if (Number.isInteger(claim?.referenceNumber) && !byReference.has(claim.referenceNumber)) {
+      byReference.set(claim.referenceNumber, claim);
+    }
+    if (typeof claim?.claimId === "string") byId.set(claim.claimId, claim);
+  }
+  const found = [];
+  for (const [index, line] of body.split("\n").entries()) {
+    if (/^\s*#{1,6}\s/.test(line)) continue;
+    const locators = [...line.matchAll(statuteArticleLocator)];
+    if (!locators.length) continue;
+    const refs = [...standardCitationNumbers(line)].filter((number) => Number.isInteger(number)).sort((a, b) => a - b);
+    const candidates = [
+      ...refs.map((number) => byReference.get(number)),
+      ...reportClaimIds(line).map((id) => byId.get(id)),
+    ].filter(Boolean);
+    const tuples = candidates.flatMap(claimSourceTuples);
+    const hosts = [...new Set(tuples.map((tuple) => sourceDomain(tuple.sourceUrl)).filter(Boolean))];
+    for (const locator of locators) {
+      const article = canonicalArticleNumber(locator[1]);
+      const licensed = tuples.some((tuple) => {
+        const host = sourceDomain(tuple.sourceUrl);
+        if (!host || !governmentHostPattern.test(host.replace(/\.$/, ""))) return false;
+        if (typeof tuple.artifactPath !== "string" || !successfulArtifacts.has(tuple.artifactPath)) return false;
+        return articleNumbersNamed(`${tuple.supportQuote ?? ""} ${tuple.claim ?? ""}`).has(article);
+      });
+      if (licensed) continue;
+      found.push({ line: index + 1, locator: excerpt(locator[0]), article, refs, hosts });
+    }
+  }
+  return found;
+}
+
 // The manuscript register. The report is a scientific paper about a clinical
 // question; it is never a paper about the task that produced it. Two
 // vocabularies give that away, and both arrive the same way — copied out of a
@@ -321,9 +1057,54 @@ const bookkeepingIssuePatterns = Object.freeze([
   /^claims\[\d+\]\.claim numeric fact .+ is not present in any supporting source/,
   // Report-to-matrix pairing and presentation.
   /^claims\[\d+\] is not paired with its standard numbered in-text citation\.$/,
+  // A later line repeating a marker whose number it does not carry. Same
+  // bookkeeping as the line above, one line further on — except inside the
+  // practical section, where it carries a different prefix and blocks, because
+  // that section is read as instruction.
+  /^Report line \d+ anchors claim /,
+  // The exclusion ledger inside clinical-evidence-search.json. This is the
+  // search apparatus describing itself, not a claim about medicine, and it is
+  // the same report-to-apparatus bookkeeping as the entries above. Blocking on
+  // it also judged 22 delivered packages by a field the spec did not have when
+  // they were written, which is a way of failing work for not predicting a
+  // later rule.
+  /^clinical-evidence-search\.json 的 sourceRecords\[\d+\] 标记为 "included": false/,
   /^The academic report is missing a required section matching /,
   /^The academic report contains (?:runtime or retrieval-process|operational failure) prose/,
+  // An appraisal instrument promised in 资料与方法 that never rated anything in
+  // 结果 or 讨论. Named for the reader because it is worth knowing, degradable
+  // because "the stratum this instrument covers came back empty" and "the
+  // appraisal was skipped" are the same sentence in prose — see the note above
+  // appraisalInstruments.
+  /^资料与方法声明了 /,
 ]);
+
+// Which run-level error code a rejected package earns. Every one of these is a
+// finished package with an actionable defect inside it, so every one of them is
+// a member of repairableEvidencePackageErrorCodes in agentRuns.mjs and goes
+// back through the repair loop rather than being thrown away. The default —
+// specialist_evidence_traceability_failed — is what the whole gate returned
+// before, so a check that grows a message of its own without an entry here
+// keeps exactly the behaviour it had.
+//
+// The order is the order of specificity, and the first match wins.
+const clinicalEvidenceIssueCodes = Object.freeze([
+  { pattern: /^临床实践要点第 \d+ 行把/, code: "practical_emergency_trigger_conditioned_on_medication_response" },
+  { pattern: /^报告正文第 \d+ 行以条款级方式引用/, code: "regulatory_article_without_official_source" },
+  { pattern: /^检索流程数与纳入来源集合由|^参考文献表共 \d+ 条编号条目/, code: "specialist_screening_ledger_mismatch" },
+  // 资料与方法声明了… is degradable and never reaches this list.
+  { pattern: /^GRADE 等级与降级理由不自洽/, code: "declared-appraisal-must-execute" },
+]);
+
+/** The run-level error code for a package's blocking issues.
+ *  @param {readonly any[]} issues
+ */
+export function clinicalEvidencePackageErrorCode(issues) {
+  for (const { pattern, code } of clinicalEvidenceIssueCodes) {
+    if (issues.some((issue) => pattern.test(String(issue ?? "")))) return code;
+  }
+  return "specialist_evidence_traceability_failed";
+}
 
 /** @param {any} issue */
 function degradableIssue(issue) {
@@ -1525,6 +2306,36 @@ export function validateClinicalEvidencePackage({
       + "A source you could not obtain is stated as a limitation of the evidence base inside 局限性, in the reader's terms.",
     );
   }
+  for (const finding of declaredAppraisalIssues(reportText)) {
+    if (finding.branch === "grade-level-contradicts-downgrade") {
+      issues.push(
+        `GRADE 等级与降级理由不自洽——第 ${finding.line} 行「${finding.text}」同句断言了证据缺陷`
+        + "（如方法学质量偏低、偏倚风险高、存在不一致或间接性），却给出含「高」的确定性等级。"
+        + "任何一项降级都排除「高」，请改等级或删除该缺陷断言。"
+        + "（只写出五个降级领域的名称并说明未因其降级——如「偏倚风险低、结果一致、估计精确、无发表偏倚证据」——不触发本条。）",
+      );
+      continue;
+    }
+    const opening = `资料与方法声明了 ${finding.instrument}，但结果与讨论中没有一处用它给出评级：`
+      + `第 ${finding.line} 行写「${finding.text}」。`;
+    if (finding.branch === "hedged-declaration") {
+      issues.push(
+        `${opening}该行以「思路/精神/理念/参照…要点」提及 ${finding.instrument}，等同于未使用。`
+        + "删除工具名并直接写你实际做了什么，或在结果或讨论里对具体一篇文献用它评一次。",
+      );
+    } else if (finding.branch === "appraisal-tail-only") {
+      issues.push(
+        `${opening}${finding.instrument} 只在局限性或结论里出现。`
+        + "确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+      );
+    } else {
+      issues.push(
+        `${opening}工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次`
+        + "（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），"
+        + `要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ${finding.instrument} 从方法里删掉。`,
+      );
+    }
+  }
   issues.push(...manuscriptRegisterIssues(reportText));
   issues.push(...comparativeStructureIssues(reportText));
   if (/\[claim:CLM-[0-9]{3,6}[^\]]+\]/.test(reportText ?? "")) {
@@ -1654,6 +2465,19 @@ export function validateClinicalEvidencePackage({
 
   const claimsById = new Map(claims.map((claim) => [claim?.claimId, claim]));
 
+  for (const finding of regulatoryArticleIssues(reportText, claims, successfulArtifacts)) {
+    issues.push(
+      `报告正文第 ${finding.line} 行以条款级方式引用「${finding.locator}」，`
+      + "但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件"
+      + "（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，"
+      + `artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第${finding.article}条 / Article ${finding.article}）；`
+      + `该行现有引用为 [${finding.refs.join(", ") || "无"}]，指向 ${finding.hosts.join(", ") || "无可解析来源"}。`
+      + "条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，"
+      + "要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」"
+      + "改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+    );
+  }
+
   // A derived result is only as good as what it stands on. Every input must
   // resolve, and following the inputs must reach measured evidence: a chain of
   // derivations resting on nothing is the fabrication this whole gate exists to
@@ -1730,6 +2554,18 @@ export function validateClinicalEvidencePackage({
     }
   }
 
+  for (const finding of attributedStanceIssues(reportForNumericAudit, claimsById)) {
+    issues.push(finding.anchored
+      ? `报告第 ${finding.line} 行以「${finding.attribution}」把立场归属给来源，但该行引用的 ${finding.claimIds.join("、")}，`
+        + "其 supportQuote 都只陈述数值，没有一条载有这个立场。"
+        + "立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；"
+        + "若来源没说过，删去归属句，或改写为本报告自己的判断。"
+        + "把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。"
+      : `报告第 ${finding.line} 行以「${finding.attribution}」把立场归属给来源，却没有挂任何 claim 标记。`
+        + "立场归属句必须由某条 claim 的 supportQuote 逐字承载：挂上原文确实说过这句话的 claim，"
+        + "或删去归属句，改写为本报告自己的判断。");
+  }
+
   // Pseudonyms are assigned by the analysis; record numbers come from the data
   // and must not leave it. Blocking, because a reader cannot tell P90000001
   // from a pseudonym, and the person it exposes is not the reader.
@@ -1766,6 +2602,21 @@ export function validateClinicalEvidencePackage({
     .filter((line) => /^(?:(?:\*\*)?第[一二三四五六七八九十]+步|(?:\*\*)?[0-9]+[.、]|[-*+]\s+)/.test(line));
   if (practicalActionLines.some((line) => !hasClaimMarker(line))) {
     issues.push("Every practical-action step or bullet must cite at least one evidence-matrix claim.");
+  }
+  // The practical section's first line inside the report, so the notice names
+  // the line the author will find rather than an offset into a section.
+  const practicalOffset = practical ? String(reportText ?? "").indexOf(practical) : -1;
+  const practicalFirstLine = practicalOffset >= 0
+    ? String(reportText ?? "").slice(0, practicalOffset).split("\n").length
+    : 1;
+  for (const trigger of medicationConditionedEmergencyTriggers(practical)) {
+    issues.push(
+      `临床实践要点第 ${practicalFirstLine + trigger.line - 1} 行把「${trigger.span}」写成了呼叫急救的触发条件：「${trigger.sentence}」。`
+      + "急救的触发条件不得以自救用药的疗效为条件（含药不缓解、服药后无效、观察 N 分钟无效均不可）——"
+      + "本节唯一允许的口径是「无论服药与否、无论是否缓解，出现上述征象即刻呼叫 120」。"
+      + "同一节里已经写着「服药不是等待的理由，应在服药的同时呼叫急救」，这一条与它互斥，读者无法同时执行。"
+      + "若来源（指南原文）确实给出了这一条件，把它留在「结果」一节按原文复述并保留出处，实践要点只写无条件的那一句。",
+    );
   }
 
   if (deepResearch) {
@@ -1878,6 +2729,67 @@ export function validateClinicalEvidencePackage({
       .filter((number) => Number.isInteger(number) && !reportReferenceNumbers.has(number)))].sort((a, b) => a - b);
     if (unresolved.length) {
       issues.push(`The numbered reference list has no entry for reference ${unresolved.join(", ")}.`);
+    }
+    for (const finding of screeningLedgerFindings(reportText, searchLog)) {
+      if (finding.leg === "A") {
+        issues.push(
+          `检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。`
+          + `本次不一致：正文写「${finding.clause}」中的${screeningFlowNames[finding.key]} ${finding.stated}，`
+          + `检索记录 ${finding.key} = ${finding.held}。`
+          + "请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+        );
+      } else if (finding.leg === "B1") {
+        issues.push(
+          `参考文献 ${finding.numbers.map((number) => `[${number}]`).join("、")} 在正文中被引用或列入参考文献表，`
+          + "但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。"
+          + "要么读到可核验层级并置 included=true、同步更新 screening 计数，"
+          + "要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+        );
+      } else {
+        issues.push(
+          `参考文献表共 ${finding.listed} 条编号条目，screening.sourcesIncluded = ${finding.included}。`
+          + "编号表必须恰好是 included=true 的来源集合：同数量、同编号。",
+        );
+      }
+    }
+    // The practical section's line range, so a mispaired anchor there is
+    // blocking: that section is already the one place the gate refuses derived
+    // claims and requires a marker on every action line.
+    const practicalLastLine = practical ? practicalFirstLine + practical.split("\n").length - 1 : 0;
+    for (const finding of citationClosureFindings(reportText, claimsById, searchLog)) {
+      if (finding.clause === "A") {
+        issues.push(
+          `参考文献 [${finding.number}] 在正文中从未被引用：「${finding.body}」。`
+          + "已检索但未纳入的来源不进编号表——要么在正文中真正引用它，"
+          + "要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+        );
+      } else if (finding.clause === "B") {
+        issues.push(
+          `正文引用 [${finding.number}] 在参考文献表中没有对应条目：补上该条目，或改引真正支持这句话的编号。`,
+        );
+      } else if (finding.clause === "C") {
+        issues.push(
+          `报告第 ${finding.line} 行把书目标识符放进了引用位：「${finding.bracket}」。`
+          + "行内 PMID/DOI 不能代替编号引用——为该来源分配参考文献编号与 claim，或按未纳入来源记入检索日志。",
+        );
+      } else if (finding.clause === "D") {
+        const detail = `${finding.claimId}，但该行只引用了 [${finding.cited.join(", ") || "无"}]，`
+          + `而 ${finding.claimId} 的 referenceNumber 是 ${finding.allowed.join(", ")}。`
+          + "把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。";
+        issues.push(finding.line >= practicalFirstLine && finding.line <= practicalLastLine
+          ? `The practical section's report line ${finding.line} anchors claim ${detail}`
+          : `Report line ${finding.line} anchors claim ${detail}`);
+      } else if (finding.clause === "E1") {
+        issues.push(
+          `clinical-evidence-search.json 的 sourceRecords[${finding.index}] 标记为 "included": false 却没有 exclusionReason：`
+          + "未纳入的来源必须写明排除理由。",
+        );
+      } else {
+        issues.push(
+          `clinical-evidence-search.json 的 sourceRecords[${finding.index}] 标记为 "included": false，`
+          + `却仍以编号 [${finding.number}] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。`,
+        );
+      }
     }
     // references.bib: a real cross-check — it must actually contain every cited
     // source, not merely enough @entries to hit a count.
