@@ -173,6 +173,15 @@ def _workspace():
     return workspace
 
 
+def _execution_timeout_seconds():
+    """Wall clock for one specialist process, bounded well inside the server's run monitor."""
+    try:
+        configured = float(os.environ.get("EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS", "10800"))
+    except ValueError:
+        configured = 10800.0
+    return int(min(max(configured, 60.0), 14400.0))
+
+
 def _root(spec):
     raw = os.environ.get(spec["rootEnv"], "").strip()
     if not raw:
@@ -424,6 +433,47 @@ def _log_tail(path):
             os.close(descriptor)
 
 
+def _worker_is_alive(job_id, state):
+    """True, False, or None when liveness cannot be established."""
+    worker = _BACKGROUND_WORKERS.get(job_id)
+    if worker is not None:
+        return worker.poll() is None
+    try:
+        worker_pid = int(state.get("workerPid"))
+    except (TypeError, ValueError):
+        return None
+    if worker_pid <= 0:
+        return None
+    try:
+        os.kill(worker_pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # The pid exists and belongs to someone else. Reading that as "gone"
+        # would fail a job that is still running.
+        return True
+    return True
+
+
+def _abandon_lost_job(spec, state_path, state):
+    """Mark a job whose worker died without writing a terminal state."""
+    state.update({
+        "status": "failed",
+        "updatedAt": _now(),
+        "finishedAt": _now(),
+        "retryable": True,
+        "error": "%s worker exited without writing a result." % spec["label"],
+    })
+    try:
+        _atomic_json(state_path, state)
+    except OSError:
+        # Best effort. The liveness check below reaches the same conclusion on
+        # every later poll, so an unwritable state file no longer strands the
+        # job in "running" the way it used to.
+        pass
+    return state
+
+
 def status_job(tool_name, arguments):
     spec = SPECS[tool_name]
     job_id = str(arguments.get("jobId") or "").strip()
@@ -432,6 +482,17 @@ def status_job(tool_name, arguments):
     if state.get("jobId") != job_id or state.get("tool") != tool_name:
         raise SpecialistJobError("specialist_job_state_invalid", "Specialist job state does not match the request.")
     job_status = state.get("status")
+    if job_status in {"queued", "running"} and _worker_is_alive(job_id, state) is False:
+        # A SIGKILL, an OOM kill, or a failure while writing the failed state
+        # left the job saying "running" forever, and this tool answered "still
+        # working, poll again" forever with it. Re-read once first: the worker
+        # may have written its terminal state between the two reads.
+        reread = _read_json(state_path)
+        if reread.get("jobId") == job_id and reread.get("status") not in {"queued", "running"}:
+            state = reread
+        else:
+            state = _abandon_lost_job(spec, state_path, state)
+        job_status = state.get("status")
     if job_status in {"queued", "running"}:
         return {
             "status": "warning",
@@ -537,7 +598,32 @@ def _run_job(state_path):
     command = [str(python), str(root / "evimed_runner.py"), "--request", str(request_path), "--output-dir", str(output_root)]
     log_descriptor = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0), 0o600)
     with os.fdopen(log_descriptor, "ab", buffering=0) as log:
-        completed = subprocess.run(command, cwd=str(root), env=environment, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, check=False)
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=str(root),
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                check=False,
+                # A specialist process that hangs had no wall clock of its own.
+                # The only bound was the server's four-hour run monitor, and
+                # that one counts polls rather than time, so a hung child could
+                # outlive every limit the platform believed it had.
+                timeout=_execution_timeout_seconds(),
+            )
+        except subprocess.TimeoutExpired:
+            state.update({
+                "status": "failed",
+                "updatedAt": _now(),
+                "finishedAt": _now(),
+                "returnCode": None,
+                "retryable": True,
+                "error": "%s exceeded the %d second execution limit." % (spec["label"], _execution_timeout_seconds()),
+            })
+            _atomic_json(state_path, state)
+            return 1
     result_path = output_root / "result.json"
     if completed.returncode != 0 or not result_path.is_file():
         state.update({
@@ -574,7 +660,13 @@ if __name__ == "__main__":
                 state = _read_json(sys.argv[2])
                 state.update({"status": "failed", "updatedAt": _now(), "finishedAt": _now(), "retryable": False, "error": str(error)})
                 _atomic_json(sys.argv[2], state)
-            except Exception:
-                pass
+            except Exception as write_error:
+                # The job stays non-terminal on disk. status_job's liveness
+                # check is what stops that from reading as "still running"
+                # forever, so say enough here to tell the two apart in the log.
+                sys.stderr.write(
+                    "specialist job failed and its failed state could not be written: %s / %s\n"
+                    % (error, write_error)
+                )
             raise SystemExit(1)
     raise SystemExit(2)
