@@ -195,6 +195,106 @@ class SpecialistJobContractTests(unittest.TestCase):
         self.assertEqual(result["data"]["jobStatus"], "failed")
         self.assertEqual(result["data"]["jobId"], job_id)
 
+    def test_a_job_whose_worker_died_stops_answering_still_running(self):
+        # A SIGKILL or an OOM kill left the state file saying "running" and
+        # this tool answering "not complete, poll again" for as long as anyone
+        # asked. There was no liveness check at all, unlike meta_agent.
+        self.install_fake_specialist("evimed_research_topic_selection")
+        job_id = "topic-20260815090000-abcdef123456"
+        jobs = self.workspace / "research-topic-runs" / ".jobs"
+        jobs.mkdir(parents=True)
+        state_path = jobs / f"{job_id}.json"
+        dead_pid = self.a_pid_that_is_not_running()
+        state_path.write_text(
+            json.dumps({
+                "tool": "evimed_research_topic_selection",
+                "jobId": job_id,
+                "status": "running",
+                "workerPid": dead_pid,
+                "updatedAt": "2026-08-15T09:00:00Z",
+            }),
+            encoding="utf-8",
+        )
+
+        result = self.jobs.status_job("evimed_research_topic_selection", {"jobId": job_id})
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["data"]["jobStatus"], "failed")
+        self.assertTrue(result["error"]["retryable"], "an OOM kill is worth retrying")
+        self.assertEqual(
+            json.loads(state_path.read_text(encoding="utf-8"))["status"],
+            "failed",
+            "the conclusion is recorded, not recomputed on every poll",
+        )
+
+    def test_a_live_worker_is_still_reported_as_running(self):
+        # The liveness check must not fail a job that is doing its work.
+        self.install_fake_specialist("evimed_research_topic_selection")
+        job_id = "topic-20260815090100-abcdef123456"
+        jobs = self.workspace / "research-topic-runs" / ".jobs"
+        jobs.mkdir(parents=True)
+        (jobs / f"{job_id}.json").write_text(
+            json.dumps({
+                "tool": "evimed_research_topic_selection",
+                "jobId": job_id,
+                "status": "running",
+                "workerPid": os.getpid(),
+                "updatedAt": "2026-08-15T09:01:00Z",
+            }),
+            encoding="utf-8",
+        )
+
+        result = self.jobs.status_job("evimed_research_topic_selection", {"jobId": job_id})
+
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(result["data"]["jobStatus"], "running")
+
+    def test_a_job_without_a_recorded_pid_is_left_alone(self):
+        # Liveness that cannot be established is not death. A job recorded
+        # before its worker pid was written must keep polling, not be failed.
+        self.install_fake_specialist("evimed_research_topic_selection")
+        job_id = "topic-20260815090200-abcdef123456"
+        jobs = self.workspace / "research-topic-runs" / ".jobs"
+        jobs.mkdir(parents=True)
+        (jobs / f"{job_id}.json").write_text(
+            json.dumps({
+                "tool": "evimed_research_topic_selection",
+                "jobId": job_id,
+                "status": "queued",
+                "updatedAt": "2026-08-15T09:02:00Z",
+            }),
+            encoding="utf-8",
+        )
+
+        result = self.jobs.status_job("evimed_research_topic_selection", {"jobId": job_id})
+
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(result["data"]["jobStatus"], "queued")
+
+    def test_specialist_execution_carries_its_own_wall_clock(self):
+        # The only bound used to be the server's four-hour run monitor, and
+        # that one counts polls rather than time, so a hung child outlived
+        # every limit the platform believed it had.
+        self.assertEqual(self.jobs._execution_timeout_seconds(), 10800)
+        os.environ["EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS"] = "600"
+        self.assertEqual(self.jobs._execution_timeout_seconds(), 600)
+        os.environ["EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS"] = "1"
+        self.assertEqual(self.jobs._execution_timeout_seconds(), 60, "a floor, so a typo cannot disable specialists")
+        os.environ["EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS"] = "999999"
+        self.assertEqual(self.jobs._execution_timeout_seconds(), 14400, "a ceiling inside the run monitor")
+        os.environ["EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS"] = "not-a-number"
+        self.assertEqual(self.jobs._execution_timeout_seconds(), 10800)
+
+    def a_pid_that_is_not_running(self):
+        for candidate in range(400000, 420000):
+            try:
+                os.kill(candidate, 0)
+            except ProcessLookupError:
+                return candidate
+            except PermissionError:
+                continue
+        self.skipTest("no free pid found to stand in for a dead worker")
+
     def test_virtual_environment_entry_point_is_not_resolved_to_base_python(self):
         root = self.install_fake_specialist("evimed_peer_review")
         os.environ.pop("EVIMED_PEER_REVIEW_AGENT_PYTHON", None)
