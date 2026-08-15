@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { citationIntegrityIssues, numberedReferenceCount, validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
+import {
+  citationIntegrityIssues,
+  clinicalEvidencePackageErrorCode,
+  numberedReferenceCount,
+  validateClinicalEvidencePackage,
+} from "../src/clinicalEvidenceQuality.mjs";
 import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
 
@@ -1818,4 +1823,656 @@ test("the emergency-delay rule accepts the emergency number the skill asks for",
   // It must still be a requirement, not a formality.
   assert.ok(!pattern.test("立即呼叫 120，保持坐位"));
   assert.ok(!pattern.test("速效救心丸可用于气滞血瘀型心绞痛"));
+});
+
+// --- Emergency dispatch is never conditioned on a medicine's effect ---------
+/** The package with one extra line inside the practical section, and the
+ *  medication-conditioned-trigger notices it earns.
+ *  @param {string} practicalLine
+ */
+function practicalTriggerIssues(practicalLine) {
+  const input = deepResearchPackage();
+  input.reportText = input.reportText.replace(
+    "\n\n## 参考文献",
+    `\n${practicalLine} <!-- claim:CLM-001 --> [1]\n\n## 参考文献`,
+  );
+  return validateClinicalEvidencePackage(input).issues.filter((issue) => /^临床实践要点第 \d+ 行把/.test(issue));
+}
+
+test("an emergency-call trigger conditioned on how the medicine performed is rejected", () => {
+  // Verbatim from the delivered reports the read-through confirmed. Each also
+  // carries the unconditional rule ("服药不是等待的理由"), which is why they read
+  // as compliant and why no existing rule sees them: the required sentence is
+  // present, and nothing checked that a contradicting one is absent.
+  for (const line of [
+    // RQ-06: 「急救底线被『含药不缓解』重新条件化」. The 均不得 sits in the
+    // clause before the semicolon and licenses nothing after it.
+    "1. 急救底线（不可弱化）：心绞痛发作时，无论含服速效救心丸还是复方丹参滴丸，均不得作为推迟呼叫 120 的理由；胸痛持续、伴大汗、气促、含药不缓解者应立即拨打急救电话并按现行急救指南处理。",
+    // RQ-02 line 110, verbatim: dose once, wait five minutes, then call — the
+    // report's own 结论 says self-medication comes *after* the call.
+    "3. 已确诊冠心病、按既往医嘱使用者：若本次胸痛性质、程度或持续时间与既往不同，或含服 1 次后 5 分钟不缓解、加重，应立即呼叫 120，之后再决定是否追加。",
+    // The timed-observation form of the same instruction.
+    "2. 服药后观察 10 分钟无缓解者应拨打 120。",
+    "含服后 20 分钟以上胸痛不缓解符合急性心肌梗死的警示特征，应立即呼叫 120 并接受心电图评估。",
+  ]) {
+    const issues = practicalTriggerIssues(line);
+    assert.equal(issues.length >= 1, true, `a medication-conditioned dispatch trigger must be caught: ${line}`);
+  }
+});
+
+test("a clause boundary bounds the trigger, and a rejection anywhere in the sentence licenses it", () => {
+  // Every line here is verbatim from a delivered package and every one of them
+  // was rejected by the first version of this rule. None is a defect.
+  for (const line of [
+    // RQ-02 line 111. The matched span was 「给药；未完全缓解」 — the clause after
+    // the semicolon holds no medication word at all and points at calling 120
+    // *sooner*, not later. The gap read ； as ordinary text while the exemption
+    // lookup read it as a clause boundary: one function, two notions of clause.
+    "4. 慢性稳定型心绞痛患者，症状经首次含服明显改善后，方可每间隔 5 分钟重复给药；未完全缓解即呼叫 120。",
+    // 已服药者 is a population qualifier; the trigger is 晕厥与意识不清. Commas
+    // and enumeration marks end a clause for the same reason semicolons do.
+    "5. 已服药者，出现新发晕厥、意识不清且症状不缓解，立即呼叫 120。",
+    // RQ-04 line 84. The rejection that licenses it — 不得因已服药而推迟 — is the
+    // last clause of the sentence, and reading only what precedes the phrase
+    // called this sentence the very thing it forbids.
+    "3. 已确诊冠心病心绞痛的患者按既往医嘱使用属适应症内；若含服后心绞痛持续不缓解或性质改变，应立即呼叫急救，不得因已服药而推迟。",
+    // RQ-15 line 136. 症状自觉缓解不等同于心肌缺血解除 denies that the medicine's
+    // response settles anything — the same family as 不构成, and the inference
+    // this rule exists to ban.
+    "6. 含服后 20 分钟以上胸痛不缓解符合急性心肌梗死的警示特征，应立即呼叫 120 并接受心电图与高敏心肌肌钙蛋白评估，症状自觉缓解不等同于心肌缺血解除。",
+  ]) {
+    assert.deepEqual(practicalTriggerIssues(line), [], `this line is compliant and must be delivered: ${line}`);
+  }
+  // Control: strip the licensing clause off the last line and it is the
+  // violation again, so this test cannot pass by the rule having been deleted.
+  assert.equal(
+    practicalTriggerIssues("6. 含服后 20 分钟以上胸痛不缓解符合急性心肌梗死的警示特征，应立即呼叫 120 并接受心电图评估。").length,
+    1,
+  );
+});
+
+test("writing the forbidden order in order to reject it stays legitimate", () => {
+  // Every compliant report says the forbidden sequence out loud so it can
+  // forbid it, so the rejection in the clause — not the vocabulary — is what
+  // separates the two. These are verbatim from the delivered reports that got
+  // it right; a rule without the tempered gap flags all of them.
+  for (const line of [
+    "1. 含服速效救心丸不是等待的理由：如需服用，应与呼叫 120 同时进行，而非先含服、无效再呼叫。 <!-- claim:CLM-002 -->",
+    "2. 呼叫急救医疗服务（120）应与用药同时进行，而非服药后观察无效再呼叫。 <!-- claim:CLM-002 -->",
+    "3. 服药与拨打 120 应同时进行，而非先服药、观察无效后再呼救。 <!-- claim:CLM-002 -->",
+    // After a colon the enumeration's subject is the symptom, not the drug.
+    "4. 心悸伴下列任一情形时应立即拨打 120 急救，而不宜先行自行含服任何药物：胸痛持续不缓解、放射至左臂或下颌、冷汗、晕厥。",
+    "5. 心悸伴以下任一特征时应直接呼叫 120，而不宜先行自我用药：突发且不缓解的胸痛或压迫感、放射至颈或下颌的疼痛。",
+    // A symptom that does not remit, with no medication word before it, is the
+    // ordinary and correct way to state a dispatch trigger.
+    "6. 首次发生、性质改变或持续不缓解的胸痛，应立即呼叫急救（在中国为 120）；服用速效救心丸不是等待的理由，应在服用同时呼叫急救。",
+    "7. 服用速效救心丸不得延误呼叫急救：急救电话应与服药同时拨打，而非服药后观察再决定。",
+  ]) {
+    assert.deepEqual(practicalTriggerIssues(line), [], `a rejected sequence must not read as an instruction: ${line}`);
+  }
+});
+
+test("the emergency-trigger rule runs only where the reader executes instructions", () => {
+  // The same sentence shape in 摘要 or 引言 is the research question being
+  // stated ("含服药物后等多久仍不缓解就必须呼叫急救"), which is required, not
+  // forbidden. The section boundary is the rule's precondition.
+  const input = deepResearchPackage();
+  input.reportText = input.reportText.replace(
+    "## 摘要\n",
+    "## 摘要\n急性胸痛发作时，患者与家属需要一个可执行的时间界限：含服药物后等多久仍不缓解就必须呼叫急救。\n",
+  );
+  const issues = validateClinicalEvidencePackage(input).issues.filter((issue) => /^临床实践要点第 \d+ 行把/.test(issue));
+  assert.deepEqual(issues, []);
+});
+
+// --- Article-level regulatory citations ------------------------------------
+/** The package with one extra body line in 讨论, and the article-locator
+ *  notices it earns.
+ *  @param {string} bodyLine @param {(input: any) => void} [prepare]
+ */
+function regulatoryArticleIssuesFor(bodyLine, prepare) {
+  const input = deepResearchPackage();
+  input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${bodyLine}\n`);
+  if (prepare) prepare(input);
+  return validateClinicalEvidencePackage(input).issues.filter((issue) => /^报告正文第 \d+ 行以条款级方式引用/.test(issue));
+}
+
+test("an article-level regulatory citation resting on a journal source is rejected", () => {
+  // Verbatim from two delivered reports. [13] in RQ-30 is a law-school review
+  // in Frontiers in Pharmacology; RQ-23's entries 1–4 have no matrix claim,
+  // no preserved artifact and no quote at all — its own limitations section
+  // admits the statutes were 「未以官方数据库原文逐字核验」.
+  for (const line of [
+    "《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点：无有效或更优治疗手段、有循证医学证据支持、患者知情同意、医疗机构内部审查批准 [13]",
+    "《药品管理法》第五十四条规定国家对药品实行处方药与非处方药分类管理 [1]。",
+    "《处方药与非处方药分类管理办法（试行）》第四条将非处方药目录的遴选权授予国家药品监督管理局 [2]。",
+    "《药品网络销售监督管理办法》（总局令第 58 号）第九条规定应当确保处方来源真实、可靠 [3][4]。",
+    "《处方管理办法》第十九条规定处方一般不得超过七日用量 [3][4]。",
+  ]) {
+    assert.equal(regulatoryArticleIssuesFor(line).length, 1, `an unlicensed article locator must be caught: ${line}`);
+  }
+});
+
+test("an article locator licensed by the issuing authority's own preserved text passes", () => {
+  // The rule has to be satisfiable, and it is satisfied the way the skill says:
+  // preserve the statute from the regulator's own site and quote the article.
+  const licensed = regulatoryArticleIssuesFor(
+    "《医师法》第二十九条第二款将超说明书用药的合法条件规定为四点 [1]。",
+    (input) => {
+      input.matrix.claims[0].sourceUrl = "https://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313166.html";
+      input.matrix.claims[0].supportQuote = "第二十九条 医师应当坚持安全有效、经济合理的用药原则，遵循药品临床应用指导原则、临床诊疗指南和药品说明书中的用法用量使用药品。";
+      input.sourceArtifacts[input.matrix.claims[0].artifactPath] = input.matrix.claims[0].supportQuote;
+    },
+  );
+  assert.deepEqual(licensed, []);
+  // The English wording of the same article is the same article.
+  const english = regulatoryArticleIssuesFor(
+    "《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点 [1]。",
+    (input) => {
+      input.matrix.claims[0].sourceUrl = "https://www.npc.gov.cn/englishnpc/c23934/202108/statute.html";
+      input.matrix.claims[0].supportQuote = "Article 29, Paragraph 2, of this law permits off-label use under four stated conditions.";
+      input.sourceArtifacts[input.matrix.claims[0].artifactPath] = input.matrix.claims[0].supportQuote;
+    },
+  );
+  assert.deepEqual(english, []);
+});
+
+test("naming a statute without a clause locator stays legitimate", () => {
+  // Every one of these is a near miss from the delivered corpus: an ordinal
+  // that is not an article, a statute paraphrased with no article number, a
+  // limitation declaring the clauses were not verified, and the correct
+  // downgrade — the fact that a document was issued, with its document number.
+  for (const line of [
+    "第一条线是机制的可解释性。第二条线是吸收与暴露。第三条线是临床终点。",
+    "第一条是说明书与监管文本，它确定了适应症的边界；第二条是机制与观察性证据。",
+    "我国《药品管理法》（2019 修订）将“超过有效期的药品”列为劣药情形之一；[13]",
+    "药品管理法的劣药条款、说明书标签管理规定的现行文本未能核验，相关条款号与逐字原文须以官方公布文本为准。",
+    "国家药监局综合司于 2026 年印发《处方药网络零售合规指南》（药监综药管函〔2026〕282 号）[18]，但其正文与具体条款未能获取核对。",
+  ]) {
+    assert.deepEqual(regulatoryArticleIssuesFor(line), [], `an ordinary statutory reference must not be flagged: ${line}`);
+  }
+});
+
+test("an article locator inside the reference list is not a body citation", () => {
+  const input = deepResearchPackage();
+  input.reportText = `${input.reportText}\n13. 全国人民代表大会常务委员会. 中华人民共和国药品管理法（2019 年修订），第五十四条. 2019.`;
+  const issues = validateClinicalEvidencePackage(input).issues
+    .filter((issue) => /^报告正文第 \d+ 行以条款级方式引用/.test(issue));
+  assert.deepEqual(issues, []);
+});
+
+// --- An attributed position must be quoted, not inferred from data ---------
+/** The package with one extra body line in 讨论 and the named claims' quotes
+ *  replaced, and the attributed-stance notices it earns.
+ *  @param {string} line @param {Record<string, string>} quotes
+ */
+function attributedStanceIssuesFor(line, quotes = {}) {
+  const input = deepResearchPackage();
+  for (const [claimId, quote] of Object.entries(quotes)) {
+    const claim = input.matrix.claims.find((entry) => entry.claimId === claimId);
+    claim.supportQuote = quote;
+    input.sourceArtifacts[claim.artifactPath] = `${input.sourceArtifacts[claim.artifactPath]}\n${quote}`;
+  }
+  input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${line}\n`);
+  return validateClinicalEvidencePackage(input).issues.filter((issue) => /^报告第 \d+ 行以「/.test(issue));
+}
+
+test("a position attributed to a source that only reported measurements is rejected", () => {
+  // RQ-27 as delivered: the stance ("a risk marker rather than a causal
+  // factor", "residual confounding and publication bias") is in the claim's
+  // uncertainty field — the agent's own words — and in none of the three
+  // quotes, all of which are pure result sentences. Every figure on the line
+  // is in the quotes, so the numeric audit is silent.
+  const risk = attributedStanceIssuesFor(
+    "作者将血管舒缩症状视为可能的心血管风险标记而非因果因素，并指出存在残余混杂与发表偏倚的可能 [1] <!-- claim:CLM-001 --> <!-- claim:CLM-002 -->",
+    {
+      "CLM-001": "Further adjustment for cardiovascular risk factors and potential mediators attenuated but did not abolish the associations of VMS (RR = 1.28; 95%CI = 1.08; 1.52) with CHD.",
+      "CLM-002": "213,976 women with a total of 10,037 cardiovascular disease outcomes, based on 10 distinct studies, 5.3 to 15 years.",
+    },
+  );
+  assert.equal(risk.length, 1, "a stance carried by no quote must be caught");
+  assert.match(risk[0], /CLM-001、CLM-002/);
+
+  // RQ-26 as delivered, the laundering path itself: the quoted sentence and the
+  // ECG recommendation live in the claim's own `claim` field, which
+  // claimEvidenceText counts as support and this check does not read.
+  const laundered = attributedStanceIssuesFor(
+    "女性以焦虑（校正 OR 2.9，95% CI 1.1–8.1）为表现者更多，作者指出这些症状常被误释为焦虑或惊恐障碍 [1] <!-- claim:CLM-001 -->",
+    { "CLM-001": "278 were included; anxiety (OR 2.9 (95% CI 1.1 –8.1, p=0.031)) were more frequent in women when presenting in the ED." },
+  );
+  assert.equal(laundered.length, 1);
+
+  // The obvious evasion: attribute a position and cite nothing at all.
+  assert.equal(attributedStanceIssuesFor("研究团队认为该风险被系统性低估。").length, 1);
+});
+
+test("an attribution the quote does carry is left alone", () => {
+  // RQ-08 as delivered, and the proof the rule is satisfiable: the same shape
+  // as the rejected line above, with the attribution actually in the quote.
+  assert.deepEqual(
+    attributedStanceIssuesFor(
+      "加热温度升至 70 ℃ 以上使龙脑的释放量下降，作者将其归因于升温下的挥发损失 [1] <!-- claim:CLM-001 -->",
+      { "CLM-001": "Raising the temperature to 70 °C increased release to 32.08 mg. This decline was likely due to volatilization losses of L-borneol at elevated temperatures." },
+    ),
+    [],
+  );
+  // RQ-05 as delivered: the attribution is a translation of a quote that
+  // states no measurement, so the "every cited claim is numeric" conjunct
+  // spares it. Without that conjunct this legitimate restatement fails.
+  assert.deepEqual(
+    attributedStanceIssuesFor(
+      "丹麦队列作者明确指出其机制推测为便秘导致排便用力 [1] <!-- claim:CLM-001 -->",
+      { "CLM-001": "Constipation leads to straining at stool, which has been associated with transient increases in blood pressure." },
+    ),
+    [],
+  );
+  // RQ-10 as delivered: a numeric claim and a mechanism claim on one line is
+  // ordinary writing, and the mechanism claim carries the attribution.
+  assert.deepEqual(
+    attributedStanceIssuesFor(
+      "该研究将这一促进作用归因于对 CYP3A4 的激活 [1][2] <!-- claim:CLM-001 --> <!-- claim:CLM-002 -->",
+      {
+        "CLM-001": "AUC was 385.37 versus 851.64 μg/L*h in the pretreated group.",
+        "CLM-002": "Ligustrazine promoted the metabolism of valsartan via activating CYP3A4.",
+      },
+    ),
+    [],
+  );
+});
+
+test("ordinary reporting verbs are not stance attribution", () => {
+  // 报告/报道/说明/描述 report what was measured; only 认为/指出/强调/视为/归因
+  // and their neighbours attribute a position. 本文/本研究 are excluded too —
+  // the paper's own voice is not an attribution to anybody.
+  for (const line of [
+    "该文并报告舌下硝酸甘油在中国受试者中缺乏疗效 [1] <!-- claim:CLM-001 -->",
+    "该研究报道了 12 例患者的随访结果 [1] <!-- claim:CLM-001 -->",
+    "本研究认为该关联仍需前瞻性验证 [1] <!-- claim:CLM-001 -->",
+  ]) {
+    assert.deepEqual(
+      attributedStanceIssuesFor(line, { "CLM-001": "The event rate was 12.4% (95% CI 9.1 to 16.2) over 24 months." }),
+      [],
+      `an ordinary reporting verb must not read as attribution: ${line}`,
+    );
+  }
+});
+
+// --- Reference-table closure ------------------------------------------------
+/** @param {(input: any) => void} prepare @param {RegExp} shape */
+function closureIssues(prepare, shape) {
+  const input = deepResearchPackage();
+  prepare(input);
+  return validateClinicalEvidencePackage(input).issues.filter((issue) => shape.test(issue));
+}
+
+test("a numbered reference nobody cites is an orphan entry", () => {
+  // RQ-22 as delivered: a young-adult chest-pain cohort numbered 11, cited
+  // nowhere, mentioned once in 局限性 as "full text unavailable" — and it is
+  // exactly the cohort the report's own question needed. A zero-citation entry
+  // almost always points at a question that was not finished.
+  const issues = closureIssues((input) => {
+    input.reportText = input.reportText.replace(
+      "\n\n## 参考文献",
+      "\n\n## 参考文献\n13. Walker NJ, Sites FD. Characteristics and outcomes of young adults who present with chest pain. Acad Emerg Med. 2001. PMID:11435184.",
+    );
+  }, /^参考文献 \[\d+\] 在正文中从未被引用/);
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /\[13\]/);
+});
+
+test("a citation with no entry, and an identifier standing in for one, are both rejected", () => {
+  // The dangling direction fires nowhere in the delivered corpus, and it is
+  // what stops clause A's repair being gamed: deleting an entry without
+  // renumbering now fails here instead of passing silently.
+  const dangling = closureIssues((input) => {
+    input.reportText = input.reportText.replace("## 讨论\n", "## 讨论\n该结论另见一项队列研究 [23]。\n");
+  }, /^正文引用 \[23\] 在参考文献表中没有对应条目/);
+  assert.equal(dangling.length, 1);
+
+  // RQ-25 as delivered, on a sentence carrying a negative assertion.
+  const identifiers = closureIssues((input) => {
+    input.reportText = input.reportText.replace(
+      "## 讨论\n",
+      "## 讨论\n与此最接近的研究均属间接：中医诊断变量信度研究[题录，PMID 22897413，全文未获]；量表研究方案[题录，PMID 29721788，全文未获]。\n",
+    );
+  }, /^报告第 \d+ 行把书目标识符放进了引用位/);
+  assert.equal(identifiers.length, 2);
+});
+
+test("citation harvesting reads compound brackets, table rows and chemical names", () => {
+  // [6,10] must expand to both numbers or two entries are falsely orphaned; a
+  // table row is the only citation of reference 6 in one delivered report; and
+  // [2.2.1] is a von Baeyer ring descriptor inside a chemical name, not
+  // citation 2 and not an identifier.
+  const input = deepResearchPackage();
+  input.reportText = input.reportText
+    .replace("## 讨论\n", "## 讨论\n冰片（1,7,7-三甲基二环[2.2.1]庚-2-醇）的分子量为 154.25 [2]。\n")
+    .replace(
+      "\n\n## 参考文献",
+      "\n\n## 参考文献\n13. Extra source A. Journal. 2020. https://example.org/a\n14. Extra source B. Journal. 2021. https://example.org/b",
+    )
+    .replace("## 结果\n", "## 结果\n| 项目 | 值 |\n| --- | --- |\n| 核准适用场景 | 心绞痛发作的急性缓解 [13] |\n\n合并结果一致 [14,13]。\n");
+  const issues = validateClinicalEvidencePackage(input).issues.filter((issue) => (
+    /^参考文献 \[\d+\] 在正文中从未被引用/.test(issue)
+    || /^正文引用 \[\d+\] 在参考文献表中没有对应条目/.test(issue)
+    || /把书目标识符放进了引用位/.test(issue)
+  ));
+  assert.deepEqual(issues, []);
+});
+
+test("a repeated claim marker must carry that claim's number on every line it appears on", () => {
+  // RQ-13 as delivered: CLM-021 pairs correctly on line 66 and is repeated in
+  // 临床实践要点 on a safety instruction citing [6], which the claim does not
+  // carry. The existing per-claim check inspects only the first line the
+  // marker appears on, so today this passes.
+  const input = deepResearchPackage();
+  input.reportText = input.reportText.replace(
+    "\n\n## 参考文献",
+    "\n4. 发作频率增加时及时就医评估而非自行调整剂量 [6]。<!-- claim:CLM-001 -->\n\n## 参考文献",
+  );
+  const issues = validateClinicalEvidencePackage(input).issues.filter((issue) => /anchors claim CLM-001/.test(issue));
+  assert.equal(issues.length, 1);
+  // Inside the practical section it is blocking: that is where the gate already
+  // refuses derived claims and requires a marker on every action line.
+  assert.match(issues[0], /^The practical section's report line \d+ anchors claim/);
+  assert.equal(validateClinicalEvidencePackage(input).blockingIssues.includes(issues[0]), true);
+
+  // The same defect in the analysis body is bookkeeping a reader can check.
+  const body = deepResearchPackage();
+  body.reportText = body.reportText.replace("## 讨论\n", "## 讨论\n该结论亦见于队列研究 [6]。<!-- claim:CLM-001 -->\n");
+  const bodyIssues = validateClinicalEvidencePackage(body).issues.filter((issue) => /anchors claim CLM-001/.test(issue));
+  assert.equal(bodyIssues.length, 1);
+  assert.match(bodyIssues[0], /^Report line \d+ anchors claim/);
+  assert.equal(validateClinicalEvidencePackage(body).blockingIssues.includes(bodyIssues[0]), false);
+});
+
+test("an excluded source record needs a reason and must leave the numbered list", () => {
+  const issues = closureIssues((input) => {
+    const log = JSON.parse(input.searchLogText);
+    log.sourceRecords.push({
+      sourceUrl: "https://pubmed.ncbi.nlm.nih.gov/evidence/source-13",
+      referenceNumber: 5,
+      included: false,
+      accessLevel: "bibliographic",
+    });
+    input.searchLogText = JSON.stringify(log);
+  }, /sourceRecords\[12\]/);
+  assert.equal(issues.length, 2, issues.join("\n"));
+  assert.equal(issues.some((issue) => /没有 exclusionReason/.test(issue)), true);
+  assert.equal(issues.some((issue) => /却仍以编号 \[5\] 留在参考文献表中/.test(issue)), true);
+});
+
+// --- Screening numbers and the source set are rendered, never restated -----
+test("a stated flow number that disagrees with the search log is rejected, one number at a time", () => {
+  // RQ-07 as delivered: 191/116/25 in the prose against 203/125/24 in the log
+  // and in the run's own citation audit. Log and receipt agree perfectly, so
+  // every existing check passes; nobody reads the prose.
+  const input = deepResearchPackage();
+  input.reportText = input.reportText.replace(
+    "## 结果\n",
+    "## 结果\n以 PMID、DOI 及规范化题名去重后，共获得 40 条记录，去重并剔除无关记录后余 24 条，最终纳入 12 个来源。\n",
+  );
+  const issues = validateClinicalEvidencePackage(input).issues.filter((issue) => /^检索流程数与纳入来源集合/.test(issue));
+  // Only the disagreeing quantity: 24 and 12 are right and raise nothing.
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /命中记录数 40，检索记录 recordsIdentified = 42/);
+});
+
+test("a per-query hit count and a cited study's own count are not the run's flow", () => {
+  // The two most dangerous look-alikes in the corpus. 「命中 0 条」 for one named
+  // database is a result; 「纳入 46 篇系统评价」 and 「纳入 41 项随机对照试验」 are
+  // a cited paper's own counts. Without the anchoring rule the first collides
+  // with recordsIdentified and the second with sourcesIncluded.
+  for (const line of [
+    "临床试验注册库以“速效救心丸”检索命中 0 条。",
+    "纳入的 46 篇系统评价中，结局多为心绞痛与心电图等次要终点。",
+    "Ren 等的荟萃分析纳入 41 项随机对照试验、6276 例中国冠心病患者。",
+    "该试验纳入 174 例对长效硝酸酯不耐受的慢性冠脉综合征患者。",
+  ]) {
+    const input = deepResearchPackage();
+    input.reportText = input.reportText.replace("## 结果\n", `## 结果\n${line}\n`);
+    const issues = validateClinicalEvidencePackage(input).issues.filter((issue) => /^检索流程数与纳入来源集合/.test(issue));
+    assert.deepEqual(issues, [], `a per-study or per-query count must not read as the run's flow: ${line}`);
+  }
+  // And a complete, correct flow sentence stays silent, which is the shape the
+  // rule is asking for.
+  const correct = deepResearchPackage();
+  correct.reportText = correct.reportText.replace(
+    "## 结果\n",
+    "## 结果\n共执行 8 条检索式，命中 42 条记录，去重后 24 条，纳入 12 份来源。\n",
+  );
+  assert.deepEqual(
+    validateClinicalEvidencePackage(correct).issues.filter((issue) => /^检索流程数与纳入来源集合/.test(issue)),
+    [],
+  );
+});
+
+test("the numbered reference list must be exactly the included source set", () => {
+  // RQ-24 as delivered: twelve numbered references, seven included records, and
+  // the five it cites in the body sit in the log as
+  // "accessLevel": "bibliographic", "included": false. sourcesIncluded ===
+  // includedRecords.length still holds, so the existing check sees a
+  // consistent log while the reader sees twelve numbered sources.
+  const input = deepResearchPackage();
+  const log = JSON.parse(input.searchLogText);
+  log.sourceRecords[11].included = false;
+  log.sourceRecords[11].accessLevel = "bibliographic";
+  log.sourceRecords[11].exclusionReason = "题录层级，未获全文";
+  log.screening.sourcesIncluded = 11;
+  input.searchLogText = JSON.stringify(log);
+  const issues = validateClinicalEvidencePackage(input).issues;
+  assert.equal(issues.some((issue) => /^参考文献 \[12\] 在正文中被引用或列入参考文献表/.test(issue)), true, issues.join("\n"));
+  assert.equal(issues.some((issue) => /^参考文献表共 12 条编号条目，screening\.sourcesIncluded = 11/.test(issue)), true);
+});
+
+test("the screening-ledger mismatch earns its own run-level error code", () => {
+  // A repair loop told only "traceability failed" cannot hand the run the
+  // numbers that disagree.
+  assert.equal(
+    clinicalEvidencePackageErrorCode(["参考文献表共 12 条编号条目，screening.sourcesIncluded = 11。"]),
+    "specialist_screening_ledger_mismatch",
+  );
+  assert.equal(clinicalEvidencePackageErrorCode(["some other blocking issue"]), "specialist_evidence_traceability_failed");
+});
+
+// --- A named appraisal instrument is a promise, not a qualification --------
+/** @param {string} methods @param {string} [results] */
+function appraisalPackage(methods, results = "") {
+  const input = deepResearchPackage();
+  input.reportText = input.reportText
+    .replace("## 检索与方法\n", `## 检索与方法\n${methods}\n`)
+    .replace("## 结果\n", `## 结果\n${results}\n`);
+  return validateClinicalEvidencePackage(input).issues.filter((issue) => (
+    /^资料与方法声明了/.test(issue) || /^GRADE 等级与降级理由不自洽/.test(issue)
+  ));
+}
+
+/** The same, but only what actually withholds delivery.
+ *  @param {string} methods @param {string} [results]
+ */
+function appraisalBlocking(methods, results = "") {
+  const input = deepResearchPackage();
+  input.reportText = input.reportText
+    .replace("## 检索与方法\n", `## 检索与方法\n${methods}\n`)
+    .replace("## 结果\n", `## 结果\n${results}\n`);
+  return validateClinicalEvidencePackage(input).blockingIssues.filter((issue) => (
+    /^资料与方法声明了/.test(issue) || /^GRADE 等级与降级理由不自洽/.test(issue)
+  ));
+}
+
+test("an instrument named in the methods must be applied once in the results", () => {
+  // RQ-21 as delivered: seven instruments declared, each appearing zero times
+  // after 资料与方法. The closed vocabulary already existed on both sides and
+  // was used only to exempt sentences from the self-grading rule, so naming an
+  // instrument made the gate more permissive and never more demanding.
+  const declared = appraisalPackage(
+    "鉴别要点的诊断效能用 QUADAS-2 评价；干预性研究用 Cochrane RoB 2，非随机干预研究用 ROBINS-I，系统评价用 AMSTAR 2，指南方法学质量用 AGREE II 说明。药物与不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定。",
+  );
+  assert.equal(declared.length, 7, declared.join("\n"));
+  for (const instrument of ["QUADAS-2", "RoB 2", "ROBINS-I", "AMSTAR 2", "AGREE II", "Naranjo", "WHO-UMC"]) {
+    assert.equal(declared.some((issue) => issue.includes(`声明了 ${instrument}`)), true, `${instrument} must be named`);
+  }
+
+  // RQ-06 as delivered: the hedged declaration, which the line itself admits.
+  const hedged = appraisalPackage("干预性研究以 Cochrane RoB 2 / ROBINS-I 思路评估偏倚风险；指南与共识以 AGREE II 思路说明方法学质量。");
+  assert.equal(hedged.length, 3);
+  assert.equal(hedged.every((issue) => /等同于未使用/.test(issue)), true);
+
+  // RQ-29 as delivered: the instrument surfaces for the first time in 局限性,
+  // where it defends a grading that exists nowhere in 结果 or 讨论.
+  const input = deepResearchPackage();
+  input.reportText = input.reportText
+    .replace("## 检索与方法\n", "## 检索与方法\n以 QUADAS-2 评估偏倚风险。\n")
+    .replace("## 局限与不确定性\n", "## 局限与不确定性\nQUADAS-2 层面的患者选择偏倚普遍存在。\n");
+  const result = validateClinicalEvidencePackage(input);
+  const tailOnly = result.issues.filter((issue) => /^资料与方法声明了/.test(issue));
+  assert.equal(tailOnly.length, 1);
+  assert.match(tailOnly[0], /只在局限性或结论里出现/);
+  // And none of it withholds the package. See the next test.
+  assert.deepEqual(result.blockingIssues.filter((issue) => /^资料与方法声明了/.test(issue)), []);
+});
+
+test("a declared instrument that never rated anything is named for the reader, not blocked", () => {
+  // Every one of the thirty delivered packages declares its instruments per
+  // design stratum, which is the method section PRISMA asks for, and a stratum
+  // this round's search returned nothing for owes no sentence retiring its
+  // instrument. Prose does not distinguish "promised and skipped" from "came
+  // back empty", so blocking on it rejected twenty-nine of twenty-nine — and
+  // its cheapest remedy was to delete the instrument names from 资料与方法.
+  //
+  // The two lines below are the same claim about the same run, and differ only
+  // in whether the sentence happens to name the instrument. Neither may block.
+  const named = appraisalBlocking(
+    "诊断准确性研究以 QUADAS-2 评价偏倚风险。",
+    "本次检索未纳入任何诊断准确性研究，故不涉及诊断偏倚评价。研究甲 [1]。",
+  );
+  const unnamed = appraisalBlocking(
+    "诊断准确性研究以 QUADAS-2 评价偏倚风险。",
+    "未检索到可用 QUADAS-2 评定的研究。研究甲 [1]。",
+  );
+  assert.deepEqual(named, []);
+  assert.deepEqual(unnamed, []);
+  // The seven-instrument declaration of RQ-21 — the worst case in the corpus,
+  // and a confirmed defect — is still reported, still degradable.
+  const declared = appraisalPackage(
+    "干预性研究用 Cochrane RoB 2，非随机干预研究用 ROBINS-I，系统评价用 AMSTAR 2，指南方法学质量用 AGREE II 说明。",
+  );
+  assert.equal(declared.length, 4, declared.join("\n"));
+  assert.deepEqual(appraisalBlocking(
+    "干预性研究用 Cochrane RoB 2，非随机干预研究用 ROBINS-I，系统评价用 AMSTAR 2，指南方法学质量用 AGREE II 说明。",
+  ), []);
+});
+
+test("a certainty rating one paragraph below the studies it grades is the instrument being used", () => {
+  // RQ-10 line 59, verbatim: 「综合而言，机制层面……按 GRADE 属低确定性，降级理由
+  // 为间接性」 stands in 结果 and is exactly where GRADE was executed. It grades
+  // a *body* of evidence, so it summarises studies cited in the paragraphs
+  // above and carries no [n] of its own — and requiring a bracket in the same
+  // paragraph declared it missing over a single newline.
+  assert.deepEqual(
+    appraisalPackage(
+      "证据体确定性以 GRADE 表述。",
+      "研究甲报告有效率 70% [1]。\n\n综合而言，机制层面可支持方向性结论，按 GRADE 属低确定性，降级理由为间接性（离体组织与动物而非目标人群）。",
+    ),
+    [],
+  );
+  // The same text with the newline removed passed before this change, which is
+  // how the defect was found. It must still pass.
+  assert.deepEqual(
+    appraisalPackage(
+      "证据体确定性以 GRADE 表述。",
+      "研究甲报告有效率 70% [1]。综合而言，按 GRADE 属低确定性，降级理由为间接性。",
+    ),
+    [],
+  );
+  // Control: the same methods with a 结果 that never grades anything is still
+  // reported, so this test cannot pass by the rule having been deleted.
+  assert.equal(
+    appraisalPackage("证据体确定性以 GRADE 表述。", "研究甲报告有效率 70% [1]。").length,
+    1,
+  );
+});
+
+test("an instrument that was executed, or had nothing to score, is left alone", () => {
+  // RQ-26 as delivered: a genuine execution whose verdict is prose, not a
+  // canonical level word. Requiring a rating vocabulary flags this line.
+  assert.deepEqual(
+    appraisalPackage(
+      "诊断准确性研究用 QUADAS-2 评价。",
+      "按 QUADAS-2，该研究排除了初始心电图明确心肌梗死者，存在选择偏倚风险，且随访期短 [6]。",
+    ),
+    [],
+  );
+  // RQ-25 as delivered: the grading sentence carries no [n] of its own; the
+  // citations sit earlier in the same paragraph. Hence paragraph scope.
+  assert.deepEqual(
+    appraisalPackage(
+      "队列研究以 Newcastle-Ottawa 量表评价。",
+      "两项院前延迟研究报告了症状—到院时间 [5][6]。这些研究均按 Newcastle-Ottawa 量表评价并因间接性降级。",
+    ),
+    [],
+  );
+  // RQ-15 as delivered: the instrument was declared and the literature has
+  // nothing to apply it to, which is executed by saying so — no citation.
+  assert.deepEqual(
+    appraisalPackage(
+      "药物与不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定。",
+      "未检索到针对本品的 Naranjo 或 WHO-UMC 因果关系评定，也未检索到去激发与再激发观察的个案。",
+    ),
+    [],
+  );
+  // eNOS-NO is nitric oxide synthase, not the Newcastle-Ottawa Scale, and bare
+  // Cochrane is a publication rather than a versioned instrument.
+  assert.deepEqual(
+    appraisalPackage("偏倚风险按 Cochrane 相关工具评价。", "本品通过激活 eNOS-NO 通路诱导冠脉舒张 [5]。"),
+    [],
+  );
+});
+
+test("a GRADE level that reaches 高 beside a downgrade reason is rejected, and a baseline is not", () => {
+  // RQ-25 as delivered: 方法学质量偏低 is a bias-risk downgrade and the level
+  // still reaches 高, while the same report grades that body 低或极低 in 结果.
+  const contradiction = appraisalBlocking(
+    "证据体确定性以 GRADE 表述。",
+    "纳入研究整体方法学质量偏低、多数为中文单中心小样本试验，按 GRADE 在中至高之间 [5]。",
+  );
+  assert.equal(contradiction.some((issue) => /^GRADE 等级与降级理由不自洽/.test(issue)), true, contradiction.join("\n"));
+
+  // The flat form: a deficiency asserted beside a single-point 高.
+  assert.equal(
+    appraisalBlocking("证据体确定性以 GRADE 表述。", "纳入研究方法学质量偏低，按 GRADE 评为高确定性 [1]。")
+      .some((issue) => /^GRADE 等级与降级理由不自洽/.test(issue)),
+    true,
+  );
+
+  // RQ-03 as delivered: textbook-correct GRADE writing. 高 names the starting
+  // point, and RoB 2 is executed with no citation because it could not be
+  // scored — both traps in one sentence.
+  assert.deepEqual(
+    appraisalPackage(
+      "证据体确定性以 GRADE 表述，干预性研究以 RoB 2 评估。",
+      "按 GRADE 评估，该证据体从「高」起步，因偏倚风险（单个试验、结果仅为摘要层级，RoB 2 无法完整评估）降一级，因不精确再降一级，评为低确定性。",
+    ),
+    [],
+  );
+});
+
+test("the standard wording of a GRADE high-certainty verdict is not a contradiction", () => {
+  // The five GRADE domains are neutral nouns. Matching the bare noun made
+  // these two — the textbook ways of writing 高 — self-contradictory, i.e. it
+  // declared "high certainty" unwritable, and the whole point of naming the
+  // domains is to say which of them you did *not* downgrade for.
+  for (const results of [
+    "两项大型随机对照试验偏倚风险低、结果一致、估计精确、无发表偏倚证据，按 GRADE 评为高确定性 [1]。",
+    "未对任何领域降级，按 GRADE 评为高确定性 [1]。",
+    "无需降级，按 GRADE 为高确定性 [1]。",
+  ]) {
+    assert.deepEqual(appraisalPackage("证据体确定性以 GRADE 表述。", results), [], results);
+  }
+  // And the one line in the same shape that is a real contradiction still is,
+  // so this test cannot pass by the rule having been deleted.
+  assert.equal(
+    appraisalBlocking("证据体确定性以 GRADE 表述。", "纳入研究方法学质量偏低，按 GRADE 评为高确定性 [1]。").length,
+    1,
+  );
 });

@@ -376,6 +376,110 @@ test("whatever the server gate rejects, the preflight already caught", async () 
       },
     },
     {
+      label: "a GRADE level reaching 高 in the same sentence as a downgrade reason",
+      break: (input) => {
+        input.reportText = input.reportText
+          .replace("## 检索与方法\n", "## 检索与方法\n证据体确定性以 GRADE 表述。\n")
+          .replace(
+            "## 结果\n",
+            "## 结果\n纳入研究整体方法学质量偏低、多数为单中心小样本试验，按 GRADE 在中至高之间 [5]。\n",
+          );
+      },
+    },
+    {
+      // A hand-written flow sentence. The log and the receipt agree with each
+      // other, so every existing check passes and nobody reads the prose.
+      label: "a screening flow number the search log contradicts",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 结果\n",
+          "## 结果\n共获得 40 条记录，去重并剔除无关记录后余 24 条，最终纳入 12 个来源。\n",
+        );
+      },
+    },
+    {
+      // A record kept at included:false while it is numbered in 参考文献 and
+      // cited in the body. sourcesIncluded === includedRecords.length still
+      // holds, so the log reads as consistent.
+      label: "a numbered reference whose source record was never included",
+      break: (input) => {
+        const log = JSON.parse(input.searchLogText);
+        log.sourceRecords[11].included = false;
+        log.sourceRecords[11].accessLevel = "bibliographic";
+        log.sourceRecords[11].exclusionReason = "题录层级，未获全文";
+        log.screening.sourcesIncluded = 11;
+        input.searchLogText = JSON.stringify(log);
+      },
+    },
+    {
+      // A numbered entry nobody cites. The nearest existing check counts
+      // entries, so padding the list satisfied it.
+      label: "a numbered reference the body never cites",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "\n\n## 参考文献",
+          "\n\n## 参考文献\n13. Walker NJ. Characteristics and outcomes of young adults with chest pain. Acad Emerg Med. 2001. PMID:11435184.",
+        );
+      },
+    },
+    {
+      label: "a bibliographic identifier standing in the citation slot",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n与此最接近的研究均属间接：中医诊断变量信度研究[题录，PMID 22897413，全文未获]。\n",
+        );
+      },
+    },
+    {
+      label: "a repeated claim marker on a line that does not carry its number",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "\n\n## 参考文献",
+          "\n4. 发作频率增加时及时就医评估而非自行调整剂量 [6]。<!-- claim:CLM-001 -->\n\n## 参考文献",
+        );
+      },
+    },
+    {
+      // An attributed position resting on a numeric quote. Every figure on the
+      // line is in the cited quote, so the numeric audit is silent; the stance
+      // is in no quote at all.
+      label: "a position attributed to a source that only reported measurements",
+      break: (input) => {
+        input.matrix.claims[0].supportQuote = "213,976 women with 10,037 cardiovascular outcomes were followed for 5.3 to 15 years (RR = 1.28).";
+        input.sourceArtifacts[input.matrix.claims[0].artifactPath]
+          += `\n${input.matrix.claims[0].supportQuote}`;
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n作者将血管舒缩症状视为可能的心血管风险标记而非因果因素 [1] <!-- claim:CLM-001 -->\n",
+        );
+      },
+    },
+    {
+      // Verbatim from a delivered report. [1] is a preserved journal source,
+      // not the statute: an article locator asserts what a normative text says
+      // at clause granularity, and only the issuing authority can carry that.
+      label: "an article-level regulatory citation resting on a journal source",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点 [1]。\n",
+        );
+      },
+    },
+    {
+      // Verbatim from a delivered practice point. The same section also carries
+      // "服药不是等待的理由，应在服药的同时呼叫急救", so the two instructions are
+      // mutually exclusive and a reader cannot execute both.
+      label: "an emergency-call trigger conditioned on how the medicine performed",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "\n\n## 参考文献",
+          "\n4. 胸痛持续、伴大汗、气促、含药不缓解者应立即拨打急救电话。[1] <!-- claim:CLM-001 -->\n\n## 参考文献",
+        );
+      },
+    },
+    {
       label: "derived result asserted without its 〔推导〕 mark",
       break: (input) => {
         input.matrix.claims.push({
@@ -407,6 +511,81 @@ test("whatever the server gate rejects, the preflight already caught", async () 
       false,
       `${scenario.label}: the gate rejects this package but the preflight returned ok=true, `
         + "so a run would be told it is finished and then failed for it",
+    );
+  }
+});
+
+test("what the gate degrades, the preflight also degrades", async () => {
+  // The other half of the same invariant. A gap the gate reports without
+  // withholding delivery must not stop the run either, or the skill's
+  // "fix every preflight issue and rerun until ok=true" makes a finished
+  // package unfinishable over something the gate would have delivered.
+  const cases = [
+    {
+      // Seven instruments declared and none executed, as delivered. Blocking
+      // on it rejected twenty-nine of the thirty delivered packages, because
+      // pre-specifying an instrument per design stratum is what the method
+      // section is supposed to do and an empty stratum owes no retraction.
+      label: "an appraisal instrument named in the methods and never applied",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 检索与方法\n",
+          "## 检索与方法\n干预性研究用 Cochrane RoB 2 评估偏倚风险，系统评价用 AMSTAR 2。\n",
+        );
+      },
+      pattern: /资料与方法声明了 /,
+    },
+    {
+      label: "an appraisal instrument hedged with 思路, which is not using it",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 检索与方法\n",
+          "## 检索与方法\n药物—不良事件因果判断采用 Naranjo 思路；本报告未做新因果判断。\n",
+        );
+      },
+      pattern: /资料与方法声明了 /,
+    },
+    {
+      // The exclusion ledger is the search apparatus describing itself, not a
+      // claim about medicine. Blocking on it also judged twenty-two delivered
+      // packages by a field the spec did not have when they were written.
+      label: "an excluded source record with no exclusion reason",
+      break: (input) => {
+        const log = JSON.parse(input.searchLogText);
+        log.sourceRecords.push({
+          sourceUrl: "https://pubmed.ncbi.nlm.nih.gov/evidence/source-13",
+          included: false,
+          accessLevel: "bibliographic",
+        });
+        input.searchLogText = JSON.stringify(log);
+      },
+      pattern: /sourceRecords\[\d+\] 标记为 "included": false/,
+    },
+  ];
+
+  for (const scenario of cases) {
+    const input = deepResearchPackage();
+    scenario.break(input);
+    const { gate, preflight } = await verdicts(input, scenario.label);
+    assert.equal(
+      gate.issues.some((issue) => scenario.pattern.test(issue)),
+      true,
+      `${scenario.label}: the gate no longer reports this at all, so this case tests nothing`,
+    );
+    assert.deepEqual(
+      gate.blockingIssues.filter((issue) => scenario.pattern.test(issue)),
+      [],
+      `${scenario.label}: this is degradable and must not withhold the package`,
+    );
+    assert.equal(
+      preflight.issues.some((issue) => scenario.pattern.test(issue)),
+      false,
+      `${scenario.label}: the gate delivers this package but the preflight fails the run for it`,
+    );
+    assert.equal(
+      preflight.notes.some((note) => scenario.pattern.test(note)),
+      true,
+      `${scenario.label}: the run must still be told, as advice`,
     );
   }
 });
@@ -593,8 +772,20 @@ test("the sentences the skill prescribes as the repair are not themselves reject
     const input = deepResearchPackage();
     input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${write}\n`);
     const { gate, preflight } = await verdicts(input, write);
-    assert.equal(gate.valid, true, `${write}: ${gate.issues.join("\n")}`);
-    assert.equal(preflight.ok, true, `${write}: ${JSON.stringify(preflight.issues)}`);
+    // Scoped to the three families, because these fixture lines carry figures
+    // and citations that the unrelated numeric-provenance checks read.
+    const families = [/^临床实践要点第 \d+ 行把/, /^GRADE 等级与降级理由不自洽/, /^资料与方法声明了 /];
+    const preflightFamilies = [/^practical line \d+: 「/, /GRADE 等级与降级理由不自洽/, /资料与方法声明了 /];
+    assert.deepEqual(
+      gate.issues.filter((issue) => families.some((pattern) => pattern.test(issue))),
+      [],
+      `${write}: the gate flags a line the adversarial pass proved compliant`,
+    );
+    assert.deepEqual(
+      preflight.issues.filter((issue) => preflightFamilies.some((pattern) => pattern.test(issue))),
+      [],
+      `${write}: the preflight fails a run over a line the gate delivers`,
+    );
   }
 });
 
@@ -819,8 +1010,20 @@ test("a substitution claim the report says it has no comparison for is rejected 
     const input = deepResearchPackage();
     input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${declared}\n${write}\n`);
     const { gate, preflight } = await verdicts(input, write);
-    assert.equal(gate.valid, true, `${write}: ${gate.issues.join("\n")}`);
-    assert.equal(preflight.ok, true, `${write}: ${JSON.stringify(preflight.issues)}`);
+    // Scoped to the three families, because these fixture lines carry figures
+    // and citations that the unrelated numeric-provenance checks read.
+    const families = [/^临床实践要点第 \d+ 行把/, /^GRADE 等级与降级理由不自洽/, /^资料与方法声明了 /];
+    const preflightFamilies = [/^practical line \d+: 「/, /GRADE 等级与降级理由不自洽/, /资料与方法声明了 /];
+    assert.deepEqual(
+      gate.issues.filter((issue) => families.some((pattern) => pattern.test(issue))),
+      [],
+      `${write}: the gate flags a line the adversarial pass proved compliant`,
+    );
+    assert.deepEqual(
+      preflight.issues.filter((issue) => preflightFamilies.some((pattern) => pattern.test(issue))),
+      [],
+      `${write}: the preflight fails a run over a line the gate delivers`,
+    );
   }
 });
 
@@ -993,6 +1196,51 @@ test("the sentences the reviewers wrote as the repair pass both sides unchanged"
   assert.equal(sharedRun.gate.valid, true, sharedRun.gate.issues.join("\n"));
   assert.equal(sharedRun.preflight.ok, true, JSON.stringify(sharedRun.preflight.issues));
   assert.deepEqual(sharedRun.preflight.notes, []);
+});
+
+test("the lines the adversarial pass proved compliant clear both sides", async () => {
+  // Verbatim from delivered packages, each rejected by the first version of one
+  // of these rules. A rule that rejects them buys delivery with methodological
+  // transparency or with a safety sentence, which is the wrong trade in both
+  // directions — and it has to be the wrong trade on both sides at once, or a
+  // run fixes the preflight and is failed by the gate anyway.
+  for (const [where, write] of [
+    // The emergency rule: a clause boundary the span may not cross, and a
+    // rejection that may stand anywhere later in the sentence.
+    ["practical", "4. 慢性稳定型心绞痛患者，症状经首次含服明显改善后，方可每间隔 5 分钟重复给药；未完全缓解即呼叫 120。"],
+    ["practical", "5. 已服药者，出现新发晕厥、意识不清且症状不缓解，立即呼叫 120。"],
+    ["practical", "3. 若含服后心绞痛持续不缓解或性质改变，应立即呼叫急救，不得因已服药而推迟。"],
+    ["practical", "6. 含服后 20 分钟以上胸痛不缓解符合急性心肌梗死的警示特征，应立即呼叫 120，症状自觉缓解不等同于心肌缺血解除。"],
+    // The GRADE rule: naming the five domains is how a high-certainty verdict
+    // is justified, not how it is contradicted.
+    ["body", "两项大型随机对照试验偏倚风险低、结果一致、估计精确、无发表偏倚证据，按 GRADE 评为高确定性 [1]。"],
+    ["body", "未对任何领域降级，按 GRADE 评为高确定性 [1]。"],
+    // The appraisal rule: a body-level certainty stands a paragraph below the
+    // studies it grades and carries no bracket of its own.
+    ["body", "综合而言，机制层面可支持方向性结论，按 GRADE 属低确定性，降级理由为间接性。"],
+  ]) {
+    const input = deepResearchPackage();
+    input.reportText = where === "practical"
+      ? input.reportText.replace("\n\n## 参考文献", `\n${write} <!-- claim:CLM-001 --> [1]\n\n## 参考文献`)
+      : input.reportText
+        .replace("## 检索与方法\n", "## 检索与方法\n证据体确定性以 GRADE 表述。\n")
+        .replace("## 结果\n", `## 结果\n${write}\n`);
+    const { gate, preflight } = await verdicts(input, write);
+    // Scoped to the three families, because these fixture lines carry figures
+    // and citations that the unrelated numeric-provenance checks read.
+    const families = [/^临床实践要点第 \d+ 行把/, /^GRADE 等级与降级理由不自洽/, /^资料与方法声明了 /];
+    const preflightFamilies = [/^practical line \d+: 「/, /GRADE 等级与降级理由不自洽/, /资料与方法声明了 /];
+    assert.deepEqual(
+      gate.issues.filter((issue) => families.some((pattern) => pattern.test(issue))),
+      [],
+      `${write}: the gate flags a line the adversarial pass proved compliant`,
+    );
+    assert.deepEqual(
+      preflight.issues.filter((issue) => preflightFamilies.some((pattern) => pattern.test(issue))),
+      [],
+      `${write}: the preflight fails a run over a line the gate delivers`,
+    );
+  }
 });
 
 test("appraisal asymmetry is advice the run can act on, and never withholds a package", async () => {

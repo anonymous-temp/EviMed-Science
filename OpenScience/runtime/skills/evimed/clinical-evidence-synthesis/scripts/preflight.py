@@ -304,6 +304,258 @@ TRADITION_APPRAISAL = re.compile(
     r"|久经(?:临床)?(?:使用|考验)|临床经验支持|沿用已久|一线(?:用药|药物)地位"
 )
 SENTENCE_SPLIT = re.compile(r"(?<=[。！？；;])")
+# --- Emergency dispatch is never conditioned on a medicine's effect ----------
+# Mirrored from clinicalEvidenceQuality.mjs. Inside 临床实践要点 an
+# emergency-call instruction states its trigger in symptoms and signs; a trigger
+# phrased as "the drug did not work" cancels the unconditional rule the same
+# section always also carries, and a reader cannot execute both. Writing the
+# forbidden order in order to forbid it is the compliant shape, so the rejection
+# licenses the phrase when it stands in the clause carrying it or anywhere later
+# in the same sentence.
+EMERGENCY_DRUG_WORDS = "含服|含药|服药|服用|用药|口服|舌下|给药|服下"
+EMERGENCY_FAILURE_WORDS = (
+    "不缓解|未缓解|未完全缓解|无缓解|不见缓解|不能缓解|缓解不明显|缓解不佳|无效|不见效|无改善|未改善|不奏效|不起效"
+)
+# 不等同/不代表/不意味 belong to the same family as 不构成: they deny that the
+# medicine's response settles anything, which is the inference this rule bans.
+EMERGENCY_REJECT_WORDS = (
+    "不宜|而非|而不是|不是|并非|不得|不应|不能|不可|不要|勿|无论|不论|均不|都不|不因|不以|不作为|不构成"
+    "|不等同|不代表|不意味"
+)
+EMERGENCY_DISPATCH = re.compile(
+    r"(?:呼叫|拨打|呼救|叫)[^。！？\n]{0,8}(?:120|999|急救|救护)"
+    r"|(?:急救|120|999)[^。！？\n]{0,8}(?:呼叫|拨打|呼救)"
+)
+# One notion of a clause, shared by both halves of this check: a medication word
+# and a non-relief word state one trigger only when they stand in one clause.
+# Reading the span with one boundary set and the licensing rejection with
+# another made 「重复给药；未完全缓解即呼叫 120」 a single condition, while the
+# clause after the semicolon holds no medication word and calls 120 sooner.
+# The gap stays tempered against rejection words: without it 用药 reaches across
+# 而非 to 无效.
+EMERGENCY_CLAUSE_BOUNDARY = re.compile(r"[。！？；：、，;:,\n]")
+EMERGENCY_CLAUSE_GAP = rf"(?:(?!{EMERGENCY_REJECT_WORDS}|[。！？；：、，;:,\n]).){{0,20}}"
+MEDICATION_CONDITIONED_TRIGGER = re.compile(
+    rf"(?:{EMERGENCY_DRUG_WORDS}){EMERGENCY_CLAUSE_GAP}(?:{EMERGENCY_FAILURE_WORDS})"
+)
+TIMED_OBSERVATION_TRIGGER = re.compile(
+    r"(?:观察|等待|等)\s*[0-9０-９一二三四五六七八九十]{1,3}\s*(?:分钟|分|小时|min)"
+    rf"(?:(?!{EMERGENCY_REJECT_WORDS}|[。！？；：、，;:,\n]).){{0,10}}(?:{EMERGENCY_FAILURE_WORDS})"
+)
+EMERGENCY_REJECT_CLAUSE = re.compile(EMERGENCY_REJECT_WORDS)
+PRACTICAL_CLAIM_MARKER = re.compile(r"<!--.*?-->", re.S)
+PRACTICAL_EMPHASIS = re.compile(r"\*\*|__|`")
+PRACTICAL_CITATION = re.compile(r"\[\s*\d+(?:\s*[,\-–]\s*\d+)*\s*\]")
+PRACTICAL_SPACING = re.compile(r"[ \t　]+")
+# --- An article-level regulatory citation needs the regulator's own text -----
+# Mirrored from clinicalEvidenceQuality.mjs. 《XX法/条例/办法…》第 N 条 asserts
+# what a normative text says at clause granularity; only the issuing authority's
+# published text can carry that. A journal article, a review, a portal reprint
+# or a bare reference-list entry cannot, however accurately it paraphrases.
+STATUTE_TITLE = r"《[^》\n]{2,40}(?:法|条例|办法|规定|细则|准则|规范|决定|命令|公告|通知|药典)(?:[（(][^）)\n]{0,20}[）)])?》"
+STATUTE_ARTICLE_NUMBER = r"[一二三四五六七八九十百廿卅零〇0-9]{1,6}"
+STATUTE_ARTICLE_LOCATOR = re.compile(
+    rf"{STATUTE_TITLE}(?:[（(][^）)\n]{{0,24}}[）)])?[^。；！？\n]{{0,24}}?第\s*({STATUTE_ARTICLE_NUMBER})\s*条"
+)
+ARTICLE_NUMBER_CN = re.compile(rf"第\s*({STATUTE_ARTICLE_NUMBER})\s*条")
+ARTICLE_NUMBER_EN = re.compile(r"article\s+(\d{1,4})", re.I)
+# A registry fact, not a tuned list: these namespaces are restricted by their
+# registries to government entities, .int to intergovernmental treaty
+# organisations, and .europa.eu to EU institutions.
+GOVERNMENT_HOST = re.compile(r"(?:\.gov|\.gov\.[a-z]{2}|\.go\.[a-z]{2}|\.gouv\.fr|\.europa\.eu|\.int)$")
+REFERENCES_HEADING_LINE = re.compile(r"(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$", re.I | re.M)
+HEADING_LINE = re.compile(r"^\s*#{1,6}\s")
+CLAIM_MARKER_ID = re.compile(r"<!--\s*claim:(CLM-[0-9]{3,6})\s*-->|\[claim:(CLM-[0-9]{3,6})\]")
+CJK_DIGIT = {"〇": 0, "零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+CJK_UNIT_SMALL = {"十": 10, "百": 100, "千": 1000}
+CJK_UNIT_BIG = {"万": 10000, "亿": 100000000}
+# --- Conclusory quantity extraction, mirrored from clinicalEvidenceQuality.mjs
+# A number carrying a unit or a statistical marker is a measured quantity;
+# a bare integer is a list position or a section number. Every \b of the
+# original is written out as an explicit ASCII lookaround, because Python's \b
+# is unicode-aware and would not fall between a CJK glyph and a Latin letter
+# where JavaScript's does.
+NUMERIC_MARKDOWN_LINK = re.compile(r"\]\(https?://[^)\s]+\)", re.I)
+NUMERIC_WEB_ADDRESS = re.compile(r"https?://\S+", re.I)
+NUMERIC_VISIBLE_MARKER = re.compile(r"\[claim:CLM-[0-9]{3,6}\]")
+NUMERIC_HIDDEN_MARKER = re.compile(r"<!--\s*claim:CLM-[0-9]{3,6}\s*-->")
+NUMERIC_CITATION = re.compile(r"\[(?:[0-9]+(?:\s*[-,]\s*[0-9]+)*)\]")
+NUMERIC_ALNUM_TOKEN = re.compile(
+    r"(?<![A-Za-z0-9_])(?=[A-Za-z0-9-]*[0-9])[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*(?![A-Za-z0-9_])"
+)
+NUMERIC_LIST_MARKER = re.compile(r"[（(]\s*[1-9][0-9]?\s*[)）]")
+NUMERIC_THOUSANDS = re.compile(r"(?<=[0-9]),(?=[0-9]{3}(?:[^0-9]|$))")
+NUMERIC_INTERVAL_PERCENT = re.compile(r"%(\s*[–—-]\s*)(?=[0-9])")
+NUMERIC_RUN = re.compile(r"[0-9]+(?:\.[0-9]+)?(?:\s*[–—-]\s*[0-9]+(?:\.[0-9]+)?)?")
+EN_ONES = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+    "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+    "seventeen": 17, "eighteen": 18, "nineteen": 19,
+}
+EN_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+EN_SCALES = {"hundred": 100, "thousand": 1000, "million": 1000000, "billion": 1000000000}
+EN_WORDS_ALT = "|".join([*EN_ONES, *EN_TENS, *EN_SCALES])
+CONCLUSORY_NUMBER = (
+    r"(?:[0-9]+(?:\.[0-9]+)?(?:\s*[–—-]\s*[0-9]+(?:\.[0-9]+)?)?"
+    r"|[〇零一二两三四五六七八九十百千万亿]+"
+    rf"|(?<![A-Za-z])(?:{EN_WORDS_ALT})(?:[\s-]+(?:{EN_WORDS_ALT}))*(?![A-Za-z]))"
+)
+CONCLUSORY_UNIT = (
+    r"(?:%|‰|倍|percent|fold|times|mg|µg|μg|ug|mcg|ng|kg|g|mmol/?L?|mol|mmHg|mL|ml|L|IU"
+    r"|毫克|微克|纳克|千克|克|毫升|微升|升|毫摩尔|摩尔|国际单位|片|粒|支|滴|例次|人次|例患者|例|名|人|患者|项|次|周|月|年|天|日|岁"
+    r"|weeks?|months?|years?|days?|participants|patients|subjects|trials|studies|cases)(?![A-Za-z])"
+)
+RATIO_PREFIX = (
+    r"(?<![A-Za-z])(?:HR|aHR|OR|aOR|RR|aRR|风险比|比值比|危险比|相对危险度|CI|置信区间|发生率|有效率|敏感度|特异度"
+    r"|阳性率|死亡率|发病率|中位数|中位|平均|均值|百分之)"
+)
+STAT_PREFIX = r"(?<![A-Za-z])(?:n|N|p|P)\s*[<>=]"
+CONCLUSORY_CONNECTOR = r"[\s=:：<>≈~〜约为是]*"
+CONCLUSORY_SUFFIX = re.compile(rf"({CONCLUSORY_NUMBER})\s*{CONCLUSORY_UNIT}", re.I)
+CONCLUSORY_PREFIX = re.compile(rf"(?:{RATIO_PREFIX}{CONCLUSORY_CONNECTOR}|{STAT_PREFIX}\s*)({CONCLUSORY_NUMBER})", re.I)
+CONCLUSORY_PER_UNIT = re.compile(r"一(?:次|日|天)(?=\s*[0-9〇零一二两三四五六七八九十])")
+# --- A named appraisal instrument is a promise, not a qualification ---------
+# Mirrored from clinicalEvidenceQuality.mjs. NAMED_APPRAISAL_INSTRUMENT above is
+# used only as an exemption and is deliberately left alone; this is the other
+# half. Bare Cochrane is not in the vocabulary — 2008 年 Cochrane 系统评价 is a
+# publication — and bare NOS is nitric oxide synthase unless a scale noun
+# follows it.
+APPRAISAL_INSTRUMENTS = (
+    ("RoB 2", re.compile(r"RoB\s?[-‑]?\s?2", re.I)),
+    ("ROBINS-I", re.compile(r"ROBINS[-‑\s]?I(?![A-Za-z])", re.I)),
+    ("ROBINS-E", re.compile(r"ROBINS[-‑\s]?E(?![A-Za-z])", re.I)),
+    ("QUADAS-2", re.compile(r"QUADAS[-‑\s]?2", re.I)),
+    ("AMSTAR 2", re.compile(r"AMSTAR\s?[-‑]?\s?2", re.I)),
+    ("AGREE II", re.compile(r"AGREE\s?(?:II|2|Ⅱ)", re.I)),
+    ("Newcastle-Ottawa", re.compile(r"Newcastle[-‑\s]?Ottawa|纽卡斯尔[-‑\s]?渥太华|(?<![A-Za-z])NOS(?=\s*(?:量表|评分|评价|清单))", re.I)),
+    ("Naranjo", re.compile(r"Naranjo|诺氏(?=\s*(?:量表|评分))", re.I)),
+    ("WHO-UMC", re.compile(r"WHO[-‑\s]?UMC", re.I)),
+    ("Jadad", re.compile(r"Jadad", re.I)),
+    ("GRADE", re.compile(r"(?<![A-Za-z])GRADE(?![A-Za-z])", re.I)),
+)
+APPRAISAL_HEDGE = re.compile(r"思路|精神|理念|大意|(?:参照|参考)[^，。；\n]{0,20}要点")
+APPRAISAL_DECLINED = re.compile(r"未(?:使用|采用|执行|做|作)|不(?:适用|使用|采用)|无从(?:评定|评价)")
+APPRAISAL_NOT_APPLIED = re.compile(
+    r"未(?:检索到|获得|见|能|报告|提供|开展|进行|作|做|给出)"
+    r"|无法(?:完整)?(?:获得|检索|评定|评价|评估|应用|实施)|不适用|无从(?:评定|评价|判断)|(?:资料|信息)不(?:足|全|完整)"
+)
+APPRAISAL_CITATION = re.compile(r"\[\d+")
+# A rating of a *body* of evidence summarises studies cited before it and is
+# routinely its own paragraph, so a bracket in the same paragraph is the wrong
+# test for "was the instrument used".
+APPRAISAL_VERDICT = re.compile(
+    r"(?:为|评为|定为|判为|属|记为|评定为)\s*[\"“”'‘’]?"
+    r"(?:极|很|较)?(?:高|中等?|低|严重|不明确|high|moderate|low|serious|critical|some\s+concerns)",
+    re.I,
+)
+GRADE_LEVEL = re.compile(
+    r"(?:为|评为|定为|判为|确定性为|在)\s*[\"“”'‘’]?"
+    r"((?:极|很|较)?(?:高|中等?|低|high|moderate|low)(?:\s*(?:至|到|~|～|-|–)\s*(?:极|很|较)?(?:高|中等?|低|high|moderate|low))?)"
+    r"[\"“”'‘’]?\s*(?:确定性|质量|等级|之间|certainty)",
+    re.I,
+)
+# A downgrade reason is an assertion that something is *wrong* with the
+# evidence; the five GRADE domains are neutral nouns and appear just as often in
+# the sentence justifying a HIGH rating (偏倚风险低、结果一致、估计精确、无发表偏
+# 倚证据). Matching the bare noun made 高 unwritable.
+GRADE_DOWNGRADE = re.compile(
+    "|".join(
+        (
+            r"降(?:级|一级|两级|一个等级|两个等级)",
+            r"(?:偏倚风险|risk of bias)(?:较|很)?(?:高|严重|不明确|不清楚)",
+            r"存在(?:严重|明显|较大|一定)?(?:偏倚风险|不一致性?|间接性|不精确性?|发表偏倚)",
+            r"(?:不一致性?|间接性|不精确性?|发表偏倚)(?:明显|严重|突出|较大)",
+            r"(?:估计|效应量?|结果)(?:很|较|明显)?不(?:精确|一致)",
+            r"(?:方法学质量|证据质量|研究质量|质量)\s*(?:普遍|整体|多数|大多|总体)?\s*(?:偏低|较低|低|差|不高)",
+        )
+    ),
+    re.I,
+)
+# 未对任何领域降级 / 无需降级: the deficiency word is there because it is being
+# ruled out.
+GRADE_DOWNGRADE_NEGATION = re.compile(r"[不未无没][^，。；\n]{0,6}$")
+GRADE_BASELINE = re.compile(r"(?:从|自|起[点始]为|基线为|起步于)\s*[\"“”'‘’]?(?:高|中)")
+GRADE_WORD = re.compile(r"(?<![A-Za-z])GRADE(?![A-Za-z])", re.I)
+APPRAISAL_CLAUSE_SPLIT = re.compile(r"[，,；;：:、\n]")
+APPRAISAL_EMPHASIS = re.compile(r"\*\*|__")
+ABSTRACT_METHOD_FIELD = re.compile(r"\*\*方法\*\*(.*?)(?=\n?\*\*(?:结果|结论)|$)", re.S)
+LEVEL_TWO_HEADING = re.compile(r"^##\s+(.+)$")
+# --- Screening numbers and the source set are rendered, never restated ------
+# Mirrored from clinicalEvidenceQuality.mjs. Four quantities live in
+# clinical-evidence-search.json and nowhere else, together with the identity of
+# every included record; when the report states one, it renders it. A flow term
+# counts as a run-flow number only when the clause anchors it — two or more flow
+# terms together, or a term carrying its noun — so a per-query hit count
+# (「注册临床试验命中 0 条」) and a cited review's own study count
+# (「纳入 46 篇系统评价」) are never read as the run's screening totals.
+SCREENING_FLOW_PATTERNS = (
+    ("totalSearches", True,
+     re.compile(r"(?:共|合计|总计)?\s*(?:完成|执行|进行)\s*(?P<n>\d+)\s*(?:次|条|组)\s*(?P<noun>检索式?|查询)")),
+    ("recordsIdentified", False,
+     re.compile(r"(?:命中|获得|检出|检索到|识别)\s*(?P<n>\d+)\s*条\s*(?P<noun>记录|题录|文献)?")),
+    ("recordsAfterDeduplication", True,
+     re.compile(r"去重(?:[^，。；\n]{0,14})?后(?:余|剩余|保留|得到)?\s*(?P<n>\d+)\s*(?P<noun>条|篇|个)")),
+    ("sourcesIncluded", False,
+     re.compile(r"纳入\s*(?P<n>\d+)\s*(?:条|个|篇|份)\s*(?P<noun>来源|证据来源)?")),
+)
+SCREENING_FLOW_NAMES = {
+    "totalSearches": "检索式条数",
+    "recordsIdentified": "命中记录数",
+    "recordsAfterDeduplication": "去重后记录数",
+    "sourcesIncluded": "纳入来源数",
+}
+SCREENING_CLAUSE_SPLIT = re.compile(r"[。；;!?\n]")
+NUMBERED_REFERENCE_ENTRY = re.compile(r"^\s*(\d+)[.、]\s+\S")
+# --- Reference-table closure: nothing floats, no number is an orphan --------
+# Mirrored from clinicalEvidenceQuality.mjs. The numbered list and the body must
+# close on each other in both directions; a bibliographic identifier may not
+# stand in for a citation; every line repeating a claim marker carries that
+# claim's own number; and a source the run retrieved but did not use is recorded
+# as excluded, with a reason, and leaves the numbered list.
+REFERENCE_ENTRY = re.compile(r"^\s*(?:\[(\d{1,3})\]|(\d{1,3})[.、])\s+(\S.*)$")
+CITATION_NUMBER_LIST = re.compile(r"\[(\d{1,3}(?:\s*[,，、\-–—]\s*\d{1,3})*)\]")
+BARE_CITATION_NUMBER_LIST = re.compile(r"^\s*\d{1,3}(?:\s*[,，、\-–—]\s*\d{1,3})*\s*$")
+BRACKET_SPAN = re.compile(r"\[([^\[\]\n]{1,200})\]")
+CITATION_RANGE = re.compile(r"^(\d+)\s*[-–—]\s*(\d+)$")
+# \b written out as ASCII lookarounds: Python's \b is unicode-aware and would
+# not fall between a CJK glyph and a Latin letter where JavaScript's does.
+BIBLIOGRAPHIC_IDENTIFIER = re.compile(
+    r"(?:(?<![A-Za-z0-9_])10\.\d{4,9}/[^\s\]，。；、]+"
+    r"|(?<![A-Za-z0-9_])PMID:?\s*\d{5,9}(?![A-Za-z0-9_])"
+    r"|(?<![A-Za-z0-9_])PMC\d{5,9}(?![A-Za-z0-9_])"
+    r"|(?<![A-Za-z0-9_])NCT\d{8}(?![A-Za-z0-9_])"
+    r"|(?<![A-Za-z0-9_])ChiCTR[-A-Za-z0-9]+(?![A-Za-z0-9_])"
+    r"|(?<![A-Za-z0-9_])ISRCTN\d{8}(?![A-Za-z0-9_]))",
+    re.I,
+)
+CODE_SPAN = re.compile(r"`[^`\n]*`")
+# The LAST reference heading, as the section cut already does: a report naming
+# its reference list twice would otherwise be cut in the wrong place.
+REFERENCES_HEADING_ANY = re.compile(r"(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*", re.I)
+# --- An attributed position must be quoted, not inferred from data ----------
+# Mirrored from clinicalEvidenceQuality.mjs. 作者指出 / 该研究强调 attributes a
+# position to a source; a quote that only reports measurements cannot carry one.
+# Only supportQuote and sourceTitle are consulted — a position written into the
+# claim's own `claim`/`applicability`/`uncertainty` field is the agent's words.
+ATTRIBUTED_STANCE = re.compile(
+    r"(?<!本)(?:作者|研究者|研究人员|原作者|综述作者|原文|该文|文中|该研究|该综述|该试验|该队列|该分析|研究团队)"
+    r"[^。！？；;\n]{0,25}?(?:认为|指出|强调|视为|归因|主张|推测|承认|坦承|警告|提醒|解释为|理解为|注意到|倾向)"
+)
+# A permit-list, so adding a token can only silence a trigger and never create
+# one. but / not / only / significant / potential / established are excluded on
+# purpose: each occurs inside purely numeric result sentences.
+QUOTED_STANCE = re.compile(
+    r"(?<![A-Za-z])(?:we|our|the authors?|authors?)(?![A-Za-z])"
+    r"|suggest|conclude|conclusion|argu|propose|hypothes|speculat|acknowledg|caution|recommend|interpret"
+    r"|consider|believ|assum|attribut|postulat|reflect"
+    r"|(?<![A-Za-z])(?:may|might|could|likely|unlikely|probably|possibly|presumabl|should|cannot|can not"
+    r"|need to|appears? to|seems? to)(?![A-Za-z])"
+    r"|(?<![A-Za-z])(?:bias|confound|limitation|uncertain|caveat|due to|because of|owing to|explained by)(?![A-Za-z])"
+    r"|sufficient|reliab|adequat|justif|warrant|necessar|useful|prudent|advis|however|nevertheless|nonetheless"
+    r"|whereas|although|despite|questionab|debatab|controvers|unclear|unknown|remains to be"
+    r"|认为|指出|推测|归因|提示|建议|主张|强调|局限|偏倚|混杂|可能|或许|解释为",
+    re.I,
+)
 
 
 def check_claim(index: int, claim: dict, issues: list[str]) -> None:
@@ -925,6 +1177,599 @@ def appraisal_symmetry_notes(report: str) -> list[str]:
     return notes
 
 
+def medication_conditioned_emergency_triggers(practical: str) -> list[tuple[int, str, str]]:
+    """Every emergency-call sentence in the practical section whose trigger is
+    how a self-administered medicine performed, as (line, span, sentence).
+
+    Claim markers, emphasis and numbered citations are taken out first so
+    neither can inflate the gap between a medication word and a non-relief
+    word; the line count is preserved, because the notice names a line."""
+    text = PRACTICAL_CLAIM_MARKER.sub(" ", practical)
+    text = PRACTICAL_EMPHASIS.sub("", text)
+    text = PRACTICAL_CITATION.sub(" ", text)
+    text = PRACTICAL_SPACING.sub(" ", text)
+    found: list[tuple[int, str, str]] = []
+    for line_number, line in enumerate(text.split("\n"), 1):
+        for sentence in re.split(r"[。！？]", line):
+            if not EMERGENCY_DISPATCH.search(sentence):
+                continue
+            for pattern in (MEDICATION_CONDITIONED_TRIGGER, TIMED_OBSERVATION_TRIGGER):
+                for match in pattern.finditer(sentence):
+                    before = sentence[: match.start()]
+                    # The clause boundary, not a character count: the rejection
+                    # that licenses a compliant sentence can sit 35 characters
+                    # back, in the preceding clause.
+                    boundaries = [m.start() for m in EMERGENCY_CLAUSE_BOUNDARY.finditer(before)]
+                    boundary = boundaries[-1] if boundaries else -1
+                    # Both sides of the phrase: Chinese puts the rejection after
+                    # the instruction as often as before it (「…应立即呼叫急救，
+                    # 不得因已服药而推迟」), and reading only what precedes it
+                    # called that sentence the very thing it forbids. Anything
+                    # past 。！？ is a different instruction and licenses nothing.
+                    after = sentence[match.end():]
+                    if EMERGENCY_REJECT_CLAUSE.search(before[boundary + 1:]) or EMERGENCY_REJECT_CLAUSE.search(after):
+                        continue
+                    found.append((line_number, match.group(0), excerpt(sentence)))
+    return found
+
+
+def cjk_number_value(run: str) -> int | None:
+    """The value of a Chinese numeral run, or None when it is not one. The same
+    eight-line loop as cjkNumberValue in clinicalEvidenceQuality.mjs."""
+    total = 0
+    section_total = 0
+    current = 0
+    consumed = False
+    for character in run:
+        if character in CJK_DIGIT:
+            current = CJK_DIGIT[character]
+            consumed = True
+        elif character in CJK_UNIT_SMALL:
+            section_total += (current or 1) * CJK_UNIT_SMALL[character]
+            current = 0
+            consumed = True
+        elif character in CJK_UNIT_BIG:
+            section_total = (section_total + current) * CJK_UNIT_BIG[character]
+            total += section_total
+            section_total = 0
+            current = 0
+            consumed = True
+        else:
+            return None
+    return total + section_total + current if consumed else None
+
+
+def closure_citation_numbers(text: str) -> set[int]:
+    """Citation numbers in a passage, with the full-width separators a Chinese
+    manuscript uses. "[2.2.1]" is a von Baeyer ring descriptor, not citation 2:
+    the dot breaks the pattern, which is why the bracket must be numbers only."""
+    numbers: set[int] = set()
+    for match in CITATION_NUMBER_LIST.finditer(text):
+        for part in re.split(r"[,，、]", match.group(1)):
+            value = part.strip()
+            span = CITATION_RANGE.match(value)
+            if span:
+                start, end = int(span.group(1)), int(span.group(2))
+                if start <= end and end - start <= 100:
+                    numbers.update(range(start, end + 1))
+            elif value:
+                numbers.add(int(value))
+    return numbers
+
+
+def prose_without_code(prose: str) -> str:
+    """The prose with fenced blocks and inline code spans blanked, line count
+    preserved so a reported line is the line the author will find."""
+    inside_fence = False
+    kept: list[str] = []
+    for line in prose.split("\n"):
+        if CODE_FENCE.match(line):
+            inside_fence = not inside_fence
+            kept.append("")
+            continue
+        kept.append("" if inside_fence else CODE_SPAN.sub("", line))
+    return "\n".join(kept)
+
+
+def allowed_reference_numbers(claim: dict) -> set[int]:
+    numbers: set[int] = set()
+    number = claim.get("referenceNumber")
+    if isinstance(number, int) and not isinstance(number, bool):
+        numbers.add(number)
+    for entry in claim.get("referenceNumbers") or []:
+        if isinstance(entry, int) and not isinstance(entry, bool):
+            numbers.add(entry)
+    return numbers
+
+
+def appraisal_sections(report: str) -> tuple[str, str, str]:
+    """METHODS / BODY / TAIL as the check reads them: every matching level-two
+    section concatenated (one report writes `## 2 资料与方法`), plus the
+    abstract's 方法 field, with emphasis markers stripped — one delivery writes
+    评为**低确定性**, and the markers would break level parsing."""
+    abstract = ABSTRACT_METHOD_FIELD.search(section(report, "摘要|Abstract"))
+    buckets = {
+        "methods": [APPRAISAL_EMPHASIS.sub("", abstract.group(1)) if abstract else ""],
+        "body": [],
+        "tail": [],
+    }
+    current = None
+    for line in APPRAISAL_EMPHASIS.sub("", report).split("\n"):
+        heading = LEVEL_TWO_HEADING.match(line)
+        if heading:
+            name = heading.group(1)
+            if re.search(r"参考文献|参考来源|References?", name, re.I):
+                current = None
+            elif re.search(r"资料|材料|方法|Methods", name, re.I):
+                current = "methods"
+            elif re.search(r"结果|讨论|Results?|Discussion", name, re.I):
+                current = "body"
+            elif re.search(r"局限|结论|临床实践要点|Limitations?|Conclusion", name, re.I):
+                current = "tail"
+            else:
+                current = None
+            continue
+        if current:
+            buckets[current].append(line)
+    return "\n".join(buckets["methods"]), "\n".join(buckets["body"]), "\n".join(buckets["tail"])
+
+
+def asserted_grade_deficiency(sentence: str) -> bool:
+    """Whether a sentence asserts a GRADE downgrade — a deficiency in the
+    evidence, or a downgrade performed — rather than ruling one out.
+    Clause-scoped: a sentence grading a body says both things."""
+    for clause in APPRAISAL_CLAUSE_SPLIT.split(sentence):
+        match = GRADE_DOWNGRADE.search(clause)
+        if not match:
+            continue
+        if GRADE_DOWNGRADE_NEGATION.search(clause[: match.start()]):
+            continue
+        return True
+    return False
+
+
+def report_line_carrying(report: str, passage: str) -> int:
+    """The 1-indexed line of the unmodified report that carries a passage."""
+    needle = passage.strip()
+    if not needle:
+        return 0
+    for index, line in enumerate(report.split("\n"), 1):
+        if needle in APPRAISAL_EMPHASIS.sub("", line):
+            return index
+    return 0
+
+
+def declared_appraisal_issues(report: str) -> list[tuple[str, str, int, str]]:
+    """Instruments declared in 资料与方法 and never executed in 结果 or 讨论
+    (advisory), and GRADE levels that reach 高 beside a downgrade reason
+    (blocking), as (branch, instrument, line, excerpt)."""
+    methods, body, tail = appraisal_sections(report)
+    findings: list[tuple[str, str, int, str]] = []
+    for instrument, pattern in APPRAISAL_INSTRUMENTS:
+        declarations = [clause for clause in APPRAISAL_CLAUSE_SPLIT.split(methods) if pattern.search(clause)]
+        if not declarations:
+            continue
+        # Declared as *not* used: nothing has to land.
+        if all(APPRAISAL_DECLINED.search(clause) for clause in declarations):
+            continue
+        first = declarations[0].strip()
+        line = report_line_carrying(report, first)
+        if all(APPRAISAL_HEDGE.search(clause) for clause in declarations):
+            findings.append(("hedged-declaration", instrument, line, excerpt(first)))
+            continue
+        # Three ways a declaration lands, widest scope last: on a study cited in
+        # the same paragraph; as an explicit statement that nothing could be
+        # scored; or as a verdict on a body of evidence, which summarises
+        # studies cited in the paragraphs before it and needs only that
+        # 结果/讨论 cite something.
+        body_cites = bool(APPRAISAL_CITATION.search(body))
+        landed = False
+        for paragraph in body.split("\n"):
+            if not pattern.search(paragraph):
+                continue
+            for sentence in SENTENCE_SPLIT.split(paragraph):
+                if not pattern.search(sentence):
+                    continue
+                carrying = [clause for clause in APPRAISAL_CLAUSE_SPLIT.split(sentence) if pattern.search(clause)]
+                if not carrying or all(APPRAISAL_HEDGE.search(clause) for clause in carrying):
+                    continue
+                if (
+                    APPRAISAL_CITATION.search(paragraph)
+                    or APPRAISAL_NOT_APPLIED.search(sentence)
+                    or (body_cites and APPRAISAL_VERDICT.search(sentence))
+                ):
+                    landed = True
+                    break
+            if landed:
+                break
+        if landed:
+            continue
+        branch = "appraisal-tail-only" if pattern.search(tail) else "appraisal-declared-not-executed"
+        findings.append((branch, instrument, line, excerpt(first)))
+    # Any downgrade at all excludes 高, so only that case is decidable.
+    for sentence in SENTENCE_SPLIT.split(f"{body}\n{tail}"):
+        if not GRADE_WORD.search(sentence):
+            continue
+        level = GRADE_LEVEL.search(sentence)
+        if not level or not re.search(r"高|high", level.group(1), re.I):
+            continue
+        if GRADE_BASELINE.search(sentence) or not asserted_grade_deficiency(sentence):
+            continue
+        findings.append((
+            "grade-level-contradicts-downgrade", "GRADE", report_line_carrying(report, sentence.strip()), excerpt(sentence),
+        ))
+    return findings
+
+
+def screening_ledger_findings(report: str, search_log: dict) -> list[dict]:
+    """A stated flow quantity that disagrees with the ledger, and the source set
+    the numbered reference list does not match."""
+    headings = list(REFERENCES_HEADING_ANY.finditer(report))
+    references_start = headings[-1].start() if headings else len(report)
+    body = report[:references_start]
+    reference_block = (
+        re.split(r"\n##\s+", report[references_start + len(headings[-1].group(0)):])[0] if headings else ""
+    )
+    screening = search_log.get("screening") if isinstance(search_log.get("screening"), dict) else {}
+
+    def integer(value: object) -> int | None:
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    queries = search_log.get("queries")
+    held = {
+        "totalSearches": len(queries) if isinstance(queries, list) else None,
+        "recordsIdentified": integer(screening.get("recordsIdentified")),
+        "recordsAfterDeduplication": integer(screening.get("recordsAfterDeduplication")),
+        "sourcesIncluded": integer(screening.get("sourcesIncluded")),
+    }
+    findings: list[dict] = []
+    prose = prose_without_code(body)
+    for clause in SCREENING_CLAUSE_SPLIT.split(prose):
+        matches = [
+            (key, int(match.group("n")), anchored or bool(match.group("noun")))
+            for key, anchored, pattern in SCREENING_FLOW_PATTERNS
+            for match in pattern.finditer(clause)
+        ]
+        if len(matches) < 2 and not any(anchored for _, _, anchored in matches):
+            continue
+        for key, value, _ in matches:
+            if held[key] is None or held[key] == value:
+                continue
+            # Only the disagreeing quantity is named: a report whose other
+            # numbers are right must not be sent back to rewrite a correct
+            # sentence.
+            findings.append({"leg": "A", "key": key, "stated": value, "held": held[key], "clause": excerpt(clause)})
+    included_refs = {
+        record["referenceNumber"]
+        for record in (search_log.get("sourceRecords") or [])
+        if isinstance(record, dict)
+        and record.get("included") is True
+        and isinstance(record.get("referenceNumber"), int)
+        and not isinstance(record.get("referenceNumber"), bool)
+    }
+    listed = {
+        int(match.group(1))
+        for match in (NUMBERED_REFERENCE_ENTRY.match(line) for line in reference_block.split("\n"))
+        if match
+    }
+    if not listed or not included_refs:
+        return findings
+    cited: set[int] = set()
+    for line in prose.split("\n"):
+        cited |= closure_citation_numbers(line)
+    uncovered = sorted((listed | cited) - included_refs)
+    if uncovered:
+        findings.append({"leg": "B1", "numbers": uncovered})
+    # The raw listed set, not a de-duplicated count: padding is already its own
+    # finding, and de-duplicating here would let a padded list satisfy both.
+    if held["sourcesIncluded"] is not None and len(listed) != held["sourcesIncluded"]:
+        findings.append({"leg": "B2", "listed": len(listed), "included": held["sourcesIncluded"]})
+    return findings
+
+
+def citation_closure_findings(report: str, claims_by_id: dict[str, dict], search_log: dict) -> list[dict]:
+    """Reference-table closure in both directions, identifiers standing in for
+    citations, per-line anchor/number pairing, and the excluded set's own
+    bookkeeping."""
+    headings = list(REFERENCES_HEADING_ANY.finditer(report))
+    references_start = headings[-1].start() if headings else len(report)
+    prose = report[:references_start]
+    entries: dict[int, str] = {}
+    for line in report[references_start:].split("\n"):
+        match = REFERENCE_ENTRY.match(line)
+        if not match:
+            continue
+        number = int(match.group(1) or match.group(2))
+        entries.setdefault(number, match.group(3).strip())
+    lines = prose_without_code(prose).split("\n")
+    cited: set[int] = set()
+    for line in lines:
+        cited |= closure_citation_numbers(line)
+    findings: list[dict] = []
+    if entries:
+        for number in sorted(entries):
+            if number not in cited:
+                findings.append({"clause": "A", "number": number, "body": excerpt(entries[number])})
+        for number in sorted(cited):
+            if number not in entries:
+                findings.append({"clause": "B", "number": number})
+    first_marker_line: dict[str, int] = {}
+    for index, line in enumerate(lines):
+        for match in CLAIM_MARKER_ID.finditer(line):
+            first_marker_line.setdefault(match.group(1) or match.group(2), index)
+    for index, line in enumerate(lines):
+        for match in BRACKET_SPAN.finditer(line):
+            inner = match.group(1)
+            if BARE_CITATION_NUMBER_LIST.match(inner) or re.match(r"^\s*claim:", inner):
+                continue
+            if BIBLIOGRAPHIC_IDENTIFIER.search(inner):
+                findings.append({"clause": "C", "line": index + 1, "bracket": excerpt(match.group(0))})
+        on_line = closure_citation_numbers(line)
+        seen: set[str] = set()
+        for match in CLAIM_MARKER_ID.finditer(line):
+            claim_id = match.group(1) or match.group(2)
+            if claim_id in seen:
+                continue
+            seen.add(claim_id)
+            claim = claims_by_id.get(claim_id)
+            # A derived result carries no reference number of its own.
+            if not claim or claim.get("claimType", "direct") == "derived":
+                continue
+            # The claim that is paired nowhere is already reported once, per
+            # claim, by the marker-pairing check above. This adds the later
+            # lines it never looked at.
+            if first_marker_line.get(claim_id) == index:
+                continue
+            allowed = allowed_reference_numbers(claim)
+            if not allowed or allowed & on_line:
+                continue
+            findings.append({
+                "clause": "D",
+                "line": index + 1,
+                "claimId": claim_id,
+                "cited": sorted(on_line),
+                "allowed": sorted(allowed),
+            })
+    records = search_log.get("sourceRecords")
+    for index, record in enumerate(records if isinstance(records, list) else []):
+        if not isinstance(record, dict) or record.get("included") is True:
+            continue
+        reason = record.get("exclusionReason")
+        if not isinstance(reason, str) or not reason.strip():
+            findings.append({"clause": "E1", "index": index})
+        number = record.get("referenceNumber")
+        if isinstance(number, int) and not isinstance(number, bool) and number in entries:
+            findings.append({"clause": "E2", "index": index, "number": number})
+    return findings
+
+
+def english_number_run_value(words: list[str]) -> int | None:
+    total = 0
+    current = 0
+    any_word = False
+    for word in words:
+        if word in EN_ONES:
+            current += EN_ONES[word]
+            any_word = True
+        elif word in EN_TENS:
+            current += EN_TENS[word]
+            any_word = True
+        elif word in EN_SCALES:
+            scale = EN_SCALES[word]
+            if scale == 100:
+                current = (current or 1) * 100
+            else:
+                total += (current or 1) * scale
+                current = 0
+            any_word = True
+        else:
+            return None
+    return total + current if any_word else None
+
+
+def numeric_tokens(value: object) -> list[str]:
+    """Every figure a passage states, normalised the way numericTokens does in
+    clinicalEvidenceQuality.mjs: addresses, claim markers, numbered citations,
+    alphanumeric identifiers and list markers are removed first, thousands
+    separators and trailing zeroes are folded, and a range stays one token."""
+    text = "" if value is None else str(value)
+    text = NUMERIC_MARKDOWN_LINK.sub("]", text)
+    text = NUMERIC_WEB_ADDRESS.sub("", text)
+    text = NUMERIC_VISIBLE_MARKER.sub("", text)
+    text = NUMERIC_HIDDEN_MARKER.sub("", text)
+    text = NUMERIC_CITATION.sub("", text)
+    text = NUMERIC_ALNUM_TOKEN.sub("", text)
+    text = NUMERIC_LIST_MARKER.sub("", text)
+    text = NUMERIC_THOUSANDS.sub("", text)
+    text = NUMERIC_INTERVAL_PERCENT.sub(r"\1", text)
+    tokens = []
+    for run in NUMERIC_RUN.findall(text):
+        parts = re.sub(r"\s+", "", run).replace("–", "-").replace("—", "-").split("-")
+        cleaned = []
+        for part in parts:
+            part = re.sub(r"^0+(?=[0-9])", "", part)
+            part = re.sub(r"(\.[0-9]*?)0+$", r"\1", part)
+            cleaned.append(re.sub(r"\.$", "", part))
+        tokens.append("-".join(cleaned))
+    return tokens
+
+
+def canonical_numbers(text: str) -> list[str]:
+    if re.search(r"[0-9]", text):
+        return numeric_tokens(text)
+    if re.search(r"[a-z]", text, re.I):
+        value = english_number_run_value([word for word in re.split(r"[\s-]+", text.lower()) if word])
+        return [] if value is None or value <= 0 else [str(value)]
+    value = cjk_number_value(text)
+    return [] if value is None else [str(value)]
+
+
+def conclusory_quantities(text: object) -> set[str]:
+    """The measured quantities a passage states. A confidence interval is one
+    quantity however its endpoints are punctuated, and 一次10丸 says ten pills:
+    the 一 is the Chinese for "per", not a quantity."""
+    source = NUMERIC_INTERVAL_PERCENT.sub(r"\1", "" if text is None else str(text))
+    source = CONCLUSORY_PER_UNIT.sub("", source)
+    numbers: set[str] = set()
+    for pattern in (CONCLUSORY_SUFFIX, CONCLUSORY_PREFIX):
+        for match in pattern.finditer(source):
+            numbers.update(canonical_numbers(match.group(1)))
+    # A standalone calendar year is publication metadata, not a finding.
+    for token in list(numbers):
+        if re.fullmatch(r"[0-9]+", token) and 1900 <= int(token) <= 2099:
+            numbers.discard(token)
+    return numbers
+
+
+def claim_quote_text(claim: dict, part: str) -> str:
+    """What the source itself says, never what the agent wrote about it: the
+    `claim`, `applicability` and `uncertainty` fields are excluded on purpose,
+    because writing a position into them and citing the claim is the laundering
+    path this check exists to close."""
+    sources = (
+        claim["supportingSources"]
+        if claim.get("claimType") == "synthesized" and isinstance(claim.get("supportingSources"), list)
+        else [claim]
+    )
+    pieces: list[str] = []
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        fields = ("supportQuote", "sourceTitle") if part == "stance" else ("supportQuote",)
+        pieces.extend(source[field] for field in fields if isinstance(source.get(field), str))
+    return " ".join(pieces)
+
+
+def attributed_stance_issues(body: str, claims_by_id: dict[str, dict]) -> list[tuple[int, str, list[str], bool]]:
+    """Lines that attribute a position to a source while every claim they cite
+    states only measurements, as (line, attribution, claimIds, anchored)."""
+    found: list[tuple[int, str, list[str], bool]] = []
+    for line_number, line in enumerate(body.split("\n"), 1):
+        if HEADING_LINE.match(line):
+            continue
+        attribution = ATTRIBUTED_STANCE.search(line)
+        if not attribution:
+            continue
+        # Line-level, not sentence-level: the corpus uses both marker
+        # conventions, and a sentence splitter attributes a trailing marker to
+        # the preceding claim and manufactures a false positive.
+        ids: list[str] = []
+        for match in CLAIM_MARKER_ID.finditer(line):
+            claim_id = match.group(1) or match.group(2)
+            if claim_id not in ids:
+                ids.append(claim_id)
+        if not ids:
+            found.append((line_number, excerpt(attribution.group(0)), [], False))
+            continue
+        claims = [
+            claims_by_id[claim_id] for claim_id in ids
+            if claim_id in claims_by_id and claims_by_id[claim_id].get("claimType") != "derived"
+        ]
+        if not claims:
+            continue
+        if any(QUOTED_STANCE.search(claim_quote_text(claim, "stance")) for claim in claims):
+            continue
+        # The "every" conjunct is load-bearing: an attribution anchored to a
+        # non-numeric quote is a faithful restatement, and a line mixing a
+        # stance claim with a data claim is ordinary writing.
+        if not all(conclusory_quantities(claim_quote_text(claim, "quantity")) for claim in claims):
+            continue
+        found.append((line_number, excerpt(attribution.group(0)), [claim["claimId"] for claim in claims], True))
+    return found
+
+
+def canonical_article_number(run: str) -> str:
+    text = run.strip()
+    if re.fullmatch(r"[0-9]+", text):
+        return str(int(text))
+    value = cjk_number_value(text)
+    return text if value is None else str(value)
+
+
+def article_numbers_named(text: str) -> set[str]:
+    """Every article number a passage names, in both wordings — a statute
+    preserved from npc.gov.cn carries 第二十九条 and its English rendering
+    carries "Article 29", and both are the same article."""
+    found = {canonical_article_number(match.group(1)) for match in ARTICLE_NUMBER_CN.finditer(text)}
+    found.update(str(int(match.group(1))) for match in ARTICLE_NUMBER_EN.finditer(text))
+    return found
+
+
+def source_host(value: object) -> str:
+    """The lowercased hostname of a credential-free http(s) URL, or ""."""
+    if not isinstance(value, str):
+        return ""
+    match = re.match(r"^https?://(?:[^/@\s]*@)?([^/:?#\s]+)", value.strip(), re.I)
+    if not match or "@" in value.split("//", 1)[-1].split("/", 1)[0]:
+        return ""
+    return match.group(1).lower().rstrip(".")
+
+
+def claim_source_tuples(claim: dict) -> list[tuple[str, object, str, str]]:
+    """The (sourceUrl, artifactPath, supportQuote, claim) tuples a claim offers.
+    A synthesized claim offers one per supporting source; a derived result
+    offers none, since it has no source of its own."""
+    if claim.get("claimType") == "derived":
+        return []
+    if claim.get("claimType") == "synthesized" and isinstance(claim.get("supportingSources"), list):
+        return [
+            (
+                source.get("sourceUrl") if isinstance(source, dict) else None,
+                source.get("artifactPath") if isinstance(source, dict) else None,
+                source.get("supportQuote") if isinstance(source, dict) else "",
+                claim.get("claim") or "",
+            )
+            for source in claim["supportingSources"]
+        ]
+    return [(claim.get("sourceUrl"), claim.get("artifactPath"), claim.get("supportQuote") or "", claim.get("claim") or "")]
+
+
+def regulatory_article_issues(report: str, claims: list, preserved: set[str]) -> list[tuple[int, str, str, list[int], list[str]]]:
+    """Article-level regulatory citations resting on something other than the
+    issuing authority's own preserved text."""
+    heading = REFERENCES_HEADING_LINE.search(report)
+    body = report[: heading.start()] if heading else report
+    by_reference: dict[int, dict] = {}
+    by_id: dict[str, dict] = {}
+    for claim in claims:
+        if not isinstance(claim, dict):
+            continue
+        number = claim.get("referenceNumber")
+        if isinstance(number, int) and not isinstance(number, bool) and number not in by_reference:
+            by_reference[number] = claim
+        if isinstance(claim.get("claimId"), str):
+            by_id[claim["claimId"]] = claim
+    found: list[tuple[int, str, str, list[int], list[str]]] = []
+    for line_number, line in enumerate(body.split("\n"), 1):
+        if HEADING_LINE.match(line):
+            continue
+        locators = list(STATUTE_ARTICLE_LOCATOR.finditer(line))
+        if not locators:
+            continue
+        refs = sorted(citation_numbers(line))
+        marked = [match.group(1) or match.group(2) for match in CLAIM_MARKER_ID.finditer(line)]
+        candidates = [by_reference[number] for number in refs if number in by_reference]
+        candidates += [by_id[claim_id] for claim_id in marked if claim_id in by_id]
+        tuples = [entry for candidate in candidates for entry in claim_source_tuples(candidate)]
+        hosts = sorted({host for host in (source_host(entry[0]) for entry in tuples) if host})
+        for locator in locators:
+            article = canonical_article_number(locator.group(1))
+            licensed = False
+            for source_url, artifact_path, quote, claim_text in tuples:
+                host = source_host(source_url)
+                if not host or not GOVERNMENT_HOST.search(host):
+                    continue
+                if not isinstance(artifact_path, str) or artifact_path not in preserved:
+                    continue
+                if article in article_numbers_named(f"{quote or ''} {claim_text or ''}"):
+                    licensed = True
+                    break
+            if licensed:
+                continue
+            found.append((line_number, excerpt(locator.group(0)), article, refs, hosts))
+    return found
+
+
 def citation_numbers(line: str) -> set[int]:
     numbers: set[int] = set()
     for match in re.finditer(r"\[(\d+(?:\s*[-,]\s*\d+)*)\]", line):
@@ -986,6 +1831,41 @@ def main() -> int:
         issues.append("clinical-evidence-report.md: practical section must precede final references")
     check_register(report, issues)
     check_comparative_structure(report, issues)
+    # The instrument branches are advice, not a gate — the same split the server
+    # makes, and for the same reason: a pre-specified instrument whose design
+    # stratum this search returned nothing for owes no retirement sentence, and
+    # prose does not say which of the two happened. Only the GRADE
+    # self-consistency branch decides ok.
+    appraisal_notes: list[str] = []
+    for branch, instrument, line_number, sample in declared_appraisal_issues(report):
+        if branch == "grade-level-contradicts-downgrade":
+            issues.append(
+                f"clinical-evidence-report.md line {line_number}: GRADE 等级与降级理由不自洽——「{sample}」"
+                "同句断言了证据缺陷（如方法学质量偏低、偏倚风险高、存在不一致或间接性），却给出含「高」的确定性等级；"
+                "任何一项降级都排除「高」，请改等级或删除该缺陷断言"
+                "（只写出五个降级领域的名称并说明未因其降级，不触发本条）"
+            )
+            continue
+        opening = (
+            f"clinical-evidence-report.md line {line_number}: 资料与方法声明了 {instrument}，"
+            f"但结果与讨论中没有一处用它给出评级（{sample}）。"
+        )
+        if branch == "hedged-declaration":
+            appraisal_notes.append(
+                opening + f"该行以「思路/精神/理念/参照…要点」提及 {instrument}，等同于未使用。"
+                "删除工具名并直接写你实际做了什么，或在结果或讨论里对具体一篇文献用它评一次"
+            )
+        elif branch == "appraisal-tail-only":
+            appraisal_notes.append(
+                opening + f"{instrument} 只在局限性或结论里出现。确定性等级宜写在对应证据体处，"
+                "局限性不应为正文中不存在的方法学步骤申辩"
+            )
+        else:
+            appraisal_notes.append(
+                opening + "工具名是承诺，不是资格声明——若该设计层本轮确有纳入研究，"
+                "就在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段）；"
+                f"若该层本轮无纳入研究，{instrument} 可以留在方法里不必补写退场句"
+            )
 
     queries = search_log.get("queries")
     query_values = [
@@ -1066,6 +1946,127 @@ def main() -> int:
                     f"{', '.join(sorted(cited))} must be marked 〔推导〕"
                 )
 
+    claims_by_id = {
+        claim["claimId"]: claim
+        for claim in claims
+        if isinstance(claim, dict) and isinstance(claim.get("claimId"), str)
+    }
+    numeric_body = without_sections(without_sections(report, "参考文献|参考来源|References?"), "检索|方法|Methods?")
+    for line_number, attribution, claim_ids, anchored in attributed_stance_issues(numeric_body, claims_by_id):
+        issues.append(
+            f"clinical-evidence-report.md line {line_number}: 以「{attribution}」把立场归属给来源，"
+            + (
+                f"但该行引用的 {'、'.join(claim_ids)}，其 supportQuote 都只陈述数值，没有一条载有这个立场。"
+                if anchored else "却没有挂任何 claim 标记。"
+            )
+            + "立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；"
+            "若来源没说过，删去归属句，或改写为本报告自己的判断。"
+            "把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote"
+        )
+
+    for finding in screening_ledger_findings(report, search_log):
+        if finding["leg"] == "A":
+            issues.append(
+                "clinical-evidence-report.md: 检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，"
+                f"正文只能渲染、不得复述。本次不一致：正文写「{finding['clause']}」中的"
+                f"{SCREENING_FLOW_NAMES[finding['key']]} {finding['stated']}，检索记录 {finding['key']} = {finding['held']}。"
+                "请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好"
+            )
+        elif finding["leg"] == "B1":
+            listed = "、".join(f"[{number}]" for number in finding["numbers"])
+            issues.append(
+                f"clinical-evidence-report.md: 参考文献 {listed} 在正文中被引用或列入参考文献表，"
+                "但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。"
+                "要么读到可核验层级并置 included=true、同步更新 screening 计数，"
+                "要么删除这条引用——题录层级的记录支撑不了任何陈述"
+            )
+        else:
+            issues.append(
+                f"clinical-evidence-report.md: 参考文献表共 {finding['listed']} 条编号条目，"
+                f"screening.sourcesIncluded = {finding['included']}。"
+                "编号表必须恰好是 included=true 的来源集合：同数量、同编号"
+            )
+
+    # Line span of 临床实践要点, so clause D can block there and degrade
+    # elsewhere exactly as the gate does.
+    if practical_position >= 0:
+        practical_first_line = report.count("\n", 0, practical_position) + 1
+        practical_last_line = (
+            report.count("\n", 0, references_position) + 1
+            if references_position > practical_position
+            else report.count("\n") + 1
+        )
+    else:
+        practical_first_line = 0
+        practical_last_line = 0
+
+    for finding in citation_closure_findings(report, claims_by_id, search_log):
+        clause = finding["clause"]
+        if clause == "A":
+            issues.append(
+                f"clinical-evidence-report.md: 参考文献 [{finding['number']}] 在正文中从未被引用（{finding['body']}）。"
+                "已检索但未纳入的来源不进编号表——要么在正文中真正引用它，"
+                '要么把它写入 clinical-evidence-search.json 的 sourceRecords（"included": false 并给出 exclusionReason）'
+                "后从编号表中移除并重新编号"
+            )
+        elif clause == "B":
+            issues.append(
+                f"clinical-evidence-report.md: 正文引用 [{finding['number']}] 在参考文献表中没有对应条目："
+                "补上该条目，或改引真正支持这句话的编号"
+            )
+        elif clause == "C":
+            issues.append(
+                f"clinical-evidence-report.md line {finding['line']}: 把书目标识符放进了引用位（{finding['bracket']}）。"
+                "行内 PMID/DOI 不能代替编号引用——为该来源分配参考文献编号与 claim，或按未纳入来源记入检索日志"
+            )
+        elif clause == "D":
+            listed = ", ".join(str(number) for number in finding["cited"]) or "无"
+            allowed = ", ".join(str(number) for number in finding["allowed"])
+            message = (
+                f"clinical-evidence-report.md line {finding['line']}: 标注了 {finding['claimId']}，"
+                f"但该行只引用了 [{listed}]，而 {finding['claimId']} 的 referenceNumber 是 {allowed}。"
+                "把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行"
+            )
+            # The gate blocks this only inside 临床实践要点, where the section is
+            # read as instruction, and degrades it everywhere else. Emitting it
+            # as a hard issue here held a run on something the gate would have
+            # shipped -- drift in the safe direction, but drift.
+            if practical_first_line and practical_first_line <= finding["line"] <= practical_last_line:
+                issues.append(message)
+            else:
+                appraisal_notes.append(message)
+        else:
+            # The exclusion ledger is the search apparatus describing itself.
+            # The gate degrades it; so does this.
+            if clause == "E1":
+                appraisal_notes.append(
+                    f'clinical-evidence-search.json: sourceRecords[{finding["index"]}] 标记为 "included": false '
+                    "却没有 exclusionReason：未纳入的来源必须写明排除理由"
+                )
+            else:
+                appraisal_notes.append(
+                    f'clinical-evidence-search.json: sourceRecords[{finding["index"]}] 标记为 "included": false，'
+                    f"却仍以编号 [{finding['number']}] 留在参考文献表中：读到可核验层级并置 included=true，"
+                    "或从编号表中移除并重新编号"
+                )
+
+    preserved_artifacts = {
+        entry for entry in (receipt.get("successfulSourceArtifacts") or []) if isinstance(entry, str)
+    }
+    for line_number, locator, article, refs, hosts in regulatory_article_issues(report, claims, preserved_artifacts):
+        listed = ", ".join(str(number) for number in refs) or "无"
+        pointing = ", ".join(hosts) or "无可解析来源"
+        issues.append(
+            f"clinical-evidence-report.md line {line_number}: 以条款级方式引用「{locator}」，"
+            "但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件"
+            "（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，"
+            f"artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第{article}条 / Article {article}）；"
+            f"该行现有引用为 [{listed}]，指向 {pointing}。"
+            "条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，"
+            "要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」"
+            "改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」"
+        )
+
     practical = section(report, PRACTICAL_SECTION_HEADING)
     practical_derived = sorted(claim_id for claim_id in derived_ids if f"claim:{claim_id}" in practical)
     if practical_derived:
@@ -1080,6 +2081,14 @@ def main() -> int:
             issues.append(f"practical line {line_number}: missing numbered citation")
         if "<!-- claim:CLM-" not in line:
             issues.append(f"practical line {line_number}: missing hidden claim marker")
+    for line_number, span, sentence in medication_conditioned_emergency_triggers(practical):
+        issues.append(
+            f"practical line {line_number}: 「{span}」写成了呼叫急救的触发条件（{sentence}）。"
+            "急救的触发条件不得以自救用药的疗效为条件（含药不缓解、服药后无效、观察 N 分钟无效均不可）——"
+            "本节唯一允许的口径是「无论服药与否、无论是否缓解，出现上述征象即刻呼叫 120」。"
+            "同一节里已经写着「服药不是等待的理由，应在服药的同时呼叫急救」，这一条与它互斥，读者无法同时执行。"
+            "若来源（指南原文）确实给出了这一条件，把它留在「结果」一节按原文复述并保留出处，实践要点只写无条件的那一句"
+        )
 
     reference_count = len(
         re.findall(r"^\s*\d+\.\s+\S", section(report, "参考文献|References"), re.M)
@@ -1190,7 +2199,7 @@ def main() -> int:
         "workspace": str(root),
         # Advice the run should read and act on where it applies. It never
         # decides "ok", because it cannot be decided mechanically.
-        "notes": appraisal_symmetry_notes(report) + comparative_structure_notes(report),
+        "notes": appraisal_symmetry_notes(report) + comparative_structure_notes(report) + appraisal_notes,
         "metrics": {
             "reportCharacters": len(report.strip()),
             "queries": len(query_values),

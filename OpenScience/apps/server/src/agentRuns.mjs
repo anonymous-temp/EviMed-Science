@@ -9,7 +9,11 @@ import {
   withProjectStorageMutation,
   writeFileAtomicNoFollow,
 } from "./security.mjs";
-import { citationIntegrityIssues, validateClinicalEvidencePackage } from "./clinicalEvidenceQuality.mjs";
+import {
+  citationIntegrityIssues,
+  clinicalEvidencePackageErrorCode,
+  validateClinicalEvidencePackage,
+} from "./clinicalEvidenceQuality.mjs";
 
 const ledgerFileName = "runs.jsonl";
 const terminalStatuses = new Set(["succeeded", "failed", "canceled"]);
@@ -405,6 +409,16 @@ export const repairableEvidencePackageErrorCodes = new Set([
   "specialist_evidence_snapshot_missing",
   "specialist_evidence_snapshot_invalid",
   "specialist_evidence_snapshot_empty",
+  // The delivery gate's own named defects (clinicalEvidencePackageErrorCode).
+  // Each names one element of a finished package — a line, a number, a claim,
+  // a reference — so each is repaired in place like the codes above it, never
+  // regenerated. A code added there and forgotten here would silently turn a
+  // repairable package into a discarded one, which is the failure this set was
+  // introduced to stop.
+  "practical_emergency_trigger_conditioned_on_medication_response",
+  "regulatory_article_without_official_source",
+  "specialist_screening_ledger_mismatch",
+  "declared-appraisal-must-execute",
 ]);
 // A source the run could not read is a limitation to report, not a defect in
 // the run. These codes all mean "this document was not obtainable", which the
@@ -1388,7 +1402,11 @@ async function specialistCompletionOutcome(
       const rest = validation.issues.filter((issue) => !blocking.includes(issue));
       return {
         artifacts,
-        errorCode: "specialist_evidence_traceability_failed",
+        // Which defect this is, so the repair loop hands the run the named
+        // numbers instead of one code that means "something in the package".
+        // Every code the gate can name is repairable: the package is complete
+        // and the issue is actionable inside it.
+        errorCode: clinicalEvidencePackageErrorCode(blocking),
         qualityIssues: [
           ...(delegationNotice ? [`MUST FIX — ${delegationNotice}`] : []),
           ...blocking.map((issue) => `MUST FIX — ${issue}`),
