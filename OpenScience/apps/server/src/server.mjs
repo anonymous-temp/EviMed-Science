@@ -1306,6 +1306,7 @@ export function createWebApiApp(overrides = {}) {
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });
+      await flushLedgerWrites();
       await store.close();
     },
   };
@@ -1736,8 +1737,10 @@ async function audit(ctx, action, status, details = {}) {
     error: details.error ?? null,
   };
   const file = path.join(ctx.project.metaDir, "audit.jsonl");
-  await appendJsonLineNoFollow(ctx.project.rootDir, file, record, { maxBytes: ctx.config.maxLogFileBytes })
-    .catch((error) => recordLedgerWriteFailure("audit", error));
+  await trackLedgerWrite(
+    appendJsonLineNoFollow(ctx.project.rootDir, file, record, { maxBytes: ctx.config.maxLogFileBytes })
+      .catch((error) => recordLedgerWriteFailure("audit", error)),
+  );
 }
 
 async function auditRuntimeLifecycle(ctx, command, status, err = null) {
@@ -1766,6 +1769,22 @@ async function auditRuntimeLifecycle(ctx, command, status, err = null) {
 // the one failure the audit chain cannot record is its own. Count them and put
 // the count where an operator already looks.
 const ledgerWriteFailures = { audit: 0, security: 0, errors: 0 };
+// A ledger append can outlive the request it describes -- a download is
+// audited on what actually left, which is known only after the response ends.
+// Shutdown must wait for those, or the last thing that happened is the one
+// thing never recorded.
+const pendingLedgerWrites = new Set();
+
+function trackLedgerWrite(promise) {
+  pendingLedgerWrites.add(promise);
+  return promise.finally(() => pendingLedgerWrites.delete(promise));
+}
+
+async function flushLedgerWrites() {
+  while (pendingLedgerWrites.size) {
+    await Promise.allSettled([...pendingLedgerWrites]);
+  }
+}
 
 function recordLedgerWriteFailure(ledger, error) {
   ledgerWriteFailures[ledger] += 1;
@@ -1791,8 +1810,10 @@ async function securityAudit(config, action, status, details = {}) {
     code: details.code ?? null,
   };
   const file = path.join(config.dataDir, ".openscience", "security.jsonl");
-  await appendJsonLineNoFollow(config.dataDir, file, record, { maxBytes: config.maxLogFileBytes })
-    .catch((error) => recordLedgerWriteFailure("security", error));
+  await trackLedgerWrite(
+    appendJsonLineNoFollow(config.dataDir, file, record, { maxBytes: config.maxLogFileBytes })
+      .catch((error) => recordLedgerWriteFailure("security", error)),
+  );
 }
 
 function safeLogId(value) {
@@ -1816,8 +1837,10 @@ async function appendErrorRecord(config, req, pathname, { status, code, requestI
     ...(truncated ? { truncated: true } : {}),
   };
   const file = path.join(config.dataDir, ".openscience", "errors.jsonl");
-  await appendJsonLineNoFollow(config.dataDir, file, record, { maxBytes: config.maxLogFileBytes })
-    .catch((error) => recordLedgerWriteFailure("errors", error));
+  await trackLedgerWrite(
+    appendJsonLineNoFollow(config.dataDir, file, record, { maxBytes: config.maxLogFileBytes })
+      .catch((error) => recordLedgerWriteFailure("errors", error)),
+  );
 }
 
 async function errorAudit(config, req, pathname, err, details = {}) {

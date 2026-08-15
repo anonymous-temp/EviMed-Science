@@ -1077,14 +1077,22 @@ def literature(arguments):
                 return result
             evimed_warning = "EviMed literature search returned no records matching all required concepts."
         except PublicSourceError as error:
+            legacy_error = None
             try:
                 legacy = _evimed_evidence_records(query, limit)
                 if legacy.get("data", {}).get("items"):
                     legacy["warnings"].insert(0, "The documented EviMed literature endpoint was unavailable: %s" % error)
                     return legacy
-            except PublicSourceError:
-                pass
-            evimed_warning = "EviMed evidence search was unavailable: %s" % error
+            except PublicSourceError as fallback_error:
+                legacy_error = fallback_error
+            # Both rungs failed, and only the first one used to be reported. A
+            # run was told "EviMed was unavailable" and could not tell that the
+            # fallback had failed too, which is what decides whether the gap is
+            # worth retrying.
+            evimed_warning = "EviMed evidence search was unavailable: %s%s" % (
+                error,
+                (" The legacy endpoint also failed: %s" % legacy_error) if legacy_error is not None else "",
+            )
         fallback = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
         fallback = _bibliographic_metadata_only(fallback)
         fallback["warnings"].insert(0, evimed_warning)
