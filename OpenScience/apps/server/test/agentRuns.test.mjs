@@ -2642,6 +2642,66 @@ test("a provenance rejection is repaired rather than discarded", async () => {
 // evidence of a stall, so a run working normally through a spell of 502s from
 // its runtime was closed as runtime_monitor_stalled, with nothing recording
 // that any read had failed. Unknown has to be its own answer.
+// Progress is a live gauge, not history: only the latest observation of a run
+// says anything. Appending every one put 7,800 progress rows in the ledger
+// across 31 runs and left it 114 bytes under its one-megabyte limit, at which
+// point no further run could start — the rows that cannot be dropped
+// (started/dispatch/finished) were crowded out by rows that can.
+test("repeated progress observations do not grow the ledger", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-ledger-growth-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_growth", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 5,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "busy",
+    });
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_growth",
+    }, async () => ({ accepted: true }));
+
+    const ledger = path.join(project.metaDir, "runs.jsonl");
+    const sizes = [];
+    for (let i = 1; i <= 40; i += 1) {
+      history = Array.from({ length: i }, (_, n) => ({
+        info: { id: `msg_${n}`, role: "assistant", time: { completed: Date.now() } },
+        parts: [{ type: "text", text: "working" }],
+      }));
+      assert.equal(await store.recordProgress(project, run), true, `observation ${i} recorded`);
+      sizes.push((await readFile(ledger, "utf8")).length);
+    }
+    // Forty observations, one row. The file does not stay byte-identical — the
+    // observation counts widen from 1 to 40 — but it must not grow with the
+    // number of observations, which is what filled it in production.
+    assert.ok(
+      sizes.at(-1) - sizes[0] < 20,
+      `the ledger grew ${sizes.at(-1) - sizes[0]} bytes over forty observations`,
+    );
+    const rows = (await readFile(ledger, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    assert.equal(rows.filter((row) => row.event === "progress" && row.id === run.id).length, 1);
+    // And the rows that cannot be dropped are all still there.
+    assert.equal(rows.filter((row) => row.event === "started").length, 1);
+    assert.equal(rows.at(-1).messages, 40, "the surviving observation is the latest one");
+
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a progress read that fails is not counted as a run standing still", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-unreadable-"));
   try {
