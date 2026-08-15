@@ -41,11 +41,18 @@ async function removeRegularFile(file, { optional = false } = {}) {
   return true;
 }
 
-async function prune(backupDir, retentionDays) {
+// Age alone does not bound a directory. A scheduler retrying a failure wrote
+// eight 403 MB archives inside fifteen minutes, and every one of them was
+// younger than the retention window, so nothing was eligible for deletion while
+// the disk filled. A count is the bound that holds however often backups run.
+const DEFAULT_MAX_ARCHIVES = 14;
+
+async function prune(backupDir, retentionDays, maxArchives = DEFAULT_MAX_ARCHIVES) {
   await assertBackupDir(backupDir);
   const cutoff = Date.now() - retentionDays * DAY_MS;
   const entries = await fsp.readdir(backupDir, { withFileTypes: true });
   const deleted = [];
+  const archives = [];
 
   for (const entry of entries) {
     if (!ARCHIVE_RE.test(entry.name)) continue;
@@ -53,16 +60,26 @@ async function prune(backupDir, retentionDays) {
     const stat = await fsp.lstat(archive);
     if (stat.isSymbolicLink()) throw new Error(`Refusing to prune symbolic-link backup archive: ${archive}`);
     if (!stat.isFile()) continue;
-    if (stat.mtimeMs >= cutoff) continue;
+    archives.push({ name: entry.name, path: archive, mtimeMs: stat.mtimeMs });
+  }
 
-    await removeRegularFile(archive);
-    deleted.push(entry.name);
-    if (await removeRegularFile(`${archive}.sha256`, { optional: true })) {
-      deleted.push(`${entry.name}.sha256`);
+  // Newest first, so "keep the most recent N" is the same decision as "the rest
+  // are surplus" — and an archive older than the window goes whichever rank it
+  // holds.
+  archives.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  for (const [index, archive] of archives.entries()) {
+    const tooOld = archive.mtimeMs < cutoff;
+    const surplus = Number.isSafeInteger(maxArchives) && maxArchives > 0 && index >= maxArchives;
+    if (!tooOld && !surplus) continue;
+
+    await removeRegularFile(archive.path);
+    deleted.push(archive.name);
+    if (await removeRegularFile(`${archive.path}.sha256`, { optional: true })) {
+      deleted.push(`${archive.name}.sha256`);
     }
   }
 
-  return { backupDir, retentionDays, deleted };
+  return { backupDir, retentionDays, maxArchives, deleted };
 }
 
 const [, , mode, backupDir, daysArg] = process.argv;
