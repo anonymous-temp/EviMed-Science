@@ -788,3 +788,45 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   assert.match(workflow, /--profile backup --profile monitoring --profile tls down -v --remove-orphans/);
   assert.equal(workflow.includes("open-science-opencode:latest"), false);
 });
+
+// A scheduler that threw past its failure threshold exited, the container
+// restarted it, it read the count back, exceeded the threshold again, and took
+// a full backup on the way. The circuit breaker was a backup every two minutes:
+// eight 403 MB archives inside a quarter of an hour, until the disk filled and
+// the filling was itself the failure being retried.
+test("the backup scheduler stops retrying past its failure threshold instead of exiting", async () => {
+  const source = await readFile(path.join(repoRoot, "OpenScience/scripts/ops/backup-scheduler.mjs"), "utf8")
+    .catch(() => readFile(path.join(repoRoot, "scripts/ops/backup-scheduler.mjs"), "utf8"));
+  const loop = source.slice(source.indexOf("while (!stopping)"), source.indexOf("for (const signal of"));
+  assert.doesNotMatch(
+    loop,
+    /consecutiveFailures >= config\.maxFailures\) throw/,
+    "exiting on the threshold makes the restart policy retry it",
+  );
+  assert.match(loop, /backup\.circuit_open/, "an open circuit is announced");
+  assert.match(loop, /exhausted \? config\.intervalSeconds : config\.retrySeconds/, "an open circuit waits the full interval");
+});
+
+// Age alone does not bound a directory: every archive written during a retry
+// storm is younger than the retention window, so nothing is eligible while the
+// disk fills.
+test("backup retention bounds the archive count, not only their age", async () => {
+  const retention = path.join(repoRoot, "OpenScience/scripts/ops/backup-retention.mjs");
+  const file = existsSync(retention) ? retention : path.join(repoRoot, "scripts/ops/backup-retention.mjs");
+  const { mkdtemp, writeFile: write, utimes, readdir } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(path.join(tmpdir(), "os-backup-retention-"));
+  // Twenty archives, all written now — none older than any sane window.
+  for (let i = 0; i < 20; i += 1) {
+    const stamp = `2026081${Math.floor(i / 10)}T${String(i).padStart(2, "0")}0000Z`;
+    const name = path.join(dir, `open-science-data-${stamp}.tar.gz.enc`);
+    await write(name, "archive", "utf8");
+    await write(`${name}.sha256`, "hash", "utf8");
+    const when = new Date(Date.now() - i * 60_000);
+    await utimes(name, when, when);
+  }
+  execFileSync(process.execPath, [file, "prune", dir, "30"], { encoding: "utf8" });
+  const left = (await readdir(dir)).filter((name) => name.endsWith(".enc"));
+  assert.ok(left.length <= 14, `retention left ${left.length} archives, none of them old enough to expire`);
+  assert.ok(left.length > 0, "retention must not empty the directory");
+});

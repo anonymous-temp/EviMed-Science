@@ -270,8 +270,23 @@ async function run() {
       await sleep(config.intervalSeconds);
     } catch (error) {
       state = await recordFailure(config, state, error);
-      if (state.consecutiveFailures >= config.maxFailures) throw error;
-      await sleep(config.retrySeconds);
+      // Throwing here exits the process, and the container restarts it — which
+      // reads the failure count back, exceeds the threshold again, and takes a
+      // full backup on the way. What looks like a circuit breaker became a
+      // backup every two minutes: eight 403 MB archives in a quarter of an
+      // hour, until the disk filled and the filling was itself the failure.
+      //
+      // Past the threshold the scheduler stays up and stops trying so often.
+      // Health still reports failed, so the deployment is not pretending to be
+      // backed up; it simply is not paying for the attempt every retry window.
+      const exhausted = state.consecutiveFailures >= config.maxFailures;
+      if (exhausted) {
+        log("backup.circuit_open", {
+          consecutiveFailures: state.consecutiveFailures,
+          sleepingSeconds: config.intervalSeconds,
+        }, true);
+      }
+      await sleep(exhausted ? config.intervalSeconds : config.retrySeconds);
     }
   }
 }
