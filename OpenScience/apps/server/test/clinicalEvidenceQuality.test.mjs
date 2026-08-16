@@ -1839,6 +1839,52 @@ function practicalTriggerIssues(practicalLine) {
   return validateClinicalEvidencePackage(input).issues.filter((issue) => /^临床实践要点第 \d+ 行把/.test(issue));
 }
 
+test("the section that satisfies the practical-answer requirement is the section that gets audited", () => {
+  // The requirement used to be satisfied by 结论|处置|Conclusion|Practical while
+  // every check on the section found it by a narrower expression, so a report
+  // headed 「## 结论与处置建议」 or 「## 患者须知」 satisfied the requirement and had
+  // its practical advice audited by nothing at all: 急救触发条件, the derived
+  // ban, and 每条要点须挂 claim all ran over an empty string.
+  for (const heading of ["结论与处置建议", "患者须知", "面向临床的处置建议"]) {
+    const input = deepResearchPackage();
+    input.reportText = input.reportText.replace("## 实际处置", `## ${heading}`);
+    const issues = validateClinicalEvidencePackage(input).issues;
+    assert.equal(
+      issues.some((issue) => /missing the safety-first practical-answer section/.test(issue)),
+      true,
+      `a heading outside the practical vocabulary must not satisfy the requirement: ${heading}`,
+    );
+  }
+  // 结论 and 临床实践要点 stay two sections: the conclusion requirement no longer
+  // accepts a practical heading in its place either.
+  const withoutConclusion = deepResearchPackage();
+  withoutConclusion.reportText = withoutConclusion.reportText.replace("## 结论\n", "## 处置建议\n");
+  assert.equal(
+    validateClinicalEvidencePackage(withoutConclusion).issues
+      .some((issue) => /missing a required section matching .*结论/.test(issue)),
+    true,
+  );
+  // A heading with nothing under it is audited exactly like a missing one.
+  const empty = deepResearchPackage();
+  empty.reportText = empty.reportText.replace(
+    /## 实际处置\n[\s\S]*?(?=\n## 参考文献)/,
+    "## 实际处置\n",
+  );
+  assert.equal(
+    validateClinicalEvidencePackage(empty).issues
+      .some((issue) => /practical-answer section is empty/.test(issue)),
+    true,
+    validateClinicalEvidencePackage(empty).issues.join("\n"),
+  );
+  // Control: the fixture's own heading satisfies both the requirement and the
+  // locator, so this test cannot pass by the requirement having been deleted.
+  assert.deepEqual(
+    validateClinicalEvidencePackage(deepResearchPackage()).issues
+      .filter((issue) => /practical-answer section/.test(issue)),
+    [],
+  );
+});
+
 test("an emergency-call trigger conditioned on how the medicine performed is rejected", () => {
   // Verbatim from the delivered reports the read-through confirmed. Each also
   // carries the unconditional rule ("服药不是等待的理由"), which is why they read
@@ -1910,6 +1956,95 @@ test("writing the forbidden order in order to reject it stays legitimate", () =>
   ]) {
     assert.deepEqual(practicalTriggerIssues(line), [], `a rejected sequence must not read as an instruction: ${line}`);
   }
+});
+
+test("a synonym, a full stop or a drug name does not turn the trigger into something else", () => {
+  // Every line here is the same instruction as one the rule already rejected,
+  // rewritten by one of the six moves the adversarial pass found: a comma
+  // inside the condition, a non-relief synonym the phrase list did not hold,
+  // a medication verb it did not hold, the drug named instead of the act of
+  // taking it, the two halves split across a full stop, and a second sentence
+  // that is safer still and used to license the first.
+  for (const line of [
+    // 「若含服硝酸甘油后，症状仍不缓解」: one comma, closing a temporal clause.
+    "若含服硝酸甘油后，症状仍不缓解，应立即拨打 120。",
+    // 未见效 / 无好转 / 症状持续存在 / 疼痛不减轻 / 未获缓解: the phrase list held
+    // 不见效 and 不缓解 and nothing else.
+    "若含服硝酸甘油 5 分钟未见效，应立即拨打 120。",
+    "若含服硝酸甘油 5 分钟无好转，应立即拨打 120。",
+    "若含服硝酸甘油 5 分钟后症状持续存在，应立即拨打 120。",
+    "若含服硝酸甘油 5 分钟疼痛不减轻，应立即拨打 120。",
+    "急救呼叫的启动条件为含服后 5 分钟症状未获缓解。",
+    // 吃药 is a medication word; the list held 服药 and 用药.
+    "若吃药后 5 分钟不缓解，应立即拨打 120。",
+    // The drug named instead of the act: no medication verb anywhere, and an
+    // efficacy predicate whose subject can only be a treatment.
+    "若硝酸甘油未能奏效，应立即拨打 120。",
+    // Two sentences, the anaphor carrying the medication act across the stop.
+    "含服硝酸甘油一片后观察。仍不缓解者拨打 120。",
+    // RQ-06 and RQ-02, rewritten.
+    "胸痛持续、伴大汗、气促、含药后无好转者应立即拨打急救电话",
+    "或含服 1 次后，5 分钟仍不缓解或加重，应立即呼叫 120",
+    // The cheapest exemption there was: a negation about something else.
+    "若含服硝酸甘油 5 分钟不缓解，应立即拨打 120，不要自行驾车前往医院。",
+    "若含服硝酸甘油 5 分钟不缓解，应立即拨打 120，切勿自行前往。",
+  ]) {
+    assert.equal(
+      practicalTriggerIssues(line).length >= 1,
+      true,
+      `a rewritten medication-conditioned trigger must still be caught: ${line}`,
+    );
+  }
+});
+
+test("a trigger conditions the call that follows it, not the waiting that does", () => {
+  // Hardening the rule against synonyms made it read three compliant sentences
+  // as violations. The first is the order this rule exists to produce -- call
+  // first, then wait -- and forbidding it pushed the author toward the wrong
+  // sequence, which is worse than missing a defect.
+  for (const line of [
+    "已含服硝酸甘油并拨打 120 后，若疼痛仍未缓解，保持静卧、不要走动。",
+    "含服硝酸甘油的同时拨打 120；症状仍不缓解，继续静卧等待急救人员到达。",
+    // The efficacy branch has no medication word to check, so it has to be told
+    // that the thing which did not work is not the medicine.
+    "自我判断不能有效区分心绞痛与急性心肌梗死，出现持续胸痛应立即拨打 120。",
+    "早期呼救可显著改善预后，延迟呼救则效果不佳；出现持续胸痛请立即拨打 120。",
+  ]) {
+    assert.deepEqual(practicalTriggerIssues(line), [], `this line is compliant and must be delivered: ${line}`);
+  }
+  // Controls: the call after the trigger, and the nominalised frame that names
+  // the call first and then states the condition for making it.
+  // Count is not the assertion -- one sentence can match two branches. What
+  // matters is that each is still refused.
+  for (const line of [
+    "含服 1 片后 5 分钟症状仍不缓解，立即呼叫 120。",
+    "急救呼叫的启动条件为含服后 5 分钟症状未获缓解。",
+    "若硝酸甘油未能奏效，应立即拨打 120。",
+  ]) {
+    assert.ok(practicalTriggerIssues(line).length >= 1, `this line is a violation and must be refused: ${line}`);
+  }
+});
+
+test("a rejection licenses the trigger only when it is about the trigger", () => {
+  // The licensing clause has to name the medication or the relief, because that
+  // is what makes it a rejection of *this* condition. Both lines are verbatim
+  // from delivered packages and both must keep being delivered.
+  for (const line of [
+    "3. 已确诊冠心病心绞痛的患者按既往医嘱使用属适应症内；若含服后心绞痛持续不缓解或性质改变，应立即呼叫急救，不得因已服药而推迟。",
+    "6. 含服后 20 分钟以上胸痛不缓解符合急性心肌梗死的警示特征，应立即呼叫 120 并接受心电图与高敏心肌肌钙蛋白评估，症状自觉缓解不等同于心肌缺血解除。",
+    "无论服药与否、无论症状是否缓解，出现上述征象即刻呼叫 120。",
+    "服药不是等待的理由，应在服药的同时呼叫急救。",
+  ]) {
+    assert.deepEqual(practicalTriggerIssues(line), [], `this line is compliant and must be delivered: ${line}`);
+  }
+  // Control: swap the licensing clause for a negation about something else and
+  // the same sentence is the violation again.
+  assert.equal(
+    practicalTriggerIssues(
+      "3. 已确诊冠心病心绞痛的患者按既往医嘱使用属适应症内；若含服后心绞痛持续不缓解或性质改变，应立即呼叫急救，不要自行驾车前往医院。",
+    ).length,
+    1,
+  );
 });
 
 test("the emergency-trigger rule runs only where the reader executes instructions", () => {
@@ -1990,6 +2125,33 @@ test("naming a statute without a clause locator stays legitimate", () => {
     "国家药监局综合司于 2026 年印发《处方药网络零售合规指南》（药监综药管函〔2026〕282 号）[18]，但其正文与具体条款未能获取核对。",
   ]) {
     assert.deepEqual(regulatoryArticleIssuesFor(line), [], `an ordinary statutory reference must not be flagged: ${line}`);
+  }
+});
+
+test("a statute cited without its book-title marks, backwards, or by anaphor is the same citation", () => {
+  // Three rewritings of one sentence, each of which used to clear the rule
+  // while asserting exactly what it asserts: the 《》 dropped, the article
+  // number put first, and the statute referred back to from a later clause.
+  for (const line of [
+    "医师法第 29 条第 2 款将超说明书用药的合法条件规定为四点 [13]",
+    "《中华人民共和国医师法》确立了医师用药的基本原则；该法第 29 条第 2 款将其规定为四点 [13]",
+    "第 29 条第 2 款是《医师法》为超说明书用药设定的合法条件 [13]",
+  ]) {
+    assert.equal(regulatoryArticleIssuesFor(line).length, 1, `an unlicensed article locator must be caught: ${line}`);
+  }
+});
+
+test("a 法-compound that is not a statute is not a statute reference", () => {
+  // 法 also ends 方法/用法/疗法/合法, and the bare-name branch reads the run of
+  // characters standing against the article locator — so the compounds have to
+  // be excluded by name, or every numbered step in a methods section becomes a
+  // clause-level regulatory citation.
+  for (const line of [
+    "该药的含量测定方法第三条为高效液相色谱法。",
+    "本文采用的分析法第二条为峰面积归一化。",
+    "其用法第一条为舌下含服。",
+  ]) {
+    assert.deepEqual(regulatoryArticleIssuesFor(line), [], `an ordinary 法-compound must not be flagged: ${line}`);
   }
 });
 
@@ -2095,6 +2257,106 @@ test("ordinary reporting verbs are not stance attribution", () => {
       `an ordinary reporting verb must not read as attribution: ${line}`,
     );
   }
+});
+
+test("a measure word, a demonstrative or a nominalised opinion is the same attribution", () => {
+  // 该研究 used to be a listed string, so 「这项研究」 and 「该项研究」 — one measure
+  // word inserted — were different subjects, and 「上述研究」 was a third. The
+  // stance can also be written without any of the listed verbs: 提出/断言/归结/
+  // 写道, the frame 「在…看来」, and the nominalisation 「…的核心观点是」.
+  const numeric = { "CLM-001": "The event rate was 12.4% (95% CI 9.1 to 16.2) over 24 months." };
+  for (const line of [
+    "上述研究认为硝酸甘油反应不能用于鉴别心源性胸痛 [1] <!-- claim:CLM-001 -->",
+    "这项研究认为该关联被系统性低估 [1] <!-- claim:CLM-001 -->",
+    "该项研究指出该关联被系统性低估 [1] <!-- claim:CLM-001 -->",
+    "课题组认为该关联被系统性低估 [1] <!-- claim:CLM-001 -->",
+    "作者提出该关联被系统性低估 [1] <!-- claim:CLM-001 -->",
+    "该研究提示该关联被系统性低估 [1] <!-- claim:CLM-001 -->",
+    "作者断言该关联被系统性低估 [1] <!-- claim:CLM-001 -->",
+    "在原作者看来，该关联被系统性低估 [1] <!-- claim:CLM-001 -->",
+    "作者的核心观点是该关联被系统性低估 [1] <!-- claim:CLM-001 -->",
+    "该现象被作者归结于安慰剂效应 [1] <!-- claim:CLM-001 -->",
+    "作者写道：该关联被系统性低估 [1] <!-- claim:CLM-001 -->",
+  ]) {
+    assert.equal(
+      attributedStanceIssuesFor(line, numeric).length,
+      1,
+      `a rewritten attribution must still be caught: ${line}`,
+    );
+  }
+  // A subject and its predicate stand in one clause. Both lines are verbatim
+  // from delivered packages: the first says where the conclusions came from,
+  // the second predicates 提示 of an E value, not of the authors.
+  for (const line of [
+    "其结论引自摘要原文、未据标题推断，但效应量与偏倚风险的完整评定受限制 [1] <!-- claim:CLM-001 -->",
+    "作者对心肌梗死估计的 E 值为 1.79，提示需相当强度的未测混杂才能解释该关联 [1] <!-- claim:CLM-001 -->",
+  ]) {
+    assert.deepEqual(attributedStanceIssuesFor(line, numeric), [], `a comma ends the window: ${line}`);
+  }
+});
+
+test("the stance exemption asks for a predication, not for a word", () => {
+  // The exemption used to be a flat vocabulary tested anywhere in the quote and
+  // cleared 183 of the 578 claims in thirty delivered packages outright. The
+  // four quotes below are verbatim from that corpus and carry no stance at all:
+  // patient instruction, two methods sentences and a measurement with a
+  // connective in front of it. Each of them used to clear this line.
+  const attribution = "该研究指出该关联被系统性低估 [1] <!-- claim:CLM-001 -->";
+  for (const quote of [
+    "You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital. The event rate was 12.4% over 24 months.",
+    "Forty-one trials involving 6276 patients were included in our analysis, with an event rate of 12.4% over 24 months.",
+    "In this study, we included 417 patients aged 65 to 95 years; the event rate was 12.4% over 24 months.",
+    "However, there was significant heterogeneity between studies, with an event rate of 12.4% over 24 months.",
+  ]) {
+    assert.equal(
+      attributedStanceIssuesFor(attribution, { "CLM-001": quote }).length,
+      1,
+      `a token is not a position: ${quote}`,
+    );
+  }
+  // And these five are the corpus lines the exemption exists for — each one a
+  // quote that states a position, in the four shapes a source states one in.
+  for (const quote of [
+    // Authorial predication (RQ-16 CLM-010).
+    "Our results do not support the findings of the previous study by Wang et al that employees with permanent night shifts increase the risk of incident AF.",
+    // Hedged interpretation (RQ-08 CLM-004).
+    "Raising the temperature to 70 °C increased release to 32.08 mg. This decline was likely due to volatilization losses of L-borneol at elevated temperatures.",
+    // Deontic position (RQ-16 CLM-013, RQ-24 CLM-012).
+    "the need to consider arrhythmia in the differential diagnosis and to obtain an electrocardiogram in patients presenting with palpitations",
+    "The use of a single abnormal finding on electrocardiography is not recommended for stratifying the risk of cardiovascular events in low-risk general populations.",
+    // Causal attribution anchored to a stated result (RQ-28 CLM-009).
+    "Many patients initially fail to recognize myocardial infarction symptoms and misattribute their symptoms to other causes, which may lead to a longer decision delay.",
+  ]) {
+    assert.deepEqual(
+      attributedStanceIssuesFor(attribution, { "CLM-001": quote }),
+      [],
+      `a quote that does carry the position must stay exempt: ${quote}`,
+    );
+  }
+});
+
+test("a source title is metadata the run types in, not something the source said", () => {
+  // The notice tells the author the gate reads supportQuote alone. It also read
+  // sourceTitle, so retitling one source cleared the line with the prose and
+  // the quote untouched.
+  const issues = attributedStanceIssuesFor(
+    "作者指出这些症状常被误释为焦虑或惊恐障碍 [1] <!-- claim:CLM-001 -->",
+    { "CLM-001": "278 were included; anxiety (OR 2.9, 95% CI 1.1-8.1) was more frequent in women presenting in the ED." },
+  );
+  assert.equal(issues.length, 1);
+  const retitled = (() => {
+    const input = deepResearchPackage();
+    const claim = input.matrix.claims.find((entry) => entry.claimId === "CLM-001");
+    claim.supportQuote = "278 were included; anxiety (OR 2.9, 95% CI 1.1-8.1) was more frequent in women presenting in the ED.";
+    claim.sourceTitle = "Selection bias in emergency chest pain cohorts";
+    input.sourceArtifacts[claim.artifactPath] = `${input.sourceArtifacts[claim.artifactPath]}\n${claim.supportQuote}`;
+    input.reportText = input.reportText.replace(
+      "## 讨论\n",
+      "## 讨论\n作者指出这些症状常被误释为焦虑或惊恐障碍 [1] <!-- claim:CLM-001 -->\n",
+    );
+    return validateClinicalEvidencePackage(input).issues.filter((issue) => /^报告第 \d+ 行以「/.test(issue));
+  })();
+  assert.equal(retitled.length, 1, "a retitled source must not clear an attributed stance");
 });
 
 // --- Reference-table closure ------------------------------------------------
@@ -2453,6 +2715,37 @@ test("a GRADE level that reaches 高 beside a downgrade reason is rejected, and 
       "证据体确定性以 GRADE 表述，干预性研究以 RoB 2 评估。",
       "按 GRADE 评估，该证据体从「高」起步，因偏倚风险（单个试验、结果仅为摘要层级，RoB 2 无法完整评估）降一级，因不精确再降一级，评为低确定性。",
     ),
+    [],
+  );
+});
+
+test("a full stop, a synonym or a word order does not separate a GRADE verdict from its reason", () => {
+  // Eight rewritings of one paragraph, each of which used to clear the rule.
+  // The first two split the judgement across a full stop in either order; the
+  // next three swap the deficiency for a synonym; the last three write the
+  // verdict the other way round, with a different noun, or without naming GRADE.
+  for (const results of [
+    "纳入研究方法学质量普遍偏低 [1]。按 GRADE 评为高确定性 [1]。",
+    "按 GRADE 评为高确定性 [1]。理由：纳入研究方法学质量普遍偏低 [1]。",
+    "因偏倚风险与不一致性下调一级，按 GRADE 评为高确定性 [1]。",
+    "纳入研究方法学质量欠佳，按 GRADE 评为高确定性 [1]。",
+    "纳入研究整体证据强度不足，按 GRADE 评为高确定性 [1]。",
+    "纳入研究方法学质量普遍偏低，按 GRADE 属高级别证据 [1]。",
+    "纳入研究方法学质量普遍偏低，GRADE 确定性高 [1]。",
+    "纳入研究方法学质量普遍偏低，证据确定性评为高 [1]。",
+  ]) {
+    assert.equal(
+      appraisalBlocking("证据体确定性以 GRADE 表述。", results)
+        .some((issue) => /^GRADE 等级与降级理由不自洽/.test(issue)),
+      true,
+      `a rewritten GRADE contradiction must still be caught: ${results}`,
+    );
+  }
+  // The two GRADE domains spelled with a negator must not read as a negation of
+  // the downgrade standing next to them: 不因不一致性降级 rules one out,
+  // 因不一致性下调一级 performs one.
+  assert.deepEqual(
+    appraisalPackage("证据体确定性以 GRADE 表述。", "未因不一致性降级，按 GRADE 评为高确定性 [1]。"),
     [],
   );
 });

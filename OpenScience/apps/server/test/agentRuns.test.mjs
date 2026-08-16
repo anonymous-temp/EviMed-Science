@@ -240,7 +240,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.7.0",
+      effectiveAgentVersion: "2.7.1",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
 

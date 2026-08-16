@@ -480,6 +480,88 @@ test("whatever the server gate rejects, the preflight already caught", async () 
       },
     },
     {
+      // The six rewritings the adversarial pass found. Each is the same
+      // assertion as a case above with one thing changed, and each of them used
+      // to pass both sides — so if either side loses one of them, the other
+      // side must lose it too.
+      label: "an emergency trigger rewritten across a comma and with a synonym",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "\n\n## 参考文献",
+          "\n4. 若含服硝酸甘油后，症状仍不缓解，应立即拨打 120，不要自行驾车前往医院。[1] <!-- claim:CLM-001 -->\n\n## 参考文献",
+        );
+      },
+    },
+    {
+      label: "an emergency trigger resumed by an anaphor after a full stop",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "\n\n## 参考文献",
+          "\n4. 含服硝酸甘油一片后观察。仍不缓解者拨打 120。[1] <!-- claim:CLM-001 -->\n\n## 参考文献",
+        );
+      },
+    },
+    {
+      label: "an emergency trigger stated with the drug named instead of the act",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "\n\n## 参考文献",
+          "\n4. 若硝酸甘油未能奏效，应立即拨打 120。[1] <!-- claim:CLM-001 -->\n\n## 参考文献",
+        );
+      },
+    },
+    {
+      label: "a GRADE verdict split from its downgrade reason by a full stop",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 结果\n",
+          "## 结果\n纳入研究方法学质量普遍偏低 [1]。按 GRADE 属高级别证据 [1]。\n",
+        );
+      },
+    },
+    {
+      label: "an article-level statute citation written without its book-title marks",
+      break: (input) => {
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n医师法第 29 条第 2 款将超说明书用药的合法条件规定为四点 [1]。\n",
+        );
+      },
+    },
+    {
+      label: "an attributed stance with a measure word inside the subject",
+      break: (input) => {
+        input.matrix.claims[0].supportQuote = "213,976 women with 10,037 cardiovascular outcomes were followed for 5.3 to 15 years (RR = 1.28).";
+        input.sourceArtifacts[input.matrix.claims[0].artifactPath]
+          += `\n${input.matrix.claims[0].supportQuote}`;
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n这项研究认为血管舒缩症状是可能的心血管风险标记 [1] <!-- claim:CLM-001 -->\n",
+        );
+      },
+    },
+    {
+      // The stance exemption on both sides has to clear the same quotes. This
+      // one carries `could` and `our` and no position at all.
+      label: "a stance exemption resting on a token rather than on a predication",
+      break: (input) => {
+        input.matrix.claims[0].supportQuote = "You could be having a heart attack. Forty-one trials involving 6276 patients were included in our analysis (RR = 1.28).";
+        input.sourceArtifacts[input.matrix.claims[0].artifactPath]
+          += `\n${input.matrix.claims[0].supportQuote}`;
+        input.reportText = input.reportText.replace(
+          "## 讨论\n",
+          "## 讨论\n该研究提示血管舒缩症状是可能的心血管风险标记 [1] <!-- claim:CLM-001 -->\n",
+        );
+      },
+    },
+    {
+      // The practical section located by a heading neither side recognises.
+      label: "the practical answer written under a heading outside the vocabulary",
+      break: (input) => {
+        input.reportText = input.reportText.replace("## 实际处置", "## 结论与处置建议");
+      },
+    },
+    {
       label: "derived result asserted without its 〔推导〕 mark",
       break: (input) => {
         input.matrix.claims.push({
