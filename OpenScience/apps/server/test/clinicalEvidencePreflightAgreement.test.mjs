@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
-import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
+import { deepResearchPackage, questionCoverageLedger } from "./fixtures/clinicalEvidencePackage.mjs";
 
 const execFileAsync = promisify(execFile);
 const preflightScript = new URL(
@@ -41,6 +41,7 @@ async function writeWorkspace(input) {
     "references.bib": input.referencesText,
     "citation-ledger.csv": input.citationLedgerText,
     "citation-audit.md": input.citationAuditText,
+    "question-coverage.json": input.questionCoverageText,
   };
   for (const [name, content] of Object.entries(files)) {
     await writeFile(path.join(workspace, name), content, "utf8");
@@ -65,6 +66,10 @@ async function runPreflight(workspace) {
 
 /** @param {any} input @param {string} label */
 async function verdicts(input, label) {
+  // The coverage ledger cites report line numbers, and almost every case here
+  // edits the report. Rebuild it against the report the case actually built,
+  // unless the case is about the ledger and set one itself.
+  if (!input.keepCoverage) input.questionCoverageText = questionCoverageLedger(input.reportText, input.searchLogText);
   const workspace = await writeWorkspace(input);
   try {
     return {
@@ -578,6 +583,91 @@ test("whatever the server gate rejects, the preflight already caught", async () 
         input.reportText = input.reportText.replace(
           "## 讨论\n",
           "## 讨论\n在给定条件下 6 个月残余约 78%。 <!-- claim:CLM-101 -->\n",
+        );
+      },
+    },
+    // The question-coverage ledger. It is the newest deliverable and the one a
+    // run writes last, which is exactly when a run is most likely to be told
+    // "done" by the preflight and then failed by the gate. One case per
+    // cross-check, each breaking only that check.
+    {
+      label: "a coverage ledger that is not there at all",
+      break: (input) => {
+        input.keepCoverage = true;
+        input.questionCoverageText = "";
+      },
+    },
+    {
+      label: "a coverage entry whose status is neither answered nor gap",
+      break: (input) => {
+        const ledger = JSON.parse(input.questionCoverageText);
+        ledger.entries[0].status = "partial";
+        input.keepCoverage = true;
+        input.questionCoverageText = JSON.stringify(ledger);
+      },
+    },
+    {
+      label: "an answered sub-question pointing past the end of the report",
+      break: (input) => {
+        const ledger = JSON.parse(input.questionCoverageText);
+        ledger.entries[0].reportLines = [9999];
+        input.keepCoverage = true;
+        input.questionCoverageText = JSON.stringify(ledger);
+      },
+    },
+    {
+      label: "an answered sub-question pointing at the reference list",
+      break: (input) => {
+        const referencesLine = input.reportText.split("\n").findIndex((line) => /^1\. Author group\./.test(line)) + 1;
+        const ledger = JSON.parse(input.questionCoverageText);
+        ledger.entries[0].reportLines = [referencesLine];
+        ledger.entries[1].reportLines = [referencesLine];
+        input.keepCoverage = true;
+        input.questionCoverageText = JSON.stringify(ledger);
+      },
+    },
+    {
+      label: "a declared gap whose search never ran",
+      break: (input) => {
+        const ledger = JSON.parse(input.questionCoverageText);
+        ledger.entries[2].searches = [{
+          query: "a search that was never run in this session",
+          database: "PubMed",
+          searchedAt: "2026-02-11",
+        }];
+        input.keepCoverage = true;
+        input.questionCoverageText = JSON.stringify(ledger);
+      },
+    },
+    {
+      label: "a registered gap written as a finding in the conclusion",
+      break: (input) => {
+        const ledger = JSON.parse(input.questionCoverageText);
+        ledger.entries[2].question = "本品在夜间低血压人群中的院外自救有无以临床结局为终点的直接研究";
+        input.keepCoverage = true;
+        input.questionCoverageText = JSON.stringify(ledger);
+        input.reportText = input.reportText.replace(
+          "## 结论\n",
+          "## 结论\n本品在夜间低血压人群中的院外自救无相关证据 [1] <!-- claim:CLM-001 -->。\n",
+        );
+      },
+    },
+    {
+      label: "an abstract that restates five questions as three",
+      break: (input) => {
+        const ledger = JSON.parse(input.questionCoverageText);
+        const reportLines = ledger.entries[0].reportLines;
+        ledger.entries = [1, 2, 3, 4, 5].map((number) => ({
+          id: `${number}.1`,
+          question: `题面第 ${number} 问的原文转录，长度足够作为一条子问`,
+          status: "answered",
+          reportLines,
+        }));
+        input.keepCoverage = true;
+        input.questionCoverageText = JSON.stringify(ledger);
+        input.reportText = input.reportText.replace(
+          "## 摘要\n",
+          "## 摘要\n本文评价三个问题：（1）适应症边界；（2）鉴别路径；（3）院外处置。\n",
         );
       },
     },
@@ -1385,5 +1475,46 @@ test("the practical answer is found under its old and its manuscript name", asyn
     const { gate, preflight } = await verdicts(input, heading);
     assert.equal(gate.valid, true, `${heading}: ${gate.issues.join("\n")}`);
     assert.equal(preflight.ok, true, `${heading}: ${JSON.stringify(preflight.issues)}`);
+  }
+});
+
+test("the coverage ledger is checked field for field on the run's side, not only at delivery", async () => {
+  // The agreement above proves the preflight rejects these packages. It does
+  // not prove it rejects them *for the coverage defect* — and an issue that
+  // names something else leaves the run to guess. Each case names its own.
+  const cases = [
+    [(ledger) => { ledger.entries[0].reportLines = [9999]; }, /question-coverage\.json: 1\.1 points at report line 9999/],
+    [(ledger) => { ledger.entries[0].status = "partial"; }, /question-coverage\.json: 1\.1\.status must be/],
+    [(ledger) => { ledger.entries[1].id = "1.1"; }, /entry id 1\.1 appears twice/],
+    [(ledger) => { ledger.entries[2].searches[0].query = "never ran"; }, /1「never ran」|declares the search 「never ran」/],
+    [(ledger) => { ledger.entries[2].searches[0].database = "Embase"; }, /under database 「Embase」/],
+    [(ledger) => { ledger.entries[2].searches = []; }, /2\.1 is a gap, so searches must give/],
+  ];
+  for (const [breakLedger, expected] of cases) {
+    const input = deepResearchPackage();
+    input.questionCoverageText = questionCoverageLedger(input.reportText, input.searchLogText);
+    const ledger = JSON.parse(input.questionCoverageText);
+    breakLedger(ledger);
+    input.keepCoverage = true;
+    input.questionCoverageText = JSON.stringify(ledger);
+    const { gate, preflight } = await verdicts(input, String(expected));
+    assert.equal(gate.valid, false, `${expected}: the gate accepted it`);
+    assert.match(preflight.issues.join("\n"), expected);
+  }
+
+  // And the deliverable's absence, which is the state every already-delivered
+  // package is in: the preflight has to say which file and what goes in it.
+  const missing = deepResearchPackage();
+  missing.keepCoverage = true;
+  missing.questionCoverageText = "";
+  const workspace = await writeWorkspace(missing);
+  try {
+    await rm(path.join(workspace, "question-coverage.json"));
+    const preflight = await runPreflight(workspace);
+    assert.equal(preflight.ok, false);
+    assert.match(preflight.issues.join("\n"), /question-coverage\.json: missing\./);
+    assert.match(preflight.issues.join("\n"), /one entry per atomic sub-question/);
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
   }
 });

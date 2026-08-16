@@ -121,7 +121,7 @@ test("official specialist packages preserve domain-specific evidence and release
   const expectedVersions = new Map([
     ["adr-analysis", "1.2.2"],
     ["bibliometric-analysis", "1.0.1"],
-    ["clinical-evidence-synthesis", "2.7.1"],
+    ["clinical-evidence-synthesis", "2.9.0"],
     ["comprehensive-drug-evaluation", "2.2.1"],
     ["dataset-research-scoping", "1.7.0"],
     ["drug-selection", "2.1.1"],
@@ -177,6 +177,11 @@ test("official specialist packages preserve domain-specific evidence and release
       "references.bib",
       "citation-audit.md",
       "clinical-evidence-run.json",
+      // The run's own account of the brief's sub-questions. It is required
+      // because a question that disappears from the body without a word is the
+      // commonest confirmed defect in delivered work, and the gate cannot see
+      // the brief to notice it.
+      "question-coverage.json",
     ],
   );
 

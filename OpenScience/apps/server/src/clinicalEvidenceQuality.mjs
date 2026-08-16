@@ -1384,6 +1384,14 @@ const clinicalEvidenceIssueCodes = Object.freeze([
   { pattern: /^检索流程数与纳入来源集合由|^参考文献表共 \d+ 条编号条目/, code: "specialist_screening_ledger_mismatch" },
   // 资料与方法声明了… is degradable and never reaches this list.
   { pattern: /^GRADE 等级与降级理由不自洽/, code: "declared-appraisal-must-execute" },
+  // The question-coverage ledger. Four codes, because the four defects are
+  // repaired in four different places: the ledger's own shape, an entry that
+  // points nowhere, a sentence that contradicts a registered gap, and an
+  // abstract that restates the brief with fewer questions than it has.
+  { pattern: /^question-coverage\.json 台账格式无效/, code: "specialist_question_coverage_invalid" },
+  { pattern: /^question-coverage\.json 条目 .*登记为 gap/, code: "specialist_question_coverage_gap_overstated" },
+  { pattern: /^question-coverage\.json 条目 /, code: "specialist_question_coverage_unsupported" },
+  { pattern: /^摘要重述研究范围时把问题数/, code: "specialist_question_coverage_understated" },
 ]);
 
 /** The run-level error code for a package's blocking issues.
@@ -2517,6 +2525,451 @@ function validateSynthesizedClaim(
   }
 }
 
+// --- The question-coverage ledger -------------------------------------------
+//
+// The commonest confirmed defect in delivered work is a sub-question that
+// disappears from the body without a word: of the 47 findings a coverage
+// re-audit of thirty packages could not attribute to any existing check, 38
+// were that one shape. A brief names five questions; the report answers three
+// and the abstract rewrites the scope as three.
+//
+// This gate cannot check that directly, because it never sees the brief. The
+// run ledger keeps a 160-character preview of the question (maxQuestionPreview
+// in agentRuns.mjs) and nothing more, and carrying the whole brief there is not
+// available: the ledger has a byte ceiling that a burst of progress events has
+// already burst once, at 1048462 of 1048576, and the run after it could not
+// start.
+//
+// So the run declares its own account — question-coverage.json, one entry per
+// atomic sub-question — and this gate checks that account against the things it
+// does hold: the report's own lines, the claim anchors in them, and the search
+// log the retrieval tools wrote. Every field below lands on one of those. A run
+// cannot write "answered" without a report line that carries evidence, and
+// cannot write "gap" without a search that actually ran: "I looked and found
+// nothing" becomes a falsifiable sentence, because the log is written by the
+// tools rather than by the model.
+//
+// What the gate cannot decide stays in the skill. Whether the entries are in
+// fact the brief's sub-questions, and whether a conditional question's fallback
+// branch was split out as its own entry, are both invisible here — a check that
+// cannot be decided must not be able to withhold a finished package.
+const coverageStatuses = new Set(["answered", "gap"]);
+// A sentence saying what this paper set out to do. Naming a quantity as an
+// objective is not reporting one: RQ-11's 目的 sentence says it will count the
+// aetiological proportions, and reading that as a proportion told the author
+// to rewrite a statement of intent as a gap declaration.
+const coverageObjectiveSentence = /(?:^|[|\s])(?:\*\*)?目的(?:\*\*)?|本文(?:旨在|拟|试图|将)|本研究(?:旨在|拟|试图)|(?:旨在|意在)(?:清点|量化|评价|回答|梳理|核查)/;
+const coverageIsoDate = /^\d{4}-\d{2}-\d{2}$/;
+const coverageAnchorPattern = /<!--\s*claim:CLM-[0-9]{3,6}\s*-->|\[claim:CLM-[0-9]{3,6}\]/;
+const coverageExcludedSection = /参考文献|参考来源|References?|局限|Limitations?/i;
+// The three places a reader takes away an answer. A gap written as a finding
+// anywhere else is at least surrounded by its own qualifications; here it is
+// the takeaway.
+const coverageVerdictSections = Object.freeze([
+  { name: "摘要", pattern: "摘要|Abstract" },
+  { name: "结论", pattern: "结论|Conclusions?" },
+  { name: "临床实践要点", pattern: practicalSectionHeading },
+]);
+// The four ways a registered gap gets written as an answer, from the audit.
+const coverageRankingAssertion = /最常见|首位|占比|构成比|居首|多数|约半数|大多数/;
+const coverageThresholdAssertion = new RegExp([
+  "\\d+(?:\\.\\d+)?\\s*[%％]",
+  "[≥≤><]\\s*\\d",
+  "(?:大于|小于|超过|不超过|不少于|至少|不足|上限|下限)\\s*\\d",
+  "\\d+(?:\\.\\d+)?\\s*(?:[-–—~～至]|到)\\s*\\d",
+  "\\d+(?:\\.\\d+)?\\s*(?:mg|µg|μg|g|ml|mmHg|分钟|小时|天|周|个月|年|次|例|丸|片|倍|杯)",
+].join("|"), "i");
+const coverageDirectiveAssertion = /推荐|建议|应当|应予|应立即|必须|首选|优先(?:选择|使用)|可给予|适用于|可用于/;
+// The retrieval came back empty; the sentence reports it as a property of the
+// literature. This family carries no acknowledgement exemption — a sentence that
+// says both "we did not find it" and "the literature does not contain it" still
+// says the second one.
+const coverageLiteratureFactAssertion = new RegExp([
+  "(?:证据|结果|研究|数据)\\s*(?:为|是|均为|呈)[^，。；\\n]{0,8}阴性",
+  // 尚无 and 暂无 are hedges about what has been published so far; 无相关证据 is
+  // a statement about the literature. Only the second one is this family.
+  "(?<![尚暂])无(?:此类|该类|相关|任何|已发表)(?:的)?(?:证据|研究|报道|文献)",
+  "不存在(?:相关|此类|该类|任何)(?:的)?(?:证据|研究)",
+  "文献(?:中|里)(?:并)?(?:没有|无|未见)",
+  // 「此为证据空缺，非已证实无效」 is the sentence this rule exists to protect,
+  // so the negation in front of it has to be read.
+  "(?<![不非未])(?:已|均)(?:证实|表明|显示)(?:其)?无效",
+].join("|"));
+// "未检索到直接证据，这是一处证据空白" is the sentence this whole ledger exists
+// to encourage. A sentence that says so is not asserting an answer, whatever
+// else it carries, so the first three families never read it.
+const coverageGapAcknowledgement = new RegExp([
+  "未(?:能)?检索到",
+  "未检索出",
+  "尚未检索",
+  "检索(?:结果)?为空",
+  "未(?:能)?获(?:得|取)",
+  "未(?:能)?(?:获|经)(?:得)?(?:核验|核实|证实|确认)",
+  "证据空(?:白|缺)",
+  "证据缺口",
+  "未见(?:相关|直接|任何|以|有)",
+  "尚无(?:直接|已发表|公开|相应)?(?:的)?(?:证据|研究|数据|报道)",
+  "证据不足",
+  "不足以支持",
+  "无法(?:判定|评定|确定)",
+  "未(?:能)?(?:追溯|定位)到",
+  "未述及",
+  "未载",
+  "缺乏(?:直接)?(?:证据|研究|数据)",
+  "无直接(?:证据|研究)",
+].join("|"));
+// The abstract's methods sentence names the databases and the search date, and
+// a brief that names the same databases shares a long span with it. It states
+// how the evidence was looked for, never what was found, so it cannot be a gap
+// written as an answer and is not read as one.
+const coverageRetrievalRestatement = /检索(?:日期|时间|截至|策略)|检索[^。；\n]{0,60}(?:数据库|索引|注册库|PubMed|Europe\s*PMC|Crossref|ClinicalTrials|CNKI)/i;
+// Only a paragraph that says it is restating the study's scope is read for a
+// question count. A report enumerating its findings is enumerating findings.
+const coverageScopeCue = /(?:本文|本研究|本综述|本报告|本篇)[^。；\n]{0,24}(?:评价|评估|回答|讨论|考察|梳理|分析|围绕|聚焦|检索)[^。；\n]{0,12}(?:问题|方面)/;
+const coverageScopeCountWord = /(\d{1,2}|[一二三四五六七八九十]{1,3})\s*(?:个|项|类|方面)?\s*(?:核心|主要)?问题/g;
+const coverageCircledDigits = "①②③④⑤⑥⑦⑧⑨⑩";
+const coverageSentenceSplit = /(?<=[。！？；;])/;
+
+/** The letter/digit/Han runs of a string, so a shared span cannot be stitched
+ *  across a comma.
+ *  @param {any} value */
+function coverageContentRuns(value) {
+  return String(value ?? "").match(/[\p{Script=Han}A-Za-z0-9]+/gu) ?? [];
+}
+
+/** The longest run of letters, digits and Han characters two strings share.
+ *  No stopword list decides what a topic is, and the span itself is what the
+ *  notice names, so a reader can see at once whether the match is real.
+ *
+ *  Eight characters, not five. A shorter bar was measured over the thirty
+ *  delivered packages and matched on spans like 随机对照试验, 安慰剂对照,
+ *  性冠脉综合征 and GRADE — vocabulary every report in this field uses in every
+ *  section, which made the check fire on sentences that had nothing to do with
+ *  the registered gap. The two matches that were real carried spans of eleven
+ *  characters (以本品为干预的临床研究, 青年人为预防猝死而常备). Missing a real one
+ *  costs a defect that other checks may still catch; a false one sends a run
+ *  back to break a correct sentence, so the bar sits where the evidence puts it.
+ *  @param {any} left @param {any} right */
+function coverageSharedTopic(left, right) {
+  const first = coverageContentRuns(left);
+  const second = coverageContentRuns(right);
+  let best = "";
+  for (const a of first) {
+    for (const b of second) {
+      let previous = new Array(b.length + 1).fill(0);
+      for (let i = 1; i <= a.length; i += 1) {
+        const current = new Array(b.length + 1).fill(0);
+        for (let j = 1; j <= b.length; j += 1) {
+          if (a[i - 1] !== b[j - 1]) continue;
+          current[j] = previous[j - 1] + 1;
+          if (current[j] > best.length) best = a.slice(i - current[j], i);
+        }
+        previous = current;
+      }
+    }
+  }
+  return best.length >= 8 ? best : "";
+}
+
+/** @param {string} run */
+function coverageNumberValue(run) {
+  if (/^\d+$/.test(run)) return Number(run);
+  const digits = "零一二三四五六七八九";
+  if (run === "十") return 10;
+  if (/^十[一二三四五六七八九]$/.test(run)) return 10 + digits.indexOf(run[1]);
+  if (/^[一二三四五六七八九]十$/.test(run)) return digits.indexOf(run[0]) * 10;
+  if (/^[一二三四五六七八九]十[一二三四五六七八九]$/.test(run)) {
+    return digits.indexOf(run[0]) * 10 + digits.indexOf(run[2]);
+  }
+  return /^[零一二三四五六七八九]$/.test(run) ? digits.indexOf(run) : Number.NaN;
+}
+
+/** @param {string} paragraph @param {number} index */
+function coverageEnumeratedMarker(paragraph, index) {
+  if (paragraph.includes(`（${index}）`) || paragraph.includes(`(${index})`)) return true;
+  if (index <= coverageCircledDigits.length && paragraph.includes(coverageCircledDigits[index - 1])) return true;
+  const ordinals = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+  return index <= ordinals.length && new RegExp(`第${ordinals[index - 1]}[，,、]`).test(paragraph);
+}
+
+/** How many questions a scope-restating paragraph says the study has, or 0 when
+ *  no paragraph restates the scope.
+ *  @param {string} sectionText */
+function coverageDeclaredScopeCount(sectionText) {
+  let claimed = 0;
+  for (const paragraph of String(sectionText ?? "").split(/\n\s*\n/)) {
+    if (!coverageScopeCue.test(paragraph)) continue;
+    let enumerated = 0;
+    while (coverageEnumeratedMarker(paragraph, enumerated + 1)) enumerated += 1;
+    claimed = Math.max(claimed, enumerated);
+    coverageScopeCountWord.lastIndex = 0;
+    for (const match of paragraph.matchAll(coverageScopeCountWord)) {
+      const value = coverageNumberValue(match[1]);
+      if (Number.isInteger(value) && value > 0 && value <= 30) claimed = Math.max(claimed, value);
+    }
+  }
+  return claimed;
+}
+
+/** The level-two heading in force on each report line, indexed from 0.
+ *  @param {any} reportText */
+function coverageSectionOfLine(reportText) {
+  let heading = "";
+  return String(reportText ?? "").split("\n").map((line) => {
+    const match = /^##\s+(.*)$/.exec(line);
+    if (match) heading = match[1];
+    return heading;
+  });
+}
+
+/** The contiguous non-blank block a line belongs to.
+ *  @param {string[]} lines @param {number} index */
+function coverageParagraphAt(lines, index) {
+  let start = index;
+  let end = index;
+  while (start > 0 && lines[start - 1].trim()) start -= 1;
+  while (end < lines.length - 1 && lines[end + 1].trim()) end += 1;
+  return lines.slice(start, end + 1).join("\n");
+}
+
+/** @param {string} line */
+function coverageLineSubstance(line) {
+  return String(line ?? "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\[[^\]\n]*\]\([^)\s]*\)/g, "")
+    .replace(/\[\s*\d+(?:\s*[,，、\-–]\s*\d+)*\s*\]/g, "")
+    .replace(/[#>*_`|\-–—\s]/g, "")
+    .trim();
+}
+
+/** Everything the coverage ledger claims, checked against the report lines, the
+ *  claim anchors and the search log this gate already holds.
+ *  @param {any} questionCoverageText @param {any} reportText @param {any} searchLogText
+ *  @param {Set<string>} claimIds */
+function questionCoverageFindings(questionCoverageText, reportText, searchLogText, claimIds) {
+  const findings = [];
+  const text = String(questionCoverageText ?? "");
+  if (!text.trim()) {
+    findings.push({ kind: "shape", detail: "文件缺失或为空。它必须是一个 JSON 对象，逐条列出题面「需要回答的问题」拆出的原子子问。" });
+    return findings;
+  }
+  let ledger = null;
+  try {
+    ledger = JSON.parse(text);
+  } catch (error) {
+    findings.push({ kind: "shape", detail: `不是合法 JSON（${String(error?.message ?? error).slice(0, 120)}）。` });
+    return findings;
+  }
+  if (!ledger || typeof ledger !== "object" || Array.isArray(ledger)) {
+    findings.push({ kind: "shape", detail: "顶层必须是对象，不能是数组或标量。" });
+    return findings;
+  }
+  if (ledger.schemaVersion !== 1) {
+    findings.push({ kind: "shape", detail: "必须写 \"schemaVersion\": 1。" });
+  }
+  const entries = Array.isArray(ledger.entries) ? ledger.entries : null;
+  if (!entries || !entries.length) {
+    findings.push({ kind: "shape", detail: "entries 必须是非空数组，一条原子子问一个条目。" });
+    return findings;
+  }
+  const lines = String(reportText ?? "").split("\n");
+  const sectionOfLine = coverageSectionOfLine(reportText);
+  const searchLog = parseJsonObject(searchLogText);
+  const loggedQueries = (Array.isArray(searchLog?.queries) ? searchLog.queries : []).map((entry) => ({
+    query: normalizedSearchQuery(entry?.query),
+    database: String(entry?.database ?? "").trim().toLowerCase(),
+  }));
+  const loggedDate = String(searchLog?.searchedAt ?? "").slice(0, 10);
+  const seenIds = new Set();
+  const groups = new Set();
+  for (const [index, entry] of entries.entries()) {
+    const label = `entries[${index}]`;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      findings.push({ kind: "shape", detail: `${label} 必须是对象。` });
+      continue;
+    }
+    const id = typeof entry.id === "string" ? entry.id.trim() : "";
+    const question = typeof entry.question === "string" ? entry.question.trim() : "";
+    if (!id) {
+      findings.push({ kind: "shape", detail: `${label}.id 必须是题面编号加子项序号（如 "2.3"）。` });
+      continue;
+    }
+    if (seenIds.has(id)) {
+      findings.push({ kind: "shape", detail: `条目编号 ${id} 出现了两次；一条子问一个编号。` });
+      continue;
+    }
+    seenIds.add(id);
+    const groupMatch = /\d+/.exec(id);
+    groups.add(groupMatch ? groupMatch[0] : id);
+    if (question.replace(/\s+/g, "").length < 8) {
+      findings.push({ kind: "shape", detail: `${id}.question 必须转录子问原文（至少 8 个字符），当前为 ${JSON.stringify(question)}。` });
+      continue;
+    }
+    if (!coverageStatuses.has(entry.status)) {
+      findings.push({ kind: "shape", detail: `${id}.status 必须是 "answered" 或 "gap"，当前为 ${JSON.stringify(entry.status)}。` });
+      continue;
+    }
+    if (Array.isArray(entry.claimIds)) {
+      for (const claimId of entry.claimIds) {
+        if (!claimIds.has(claimId)) {
+          findings.push({ kind: "shape", detail: `${id}.claimIds 提到 ${JSON.stringify(claimId)}，证据矩阵里没有这个 claim。` });
+        }
+      }
+    }
+    if (entry.status === "answered") {
+      const reportLines = Array.isArray(entry.reportLines) ? entry.reportLines : null;
+      if (!reportLines || !reportLines.length || reportLines.some((value) => !Number.isInteger(value) || value < 1)) {
+        findings.push({ kind: "shape", detail: `${id} 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。` });
+        continue;
+      }
+      let anchored = false;
+      for (const line of reportLines) {
+        if (line > lines.length) {
+          findings.push({ kind: "answered", id, question, detail: `指向报告第 ${line} 行，而报告只有 ${lines.length} 行。` });
+          continue;
+        }
+        const heading = sectionOfLine[line - 1] ?? "";
+        if (coverageExcludedSection.test(heading)) {
+          findings.push({
+            kind: "answered",
+            id,
+            question,
+            detail: `指向报告第 ${line} 行，那一行在「${heading.trim()}」一节里。参考文献表与局限性都不回答问题——把行号改到正文中真正给出答案的那一行。`,
+          });
+          continue;
+        }
+        if (!coverageLineSubstance(lines[line - 1])) {
+          findings.push({ kind: "answered", id, question, detail: `指向报告第 ${line} 行，那一行是空行或只有标记，没有正文。` });
+          continue;
+        }
+        if (coverageAnchorPattern.test(coverageParagraphAt(lines, line - 1))) anchored = true;
+      }
+      if (anchored) continue;
+      findings.push({
+        kind: "answered",
+        id,
+        question,
+        detail: `声明的行 ${reportLines.join("、")} 所在段落都没有 claim 锚点（<!-- claim:CLM-… -->）。`
+          + "被当作已回答的子问，其答案必须挂在证据上；没有锚点的一段散文不是答案。",
+      });
+      continue;
+    }
+    const searches = Array.isArray(entry.searches) ? entry.searches : null;
+    if (!searches || !searches.length) {
+      findings.push({ kind: "shape", detail: `${id} 声明 gap，就必须在 searches 里给出实际执行过的检索式、数据源与检索日期（至少一条）。` });
+      continue;
+    }
+    for (const [position, search] of searches.entries()) {
+      const query = typeof search?.query === "string" ? search.query.trim() : "";
+      const database = typeof search?.database === "string" ? search.database.trim() : "";
+      const searchedAt = typeof search?.searchedAt === "string" ? search.searchedAt.trim() : "";
+      if (!query || !database || !coverageIsoDate.test(searchedAt)) {
+        findings.push({
+          kind: "shape",
+          detail: `${id}.searches[${position}] 必须同时给出 query、database 与 searchedAt（YYYY-MM-DD）。`,
+        });
+        continue;
+      }
+      const normalized = normalizedSearchQuery(query);
+      const matches = loggedQueries.filter((logged) => logged.query === normalized);
+      if (!matches.length) {
+        findings.push({
+          kind: "gap-search",
+          id,
+          question,
+          detail: `其检索式「${query}」在 clinical-evidence-search.json 的 queries 中没有对应记录。`
+            + "检索日志由取数工具写入，「查过但没查到」必须能在日志里找到那一次检索——"
+            + "把真正跑过的检索式抄进来，或者去跑这一次检索。",
+        });
+        continue;
+      }
+      if (!matches.some((logged) => logged.database === database.toLowerCase())) {
+        findings.push({
+          kind: "gap-search",
+          id,
+          question,
+          detail: `其检索式「${query}」声明的数据源是「${database}」，`
+            + `检索日志里这条检索记在「${[...new Set(matches.map((logged) => logged.database))].join("、")}」下。`,
+        });
+        continue;
+      }
+      if (loggedDate && searchedAt !== loggedDate) {
+        findings.push({
+          kind: "gap-search",
+          id,
+          question,
+          detail: `其检索式「${query}」声明的检索日期是 ${searchedAt}，clinical-evidence-search.json 的 searchedAt 是 ${loggedDate}。`,
+        });
+      }
+    }
+  }
+  // A registered gap written as an answer where the reader takes the answer
+  // away. The span the two strings share is what the notice names, so a reader
+  // can see at once whether the match is real.
+  const gapEntries = entries.filter((entry) => (
+    entry && typeof entry === "object" && entry.status === "gap" && typeof entry.question === "string"
+  ));
+  for (const { name, pattern } of coverageVerdictSections) {
+    const sectionText = reportSection(reportText, pattern);
+    if (!sectionText.trim()) continue;
+    const sectionOffset = String(reportText ?? "").indexOf(sectionText);
+    const sectionFirstLine = sectionOffset >= 0
+      ? String(reportText ?? "").slice(0, sectionOffset).split("\n").length
+      : 1;
+    for (const [lineIndex, line] of sectionText.split("\n").entries()) {
+      for (const sentence of line.split(coverageSentenceSplit)) {
+        if (!sentence.trim()) continue;
+        if (coverageRetrievalRestatement.test(sentence)) continue;
+        // Naming a quantity as an objective is not reporting one.
+        if (coverageObjectiveSentence.test(sentence)) continue;
+        const literatureFact = coverageLiteratureFactAssertion.test(sentence);
+        const acknowledged = coverageGapAcknowledgement.test(sentence);
+        const family = literatureFact
+          ? "把这一次检索的空手写成了文献世界的事实"
+          : acknowledged
+            ? ""
+            : coverageRankingAssertion.test(sentence)
+              ? "给出了排序或构成比"
+              : coverageThresholdAssertion.test(sentence)
+                ? "给出了阈值或数值区间"
+                : coverageDirectiveAssertion.test(sentence)
+                  ? "给出了推荐或处置祈使"
+                  : "";
+        if (!family) continue;
+        for (const entry of gapEntries) {
+          const topic = coverageSharedTopic(entry.question, sentence);
+          if (!topic) continue;
+          findings.push({
+            kind: "gap-asserted",
+            id: String(entry.id ?? "").trim(),
+            question: entry.question.trim(),
+            section: name,
+            line: sectionFirstLine + lineIndex,
+            topic,
+            family,
+            sentence: sentence.trim().slice(0, 120),
+          });
+          break;
+        }
+      }
+    }
+  }
+  if (groups.size) {
+    for (const section of ["摘要|Abstract", "引言|临床问题|Introduction"]) {
+      const claimed = coverageDeclaredScopeCount(reportSection(reportText, section));
+      // Either direction. Firing only on claimed < held left the natural
+      // shortcut silent: keep the abstract honest at five questions and
+      // register three, and the two numbers disagree the other way round.
+      // Neither number comes from the brief, so this can only catch the run
+      // contradicting itself -- see the note on questionCoverageFindings.
+      if (claimed > 0 && claimed !== groups.size) {
+        findings.push({ kind: "scope", section: section.split("|")[0], claimed, held: groups.size });
+      }
+    }
+  }
+  return findings;
+}
+
 /** TypeScript infers a destructured parameter as exactly the shape its
  *  defaults name, which rejects every other property a caller passes.
  *  @param {Record<string, any>} options0
@@ -2531,6 +2984,7 @@ export function validateClinicalEvidencePackage({
   referencesText = "",
   citationLedgerText = "",
   citationAuditText = "",
+  questionCoverageText = "",
 } = {}) {
   const issues = [];
   const claimIds = [];
@@ -2931,6 +3385,40 @@ export function validateClinicalEvidencePackage({
       + "同一节里已经写着「服药不是等待的理由，应在服药的同时呼叫急救」，这一条与它互斥，读者无法同时执行。"
       + "若来源（指南原文）确实给出了这一条件，把它留在「结果」一节按原文复述并保留出处，实践要点只写无条件的那一句。",
     );
+  }
+
+  for (const finding of questionCoverageFindings(questionCoverageText, reportText, searchLogText, new Set(claimIds))) {
+    if (finding.kind === "shape") {
+      issues.push(
+        `question-coverage.json 台账格式无效：${finding.detail} `
+        + "台账把题面「需要回答的问题」拆成原子子问，一条一个条目："
+        + '{"schemaVersion":1,"entries":[{"id":"2.3","question":"<子问原文>","status":"answered","reportLines":[64],"claimIds":["CLM-005"]}]}；'
+        + 'status 为 "gap" 的条目改为给出 searches:[{"query":"<实际执行过的检索式>","database":"PubMed","searchedAt":"YYYY-MM-DD"}]。',
+      );
+    } else if (finding.kind === "answered") {
+      issues.push(
+        `question-coverage.json 条目 ${finding.id}（「${finding.question.slice(0, 60)}」）声明 answered，但${finding.detail}`,
+      );
+    } else if (finding.kind === "gap-search") {
+      issues.push(
+        `question-coverage.json 条目 ${finding.id}（「${finding.question.slice(0, 60)}」）声明 gap，${finding.detail}`,
+      );
+    } else if (finding.kind === "gap-asserted") {
+      issues.push(
+        `question-coverage.json 条目 ${finding.id}（「${finding.question.slice(0, 60)}」）登记为 gap，`
+        + `${finding.section}第 ${finding.line} 行却就同一主题「${finding.topic}」${finding.family}：「${finding.sentence}」。`
+        + "摘要、结论与临床实践要点是读者取走答案的地方，缺口不能在那里变成结论。"
+        + "要么把这一句改写成如实的缺口陈述（「未检索到该终点的直接证据，这是一处证据空白」是允许的，也是应当写的），"
+        + "要么这条子问其实有答案，把台账改成 answered 并给出正文行号。",
+      );
+    } else {
+      issues.push(
+        `摘要重述研究范围时把问题数从 ${finding.held} 改小到 ${finding.claimed}：`
+        + `${finding.section}一节声明本文回答 ${finding.claimed} 个问题，question-coverage.json 却登记了 ${finding.held} 个题面编号。`
+        + "题面有几问，重述时就是几问——不得合并、不得重新编号、不得少列。"
+        + "若某一问全篇未答，它仍然是一问，在台账里登记为 gap 并在正文中如实写出这处空白。",
+      );
+    }
   }
 
   if (deepResearch) {

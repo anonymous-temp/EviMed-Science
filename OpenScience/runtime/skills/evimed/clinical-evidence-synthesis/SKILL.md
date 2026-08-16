@@ -80,45 +80,179 @@ Do not carry a previous question's domains into this one. If the question is abo
 
 ### The question ledger: one entry per asked question, and a declared gap stays a gap
 
-Decomposition is also a deliverable. Write `question-coverage.json` next to the
-files listed under "Required outputs". Copy the task's 「需要回答的问题」 section
-into `taskQuestionBlock` verbatim, then create exactly one `questions[]` entry per
-numbered item, in the task's own order and under the task's own numbering — never
-merge two items into one, never renumber. Inside each item, split on 顿号,
-破折号, 「或」, and parallel clauses into atomic sub-questions; an item needs at
-least as many sub-questions as it has 「？」. A 「若 X 检索不足则回到 Y」 fallback
-branch is itself a sub-question.
+Decomposition is also a deliverable, and it is the one deliverable the delivery
+gate cannot reconstruct for itself: it never sees the task's 「需要回答的问题」
+section, only a 160-character preview of the question. So it checks your account
+of that section against the artifacts it does hold — the report's own lines, the
+claim anchors in them, and `clinical-evidence-search.json`. Write it last, out of
+the finished package.
 
-Give every sub-question exactly one status:
+Write `question-coverage.json` next to the files listed under "Required outputs",
+with exactly this shape:
+
+```json
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "2.3",
+      "question": "睡眠剥夺对心率变异性所反映的交感与迷走张力有何实测效应",
+      "status": "answered",
+      "reportLines": [58],
+      "claimIds": ["CLM-005"]
+    },
+    {
+      "id": "4.1",
+      "question": "以睡眠剥夺、失眠或轮班人群为纳入对象、以本品为干预的临床研究是否存在",
+      "status": "gap",
+      "searches": [
+        { "query": "suxiao jiuxin palpitation insomnia sleep", "database": "PubMed", "searchedAt": "2026-08-13" }
+      ]
+    }
+  ]
+}
+```
+
+Create one entry per **atomic sub-question**, under the task's own numbering and
+in the task's own order — never merge two items into one, never renumber, never
+drop one because it reads like a restatement of its neighbour. Inside each
+numbered item, split on 顿号, 破折号, 「或」, and parallel clauses; an item needs at
+least as many entries as it has 「？」, and an enumeration introduced by 「：」 or set
+off by 破折号 gives one entry per member — that list *is* the question, not
+decoration. One entry asks one thing. `id` is the task's number plus a sub-item
+index (`2.3`); `question` transcribes the sub-question's own wording, not a
+paraphrase that is easier to answer.
+
+Two things are not splits. A **population stratification** (「急性完全性、慢性部分
+性与轮班作业三种形式」) is reported inside each entry rather than multiplied across
+entries; see "Stratify the population before you conclude". A **reporting
+requirement attached to the whole item** (研究类型、效应量、可逆性、随访时长) is what
+every entry of that item owes, not an entry of its own.
+
+示例——某题面第 2 问原文：
+
+> 睡眠剥夺——急性完全性、慢性部分性与轮班作业三种形式——对心血管系统的实测效应有哪些：心率与血压、心率变异性所反映的交感与迷走张力、儿茶酚胺水平、房性与室性期前收缩负荷、心房颤动发作、QT 间期、炎症与内皮功能指标？各项结论分别来自何种研究类型（健康志愿者睡眠剥夺实验、轮班人群队列、可穿戴设备观察），其效应量、可逆性与随访时长为何？睡眠剥夺与心肌缺血及急性冠脉事件之间的关联强度如何，这些人群层面的关联能否对应到「心悸」这一主诉？
+
+- 正例（一问拆成九条：`：` 后的七项各一条，后两个「？」各一条）：`2.1 睡眠剥夺对心率
+  与血压的实测效应`、`2.2 睡眠剥夺对心率变异性所反映的交感与迷走张力的实测效应`、
+  `2.3 睡眠剥夺对儿茶酚胺水平的实测效应`、`2.4 睡眠剥夺对房性与室性期前收缩负荷的
+  实测效应`、`2.5 睡眠剥夺与心房颤动发作的关系`、`2.6 睡眠剥夺对 QT 间期的实测效应`、
+  `2.7 睡眠剥夺对炎症与内皮功能指标的实测效应`、`2.8 睡眠剥夺与心肌缺血及急性冠脉
+  事件之间的关联强度`、`2.9 上述人群层面的关联能否对应到「心悸」这一主诉`。三种睡眠
+  剥夺形式在每条内部分层陈述；研究类型、效应量、可逆性与随访时长是这九条各自都要
+  报告的内容，不另立条目。
+- 反例（真实交付的 `摘要`，把五个编号问题重排成「三件事」）：
+  `**目的** 评价三件事所依赖的证据：其一，工作压力与情绪激动后出现的心悸、胸闷，与心绞痛之间据以鉴别的证据；其二，现行指南要求在把症状归因于情绪之前排除哪些病因；其三，速效救心丸的说明书边界是否覆盖"无心血管诊断者在应激场景自行含服"这一用法。`
+  该题面第 2 问的第一句是「其病理生理路径——交感激活、过度换气与低碳酸血症、心率
+  变异性改变——各由何种研究类型支持？」，破折号里的三条支路本该是三条条目；全文
+  「交感」「低碳酸」「心率变异」各 0 次，既没有答案，也没有缺口声明。缺口被申明与问题
+  被删除，在交付物上看不出差别，对读者的后果完全不同。
+
+**A conditional question's fallback branch is its own sub-question.** 「若 X 检索
+不足则回到 Y 并标注来源与推荐强度」 is two entries: X, and Y. A report that wrote
+「未检索到 X」 and stopped has answered neither — it has answered X as a gap and
+left Y unwritten, and Y is what the reader was promised. The gate cannot see this
+one, because it cannot see the task text; it is on you.
+
+题面原文（真实题面的证据要求节）：`若检索不足以支持给出独立的血压下限或时间阈值，应
+回到指南既有阈值并标注其来源与推荐强度。` X 是本品自己的血压下限与时间阈值，Y 是指南
+既有阈值及其来源与推荐强度；两条都要登记，Y 落在正文里，不是落在 `局限性` 里。
+
+- 正例（真实交付，X 落空后照 Y 交付）：先写 `该说明书未载明含服后应观察多久、再次给
+  药的间隔，也未给出任何"不缓解即升级"的时间界限`，再回到指南把阈值连同推荐强度逐条
+  给出：`2012 ACCF/AHA 稳定型缺血性心脏病（SIHD）指南以"每间隔 5 分钟给药、15 分钟内≤1.2 mg"为用药边界，并写明此时间窗内不缓解即应"立即寻求医疗关注"，即刻缓解推荐证据等级为 B`。
+- 反例（另一份交付，X 落空后 Y 也没有写，缺口只留在 `局限性`）：
+  `指南（2021 AHA/ACC、ESC、国内共识）以正式题录与官方摘要页为依据，未逐条核对推荐类别与证据等级原文`。
+  该题面第 5 问要的是「必须立即启动急救医疗服务的条件，其推荐类别与证据等级如何」，
+  并写明检索不足时回到指南既有阈值。全文既没有任何时间阈值，也没有任何推荐类别与
+  证据等级，正文读起来却像这一问已被回答。
+
+Give every entry exactly one status:
 
 - `answered` — list `reportLines`, the 1-indexed lines of
-  `clinical-evidence-report.md` where you actually answer it. Point at body
-  prose, not at a heading, not at the abstract, not at the reference list. A line
-  that only says 「未检索到…」 is not an answer; that sub-question is a gap.
-- `gap` — give the `searchQuery`, `database`, and `searchDate` you actually ran.
-  The query and the database must appear in `clinical-evidence-search.json`'s
-  `queries[]`, and the date must be that entry's `searchedAt` date. Also list one
-  to five `gapTopicTerms`, each copied verbatim out of that sub-question's own
-  wording, each at least four Chinese characters, and none of them a phrase from
-  the report title.
+  `clinical-evidence-report.md` where you actually answer it, and optionally the
+  `claimIds` those lines carry. Every line must exist and carry prose, and at
+  least one of them must sit in a paragraph that carries a claim anchor
+  (`<!-- claim:CLM-… -->`). A line inside `参考文献` or `局限性` does not count:
+  neither section answers a question. A line that only says 「未检索到…」 is not an
+  answer either; that sub-question is a gap.
+- `gap` — list the searches you really ran, each with `query`, `database` and
+  `searchedAt` (`YYYY-MM-DD`). Every query must match an entry in
+  `clinical-evidence-search.json`'s `queries[]` (whitespace, quoting and case may
+  differ; the terms may not), under the same database, on the log's own
+  `searchedAt` date. The search log is written by the retrieval tools, not by
+  you, so 「我查了但没查到」 is a falsifiable sentence — and one you have not run
+  the search for will be caught at once.
 
-The ledger then binds the prose. Where `摘要` or `引言` restates the scope of the
-work, it may not name fewer items than the ledger holds. And once a sub-question
-is registered as a gap, its topic may not reappear in `摘要`, `结论`, or
-`临床实践要点` as a ranking, a composition share, a 「最常见」, a threshold, a
-「证据为阴性／已证实无效」, or a 「已有数据显示」. A premise you could not verify
-downgrades the sub-questions that depend on it; it does not delete the ones that
-do not.
+**A `gap` is a result, not a failure.** A sub-question you searched for and did
+not find is registered as `gap`, written into the body in those same words, and
+carried together with the searches that came back empty. Writing the gap out is
+the point: 「未检索到该终点的直接证据，这是一处证据空白」 is exactly right, and
+「未检索到以睡眠不足人群为对象、以本品为干预的临床研究，此为证据空缺，非已证实无效」
+is the sentence to copy. What is forbidden is the *next* sentence, the one that
+turns the absence into a finding — a direction of effect, a ranking, a share, or
+a claim about what the literature contains. 「我这次没有检索到」 is a statement about
+your run; 「英文索引中只有 1 条」 is a statement about the world, and this run did
+not measure the world. Say the one you can support, and see "Absent evidence is a
+gap, not a counter-finding".
 
-- 正例（`结论`，缺口在结论里仍然是缺口，依赖它的论断降级、不依赖它的照常给出）：
+- 正例（真实交付，检索空手就写成检索空手，并点名注册库的检索结果）：
+  `未检索到以运动诱发胸痛人群、久坐无心血管诊断者或运动人群为纳入对象、以速效救心丸为干预的临床研究；临床试验注册库以"速效救心丸"检索命中 0 条。`
+- 反例（同一段的下一句）：
+  `英文索引中与本品相关的临床相关记录仅 1 条，为 2011 年发表的动物实验（速效救心丸对大鼠实验性动脉粥样硬化氧化应激与炎症的作用，SinoMed 题录）[8]。`
+  这一篇对该药只跑过两条 PubMed 检索式，自己声明过的 Europe PMC 一次也没有用上；
+  同批次另外四篇用几乎相同的词检出了一项含 41 项随机对照试验的 meta 分析与一项多中心
+  双盲安慰剂对照试验。一次薄检索的空手被写成了文献格局，缺口还被顺势归因给不可及的
+  中文数据库——既误述了证据格局，也掩盖了检索本身的不足。
+- 反例（另一份交付的 `结论`，把空手升级成阴性结论）：
+  `第四，无心血管诊断青年人为预防猝死而常备自服本品缺乏临床结局证据；减少咖啡因对心悸发作的直接干预证据为弱或阴性。`
+  该题面问的是「减少咖啡因摄入能否降低心悸发作频次」；用来支撑「阴性」的试验，人群是
+  房颤电复律后的持续性房颤患者、结局是房颤复发，没有测过心悸发作频次。换人群、换结局
+  的阴性结果回答不了这条子问，它只能说明这条仍是 gap。
+
+**The ledger then binds the prose.** Where `摘要` or `引言` restates the scope of
+the work, it names at least as many items as the ledger holds, and it keeps the
+task's numbering: no merging two items into one, no renumbering what survives. A
+restatement is a promise about the body, and a body that never answers item 4 is
+found out only by the reader who still had the task in hand.
+
+- 正例（真实交付，题面五问，重述仍是五问）：
+  `本文旨在逐条核查上述五个问题所依赖的证据，明确哪些结论有直接证据支持、哪些仅能作为间接证据陈述、哪些属于证据空白，并以证据强度相称的方式给出结论。`
+- 反例（题面同样是五问，`摘要` 重述成三问）：
+  `本文评价三个问题：（1）睡眠剥夺对心血管系统的实测效应及其能否对应到"心悸"这一具体主诉；（2）速效救心丸的适应症边界，及其与三类临床情境的关系；（3）在无心血管诊断的睡眠剥夺相关心悸人群中使用本品的获益与风险证据。`
+  被折进「（1）」半句里的，是题面逐项点名的七类实测效应；全文「儿茶酚胺」「血压」
+  「炎症」「内皮」各 0 次，读者无从发现四条子问从未被回答。同一批交付里还有一种更隐蔽
+  的形态：五问重述为三问，而这三问恰好是第 1、2、4 问的合并，第 3、5 问随重新编号一起
+  消失——条目数与编号都不得改。
+
+And once a sub-question is registered as a gap, its topic may not reappear in
+`摘要`, `结论`, or `临床实践要点` as a ranking, a composition share, a 「最常见」, a
+threshold, a recommendation, or a 「证据为阴性／无此类证据／文献中没有」.
+
+- 正例（`结论`，缺口在结论里仍然是缺口）：
   `（一）速效救心丸按处方药还是非处方药（甲类/乙类）管理、其出处、不同规格与批准文号之间分类是否一致、以及分类沿革，均无法从本研究可及的任何权威来源核实；原因是官方登记与公告不可及、标签索引副本不含分类字段、中文全文数据库不可访问。凡以某一具体分类属性为前提的渠道论断，只能以条件句表述。`
 - 反例（同一段先声明缺口，再把缺口当已知构成使用）：
   `其三，高原暴露人群的急性冠脉事件、心绞痛与心血管死亡发生率相对平原的差异，缺乏前瞻性对照数据；以胸闷、心慌、气短为主诉者的病因构成比例亦无分母明确的研究。现有证据仅支持"急性高原病是最常见病因、高原肺水肿与高原脑水肿罕见但致命、肺栓塞可与高原肺水肿混淆、心源性猝死以既往心肌梗死与不习惯运动为要"这一较弱表述。`
   为什么是反例：「病因构成比例无分母明确的研究」是一条缺口，紧接着的「最常见病因」
   却是一个构成排序。要么把该子问登记为 `answered` 并指向承载分母的正文行，要么删掉
-  排序断言。同一批交付里的另一种写法是把五问的题面在 `摘要` 重述成三问
-  （`……回答三个问题：（1）…（2）…（3）…`），第五问此后全文不再出现——重述的条目数
-  不得少于台账。
+  排序断言。
+
+**An unverifiable premise downgrades the sub-questions that depend on it; it does
+not delete the ones that do not.** When a fact you could not verify is the
+premise of some entries, mark those entries and conditionalize their claims —
+and then answer the rest of the item anyway. Ask of every neighbouring entry
+whether it truly needs the missing premise; most do not.
+
+- 正例（真实交付，前提不可核实，依赖它的论断改写为条件句）：上面那条 `（一）…凡以某
+  一具体分类属性为前提的渠道论断，只能以条件句表述。`
+- 反例（同一篇，不依赖该前提的两问被顺带吞掉）：`摘要` 把 `界定分类属性对各购买渠道
+  设定的前置条件` 列为三大目的之一，正文却没有任何一节回答它，也没有写「未检索到相关
+  规章」；`讨论` 只写 `只能以条件句表述"若属甲类/若属乙类/若为处方药，则……"`，而条件句
+  的内容始终没有写出来。题面第 3 问的后半段（规章对销售主体资质、处方审核、平台责任、
+  信息展示的要求）与第 4 问（说明书与警示语规范、遴选原则、执业药师指导义务、包装标签
+  标识）并不依赖分类属性是否可核实——同批次另一篇在同样的检索环境里引到了《药品网络
+  销售监督管理办法》与《处方管理办法》的具体条款。不是取不到，是被一句「前提不可核实」
+  顺带删掉了。
 
 ### Reproducible search
 
@@ -1556,7 +1690,9 @@ Read every output back before claiming success. Do not use `grep` or another unb
 - no visible `[claim:...]` marker remains;
 - no operational failure or tool-process prose appears in the academic report;
 - every research question in `摘要目的` has its answer in `结论` in the same order, every 「证据不足」 judgment names the population stratum it holds for, and no section's share of the body outweighs the rank of the question it serves (see "Comparative appraisal and evidence bridging");
-- every numbered item of the task has its entry in `question-coverage.json`, each `answered` sub-question points at body prose that answers it, and no topic registered as a gap reappears as a ranking, a share, a threshold, or a negative finding in `摘要`, `结论`, or `临床实践要点`;
+- every numbered item of the task has its atomic entries in `question-coverage.json` — including the fallback branch of every 「若 X 则回到 Y」 — each `answered` sub-question points at body prose whose paragraph carries a claim anchor, each `gap` names a search that appears in `clinical-evidence-search.json`, no topic registered as a gap reappears as a ranking, a share, a threshold, a recommendation, or a negative finding in `摘要`, `结论`, or `临床实践要点`, no restatement of the scope lists fewer items than the ledger holds or renumbers
+  and merges what survives, and every sub-question that does not depend on an
+  unverifiable premise is still answered;
 - the section names are the manuscript ones and no commissioning, acceptance-specification, or self-referential prose survives anywhere in the report (see "Register: what a manuscript never says"). Read the request once more and confirm that no phrase of it was copied into the report — the request's wording is the usual way this register gets in;
 - the practical answer is medically correct, source-supported, and does not encourage delay.
 

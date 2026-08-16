@@ -419,7 +419,29 @@ export const repairableEvidencePackageErrorCodes = new Set([
   "regulatory_article_without_official_source",
   "specialist_screening_ledger_mismatch",
   "declared-appraisal-must-execute",
+  // The question-coverage ledger. A package missing it is otherwise complete —
+  // the report, the matrix, the search log and every citation artifact are on
+  // disk — and the ledger is written from them, so this is the one missing
+  // deliverable the run can supply without redoing any work. It is therefore
+  // repaired rather than discarded, unlike a missing report.
+  "specialist_question_coverage_missing",
+  "specialist_question_coverage_invalid",
+  "specialist_question_coverage_unsupported",
+  "specialist_question_coverage_gap_overstated",
+  "specialist_question_coverage_understated",
 ]);
+// Missing deliverables that earn a code of their own rather than the generic
+// one, because the generic one is discarded and these are repairable in place.
+const missingOutputErrorCodes = Object.freeze({
+  "question-coverage.json": "specialist_question_coverage_missing",
+});
+const missingOutputRepairAdvice = Object.freeze({
+  "question-coverage.json":
+    "Write one entry per atomic sub-question of the brief — split the numbered questions on 、, —, 或 and coordinate clauses — "
+    + 'as {"schemaVersion":1,"entries":[{"id":"2.3","question":"<the sub-question, transcribed>","status":"answered","reportLines":[64],"claimIds":["CLM-005"]}]}. '
+    + 'An entry with "status":"gap" carries searches:[{"query":"<a search this run actually ran>","database":"PubMed","searchedAt":"YYYY-MM-DD"}] instead, '
+    + "and every query must appear in clinical-evidence-search.json. Everything the ledger needs is already in the package you have written.",
+});
 // A source the run could not read is a limitation to report, not a defect in
 // the run. These codes all mean "this document was not obtainable", which the
 // skill already instructs the agent to record in failedSources and work around.
@@ -1141,9 +1163,10 @@ async function specialistCompletionOutcome(
     if (!file) {
       return {
         artifacts,
-        errorCode: "specialist_required_output_missing",
+        errorCode: missingOutputErrorCodes[relative] ?? "specialist_required_output_missing",
         qualityIssues: [
           `The required deliverable ${relative} is not in the workspace. Write it at exactly that path, at the workspace root, before finishing.`,
+          ...(missingOutputRepairAdvice[relative] ? [missingOutputRepairAdvice[relative]] : []),
         ],
       };
     }
@@ -1385,6 +1408,7 @@ async function specialistCompletionOutcome(
       referencesText: files.get("references.bib") ?? "",
       citationLedgerText: files.get("citation-ledger.csv") ?? "",
       citationAuditText: files.get("citation-audit.md") ?? "",
+      questionCoverageText: files.get("question-coverage.json") ?? "",
     });
     if (!validation.valid) {
       // The analysis is on disk and every required deliverable exists. Ending

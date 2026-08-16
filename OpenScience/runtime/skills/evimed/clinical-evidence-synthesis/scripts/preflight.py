@@ -2043,6 +2043,360 @@ def citation_numbers(line: str) -> set[int]:
     return numbers
 
 
+# --- The question-coverage ledger, mirrored from clinicalEvidenceQuality.mjs --
+#
+# The server gate cannot see the brief — the run ledger keeps a 160-character
+# preview of the question and nothing more — so it checks the run's own account
+# of the brief's questions against the artifacts it does hold: the report's
+# lines, the claim anchors in them, and this package's search log. Every rule
+# below is the same rule the gate applies, so a run that clears this file is not
+# failed for coverage after the fact.
+COVERAGE_STATUSES = ("answered", "gap")
+# Mirrors the gate: a sentence stating an objective is not a finding.
+COVERAGE_OBJECTIVE_SENTENCE = re.compile(
+    r"(?:^|[|\s])(?:\*\*)?目的(?:\*\*)?|本文(?:旨在|拟|试图|将)|本研究(?:旨在|拟|试图)|(?:旨在|意在)(?:清点|量化|评价|回答|梳理|核查)"
+)
+COVERAGE_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+COVERAGE_ANCHOR = re.compile(r"<!--\s*claim:CLM-[0-9]{3,6}\s*-->|\[claim:CLM-[0-9]{3,6}\]")
+COVERAGE_EXCLUDED_SECTION = re.compile(r"参考文献|参考来源|References?|局限|Limitations?", re.I)
+COVERAGE_VERDICT_SECTIONS = (
+    ("摘要", "摘要|Abstract"),
+    ("结论", "结论|Conclusions?"),
+    ("临床实践要点", PRACTICAL_SECTION_HEADING),
+)
+COVERAGE_RANKING = re.compile(r"最常见|首位|占比|构成比|居首|多数|约半数|大多数")
+COVERAGE_THRESHOLD = re.compile(
+    r"\d+(?:\.\d+)?\s*[%％]"
+    r"|[≥≤><]\s*\d"
+    r"|(?:大于|小于|超过|不超过|不少于|至少|不足|上限|下限)\s*\d"
+    r"|\d+(?:\.\d+)?\s*(?:[-–—~～至]|到)\s*\d"
+    r"|\d+(?:\.\d+)?\s*(?:mg|µg|μg|g|ml|mmHg|分钟|小时|天|周|个月|年|次|例|丸|片|倍|杯)",
+    re.I,
+)
+COVERAGE_DIRECTIVE = re.compile(r"推荐|建议|应当|应予|应立即|必须|首选|优先(?:选择|使用)|可给予|适用于|可用于")
+COVERAGE_LITERATURE_FACT = re.compile(
+    r"(?:证据|结果|研究|数据)\s*(?:为|是|均为|呈)[^，。；\n]{0,8}阴性"
+    r"|(?<![尚暂])无(?:此类|该类|相关|任何|已发表)(?:的)?(?:证据|研究|报道|文献)"
+    r"|不存在(?:相关|此类|该类|任何)(?:的)?(?:证据|研究)"
+    r"|文献(?:中|里)(?:并)?(?:没有|无|未见)"
+    r"|(?<![不非未])(?:已|均)(?:证实|表明|显示)(?:其)?无效"
+)
+COVERAGE_ACK = re.compile(
+    r"未(?:能)?检索到|未检索出|尚未检索|检索(?:结果)?为空"
+    r"|未(?:能)?获(?:得|取)|未(?:能)?(?:获|经)(?:得)?(?:核验|核实|证实|确认)"
+    r"|证据空(?:白|缺)|证据缺口|未见(?:相关|直接|任何|以|有)"
+    r"|尚无(?:直接|已发表|公开|相应)?(?:的)?(?:证据|研究|数据|报道)"
+    r"|证据不足|不足以支持|无法(?:判定|评定|确定)|未(?:能)?(?:追溯|定位)到"
+    r"|未述及|未载|缺乏(?:直接)?(?:证据|研究|数据)|无直接(?:证据|研究)"
+)
+COVERAGE_RETRIEVAL_RESTATEMENT = re.compile(
+    r"检索(?:日期|时间|截至|策略)"
+    r"|检索[^。；\n]{0,60}(?:数据库|索引|注册库|PubMed|Europe\s*PMC|Crossref|ClinicalTrials|CNKI)",
+    re.I,
+)
+COVERAGE_SCOPE_CUE = re.compile(
+    r"(?:本文|本研究|本综述|本报告|本篇)[^。；\n]{0,24}"
+    r"(?:评价|评估|回答|讨论|考察|梳理|分析|围绕|聚焦|检索)[^。；\n]{0,12}(?:问题|方面)"
+)
+COVERAGE_SCOPE_COUNT_WORD = re.compile(r"(\d{1,2}|[一二三四五六七八九十]{1,3})\s*(?:个|项|类|方面)?\s*(?:核心|主要)?问题")
+COVERAGE_CIRCLED_DIGITS = "①②③④⑤⑥⑦⑧⑨⑩"
+COVERAGE_CONTENT_RUN = re.compile(r"[㐀-鿿豈-﫿A-Za-z0-9]+")
+COVERAGE_TOPIC_CHARACTERS = 8
+
+
+def normalized_search_query(value: object) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[‘’“”\"'＂＇]", "", str(value or ""))).strip().lower()
+
+
+def coverage_shared_topic(left: str, right: str) -> str:
+    """The longest run of letters, digits and Han characters two strings share,
+    or "" when it is shorter than a topic. Eight characters, not five: shorter
+    spans matched field vocabulary (随机对照试验, 安慰剂对照, GRADE) that every
+    section of every report in this corpus uses."""
+    best = ""
+    for a in COVERAGE_CONTENT_RUN.findall(left):
+        for b in COVERAGE_CONTENT_RUN.findall(right):
+            previous = [0] * (len(b) + 1)
+            for i in range(1, len(a) + 1):
+                current = [0] * (len(b) + 1)
+                for j in range(1, len(b) + 1):
+                    if a[i - 1] != b[j - 1]:
+                        continue
+                    current[j] = previous[j - 1] + 1
+                    if current[j] > len(best):
+                        best = a[i - current[j]:i]
+                previous = current
+    return best if len(best) >= COVERAGE_TOPIC_CHARACTERS else ""
+
+
+def coverage_number_value(run: str) -> int | None:
+    if run.isdigit():
+        return int(run)
+    digits = "零一二三四五六七八九"
+    if run == "十":
+        return 10
+    if re.fullmatch(r"十[一二三四五六七八九]", run):
+        return 10 + digits.index(run[1])
+    if re.fullmatch(r"[一二三四五六七八九]十", run):
+        return digits.index(run[0]) * 10
+    if re.fullmatch(r"[一二三四五六七八九]十[一二三四五六七八九]", run):
+        return digits.index(run[0]) * 10 + digits.index(run[2])
+    return digits.index(run) if re.fullmatch(r"[零一二三四五六七八九]", run) else None
+
+
+def coverage_enumerated_marker(paragraph: str, index: int) -> bool:
+    if f"（{index}）" in paragraph or f"({index})" in paragraph:
+        return True
+    if index <= len(COVERAGE_CIRCLED_DIGITS) and COVERAGE_CIRCLED_DIGITS[index - 1] in paragraph:
+        return True
+    ordinals = "一二三四五六七八九十"
+    return index <= len(ordinals) and re.search(rf"第{ordinals[index - 1]}[，,、]", paragraph) is not None
+
+
+def coverage_declared_scope_count(section_text: str) -> int:
+    claimed = 0
+    for paragraph in re.split(r"\n\s*\n", section_text or ""):
+        if not COVERAGE_SCOPE_CUE.search(paragraph):
+            continue
+        enumerated = 0
+        while coverage_enumerated_marker(paragraph, enumerated + 1):
+            enumerated += 1
+        claimed = max(claimed, enumerated)
+        for match in COVERAGE_SCOPE_COUNT_WORD.finditer(paragraph):
+            value = coverage_number_value(match.group(1))
+            if value is not None and 0 < value <= 30:
+                claimed = max(claimed, value)
+    return claimed
+
+
+def coverage_section_of_line(report: str) -> list[str]:
+    heading = ""
+    headings: list[str] = []
+    for line in report.split("\n"):
+        match = re.match(r"^##\s+(.*)$", line)
+        if match:
+            heading = match.group(1)
+        headings.append(heading)
+    return headings
+
+
+def coverage_paragraph_at(lines: list[str], index: int) -> str:
+    start = index
+    end = index
+    while start > 0 and lines[start - 1].strip():
+        start -= 1
+    while end < len(lines) - 1 and lines[end + 1].strip():
+        end += 1
+    return "\n".join(lines[start:end + 1])
+
+
+def coverage_line_substance(line: str) -> str:
+    text = re.sub(r"<!--.*?-->", "", line or "", flags=re.S)
+    text = re.sub(r"\[[^\]\n]*\]\([^)\s]*\)", "", text)
+    text = re.sub(r"\[\s*\d+(?:\s*[,，、\-–]\s*\d+)*\s*\]", "", text)
+    return re.sub(r"[#>*_`|\-–—\s]", "", text).strip()
+
+
+def check_question_coverage(
+    root: Path,
+    report: str,
+    search_log: dict,
+    claim_ids: set[str],
+    issues: list[str],
+) -> None:
+    name = "question-coverage.json"
+    path = root / name
+    if not path.is_file():
+        issues.append(
+            f"{name}: missing. Write one entry per atomic sub-question of the brief — "
+            "split the numbered questions on 、, ——, 或 and coordinate clauses — as "
+            '{"schemaVersion":1,"entries":[{"id":"2.3","question":"<the sub-question, transcribed>",'
+            '"status":"answered","reportLines":[64],"claimIds":["CLM-005"]}]}; a "gap" entry carries '
+            'searches:[{"query":"<a search this run really ran>","database":"PubMed","searchedAt":"YYYY-MM-DD"}] instead'
+        )
+        return
+    try:
+        ledger = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        issues.append(f"{name}: unreadable or invalid JSON: {exc}")
+        return
+    if not isinstance(ledger, dict):
+        issues.append(f"{name}: top level must be an object")
+        return
+    if ledger.get("schemaVersion") != 1:
+        issues.append(f'{name}: must declare "schemaVersion": 1')
+    entries = ledger.get("entries")
+    if not isinstance(entries, list) or not entries:
+        issues.append(f"{name}: entries must be a non-empty array, one atomic sub-question per entry")
+        return
+
+    lines = report.split("\n")
+    section_of_line = coverage_section_of_line(report)
+    logged = [
+        (
+            normalized_search_query(entry.get("query")),
+            str(entry.get("database") or "").strip().lower(),
+        )
+        for entry in (search_log.get("queries") or [])
+        if isinstance(entry, dict)
+    ]
+    logged_date = str(search_log.get("searchedAt") or "")[:10]
+    seen: set[str] = set()
+    groups: set[str] = set()
+    gap_entries: list[dict] = []
+    for index, entry in enumerate(entries):
+        label = f"entries[{index}]"
+        if not isinstance(entry, dict):
+            issues.append(f"{name}: {label} must be an object")
+            continue
+        entry_id = entry.get("id").strip() if isinstance(entry.get("id"), str) else ""
+        question = entry.get("question").strip() if isinstance(entry.get("question"), str) else ""
+        if not entry_id:
+            issues.append(f'{name}: {label}.id must be the brief\'s number plus a sub-item index (for example "2.3")')
+            continue
+        if entry_id in seen:
+            issues.append(f"{name}: entry id {entry_id} appears twice; one sub-question, one id")
+            continue
+        seen.add(entry_id)
+        group = re.search(r"\d+", entry_id)
+        groups.add(group.group(0) if group else entry_id)
+        if len(re.sub(r"\s+", "", question)) < 8:
+            issues.append(f"{name}: {entry_id}.question must transcribe the sub-question (at least 8 characters)")
+            continue
+        if entry.get("status") not in COVERAGE_STATUSES:
+            issues.append(f'{name}: {entry_id}.status must be "answered" or "gap"')
+            continue
+        if isinstance(entry.get("claimIds"), list):
+            for claim_id in entry["claimIds"]:
+                if claim_id not in claim_ids:
+                    issues.append(f"{name}: {entry_id}.claimIds names {claim_id!r}, which is not in the evidence matrix")
+        if entry.get("status") == "answered":
+            report_lines = entry.get("reportLines")
+            if (
+                not isinstance(report_lines, list)
+                or not report_lines
+                or any(not isinstance(value, int) or isinstance(value, bool) or value < 1 for value in report_lines)
+            ):
+                issues.append(
+                    f"{name}: {entry_id} is answered, so reportLines must give the body line numbers "
+                    "(a non-empty array of positive integers)"
+                )
+                continue
+            anchored = False
+            for line_number in report_lines:
+                if line_number > len(lines):
+                    issues.append(
+                        f"{name}: {entry_id} points at report line {line_number}, "
+                        f"but the report has {len(lines)} lines"
+                    )
+                    continue
+                heading = section_of_line[line_number - 1]
+                if COVERAGE_EXCLUDED_SECTION.search(heading):
+                    issues.append(
+                        f"{name}: {entry_id} points at report line {line_number}, which is inside "
+                        f"「{heading.strip()}」; the reference list and the limitations answer no question"
+                    )
+                    continue
+                if not coverage_line_substance(lines[line_number - 1]):
+                    issues.append(
+                        f"{name}: {entry_id} points at report line {line_number}, which is blank or markup only"
+                    )
+                    continue
+                if COVERAGE_ANCHOR.search(coverage_paragraph_at(lines, line_number - 1)):
+                    anchored = True
+            if not anchored:
+                issues.append(
+                    f"{name}: {entry_id} is answered, but no paragraph around lines "
+                    f"{'、'.join(str(value) for value in report_lines)} carries a claim anchor "
+                    "(<!-- claim:CLM-… -->); an answer must hang on evidence"
+                )
+            continue
+        gap_entries.append(entry)
+        searches = entry.get("searches")
+        if not isinstance(searches, list) or not searches:
+            issues.append(
+                f"{name}: {entry_id} is a gap, so searches must give the searches this run really ran "
+                "(query, database and searchedAt, at least one)"
+            )
+            continue
+        for position, search in enumerate(searches):
+            query = search.get("query").strip() if isinstance(search, dict) and isinstance(search.get("query"), str) else ""
+            database = search.get("database").strip() if isinstance(search, dict) and isinstance(search.get("database"), str) else ""
+            searched_at = search.get("searchedAt").strip() if isinstance(search, dict) and isinstance(search.get("searchedAt"), str) else ""
+            if not query or not database or not COVERAGE_ISO_DATE.match(searched_at):
+                issues.append(
+                    f"{name}: {entry_id}.searches[{position}] must give query, database and searchedAt (YYYY-MM-DD)"
+                )
+                continue
+            matches = [record for record in logged if record[0] == normalized_search_query(query)]
+            if not matches:
+                issues.append(
+                    f"{name}: {entry_id} declares the search 「{query}」, which has no record in "
+                    "clinical-evidence-search.json; the search log is written by the retrieval tools, "
+                    "so a gap must name a search that actually ran"
+                )
+                continue
+            if not any(record[1] == database.lower() for record in matches):
+                issues.append(
+                    f"{name}: {entry_id} declares the search 「{query}」 under database 「{database}」, "
+                    f"but the log records it under 「{'、'.join(sorted({record[1] for record in matches}))}」"
+                )
+                continue
+            if logged_date and searched_at != logged_date:
+                issues.append(
+                    f"{name}: {entry_id} declares the search 「{query}」 on {searched_at}, "
+                    f"but clinical-evidence-search.json was searched on {logged_date}"
+                )
+
+    for section_name, heading in COVERAGE_VERDICT_SECTIONS:
+        section_text = section(report, heading)
+        if not section_text.strip():
+            continue
+        section_offset = report.find(section_text)
+        section_first_line = report[:section_offset].count("\n") + 1 if section_offset >= 0 else 1
+        for line_index, line in enumerate(section_text.split("\n")):
+            for sentence in re.split(r"(?<=[。！？；;])", line):
+                if not sentence.strip() or COVERAGE_RETRIEVAL_RESTATEMENT.search(sentence):
+                    continue
+                if COVERAGE_OBJECTIVE_SENTENCE.search(sentence):
+                    continue
+                if COVERAGE_LITERATURE_FACT.search(sentence):
+                    family = "把这一次检索的空手写成了文献世界的事实"
+                elif COVERAGE_ACK.search(sentence):
+                    continue
+                elif COVERAGE_RANKING.search(sentence):
+                    family = "给出了排序或构成比"
+                elif COVERAGE_THRESHOLD.search(sentence):
+                    family = "给出了阈值或数值区间"
+                elif COVERAGE_DIRECTIVE.search(sentence):
+                    family = "给出了推荐或处置祈使"
+                else:
+                    continue
+                for entry in gap_entries:
+                    topic = coverage_shared_topic(str(entry.get("question") or ""), sentence)
+                    if not topic:
+                        continue
+                    issues.append(
+                        f"{name}: entry {entry.get('id')} is registered as a gap, but "
+                        f"{section_name} line {section_first_line + line_index} {family} "
+                        f"on the same topic 「{topic}」: 「{sentence.strip()[:120]}」. "
+                        "摘要、结论与临床实践要点是读者取走答案的地方，缺口不能在那里变成结论"
+                        "（「未检索到该终点的直接证据，这是一处证据空白」是允许的，也是应当写的）"
+                    )
+                    break
+
+    if groups:
+        for heading in ("摘要|Abstract", "引言|临床问题|Introduction"):
+            claimed = coverage_declared_scope_count(section(report, heading))
+            # Either direction; see the note in the gate.
+            if claimed > 0 and claimed != len(groups):
+                issues.append(
+                    f"{name}: {heading.split('|')[0]} restates the study as {claimed} questions while the ledger "
+                    f"registers {len(groups)} of the brief's numbers; a question that went unanswered is still a "
+                    "question — register it as a gap and state the gap in the body"
+                )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", default=".")
@@ -2217,6 +2571,7 @@ def main() -> int:
         for claim in claims
         if isinstance(claim, dict) and isinstance(claim.get("claimId"), str)
     }
+    check_question_coverage(root, report, search_log, set(claims_by_id), issues)
     numeric_body = without_sections(without_sections(report, "参考文献|参考来源|References?"), "检索|方法|Methods?")
     for line_number, attribution, claim_ids, anchored in attributed_stance_issues(numeric_body, claims_by_id):
         issues.append(
