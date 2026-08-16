@@ -252,10 +252,18 @@ methodological transparency the notice exists to protect. Delete it only if it
 was never part of your plan. The gate reports the gap and delivers the package.
 
 A GRADE level must agree with the downgrade reasons written next to it, and this
-one *is* a gate. Any downgrade at all excludes 高, so a sentence that **asserts a
-deficiency** in the evidence — 方法学质量偏低, 偏倚风险高/严重/不明确,
-存在不一致/间接性/不精确, or a downgrade actually taken — may not give a level that
-reaches 高, including ranges such as 中至高. Naming the five domains in order to
+one *is* a gate. Any downgrade at all excludes 高, so a **paragraph** that
+**asserts a deficiency** in the evidence — 方法学质量偏低/欠佳/不足, 证据强度不足,
+偏倚风险高/严重/不明确, 存在不一致/间接性/不精确, or a downgrade actually taken
+(降一级 / 下调一级 / 扣一档) — may not give a level that reaches 高, including
+ranges such as 中至高.
+
+The paragraph, not the sentence, is the unit, and the verdict counts however it
+is worded: 「纳入研究方法学质量普遍偏低。按 GRADE 评为高确定性。」 is the same
+judgement as the one-sentence form, and so is the same pair in the other order.
+So are 「按 GRADE 属高级别证据」, 「GRADE 确定性高」 and 「证据确定性评为高」 — putting
+the level after its noun, changing the noun, or leaving the word GRADE out does
+not make it a different verdict. Naming the five domains in order to
 say you did *not* downgrade for them is the standard way to justify 高 and is not
 this error: 「偏倚风险低、结果一致、估计精确、无发表偏倚证据，按 GRADE 评为高确定性」
 and 「未对任何领域降级，按 GRADE 评为高确定性」 both pass. Naming GRADE's starting
@@ -780,8 +788,30 @@ standing next to it.
    either quote the passage or drop the attribution and own the reading
    (本研究认为…). Writing the position into the claim's `claim` /
    `applicability` / `uncertainty` field and then citing that claim does not
-   work — those are your words, and only `supportQuote` is checked against the
-   preserved artifact.
+   work — those are your words. So is `sourceTitle`: it is metadata you typed
+   in, not text the source was quoted as saying, and **only `supportQuote` is
+   read**.
+
+   The attribution is recognised by what it is, not by which string you used.
+   The subject is any demonstrative plus a research-entity noun, with or without
+   a measure word (该研究 / 这项研究 / 该项研究 / 上述研究 / 该 meta 分析), or any
+   author noun (作者 / 研究团队 / 课题组 / 原作者). The predicate is any stance verb
+   (认为/指出/强调/视为/归因/归结/主张/推测/提出/断言/提示/写道…) or one of the two
+   frames that carry a position without a verb: 「在原作者看来，…」 and
+   「作者的核心观点是…」. 报告/报道/说明/描述 are reporting verbs and are not this
+   rule. 本研究/本文 is your own voice and is never an attribution.
+
+   The quote counts as carrying a position when it **states** one, not when it
+   contains a word associated with one. `could` inside
+   "You could be having a heart attack", `our` inside "included in our analysis",
+   `we` inside "we included 417 patients" and `however` in front of a
+   measurement are not positions. What is: an authorial subject predicating a
+   judgement verb ("Our results do not support…"), a judgement verb taking a
+   complement ("concluded that…", "considered to be…"), a hedge governing an
+   interpretive predicate ("was likely due to…", "may lead to…"), a deontic
+   statement ("is not recommended for…", "the need to…"), a causal attribution
+   of a stated result ("received low Jadad scores due to…", "accounts for the
+   observed decline"), and an epistemic one ("remains unclear").
 
 - 正例（归属句与引文逐字对得上，数值和结论各有各的出处）：
   `在以聚乙二醇 6000 为载体熔融制备固体分散体的过程中，加热温度升至 70 ℃ 以上、延长加热时间均使龙脑的释放量下降，作者将其归因于升温下的挥发损失 [3]。<!-- claim:CLM-004 -->`
@@ -802,9 +832,13 @@ standing next to it.
 
 ### Article-level regulatory citations need the regulator's own text
 
-An article locator — `《…法/条例/办法/规定/细则/准则/规范/决定/命令/公告/通知/药典》…第 N 条`
-— asserts what a normative text says at clause granularity. Only the issuing
-authority's own published text can carry that. On any body line (before
+An article locator — a statute and an article number in one sentence — asserts
+what a normative text says at clause granularity. Only the issuing authority's
+own published text can carry that. The order and the spelling do not matter:
+`《医师法》…第 29 条`, `医师法第 29 条` without the book-title marks,
+`第 29 条第 2 款是《医师法》为…设定的` with the number first, and
+`《中华人民共和国医师法》确立了…；该法第 29 条…` referring back from a later clause
+are one assertion in four disguises, and all four are this rule. On any body line (before
 `## 参考文献`) containing such a locator, at least one source cited on that line
 must be a matrix claim whose `sourceUrl` host sits in a government namespace
 (`.gov`, `.gov.<cc>`, `.go.<cc>`, `.gouv.fr`, `.europa.eu`, `.int`), whose
@@ -1011,7 +1045,7 @@ Required level-two sections, in this order:
 5. `讨论` — what the body of evidence supports as a whole, where the lines of evidence agree or conflict, how this stands against existing knowledge, and what would settle the question.
 6. `局限性` — the closing movement of the discussion, kept as its own heading.
 7. `结论` — the answer, at the strength the evidence supports.
-8. `临床实践要点` — the safety-first practical answer. This section carries every safety duty the report has; it was named `安全优先的实际处置` and only the name changed.
+8. `临床实践要点` — the safety-first practical answer. This section carries every safety duty the report has; it was named `安全优先的实际处置` and only the name changed. Head it with one of `安全优先的实际处置` / `实际处置` / `实用回答` / `临床实践要点` / `临床要点` / `怎么办` / `Practical`, and write the reader's actions under it: every safety check on practical advice locates the section by that heading, so a heading outside the set — `结论与处置建议`, `患者须知`, `面向临床的处置建议` — and an empty section are both audited as no section at all, and both are refused. `结论` and `临床实践要点` remain two sections; neither satisfies the other's requirement.
 9. `参考文献` — always the final level-two section.
 
 Do not merge these sections and do not add sections between them; whatever
@@ -1095,9 +1129,17 @@ report tool, gateway, file, or page-retrieval failures in the academic report.
 **Emergency-call triggers may never be conditioned on how a self-administered
 medicine performed.** An item that tells the reader to call emergency services
 must state its trigger in terms of **symptoms and signs only**. A trigger
-phrased as "the drug did not work" — 含药不缓解 / 服药后无效 / 含服 N 分钟后不缓解
-/ 未完全缓解即呼叫 — is forbidden, **even when a guideline you cited says exactly
-that**. It is forbidden because this section always also carries the
+phrased as "the drug did not work" is forbidden, **even when a guideline you
+cited says exactly that**.
+
+"The drug did not work" is a meaning, not a phrase, and every way of writing it
+is the same trigger: 含药不缓解 / 服药后无效 / 含服 N 分钟后不缓解 / 未完全缓解即呼叫,
+and equally 未见效 / 无好转 / 未获缓解 / 未能奏效 / 疼痛不减轻 / 症状持续存在. So is
+the same condition written across a comma that closes a temporal clause
+(「若含服硝酸甘油后，症状仍不缓解，应立即拨打 120」), across a full stop with an
+anaphor picking the medication act back up (「含服一片后观察。仍不缓解者拨打 120」),
+and with the medicine named instead of the act of taking it (「若硝酸甘油未能奏效，
+应立即拨打 120」). It is forbidden because this section always also carries the
 unconditional rule (「服药不是等待的理由，应在服药的同时呼叫急救」), and a reader
 cannot execute both. The only permitted register is unconditional: 无论服药与否、
 无论是否缓解. If a source does state a drug-response threshold, restate it
@@ -1106,16 +1148,22 @@ and 临床实践要点 is the one section a reader executes.
 
 Writing the forbidden order in order to reject it is fine. The negation
 (而非/不得/不应/无论/不宜/不因/不构成/不等同…) may stand in the clause that carries
-the phrase **or anywhere later in the same sentence** — 「若含服后…不缓解，应立即
-呼叫急救，不得因已服药而推迟」 rejects the delay in its last clause and is
-compliant. It must be in that sentence: a rejection in a neighbouring sentence
-licenses nothing.
+the phrase, or in a later clause of the same sentence **that is itself about the
+medicine or about relief** — 「若含服后…不缓解，应立即呼叫急救，不得因已服药而推迟」
+rejects the delay in its last clause and is compliant, and so is 「…，症状自觉缓解
+不等同于心肌缺血解除」. A negation about something else does not license it:
+「…应立即拨打 120，不要自行驾车前往医院」 is safer advice about driving and leaves
+the trigger exactly as it was. It must also be in that sentence: a rejection in a
+neighbouring sentence licenses nothing.
 
 The medication word and the non-relief word must also stand in **one clause** to
-count as one trigger. 「症状经首次含服明显改善后，方可每间隔 5 分钟重复给药；未完全
-缓解即呼叫 120」 is compliant — the clause after 「；」 names no medicine and points
-at calling 120 *sooner*. So is 「已服药者，出现新发晕厥、意识不清且症状不缓解，立即
-呼叫 120」, where 已服药者 is a population qualifier and the trigger is the signs.
+count as one trigger, where a comma ends a clause unless it closes a temporal or
+conditional one (…后，/…时，). 「症状经首次含服明显改善后，方可每间隔 5 分钟重复给药；
+未完全缓解即呼叫 120」 is compliant — the clause after 「；」 names no medicine and
+points at calling 120 *sooner*. So is 「已服药者，出现新发晕厥、意识不清且症状不缓解，
+立即呼叫 120」, where 者 closes a population qualifier and the trigger is the signs.
+A symptom that does not remit, with no medicine anywhere in the clause
+(「胸痛持续 20 分钟不缓解者立即拨打 120」), is the correct way to state a trigger.
 
 - 正例（同句里出现了「含服」「无效」「呼叫 120」，但「无效」被同一小句里的「而非」
   判为错误做法，触发条件仍然只是症状）：

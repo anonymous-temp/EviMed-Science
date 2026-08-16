@@ -95,8 +95,43 @@ const practicalHeadingLinePattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${pract
 // TO care; `suxiao-must-not-delay-emergency` checks the required sentence is
 // present and never that a contradicting one is absent — every offending report
 // carries the required sentence too, which is why they read as compliant.
-const emergencyDrugWords = "含服|含药|服药|服用|用药|口服|舌下|给药|服下";
-const emergencyFailureWords = "不缓解|未缓解|未完全缓解|无缓解|不见缓解|不能缓解|缓解不明显|缓解不佳|无效|不见效|无改善|未改善|不奏效|不起效";
+const emergencyDrugWords = "含服|含化|含药|服药|服用|用药|口服|舌下|给药|服下|吃药|嚼服|吞服|喷服";
+// Non-relief is a morphology, not a phrase list. Listing the phrases meant that
+// 未见效 (the list held 不见效), 无好转, 未获缓解, 未能奏效, 症状持续存在 and
+// 疼痛不减轻 all walked past a rule that already rejected 不见效 and 不缓解 —
+// same instruction, one character different. What the rule is about is a
+// negator scoping over a relief predicate, so that is what it matches.
+//
+// The relief predicates split in two, and the split is what lets one of the two
+// stand without a medication word in front of it:
+//   RELIEF   — 缓解 / 好转 / 减轻: predicated of a *symptom*. 胸痛持续 20 分钟
+//              不缓解 is a legitimate, symptom-stated trigger, so this half
+//              means nothing until a medication word anchors it.
+//   EFFICACY — 见效 / 奏效 / 起效 / 疗效 / 无效: only a treatment can be their
+//              subject. 「若硝酸甘油未能奏效，应立即拨打 120」 names the drug
+//              instead of the act of taking it and so carries no medication
+//              *word* at all, yet the predicate presupposes one. This half
+//              therefore needs no anchor — and in exchange a rejection anywhere
+//              earlier in the sentence licenses it, since 而非服药后观察无效再呼叫
+//              writes the forbidden sequence out in order to forbid it.
+const emergencyReliefWords = "缓解|好转|改善|减轻|缓和|消失|消退|平息|减退|控制";
+const emergencyEfficacyWords = "见效|奏效|起效|生效|有效|效果|疗效|效";
+const emergencyNegators = "[不未无没莫]";
+// A closed set of light verbs and degree adverbs, not a wildcard: 无论是否缓解
+// must not read as a negated relief predicate.
+const emergencyNegationHelpers = "(?:能|可|见|获|得|予|会|再|有|够|完全|明显|充分|显著|彻底){0,2}";
+const emergencyDegreeWords = "明显|佳|好|全|够|理想|满意|充分";
+const emergencyPersistWords = "持续存在|持续不退|持续不解|仍(?:然|旧)?存在|依然存在|依旧存在|症状持续|疼痛持续|胸痛持续";
+const emergencyEfficacyFailure = [
+  `${emergencyNegators}${emergencyNegationHelpers}(?:${emergencyEfficacyWords})`,
+  `(?:疗效|药效|效果)${emergencyNegators}(?:${emergencyDegreeWords})`,
+].join("|");
+const emergencyFailureWords = [
+  `${emergencyNegators}${emergencyNegationHelpers}(?:${emergencyReliefWords})`,
+  `(?:${emergencyReliefWords})${emergencyNegators}(?:${emergencyDegreeWords})`,
+  emergencyPersistWords,
+  emergencyEfficacyFailure,
+].join("|");
 // Writing the forbidden order in order to forbid it is the compliant shape, so
 // the negation is what separates the two. 不等同/不代表/不意味 belong to the same
 // family as 不构成: they deny that the medicine's response settles anything,
@@ -108,21 +143,45 @@ const emergencyDispatchPattern = /(?:呼叫|拨打|呼救|叫)[^。！？\n]{0,8
 // rejection with another (；：;:), so 「症状经首次含服明显改善后，方可每间隔 5
 // 分钟重复给药；未完全缓解即呼叫 120」 was read as a single condition spanning
 // 「给药；未完全缓解」 — while the clause after the semicolon contains no
-// medication word at all and points at calling 120 *sooner*. A medication word
-// and a non-relief word state one trigger only when they stand in one clause.
+// medication word at all and points at calling 120 *sooner*.
+//
+// A comma is a clause boundary here with one exception, and the exception is
+// grammatical rather than convenient: a comma that closes a temporal or
+// conditional clause (…后，/…时，) does not end the condition, it hands it on.
+// 「若含服硝酸甘油后，症状仍不缓解，应立即拨打 120」 is one trigger written across
+// that comma, and inserting it was the cheapest way past this rule there was.
+// 「已服药者，出现新发晕厥…」 keeps its boundary: 者 closes a population
+// qualifier, not a condition.
 //
 // The gap stays tempered against rejection words on top of that: without it
 // 用药 reaches across 而非 to 无效 and the compliant sentence
 // 而非服药后观察无效再呼叫 is read as the violation it rejects.
 const emergencyClauseBoundary = /[。！？；：、，;:,\n]/g;
-const emergencyClauseGap = `(?:(?!${emergencyRejectWords}|[。！？；：、，;:,\\n]).){0,20}`;
-const medicationConditionedTrigger = new RegExp(`(?:${emergencyDrugWords})${emergencyClauseGap}(?:${emergencyFailureWords})`, "g");
+const emergencyClauseGap = `(?:(?!${emergencyRejectWords}|[。！？；：、，;:,\\n]).|(?<=[后时])[，,])`;
+const medicationConditionedTrigger = new RegExp(`(?:${emergencyDrugWords})${emergencyClauseGap}{0,20}(?:${emergencyFailureWords})`, "g");
 const timedObservationTrigger = new RegExp(
   `(?:观察|等待|等)\\s*[0-9０-９一二三四五六七八九十]{1,3}\\s*(?:分钟|分|小时|min)`
-  + `(?:(?!${emergencyRejectWords}|[。！？；：、，;:,\\n]).){0,10}(?:${emergencyFailureWords})`,
+  + `${emergencyClauseGap}{0,10}(?:${emergencyFailureWords})`,
   "g",
 );
+// The medication act and the trigger it conditions need not share a sentence:
+// 「含服硝酸甘油一片后观察。仍不缓解者拨打 120。」 splits them with a full stop and
+// resumes with an anaphor whose antecedent is the medication act. An elided
+// subject picked up by 仍 / 依然 / 若仍 is that antecedent; this branch runs only
+// where a medication word has already been stated on the same line.
+const emergencyAnaphora = "仍|依然|依旧|仍旧|如仍|若仍|经上述处理|上述处理后";
+const anaphoricFailureTrigger = new RegExp(`(?:${emergencyAnaphora})${emergencyClauseGap}{0,10}(?:${emergencyFailureWords})`, "g");
+const efficacyFailureTrigger = new RegExp(`(?:${emergencyEfficacyFailure})`, "g");
 const emergencyRejectClause = new RegExp(emergencyRejectWords);
+const emergencyDrugClause = new RegExp(emergencyDrugWords);
+const emergencyReliefClause = new RegExp(emergencyReliefWords);
+// A sentence that names the dispatch and then states when to make it puts the
+// call before its own trigger, so trigger-then-dispatch order does not hold.
+const emergencyConditionFrame = /(?:条件|前提|标准|指征|时机|情形|情况下)/;
+// Things other than the medicine whose working or not working this section
+// legitimately discusses. The unanchored efficacy branch has no medication
+// word to check, so it has to be told what it is not looking at.
+const emergencyNonTreatmentSubject = /(?:判断|鉴别|识别|区分|呼救|呼叫|求救|送医|就医|驾车|自驾|等待|观察|评估|筛查)/;
 
 /** The practical section with claim markers, emphasis and numbered citations
  *  taken out, so neither can inflate the gap between a medication word and a
@@ -155,27 +214,65 @@ function lastClauseBoundary(passage) {
 function medicationConditionedEmergencyTriggers(practical) {
   const found = [];
   for (const [lineIndex, rawLine] of normalizedPracticalText(practical).split("\n").entries()) {
+    let medicationStated = false;
     for (const sentence of rawLine.split(/[。！？]/)) {
-      if (!emergencyDispatchPattern.test(sentence)) continue;
-      for (const pattern of [medicationConditionedTrigger, timedObservationTrigger]) {
+      const carriesMedication = emergencyDrugClause.test(sentence);
+      if (!emergencyDispatchPattern.test(sentence)) {
+        medicationStated ||= carriesMedication;
+        continue;
+      }
+      const patterns = [medicationConditionedTrigger, timedObservationTrigger, efficacyFailureTrigger];
+      if (medicationStated || carriesMedication) patterns.push(anaphoricFailureTrigger);
+      for (const pattern of patterns) {
+        pattern.lastIndex = 0;
         for (const match of sentence.matchAll(pattern)) {
+          // A trigger conditions what follows it. When the call for help is
+          // already stated before the phrase, the phrase governs the waiting
+          // instruction instead: 已含服硝酸甘油并拨打 120 后，若疼痛仍未缓解，保持
+          // 静卧 is the order this rule wants, and reading it as a conditioned
+          // dispatch pushed authors away from writing it.
+          // ...unless the sentence names the dispatch and then defines when to
+          // make it, which puts the call first and the trigger after it:
+          // 急救呼叫的启动条件为含服后 5 分钟症状未获缓解.
+          const governsDispatch = emergencyDispatchPattern.test(sentence.slice(match.index + match[0].length))
+            || emergencyConditionFrame.test(sentence);
+          if (!governsDispatch) continue;
+          // The unanchored branch presupposes that what did not work is the
+          // medicine. When the clause says outright that it is something else —
+          // 自我判断不能有效区分…, 延迟呼救则效果不佳 — the sentence is the section
+          // doing its job, and reading it as a trigger forbade the advice.
+          if (pattern === efficacyFailureTrigger
+            && emergencyNonTreatmentSubject.test(sentence.slice(lastClauseBoundary(sentence.slice(0, match.index)) + 1, match.index))) {
+            continue;
+          }
           const before = sentence.slice(0, match.index);
           // The clause boundary, not a character count: the rejection that
           // licenses RQ-06 sits 35 characters back, in the preceding clause.
-          const boundary = lastClauseBoundary(before);
-          // Both sides of the phrase, because Chinese puts the rejection after
-          // the instruction as often as before it: 「若含服后心绞痛持续不缓解或
-          // 性质改变，应立即呼叫急救，不得因已服药而推迟」 rejects the delay in
-          // its last clause, and reading only what precedes the phrase called
-          // that sentence the very thing it forbids. Everything after the
-          // phrase is in scope up to the end of the sentence — a rejection
-          // there governs the whole instruction; anything past 。！？ is a
-          // different instruction and still licenses nothing.
-          const after = sentence.slice(match.index + match[0].length);
-          if (emergencyRejectClause.test(before.slice(boundary + 1)) || emergencyRejectClause.test(after)) continue;
+          // The unanchored efficacy branch reads the whole preceding sentence
+          // instead, because there is no medication word for a clause to hold.
+          const preceding = pattern === efficacyFailureTrigger
+            ? before
+            : before.slice(lastClauseBoundary(before) + 1);
+          if (emergencyRejectClause.test(preceding)) continue;
+          // Chinese puts the rejection after the instruction as often as before
+          // it: 「若含服后心绞痛持续不缓解或性质改变，应立即呼叫急救，不得因已服药
+          // 而推迟」 rejects the delay in its last clause, and reading only what
+          // precedes the phrase called that sentence the very thing it forbids.
+          //
+          // A rejection past the trigger's own clause licenses only if it is
+          // about this trigger — its clause names the medication or the relief.
+          // Without that test, 「…应立即拨打 120，不要自行驾车前往医院」 cleared
+          // itself with a negation about driving, and adding a sentence that is
+          // safer still was the cheapest exemption in the file. Anything past
+          // 。！？ is a different instruction and licenses nothing.
+          const after = sentence.slice(match.index + match[0].length).split(emergencyClauseBoundary);
+          const licensed = after.some((clause, index) => emergencyRejectClause.test(clause)
+            && (index === 0 || emergencyDrugClause.test(clause) || emergencyReliefClause.test(clause)));
+          if (licensed) continue;
           found.push({ line: lineIndex + 1, span: match[0], sentence: excerpt(sentence) });
         }
       }
+      medicationStated ||= carriesMedication;
     }
   }
   return found;
@@ -239,7 +336,18 @@ const appraisalCitationPattern = /\[\d+/;
 // hands down a level is the instrument being used; it only needs the section it
 // stands in to cite anything at all.
 const appraisalVerdictPattern = /(?:为|评为|定为|判为|属|记为|评定为)\s*["“”'‘’]?(?:极|很|较)?(?:高|中等?|低|严重|不明确|high|moderate|low|serious|critical|some\s+concerns)/i;
-const gradeLevelPattern =/(?:为|评为|定为|判为|确定性为|在)\s*["“”'‘’]?((?:极|很|较)?(?:高|中等?|低|high|moderate|low)(?:\s*(?:至|到|~|～|-|–)\s*(?:极|很|较)?(?:高|中等?|低|high|moderate|low))?)["“”'‘’]?\s*(?:确定性|质量|等级|之间|certainty)/i;
+// A GRADE verdict written either way round. 「评为高确定性」 puts the level before
+// its noun; 「GRADE 确定性高」 and 「证据确定性评为高」 put it after, and matching
+// only the first order meant the same verdict passed by word order alone. 属 and
+// 级别 join the vocabulary for the same reason — 「按 GRADE 属高级别证据」 is the
+// verdict spelled with the nouns GRADE's Chinese translations actually use.
+const gradeCertaintyNoun = "确定性|证据质量|证据等级|证据级别|质量|等级|级别|certainty";
+const gradeLevelWord = "(?:极|很|较)?(?:高|中等?|低|high|moderate|low)(?:\\s*(?:至|到|~|～|-|–)\\s*(?:极|很|较)?(?:高|中等?|低|high|moderate|low))?";
+const gradeLevelPattern = new RegExp(
+  `(?:为|评为|评定为|定为|判为|属于|属|记为|确定性为|在)\\s*["“”'‘’「『]?(${gradeLevelWord})["“”'‘’」』]?\\s*(?:${gradeCertaintyNoun}|之间)`
+  + `|(?:${gradeCertaintyNoun})\\s*(?:评定为|评为|定为|判为|记为|属于|属|为|是)?\\s*["“”'‘’「『]?(${gradeLevelWord})(?![于过])`,
+  "i",
+);
 // A downgrade reason is an assertion that something is *wrong* with the
 // evidence, and the five GRADE domains are neutral nouns. 偏倚风险 / 不一致 /
 // 间接性 / 不精确 / 发表偏倚 appear in the sentence that justifies a HIGH rating
@@ -248,21 +356,54 @@ const gradeLevelPattern =/(?:为|评为|定为|判为|确定性为|在)\s*["“�
 // textbook wording — so matching the bare noun made 高 unwritable. What counts
 // is a stated deficiency, or a downgrade actually performed, and it has to be
 // in the clause that states it: 未对任何领域降级 is not a downgrade.
+//
+// A downgrade performed is 降级 or 下调 or 扣 followed by a step; a deficiency
+// stated is an evidence-quality noun under a negative evaluation. Both used to
+// be spelled out phrase by phrase, and 下调一级 / 质量欠佳 / 证据强度不足 walked
+// past a rule that already rejected 降一级 / 质量偏低 — the same assertion, a
+// synonym apart.
+//
+// The English branch used to read (?:偏倚风险|risk of bias)(?:较|很)?(?:高|严重),
+// which demands a Chinese intensifier after an English noun and so could not
+// match any text in either language. It is written out here instead of deleted,
+// because an English-language evidence table is a real shape.
+const gradeDowngradeStep = "(?:一|两|二|1|2)?\\s*(?:个)?\\s*(?:级|等级|档)";
+const gradeQualityNoun = "方法学质量|证据质量|研究质量|证据强度|证据级别|方法学|质量";
+const gradeQualityDeficient = "偏低|较低|低|差|不高|欠佳|不佳|欠缺|不足|有限|堪忧|参差不齐";
 const gradeDowngradePattern = new RegExp([
-  "降(?:级|一级|两级|一个等级|两个等级)",
-  "(?:偏倚风险|risk of bias)(?:较|很)?(?:高|严重|不明确|不清楚)",
+  `(?:降|下调|下降|扣)\\s*${gradeDowngradeStep}`,
+  "降级",
+  "偏倚风险(?:较|很)?(?:高|严重|不明确|不清楚)",
   "存在(?:严重|明显|较大|一定)?(?:偏倚风险|不一致性?|间接性|不精确性?|发表偏倚)",
   "(?:不一致性?|间接性|不精确性?|发表偏倚)(?:明显|严重|突出|较大)",
   "(?:估计|效应量?|结果)(?:很|较|明显)?不(?:精确|一致)",
-  "(?:方法学质量|证据质量|研究质量|质量)\\s*(?:普遍|整体|多数|大多|总体)?\\s*(?:偏低|较低|低|差|不高)",
+  `(?:${gradeQualityNoun})\\s*(?:普遍|整体|多数|大多|总体|均|尚)?\\s*(?:${gradeQualityDeficient})`,
+  "(?:downgrad|rated down)",
+  "risk of bias\\s*(?:(?:is|was|were|are)\\s*)?(?:high|serious|critical|unclear)",
+  "(?:methodological|study|evidence)\\s+quality\\s*(?:(?:is|was|were|are)\\s*)?(?:low|poor|limited)",
+  "serious\\s+(?:limitations?|risk of bias|imprecision|inconsistency|indirectness)",
 ].join("|"), "i");
 // 未对任何领域降级 / 无需降级 / 不因不一致性降级: the deficiency word is present
 // because it is being ruled out.
+//
+// Two of GRADE's five domains are spelled with a negator — 不一致性, 不精确 — so
+// the negator inside the domain noun read as a negation of the downgrade next
+// to it, and 「因偏倚风险与不一致性下调一级」 was scored as a downgrade ruled out.
+// The domain nouns are masked to the same width before the negation is looked
+// for, which leaves 不因不一致性降级 negated and this one asserted.
 const gradeDowngradeNegationPattern = /[不未无没][^，。；\n]{0,6}$/;
-// 从"高"起步 names GRADE's starting point, not the verdict.
-const gradeBaselinePattern = /(?:从|自|起[点始]为|基线为|起步于)\s*["“”'‘’]?(?:高|中)/;
+const gradeDomainNegatorNouns = /不一致性?|不精确性?/g;
+// 从"高"起步 names GRADE's starting point, not the verdict. Tested against the
+// level match and the few characters in front of it rather than against the
+// whole passage: a blanket skip would let one baseline sentence license every
+// verdict in the paragraph.
+const gradeBaselinePattern = /(?:从|自|起[点始]|基线|起步)\s*(?:为|于)?\s*["“”'‘’「『]?(?:极|很|较)?(?:高|中)/;
 const appraisalSentenceSplit = /(?<=[。！？；;])/;
 const appraisalClauseSplit = /[，,；;：:、\n]/;
+// The GRADE self-consistency branch reads a whole paragraph, so its clause
+// split has to end clauses at full stops too — otherwise a negation six
+// characters back reaches over one.
+const gradeClauseSplit = /[，,；;：:、。！？\n]/;
 
 /** METHODS / BODY / TAIL as the check reads them: every matching level-two
  *  section concatenated (reportSection returns only the first, and one report
@@ -299,10 +440,11 @@ function appraisalSections(reportText) {
  *  @param {string} sentence
  */
 function assertedGradeDeficiency(sentence) {
-  for (const clause of sentence.split(appraisalClauseSplit)) {
+  for (const clause of sentence.split(gradeClauseSplit)) {
     const match = gradeDowngradePattern.exec(clause);
     if (!match) continue;
-    if (gradeDowngradeNegationPattern.test(clause.slice(0, match.index))) continue;
+    const preceding = clause.slice(0, match.index).replace(gradeDomainNegatorNouns, (noun) => "·".repeat(noun.length));
+    if (gradeDowngradeNegationPattern.test(preceding)) continue;
     return true;
   }
   return false;
@@ -367,16 +509,32 @@ function declaredAppraisalIssues(reportText) {
   // Any downgrade at all excludes 高, so only that case is decidable. GRADE
   // legitimately reaches 中 after one downgrade, and observational bodies start
   // at 低, so counting downgrade domains from prose is not reliable.
-  for (const sentence of `${body}\n${tail}`.split(appraisalSentenceSplit)) {
-    if (!/(?<![A-Za-z])GRADE(?![A-Za-z])/i.test(sentence)) continue;
-    const level = gradeLevelPattern.exec(sentence);
-    if (!level || !/高|high/i.test(level[1])) continue;
-    if (gradeBaselinePattern.test(sentence)) continue;
-    if (!assertedGradeDeficiency(sentence)) continue;
+  // The unit is the paragraph, not the sentence. A verdict and the deficiency
+  // that contradicts it are one judgement however they are punctuated, and a
+  // sentence-scoped check was cleared by a full stop:
+  // 「纳入研究方法学质量普遍偏低。按 GRADE 评为高确定性。」 and the same two
+  // sentences in the other order both passed while saying exactly what the
+  // one-sentence form says.
+  //
+  // The verdict noun is not required to be the string GRADE either. 「证据确定性
+  // 评为高」 is a GRADE verdict with the instrument's name left out, and reading
+  // only sentences containing GRADE made deleting the word an exemption.
+  const gradedPassages = `${body}\n${tail}`.split("\n");
+  for (const passage of gradedPassages) {
+    if (!/(?<![A-Za-z])GRADE(?![A-Za-z])|证据(?:确定性|质量|等级|级别)|确定性/i.test(passage)) continue;
+    if (!assertedGradeDeficiency(passage)) continue;
+    gradeLevelPattern.lastIndex = 0;
+    const highVerdict = [...passage.matchAll(new RegExp(gradeLevelPattern.source, "gi"))].find((level) => {
+      const stated = level[1] ?? level[2] ?? "";
+      if (!/高|high/i.test(stated)) return false;
+      // 从「高」起步 / 起点为高: the baseline GRADE starts from, not the verdict.
+      return !gradeBaselinePattern.test(passage.slice(Math.max(0, level.index - 8), level.index + level[0].length));
+    });
+    if (!highVerdict) continue;
     findings.push({
       branch: "grade-level-contradicts-downgrade",
-      line: reportLineCarrying(reportText, sentence.trim()),
-      text: excerpt(sentence),
+      line: reportLineCarrying(reportText, passage.trim()),
+      text: excerpt(passage),
     });
   }
   return findings;
@@ -632,38 +790,123 @@ function citationClosureFindings(reportText, claimsById, searchLog) {
 // the delivered citation-audit could truthfully write 「声明中的阿拉伯数字均出现
 // 于引文」. Worse, claimEvidenceText includes the agent-authored `claim` field,
 // so a stance written there counts as its own support. That is the laundering
-// path this reads around: only supportQuote and sourceTitle are consulted.
+// path this reads around: only supportQuote is consulted.
+//
+// sourceTitle used to be read alongside it, which reopened the laundering path
+// one field over — a title is metadata the run types in, not text the source
+// was quoted as saying, and the notice below already told the author the gate
+// reads supportQuote alone. Retitling one source
+// 「Selection bias in emergency chest pain cohorts」 put `bias` in the stance
+// text and cleared the line with the prose untouched.
 //
 // The subject→verb window is one clause and at most 25 characters — the longest
 // real gap in the corpus is 11 (作者将血管舒缩症状视为) — and 报告/报道/说明/描述
 // are deliberately not stance verbs: they are ordinary reporting verbs.
-const attributedStancePattern = /(?<!本)(?:作者|研究者|研究人员|原作者|综述作者|原文|该文|文中|该研究|该综述|该试验|该队列|该分析|研究团队)[^。！？；;\n]{0,25}?(?:认为|指出|强调|视为|归因|主张|推测|承认|坦承|警告|提醒|解释为|理解为|注意到|倾向)/;
-// A permit-list, so adding a token can only silence a trigger and never create
-// one: a stance the quote does carry, in the wordings sources use for it.
-// Deliberately excluded — but, not, only, significant, potential, established —
-// each occurs inside purely numeric result sentences, and admitting them would
-// silence the check. sufficient/reliab/however earn their place: they are what
-// a source writes when it warns about its own measurement.
+//
+// A comma ends the window, because a subject and its predicate stand in one
+// clause: 「其结论引自摘要原文、未据标题推断」 says where the conclusions came
+// from, and 「作者对心肌梗死估计的 E 值为 1.79，提示…」 predicates 提示 of the
+// E value, not of the authors.
+//
+// The subject is built rather than listed. 该研究 used to be a listed string, so
+// 「这项研究认为」 and 「该项研究指出」 — one measure word inserted — were not the
+// same subject, and 「上述研究认为」 was not either. A source-denoting subject is a
+// demonstrative plus a research-entity noun, with the measure word Chinese puts
+// between them optional; 本 is excluded because 本研究/本文 is the report's own
+// voice and not an attribution to anybody.
+//
+// The predicate list gains the stance verbs the corpus reached for next —
+// 提出 / 断言 / 归结 / 论断 / 推断 / 写道 / 提示 and the polemic ones — plus the two
+// non-verbal frames that say the same thing without a verb at all:
+// 「在原作者看来，…」 and 「作者的核心观点是…」.
+const attributedStanceDeterminer = "该|这|此|上述|前述|前文|原";
+const attributedStanceEntity = "研究|综述|试验|队列|分析|文献|论文|报告|文章|指南|共识|荟萃分析|meta\\s*分析";
+const attributedStanceAuthor = "作者|笔者|研究者|研究人员|研究团队|课题组|原作者|综述作者|作者们|原文|该文|文中";
+const attributedStanceSubject = `(?:(?:${attributedStanceDeterminer})\\s*(?:一)?\\s*(?:项|篇|个|份|部)?\\s*(?:${attributedStanceEntity})|${attributedStanceAuthor})`;
+const attributedStanceVerb = "认为|指出|强调|视为|归因|归结|主张|推测|承认|坦承|警告|提醒|解释为|理解为|注意到|倾向|提出|断言|论断|推断|质疑|反驳|否认|声称|宣称|写道|提示";
+const attributedStancePattern = new RegExp([
+  `(?<!本)${attributedStanceSubject}[^。！？；；，、;,\\n]{0,25}?(?:${attributedStanceVerb})`,
+  `在\\s*(?<!本)${attributedStanceSubject}[^。！？；；，、;,\\n]{0,12}?看来`,
+  `(?<!本)${attributedStanceSubject}[^。！？；；，、;,\\n]{0,8}?的\\s*(?:核心|主要|基本)?\\s*(?:观点|看法|立场|主张|判断|解释|论点)\\s*(?:是|为|在于)`,
+].join("|"));
+// The exemption: the quote itself carries a position, so attributing one to it
+// is a faithful restatement. It stays a permit-list — matching can only silence
+// a trigger, never create one — but what it permits is a *stance predication*,
+// not a token.
+//
+// It used to be a flat vocabulary tested anywhere in the quote, and on the
+// thirty delivered packages that cleared 183 of 578 claims (31.7%) outright.
+// The words doing the clearing were carrying no stance at all: `could` in
+// 「You could be having a heart attack. Call 999」 (patient instruction), `our`
+// and `we` in 「included in our analysis」 / 「we included 417 patients」 (methods),
+// `however` in 「However, there was significant heterogeneity」 (a measurement
+// with a connective in front of it). A word is not a position; a predication is.
+//
+// So each branch below requires the stance-bearing element to stand in a
+// governing configuration — a subject it predicates of, or a complement it
+// takes — which is what makes it a claim about a proposition rather than a
+// token inside a result sentence:
+//
+//   A authorial predication  we / our results / the authors + a judgement verb,
+//                            within one clause. Kills 「our analysis included」;
+//                            keeps 「Our results do not support the findings of…」.
+//   B complemented judgement a judgement verb taking a propositional complement
+//                            (that / to-infinitive / whether). Kills 「were
+//                            considered as low quality studies」 (a methods
+//                            definition); keeps 「considered to be the most
+//                            common cause」, 「concluded that…」.
+//   C hedged interpretation  a hedge governing an interpretive predicate. Kills
+//                            「could be having a heart attack」 and 「differences
+//                            may exist」; keeps 「was likely due to volatilization
+//                            losses」, 「may lead to a longer decision delay」.
+//   D deontic position       the source telling someone what to do — should /
+//                            must / the need to / (not) recommended. A guideline
+//                            recommendation is a position its authors hold.
+//   E causal attribution     a causal frame whose explanandum is a stated result.
+//                            Kills 「tolerance due to the accumulation of…」;
+//                            keeps 「received low Jadad scores due to the lack of
+//                            a double-blind design」, 「accounts for the observed
+//                            decline」.
+//   F epistemic state        remains unclear / cannot be excluded.
+//   G/H Chinese              stance verbs, and a hedge governing an interpretive
+//                            predicate. The bare nouns and adverbs that used to
+//                            sit here — 局限 / 偏倚 / 混杂 / 可能 / 或许 — are
+//                            words a result sentence contains, not positions.
+//
+// After: 60 of 578 (10.4%). Every attribution line the corpus clears through
+// this exemption still clears it, and each does so on a quote that genuinely
+// states a position (RQ-08 CLM-004, RQ-16 CLM-010, RQ-16 CLM-013, RQ-24
+// CLM-012/013, RQ-28 CLM-009); the two confirmed violations still fire.
+const stanceAuthorialSubject = "(?:we|our|us|the authors?|this (?:study|review|analysis|paper|report|trial|cohort|meta-analysis)|the present (?:study|review|analysis))";
+const stanceJudgementVerb = "(?:suggest|conclud|conclusion|propos|argu|hypothesi[sz]|speculat|acknowledg|caution|recommend|advocat|interpret|consider|believ|assum|attribut|postulat|contend|support|emphasi[sz]|warn)";
+const stanceHedge = "(?:may|might|could|would|likely|unlikely|probably|possibly|presumably|appears? to|seems? to|tends? to)";
+const stanceInterpretivePredicate = "(?:due to|attribut|explain|accounts? for|accounted for|reflect|indicat|impl(?:y|ies|ied)|results? from|resulted from|leads? to|lead to|contribut|underl(?:ie|ying|ies)|represent|mediat|responsible for|caused? by|associated with|related to|arise|stem)";
+const stanceResultNoun = "(?:results?|findings?|outcomes?|observations?|declines?|increases?|reductions?|differences?|associations?|effects?|scores?|delays?|heterogeneity|discrepanc|variation|trends?|improvements?|changes?|estimates?|rates?)";
+const stanceCausalFrame = "(?:due to|owing to|because of|because|attributable to|attributed to|explained by|accounts? for|accounted for|resulted from|arises? from|stems? from|reflects?)";
+const stanceDeonticPredicate = "(?:the need to|needs? to|should|must|ought to|is\\s+(?:not\\s+)?(?:recommended|advised|warranted|justified|essential|necessary|indicated|contraindicated)|are\\s+(?:not\\s+)?(?:recommended|advised|warranted|justified)|(?:do(?:es)? not\\s+)?recommends?|not recommended)";
 const quotedStancePattern = new RegExp([
-  "(?<![A-Za-z])(?:we|our|the authors?|authors?)(?![A-Za-z])",
-  "suggest|conclude|conclusion|argu|propose|hypothes|speculat|acknowledg|caution|recommend|interpret|consider|believ|assum|attribut|postulat|reflect",
-  "(?<![A-Za-z])(?:may|might|could|likely|unlikely|probably|possibly|presumabl|should|cannot|can not|need to|appears? to|seems? to)(?![A-Za-z])",
-  "(?<![A-Za-z])(?:bias|confound|limitation|uncertain|caveat|due to|because of|owing to|explained by)(?![A-Za-z])",
-  "sufficient|reliab|adequat|justif|warrant|necessar|useful|prudent|advis|however|nevertheless|nonetheless|whereas|although|despite|questionab|debatab|controvers|unclear|unknown|remains to be",
-  "认为|指出|推测|归因|提示|建议|主张|强调|局限|偏倚|混杂|可能|或许|解释为",
+  `(?<![A-Za-z])${stanceAuthorialSubject}(?![A-Za-z])[^.;\\n]{0,40}?(?<![A-Za-z])${stanceJudgementVerb}`,
+  `(?<![A-Za-z])${stanceJudgementVerb}[a-z]*(?![A-Za-z])[^.;\\n]{0,24}?(?:that(?![A-Za-z])|to\\s+[a-z]|whether(?![A-Za-z]))`,
+  `(?<![A-Za-z])${stanceHedge}(?![A-Za-z])[^.;\\n]{0,20}?(?<![A-Za-z])${stanceInterpretivePredicate}`,
+  `(?<![A-Za-z])${stanceDeonticPredicate}(?![A-Za-z])`,
+  `(?<![A-Za-z])${stanceResultNoun}(?![A-Za-z])[^.;\\n]{0,30}?(?<![A-Za-z])${stanceCausalFrame}(?![A-Za-z])`,
+  `(?<![A-Za-z])${stanceCausalFrame}(?![A-Za-z])[^.;\\n]{0,30}?(?<![A-Za-z])${stanceResultNoun}(?![A-Za-z])`,
+  "(?<![A-Za-z])(?:remains? (?:to be|unclear|unknown|uncertain|controversial|debated)|(?:is|are|was|were) (?:unclear|uncertain|controversial|questionable|debatable)|cannot be (?:excluded|ruled out|determined))",
+  "认为|指出|主张|推测|归因|建议|强调|提示|警告|坦承|承认|解释为|视为",
+  "(?:可能|或许|大概|似乎|倾向于)[^。；\\n]{0,12}(?:由于|因为|归因|源于|导致|引起|反映|解释|提示|相关|有关)",
 ].join("|"), "i");
 
 /** The quote-side text of a claim: what the source itself says, never what the
- *  agent wrote about it. `claim`, `applicability` and `uncertainty` are the
- *  agent's own words and are excluded on purpose.
- *  @param {any} claim @param {"stance" | "quantity"} part
+ *  agent wrote about it. `claim`, `applicability`, `uncertainty` and
+ *  `sourceTitle` are the agent's own words and are excluded on purpose.
+ *  @param {any} claim
  */
-function claimQuoteText(claim, part) {
+function claimQuoteText(claim) {
   const sources = claim?.claimType === "synthesized" && Array.isArray(claim?.supportingSources)
     ? claim.supportingSources
     : [claim];
   return sources
-    .flatMap((source) => (part === "stance" ? [source?.supportQuote, source?.sourceTitle] : [source?.supportQuote]))
+    .map((source) => source?.supportQuote)
     .filter((value) => typeof value === "string")
     .join(" ");
 }
@@ -689,12 +932,12 @@ function attributedStanceIssues(body, claimsById) {
       continue;
     }
     if (!claims.length) continue;
-    if (claims.some((claim) => quotedStancePattern.test(claimQuoteText(claim, "stance")))) continue;
+    if (claims.some((claim) => quotedStancePattern.test(claimQuoteText(claim)))) continue;
     // The "every" conjunct is load-bearing: an attribution anchored to a claim
     // whose quote is a plain non-numeric sentence is a faithful restatement,
     // and a line that mixes a stance claim with a data claim is ordinary
     // writing. Only a position resting entirely on measurements is the defect.
-    if (!claims.every((claim) => conclusoryQuantities(claimQuoteText(claim, "quantity")).size > 0)) continue;
+    if (!claims.every((claim) => conclusoryQuantities(claimQuoteText(claim)).size > 0)) continue;
     found.push({
       line: index + 1,
       attribution: excerpt(attribution[0]),
@@ -715,10 +958,58 @@ function attributedStanceIssues(body, claimsById) {
 // string 《医师法》 makes the gate more permissive and never more demanding.
 const statuteTitlePattern = "《[^》\\n]{2,40}(?:法|条例|办法|规定|细则|准则|规范|决定|命令|公告|通知|药典)(?:[（(][^）)\\n]{0,20}[）)])?》";
 const statuteArticleNumber = "[一二三四五六七八九十百廿卅零〇0-9]{1,6}";
-const statuteArticleLocator = new RegExp(
-  `${statuteTitlePattern}(?:[（(][^）)\\n]{0,24}[）)])?[^。；！？\\n]{0,24}?第\\s*(${statuteArticleNumber})\\s*条`,
-  "g",
-);
+// An article-level assertion is a statute reference and an article number in one
+// sentence, and the assertion is the same however the two are ordered and
+// however the statute is named. Requiring 《》 before 第 N 条 meant three
+// rewritings of one sentence walked past it: dropping the book-title marks
+// (「医师法第 29 条第 2 款…」), putting the number first (「第 29 条第 2 款是
+// 《医师法》为…设定的合法条件」), and referring back to a statute named in an
+// earlier clause (「…；该法第 29 条第 2 款将其规定为四点」).
+//
+// The bare and anaphoric forms are recognised by the shape Chinese legal
+// citation actually uses — a statute name written immediately against its
+// article locator, 医师法第 29 条 / 该法第 29 条 / 本办法第 5 条. Adjacency is what
+// makes that safe: 法 also ends 方法, 用法, 疗法 and 合法, and those compounds are
+// filtered by name rather than by a lookbehind, so the same rule can be written
+// in Python, whose lookbehind must be fixed-width.
+// One character before the statute suffix, not two: 该法 / 本法 is how a second
+// clause refers back to the statute the first one named, and that anaphor is
+// two characters long in total.
+const statuteBareName = "[\\u4e00-\\u9fa5]{1,20}(?:法|条例|办法|规定|细则|准则|规范|决定|命令|公告|药典)";
+const statuteBareNameTrap = /(?:方法|用法|疗法|说法|看法|做法|想法|手法|写法|算法|语法|文法|合法|依法|司法|立法|执法|违法|非法|无法|书法|针法|制法|色谱法|滴定法|分析法|测定法|检查法|鉴别法|检验法)$/;
+const statuteArticleLocators = Object.freeze([
+  new RegExp(
+    `${statuteTitlePattern}(?:[（(][^）)\\n]{0,24}[）)])?[^。；！？\\n]{0,24}?第\\s*(?<article>${statuteArticleNumber})\\s*条`,
+    "g",
+  ),
+  new RegExp(
+    `第\\s*(?<article>${statuteArticleNumber})\\s*条[^。；！？\\n]{0,24}?${statuteTitlePattern}`,
+    "g",
+  ),
+  new RegExp(
+    `(?:^|[^\\u4e00-\\u9fa5])(?<name>${statuteBareName})\\s*第\\s*(?<article>${statuteArticleNumber})\\s*条`,
+    "g",
+  ),
+]);
+
+/** Every article-level statute locator on one line, one per article number:
+ *  the three orderings above can match the same assertion twice.
+ *  @param {string} line
+ *  @returns {{ text: string, article: string }[]}
+ */
+function statuteArticleLocatorsOn(line) {
+  const byArticle = new Map();
+  for (const pattern of statuteArticleLocators) {
+    pattern.lastIndex = 0;
+    for (const match of line.matchAll(pattern)) {
+      const name = match.groups?.name;
+      if (name && statuteBareNameTrap.test(name)) continue;
+      const article = canonicalArticleNumber(match.groups?.article ?? "");
+      if (!byArticle.has(article)) byArticle.set(article, { text: match[0], article });
+    }
+  }
+  return [...byArticle.values()];
+}
 // A registry fact, not a tuned list: these namespaces are restricted by their
 // registries to government entities, .int to intergovernmental treaty
 // organisations, and .europa.eu to EU institutions. It covers npc.gov.cn,
@@ -793,7 +1084,7 @@ function regulatoryArticleIssues(reportText, claims, successfulArtifacts) {
   const found = [];
   for (const [index, line] of body.split("\n").entries()) {
     if (/^\s*#{1,6}\s/.test(line)) continue;
-    const locators = [...line.matchAll(statuteArticleLocator)];
+    const locators = statuteArticleLocatorsOn(line);
     if (!locators.length) continue;
     const refs = [...standardCitationNumbers(line)].filter((number) => Number.isInteger(number)).sort((a, b) => a - b);
     const candidates = [
@@ -802,8 +1093,7 @@ function regulatoryArticleIssues(reportText, claims, successfulArtifacts) {
     ].filter(Boolean);
     const tuples = candidates.flatMap(claimSourceTuples);
     const hosts = [...new Set(tuples.map((tuple) => sourceDomain(tuple.sourceUrl)).filter(Boolean))];
-    for (const locator of locators) {
-      const article = canonicalArticleNumber(locator[1]);
+    for (const { text: locatorText, article } of locators) {
       const licensed = tuples.some((tuple) => {
         const host = sourceDomain(tuple.sourceUrl);
         if (!host || !governmentHostPattern.test(host.replace(/\.$/, ""))) return false;
@@ -811,7 +1101,7 @@ function regulatoryArticleIssues(reportText, claims, successfulArtifacts) {
         return articleNumbersNamed(`${tuple.supportQuote ?? ""} ${tuple.claim ?? ""}`).has(article);
       });
       if (licensed) continue;
-      found.push({ line: index + 1, locator: excerpt(locator[0]), article, refs, hosts });
+      found.push({ line: index + 1, locator: excerpt(locatorText), article, refs, hosts });
     }
   }
   return found;
@@ -2266,8 +2556,34 @@ export function validateClinicalEvidencePackage({
   if (!nonEmpty(reportText)) issues.push("clinical-evidence-report.md must contain academic analysis.");
   const title = typeof reportText === "string" ? reportText.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "" : "";
   if (!title) issues.push("The academic title must be present.");
-  for (const section of [/(?:^|\n)##\s+(?:摘要|Abstract)/i, /(?:^|\n)##\s+.*(?:临床|证据|Evidence|Clinical)/i, /(?:^|\n)##\s+.*(?:局限|Limitations?)/i, /(?:^|\n)##\s+.*(?:结论|处置|Conclusion|Practical)/i]) {
+  for (const section of [/(?:^|\n)##\s+(?:摘要|Abstract)/i, /(?:^|\n)##\s+.*(?:临床|证据|Evidence|Clinical)/i, /(?:^|\n)##\s+.*(?:局限|Limitations?)/i, /(?:^|\n)##\s+.*(?:结论|Conclusion)/i]) {
     if (!section.test(reportText ?? "")) issues.push(`The academic report is missing a required section matching ${section}.`);
+  }
+  // The practical section is required by the same expression that finds it, and
+  // by that expression alone. It used to be admitted by a second, wider
+  // vocabulary — 结论|处置|Conclusion|Practical — so a report headed
+  // 「## 结论与处置建议」 or 「## 患者须知」 satisfied the requirement while
+  // reportSection(practicalSectionHeading) returned nothing, and every check
+  // that reads this section (急救触发条件、derived 禁令、每条要点须挂 claim、
+  // 药物安全规则) passed on an empty string. Requiring and locating the section
+  // through one expression makes "the section that satisfies the requirement"
+  // and "the section that gets audited" the same section by construction.
+  // 结论 and 临床实践要点 stay two sections: the conclusion requirement above no
+  // longer accepts a practical heading in its place, and this one does not
+  // accept a conclusion heading.
+  const practicalSection = reportSection(reportText, practicalSectionHeading);
+  if (!practicalHeadingLinePattern.test(reportText ?? "")) {
+    issues.push(
+      "The academic report is missing the safety-first practical-answer section. "
+      + `Head it with one of: ${practicalSectionHeading.split("|").join(" / ")} — `
+      + "every safety check on practical advice locates that section by its heading, "
+      + "so a heading outside this set means the section is never audited.",
+    );
+  } else if (!nonEmpty(practicalSection)) {
+    issues.push(
+      "The safety-first practical-answer section is empty. "
+      + "Write the reader's actions under that heading; an empty section is audited as no section at all.",
+    );
   }
   if (deepResearch) {
     for (const section of [
@@ -2279,11 +2595,9 @@ export function validateClinicalEvidencePackage({
         issues.push(`The deep-research report is missing a required academic section matching ${section}.`);
       }
     }
+    // Presence is required of every report above; here only the order matters.
     const practicalHeading = String(reportText ?? "").search(practicalHeadingLinePattern);
     const referencesHeading = String(reportText ?? "").search(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$/im);
-    if (practicalHeading < 0) {
-      issues.push("The deep-research report must contain a dedicated safety-first practical-answer section.");
-    }
     if (referencesHeading < 0 || (practicalHeading >= 0 && referencesHeading < practicalHeading)) {
       issues.push("The numbered reference list must follow the safety-first practical-answer section.");
     }
@@ -2578,7 +2892,7 @@ export function validateClinicalEvidencePackage({
     );
   }
 
-  const practical = reportSection(reportText, practicalSectionHeading);
+  const practical = practicalSection;
   // The analysis may reason as far as the evidence allows. What a reader is
   // told to actually do may not rest on the analyst's own estimate: this
   // section is read as instruction, and an estimate read as instruction is the

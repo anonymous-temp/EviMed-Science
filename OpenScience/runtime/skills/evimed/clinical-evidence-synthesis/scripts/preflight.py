@@ -312,9 +312,39 @@ SENTENCE_SPLIT = re.compile(r"(?<=[。！？；;])")
 # forbidden order in order to forbid it is the compliant shape, so the rejection
 # licenses the phrase when it stands in the clause carrying it or anywhere later
 # in the same sentence.
-EMERGENCY_DRUG_WORDS = "含服|含药|服药|服用|用药|口服|舌下|给药|服下"
+EMERGENCY_DRUG_WORDS = "含服|含化|含药|服药|服用|用药|口服|舌下|给药|服下|吃药|嚼服|吞服|喷服"
+# Non-relief is a morphology, not a phrase list: a negator scoping over a relief
+# predicate. Listing the phrases let 未见效 (the list held 不见效), 无好转,
+# 未获缓解, 未能奏效, 症状持续存在 and 疼痛不减轻 past a rule that already rejected
+# 不见效 and 不缓解 — the same instruction, one character different.
+#
+# The relief predicates split in two, and the split is what lets one half stand
+# without a medication word in front of it:
+#   RELIEF   — 缓解/好转/减轻, predicated of a *symptom*. 胸痛持续 20 分钟不缓解 is
+#              a legitimate symptom-stated trigger, so this half means nothing
+#              until a medication word anchors it.
+#   EFFICACY — 见效/奏效/起效/疗效/无效: only a treatment can be their subject.
+#              「若硝酸甘油未能奏效，应立即拨打 120」 names the drug instead of the
+#              act of taking it, so it carries no medication word at all while
+#              the predicate presupposes one. This half needs no anchor — and in
+#              exchange a rejection anywhere earlier in the sentence licenses it.
+EMERGENCY_RELIEF_WORDS = "缓解|好转|改善|减轻|缓和|消失|消退|平息|减退|控制"
+EMERGENCY_EFFICACY_WORDS = "见效|奏效|起效|生效|有效|效果|疗效|效"
+EMERGENCY_NEGATORS = "[不未无没莫]"
+# A closed set of light verbs and degree adverbs, not a wildcard: 无论是否缓解
+# must not read as a negated relief predicate.
+EMERGENCY_NEGATION_HELPERS = "(?:能|可|见|获|得|予|会|再|有|够|完全|明显|充分|显著|彻底){0,2}"
+EMERGENCY_DEGREE_WORDS = "明显|佳|好|全|够|理想|满意|充分"
+EMERGENCY_PERSIST_WORDS = "持续存在|持续不退|持续不解|仍(?:然|旧)?存在|依然存在|依旧存在|症状持续|疼痛持续|胸痛持续"
+EMERGENCY_EFFICACY_FAILURE = (
+    rf"{EMERGENCY_NEGATORS}{EMERGENCY_NEGATION_HELPERS}(?:{EMERGENCY_EFFICACY_WORDS})"
+    rf"|(?:疗效|药效|效果){EMERGENCY_NEGATORS}(?:{EMERGENCY_DEGREE_WORDS})"
+)
 EMERGENCY_FAILURE_WORDS = (
-    "不缓解|未缓解|未完全缓解|无缓解|不见缓解|不能缓解|缓解不明显|缓解不佳|无效|不见效|无改善|未改善|不奏效|不起效"
+    rf"{EMERGENCY_NEGATORS}{EMERGENCY_NEGATION_HELPERS}(?:{EMERGENCY_RELIEF_WORDS})"
+    rf"|(?:{EMERGENCY_RELIEF_WORDS}){EMERGENCY_NEGATORS}(?:{EMERGENCY_DEGREE_WORDS})"
+    rf"|{EMERGENCY_PERSIST_WORDS}"
+    rf"|{EMERGENCY_EFFICACY_FAILURE}"
 )
 # 不等同/不代表/不意味 belong to the same family as 不构成: they deny that the
 # medicine's response settles anything, which is the inference this rule bans.
@@ -322,6 +352,8 @@ EMERGENCY_REJECT_WORDS = (
     "不宜|而非|而不是|不是|并非|不得|不应|不能|不可|不要|勿|无论|不论|均不|都不|不因|不以|不作为|不构成"
     "|不等同|不代表|不意味"
 )
+EMERGENCY_NON_TREATMENT_SUBJECT = re.compile(r"(?:判断|鉴别|识别|区分|呼救|呼叫|求救|送医|就医|驾车|自驾|等待|观察|评估|筛查)")
+EMERGENCY_CONDITION_FRAME = re.compile(r"(?:条件|前提|标准|指征|时机|情形|情况下)")
 EMERGENCY_DISPATCH = re.compile(
     r"(?:呼叫|拨打|呼救|叫)[^。！？\n]{0,8}(?:120|999|急救|救护)"
     r"|(?:急救|120|999)[^。！？\n]{0,8}(?:呼叫|拨打|呼救)"
@@ -333,16 +365,33 @@ EMERGENCY_DISPATCH = re.compile(
 # clause after the semicolon holds no medication word and calls 120 sooner.
 # The gap stays tempered against rejection words: without it 用药 reaches across
 # 而非 to 无效.
+# A comma is a clause boundary here with one exception, and the exception is
+# grammatical rather than convenient: a comma closing a temporal or conditional
+# clause (…后，/…时，) does not end the condition, it hands it on.
+# 「若含服硝酸甘油后，症状仍不缓解，应立即拨打 120」 is one trigger written across
+# that comma. 「已服药者，出现新发晕厥…」 keeps its boundary: 者 closes a
+# population qualifier, not a condition.
 EMERGENCY_CLAUSE_BOUNDARY = re.compile(r"[。！？；：、，;:,\n]")
-EMERGENCY_CLAUSE_GAP = rf"(?:(?!{EMERGENCY_REJECT_WORDS}|[。！？；：、，;:,\n]).){{0,20}}"
+EMERGENCY_CLAUSE_GAP_UNIT = rf"(?:(?!{EMERGENCY_REJECT_WORDS}|[。！？；：、，;:,\n]).|(?<=[后时])[，,])"
 MEDICATION_CONDITIONED_TRIGGER = re.compile(
-    rf"(?:{EMERGENCY_DRUG_WORDS}){EMERGENCY_CLAUSE_GAP}(?:{EMERGENCY_FAILURE_WORDS})"
+    rf"(?:{EMERGENCY_DRUG_WORDS}){EMERGENCY_CLAUSE_GAP_UNIT}{{0,20}}(?:{EMERGENCY_FAILURE_WORDS})"
 )
 TIMED_OBSERVATION_TRIGGER = re.compile(
     r"(?:观察|等待|等)\s*[0-9０-９一二三四五六七八九十]{1,3}\s*(?:分钟|分|小时|min)"
-    rf"(?:(?!{EMERGENCY_REJECT_WORDS}|[。！？；：、，;:,\n]).){{0,10}}(?:{EMERGENCY_FAILURE_WORDS})"
+    rf"{EMERGENCY_CLAUSE_GAP_UNIT}{{0,10}}(?:{EMERGENCY_FAILURE_WORDS})"
 )
+# The medication act and the trigger it conditions need not share a sentence:
+# 「含服硝酸甘油一片后观察。仍不缓解者拨打 120。」 splits them with a full stop and
+# resumes with an anaphor whose antecedent is the medication act. This branch
+# runs only where a medication word has already been stated on the same line.
+EMERGENCY_ANAPHORA = "仍|依然|依旧|仍旧|如仍|若仍|经上述处理|上述处理后"
+ANAPHORIC_FAILURE_TRIGGER = re.compile(
+    rf"(?:{EMERGENCY_ANAPHORA}){EMERGENCY_CLAUSE_GAP_UNIT}{{0,10}}(?:{EMERGENCY_FAILURE_WORDS})"
+)
+EFFICACY_FAILURE_TRIGGER = re.compile(rf"(?:{EMERGENCY_EFFICACY_FAILURE})")
 EMERGENCY_REJECT_CLAUSE = re.compile(EMERGENCY_REJECT_WORDS)
+EMERGENCY_DRUG_CLAUSE = re.compile(EMERGENCY_DRUG_WORDS)
+EMERGENCY_RELIEF_CLAUSE = re.compile(EMERGENCY_RELIEF_WORDS)
 PRACTICAL_CLAIM_MARKER = re.compile(r"<!--.*?-->", re.S)
 PRACTICAL_EMPHASIS = re.compile(r"\*\*|__|`")
 PRACTICAL_CITATION = re.compile(r"\[\s*\d+(?:\s*[,\-–]\s*\d+)*\s*\]")
@@ -354,9 +403,49 @@ PRACTICAL_SPACING = re.compile(r"[ \t　]+")
 # or a bare reference-list entry cannot, however accurately it paraphrases.
 STATUTE_TITLE = r"《[^》\n]{2,40}(?:法|条例|办法|规定|细则|准则|规范|决定|命令|公告|通知|药典)(?:[（(][^）)\n]{0,20}[）)])?》"
 STATUTE_ARTICLE_NUMBER = r"[一二三四五六七八九十百廿卅零〇0-9]{1,6}"
-STATUTE_ARTICLE_LOCATOR = re.compile(
-    rf"{STATUTE_TITLE}(?:[（(][^）)\n]{{0,24}}[）)])?[^。；！？\n]{{0,24}}?第\s*({STATUTE_ARTICLE_NUMBER})\s*条"
+# An article-level assertion is a statute reference and an article number in one
+# sentence, and the assertion is the same however the two are ordered and however
+# the statute is named. Requiring 《》 before 第 N 条 let three rewritings of one
+# sentence past it: dropping the book-title marks (「医师法第 29 条第 2 款…」),
+# putting the number first (「第 29 条第 2 款是《医师法》为…设定的合法条件」), and
+# referring back to a statute named in an earlier clause (「…；该法第 29 条…」).
+#
+# The bare and anaphoric forms are recognised by the shape Chinese legal citation
+# actually uses — a statute name written immediately against its article locator.
+# Adjacency is what makes that safe: 法 also ends 方法, 用法, 疗法 and 合法, and
+# those compounds are filtered by name rather than by a lookbehind, which here
+# would have to be variable-width.
+STATUTE_BARE_NAME = r"[\u4e00-\u9fa5]{1,20}(?:法|条例|办法|规定|细则|准则|规范|决定|命令|公告|药典)"
+STATUTE_BARE_NAME_TRAP = re.compile(
+    r"(?:方法|用法|疗法|说法|看法|做法|想法|手法|写法|算法|语法|文法|合法|依法|司法|立法|执法|违法|非法"
+    r"|无法|书法|针法|制法|色谱法|滴定法|分析法|测定法|检查法|鉴别法|检验法)$"
 )
+STATUTE_ARTICLE_LOCATORS = (
+    re.compile(
+        rf"{STATUTE_TITLE}(?:[（(][^）)\n]{{0,24}}[）)])?[^。；！？\n]{{0,24}}?"
+        rf"第\s*(?P<article>{STATUTE_ARTICLE_NUMBER})\s*条"
+    ),
+    re.compile(
+        rf"第\s*(?P<article>{STATUTE_ARTICLE_NUMBER})\s*条[^。；！？\n]{{0,24}}?{STATUTE_TITLE}"
+    ),
+    re.compile(
+        rf"(?:^|[^\u4e00-\u9fa5])(?P<name>{STATUTE_BARE_NAME})\s*第\s*(?P<article>{STATUTE_ARTICLE_NUMBER})\s*条"
+    ),
+)
+
+
+def statute_article_locators_on(line: str) -> list[tuple[str, str]]:
+    """Every article-level statute locator on one line, one per article number:
+    the three orderings above can match the same assertion twice."""
+    by_article: dict[str, tuple[str, str]] = {}
+    for pattern in STATUTE_ARTICLE_LOCATORS:
+        for match in pattern.finditer(line):
+            name = match.groupdict().get("name")
+            if name and STATUTE_BARE_NAME_TRAP.search(name):
+                continue
+            article = canonical_article_number(match.group("article"))
+            by_article.setdefault(article, (match.group(0), article))
+    return list(by_article.values())
 ARTICLE_NUMBER_CN = re.compile(rf"第\s*({STATUTE_ARTICLE_NUMBER})\s*条")
 ARTICLE_NUMBER_EN = re.compile(r"article\s+(\d{1,4})", re.I)
 # A registry fact, not a tuned list: these namespaces are restricted by their
@@ -448,35 +537,69 @@ APPRAISAL_VERDICT = re.compile(
     r"(?:极|很|较)?(?:高|中等?|低|严重|不明确|high|moderate|low|serious|critical|some\s+concerns)",
     re.I,
 )
+# A GRADE verdict written either way round. 「评为高确定性」 puts the level before
+# its noun; 「GRADE 确定性高」 and 「证据确定性评为高」 put it after, and matching only
+# the first order meant the same verdict passed by word order alone. 属 and 级别
+# join the vocabulary for the same reason: 「按 GRADE 属高级别证据」 is the verdict
+# spelled with the nouns GRADE's Chinese translations actually use.
+GRADE_CERTAINTY_NOUN = r"确定性|证据质量|证据等级|证据级别|质量|等级|级别|certainty"
+GRADE_LEVEL_WORD = (
+    r"(?:极|很|较)?(?:高|中等?|低|high|moderate|low)"
+    r"(?:\s*(?:至|到|~|～|-|–)\s*(?:极|很|较)?(?:高|中等?|低|high|moderate|low))?"
+)
 GRADE_LEVEL = re.compile(
-    r"(?:为|评为|定为|判为|确定性为|在)\s*[\"“”'‘’]?"
-    r"((?:极|很|较)?(?:高|中等?|低|high|moderate|low)(?:\s*(?:至|到|~|～|-|–)\s*(?:极|很|较)?(?:高|中等?|低|high|moderate|low))?)"
-    r"[\"“”'‘’]?\s*(?:确定性|质量|等级|之间|certainty)",
+    rf"(?:为|评为|评定为|定为|判为|属于|属|记为|确定性为|在)\s*[\"“”'‘’「『]?({GRADE_LEVEL_WORD})[\"“”'‘’」』]?"
+    rf"\s*(?:{GRADE_CERTAINTY_NOUN}|之间)"
+    rf"|(?:{GRADE_CERTAINTY_NOUN})\s*(?:评定为|评为|定为|判为|记为|属于|属|为|是)?\s*[\"“”'‘’「『]?({GRADE_LEVEL_WORD})(?![于过])",
     re.I,
 )
 # A downgrade reason is an assertion that something is *wrong* with the
 # evidence; the five GRADE domains are neutral nouns and appear just as often in
 # the sentence justifying a HIGH rating (偏倚风险低、结果一致、估计精确、无发表偏
 # 倚证据). Matching the bare noun made 高 unwritable.
+# A downgrade performed is 降级 or 下调 or 扣 followed by a step; a deficiency
+# stated is an evidence-quality noun under a negative evaluation. Spelling both
+# out phrase by phrase let 下调一级 / 质量欠佳 / 证据强度不足 past a rule that
+# already rejected 降一级 / 质量偏低 — the same assertion, a synonym apart. The
+# English branch used to read (?:偏倚风险|risk of bias)(?:较|很)?(?:高|严重), which
+# demands a Chinese intensifier after an English noun and matched no text in
+# either language; it is written out rather than deleted.
+GRADE_DOWNGRADE_STEP = r"(?:一|两|二|1|2)?\s*(?:个)?\s*(?:级|等级|档)"
+GRADE_QUALITY_NOUN = r"方法学质量|证据质量|研究质量|证据强度|证据级别|方法学|质量"
+GRADE_QUALITY_DEFICIENT = r"偏低|较低|低|差|不高|欠佳|不佳|欠缺|不足|有限|堪忧|参差不齐"
 GRADE_DOWNGRADE = re.compile(
     "|".join(
         (
-            r"降(?:级|一级|两级|一个等级|两个等级)",
-            r"(?:偏倚风险|risk of bias)(?:较|很)?(?:高|严重|不明确|不清楚)",
+            rf"(?:降|下调|下降|扣)\s*{GRADE_DOWNGRADE_STEP}",
+            r"降级",
+            r"偏倚风险(?:较|很)?(?:高|严重|不明确|不清楚)",
             r"存在(?:严重|明显|较大|一定)?(?:偏倚风险|不一致性?|间接性|不精确性?|发表偏倚)",
             r"(?:不一致性?|间接性|不精确性?|发表偏倚)(?:明显|严重|突出|较大)",
             r"(?:估计|效应量?|结果)(?:很|较|明显)?不(?:精确|一致)",
-            r"(?:方法学质量|证据质量|研究质量|质量)\s*(?:普遍|整体|多数|大多|总体)?\s*(?:偏低|较低|低|差|不高)",
+            rf"(?:{GRADE_QUALITY_NOUN})\s*(?:普遍|整体|多数|大多|总体|均|尚)?\s*(?:{GRADE_QUALITY_DEFICIENT})",
+            r"(?:downgrad|rated down)",
+            r"risk of bias\s*(?:(?:is|was|were|are)\s*)?(?:high|serious|critical|unclear)",
+            r"(?:methodological|study|evidence)\s+quality\s*(?:(?:is|was|were|are)\s*)?(?:low|poor|limited)",
+            r"serious\s+(?:limitations?|risk of bias|imprecision|inconsistency|indirectness)",
         )
     ),
     re.I,
 )
 # 未对任何领域降级 / 无需降级: the deficiency word is there because it is being
 # ruled out.
+# Two of GRADE's five domains are spelled with a negator — 不一致性, 不精确 — so
+# the negator inside the domain noun read as a negation of the downgrade next to
+# it, and 「因偏倚风险与不一致性下调一级」 scored as a downgrade ruled out. The
+# domain nouns are masked to the same width before the negation is looked for.
 GRADE_DOWNGRADE_NEGATION = re.compile(r"[不未无没][^，。；\n]{0,6}$")
-GRADE_BASELINE = re.compile(r"(?:从|自|起[点始]为|基线为|起步于)\s*[\"“”'‘’]?(?:高|中)")
-GRADE_WORD = re.compile(r"(?<![A-Za-z])GRADE(?![A-Za-z])", re.I)
+GRADE_DOMAIN_NEGATOR_NOUNS = re.compile(r"不一致性?|不精确性?")
+GRADE_BASELINE = re.compile(r"(?:从|自|起[点始]|基线|起步)\s*(?:为|于)?\s*[\"“”'‘’「『]?(?:极|很|较)?(?:高|中)")
+GRADE_WORD = re.compile(r"(?<![A-Za-z])GRADE(?![A-Za-z])|证据(?:确定性|质量|等级|级别)|确定性", re.I)
 APPRAISAL_CLAUSE_SPLIT = re.compile(r"[，,；;：:、\n]")
+# The GRADE self-consistency branch reads a whole paragraph, so its clause split
+# has to end clauses at full stops too — otherwise a negation six characters
+# back reaches over one.
+GRADE_CLAUSE_SPLIT = re.compile(r"[，,；;：:、。！？\n]")
 APPRAISAL_EMPHASIS = re.compile(r"\*\*|__")
 ABSTRACT_METHOD_FIELD = re.compile(r"\*\*方法\*\*(.*?)(?=\n?\*\*(?:结果|结论)|$)", re.S)
 LEVEL_TWO_HEADING = re.compile(r"^##\s+(.+)$")
@@ -535,25 +658,102 @@ REFERENCES_HEADING_ANY = re.compile(r"(?:^|\n)##\s+[^\n]*(?:参考文献|参考�
 # --- An attributed position must be quoted, not inferred from data ----------
 # Mirrored from clinicalEvidenceQuality.mjs. 作者指出 / 该研究强调 attributes a
 # position to a source; a quote that only reports measurements cannot carry one.
-# Only supportQuote and sourceTitle are consulted — a position written into the
-# claim's own `claim`/`applicability`/`uncertainty` field is the agent's words.
-ATTRIBUTED_STANCE = re.compile(
-    r"(?<!本)(?:作者|研究者|研究人员|原作者|综述作者|原文|该文|文中|该研究|该综述|该试验|该队列|该分析|研究团队)"
-    r"[^。！？；;\n]{0,25}?(?:认为|指出|强调|视为|归因|主张|推测|承认|坦承|警告|提醒|解释为|理解为|注意到|倾向)"
+# Only supportQuote is consulted — a position written into the claim's own
+# `claim`/`applicability`/`uncertainty` field is the agent's words, and so is
+# `sourceTitle`, which the run types in rather than quoting: reading it here
+# reopened the same laundering path one field over.
+# The subject is built rather than listed. 该研究 used to be a listed string, so
+# 「这项研究认为」 and 「该项研究指出」 — one measure word inserted — were not the same
+# subject, and 「上述研究认为」 was not either. A source-denoting subject is a
+# demonstrative plus a research-entity noun, with the measure word Chinese puts
+# between them optional; 本 is excluded because 本研究/本文 is the report's own
+# voice. A comma ends the subject→verb window: a subject and its predicate stand
+# in one clause, and 「作者对心肌梗死估计的 E 值为 1.79，提示…」 predicates 提示 of
+# the E value. 报告/报道/说明/描述 stay out — they are reporting verbs.
+ATTRIBUTED_STANCE_DETERMINER = r"该|这|此|上述|前述|前文|原"
+ATTRIBUTED_STANCE_ENTITY = r"研究|综述|试验|队列|分析|文献|论文|报告|文章|指南|共识|荟萃分析|meta\s*分析"
+ATTRIBUTED_STANCE_AUTHOR = r"作者|笔者|研究者|研究人员|研究团队|课题组|原作者|综述作者|作者们|原文|该文|文中"
+ATTRIBUTED_STANCE_SUBJECT = (
+    rf"(?:(?:{ATTRIBUTED_STANCE_DETERMINER})\s*(?:一)?\s*(?:项|篇|个|份|部)?\s*(?:{ATTRIBUTED_STANCE_ENTITY})"
+    rf"|{ATTRIBUTED_STANCE_AUTHOR})"
 )
-# A permit-list, so adding a token can only silence a trigger and never create
-# one. but / not / only / significant / potential / established are excluded on
-# purpose: each occurs inside purely numeric result sentences.
+ATTRIBUTED_STANCE_VERB = (
+    r"认为|指出|强调|视为|归因|归结|主张|推测|承认|坦承|警告|提醒|解释为|理解为|注意到|倾向"
+    r"|提出|断言|论断|推断|质疑|反驳|否认|声称|宣称|写道|提示"
+)
+ATTRIBUTED_STANCE_GAP = r"[^。！？；；，、;,\n]"
+ATTRIBUTED_STANCE = re.compile(
+    rf"(?<!本){ATTRIBUTED_STANCE_SUBJECT}{ATTRIBUTED_STANCE_GAP}{{0,25}}?(?:{ATTRIBUTED_STANCE_VERB})"
+    rf"|在\s*(?<!本){ATTRIBUTED_STANCE_SUBJECT}{ATTRIBUTED_STANCE_GAP}{{0,12}}?看来"
+    rf"|(?<!本){ATTRIBUTED_STANCE_SUBJECT}{ATTRIBUTED_STANCE_GAP}{{0,8}}?的\s*(?:核心|主要|基本)?\s*"
+    rf"(?:观点|看法|立场|主张|判断|解释|论点)\s*(?:是|为|在于)"
+)
+# The exemption, mirrored from clinicalEvidenceQuality.mjs: the quote itself
+# carries a position, so attributing one to it is a faithful restatement. Still
+# a permit-list — matching can only silence a trigger, never create one — but
+# what it permits is a *stance predication*, not a token.
+#
+# A flat vocabulary tested anywhere in the quote cleared 183 of 578 claims
+# (31.7%) on the thirty delivered packages, on words carrying no stance at all:
+# `could` in "You could be having a heart attack. Call 999", `our`/`we` in
+# "included in our analysis" / "we included 417 patients", `however` in
+# "However, there was significant heterogeneity". Each branch below therefore
+# requires the stance-bearing element to stand in a governing configuration — a
+# subject it predicates of, or a complement it takes:
+#   A authorial predication  we / our results / the authors + a judgement verb
+#   B complemented judgement a judgement verb + that / to-infinitive / whether
+#   C hedged interpretation  a hedge governing an interpretive predicate
+#   D deontic position       should / must / the need to / (not) recommended
+#   E causal attribution     a causal frame whose explanandum is a stated result
+#   F epistemic state        remains unclear / cannot be excluded
+#   G/H Chinese              stance verbs, and a hedge governing an interpretive
+#                            predicate; the bare nouns and adverbs that used to
+#                            sit here (局限/偏倚/混杂/可能/或许) are words a result
+#                            sentence contains, not positions
+# After: 60 of 578 (10.4%).
+STANCE_AUTHORIAL_SUBJECT = (
+    r"(?:we|our|us|the authors?|this (?:study|review|analysis|paper|report|trial|cohort|meta-analysis)"
+    r"|the present (?:study|review|analysis))"
+)
+STANCE_JUDGEMENT_VERB = (
+    r"(?:suggest|conclud|conclusion|propos|argu|hypothesi[sz]|speculat|acknowledg|caution|recommend"
+    r"|advocat|interpret|consider|believ|assum|attribut|postulat|contend|support|emphasi[sz]|warn)"
+)
+STANCE_HEDGE = (
+    r"(?:may|might|could|would|likely|unlikely|probably|possibly|presumably|appears? to|seems? to|tends? to)"
+)
+STANCE_INTERPRETIVE_PREDICATE = (
+    r"(?:due to|attribut|explain|accounts? for|accounted for|reflect|indicat|impl(?:y|ies|ied)|results? from"
+    r"|resulted from|leads? to|lead to|contribut|underl(?:ie|ying|ies)|represent|mediat|responsible for"
+    r"|caused? by|associated with|related to|arise|stem)"
+)
+STANCE_RESULT_NOUN = (
+    r"(?:results?|findings?|outcomes?|observations?|declines?|increases?|reductions?|differences?|associations?"
+    r"|effects?|scores?|delays?|heterogeneity|discrepanc|variation|trends?|improvements?|changes?|estimates?"
+    r"|rates?)"
+)
+STANCE_CAUSAL_FRAME = (
+    r"(?:due to|owing to|because of|because|attributable to|attributed to|explained by|accounts? for"
+    r"|accounted for|resulted from|arises? from|stems? from|reflects?)"
+)
+STANCE_DEONTIC_PREDICATE = (
+    r"(?:the need to|needs? to|should|must|ought to"
+    r"|is\s+(?:not\s+)?(?:recommended|advised|warranted|justified|essential|necessary|indicated|contraindicated)"
+    r"|are\s+(?:not\s+)?(?:recommended|advised|warranted|justified)|(?:do(?:es)? not\s+)?recommends?"
+    r"|not recommended)"
+)
 QUOTED_STANCE = re.compile(
-    r"(?<![A-Za-z])(?:we|our|the authors?|authors?)(?![A-Za-z])"
-    r"|suggest|conclude|conclusion|argu|propose|hypothes|speculat|acknowledg|caution|recommend|interpret"
-    r"|consider|believ|assum|attribut|postulat|reflect"
-    r"|(?<![A-Za-z])(?:may|might|could|likely|unlikely|probably|possibly|presumabl|should|cannot|can not"
-    r"|need to|appears? to|seems? to)(?![A-Za-z])"
-    r"|(?<![A-Za-z])(?:bias|confound|limitation|uncertain|caveat|due to|because of|owing to|explained by)(?![A-Za-z])"
-    r"|sufficient|reliab|adequat|justif|warrant|necessar|useful|prudent|advis|however|nevertheless|nonetheless"
-    r"|whereas|although|despite|questionab|debatab|controvers|unclear|unknown|remains to be"
-    r"|认为|指出|推测|归因|提示|建议|主张|强调|局限|偏倚|混杂|可能|或许|解释为",
+    rf"(?<![A-Za-z]){STANCE_AUTHORIAL_SUBJECT}(?![A-Za-z])[^.;\n]{{0,40}}?(?<![A-Za-z]){STANCE_JUDGEMENT_VERB}"
+    rf"|(?<![A-Za-z]){STANCE_JUDGEMENT_VERB}[a-z]*(?![A-Za-z])[^.;\n]{{0,24}}?(?:that(?![A-Za-z])|to\s+[a-z]|whether(?![A-Za-z]))"
+    rf"|(?<![A-Za-z]){STANCE_HEDGE}(?![A-Za-z])[^.;\n]{{0,20}}?(?<![A-Za-z]){STANCE_INTERPRETIVE_PREDICATE}"
+    rf"|(?<![A-Za-z]){STANCE_DEONTIC_PREDICATE}(?![A-Za-z])"
+    rf"|(?<![A-Za-z]){STANCE_RESULT_NOUN}(?![A-Za-z])[^.;\n]{{0,30}}?(?<![A-Za-z]){STANCE_CAUSAL_FRAME}(?![A-Za-z])"
+    rf"|(?<![A-Za-z]){STANCE_CAUSAL_FRAME}(?![A-Za-z])[^.;\n]{{0,30}}?(?<![A-Za-z]){STANCE_RESULT_NOUN}(?![A-Za-z])"
+    r"|(?<![A-Za-z])(?:remains? (?:to be|unclear|unknown|uncertain|controversial|debated)"
+    r"|(?:is|are|was|were) (?:unclear|uncertain|controversial|questionable|debatable)"
+    r"|cannot be (?:excluded|ruled out|determined))"
+    r"|认为|指出|主张|推测|归因|建议|强调|提示|警告|坦承|承认|解释为|视为"
+    r"|(?:可能|或许|大概|似乎|倾向于)[^。；\n]{0,12}(?:由于|因为|归因|源于|导致|引起|反映|解释|提示|相关|有关)",
     re.I,
 )
 
@@ -1190,26 +1390,68 @@ def medication_conditioned_emergency_triggers(practical: str) -> list[tuple[int,
     text = PRACTICAL_SPACING.sub(" ", text)
     found: list[tuple[int, str, str]] = []
     for line_number, line in enumerate(text.split("\n"), 1):
+        medication_stated = False
         for sentence in re.split(r"[。！？]", line):
+            carries_medication = bool(EMERGENCY_DRUG_CLAUSE.search(sentence))
             if not EMERGENCY_DISPATCH.search(sentence):
+                medication_stated = medication_stated or carries_medication
                 continue
-            for pattern in (MEDICATION_CONDITIONED_TRIGGER, TIMED_OBSERVATION_TRIGGER):
+            patterns = [MEDICATION_CONDITIONED_TRIGGER, TIMED_OBSERVATION_TRIGGER, EFFICACY_FAILURE_TRIGGER]
+            if medication_stated or carries_medication:
+                patterns.append(ANAPHORIC_FAILURE_TRIGGER)
+            for pattern in patterns:
                 for match in pattern.finditer(sentence):
+                    # A trigger conditions what follows it. With the call for
+                    # help already stated before the phrase, the phrase governs
+                    # the waiting instruction instead.
+                    # ...unless the sentence names the dispatch and then
+                    # defines when to make it, which puts the call first.
+                    if not (
+                        EMERGENCY_DISPATCH.search(sentence[match.end():])
+                        or EMERGENCY_CONDITION_FRAME.search(sentence)
+                    ):
+                        continue
+                    # Mirrors the gate: the unanchored branch presupposes the
+                    # medicine is what did not work.
+                    if pattern is EFFICACY_FAILURE_TRIGGER:
+                        head = sentence[: match.start()]
+                        edges = [m.start() for m in EMERGENCY_CLAUSE_BOUNDARY.finditer(head)]
+                        if EMERGENCY_NON_TREATMENT_SUBJECT.search(head[(edges[-1] if edges else -1) + 1:]):
+                            continue
                     before = sentence[: match.start()]
                     # The clause boundary, not a character count: the rejection
                     # that licenses a compliant sentence can sit 35 characters
-                    # back, in the preceding clause.
-                    boundaries = [m.start() for m in EMERGENCY_CLAUSE_BOUNDARY.finditer(before)]
-                    boundary = boundaries[-1] if boundaries else -1
-                    # Both sides of the phrase: Chinese puts the rejection after
-                    # the instruction as often as before it (「…应立即呼叫急救，
-                    # 不得因已服药而推迟」), and reading only what precedes it
-                    # called that sentence the very thing it forbids. Anything
-                    # past 。！？ is a different instruction and licenses nothing.
-                    after = sentence[match.end():]
-                    if EMERGENCY_REJECT_CLAUSE.search(before[boundary + 1:]) or EMERGENCY_REJECT_CLAUSE.search(after):
+                    # back, in the preceding clause. The unanchored efficacy
+                    # branch reads the whole preceding sentence instead, because
+                    # there is no medication word for a clause to hold.
+                    if pattern is EFFICACY_FAILURE_TRIGGER:
+                        preceding = before
+                    else:
+                        boundaries = [m.start() for m in EMERGENCY_CLAUSE_BOUNDARY.finditer(before)]
+                        preceding = before[(boundaries[-1] if boundaries else -1) + 1:]
+                    if EMERGENCY_REJECT_CLAUSE.search(preceding):
+                        continue
+                    # Chinese puts the rejection after the instruction as often
+                    # as before it (「…应立即呼叫急救，不得因已服药而推迟」). Past
+                    # the trigger's own clause it licenses only if it is about
+                    # this trigger — its clause names the medication or the
+                    # relief — or 「…应立即拨打 120，不要自行驾车前往医院」 clears
+                    # itself with a negation about driving. Anything past 。！？
+                    # is a different instruction and licenses nothing.
+                    after = EMERGENCY_CLAUSE_BOUNDARY.split(sentence[match.end():])
+                    licensed = any(
+                        EMERGENCY_REJECT_CLAUSE.search(clause)
+                        and (
+                            index == 0
+                            or EMERGENCY_DRUG_CLAUSE.search(clause)
+                            or EMERGENCY_RELIEF_CLAUSE.search(clause)
+                        )
+                        for index, clause in enumerate(after)
+                    )
+                    if licensed:
                         continue
                     found.append((line_number, match.group(0), excerpt(sentence)))
+            medication_stated = medication_stated or carries_medication
     return found
 
 
@@ -1318,11 +1560,12 @@ def asserted_grade_deficiency(sentence: str) -> bool:
     """Whether a sentence asserts a GRADE downgrade — a deficiency in the
     evidence, or a downgrade performed — rather than ruling one out.
     Clause-scoped: a sentence grading a body says both things."""
-    for clause in APPRAISAL_CLAUSE_SPLIT.split(sentence):
+    for clause in GRADE_CLAUSE_SPLIT.split(sentence):
         match = GRADE_DOWNGRADE.search(clause)
         if not match:
             continue
-        if GRADE_DOWNGRADE_NEGATION.search(clause[: match.start()]):
+        preceding = GRADE_DOMAIN_NEGATOR_NOUNS.sub(lambda m: "·" * len(m.group(0)), clause[: match.start()])
+        if GRADE_DOWNGRADE_NEGATION.search(preceding):
             continue
         return True
     return False
@@ -1387,16 +1630,32 @@ def declared_appraisal_issues(report: str) -> list[tuple[str, str, int, str]]:
         branch = "appraisal-tail-only" if pattern.search(tail) else "appraisal-declared-not-executed"
         findings.append((branch, instrument, line, excerpt(first)))
     # Any downgrade at all excludes 高, so only that case is decidable.
-    for sentence in SENTENCE_SPLIT.split(f"{body}\n{tail}"):
-        if not GRADE_WORD.search(sentence):
+    # The unit is the paragraph, not the sentence. A verdict and the deficiency
+    # that contradicts it are one judgement however they are punctuated, and a
+    # sentence-scoped check was cleared by a full stop: 「纳入研究方法学质量普遍
+    # 偏低。按 GRADE 评为高确定性。」 passed, and so did the two sentences the other
+    # way round. The verdict noun need not be the string GRADE either —
+    # 「证据确定性评为高」 is a GRADE verdict with the instrument's name left out.
+    for passage in f"{body}\n{tail}".split("\n"):
+        if not GRADE_WORD.search(passage):
             continue
-        level = GRADE_LEVEL.search(sentence)
-        if not level or not re.search(r"高|high", level.group(1), re.I):
+        if not asserted_grade_deficiency(passage):
             continue
-        if GRADE_BASELINE.search(sentence) or not asserted_grade_deficiency(sentence):
+        high_verdict = None
+        for level in GRADE_LEVEL.finditer(passage):
+            stated = level.group(1) or level.group(2) or ""
+            if not re.search(r"高|high", stated, re.I):
+                continue
+            # 从「高」起步 / 起点为高: the baseline GRADE starts from, not the verdict.
+            window = passage[max(0, level.start() - 8): level.end()]
+            if GRADE_BASELINE.search(window):
+                continue
+            high_verdict = level
+            break
+        if high_verdict is None:
             continue
         findings.append((
-            "grade-level-contradicts-downgrade", "GRADE", report_line_carrying(report, sentence.strip()), excerpt(sentence),
+            "grade-level-contradicts-downgrade", "GRADE", report_line_carrying(report, passage.strip()), excerpt(passage),
         ))
     return findings
 
@@ -1621,11 +1880,11 @@ def conclusory_quantities(text: object) -> set[str]:
     return numbers
 
 
-def claim_quote_text(claim: dict, part: str) -> str:
+def claim_quote_text(claim: dict) -> str:
     """What the source itself says, never what the agent wrote about it: the
-    `claim`, `applicability` and `uncertainty` fields are excluded on purpose,
-    because writing a position into them and citing the claim is the laundering
-    path this check exists to close."""
+    `claim`, `applicability`, `uncertainty` and `sourceTitle` fields are
+    excluded on purpose, because writing a position into them and citing the
+    claim is the laundering path this check exists to close."""
     sources = (
         claim["supportingSources"]
         if claim.get("claimType") == "synthesized" and isinstance(claim.get("supportingSources"), list)
@@ -1635,8 +1894,8 @@ def claim_quote_text(claim: dict, part: str) -> str:
     for source in sources:
         if not isinstance(source, dict):
             continue
-        fields = ("supportQuote", "sourceTitle") if part == "stance" else ("supportQuote",)
-        pieces.extend(source[field] for field in fields if isinstance(source.get(field), str))
+        if isinstance(source.get("supportQuote"), str):
+            pieces.append(source["supportQuote"])
     return " ".join(pieces)
 
 
@@ -1667,12 +1926,12 @@ def attributed_stance_issues(body: str, claims_by_id: dict[str, dict]) -> list[t
         ]
         if not claims:
             continue
-        if any(QUOTED_STANCE.search(claim_quote_text(claim, "stance")) for claim in claims):
+        if any(QUOTED_STANCE.search(claim_quote_text(claim)) for claim in claims):
             continue
         # The "every" conjunct is load-bearing: an attribution anchored to a
         # non-numeric quote is a faithful restatement, and a line mixing a
         # stance claim with a data claim is ordinary writing.
-        if not all(conclusory_quantities(claim_quote_text(claim, "quantity")) for claim in claims):
+        if not all(conclusory_quantities(claim_quote_text(claim)) for claim in claims):
             continue
         found.append((line_number, excerpt(attribution.group(0)), [claim["claimId"] for claim in claims], True))
     return found
@@ -1743,7 +2002,7 @@ def regulatory_article_issues(report: str, claims: list, preserved: set[str]) ->
     for line_number, line in enumerate(body.split("\n"), 1):
         if HEADING_LINE.match(line):
             continue
-        locators = list(STATUTE_ARTICLE_LOCATOR.finditer(line))
+        locators = statute_article_locators_on(line)
         if not locators:
             continue
         refs = sorted(citation_numbers(line))
@@ -1752,8 +2011,7 @@ def regulatory_article_issues(report: str, claims: list, preserved: set[str]) ->
         candidates += [by_id[claim_id] for claim_id in marked if claim_id in by_id]
         tuples = [entry for candidate in candidates for entry in claim_source_tuples(candidate)]
         hosts = sorted({host for host in (source_host(entry[0]) for entry in tuples) if host})
-        for locator in locators:
-            article = canonical_article_number(locator.group(1))
+        for locator_text, article in locators:
             licensed = False
             for source_url, artifact_path, quote, claim_text in tuples:
                 host = source_host(source_url)
@@ -1766,7 +2024,7 @@ def regulatory_article_issues(report: str, claims: list, preserved: set[str]) ->
                     break
             if licensed:
                 continue
-            found.append((line_number, excerpt(locator.group(0)), article, refs, hosts))
+            found.append((line_number, excerpt(locator_text), article, refs, hosts))
     return found
 
 
@@ -1829,6 +2087,14 @@ def main() -> int:
     references_position = references_matches[-1].start() if references_matches else -1
     if practical_position < 0 or references_position < practical_position:
         issues.append("clinical-evidence-report.md: practical section must precede final references")
+    # An empty practical section is audited exactly like a missing one: every
+    # check that reads it — 急救触发条件、derived 禁令、每条要点须挂 claim — runs
+    # over "" and passes. The heading must carry the reader's actions.
+    if practical_position >= 0 and not section(report, PRACTICAL_SECTION_HEADING).strip():
+        issues.append(
+            "clinical-evidence-report.md: the practical section is empty; "
+            "write the reader's actions under that heading"
+        )
     check_register(report, issues)
     check_comparative_structure(report, issues)
     # The instrument branches are advice, not a gate — the same split the server
