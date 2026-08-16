@@ -12,6 +12,7 @@ import {
 import {
   citationIntegrityIssues,
   clinicalEvidencePackageErrorCode,
+  coverageJudgeContext,
   validateClinicalEvidencePackage,
 } from "./clinicalEvidenceQuality.mjs";
 
@@ -99,7 +100,16 @@ function normalizeDispatchInput(input) {
     // What the reader asked, kept short. A run list identified only by
     // run_cf7f08fa4b78… is a list of hashes: thirty analyses side by side and
     // no way to tell which is which without opening each one.
+    //
+    // This is the only form of the question that reaches runs.jsonl. The ledger
+    // has a byte ceiling (defaultMaxBytes) that a burst of progress events has
+    // already burst once, at 1048462 of 1048576, and the run after it could not
+    // start; briefs run to several thousand characters each.
     question: questionPreview(input.question),
+    // The whole brief, for the delivery gate. Never serialized: it is held in
+    // memory on the store (dispatchedBriefs) and passed straight to
+    // validateClinicalEvidencePackage.
+    briefText: typeof input.question === "string" && input.question.trim() ? input.question : null,
     effectiveAgentId: input.effectiveAgentId ?? null,
     effectiveAgentVersion: input.effectiveAgentVersion ?? null,
     effectiveRuntimeAgent: input.effectiveRuntimeAgent ?? null,
@@ -430,6 +440,11 @@ export const repairableEvidencePackageErrorCodes = new Set([
   "specialist_question_coverage_gap_overstated",
   "specialist_question_coverage_understated",
 ]);
+// Where the run finds the brief it was given. Written by the server at dispatch
+// and read by the run and by its preflight; the delivery gate reads the
+// server's own in-memory copy instead, so this file is a convenience for the
+// run and never evidence about it.
+export const workspaceBriefPath = ".evimed-brief/research-brief.md";
 // Missing deliverables that earn a code of their own rather than the generic
 // one, because the generic one is discarded and these are repairable in place.
 const missingOutputErrorCodes = Object.freeze({
@@ -1054,6 +1069,8 @@ async function requiredSpecialistArtifacts(
   agentRegistry,
   sourceArtifactProvenance = new Map(),
   assistantMessages = [],
+  briefText = null,
+  judgeCoverage = null,
 ) {
   // Notices a check raises that do not decide the verdict. Collected here
   // because the checks below each return the moment they conclude, so a finding
@@ -1066,6 +1083,8 @@ async function requiredSpecialistArtifacts(
     sourceArtifactProvenance,
     assistantMessages,
     advisories,
+    briefText,
+    judgeCoverage,
   );
   if (advisories.length === 0) return outcome;
   return outcome.errorCode
@@ -1079,6 +1098,8 @@ async function requiredSpecialistArtifacts(
  *  @param {any} sourceArtifactProvenance
  *  @param {any} assistantMessages
  *  @param {string[]} advisories
+ *  @param {any} briefText
+ *  @param {((context: any) => Promise<{ notices: string[] }>)|null} judgeCoverage
  */
 async function specialistCompletionOutcome(
   project,
@@ -1087,6 +1108,8 @@ async function specialistCompletionOutcome(
   sourceArtifactProvenance,
   assistantMessages,
   advisories,
+  briefText,
+  judgeCoverage = null,
 ) {
   if (!run.effectiveAgentId) return { artifacts: [], errorCode: null };
   const registry = await agentRegistry;
@@ -1409,7 +1432,34 @@ async function specialistCompletionOutcome(
       citationLedgerText: files.get("citation-ledger.csv") ?? "",
       citationAuditText: files.get("citation-audit.md") ?? "",
       questionCoverageText: files.get("question-coverage.json") ?? "",
+      briefText,
+      workspaceBriefText: (await readRequiredFile(project, workspaceBriefPath))?.text ?? null,
     });
+    // Said out loud whichever way the package goes: an advisory rides on a
+    // delivered run as a notice, and is appended to the issues of a failed one.
+    // The alternative — a coverage check that quietly does less after a restart
+    // — is a package delivered as if it had been checked against the brief.
+    if (validation.coverageDegradedNotice) advisories.push(validation.coverageDegradedNotice);
+    // The semantic half, on a package that has already cleared every
+    // deterministic check that can withhold it. Deliberately last, deliberately
+    // conditional on there being nothing blocking: a package heading back round
+    // the repair loop will be judged when it comes back clean, and a model call
+    // per repair attempt is a cost with no reader on the other end. It cannot
+    // change the verdict — judgeCoverage returns notices only — so it is safe
+    // to skip and safe to fail.
+    if (typeof judgeCoverage === "function" && validation.blockingIssues.length === 0) {
+      try {
+        const judged = await judgeCoverage(coverageJudgeContext({
+          briefText,
+          questionCoverageText: files.get("question-coverage.json") ?? "",
+          reportText: files.get("clinical-evidence-report.md") ?? "",
+        }));
+        advisories.push(...(judged?.notices ?? []));
+      } catch {
+        // A judge that throws is a judge that did not run. It is not a reason
+        // to withhold a package that passed everything that can withhold it.
+      }
+    }
     if (!validation.valid) {
       // The analysis is on disk and every required deliverable exists. Ending
       // here as a bare failure threw all of it away and returned an error code:
@@ -1491,6 +1541,20 @@ export class AgentRunStore {
     // Report size when repair first began, so a shrinking revision is measured
     // against where it started rather than against the previous attempt only.
     this.clinicalRepairReportSizes = new Map();
+    // The brief each in-flight run was dispatched with, by run id. In memory
+    // only: it is what the delivery gate checks question coverage against, and
+    // it is far too large for the run ledger (see normalizeDispatchInput).
+    // A restart therefore loses it, and the gate degrades in the open rather
+    // than checking a brief the run itself could have written.
+    this.dispatchedBriefs = new Map();
+    // The semantic coverage judge (coverageJudge.mjs), or null in a deployment
+    // that has none. It is asked at most once per run: the entry is written
+    // before the call so a second pass over the same finished run — the monitor
+    // polls, and a repair loop re-enters this path — reuses the answer instead
+    // of paying for it again.
+    this.coverageJudge = options.coverageJudge ?? null;
+    /** @type {Map<string, Promise<{ notices: string[] }>>} */
+    this.coverageJudgements = new Map();
     if (!this.model) throw new Error("AgentRunStore requires a configured model.");
   }
 
@@ -1616,6 +1680,7 @@ export class AgentRunStore {
       sessionId,
       dispatchId,
       question,
+      briefText,
       effectiveAgentId,
       effectiveAgentVersion,
       effectiveRuntimeAgent,
@@ -1640,6 +1705,12 @@ export class AgentRunStore {
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
+    // The brief, before the prompt goes out, so it is held whatever happens
+    // next. This is the authoritative copy and the only one the gate reads.
+    if (briefText) {
+      this.dispatchedBriefs.set(record.id, briefText);
+      await this.writeWorkspaceBrief(project, briefText);
+    }
     try {
       const result = await sendPrompt(session, record);
       if (result?.accepted === false) {
@@ -1665,6 +1736,47 @@ export class AgentRunStore {
     } finally {
       this.dispatchOwners.delete(record.id);
     }
+  }
+
+  /** One semantic coverage judgement per run, whatever else happens to it.
+   *
+   *  The cost ceiling is the point: one finished run, one model call. The
+   *  in-flight promise is cached rather than its result, so two monitor passes
+   *  landing together do not both issue a call.
+   *  @param {string} runId @param {any} context */
+  judgeCoverageOnce(runId, context) {
+    const existing = this.coverageJudgements.get(runId);
+    if (existing) return existing;
+    const pending = Promise.resolve(this.coverageJudge.judge(context))
+      .catch(() => ({ notices: [], judged: false, verdicts: [] }));
+    this.coverageJudgements.set(runId, pending);
+    return pending;
+  }
+
+  /** Put a read-only copy of the brief in the workspace.
+   *
+   *  The brief used to exist only inside the prompt, which meant a run could
+   *  only work from what was still in its context: after an hour of retrieval
+   *  the fifth question is a recollection. A file on disk it can re-read is not.
+   *
+   *  It is a copy, not the source of truth. The delivery gate reads the
+   *  server's in-memory copy and never this one, because a run that supplies
+   *  its own brief is setting its own exam; this file exists so the run — and
+   *  the run-side preflight — can see what was asked. The gate compares the two
+   *  and says so if they differ.
+   *
+   *  Failure to write is not a reason to refuse a dispatch: the brief is still
+   *  in the prompt and still on the run record.
+   *  @param {any} project @param {string} briefText */
+  async writeWorkspaceBrief(project, briefText) {
+    try {
+      await writeFileAtomicNoFollow(
+        project.workspaceDir,
+        path.join(project.workspaceDir, workspaceBriefPath),
+        briefText,
+        { encoding: "utf8", mode: 0o444 },
+      );
+    } catch { /* advisory copy only; the authoritative one is on the run record */ }
   }
 
   async markDispatch(project, rawRunId, status) {
@@ -1713,6 +1825,10 @@ export class AgentRunStore {
       this.clinicalRepairBaselineCursors.delete(runId);
       this.clinicalRepairSenders.delete(runId);
       this.clinicalRepairReportSizes.delete(runId);
+      // The gate has already run by the time a run reaches a terminal state,
+      // so the brief has done its work; keeping it would grow with every run.
+      this.dispatchedBriefs.delete(runId);
+      this.coverageJudgements.delete(runId);
     }
     if (outcome.transitioned) {
       try {
@@ -1805,6 +1921,11 @@ export class AgentRunStore {
           this.agentRegistry,
           sourceArtifactProvenance,
           allAssistants,
+          // Only what this process dispatched. A run recovered from the ledger
+          // after a restart has no brief here, and the gate is told so rather
+          // than reading the copy in the workspace.
+          this.dispatchedBriefs.get(run.id) ?? null,
+          this.coverageJudge ? (context) => this.judgeCoverageOnce(run.id, context) : null,
         );
       } catch {
         completion = { artifacts: [], errorCode: "specialist_contract_unavailable" };

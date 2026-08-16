@@ -670,6 +670,34 @@ export function loadConfig(overrides = {}) {
         ?? process.env.OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD
         ?? 0.75,
     ),
+    // Semantic coverage judging on a finished clinical evidence package (see
+    // coverageJudge.mjs). Every line number and quotation it reports is
+    // verified against the package first, and it never withholds a delivery.
+    //
+    // Off by default all the same, on three measurements. Of 114 verdicts kept
+    // across the twenty-nine corpus packages, 3 landed on a labelled defect, so
+    // a reader gets about four notes per delivery to find one real thing. The
+    // same package judged five times at temperature 0 produced 6, 4, 4, 3 and 4
+    // verdicts, and one entry changed which fault it was accused of -- a note
+    // that cannot be reproduced cannot be a regression signal. And the one
+    // field a reader actually reads, `why`, is the one field no code can check;
+    // a model that decides to write "no problems, deliver as is" will have it
+    // printed verbatim.
+    //
+    // Turn it on per deployment (OPEN_SCIENCE_COVERAGE_JUDGE_ENABLED=true) to
+    // gather the blind-rated sample that would justify making it the default.
+    coverageJudgeEnabled:
+      overrides.coverageJudgeEnabled ?? boolEnv("OPEN_SCIENCE_COVERAGE_JUDGE_ENABLED", false),
+    // Measured, not guessed: 29 live judgements of the corpus packages against
+    // deepseek-v4-pro took a median of 165 s and at most 214 s, because the
+    // model reasons over the whole excerpt before it writes a verdict. At the
+    // 120 s this used to default to, four deliveries in five would have aborted
+    // and reported "not judged" — a degraded notice on almost every delivery,
+    // which reads as a broken check rather than an absent one. The wait is paid
+    // once per run, at the end of a run that took tens of minutes.
+    coverageJudgeTimeoutMs: Number(
+      overrides.coverageJudgeTimeoutMs ?? process.env.OPEN_SCIENCE_COVERAGE_JUDGE_TIMEOUT_MS ?? 420_000,
+    ),
     modelGatewaySigningSecret: modelGatewaySecret.value,
     modelGatewaySigningSecretSource: modelGatewaySecret.source,
     modelGatewaySigningSecretError: modelGatewaySecret.error,
