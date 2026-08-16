@@ -5,9 +5,20 @@ import {
   citationIntegrityIssues,
   clinicalEvidencePackageErrorCode,
   numberedReferenceCount,
-  validateClinicalEvidencePackage,
+  validateClinicalEvidencePackage as validatePackage,
 } from "../src/clinicalEvidenceQuality.mjs";
-import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
+import { deepResearchPackage, questionCoverageLedger } from "./fixtures/clinicalEvidencePackage.mjs";
+
+/** The question-coverage ledger cites report line numbers, and almost every
+ *  case below edits the report. Rebuild it against the report the case actually
+ *  built, so a case about a quotation is not failed over a stale line number;
+ *  a case whose subject is the ledger sets `keepCoverage` and supplies its own.
+ *  @param {any} input */
+function validateClinicalEvidencePackage(input) {
+  return validatePackage(input?.keepCoverage
+    ? input
+    : { ...input, questionCoverageText: questionCoverageLedger(input?.reportText, input?.searchLogText) });
+}
 
 
 function claim(index, domain) {
@@ -2768,4 +2779,304 @@ test("the standard wording of a GRADE high-certainty verdict is not a contradict
     appraisalBlocking("证据体确定性以 GRADE 表述。", "纳入研究方法学质量偏低，按 GRADE 评为高确定性 [1]。").length,
     1,
   );
+});
+
+// --- The question-coverage ledger -------------------------------------------
+//
+// The gate never sees the brief, so it cannot check that every numbered
+// question was answered. It checks the run's own account of them against the
+// artifacts it does hold. Each case below is one of those cross-checks.
+
+/** A coverage-targeted package: the fixture, with the ledger the case supplies.
+ *  @param {any} ledger @param {(input: any) => void} [edit] */
+function coveragePackage(ledger, edit) {
+  const input = deepResearchPackage();
+  if (edit) edit(input);
+  input.keepCoverage = true;
+  input.questionCoverageText = typeof ledger === "string" ? ledger : JSON.stringify(ledger);
+  return input;
+}
+
+/** @param {any} ledger @param {(input: any) => void} [edit] */
+function coverageBlocking(ledger, edit) {
+  const result = validateClinicalEvidencePackage(coveragePackage(ledger, edit));
+  return result.blockingIssues.filter((issue) => (
+    /^question-coverage\.json /.test(issue) || /^摘要重述研究范围时把问题数/.test(issue)
+  ));
+}
+
+/** The ledger the fixture is valid under, as an object to edit. */
+function coverageLedgerObject() {
+  const input = deepResearchPackage();
+  return JSON.parse(input.questionCoverageText);
+}
+
+test("the coverage ledger is a required deliverable, and its absence is stated as such", () => {
+  for (const absent of ["", "   ", undefined]) {
+    const input = deepResearchPackage();
+    input.keepCoverage = true;
+    input.questionCoverageText = absent;
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, false, `an absent coverage ledger must block: ${JSON.stringify(absent)}`);
+    assert.match(result.blockingIssues.join("\n"), /^question-coverage\.json 台账格式无效：文件缺失或为空/m);
+    assert.equal(clinicalEvidencePackageErrorCode(result.blockingIssues), "specialist_question_coverage_invalid");
+  }
+  // And the fixture with its ledger passes, so this cannot pass by the whole
+  // family having been deleted.
+  assert.equal(validateClinicalEvidencePackage(deepResearchPackage()).valid, true);
+});
+
+test("a malformed coverage ledger names the field that is wrong", () => {
+  const cases = [
+    ["[]", /顶层必须是对象/],
+    ["{", /不是合法 JSON/],
+    ['{"schemaVersion":2,"entries":[]}', /必须写 "schemaVersion": 1/],
+    ['{"schemaVersion":1,"entries":[]}', /entries 必须是非空数组/],
+    ['{"schemaVersion":1,"entries":[{"question":"胸口发闷是心绞痛还是胃病","status":"answered","reportLines":[1]}]}', /\.id 必须是题面编号/],
+    ['{"schemaVersion":1,"entries":[{"id":"1.1","question":"短","status":"answered","reportLines":[1]}]}', /\.question 必须转录子问原文/],
+    ['{"schemaVersion":1,"entries":[{"id":"1.1","question":"胸口发闷是心绞痛还是胃病","status":"partial"}]}', /\.status 必须是/],
+  ];
+  for (const [ledger, expected] of cases) {
+    const issues = coverageBlocking(ledger);
+    assert.ok(issues.length > 0, `a malformed ledger must block: ${ledger}`);
+    assert.match(issues.join("\n"), expected);
+  }
+  // A repeated id, and a claim the matrix does not have.
+  const duplicate = coverageLedgerObject();
+  duplicate.entries[1].id = duplicate.entries[0].id;
+  assert.match(coverageBlocking(duplicate).join("\n"), /条目编号 1\.1 出现了两次/);
+  const invented = coverageLedgerObject();
+  invented.entries[0].claimIds = ["CLM-777"];
+  assert.match(coverageBlocking(invented).join("\n"), /证据矩阵里没有这个 claim/);
+});
+
+test("an answered sub-question must land on a report line that carries evidence", () => {
+  const beyond = coverageLedgerObject();
+  beyond.entries[0].reportLines = [9999];
+  assert.match(
+    coverageBlocking(beyond).join("\n"),
+    /条目 1\.1（「胸口突然发闷发紧、像被压着一样，是心绞痛还是胃病」）声明 answered，但指向报告第 9999 行/,
+  );
+
+  // Pointing at the reference list, at the limitations, and at a blank line.
+  const input = deepResearchPackage();
+  const lines = input.reportText.split("\n");
+  const lineIn = (heading) => {
+    let current = "";
+    for (const [index, line] of lines.entries()) {
+      const found = /^##\s+(.*)$/.exec(line);
+      if (found) current = found[1];
+      if (new RegExp(heading).test(current) && !/^##/.test(line) && line.trim()) return index + 1;
+    }
+    return 0;
+  };
+  for (const [line, expected] of [
+    [lineIn("参考文献"), /那一行在「参考文献」一节里/],
+    [lineIn("局限"), /那一行在「局限与不确定性」一节里/],
+    [lines.findIndex((value) => !value.trim()) + 1, /那一行是空行或只有标记/],
+  ]) {
+    const ledger = coverageLedgerObject();
+    ledger.entries[0].reportLines = [line];
+    ledger.entries[1].reportLines = [line];
+    assert.match(coverageBlocking(ledger).join("\n"), expected, `line ${line}`);
+  }
+
+  // A real prose line that carries no claim anchor anywhere in its paragraph.
+  const unanchored = lines.findIndex((line) => (
+    line.trim() && !/^#/.test(line) && !/claim:CLM/.test(line)
+  )) + 1;
+  const bare = coverageLedgerObject();
+  bare.entries[0].reportLines = [unanchored];
+  bare.entries[1].reportLines = [unanchored];
+  assert.match(coverageBlocking(bare).join("\n"), /所在段落都没有 claim 锚点/);
+
+  // The unedited ledger clears all of it.
+  assert.deepEqual(coverageBlocking(coverageLedgerObject()), []);
+});
+
+test("a declared gap must be backed by a search the retrieval tools really ran", () => {
+  const invented = coverageLedgerObject();
+  invented.entries[2].searches = [{
+    query: "a search that was never run in this session",
+    database: "PubMed",
+    searchedAt: "2026-02-11",
+  }];
+  assert.match(
+    coverageBlocking(invented).join("\n"),
+    /条目 2\.1（[^）]*）声明 gap，其检索式「a search that was never run in this session」在 clinical-evidence-search\.json 的 queries 中没有对应记录/,
+  );
+
+  const wrongDatabase = coverageLedgerObject();
+  wrongDatabase.entries[2].searches[0].database = "Embase";
+  assert.match(coverageBlocking(wrongDatabase).join("\n"), /声明的数据源是「Embase」/);
+
+  const wrongDate = coverageLedgerObject();
+  wrongDate.entries[2].searches[0].searchedAt = "2020-01-01";
+  assert.match(coverageBlocking(wrongDate).join("\n"), /声明的检索日期是 2020-01-01/);
+
+  for (const searches of [[], undefined, [{ query: "x" }]]) {
+    const missing = coverageLedgerObject();
+    missing.entries[2].searches = searches;
+    assert.ok(coverageBlocking(missing).length > 0, `a gap without a real search must block: ${JSON.stringify(searches)}`);
+  }
+
+  // Transcription differences in the query — spacing, quotes, case — are not a
+  // search that never ran.
+  const retyped = coverageLedgerObject();
+  retyped.entries[2].searches[0].query = ` "Distinct   Structured" search CONCEPT 1 `;
+  assert.deepEqual(coverageBlocking(retyped), []);
+});
+
+test("a registered gap may not be written as an answer where the reader takes the answer away", () => {
+  // One sentence per family, each carrying the gap's own subject, inserted into
+  // each of the three sections a reader reads for the answer.
+  const subject = "本品在夜间低血压人群中的院外自救";
+  const families = [
+    `${subject}最常见的表现形式是无症状低灌注 [1] <!-- claim:CLM-001 -->。`,
+    `${subject}的有效率为 62%，优于对照 [1] <!-- claim:CLM-001 -->。`,
+    `${subject}推荐在症状出现后即刻含服 [1] <!-- claim:CLM-001 -->。`,
+    `${subject}无相关证据，文献中没有任何记载 [1] <!-- claim:CLM-001 -->。`,
+  ];
+  const sections = [["## 摘要\n", "摘要"], ["## 结论\n", "结论"], ["## 实际处置\n", "临床实践要点"]];
+  for (const sentence of families) {
+    for (const [heading, name] of sections) {
+      const ledger = coverageLedgerObject();
+      ledger.entries[2].question = `${subject}有无以临床结局为终点的直接研究`;
+      const issues = coverageBlocking(ledger, (input) => {
+        input.reportText = input.reportText.replace(heading, `${heading}${sentence}\n`);
+      });
+      assert.ok(
+        issues.some((issue) => new RegExp(`条目 2\\.1[^\\n]*登记为 gap，${name}第 \\d+ 行`).test(issue)),
+        `${name} / ${sentence}: ${issues.join("\n") || "no finding"}`,
+      );
+      assert.equal(
+        clinicalEvidencePackageErrorCode(issues),
+        "specialist_question_coverage_gap_overstated",
+      );
+    }
+  }
+});
+
+test("admitting a gap is not asserting one, and the sentences the corpus wrote for it stay writable", () => {
+  // Verbatim from delivered packages. A rule that punished these would teach
+  // runs to stop writing them, which is the opposite of what the ledger is for.
+  // Each is placed in 结论 beside a gap entry whose question is that same
+  // sentence, which is the largest topic overlap the rule can ever see.
+  for (const sentence of [
+    "在“气滞血瘀型冠心病心绞痛”之外，未检索到速效救心丸适应症内的直接临床证据。",
+    "速效救心丸说明书与相关共识未检索到任何时间界限或再次给药间隔 [7]。",
+    "超出说明书适应症的长期“保养”或“预防”性服用，未检索到适应症内直接证据。",
+    "排便姿势与通便措施仅具排便力学与血流动力学终点，未检索到以心血管事件为终点的研究。",
+    "出院后自备、按需含服这一用法未检索到以临床结局为终点的直接研究。",
+    "未检索到以睡眠不足人群为对象、以本品为干预的临床研究，此为证据空缺，非已证实无效。",
+    "指南对体检报告该所见后各后续检查的推荐强度与证据等级未获核验，不逐条给出。",
+  ]) {
+    const ledger = coverageLedgerObject();
+    ledger.entries[2].question = sentence;
+    const issues = coverageBlocking(ledger, (input) => {
+      input.reportText = input.reportText.replace("## 结论\n", `## 结论\n${sentence}\n`);
+    });
+    assert.deepEqual(issues, [], `a compliant admission of a gap was flagged: ${sentence}`);
+  }
+  // And the sentence that turns the same admission into a finding about the
+  // literature still blocks, so this cannot pass by the rule being gone.
+  const asserted = coverageLedgerObject();
+  asserted.entries[2].question = "本品在该人群中的院外自救有无以临床结局为终点的直接研究";
+  assert.ok(coverageBlocking(asserted, (input) => {
+    input.reportText = input.reportText.replace(
+      "## 结论\n",
+      "## 结论\n本品在该人群中的院外自救无相关证据 [1] <!-- claim:CLM-001 -->。\n",
+    );
+  }).length > 0);
+});
+
+test("an honest abstract and an under-registered ledger disagree, and that is the finding", () => {
+  // The adversarial pass walked straight through the first version: keep the
+  // abstract honest at five questions, register three entries and mark all
+  // three answered, and the check -- which only fired when the abstract
+  // claimed fewer than the ledger held -- stayed silent. Neither number comes
+  // from the brief, so this can only catch the run contradicting itself; the
+  // least it must do is catch it in both directions.
+  const restate = "本文评价五个问题：（1）甲；（2）乙；（3）丙；（4）丁；（5）戊。";
+  const withAbstract = (input) => {
+    input.reportText = input.reportText.replace("## 摘要\n", `## 摘要\n${restate}\n`);
+  };
+  const ledgerOf = (count) => {
+    const ledger = coverageLedgerObject();
+    const lines = ledger.entries[0].reportLines;
+    ledger.entries = Array.from({ length: count }, (_, index) => ({
+      id: `${index + 1}.1`,
+      question: `题面第 ${index + 1} 问的原文转录，长度足够作为一条子问`,
+      status: "answered",
+      reportLines: lines,
+    }));
+    return ledger;
+  };
+  assert.deepEqual(coverageBlocking(ledgerOf(5), withAbstract).filter((issue) => /问题数/.test(issue)), []);
+  for (const count of [3, 7]) {
+    const issues = coverageBlocking(ledgerOf(count), withAbstract);
+    assert.ok(
+      issues.some((issue) => /问题数/.test(issue)),
+      `a ledger of ${count} groups against an abstract of five must not pass: ${issues.join("\n") || "no finding"}`,
+    );
+  }
+});
+
+test("naming a quantity as an objective is not reporting one", () => {
+  // The abstract's 目的 sentence says what the paper set out to count. Reading
+  // it as a proportion told the author to rewrite a statement of intent as a
+  // gap declaration, which is not a thing an abstract can say.
+  const ledger = coverageLedgerObject();
+  ledger.entries = [{
+    id: "1.1",
+    question: "胸痛心源性与常见非心源性病因的构成比",
+    status: "gap",
+    searches: ledger.entries.find((entry) => entry.status === "gap")?.searches
+      ?? [{ query: "chest pain aetiology proportion", database: "PubMed", searchedAt: "2026-08-13" }],
+  }];
+  const issues = coverageBlocking(ledger, (input) => {
+    input.reportText = input.reportText.replace(
+      "## 摘要\n",
+      "## 摘要\n**目的** 清点胸痛心源性与常见非心源性病因的构成比。\n",
+    );
+  });
+  assert.deepEqual(issues.filter((issue) => /给出了排序或构成比/.test(issue)), []);
+});
+
+test("the abstract may not restate the brief with fewer questions than it has", () => {
+  const ledger = coverageLedgerObject();
+  ledger.entries = [1, 2, 3, 4, 5].map((number) => ({
+    id: `${number}.1`,
+    question: `题面第 ${number} 问的原文转录，长度足够作为一条子问`,
+    status: "answered",
+    reportLines: ledger.entries[0].reportLines,
+  }));
+  for (const [heading, restatement] of [
+    ["## 摘要\n", "本文评价三个问题：（1）适应症边界；（2）鉴别路径；（3）院外处置。"],
+    ["## 摘要\n", "本文回答三个问题。"],
+    ["## 临床问题与分析框架\n", "本研究围绕三个问题展开：①适应症边界；②鉴别路径；③院外处置。"],
+  ]) {
+    const issues = coverageBlocking(ledger, (input) => {
+      input.reportText = input.reportText.replace(heading, `${heading}${restatement}\n`);
+    });
+    assert.ok(
+      issues.some((issue) => /^摘要重述研究范围时把问题数从 5 改小到 3/.test(issue)),
+      `${restatement}: ${issues.join("\n") || "no finding"}`,
+    );
+    assert.equal(clinicalEvidencePackageErrorCode(issues), "specialist_question_coverage_understated");
+  }
+  // Five restated as five is not a finding, and neither is a paragraph that
+  // enumerates something other than the study's questions.
+  for (const restatement of [
+    "本文评价五个问题：（1）适应症边界；（2）鉴别路径；（3）院外处置；（4）安全边界；（5）证据缺口。",
+    "常见病因有三类：（1）心源性；（2）胃食管；（3）肌骨。",
+  ]) {
+    assert.deepEqual(
+      coverageBlocking(ledger, (input) => {
+        input.reportText = input.reportText.replace("## 摘要\n", `## 摘要\n${restatement}\n`);
+      }),
+      [],
+      restatement,
+    );
+  }
 });

@@ -1,6 +1,63 @@
 // Shared, known-valid deep-research clinical evidence package fixture, used by
 // both the clinicalEvidenceQuality unit tests and the agentRuns integration
 // tests. Keep it valid: tests derive their broken variants from it.
+
+/** A valid question-coverage ledger for whatever report is passed in.
+ *
+ *  The ledger cites report line numbers, and nearly every case in these suites
+ *  edits the report — inserting a sentence into 讨论 moves every line after it.
+ *  Deriving the ledger from the report under test keeps a case about something
+ *  else from failing over stale line numbers, which is the same reason the
+ *  runs themselves write this file last.
+ *  @param {string} reportText @param {string} [searchLogText] */
+export function questionCoverageLedger(reportText, searchLogText = "") {
+  const lines = String(reportText ?? "").split("\n");
+  let heading = "";
+  const anchored = [];
+  for (const [index, line] of lines.entries()) {
+    const found = /^##\s+(.*)$/.exec(line);
+    if (found) heading = found[1];
+    if (/参考文献|参考来源|References?|局限|Limitations?/i.test(heading)) continue;
+    if (/<!--\s*claim:CLM-[0-9]{3,6}\s*-->|\[claim:CLM-[0-9]{3,6}\]/.test(line)) anchored.push(index + 1);
+  }
+  const entries = [
+    {
+      id: "1.1",
+      question: "胸口突然发闷发紧、像被压着一样，是心绞痛还是胃病",
+      status: "answered",
+      reportLines: [anchored[0] ?? 1],
+    },
+    {
+      id: "1.2",
+      question: "该先怎么办，院前应当采取哪些步骤",
+      status: "answered",
+      reportLines: [anchored[1] ?? anchored[0] ?? 1],
+    },
+  ];
+  let searchLog = null;
+  try {
+    searchLog = JSON.parse(String(searchLogText || "null"));
+  } catch {
+    searchLog = null;
+  }
+  const query = Array.isArray(searchLog?.queries) ? searchLog.queries[0] : null;
+  if (query?.query && query?.database) {
+    // A gap whose subject appears nowhere in the report, so the only thing under
+    // test is that a declared gap is backed by a search that really ran.
+    entries.push({
+      id: "2.1",
+      question: "长期随访中血脂谱变化与再入院率的关联有无直接研究",
+      status: "gap",
+      searches: [{
+        query: query.query,
+        database: query.database,
+        searchedAt: String(searchLog.searchedAt ?? "2026-02-11").slice(0, 10),
+      }],
+    });
+  }
+  return JSON.stringify({ schemaVersion: 1, entries });
+}
+
 export function deepResearchPackage() {
   const domains = [
     "pubmed.ncbi.nlm.nih.gov",
@@ -93,6 +150,7 @@ export function deepResearchPackage() {
   );
   const searchLogText = JSON.stringify({
     schemaVersion: 1,
+    searchedAt: "2026-02-11T09:00:00Z",
     queries: Array.from({ length: 8 }, (_, index) => ({
       database: index % 2 === 0 ? "PubMed" : "Official guidelines",
       query: `distinct structured search concept ${index + 1}`,
@@ -137,6 +195,9 @@ export function deepResearchPackage() {
     reportText,
     matrix: { schemaVersion: 1, claims },
     searchLogText,
+    // The run's own account of the brief's questions, derived from the report it
+    // is an account of.
+    questionCoverageText: questionCoverageLedger(reportText, searchLogText),
     referencesText,
     citationLedgerText,
     citationAuditText,

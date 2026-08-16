@@ -240,7 +240,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.7.1",
+      effectiveAgentVersion: "2.9.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
 
@@ -2233,6 +2233,7 @@ test("delivers a package whose only gap is bookkeeping, and does not stamp it un
             { path: "references.bib", required: true },
             { path: "citation-ledger.csv", required: true },
             { path: "citation-audit.md", required: true },
+            { path: "question-coverage.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
         }),
@@ -2262,6 +2263,7 @@ test("delivers a package whose only gap is bookkeeping, and does not stamp it un
       ["references.bib", pkg.referencesText],
       ["citation-ledger.csv", pkg.citationLedgerText],
       ["citation-audit.md", pkg.citationAuditText],
+      ["question-coverage.json", pkg.questionCoverageText],
     ]);
     for (const [relative, content] of deliverables) {
       await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
@@ -2374,6 +2376,7 @@ test("one plain-HTTP citation is a notice on a delivered package, not a reason t
             { path: "references.bib", required: true },
             { path: "citation-ledger.csv", required: true },
             { path: "citation-audit.md", required: true },
+            { path: "question-coverage.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
         }),
@@ -2402,6 +2405,7 @@ test("one plain-HTTP citation is a notice on a delivered package, not a reason t
       ["references.bib", pkg.referencesText],
       ["citation-ledger.csv", pkg.citationLedgerText],
       ["citation-audit.md", pkg.citationAuditText],
+      ["question-coverage.json", pkg.questionCoverageText],
     ]);
     for (const [relative, content] of deliverables) {
       await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
@@ -2757,6 +2761,13 @@ test("every repairable rejection is a code the gate actually returns", async () 
   // rather than as a literal here, so the classification table is the second
   // place a code is returned from. A code listed as repairable and present in
   // neither is dead, which is what this test exists to catch.
+  // A missing deliverable that earns a code of its own is the third place, and
+  // the reason it has one is exactly this set: the generic missing-output code
+  // is discarded, so a deliverable that can be written from the finished package
+  // is mapped to a repairable code instead.
+  const missing = /const missingOutputErrorCodes = Object\.freeze\(\{([\s\S]*?)\n\}\);/.exec(source);
+  assert.ok(missing, "the missing-deliverable code table moved");
+  for (const [, code] of missing[1].matchAll(/:\s*"(specialist_[a-z_]+)"/g)) returned.add(code);
   const gate = await readFile(new URL("../src/clinicalEvidenceQuality.mjs", import.meta.url), "utf8");
   const table = /const clinicalEvidenceIssueCodes = Object\.freeze\(\[([\s\S]*?)\n\]\);/.exec(gate);
   assert.ok(table, "the gate's error-code table moved");
@@ -3007,3 +3018,131 @@ test("an unreachable open web does not fail a complete package", () => {
   assert.equal(recoverableEvidenceSourceErrorCodes.has("web_search_query_invalid"), false);
 });
 
+
+test("a package missing only the coverage ledger is repaired, not discarded", async () => {
+  // Every package delivered before this deliverable existed is in exactly this
+  // state: the report, the matrix, the search log and every citation artifact
+  // are on disk, and the one file absent is the account of the brief's
+  // questions — which is written from the others. The generic
+  // specialist_required_output_missing is not repairable, so a code of its own
+  // is what keeps the finished analysis out of the bin.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-coverage-missing-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_coverage_missing",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    const pkg = deepResearchPackage();
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+            { path: "clinical-evidence-search.json", required: true },
+            { path: "references.bib", required: true },
+            { path: "citation-ledger.csv", required: true },
+            { path: "citation-audit.md", required: true },
+            { path: "question-coverage.json", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+      // No repair budget: go straight to the terminal delivery decision.
+      maxClinicalRepairAttempts: 0,
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_coverage_missing",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async () => ({ accepted: true }));
+
+    const deliverables = new Map([
+      ["clinical-evidence-report.md", pkg.reportText],
+      ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
+      ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
+      ["clinical-evidence-search.json", pkg.searchLogText],
+      ["references.bib", pkg.referencesText],
+      ["citation-ledger.csv", pkg.citationLedgerText],
+      ["citation-audit.md", pkg.citationAuditText],
+    ]);
+    for (const [relative, content] of deliverables) {
+      await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
+    }
+    for (const [artifactPath, content] of Object.entries(pkg.sourceArtifacts)) {
+      await mkdir(path.join(project.workspaceDir, path.dirname(artifactPath)), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, artifactPath), content, "utf8");
+    }
+
+    const retrievalParts = Object.entries(pkg.sourceArtifacts).map(([artifactPath, content]) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_open_access_full_text",
+      state: {
+        status: "completed",
+        output: JSON.stringify({
+          status: "success",
+          artifacts: [artifactPath],
+          data: { artifactSha256s: { [artifactPath]: createHash("sha256").update(content, "utf8").digest("hex") } },
+        }),
+      },
+    }));
+    const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_literature_search",
+      state: { status: "completed", input: { query: entry.query } },
+    }));
+    history = [{
+      info: { id: "msg_coverage_missing", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...retrievalParts,
+        ...searchParts,
+        ...[...deliverables.keys()].map((filePath) => ({
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath } },
+        })),
+        { type: "text", text: "Completed." },
+      ],
+    }];
+
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.id, run.id);
+    assert.equal(finished.errorCode, "specialist_question_coverage_missing");
+    assert.ok(
+      repairableEvidencePackageErrorCodes.has(finished.errorCode),
+      "a package whose only absent file is the coverage ledger must go back for repair, not be thrown away",
+    );
+    // And it must hand back what to write, since the repair path has nothing to
+    // pass on without it.
+    assert.match(finished.qualityNotices.join("\n"), /question-coverage\.json is not in the workspace/);
+    assert.match(finished.qualityNotices.join("\n"), /one entry per atomic sub-question/);
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
