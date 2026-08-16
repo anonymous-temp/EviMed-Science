@@ -58,6 +58,33 @@ export function questionCoverageLedger(reportText, searchLogText = "") {
   return JSON.stringify({ schemaVersion: 1, entries });
 }
 
+/** The brief this fixture's package was commissioned by.
+ *
+ *  The server holds this on the run record from dispatch and hands it to the
+ *  gate; the run gets a read-only copy at .evimed-brief/research-brief.md. Its
+ *  two numbered questions are the ones questionCoverageLedger transcribes, so
+ *  the base package is complete against its brief as well as against itself.
+ */
+export function researchBrief() {
+  return [
+    "# 研究任务",
+    "",
+    "## 选题",
+    "",
+    "**《急性胸痛的院前判别与处置：证据评价》**",
+    "",
+    "## 需要回答的问题",
+    "",
+    "1. 胸口突然发闷发紧、像被压着一样，是心绞痛还是胃病？该先怎么办，院前应当采取哪些步骤？",
+    "2. 长期随访中血脂谱变化与再入院率的关联有无直接研究？",
+    "",
+    "## 交付",
+    "",
+    "一篇面向临床医师与药师的中文学术论文。",
+    "",
+  ].join("\n");
+}
+
 export function deepResearchPackage() {
   const domains = [
     "pubmed.ncbi.nlm.nih.gov",
@@ -198,6 +225,10 @@ export function deepResearchPackage() {
     // The run's own account of the brief's questions, derived from the report it
     // is an account of.
     questionCoverageText: questionCoverageLedger(reportText, searchLogText),
+    // The brief itself, as the server holds it. Its presence is what turns the
+    // coverage check from "does the run contradict itself" into "does the run
+    // answer what was asked".
+    briefText: researchBrief(),
     referencesText,
     citationLedgerText,
     citationAuditText,

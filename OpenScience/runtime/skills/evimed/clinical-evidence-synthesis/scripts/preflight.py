@@ -2045,12 +2045,21 @@ def citation_numbers(line: str) -> set[int]:
 
 # --- The question-coverage ledger, mirrored from clinicalEvidenceQuality.mjs --
 #
-# The server gate cannot see the brief — the run ledger keeps a 160-character
-# preview of the question and nothing more — so it checks the run's own account
-# of the brief's questions against the artifacts it does hold: the report's
-# lines, the claim anchors in them, and this package's search log. Every rule
-# below is the same rule the gate applies, so a run that clears this file is not
-# failed for coverage after the fact.
+# Two halves. The self-consistency half checks the run's own account of the
+# brief's questions against the artifacts this workspace holds: the report's
+# lines, the claim anchors in them, and this package's search log. The other
+# half checks that account against the brief itself, read from the read-only
+# copy the server wrote to .evimed-brief/research-brief.md at dispatch.
+#
+# That copy is the one thing here the gate does NOT use. The gate reads the
+# server's own in-memory copy of the brief — a run that supplies its own brief
+# supplies its own exam — and compares the two, so editing this file changes
+# nothing except that the gate reports the difference. If this file is missing
+# (an older workspace, a run whose server could not write it) the brief-derived
+# rules below stand down and only the self-consistency half runs, exactly as the
+# gate does when its own copy is gone. Every other rule below is the rule the
+# gate applies, so a run that clears this file is not failed for coverage after
+# the fact.
 COVERAGE_STATUSES = ("answered", "gap")
 # Mirrors the gate: a sentence stating an objective is not a finding.
 COVERAGE_OBJECTIVE_SENTENCE = re.compile(
@@ -2094,12 +2103,6 @@ COVERAGE_RETRIEVAL_RESTATEMENT = re.compile(
     r"|检索[^。；\n]{0,60}(?:数据库|索引|注册库|PubMed|Europe\s*PMC|Crossref|ClinicalTrials|CNKI)",
     re.I,
 )
-COVERAGE_SCOPE_CUE = re.compile(
-    r"(?:本文|本研究|本综述|本报告|本篇)[^。；\n]{0,24}"
-    r"(?:评价|评估|回答|讨论|考察|梳理|分析|围绕|聚焦|检索)[^。；\n]{0,12}(?:问题|方面)"
-)
-COVERAGE_SCOPE_COUNT_WORD = re.compile(r"(\d{1,2}|[一二三四五六七八九十]{1,3})\s*(?:个|项|类|方面)?\s*(?:核心|主要)?问题")
-COVERAGE_CIRCLED_DIGITS = "①②③④⑤⑥⑦⑧⑨⑩"
 COVERAGE_CONTENT_RUN = re.compile(r"[㐀-鿿豈-﫿A-Za-z0-9]+")
 COVERAGE_TOPIC_CHARACTERS = 8
 
@@ -2129,46 +2132,6 @@ def coverage_shared_topic(left: str, right: str) -> str:
     return best if len(best) >= COVERAGE_TOPIC_CHARACTERS else ""
 
 
-def coverage_number_value(run: str) -> int | None:
-    if run.isdigit():
-        return int(run)
-    digits = "零一二三四五六七八九"
-    if run == "十":
-        return 10
-    if re.fullmatch(r"十[一二三四五六七八九]", run):
-        return 10 + digits.index(run[1])
-    if re.fullmatch(r"[一二三四五六七八九]十", run):
-        return digits.index(run[0]) * 10
-    if re.fullmatch(r"[一二三四五六七八九]十[一二三四五六七八九]", run):
-        return digits.index(run[0]) * 10 + digits.index(run[2])
-    return digits.index(run) if re.fullmatch(r"[零一二三四五六七八九]", run) else None
-
-
-def coverage_enumerated_marker(paragraph: str, index: int) -> bool:
-    if f"（{index}）" in paragraph or f"({index})" in paragraph:
-        return True
-    if index <= len(COVERAGE_CIRCLED_DIGITS) and COVERAGE_CIRCLED_DIGITS[index - 1] in paragraph:
-        return True
-    ordinals = "一二三四五六七八九十"
-    return index <= len(ordinals) and re.search(rf"第{ordinals[index - 1]}[，,、]", paragraph) is not None
-
-
-def coverage_declared_scope_count(section_text: str) -> int:
-    claimed = 0
-    for paragraph in re.split(r"\n\s*\n", section_text or ""):
-        if not COVERAGE_SCOPE_CUE.search(paragraph):
-            continue
-        enumerated = 0
-        while coverage_enumerated_marker(paragraph, enumerated + 1):
-            enumerated += 1
-        claimed = max(claimed, enumerated)
-        for match in COVERAGE_SCOPE_COUNT_WORD.finditer(paragraph):
-            value = coverage_number_value(match.group(1))
-            if value is not None and 0 < value <= 30:
-                claimed = max(claimed, value)
-    return claimed
-
-
 def coverage_section_of_line(report: str) -> list[str]:
     heading = ""
     headings: list[str] = []
@@ -2195,6 +2158,219 @@ def coverage_line_substance(line: str) -> str:
     text = re.sub(r"\[[^\]\n]*\]\([^)\s]*\)", "", text)
     text = re.sub(r"\[\s*\d+(?:\s*[,，、\-–]\s*\d+)*\s*\]", "", text)
     return re.sub(r"[#>*_`|\-–—\s]", "", text).strip()
+
+
+# --- Reading the brief -------------------------------------------------------
+#
+# Mirrors parseBriefQuestions / briefEnumerations / briefTranscriptionOverlap in
+# clinicalEvidenceQuality.mjs. The one difference that matters is the source:
+# this reads the workspace copy, which this run can edit, while the gate reads
+# the copy the server has held since dispatch. They are the same file until
+# something in this run changes it — and if it does, the gate checks the
+# server's copy and reports the difference. Do not edit it.
+WORKSPACE_BRIEF = ".evimed-brief/research-brief.md"
+BRIEF_QUESTIONS_HEADING = "需要回答的问题"
+BRIEF_QUESTION_NUMBER_LINE = re.compile(r"^\s*(\d{1,2})[.、)）]\s*(.*)$")
+BRIEF_ITEM_FUNCTION_WORD = re.compile(r"是否|何种|可否|为何|还是|如何|能否|多少|哪些|分别|各自|有无")
+BRIEF_ITEM_FRAGMENT_PREFIX = re.compile(r"^[其以在缺仅这那该此]")
+BRIEF_ITEM_MAX_LENGTH = 10
+BRIEF_TRANSCRIPTION_CHARACTERS = 12
+BRIEF_ENUMERATION_PRESENT_FLOOR = 2
+BRIEF_ENUMERATION_PRESENT_RATIO = 1 / 3
+BRIEF_DROPPED_ITEMS_NAMED = 8
+
+
+def brief_collapse(value: str) -> str:
+    return re.sub(r"\s+", "", value or "")
+
+
+def brief_content_only(value: str) -> str:
+    # Same character class the rest of this file mirrors the gate with
+    # (COVERAGE_CONTENT_RUN): Han, Latin, digits. Not \w, which would also keep
+    # underscores and every other script and so would not be the gate's rule.
+    return "".join(COVERAGE_CONTENT_RUN.findall(value or ""))
+
+
+def brief_section_text(brief: str, heading: str) -> str:
+    # Mirrors the gate: a brief pasted out of Word arrives CRLF and the
+    # heading match fails, silently disabling the whole family.
+    brief = str(brief or "").replace("\r\n", "\n").replace("\r", "\n")
+    collected: list[str] = []
+    inside = False
+    for line in (brief or "").split("\n"):
+        match = re.match(r"^##\s+(.*)$", line)
+        if match:
+            inside = match.group(1).strip() == heading
+            continue
+        if inside:
+            collected.append(line)
+    return "\n".join(collected)
+
+
+def parse_brief_questions(brief: str) -> list[tuple[int, str]] | None:
+    """The brief's numbered questions, or None when this is not a brief of that
+    shape — in which case every brief-derived rule stands down."""
+    section_text = brief_section_text(brief, BRIEF_QUESTIONS_HEADING)
+    if not section_text.strip():
+        return None
+    questions: list[list] = []
+    for line in section_text.split("\n"):
+        match = BRIEF_QUESTION_NUMBER_LINE.match(line)
+        if match:
+            questions.append([int(match.group(1)), match.group(2)])
+            continue
+        if questions and line.strip():
+            questions[-1][1] += line.strip()
+    if len(questions) < 2:
+        return None
+    if any(number != index + 1 for index, (number, _) in enumerate(questions)):
+        return None
+    return [(number, text) for number, text in questions]
+
+
+def brief_transcription_overlap(left: str, right: str) -> int:
+    """The longest run two strings share once punctuation is removed. Not
+    coverage_shared_topic: a transcribed sub-question is mostly punctuation, and
+    that rule (which stops at punctuation, by design, for report sentences)
+    called 32 honest entries inventions."""
+    a = brief_content_only(left)
+    b = brief_content_only(right)
+    best = 0
+    previous = [0] * (len(b) + 1)
+    for i in range(1, len(a) + 1):
+        current = [0] * (len(b) + 1)
+        for j in range(1, len(b) + 1):
+            if a[i - 1] != b[j - 1]:
+                continue
+            current[j] = previous[j - 1] + 1
+            best = max(best, current[j])
+        previous = current
+    return best
+
+
+def brief_item_term(raw: str) -> str:
+    runs = COVERAGE_CONTENT_RUN.split(raw or "")
+    trimmed = (raw or "")[len(runs[0]):len(raw or "") - len(runs[-1])] if len(runs) > 1 else ""
+    if not trimmed or len(trimmed) < 2 or len(trimmed) > BRIEF_ITEM_MAX_LENGTH:
+        return ""
+    if re.search(r"[，,。？；;：:—…]", trimmed):
+        return ""
+    if trimmed.endswith("等") or trimmed.endswith("的"):
+        return ""
+    if BRIEF_ITEM_FUNCTION_WORD.search(trimmed) or BRIEF_ITEM_FRAGMENT_PREFIX.match(trimmed):
+        return ""
+    return trimmed
+
+
+def brief_enumerations(question_text: str) -> list[list[str]]:
+    """The lists a brief question spells out with 、. Interior items only: the
+    first and last need the clause boundary guessed, and guessing it produced
+    sentence tails rather than items."""
+    runs: list[list[str]] = []
+    normalized = re.sub(r"[／/]", "、", re.sub(r"[（）()]", "、", question_text))
+    for clause in re.split(r"[。？；]", normalized):
+        parts = clause.split("、")
+        if len(parts) < 3:
+            continue
+        items: list[str] = []
+        for part in parts[1:-1]:
+            for piece in re.split(r"以及|[与及和或]", part):
+                term = brief_item_term(piece)
+                if term:
+                    items.append(term)
+        distinct = list(dict.fromkeys(items))
+        if len(distinct) >= 3:
+            runs.append(distinct)
+    return runs
+
+
+def brief_dropped_items(question_text: str, collapsed_report: str) -> list[str]:
+    dropped: list[str] = []
+    for run in brief_enumerations(question_text):
+        present = [term for term in run if brief_collapse(term) in collapsed_report]
+        absent = [term for term in run if brief_collapse(term) not in collapsed_report]
+        if not absent:
+            continue
+        if len(present) < BRIEF_ENUMERATION_PRESENT_FLOOR:
+            continue
+        if len(present) / len(run) < BRIEF_ENUMERATION_PRESENT_RATIO:
+            continue
+        dropped.extend(absent)
+    return list(dict.fromkeys(dropped))
+
+
+def check_brief_coverage(
+    root: Path,
+    report: str,
+    group_entries: dict[int, list[tuple[str, str, str]]],
+    issues: list[str],
+) -> None:
+    """The ledger against the brief this run was given. Silent when the
+    workspace has no brief copy — the gate degrades the same way."""
+    name = "question-coverage.json"
+    brief_path = root / WORKSPACE_BRIEF
+    if not brief_path.is_file():
+        return
+    try:
+        brief = brief_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return
+    questions = parse_brief_questions(brief)
+    if not questions:
+        return
+    collapsed_report = brief_collapse(report)
+    numbers = {number for number, _ in questions}
+    for number, text in questions:
+        covered = group_entries.get(number) or []
+        if not covered:
+            issues.append(
+                f"{name}: the brief's question {number} has no entry at all — 「{text[:80]}」. "
+                f"The brief asks {len(questions)} questions and the ledger registers each of them; "
+                "a question that went unanswered is still a question — register it as a gap, give a "
+                "search this run really ran, and state the gap in the body"
+            )
+            continue
+        for entry_id, entry_question, _status in covered:
+            bar = min(BRIEF_TRANSCRIPTION_CHARACTERS, len(brief_content_only(entry_question)))
+            if brief_transcription_overlap(text, entry_question) >= bar:
+                continue
+            elsewhere = next(
+                (
+                    other
+                    for other, other_text in questions
+                    if other != number and brief_transcription_overlap(other_text, entry_question) >= bar
+                ),
+                None,
+            )
+            issues.append(
+                f"{name}: {entry_id}.question is not a transcription of the brief's question {number} "
+                f"(「{text[:60]}」)"
+                + (
+                    f"; it transcribes question {elsewhere} — one entry covers one question, two questions are two entries"
+                    if elsewhere
+                    else "; transcribe the sub-question rather than paraphrasing it"
+                )
+            )
+        if not any(status == "answered" for _entry_id, _question, status in covered):
+            continue
+        dropped = brief_dropped_items(text, collapsed_report)
+        if dropped:
+            named = dropped[:BRIEF_DROPPED_ITEMS_NAMED]
+            issues.append(
+                f"{name}: {'、'.join(entry_id for entry_id, _q, _s in covered)} register the brief's question "
+                f"{number} as answered, but 「{'」「'.join(named)}」"
+                + (f" and {len(dropped) - len(named)} more" if len(dropped) > len(named) else "")
+                + " never appear anywhere in the report, while the rest of the same enumeration does. "
+                "Answer the item and anchor it, or split it into its own gap entry and say in the body "
+                "that no direct evidence was found for it"
+            )
+    for number in sorted(group_entries):
+        if number in numbers:
+            continue
+        issues.append(
+            f"{name}: {'、'.join(entry_id for entry_id, _q, _s in group_entries[number])} carry ids for the "
+            f"brief's question {number}, and the brief has {len(questions)} questions"
+        )
 
 
 def check_question_coverage(
@@ -2243,6 +2419,10 @@ def check_question_coverage(
     logged_date = str(search_log.get("searchedAt") or "")[:10]
     seen: set[str] = set()
     groups: set[str] = set()
+    # Which entries claim to cover each numbered brief question, keyed by the
+    # number their id leads with — the convention that makes the ledger
+    # comparable to the brief at all.
+    group_entries: dict[int, list[tuple[str, str, str]]] = {}
     gap_entries: list[dict] = []
     for index, entry in enumerate(entries):
         label = f"entries[{index}]"
@@ -2260,6 +2440,10 @@ def check_question_coverage(
         seen.add(entry_id)
         group = re.search(r"\d+", entry_id)
         groups.add(group.group(0) if group else entry_id)
+        if group:
+            group_entries.setdefault(int(group.group(0)), []).append(
+                (entry_id, question, str(entry.get("status")))
+            )
         if len(re.sub(r"\s+", "", question)) < 8:
             issues.append(f"{name}: {entry_id}.question must transcribe the sub-question (at least 8 characters)")
             continue
@@ -2385,16 +2569,7 @@ def check_question_coverage(
                     )
                     break
 
-    if groups:
-        for heading in ("摘要|Abstract", "引言|临床问题|Introduction"):
-            claimed = coverage_declared_scope_count(section(report, heading))
-            # Either direction; see the note in the gate.
-            if claimed > 0 and claimed != len(groups):
-                issues.append(
-                    f"{name}: {heading.split('|')[0]} restates the study as {claimed} questions while the ledger "
-                    f"registers {len(groups)} of the brief's numbers; a question that went unanswered is still a "
-                    "question — register it as a gap and state the gap in the body"
-                )
+    check_brief_coverage(root, report, group_entries, issues)
 
 
 def main() -> int:

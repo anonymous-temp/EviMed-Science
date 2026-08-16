@@ -1386,12 +1386,20 @@ const clinicalEvidenceIssueCodes = Object.freeze([
   { pattern: /^GRADE 等级与降级理由不自洽/, code: "declared-appraisal-must-execute" },
   // The question-coverage ledger. Four codes, because the four defects are
   // repaired in four different places: the ledger's own shape, an entry that
-  // points nowhere, a sentence that contradicts a registered gap, and an
-  // abstract that restates the brief with fewer questions than it has.
-  { pattern: /^question-coverage\.json 台账格式无效/, code: "specialist_question_coverage_invalid" },
-  { pattern: /^question-coverage\.json 条目 .*登记为 gap/, code: "specialist_question_coverage_gap_overstated" },
+  // points nowhere, a sentence that contradicts a registered gap, and a brief
+  // question the ledger does not account for at all.
+  { pattern: /^question-coverage\.json 台账格式无效|^工作区里的题面只读副本/, code: "specialist_question_coverage_invalid" },
+  // An entry that does not transcribe the question its id names is a defect in
+  // the ledger, not in the report the entry points at.
+  { pattern: /^question-coverage\.json 条目 .*的 question 不是题面第 \d+ 问的原文/, code: "specialist_question_coverage_invalid" },
+  // Anchored on this family's own sentence shape, not on the words 「登记为
+  // gap」 anywhere in the message: another coverage notice whose *advice* said
+  // to register something as a gap was classified as this defect.
+  { pattern: /^question-coverage\.json 条目 [^\n]{0,120}）登记为 gap，/, code: "specialist_question_coverage_gap_overstated" },
   { pattern: /^question-coverage\.json 条目 /, code: "specialist_question_coverage_unsupported" },
-  { pattern: /^摘要重述研究范围时把问题数/, code: "specialist_question_coverage_understated" },
+  // Was 「摘要重述研究范围时把问题数…」, a comparison between two numbers the run
+  // wrote itself. Same code, now earned by a comparison against the brief.
+  { pattern: /^题面第 \d+ 问在 question-coverage\.json 中没有任何条目/, code: "specialist_question_coverage_understated" },
 ]);
 
 /** The run-level error code for a package's blocking issues.
@@ -2533,26 +2541,40 @@ function validateSynthesizedClaim(
 // were that one shape. A brief names five questions; the report answers three
 // and the abstract rewrites the scope as three.
 //
-// This gate cannot check that directly, because it never sees the brief. The
-// run ledger keeps a 160-character preview of the question (maxQuestionPreview
-// in agentRuns.mjs) and nothing more, and carrying the whole brief there is not
-// available: the ledger has a byte ceiling that a burst of progress events has
-// already burst once, at 1048462 of 1048576, and the run after it could not
-// start.
+// The gate used to be unable to check that, because it never saw the brief, and
+// every rule here had to be a self-consistency rule instead: does the run's own
+// account contradict the run's own report. Measured over 30 delivered packages
+// against 55 hand-verified coverage defects, that cost almost everything — 2 of
+// 55 caught, and one of the three notices it did raise was a false one. Of the
+// 53 it missed, 36 needed nothing but the brief.
 //
-// So the run declares its own account — question-coverage.json, one entry per
-// atomic sub-question — and this gate checks that account against the things it
-// does hold: the report's own lines, the claim anchors in them, and the search
-// log the retrieval tools wrote. Every field below lands on one of those. A run
-// cannot write "answered" without a report line that carries evidence, and
-// cannot write "gap" without a search that actually ran: "I looked and found
-// nothing" becomes a falsifiable sentence, because the log is written by the
-// tools rather than by the model.
+// So the brief now arrives here (briefText). It comes from the server's own
+// copy, held in memory on the run record from the moment of dispatch — never
+// from the workspace, because a run that supplies its own brief is setting its
+// own exam. It is deliberately not written to the run ledger: that file has a
+// byte ceiling a burst of progress events has already burst once, at 1048462 of
+// 1048576, and the run after it could not start.
 //
-// What the gate cannot decide stays in the skill. Whether the entries are in
-// fact the brief's sub-questions, and whether a conditional question's fallback
-// branch was split out as its own entry, are both invisible here — a check that
-// cannot be decided must not be able to withhold a finished package.
+// Two things follow from holding it only in memory:
+//
+//   * After a server restart the brief for an in-flight run is gone. The
+//     brief-derived rules then do not run at all and the self-consistency rules
+//     below carry the check on their own, with coverageDegradedNotice saying so
+//     in words. Degrading silently would be the one outcome worse than either:
+//     a package delivered as if it had been checked against the brief.
+//   * The run gets its own read-only copy in the workspace so it can act on the
+//     brief while it works, and preflight.py reads that one. The gate never
+//     does. If the two differ, the gate says so — the copy the run can edit is
+//     not evidence about anything except the run.
+//
+// The run still declares its own account — question-coverage.json, one entry per
+// atomic sub-question — and the self-consistency rules still check that account
+// against the report's own lines, the claim anchors in them, and the search log
+// the retrieval tools wrote. A run cannot write "answered" without a report line
+// that carries evidence, and cannot write "gap" without a search that actually
+// ran: "I looked and found nothing" is falsifiable, because the log is written
+// by the tools rather than by the model. What the brief adds is the other half:
+// whether that account is an account of the questions that were actually asked.
 const coverageStatuses = new Set(["answered", "gap"]);
 // A sentence saying what this paper set out to do. Naming a quantity as an
 // objective is not reporting one: RQ-11's 目的 sentence says it will count the
@@ -2618,17 +2640,238 @@ const coverageGapAcknowledgement = new RegExp([
   "缺乏(?:直接)?(?:证据|研究|数据)",
   "无直接(?:证据|研究)",
 ].join("|"));
+// The half of the family above that says THE SEARCH CAME BACK EMPTY, as opposed
+// to the half that says a document already in hand does not mention the thing
+// (未载, 未述及, 未能追溯到). The distinction decides one thing only, in
+// coverageJudge.mjs: a ledger entry registered `gap` means "I could not answer
+// this because retrieval found nothing", so a report line that says retrieval
+// found nothing AGREES with that entry and cannot be evidence that the run
+// answered the question anyway. A line saying an obtained guideline or label
+// does not mention the thing is the opposite — the document was read, and its
+// silence is the answer the entry should have carried.
+//
+// Measured on 109 live judgements of the 29-package corpus: 16 verdicts quoted
+// a line that was itself an admission of absence, and 12 of them were of the
+// first kind — the model reporting a run for writing exactly the honest gap
+// sentence this whole ledger exists to encourage. The remaining 4 are of the
+// second kind and are kept.
+const coverageRetrievalAbsence = new RegExp([
+  "未(?:能)?检索到",
+  "未检索出",
+  "尚未检索",
+  "检索(?:结果)?为空",
+  "未(?:能)?获(?:得|取)(?![^，。；\\n]{0,6}(?:核验|核实))",
+  "证据空(?:白|缺)",
+  "证据缺口",
+  "未见(?:相关|直接|任何)[^，。；\\n]{0,8}(?:证据|研究|报道|文献|数据|记录)",
+  "尚无(?:直接|已发表|公开|相应)?(?:的)?(?:证据|研究|数据|报道)",
+  "缺乏(?:直接)?(?:证据|研究|数据)",
+  "无直接(?:证据|研究)",
+  "证据不足",
+].join("|"));
 // The abstract's methods sentence names the databases and the search date, and
 // a brief that names the same databases shares a long span with it. It states
 // how the evidence was looked for, never what was found, so it cannot be a gap
 // written as an answer and is not read as one.
 const coverageRetrievalRestatement = /检索(?:日期|时间|截至|策略)|检索[^。；\n]{0,60}(?:数据库|索引|注册库|PubMed|Europe\s*PMC|Crossref|ClinicalTrials|CNKI)/i;
-// Only a paragraph that says it is restating the study's scope is read for a
-// question count. A report enumerating its findings is enumerating findings.
-const coverageScopeCue = /(?:本文|本研究|本综述|本报告|本篇)[^。；\n]{0,24}(?:评价|评估|回答|讨论|考察|梳理|分析|围绕|聚焦|检索)[^。；\n]{0,12}(?:问题|方面)/;
-const coverageScopeCountWord = /(\d{1,2}|[一二三四五六七八九十]{1,3})\s*(?:个|项|类|方面)?\s*(?:核心|主要)?问题/g;
-const coverageCircledDigits = "①②③④⑤⑥⑦⑧⑨⑩";
 const coverageSentenceSplit = /(?<=[。！？；;])/;
+
+// --- Reading the brief -------------------------------------------------------
+//
+// A research brief is a Markdown document whose 「需要回答的问题」 section is a
+// numbered list. That structure is the contract the whole coverage check now
+// rests on, so it is read strictly: a document without that section, or with
+// fewer than two numbered questions under it, is not a brief this check can
+// use, and every brief-derived rule stands down rather than guessing. Requests
+// that are not commissioned this way — the open-domain line, a bare question —
+// land in that branch by design.
+const briefQuestionsHeading = "需要回答的问题";
+const briefQuestionNumberLine = /^\s*(\d{1,2})[.、)）]\s*(.*)$/;
+
+/** The body of one level-two section of a brief.
+ *  @param {string} briefText @param {string} heading */
+function briefSectionText(briefText, heading) {
+  const collected = [];
+  let inside = false;
+  // Normalise line endings first. A brief pasted out of Word arrives CRLF, and
+  // the heading pattern below anchors with $, which in JS matches only at end
+  // of input -- a trailing \r made every heading fail to match, so the whole
+  // brief-derived family silently stopped running on exactly the briefs a
+  // person is most likely to paste.
+  for (const line of String(briefText ?? "").replace(/\r\n?/g, "\n").split("\n")) {
+    const match = /^##\s+(.*)$/.exec(line);
+    if (match) {
+      inside = match[1].trim() === heading;
+      continue;
+    }
+    if (inside) collected.push(line);
+  }
+  return collected.join("\n");
+}
+
+/** The brief's numbered questions, or null when this request is not a brief of
+ *  that shape.
+ *  @param {any} briefText
+ *  @returns {{ number: number, text: string }[]|null} */
+function parseBriefQuestions(briefText) {
+  const section = briefSectionText(briefText, briefQuestionsHeading);
+  if (!section.trim()) return null;
+  /** @type {{ number: number, text: string }[]} */
+  const questions = [];
+  let current = null;
+  for (const line of section.split("\n")) {
+    const match = briefQuestionNumberLine.exec(line);
+    if (match) {
+      current = { number: Number(match[1]), text: match[2] };
+      questions.push(current);
+      continue;
+    }
+    // A question that wraps onto its own continuation lines is one question.
+    if (current && line.trim()) current.text += line.trim();
+  }
+  if (questions.length < 2) return null;
+  // Numbered 1..n with no repeats, or the numbering is not what it looks like.
+  if (questions.some((question, index) => question.number !== index + 1)) return null;
+  return questions;
+}
+
+// Whitespace is not content: the brief writes 「12 导联心电图」 and 「SAQ 评分」,
+// the report writes them closed up, and comparing them raw reported four items
+// as absent that were on the page.
+/** @param {any} value */
+function briefCollapse(value) {
+  return String(value ?? "").replace(/\s+/g, "");
+}
+
+/** The longest run of characters two strings share once punctuation and
+ *  whitespace are removed.
+ *
+ *  Deliberately not coverageSharedTopic, which stops at punctuation because it
+ *  compares a registered question to a report sentence and must not stitch a
+ *  match across a comma. Here the two strings are a brief question and the
+ *  ledger's transcription of part of it, and a transcribed sub-question is
+ *  mostly punctuation: 「各研究的设计、样本量、给药方案…」 has no punctuation-free
+ *  run longer than seven characters, so that rule called 32 honest entries
+ *  inventions. Contiguity across the punctuation is the whole signal.
+ *  @param {string} left @param {string} right */
+function briefTranscriptionOverlap(left, right) {
+  const a = briefContentOnly(left);
+  const b = briefContentOnly(right);
+  let best = 0;
+  let previous = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = new Array(b.length + 1).fill(0);
+    for (let j = 1; j <= b.length; j += 1) {
+      if (a[i - 1] !== b[j - 1]) continue;
+      current[j] = previous[j - 1] + 1;
+      if (current[j] > best) best = current[j];
+    }
+    previous = current;
+  }
+  return best;
+}
+
+/** @param {any} value */
+function briefContentOnly(value) {
+  return String(value ?? "").replace(/[^\p{Script=Han}A-Za-z0-9]+/gu, "");
+}
+
+// Where a transcription stops being one. Over the 611 ledger entries of the
+// 29-package corpus, 579 are an exact substring of the brief question their id
+// names and the other 32 — sub-questions split off a shared stem — share
+// between 14 and 39 characters with it. Nothing honest lands under 14; an entry
+// invented or copied from a different question does.
+const briefTranscriptionCharacters = 12;
+
+// A span carrying one of these is a clause the splitter mis-cut, not an item the
+// brief names. They are grammatical function words, and unlike a topic word list
+// there is nothing to evade by rewording: the evasion this whole check exists to
+// stop is a run dropping an item, and a dropped item cannot be dropped harder by
+// choosing a synonym for 是否.
+const briefItemFunctionWord = /是否|何种|可否|为何|还是|如何|能否|多少|哪些|分别|各自|有无/;
+const briefItemFragmentPrefix = /^[其以在缺仅这那该此]/;
+const briefItemMaxLength = 10;
+
+/** One item of a brief enumeration, or "" when the span is not one.
+ *  @param {string} raw */
+function briefItemTerm(raw) {
+  const trimmed = String(raw).replace(/^[^\p{Script=Han}A-Za-z0-9]+|[^\p{Script=Han}A-Za-z0-9]+$/gu, "");
+  if (!trimmed || trimmed.length < 2 || trimmed.length > briefItemMaxLength) return "";
+  if (/[，,。？；;：:—…]/.test(trimmed)) return "";
+  // 「…等」 is an open list; 「…的」 is a modifier waiting for its head.
+  if (/等$/.test(trimmed) || /的$/.test(trimmed)) return "";
+  if (briefItemFunctionWord.test(trimmed) || briefItemFragmentPrefix.test(trimmed)) return "";
+  return trimmed;
+}
+
+/** The enumerations inside one brief question: each is the list of items the
+ *  question spells out with 、.
+ *
+ *  Only interior items are taken. The first and last item of a run need the
+ *  clause boundary to be guessed, and guessing it produced spans like
+ *  「这些定义是否可复现」 — sentence tails, not items. Parentheses and ／ are
+ *  read as item separators, because 「主要终点（心绞痛发作频率、硝酸甘油消耗量）」
+ *  is a list whichever bracket it wears.
+ *  @param {string} questionText */
+function briefEnumerations(questionText) {
+  const runs = [];
+  const normalized = String(questionText).replace(/[（）()]/g, "、").replace(/[／/]/g, "、");
+  for (const clause of normalized.split(/[。？；]/)) {
+    const parts = clause.split("、");
+    if (parts.length < 3) continue;
+    const items = [];
+    for (let index = 1; index < parts.length - 1; index += 1) {
+      for (const piece of parts[index].split(/[与及和或]|以及/)) {
+        const term = briefItemTerm(piece);
+        if (term) items.push(term);
+      }
+    }
+    const distinct = [...new Set(items)];
+    if (distinct.length >= 3) runs.push(distinct);
+  }
+  return runs;
+}
+
+// How much of an enumeration must be on the page before its absent items are
+// read as dropped. Two present items and a third of the run is the point where
+// the check stops describing the report and starts describing the run: below it,
+// an absent item usually means the whole enumeration is off this report's topic
+// (or that the splitter cut badly), and above it the report is demonstrably
+// working through the list and left some of it out. Measured over the 29
+// delivered clinical packages, this bar takes the flagged items from 244 to 151
+// and removes the runs where nothing matched at all.
+const briefEnumerationPresentFloor = 2;
+const briefEnumerationPresentRatio = 1 / 3;
+const briefDroppedItemsNamed = 8;
+
+/** Items the brief's question spells out that the report never uses, for an
+ *  enumeration the report is otherwise working through.
+ *  @param {string} questionText @param {string} collapsedReport */
+function briefDroppedItems(questionText, collapsedReport) {
+  const dropped = [];
+  const vanished = [];
+  for (const run of briefEnumerations(questionText)) {
+    const present = run.filter((term) => collapsedReport.includes(briefCollapse(term)));
+    const absent = run.filter((term) => !collapsedReport.includes(briefCollapse(term)));
+    if (!absent.length) continue;
+    // Nothing from the list appears anywhere. Two things look like this: the
+    // extraction picked the wrong spans, or the question was dropped whole --
+    // and the second is the worst case this check exists for. Requiring some
+    // items to be present kept the noise down and blinded it to exactly that:
+    // RQ-16's second question names eight measured effects, none of which
+    // occurs in the report, and the family went quiet. Report it once, at the
+    // question, rather than as eight separate item claims whose extraction is
+    // the thing in doubt.
+    if (!present.length) {
+      if (run.length >= briefEnumerationPresentFloor + 1) vanished.push(run);
+      continue;
+    }
+    if (present.length < briefEnumerationPresentFloor) continue;
+    if (present.length / run.length < briefEnumerationPresentRatio) continue;
+    dropped.push(...absent);
+  }
+  return { dropped: [...new Set(dropped)], vanished };
+}
 
 /** The letter/digit/Han runs of a string, so a shared span cannot be stitched
  *  across a comma.
@@ -2671,46 +2914,6 @@ function coverageSharedTopic(left, right) {
   return best.length >= 8 ? best : "";
 }
 
-/** @param {string} run */
-function coverageNumberValue(run) {
-  if (/^\d+$/.test(run)) return Number(run);
-  const digits = "零一二三四五六七八九";
-  if (run === "十") return 10;
-  if (/^十[一二三四五六七八九]$/.test(run)) return 10 + digits.indexOf(run[1]);
-  if (/^[一二三四五六七八九]十$/.test(run)) return digits.indexOf(run[0]) * 10;
-  if (/^[一二三四五六七八九]十[一二三四五六七八九]$/.test(run)) {
-    return digits.indexOf(run[0]) * 10 + digits.indexOf(run[2]);
-  }
-  return /^[零一二三四五六七八九]$/.test(run) ? digits.indexOf(run) : Number.NaN;
-}
-
-/** @param {string} paragraph @param {number} index */
-function coverageEnumeratedMarker(paragraph, index) {
-  if (paragraph.includes(`（${index}）`) || paragraph.includes(`(${index})`)) return true;
-  if (index <= coverageCircledDigits.length && paragraph.includes(coverageCircledDigits[index - 1])) return true;
-  const ordinals = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
-  return index <= ordinals.length && new RegExp(`第${ordinals[index - 1]}[，,、]`).test(paragraph);
-}
-
-/** How many questions a scope-restating paragraph says the study has, or 0 when
- *  no paragraph restates the scope.
- *  @param {string} sectionText */
-function coverageDeclaredScopeCount(sectionText) {
-  let claimed = 0;
-  for (const paragraph of String(sectionText ?? "").split(/\n\s*\n/)) {
-    if (!coverageScopeCue.test(paragraph)) continue;
-    let enumerated = 0;
-    while (coverageEnumeratedMarker(paragraph, enumerated + 1)) enumerated += 1;
-    claimed = Math.max(claimed, enumerated);
-    coverageScopeCountWord.lastIndex = 0;
-    for (const match of paragraph.matchAll(coverageScopeCountWord)) {
-      const value = coverageNumberValue(match[1]);
-      if (Number.isInteger(value) && value > 0 && value <= 30) claimed = Math.max(claimed, value);
-    }
-  }
-  return claimed;
-}
-
 /** The level-two heading in force on each report line, indexed from 0.
  *  @param {any} reportText */
 function coverageSectionOfLine(reportText) {
@@ -2725,11 +2928,22 @@ function coverageSectionOfLine(reportText) {
 /** The contiguous non-blank block a line belongs to.
  *  @param {string[]} lines @param {number} index */
 function coverageParagraphAt(lines, index) {
+  const numbers = coverageParagraphLines(lines, index);
+  return numbers.map((line) => lines[line - 1]).join("\n");
+}
+
+/** The 1-based line numbers of that block. Same span as coverageParagraphAt,
+ *  kept as numbers so an excerpt can be assembled without losing which line of
+ *  the report each piece of text is.
+ *  @param {string[]} lines @param {number} index */
+function coverageParagraphLines(lines, index) {
   let start = index;
   let end = index;
   while (start > 0 && lines[start - 1].trim()) start -= 1;
   while (end < lines.length - 1 && lines[end + 1].trim()) end += 1;
-  return lines.slice(start, end + 1).join("\n");
+  const numbers = [];
+  for (let line = start + 1; line <= end + 1; line += 1) numbers.push(line);
+  return numbers;
 }
 
 /** @param {string} line */
@@ -2742,11 +2956,13 @@ function coverageLineSubstance(line) {
     .trim();
 }
 
-/** Everything the coverage ledger claims, checked against the report lines, the
- *  claim anchors and the search log this gate already holds.
+/** Everything the coverage ledger claims, checked against the brief the run was
+ *  given and against the report lines, claim anchors and search log this gate
+ *  already holds.
  *  @param {any} questionCoverageText @param {any} reportText @param {any} searchLogText
- *  @param {Set<string>} claimIds */
-function questionCoverageFindings(questionCoverageText, reportText, searchLogText, claimIds) {
+ *  @param {Set<string>} claimIds
+ *  @param {{ number: number, text: string }[]|null} briefQuestions */
+function questionCoverageFindings(questionCoverageText, reportText, searchLogText, claimIds, briefQuestions) {
   const findings = [];
   const text = String(questionCoverageText ?? "");
   if (!text.trim()) {
@@ -2782,6 +2998,12 @@ function questionCoverageFindings(questionCoverageText, reportText, searchLogTex
   const loggedDate = String(searchLog?.searchedAt ?? "").slice(0, 10);
   const seenIds = new Set();
   const groups = new Set();
+  // Which ledger entries claim to cover each numbered brief question, keyed by
+  // the number their id leads with. "2.3" is the third sub-question of the
+  // brief's second question, and that convention is what makes the ledger
+  // comparable to the brief at all.
+  /** @type {Map<number, { id: string, question: string, status: any }[]>} */
+  const briefGroupEntries = new Map();
   for (const [index, entry] of entries.entries()) {
     const label = `entries[${index}]`;
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
@@ -2801,6 +3023,10 @@ function questionCoverageFindings(questionCoverageText, reportText, searchLogTex
     seenIds.add(id);
     const groupMatch = /\d+/.exec(id);
     groups.add(groupMatch ? groupMatch[0] : id);
+    if (groupMatch) {
+      const number = Number(groupMatch[0]);
+      briefGroupEntries.set(number, [...(briefGroupEntries.get(number) ?? []), { id, question, status: entry.status }]);
+    }
     if (question.replace(/\s+/g, "").length < 8) {
       findings.push({ kind: "shape", detail: `${id}.question 必须转录子问原文（至少 8 个字符），当前为 ${JSON.stringify(question)}。` });
       continue;
@@ -2954,20 +3180,229 @@ function questionCoverageFindings(questionCoverageText, reportText, searchLogTex
       }
     }
   }
-  if (groups.size) {
-    for (const section of ["摘要|Abstract", "引言|临床问题|Introduction"]) {
-      const claimed = coverageDeclaredScopeCount(reportSection(reportText, section));
-      // Either direction. Firing only on claimed < held left the natural
-      // shortcut silent: keep the abstract honest at five questions and
-      // register three, and the two numbers disagree the other way round.
-      // Neither number comes from the brief, so this can only catch the run
-      // contradicting itself -- see the note on questionCoverageFindings.
-      if (claimed > 0 && claimed !== groups.size) {
-        findings.push({ kind: "scope", section: section.split("|")[0], claimed, held: groups.size });
+  // --- Against the brief ----------------------------------------------------
+  //
+  // What replaced the old scope-count heuristic. That one read the abstract for
+  // a sentence restating the study's scope, counted the questions it named, and
+  // compared that number to the ledger's — two numbers both written by the run,
+  // so the only thing it could catch was the run disagreeing with itself. Here
+  // the question count is not inferred from anything: the brief has five
+  // numbered questions, and either the ledger accounts for all five or it does
+  // not.
+  if (briefQuestions) {
+    const collapsedReport = briefCollapse(reportText);
+    const briefNumbers = new Set(briefQuestions.map((question) => question.number));
+    for (const question of briefQuestions) {
+      const covered = briefGroupEntries.get(question.number) ?? [];
+      if (!covered.length) {
+        findings.push({ kind: "brief-missing", number: question.number, question: question.text, total: briefQuestions.length });
+        continue;
       }
+      // The entry must be a transcription of the question it claims to cover.
+      // Without the brief the only available rule was "at least eight
+      // characters of something", which a run satisfies by typing anything —
+      // and which is exactly how one entry comes to stand for two questions:
+      // register 1.1 and 2.1 with the same text and the count comes out right.
+      for (const item of covered) {
+        const bar = Math.min(briefTranscriptionCharacters, briefContentOnly(item.question).length);
+        if (briefTranscriptionOverlap(question.text, item.question) >= bar) continue;
+        const elsewhere = briefQuestions.find((other) => (
+          other.number !== question.number && briefTranscriptionOverlap(other.text, item.question) >= bar
+        ));
+        findings.push({
+          kind: "brief-mismatch",
+          id: item.id,
+          number: question.number,
+          question: question.text,
+          elsewhere: elsewhere ? elsewhere.number : null,
+        });
+      }
+      // An item the brief spells out that the report never uses, in an
+      // enumeration the report is otherwise working through. Only for a
+      // question the ledger claims is answered: a question registered wholly as
+      // a gap is already held to a search that really ran.
+      if (!covered.some((item) => item.status === "answered")) continue;
+      const { dropped, vanished } = briefDroppedItems(question.text, collapsedReport);
+      for (const run of vanished) {
+        findings.push({
+          kind: "brief-question-absent",
+          number: question.number,
+          ids: covered.map((item) => item.id),
+          terms: run.slice(0, briefDroppedItemsNamed),
+          more: Math.max(0, run.length - briefDroppedItemsNamed),
+          total: run.length,
+        });
+      }
+      if (dropped.length) {
+        findings.push({
+          kind: "brief-item",
+          number: question.number,
+          ids: covered.map((item) => item.id),
+          terms: dropped.slice(0, briefDroppedItemsNamed),
+          more: Math.max(0, dropped.length - briefDroppedItemsNamed),
+        });
+      }
+    }
+    for (const number of [...briefGroupEntries.keys()].sort((left, right) => left - right)) {
+      if (briefNumbers.has(number)) continue;
+      findings.push({
+        kind: "brief-extra",
+        number,
+        ids: (briefGroupEntries.get(number) ?? []).map((item) => item.id),
+        total: briefQuestions.length,
+      });
     }
   }
   return findings;
+}
+
+// --- What a semantic judge is allowed to look at ----------------------------
+//
+// Everything above decides whether the run's account is INTERNALLY consistent
+// and whether it accounts for the brief's questions by name. Two defects
+// survive that by construction, and both were measured on the 30-package
+// corpus rather than imagined:
+//
+//   * A ledger entry says "answered" and points at a report line that really
+//     exists, really carries a claim anchor, and really is in the body — and
+//     answers a different question, population or endpoint than the
+//     sub-question it is registered against. Every deterministic predicate
+//     above passes. (4 labelled cases, reason R2.)
+//   * A registered gap whose answer is handed to the reader anyway in the
+//     abstract, the conclusion or the practical section, worded so that no
+//     eight-character span is shared with the registered question — synonym,
+//     nominalisation, a different clause order. coverageSharedTopic returns
+//     nothing and the gap-asserted rule stands down. (13 labelled cases,
+//     reason R3.) The reverse — material in hand registered as a gap — is the
+//     same shape. (3 labelled cases.)
+//
+// Both are judgements about MEANING, and no vocabulary list decides meaning.
+// What this function does is assemble exactly what a judge needs and nothing
+// else: the brief's questions, the ledger's entries, and a bounded excerpt of
+// the report. It decides nothing itself; coverageJudge.mjs takes it to a model
+// and then checks every checkable part of what comes back against the same
+// data. The excerpt is also the answer sheet: a verdict that names a line
+// outside it is discarded, so the model cannot cite a line it never saw.
+const coverageJudgeExcerptCharacters = 16_000;
+
+/** One report line as a judge sees it: its 1-based number, the section heading
+ *  in force, and its text.
+ *  @typedef {{ line: number, section: string, text: string }} CoverageJudgeLine */
+
+/** Everything a semantic coverage judge may read, or null when this delivery is
+ *  not one it can judge (no parsable brief questions, no usable ledger entries,
+ *  or no report).
+ *  @param {Record<string, any>} options0 */
+export function coverageJudgeContext({ briefText, questionCoverageText, reportText } = {}) {
+  const briefQuestions = parseBriefQuestions(briefText);
+  if (!briefQuestions) return null;
+  const lines = String(reportText ?? "").split("\n");
+  if (!String(reportText ?? "").trim()) return null;
+  const ledger = parseJsonObject(questionCoverageText);
+  const rawEntries = Array.isArray(ledger?.entries) ? ledger.entries : [];
+  /** @type {{ id: string, question: string, status: string, declaredLines: number[], declaredParagraph: number[] }[]} */
+  const entries = [];
+  for (const entry of rawEntries) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const id = typeof entry.id === "string" ? entry.id.trim() : "";
+    const question = typeof entry.question === "string" ? entry.question.trim() : "";
+    if (!id || !question || !coverageStatuses.has(entry.status)) continue;
+    const declaredLines = (Array.isArray(entry.reportLines) ? entry.reportLines : [])
+      .filter((value) => Number.isInteger(value) && value >= 1 && value <= lines.length);
+    entries.push({ id, question, status: entry.status, declaredLines, declaredParagraph: [] });
+  }
+  if (!entries.length) return null;
+
+  const sectionOfLine = coverageSectionOfLine(reportText);
+  // The three places a reader takes an answer away, in full. A gap that becomes
+  // a conclusion becomes one here.
+  /** @type {Map<number, string>} */
+  const verdictLines = new Map();
+  for (const { name, pattern } of coverageVerdictSections) {
+    const sectionText = reportSection(reportText, pattern);
+    if (!sectionText.trim()) continue;
+    const offset = String(reportText ?? "").indexOf(sectionText);
+    if (offset < 0) continue;
+    const firstLine = String(reportText ?? "").slice(0, offset).split("\n").length;
+    for (let index = 0; index < sectionText.split("\n").length; index += 1) {
+      const line = firstLine + index;
+      if (line >= 1 && line <= lines.length) verdictLines.set(line, name);
+    }
+  }
+  // Plus the paragraphs the ledger itself points at. Nothing else: a judge that
+  // needs the whole 30 kB report to decide whether entry 2.1's own cited line
+  // answers entry 2.1's own question is not being asked the right question, and
+  // the cost of asking it that way is paid on every delivery.
+  /** @type {Map<number, number[]>} */
+  const declaredParagraphs = new Map();
+  for (const entry of entries) {
+    for (const line of entry.declaredLines) {
+      if (declaredParagraphs.has(line)) continue;
+      declaredParagraphs.set(line, coverageParagraphLines(lines, line - 1));
+    }
+    // The paragraph, not the line. A ledger entry cites the line its answer
+    // starts on and the answer runs to the end of the block — measured on the
+    // corpus, three of the labelled unresponsive answers are worded two or
+    // three lines below the cited one, so pinning a verdict to the cited line
+    // exactly would have thrown out three true findings to no benefit. The
+    // block is still the entry's OWN citation, which is the property that makes
+    // the charge falsifiable.
+    entry.declaredParagraph = [...new Set(entry.declaredLines.flatMap((line) => declaredParagraphs.get(line) ?? []))];
+  }
+
+  // Verdict sections first, then declared paragraphs in ledger order, so a
+  // truncation drops the least load-bearing lines rather than an arbitrary tail.
+  const ordered = [...verdictLines.keys()];
+  for (const entry of entries) {
+    for (const line of entry.declaredLines) ordered.push(...(declaredParagraphs.get(line) ?? []));
+  }
+  const excerptLines = new Set();
+  let budget = coverageJudgeExcerptCharacters;
+  let truncated = false;
+  for (const line of ordered) {
+    if (excerptLines.has(line)) continue;
+    const text = lines[line - 1] ?? "";
+    if (budget - text.length < 0) {
+      truncated = true;
+      continue;
+    }
+    budget -= text.length;
+    excerptLines.add(line);
+  }
+  /** @type {CoverageJudgeLine[]} */
+  const excerptLineViews = [...excerptLines]
+    .sort((left, right) => left - right)
+    .map((line) => ({ line, section: String(sectionOfLine[line - 1] ?? "").trim(), text: lines[line - 1] ?? "" }));
+
+  return {
+    briefQuestions,
+    entries,
+    totalLines: lines.length,
+    excerpt: excerptLineViews,
+    excerptLines,
+    verdictLines,
+    truncated,
+    /** The line carries readable prose rather than markup or a blank.
+     *  @param {number} line */
+    hasSubstance: (line) => Boolean(coverageLineSubstance(lines[line - 1] ?? "")),
+    /** The line sits in a section that does not answer questions.
+     *  @param {number} line */
+    inExcludedSection: (line) => coverageExcludedSection.test(String(sectionOfLine[line - 1] ?? "")),
+    /** The line's paragraph carries a claim anchor, i.e. an answer bonded to
+     *  evidence rather than a sentence of prose.
+     *  @param {number} line */
+    isAnchored: (line) => coverageAnchorPattern.test(coverageParagraphAt(lines, line - 1)),
+    /** The line's text, for verbatim-quote verification.
+     *  @param {number} line */
+    lineText: (line) => lines[line - 1] ?? "",
+    /** The span says the search came back empty, and says nothing else that
+     *  would make it an answer — the report agreeing with a `gap` entry rather
+     *  than contradicting it.
+     *  @param {string} text */
+    statesRetrievalGap: (text) => coverageRetrievalAbsence.test(String(text ?? ""))
+      && !coverageLiteratureFactAssertion.test(String(text ?? ""))
+      && !coverageDirectiveAssertion.test(String(text ?? "")),
+  };
 }
 
 /** TypeScript infers a destructured parameter as exactly the shape its
@@ -2985,6 +3420,13 @@ export function validateClinicalEvidencePackage({
   citationLedgerText = "",
   citationAuditText = "",
   questionCoverageText = "",
+  // The server's own copy of the brief this run was dispatched with, held in
+  // memory on the run record. Null means it is not available — an in-flight run
+  // whose server restarted, or a request that never had one.
+  briefText = null,
+  // The copy the run could read in its workspace. Never used to decide
+  // anything; compared to the one above so a rewritten exam paper is visible.
+  workspaceBriefText = null,
 } = {}) {
   const issues = [];
   const claimIds = [];
@@ -3387,7 +3829,35 @@ export function validateClinicalEvidencePackage({
     );
   }
 
-  for (const finding of questionCoverageFindings(questionCoverageText, reportText, searchLogText, new Set(claimIds))) {
+  // The brief-derived rules run only on a brief the server itself holds. A run
+  // that supplies its own brief supplies its own exam, so the workspace copy is
+  // never read here — only compared, below.
+  const briefQuestions = parseBriefQuestions(briefText);
+  const coverageDegradedNotice = briefQuestions
+    ? null
+    : briefText == null
+      ? "本次交付未按题面逐问核对覆盖：服务端持有的题面副本不可用（题面只存在于内存中的运行记录上，"
+        + "服务进程重启后即丢失），question-coverage.json 只做了自洽核对——它登记了哪几问、"
+        + "登记的答案是否落在正文并挂着 claim 锚点、登记的空缺是否有真跑过的检索。"
+        + "「题面有几问、台账是不是这几问」这一层本次没有检查过。"
+      : "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，"
+        + "无法逐问比对。question-coverage.json 只做了自洽核对。";
+  if (briefQuestions && typeof workspaceBriefText === "string" && workspaceBriefText.trim()) {
+    if (briefCollapse(workspaceBriefText) !== briefCollapse(briefText)) {
+      issues.push(
+        "工作区里的题面只读副本 .evimed-brief/research-brief.md 与服务端派发时持有的题面不一致。"
+        + "门禁判定用的始终是服务端那一份，改动工作区副本不会改变判定，但被检查方改写考题本身就是可疑信号——"
+        + "把该文件恢复为派发时的原样，不要编辑它；需要记录自己的理解时另写一个文件。",
+      );
+    }
+  }
+  for (const finding of questionCoverageFindings(
+    questionCoverageText,
+    reportText,
+    searchLogText,
+    new Set(claimIds),
+    briefQuestions,
+  )) {
     if (finding.kind === "shape") {
       issues.push(
         `question-coverage.json 台账格式无效：${finding.detail} `
@@ -3411,12 +3881,42 @@ export function validateClinicalEvidencePackage({
         + "要么把这一句改写成如实的缺口陈述（「未检索到该终点的直接证据，这是一处证据空白」是允许的，也是应当写的），"
         + "要么这条子问其实有答案，把台账改成 answered 并给出正文行号。",
       );
-    } else {
+    } else if (finding.kind === "brief-missing") {
       issues.push(
-        `摘要重述研究范围时把问题数从 ${finding.held} 改小到 ${finding.claimed}：`
-        + `${finding.section}一节声明本文回答 ${finding.claimed} 个问题，question-coverage.json 却登记了 ${finding.held} 个题面编号。`
-        + "题面有几问，重述时就是几问——不得合并、不得重新编号、不得少列。"
-        + "若某一问全篇未答，它仍然是一问，在台账里登记为 gap 并在正文中如实写出这处空白。",
+        `题面第 ${finding.number} 问在 question-coverage.json 中没有任何条目：「${String(finding.question).slice(0, 80)}」。`
+        + `题面共 ${finding.total} 问，台账必须逐问登记——不得合并、不得重新编号、不得少列。`
+        + "若这一问全篇未答，它仍然是一问：登记为 gap，给出真跑过的检索式，并在正文中如实写出这处空白。",
+      );
+    } else if (finding.kind === "brief-extra") {
+      issues.push(
+        `question-coverage.json 台账格式无效：条目 ${finding.ids.join("、")} 的编号指向题面第 ${finding.number} 问，`
+        + `而题面只有 ${finding.total} 问。条目编号的首位数字必须是它所覆盖的题面问号。`,
+      );
+    } else if (finding.kind === "brief-mismatch") {
+      issues.push(
+        `question-coverage.json 条目 ${finding.id} 的 question 不是题面第 ${finding.number} 问的原文：`
+        + `题面第 ${finding.number} 问是「${String(finding.question).slice(0, 60)}」。`
+        + (finding.elsewhere
+          ? `这一条转录的是题面第 ${finding.elsewhere} 问——一条条目只能覆盖一问，两问就是两条条目。`
+          : "台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。"),
+      );
+    } else if (finding.kind === "brief-question-absent") {
+      issues.push(
+        `question-coverage.json 条目 ${finding.ids.join("、")} 把题面第 ${finding.number} 问登记为 answered，`
+        + `但这一问点名的 ${finding.total} 项——「${finding.terms.join("」「")}」`
+        + (finding.more ? `等` : "")
+        + "——在报告全篇一项都没有出现。"
+        + "一项不落地全部缺席，通常意味着这一问整个没有作答：把它答出来并挂上证据，"
+        + "或者为它单列 status 为空缺的台账条目并在正文写明未检索到直接证据。",
+      );
+    } else if (finding.kind === "brief-item") {
+      issues.push(
+        `question-coverage.json 条目 ${finding.ids.join("、")} 把题面第 ${finding.number} 问登记为 answered，`
+        + `但这一问点名的「${finding.terms.join("」「")}」`
+        + (finding.more ? `等 ${finding.terms.length + finding.more} 项` : "")
+        + "在报告全篇一次未出现，同一列举中的其余项则都在正文里。"
+        + "题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，"
+        + "并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
       );
     }
   }
@@ -3712,5 +4212,11 @@ export function validateClinicalEvidencePackage({
     blockingIssues: Object.freeze(issues.filter((issue) => !degradableIssue(issue))),
     claimIds: Object.freeze(claimIds),
     sourceDomains: Object.freeze([...sourceDomains].sort()),
+    // Not an issue: nothing here is the run's fault and nothing here is
+    // repairable by it, so it must not send a finished package back round the
+    // repair loop. It rides on the delivery as a notice instead — the one thing
+    // that must never happen is a package delivered as though the brief had
+    // been checked when it was not.
+    coverageDegradedNotice,
   });
 }

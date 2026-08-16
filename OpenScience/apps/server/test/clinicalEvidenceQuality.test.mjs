@@ -7,7 +7,7 @@ import {
   numberedReferenceCount,
   validateClinicalEvidencePackage as validatePackage,
 } from "../src/clinicalEvidenceQuality.mjs";
-import { deepResearchPackage, questionCoverageLedger } from "./fixtures/clinicalEvidencePackage.mjs";
+import { deepResearchPackage, questionCoverageLedger, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 
 /** The question-coverage ledger cites report line numbers, and almost every
  *  case below edits the report. Rebuild it against the report the case actually
@@ -2783,9 +2783,10 @@ test("the standard wording of a GRADE high-certainty verdict is not a contradict
 
 // --- The question-coverage ledger -------------------------------------------
 //
-// The gate never sees the brief, so it cannot check that every numbered
-// question was answered. It checks the run's own account of them against the
-// artifacts it does hold. Each case below is one of those cross-checks.
+// Two halves. The cases in this first block check the run's own account of the
+// brief's questions against the artifacts the gate holds anyway — the report's
+// lines, the claim anchors in them, the search log. The block further down
+// checks that account against the brief itself.
 
 /** A coverage-targeted package: the fixture, with the ledger the case supplies.
  *  @param {any} ledger @param {(input: any) => void} [edit] */
@@ -2797,11 +2798,17 @@ function coveragePackage(ledger, edit) {
   return input;
 }
 
-/** @param {any} ledger @param {(input: any) => void} [edit] */
+/** The self-consistency findings only.
+ *
+ *  Cases in this block build ledgers whose question text is written for the
+ *  case rather than transcribed from the fixture's brief, which the
+ *  brief-derived rules correctly object to. Those objections belong to the
+ *  block further down and would otherwise decide the error code here.
+ *  @param {any} ledger @param {(input: any) => void} [edit] */
 function coverageBlocking(ledger, edit) {
   const result = validateClinicalEvidencePackage(coveragePackage(ledger, edit));
   return result.blockingIssues.filter((issue) => (
-    /^question-coverage\.json /.test(issue) || /^摘要重述研究范围时把问题数/.test(issue)
+    /^question-coverage\.json /.test(issue) && !issue.includes("题面第")
   ));
 }
 
@@ -2990,37 +2997,7 @@ test("admitting a gap is not asserting one, and the sentences the corpus wrote f
   }).length > 0);
 });
 
-test("an honest abstract and an under-registered ledger disagree, and that is the finding", () => {
-  // The adversarial pass walked straight through the first version: keep the
-  // abstract honest at five questions, register three entries and mark all
-  // three answered, and the check -- which only fired when the abstract
-  // claimed fewer than the ledger held -- stayed silent. Neither number comes
-  // from the brief, so this can only catch the run contradicting itself; the
-  // least it must do is catch it in both directions.
-  const restate = "本文评价五个问题：（1）甲；（2）乙；（3）丙；（4）丁；（5）戊。";
-  const withAbstract = (input) => {
-    input.reportText = input.reportText.replace("## 摘要\n", `## 摘要\n${restate}\n`);
-  };
-  const ledgerOf = (count) => {
-    const ledger = coverageLedgerObject();
-    const lines = ledger.entries[0].reportLines;
-    ledger.entries = Array.from({ length: count }, (_, index) => ({
-      id: `${index + 1}.1`,
-      question: `题面第 ${index + 1} 问的原文转录，长度足够作为一条子问`,
-      status: "answered",
-      reportLines: lines,
-    }));
-    return ledger;
-  };
-  assert.deepEqual(coverageBlocking(ledgerOf(5), withAbstract).filter((issue) => /问题数/.test(issue)), []);
-  for (const count of [3, 7]) {
-    const issues = coverageBlocking(ledgerOf(count), withAbstract);
-    assert.ok(
-      issues.some((issue) => /问题数/.test(issue)),
-      `a ledger of ${count} groups against an abstract of five must not pass: ${issues.join("\n") || "no finding"}`,
-    );
-  }
-});
+
 
 test("naming a quantity as an objective is not reporting one", () => {
   // The abstract's 目的 sentence says what the paper set out to count. Reading
@@ -3043,40 +3020,230 @@ test("naming a quantity as an objective is not reporting one", () => {
   assert.deepEqual(issues.filter((issue) => /给出了排序或构成比/.test(issue)), []);
 });
 
-test("the abstract may not restate the brief with fewer questions than it has", () => {
+// --- The ledger against the brief -------------------------------------------
+//
+// These replace the one heuristic this section used to end with: the abstract
+// was read for a sentence restating the study's scope, the questions it named
+// were counted, and that number was compared to the ledger's. Both numbers were
+// written by the run, so the only defect it could reach was the run disagreeing
+// with itself — and the red-team construction below (register three of five and
+// mark all three answered) was completely silent, while over the 30 delivered
+// packages one of the two notices it raised was a false one.
+
+/** @param {any} ledger @param {(input: any) => void} [edit] */
+function coverageIssues(ledger, edit) {
+  const result = validateClinicalEvidencePackage(coveragePackage(ledger, edit));
+  return result.blockingIssues.filter((issue) => (
+    /^question-coverage\.json /.test(issue) || /^题面第 \d+ 问在/.test(issue) || /^工作区里的题面/.test(issue)
+  ));
+}
+
+test("a brief question the ledger does not register at all is named", () => {
+  // The construction the old scope heuristic could not see: the brief asks two
+  // questions, the ledger registers one of them, every entry says "answered",
+  // and the report never mentions the other. Nothing in the package contradicts
+  // anything else in the package.
   const ledger = coverageLedgerObject();
-  ledger.entries = [1, 2, 3, 4, 5].map((number) => ({
-    id: `${number}.1`,
-    question: `题面第 ${number} 问的原文转录，长度足够作为一条子问`,
-    status: "answered",
-    reportLines: ledger.entries[0].reportLines,
-  }));
-  for (const [heading, restatement] of [
-    ["## 摘要\n", "本文评价三个问题：（1）适应症边界；（2）鉴别路径；（3）院外处置。"],
-    ["## 摘要\n", "本文回答三个问题。"],
-    ["## 临床问题与分析框架\n", "本研究围绕三个问题展开：①适应症边界；②鉴别路径；③院外处置。"],
-  ]) {
-    const issues = coverageBlocking(ledger, (input) => {
-      input.reportText = input.reportText.replace(heading, `${heading}${restatement}\n`);
-    });
-    assert.ok(
-      issues.some((issue) => /^摘要重述研究范围时把问题数从 5 改小到 3/.test(issue)),
-      `${restatement}: ${issues.join("\n") || "no finding"}`,
+  ledger.entries = ledger.entries.filter((entry) => !entry.id.startsWith("2."));
+  const issues = coverageIssues(ledger);
+  assert.ok(
+    issues.some((issue) => /^题面第 2 问在 question-coverage\.json 中没有任何条目/.test(issue)),
+    issues.join("\n") || "no finding",
+  );
+  assert.match(issues.join("\n"), /题面共 2 问/);
+  assert.equal(clinicalEvidencePackageErrorCode(issues), "specialist_question_coverage_understated");
+});
+
+test("an entry standing in for a question it does not transcribe is named, and so is the question it does", () => {
+  // Merging: one sub-question registered twice under two numbers, so the count
+  // comes out right and one of the brief's questions is never addressed.
+  const merged = coverageLedgerObject();
+  merged.entries = merged.entries.map((entry) => (
+    entry.id.startsWith("2.")
+      ? { ...entry, question: merged.entries[0].question }
+      : entry
+  ));
+  const issues = coverageIssues(merged);
+  assert.ok(
+    issues.some((issue) => (
+      /条目 2\.1 的 question 不是题面第 2 问的原文/.test(issue) && /这一条转录的是题面第 1 问/.test(issue)
+    )),
+    issues.join("\n") || "no finding",
+  );
+  assert.equal(clinicalEvidencePackageErrorCode(issues), "specialist_question_coverage_invalid");
+
+  // Invention: text that came from neither question.
+  const invented = coverageLedgerObject();
+  invented.entries[0].question = "本报告自拟的一条概括性子问，与题面任何一问都无关";
+  assert.match(
+    coverageIssues(invented).join("\n"),
+    /条目 1\.1 的 question 不是题面第 1 问的原文.*台账条目必须逐字转录/s,
+  );
+
+  // A sub-question split off a shared stem still transcribes its question: 579
+  // of the corpus's 611 entries are an exact substring and the other 32 look
+  // like this. None of them may be called an invention.
+  const split = coverageLedgerObject();
+  split.entries[0].question = "胸口突然发闷发紧、像被压着一样，是心绞痛";
+  assert.deepEqual(coverageIssues(split), []);
+});
+
+test("an id outside the brief's numbering is named as a ledger defect", () => {
+  const ledger = coverageLedgerObject();
+  ledger.entries.push({ ...ledger.entries[0], id: "7.1" });
+  const issues = coverageIssues(ledger);
+  assert.ok(
+    issues.some((issue) => /条目 7\.1 的编号指向题面第 7 问，而题面只有 2 问/.test(issue)),
+    issues.join("\n") || "no finding",
+  );
+});
+
+test("an item the brief names that the report never uses is named, item by item", () => {
+  // The largest confirmed class: the brief spells out seven measured effects,
+  // the report works through three of them, and the other four leave without a
+  // word. The report is not self-contradictory anywhere.
+  const brief = researchBrief().replace(
+    "1. 胸口突然发闷发紧",
+    "1. 请给出心率、血压、心率变异性、儿茶酚胺水平、房性期前收缩负荷、炎症指标、随访时长各自的实测数据。胸口突然发闷发紧",
+  );
+  const issues = coverageIssues(coverageLedgerObject(), (input) => {
+    input.briefText = brief;
+    input.reportText = input.reportText.replace(
+      "## 讨论\n",
+      "## 讨论\n本节给出心率、血压与心率变异性的实测数据。\n",
     );
-    assert.equal(clinicalEvidencePackageErrorCode(issues), "specialist_question_coverage_understated");
+  });
+  const named = issues.find((issue) => /把题面第 1 问登记为 answered/.test(issue));
+  assert.ok(named, issues.join("\n") || "no finding");
+  for (const term of ["儿茶酚胺水平", "房性期前收缩负荷", "炎症指标"]) {
+    assert.ok(named.includes(term), `${term} is absent from the report and must be named: ${named}`);
   }
-  // Five restated as five is not a finding, and neither is a paragraph that
-  // enumerates something other than the study's questions.
-  for (const restatement of [
-    "本文评价五个问题：（1）适应症边界；（2）鉴别路径；（3）院外处置；（4）安全边界；（5）证据缺口。",
-    "常见病因有三类：（1）心源性；（2）胃食管；（3）肌骨。",
-  ]) {
+  // Items that are on the page are not named.
+  for (const term of ["心率变异性", "血压"]) {
+    assert.ok(!named.includes(`「${term}」`), `${term} is on the page and must not be named: ${named}`);
+  }
+  assert.equal(clinicalEvidencePackageErrorCode(issues), "specialist_question_coverage_unsupported");
+});
+
+test("an enumeration the report is not working through at all is not read as dropped items", () => {
+  // The other side of the same rule. When none of a list is on the page, the
+  // list is off this report's topic (or the brief sentence was cut badly);
+  // reading that as six dropped items is how a term check turns into noise.
+  // Measured over the delivered corpus, this bar removes 93 of 244 flagged
+  // items and every run where nothing matched.
+  const brief = researchBrief().replace(
+    "1. 胸口突然发闷发紧",
+    "1. 请给出甲状腺功能亢进、嗜铬细胞瘤、原发性醛固酮增多症、肢端肥大症各自的患病率。胸口突然发闷发紧",
+  );
+  assert.deepEqual(coverageIssues(coverageLedgerObject(), (input) => { input.briefText = brief; }), []);
+});
+
+test("a long list of which nothing is on the page is the question going missing", () => {
+  // The worst case was the one the item rule could not see. Requiring some of
+  // a list to be present kept the noise down, and a question dropped whole has
+  // nothing present by definition -- on the corpus, RQ-16's second question
+  // names eight measured effects, the report contains none of them, and the
+  // family stayed quiet. Length is what separates the two readings: a short
+  // list that misses entirely is more likely a badly cut sentence, a long one
+  // is a question nobody answered.
+  const brief = researchBrief().replace(
+    "1. 胸口突然发闷发紧",
+    "1. 请给出心率与血压、儿茶酚胺、期前收缩负荷、炎症与内皮、皮质醇节律、压力反射敏感性各自的实测效应。胸口突然发闷发紧",
+  );
+  const issues = coverageIssues(coverageLedgerObject(), (input) => { input.briefText = brief; });
+  const named = issues.find((issue) => /一项都没有出现/.test(issue));
+  assert.ok(named, issues.join("\n") || "no finding");
+  assert.ok(/题面第 1 问/.test(named), named);
+  assert.equal(clinicalEvidencePackageErrorCode(issues), "specialist_question_coverage_unsupported");
+  // And it is reported once at the question, not once per item: the extraction
+  // is the thing in doubt, so the items are evidence, not separate claims.
+  assert.equal(issues.filter((issue) => /一项都没有出现/.test(issue)).length, 1);
+});
+
+test("a brief pasted with Windows line endings is still parsed", () => {
+  // $ in the heading pattern matches only at end of input, so a trailing \r
+  // made every heading fail and the whole brief-derived family went quiet --
+  // on exactly the briefs a person is most likely to paste out of Word.
+  const brief = researchBrief().replace(
+    "2. 长期随访中血脂谱变化与再入院率的关联有无直接研究？",
+    "2. 这一问被删掉了，台账里不会有它。",
+  );
+  const ledger = coverageLedgerObject();
+  ledger.entries = ledger.entries.filter((entry) => !entry.id.startsWith("2."));
+  const missing = /题面第 2 问/;
+  for (const [label, text] of [["LF", brief], ["CRLF", brief.replace(/\n/g, "\r\n")]]) {
+    const issues = coverageIssues(ledger, (input) => { input.briefText = text; });
+    assert.ok(issues.some((issue) => missing.test(issue)), `${label}: ${issues.join("\n") || "no finding"}`);
+  }
+});
+
+test("a question registered wholly as a gap is not also held to its named items", () => {
+  // A run that says "I searched for this and found nothing", with a search the
+  // log confirms, has already answered for the whole question. Naming its items
+  // as well would tell it to write the very sentences it just declared absent.
+  const ledger = coverageLedgerObject();
+  const gapEntry = ledger.entries.find((entry) => entry.status === "gap");
+  ledger.entries = [
+    ...ledger.entries.filter((entry) => entry.status !== "gap"),
+    { ...gapEntry, id: "1.9", question: ledger.entries[0].question },
+  ].map((entry) => (entry.id.startsWith("1.") ? entry : entry));
+  const brief = researchBrief().replace(
+    "2. 长期随访中血脂谱变化与再入院率的关联有无直接研究？",
+    "2. 长期随访中血脂谱变化与再入院率的关联有无直接研究？请给出总胆固醇、甘油三酯、载脂蛋白B、脂蛋白a的随访数据。",
+  );
+  const onlyGap = coverageLedgerObject();
+  onlyGap.entries = onlyGap.entries.filter((entry) => entry.status === "gap");
+  const issues = coverageIssues(onlyGap, (input) => { input.briefText = brief; });
+  assert.deepEqual(issues.filter((issue) => /把题面第 2 问登记为 answered/.test(issue)), []);
+});
+
+test("without the brief the coverage check degrades in the open rather than silently", () => {
+  // A server restart loses the brief for an in-flight run. What must not happen
+  // is a package delivered as though it had been checked against one.
+  const missing = coverageLedgerObject();
+  missing.entries = missing.entries.filter((entry) => !entry.id.startsWith("2."));
+  for (const briefText of [null, undefined, "什么都没有的一段自由文本，没有编号问题清单"]) {
+    const result = validateClinicalEvidencePackage(coveragePackage(missing, (input) => {
+      input.briefText = briefText;
+    }));
     assert.deepEqual(
-      coverageBlocking(ledger, (input) => {
-        input.reportText = input.reportText.replace("## 摘要\n", `## 摘要\n${restatement}\n`);
-      }),
+      result.issues.filter((issue) => /^题面第 \d+ 问在/.test(issue)),
       [],
-      restatement,
+      `${briefText}: the brief-derived rules must not run without a brief`,
+    );
+    assert.match(String(result.coverageDegradedNotice), /未按题面逐问核对覆盖/);
+    // Still a check, not a waiver: the self-consistency half is unaffected.
+    assert.deepEqual(
+      validateClinicalEvidencePackage(coveragePackage("not json", (input) => {
+        input.briefText = briefText;
+      })).blockingIssues.filter((issue) => /^question-coverage\.json 台账格式无效/.test(issue)).length,
+      1,
+    );
+  }
+  // With a usable brief there is nothing to disclose.
+  assert.equal(validateClinicalEvidencePackage(deepResearchPackage()).coverageDegradedNotice, null);
+});
+
+test("a workspace brief the run has rewritten is reported, and never used", () => {
+  const rewritten = researchBrief().replace("2. 长期随访中血脂谱变化与再入院率的关联有无直接研究？", "");
+  const result = validateClinicalEvidencePackage(coveragePackage(coverageLedgerObject(), (input) => {
+    input.workspaceBriefText = rewritten;
+  }));
+  assert.ok(
+    result.blockingIssues.some((issue) => /^工作区里的题面只读副本/.test(issue)),
+    result.blockingIssues.join("\n") || "no finding",
+  );
+  assert.equal(clinicalEvidencePackageErrorCode(result.blockingIssues), "specialist_question_coverage_invalid");
+  // The gate judged the server's brief, not the rewritten one: dropping the
+  // second question from the workspace copy did not excuse the ledger from it.
+  assert.deepEqual(result.issues.filter((issue) => /^题面第 2 问在/.test(issue)), []);
+  // An identical copy, and a copy with only whitespace differences, are silent.
+  for (const copy of [researchBrief(), `${researchBrief()}\n\n`]) {
+    assert.deepEqual(
+      validateClinicalEvidencePackage(coveragePackage(coverageLedgerObject(), (input) => {
+        input.workspaceBriefText = copy;
+      })).issues.filter((issue) => /^工作区里的题面/.test(issue)),
+      [],
     );
   }
 });

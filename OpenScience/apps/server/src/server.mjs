@@ -18,6 +18,7 @@ import {
   routeOpenDomainSpecialist,
 } from "./specialistRouting.mjs";
 import { SpecialistClassifier } from "./specialistClassifier.mjs";
+import { CoverageJudge } from "./coverageJudge.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
@@ -359,6 +360,9 @@ export function createWebApiApp(overrides = {}) {
   const specialistClassifier = new SpecialistClassifier(config, {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
   });
+  const coverageJudge = new CoverageJudge(config, {
+    fetchImpl: overrides.coverageJudgeFetch ?? globalThis.fetch,
+  });
   let agentRuns;
   const runtimeManager = new RuntimeManager(config, {
     agentRegistry,
@@ -367,6 +371,7 @@ export function createWebApiApp(overrides = {}) {
   });
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
+    coverageJudge,
     model: `deepseek/${config.deepseekModel}`,
     // Both poll counts are periods of this interval. It was assumed rather than
     // passed, so the stall threshold silently meant a different amount of time

@@ -80,12 +80,27 @@ Do not carry a previous question's domains into this one. If the question is abo
 
 ### The question ledger: one entry per asked question, and a declared gap stays a gap
 
-Decomposition is also a deliverable, and it is the one deliverable the delivery
-gate cannot reconstruct for itself: it never sees the task's 「需要回答的问题」
-section, only a 160-character preview of the question. So it checks your account
-of that section against the artifacts it does hold — the report's own lines, the
-claim anchors in them, and `clinical-evidence-search.json`. Write it last, out of
-the finished package.
+Decomposition is also a deliverable. The delivery gate checks your account of the
+task's 「需要回答的问题」 section against two things: the artifacts in this
+workspace — the report's own lines, the claim anchors in them, and
+`clinical-evidence-search.json` — and the task itself. Write it last, out of the
+finished package.
+
+The task you were given is on disk at `.evimed-brief/research-brief.md`, written
+by the server before this run began. Read it whenever you need the exact wording
+of a question rather than your recollection of it; after an hour of retrieval the
+fifth question is a recollection. **Do not edit it.** The gate checks its own
+copy, not this one, and reports any difference between them — editing it changes
+nothing except that the difference is on the record. If the file is not there,
+the gate is checking without the task too, and says so on the delivery.
+
+Every numbered question of the task needs at least one entry whose `id` begins
+with that question's number, and every entry's `question` must be transcribed
+from the question its `id` names — not paraphrased, and not the text of a
+different question. Where a question spells out a list of things to report, each
+of those things must end up somewhere in the report: answered and anchored, or
+named in its own `gap` entry and written up in the body as a gap. An item that is
+simply absent from the report is the defect this ledger exists to surface.
 
 Write `question-coverage.json` next to the files listed under "Required outputs",
 with exactly this shape:
@@ -1690,7 +1705,7 @@ Read every output back before claiming success. Do not use `grep` or another unb
 - no visible `[claim:...]` marker remains;
 - no operational failure or tool-process prose appears in the academic report;
 - every research question in `摘要目的` has its answer in `结论` in the same order, every 「证据不足」 judgment names the population stratum it holds for, and no section's share of the body outweighs the rank of the question it serves (see "Comparative appraisal and evidence bridging");
-- every numbered item of the task has its atomic entries in `question-coverage.json` — including the fallback branch of every 「若 X 则回到 Y」 — each `answered` sub-question points at body prose whose paragraph carries a claim anchor, each `gap` names a search that appears in `clinical-evidence-search.json`, no topic registered as a gap reappears as a ranking, a share, a threshold, a recommendation, or a negative finding in `摘要`, `结论`, or `临床实践要点`, no restatement of the scope lists fewer items than the ledger holds or renumbers
+- every numbered item of the task has its atomic entries in `question-coverage.json` — including the fallback branch of every 「若 X 则回到 Y」 — each `answered` sub-question points at body prose whose paragraph carries a claim anchor, each `gap` names a search that appears in `clinical-evidence-search.json`, no topic registered as a gap reappears as a ranking, a share, a threshold, a recommendation, or a negative finding in `摘要`, `结论`, or `临床实践要点`, every numbered question of the task has at least one entry, every entry transcribes the question its id names, and every item a question spells out is either in the report or registered as its own gap
   and merges what survives, and every sub-question that does not depend on an
   unverifiable premise is still answered;
 - the section names are the manuscript ones and no commissioning, acceptance-specification, or self-referential prose survives anywhere in the report (see "Register: what a manuscript never says"). Read the request once more and confirm that no phrase of it was copied into the report — the request's wording is the usual way this register gets in;

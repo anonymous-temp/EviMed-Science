@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
-import { deepResearchPackage, questionCoverageLedger } from "./fixtures/clinicalEvidencePackage.mjs";
+import { deepResearchPackage, questionCoverageLedger, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 
 const execFileAsync = promisify(execFile);
 const preflightScript = new URL(
@@ -42,8 +42,14 @@ async function writeWorkspace(input) {
     "citation-ledger.csv": input.citationLedgerText,
     "citation-audit.md": input.citationAuditText,
     "question-coverage.json": input.questionCoverageText,
+    // The read-only copy the server writes at dispatch. The preflight reads
+    // this one; the gate reads input.briefText, which is the server's own copy.
+    // A case that sets them differently is testing exactly that difference.
+    ".evimed-brief/research-brief.md": input.workspaceBriefText ?? input.briefText,
   };
   for (const [name, content] of Object.entries(files)) {
+    if (content == null) continue;
+    await mkdir(path.join(workspace, path.dirname(name)), { recursive: true });
     await writeFile(path.join(workspace, name), content, "utf8");
   }
   for (const [artifactPath, content] of Object.entries(input.sourceArtifacts)) {
@@ -653,21 +659,38 @@ test("whatever the server gate rejects, the preflight already caught", async () 
       },
     },
     {
-      label: "an abstract that restates five questions as three",
+      // Was "an abstract that restates five questions as three", which the
+      // gate caught by comparing two numbers the run wrote itself. It now
+      // compares against the brief, and this is the construction that walked
+      // through the old rule: register one of the brief's two questions, mark
+      // it answered, and never contradict yourself anywhere.
+      label: "a brief question the ledger does not register at all",
       break: (input) => {
         const ledger = JSON.parse(input.questionCoverageText);
-        const reportLines = ledger.entries[0].reportLines;
-        ledger.entries = [1, 2, 3, 4, 5].map((number) => ({
-          id: `${number}.1`,
-          question: `题面第 ${number} 问的原文转录，长度足够作为一条子问`,
-          status: "answered",
-          reportLines,
-        }));
+        ledger.entries = ledger.entries.filter((entry) => !entry.id.startsWith("2."));
         input.keepCoverage = true;
         input.questionCoverageText = JSON.stringify(ledger);
+      },
+    },
+    {
+      label: "a ledger entry that does not transcribe the brief question its id names",
+      break: (input) => {
+        const ledger = JSON.parse(input.questionCoverageText);
+        ledger.entries[0].question = "本报告自拟的一条概括性子问，与题面任何一问都无关";
+        input.keepCoverage = true;
+        input.questionCoverageText = JSON.stringify(ledger);
+      },
+    },
+    {
+      label: "an item the brief spells out that the report never uses",
+      break: (input) => {
+        input.briefText = researchBrief().replace(
+          "1. 胸口突然发闷发紧",
+          "1. 请给出心率、血压、心率变异性、儿茶酚胺水平、房性期前收缩负荷、炎症指标、随访时长各自的实测数据。胸口突然发闷发紧",
+        );
         input.reportText = input.reportText.replace(
-          "## 摘要\n",
-          "## 摘要\n本文评价三个问题：（1）适应症边界；（2）鉴别路径；（3）院外处置。\n",
+          "## 讨论\n",
+          "## 讨论\n本节给出心率、血压与心率变异性的实测数据。\n",
         );
       },
     },

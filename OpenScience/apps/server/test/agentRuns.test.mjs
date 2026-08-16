@@ -12,7 +12,7 @@ import {
   repairableEvidencePackageErrorCodes,
   terminalEvidenceSourceErrorCodes,
 } from "../src/agentRuns.mjs";
-import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
+import { deepResearchPackage, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 
 async function withApp(fn, overrides = {}) {
@@ -3145,4 +3145,301 @@ test("a package missing only the coverage ledger is repaired, not discarded", as
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("the brief reaches the gate and the workspace, and never the run ledger", async () => {
+  // The brief is what the coverage check compares the run's account against,
+  // and it is several thousand characters. runs.jsonl has a byte ceiling that a
+  // burst of progress events has already burst once, at 1048462 of 1048576, and
+  // the run after it could not start — so the ledger keeps the 160-character
+  // preview it always kept, and the brief itself lives in memory on the store.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-brief-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_brief",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => [],
+      monitorIntervalMs: 60_000,
+    });
+    const brief = researchBrief().replace(
+      "## 交付",
+      `## 检索范围\n\n${"以 PubMed、Europe PMC 为检索来源，记录检索式与命中数。".repeat(60)}检索截止于本次派发当日。\n\n## 交付`,
+    );
+    assert.ok(brief.length > 1600, "the fixture brief must be long enough to make the point");
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_brief",
+      question: brief,
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async () => ({ accepted: true }));
+
+    // The ledger carries the preview and only the preview.
+    const ledger = await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8");
+    assert.ok(run.question.length <= 161, `the ledger question must stay a preview: ${run.question.length}`);
+    assert.ok(!ledger.includes("检索截止于本次派发当日"), "the brief body must not be written to runs.jsonl");
+    assert.ok(ledger.length < brief.length, "the whole ledger must be smaller than one brief");
+
+    // The gate's copy is the whole brief, held in memory on the store.
+    assert.equal(store.dispatchedBriefs.get(run.id), brief);
+
+    // The run's copy is on disk, byte-identical and read-only.
+    const copyPath = path.join(project.workspaceDir, ".evimed-brief", "research-brief.md");
+    assert.equal(await readFile(copyPath, "utf8"), brief);
+    assert.equal((await stat(copyPath)).mode & 0o222, 0, "the run's copy must not be writable");
+
+    // A terminal run releases it; a restart is the same state, and the gate is
+    // told so rather than falling back to the copy the run can edit.
+    await store.cancelSession(project, binding.sessionId);
+    assert.equal(store.dispatchedBriefs.has(run.id), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// --- the semantic coverage judge in the delivery path ------------------------
+
+/** A fake DeepSeek that answers with a verdict built from the excerpt it was
+ *  actually sent: the first answered ledger entry, one of that entry's own
+ *  declared lines, and a span copied verbatim out of that line. Nothing is
+ *  hardcoded, so the test fails if the payload contract changes. */
+function coverageJudgeFetchStub(calls) {
+  return async (_url, init) => {
+    calls.push(init);
+    const payload = JSON.parse(JSON.parse(init.body).messages[1].content);
+    const entry = payload.ledgerEntries.find(
+      (item) => item.status === "answered" && item.declaredReportLines.length > 0,
+    );
+    const line = payload.reportExcerpt.find((item) => item.line === entry.declaredReportLines[0]);
+    const verdicts = [{
+      entryId: entry.entryId,
+      kind: "answer-not-responsive",
+      reportLine: line.line,
+      quote: line.text.trim().slice(0, 24),
+      why: "该行给出的是另一人群的数据，不是这一子问所问的那一层。",
+    }];
+    return {
+      ok: true,
+      headers: { get: () => null },
+      text: async () => JSON.stringify({ choices: [{ message: { content: JSON.stringify({ verdicts }) } }] }),
+    };
+  };
+}
+
+/** Deliver the shared fixture package through the store and return the terminal
+ *  run, with whatever coverage judge the caller supplies.
+ *  @param {string} label @param {Record<string, any>} options */
+async function deliverClinicalPackage(label, { coverageJudge = null, mutate = null } = {}) {
+  const root = await mkdtemp(path.join(tmpdir(), `os-agent-run-${label}-`));
+  const project = {
+    id: "project-1",
+    userId: "user-1",
+    rootDir: root,
+    workspaceDir: path.join(root, "workspace"),
+    metaDir: path.join(root, ".openscience"),
+  };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const binding = {
+    sessionId: `ses_${label}`,
+    mode: "open-domain",
+    agentId: null,
+    agentVersion: null,
+    runtimeAgent: null,
+  };
+  const pkg = deepResearchPackage();
+  mutate?.(pkg);
+  let history = [];
+  const store = new AgentRunStore({ get: async () => binding }, {
+    agentRegistry: {
+      get: () => ({
+        id: "clinical-evidence-synthesis",
+        version: "1.0.0",
+        runtimeAgent: "evimed-clinical-evidence-synthesis",
+        outputs: [
+          { path: "clinical-evidence-report.md", required: true },
+          { path: "clinical-evidence-matrix.json", required: true },
+          { path: "clinical-evidence-run.json", required: true },
+          { path: "clinical-evidence-search.json", required: true },
+          { path: "references.bib", required: true },
+          { path: "citation-ledger.csv", required: true },
+          { path: "citation-audit.md", required: true },
+          { path: "question-coverage.json", required: true },
+        ],
+        completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
+      }),
+    },
+    coverageJudge,
+    model: "deepseek/deepseek-v4-pro",
+    monitorIntervalMs: 60_000,
+    monitorMaxPolls: 20,
+    readSessionHistory: async () => history,
+    readSessionStatus: async () => "idle",
+    maxClinicalRepairAttempts: 0,
+  });
+  store.scheduleMonitor = () => {};
+  const run = await store.dispatch(project, {
+    sessionId: binding.sessionId,
+    dispatchId: `turn_${label}`,
+    question: pkg.briefText,
+    effectiveAgentId: "clinical-evidence-synthesis",
+    effectiveAgentVersion: "1.0.0",
+    effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+  }, async () => ({ accepted: true }));
+
+  const deliverables = new Map([
+    ["clinical-evidence-report.md", pkg.reportText],
+    ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
+    ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
+    ["clinical-evidence-search.json", pkg.searchLogText],
+    ["references.bib", pkg.referencesText],
+    ["citation-ledger.csv", pkg.citationLedgerText],
+    ["citation-audit.md", pkg.citationAuditText],
+    ["question-coverage.json", pkg.questionCoverageText],
+  ]);
+  for (const [relative, content] of deliverables) {
+    await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
+  }
+  for (const [artifactPath, content] of Object.entries(pkg.sourceArtifacts)) {
+    await mkdir(path.join(project.workspaceDir, path.dirname(artifactPath)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, artifactPath), content, "utf8");
+  }
+  const retrievalParts = Object.entries(pkg.sourceArtifacts).map(([artifactPath, content]) => ({
+    type: "tool",
+    tool: "evimed-research_evimed_open_access_full_text",
+    state: {
+      status: "completed",
+      output: JSON.stringify({
+        status: "success",
+        artifacts: [artifactPath],
+        data: { artifactSha256s: { [artifactPath]: createHash("sha256").update(content, "utf8").digest("hex") } },
+      }),
+    },
+  }));
+  const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
+    type: "tool",
+    tool: "evimed-research_evimed_literature_search",
+    state: { status: "completed", input: { query: entry.query } },
+  }));
+  history = [{
+    info: { id: `msg_${label}`, role: "assistant", time: { completed: Date.now() } },
+    parts: [
+      ...retrievalParts,
+      ...searchParts,
+      ...[...deliverables.keys()].map((filePath) => ({
+        type: "tool",
+        tool: "write",
+        state: { status: "completed", input: { filePath } },
+      })),
+      { type: "text", text: "Completed." },
+    ],
+  }];
+  const finished = await store.reconcileSession(project, binding.sessionId);
+  assert.equal(finished.id, run.id);
+  await store.closeProject(project, "canceled");
+  await rm(root, { recursive: true, force: true });
+  return { finished, store, runId: run.id };
+}
+
+test("a semantic coverage verdict rides on a delivered package as a notice, and never withholds it", async () => {
+  const { CoverageJudge } = await import("../src/coverageJudge.mjs");
+  const calls = [];
+  const coverageJudge = new CoverageJudge({
+    coverageJudgeEnabled: true,
+    deepseekProviderEnabled: true,
+    deepseekApiKey: "sk-test",
+    deepseekBaseUrl: "https://api.deepseek.com",
+    deepseekModel: "deepseek-v4-pro",
+    production: false,
+  }, { fetchImpl: coverageJudgeFetchStub(calls) });
+
+  const { finished, store, runId } = await deliverClinicalPackage("judge", { coverageJudge });
+  assert.equal(calls.length, 1, "one finished run, one model call");
+  // The judgement is a notice about meaning; it cannot fail a package.
+  assert.equal(finished.status, "succeeded");
+  assert.equal(finished.errorCode, null);
+  assert.notEqual(finished.verification, "unverified");
+  assert.match(finished.qualityNotices.join("\n"), /语义覆盖判定/);
+  assert.match(finished.qualityNotices.join("\n"), /台账条目 1\.1/);
+  assert.match(finished.qualityNotices.join("\n"), /未经核对/);
+  // The brief went to the judge, but the run ledger still holds only a preview.
+  assert.equal(store.coverageJudgements.has(runId), false, "a terminal run releases its judgement");
+});
+
+test("the judge is asked at most once per run, however many times the delivery decision is reached", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-judge-once-"));
+  try {
+    let calls = 0;
+    const store = new AgentRunStore({ get: async () => null }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => [],
+      coverageJudge: {
+        judge: async () => {
+          calls += 1;
+          return { notices: ["语义覆盖判定：一处疑点。"], judged: true, verdicts: [] };
+        },
+      },
+    });
+    const first = await store.judgeCoverageOnce("run_1", {});
+    const second = await store.judgeCoverageOnce("run_1", {});
+    assert.equal(calls, 1, "a repeat pass over the same finished run must reuse the answer");
+    assert.deepEqual(first, second);
+    // In flight, not merely already resolved: two monitor passes landing
+    // together must not both issue a call.
+    await Promise.all([store.judgeCoverageOnce("run_2", {}), store.judgeCoverageOnce("run_2", {})]);
+    assert.equal(calls, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a coverage judge that throws leaves the finished package exactly as it was", async () => {
+  const coverageJudge = { judge: async () => { throw new Error("judge exploded"); } };
+  const { finished } = await deliverClinicalPackage("judge-throws", { coverageJudge });
+  assert.equal(finished.status, "succeeded");
+  assert.equal(finished.errorCode, null);
+  assert.doesNotMatch(finished.qualityNotices.join("\n"), /语义覆盖判定/);
+});
+
+test("no coverage judge configured delivers exactly as before", async () => {
+  const { finished } = await deliverClinicalPackage("judge-absent");
+  assert.equal(finished.status, "succeeded");
+  assert.equal(finished.errorCode, null);
+});
+
+test("the judge is not consulted while a blocking issue is still holding the package", async () => {
+  // A model call on a package that is going back round the repair loop is a
+  // cost with no reader on the other end.
+  let calls = 0;
+  const coverageJudge = {
+    judge: async () => {
+      calls += 1;
+      return { notices: [], judged: true, verdicts: [] };
+    },
+  };
+  const { finished } = await deliverClinicalPackage("judge-blocked", {
+    coverageJudge,
+    mutate: (pkg) => { pkg.matrix.claims[0].supportQuote = "这句话在它所引的来源里并不存在。"; },
+  });
+  // The package is delivered — a reader is better served by the analysis plus
+  // the list of what could not be verified — but it carries a blocking-grade
+  // finding, and that is the state in which a semantic opinion is noise.
+  assert.match(finished.qualityNotices.join("\n"), /supportQuote was not found in its preserved source artifact/);
+  assert.equal(calls, 0);
 });
