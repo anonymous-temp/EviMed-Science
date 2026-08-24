@@ -348,6 +348,31 @@ For a stricter readiness assessment of the current Web adaptation, see
   user names, or project IDs.
 - Docker and Compose definitions are under `deploy/web`.
 
+## Package Mirrors a Build Needs
+
+Every image build fetches from Debian, npm, PyPI and GitHub. The Dockerfiles
+and Compose take each source as a build argument, and the defaults are the
+upstream ones — correct for a host that can reach them, and wrong for a host
+that cannot. On the China-hosted production server, measured:
+
+| Source | Direct | Set instead |
+|---|---|---|
+| Debian packages | `deb.debian.org` installs ~21 packages in 13 minutes | `OPEN_SCIENCE_APT_MIRROR=http://mirrors.aliyun.com/debian`, `OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR=http://mirrors.aliyun.com/debian-security` |
+| GitHub release assets (the uv binary and its licence) | **unreachable — 0 B/s** | `OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX=https://ghfast.top/` (2.1 MB/s measured) |
+| npm | slow | `OPEN_SCIENCE_NPM_REGISTRY=https://registry.npmmirror.com` |
+| PyPI | slow | `OPEN_SCIENCE_PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple` |
+
+These belong in the deployment's `.env`, which is where Compose reads them from
+and where the production server already carries them. Build through Compose
+(`docker compose --profile runtime-image build dsh-runtime-image`) rather than
+invoking `docker build` directly: the forwarding is the part that is easy to
+lose, and a build that silently falls back to an unreachable default fails
+after several minutes on a `curl` timeout rather than at its first line.
+
+The failure this documents cost two builds before it was written down: the
+values existed only in the server's `.env`, and nothing in the repository said
+which mirrors this deployment must use.
+
 ## Production Host Preflight
 
 The target host must run Linux and Docker Engine 26 or newer. Before starting

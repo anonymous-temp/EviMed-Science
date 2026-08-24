@@ -2800,6 +2800,73 @@ capsule-<capsuleId>-v<version>.evimedcap          zip（仅存储或 deflate）
 
 ---
 
+## 30. P0 首次真机验收（2026-08-24）：八个缺陷与它们的共同形状
+
+> 本节记录换内核后**第一次真正构建镜像并起容器**的结果。价值不在修了什么，而在于：这八个缺陷全部发生在 988 项服务端测试、657 项前端测试、73 项合规检查、全套契约测试**都绿**之后，且每一个都只有真机能暴露。裁决 #16 把"真机验收先于翻默认"排在第一位，本节是它的兑现。
+
+### 30.1 八个缺陷
+
+| # | 缺陷 | 为什么测试测不到 | 修法 | 现在由什么兜住 |
+|---|---|---|---|---|
+| 1 | 镜像未装 pnpm，`dsh plugin add` 退 127 | 没有任何单元测试会去构建一个镜像 | 装 pnpm | 合规审计要求 `PNPM_VERSION` pin |
+| 2 | 装成工作区的 pnpm 9.4.0；DSH 的 profile 目录声明自己为 workspace 包，pnpm 9 拒绝无 `-w` 的 `add` | 版本"与工作区一致"听起来正确 | 改用 DSH 自己钉的 11.7.0，写进 `deps-version.json.dsh.pnpm` | 契约测试断言 Dockerfile / compose / 单点三处相等 |
+| 3 | bundle 未钉版本 → `latest` 解析到 `0.0.1-rc.1` 并 404 | 本地无人安装 bundle | `@pkg@${DSH_VERSION}` | 审计：任一 bundle 缺版本即失败（已验齿） |
+| 4 | pnpm ≥10 拦截安装脚本，`node-pty`/`koffi` 未构建 | 依赖树只在镜像里存在 | profile 随附 DSH 自己的 `allowBuilds` 策略文件 | 构建期断言存在可加载的原生绑定 |
+| 5 | `dsh plugin add <裸路径>` 写**相对链接**指向 profile 之外；`cp -a` 到卷后链接失效，**bundle 静默消失而组合照样成功** | 原地测试永远成立 | 改用 `file:`（复制进 profile 自己的 store） | 构建期断言：把种子复制到另一路径再组合一次 |
+| 6 | 种子 `chmod -R a-w`，`cp -a` 把只读位带上卷，而组合要写 `cordis.yml` | root 只要还有 `CAP_DAC_OVERRIDE` 就无视只读位——**宽松容器退 0/16074 字节，`--cap-drop ALL` 退 1/634 字节** | 启动脚本播种后 `chmod -R u+w` | 验收在生产同款容器参数下执行 |
+| 7 | corepack shim 每次调用都联网解析版本；运行时容器无外网 → `EAI_AGAIN` | 构建期有网 | 改为真实全局安装 | 构建期把 registry 指向死地址跑一次 pnpm |
+| 8 | **profile patch 够不着 preset 的行**；DSH 只在 stderr 告警。七行落空，其中 `mcp-evimed` 从未被插入 → **研究工具一个都没挂**，六个插件用默认值跑 | patch 生成器的注释写了一个错误假设，测试照着它断言"patch 里有这些行" | `mcp-evimed` 改 `insert`；preset 行改 `!!js process.env.*`，控制面注入容器环境 | 两个契约测试：patch 只能命名宿主组合的行；preset 读的每个变量都必须有人提供，反之亦然 |
+
+### 30.2 共同形状：断言机制，而不是断言结果
+
+八个里有三个（5、8，以及我自己在修复过程中写坏的两处断言）是同一个错误：**验证了"命令成功"而没有验证"想要的效果发生了"**。
+
+- 断言 `node-pty/build` 目录存在 → 那是 node-gyp 的实现细节；node-pty 用预编译产物时**根本不生成该目录**，于是断言在正常镜像上失败。改为查找可加载的 `*.node`。
+- 断言"搬迁后能组合" → **没有我们的 bundle 也能组合**，所以 bundle 消失时它是绿的。改为断言我们的行在场。
+- 五个既有测试断言"patch 里有 `evimed-run-policy` 这一行" → 这一行确实在文件里，但 DSH 会丢弃它。测试在为一个从未发生的效果背书。
+
+**规则**：验收条件要写成"我要的东西在不在"，不能写成"我做的动作有没有报错"。
+
+### 30.3 第二个形状：只有掉权限才现形
+
+缺陷 6 的性质值得单列。同一个镜像、同一条命令：
+
+| 容器参数 | 结果 |
+|---|---|
+| 宽松（不掉 capability） | 退出码 0，16,074 字节 |
+| `--cap-drop ALL`（生产同款） | 退出码 1，634 字节 |
+
+差别只在 root 是否还持有 `CAP_DAC_OVERRIDE`。**开发机上永远测不出来**。因此本节的所有验收一律在生产同款参数下执行（`--cap-drop ALL --security-opt no-new-privileges --pids-limit --memory --cpus`），这条写进 §13 的 P0 退出标准。
+
+### 30.4 V13 的答案与处置
+
+内核 6.8 给 Landlock **ABI 4**，DSH 的启动器按 `MAX_ABI 5` 构建规则集（ABI 5 在内核 6.10，新增 `IOCTL_DEV`），故自报 `partial`。DSH 自己的 C 源码写明「report, do not refuse」。
+
+**处置：宿主内核升到 7.0.0-30（Ubuntu 24.04 官方 HWE），实测 `landlock: fully enforced`。** 因此 `OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT` 保持生产默认 `full`，不为任何一台机器开例外——例外一旦开了，下一台机器该不该继承就说不清。
+
+约束实效在两个内核上都实测过：工作区外读写 `Permission denied`，区内正常。
+
+顺带补上一个真缺口：`host-preflight` 原本只检查内核 ≥ **5.13**（Landlock 存不存在），而满级 enforcement 要 **6.10**——也就是说 6.8 能通过全部预检、然后运行时拒绝启动。现已按实测分界补成门禁。
+
+### 30.5 构建期外部依赖（部署前提，必须记进仓库）
+
+前两次构建失败与代码无关，是国内主机的网络前提：
+
+| 依赖 | 直连 | 必须走 |
+|---|---|---|
+| Debian 包 | `deb.debian.org` 极慢（13 分钟装 21 个包） | `mirrors.aliyun.com/debian` |
+| GitHub（uv 二进制与 LICENSE） | **0 B/s，完全不通** | `GITHUB_DOWNLOAD_PREFIX=https://ghfast.top/`（实测 2.1 MB/s） |
+| npm | 慢 | `registry.npmmirror.com` |
+| PyPI | 慢 | `mirrors.aliyun.com/pypi/simple` |
+
+这套值**本来只存在于服务器的 `.env` 里**，仓库中无处记录。Dockerfile 与 compose 的参数化早就做好了（`APT_MIRROR` / `GITHUB_DOWNLOAD_PREFIX` / …，且 compose 的转发正是 2026-07-23 那次教训的产物），缺的只是"这个部署该用哪几个源"这一事实的落点——已补入部署文档。
+
+### 30.6 尚未验收的部分
+
+本节走通的是**基础设施层**：镜像可构建、profile 可播种可搬迁、生产加固下可组合、pnpm 离线可用、沙箱满级约束、patch 零未匹配。**模型链路（真实题面经 DSH 跑完并过门禁）尚未执行**——它需要真实的 DeepSeek 调用与完整控制面。P0 退出标准在那一步完成前不算满足。
+
+---
+
 ## 附：一句话回答用户的三个原始问题
 
 - **「DSH 里很多功能用不到，要不要剥离？」** 不用剥。模型可见面由 preset 决定；不写进我们的 preset 的工具和提示词节，模型永远看不到；宿主面的注册表、沙箱、持久化、模型路由必须整套保留。唯一要**关**的是 `hmr`、`tool-web`、遥测。
