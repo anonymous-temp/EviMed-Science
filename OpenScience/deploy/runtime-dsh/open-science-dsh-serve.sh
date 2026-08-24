@@ -31,6 +31,12 @@ rm -f "${socket}"
 if [ -n "${DSH_HOME:-}" ] && [ -n "${DSH_HOME_SEED:-}" ] && [ ! -d "${DSH_HOME}/profiles/${profile}" ]; then
   mkdir -p "${DSH_HOME}"
   cp -a "${DSH_HOME_SEED}/." "${DSH_HOME}/"
+  # The seed is read-only in the image so nothing can mutate the template, and
+  # `cp -a` carries those bits onto the volume — where they are wrong, because
+  # composing a profile writes `cordis.yml` into it. Root can ignore a read-only
+  # bit while it still holds CAP_DAC_OVERRIDE, so this failure appears only once
+  # the container drops capabilities, which is to say only in production.
+  chmod -R u+w "${DSH_HOME}"
 fi
 
 # Telemetry off and the sandbox mode fixed here as well as in the image: a

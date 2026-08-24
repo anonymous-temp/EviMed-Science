@@ -110,10 +110,11 @@ RUN set -eux; \
 # prints "pnpm not found on PATH" and exits 127, which is what a build that had
 # never been run could not have told anyone.
 #
-# Corepack fetches the pinned release, and COREPACK_NPM_REGISTRY has to be set
-# before that fetch: the same ordering defect once failed a production build
-# here by falling back to npmjs.org from a China-hosted host (PROGRESS
-# 2026-07-23).
+# It is installed as a real global package rather than through Corepack. A
+# Corepack shim resolves its version at every invocation and reaches the
+# registry to do it, so in the runtime container — which has no route off the
+# host by design — `pnpm` fails with EAI_AGAIN instead of running. The web image
+# may use Corepack because it only ever runs during a build with a network.
 #
 # The version tracks DSH's own packageManager, not the workspace's. This pnpm
 # exists to manage a DSH profile, and `dsh plugin` writes a pnpm-workspace.yaml
@@ -121,13 +122,12 @@ RUN set -eux; \
 # a dependency into a workspace root without -w, so the workspace pin fails here
 # with ERR_PNPM_ADDING_TO_ROOT. Two tools, two requirements — deps-version.json
 # keeps this one next to the DSH pin that decides it.
-ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}
 RUN set -eux; \
-  corepack enable; \
-  corepack prepare "pnpm@${PNPM_VERSION}" --activate; \
+  npm install -g --no-fund --no-audit "pnpm@${PNPM_VERSION}"; \
   pnpm config set registry "${NPM_REGISTRY}"; \
   installed="$(pnpm --version)"; \
-  test "${installed}" = "${PNPM_VERSION}" || { echo "installed pnpm ${installed} != pinned ${PNPM_VERSION}" >&2; exit 1; }
+  test "${installed}" = "${PNPM_VERSION}" || { echo "installed pnpm ${installed} != pinned ${PNPM_VERSION}" >&2; exit 1; }; \
+  env -u COREPACK_NPM_REGISTRY npm_config_registry=http://127.0.0.1:1 pnpm --version > /dev/null
 
 # The hosted notebook kernel and the agent runtime intentionally share one
 # reviewed image. Keep the scientific stack pinned so a green image build is
@@ -274,34 +274,36 @@ RUN set -eux; \
 # dependency that release named and later versions do not — which is what a
 # build proves and a version range hides.
 ENV DSH_HOME_SEED=/opt/evimed/dsh-home-seed
+
+# The allowBuilds policy is a file rather than an inline heredoc: a heredoc
+# cannot be spliced into a backslash-continued RUN, and keeping it beside the
+# Dockerfile makes the decision reviewable on its own.
+COPY deploy/runtime-dsh/profile-pnpm-workspace.yaml /opt/evimed/profile-pnpm-workspace.yaml
+
+# The socket is added as `file:` rather than as a bare path, and the difference
+# decides whether the image works at all. A bare path makes pnpm link the source
+# directory, and the link it writes is relative to the profile — so the moment
+# the boot script copies this seed onto a project volume, `../../../socket`
+# resolves under /runtime and the profile cannot compose. `file:` copies the
+# package into the profile's own store, which is what makes the seed relocatable.
+#
+# The seed then proves itself three ways: a loadable native binding shows the
+# build permission took effect (node-pty ships prebuilds and never creates
+# build/, so asserting that directory would fail on a working image); a
+# non-empty --dump-config shows the composition resolves; and composing again
+# from a copy at a different path shows it will still resolve after the boot
+# script relocates it, which is the one thing a test in place cannot show.
 RUN set -eux; \
   install -d -m 0755 "${DSH_HOME_SEED}/profiles/evimed-runtime"; \
-  cat > "${DSH_HOME_SEED}/profiles/evimed-runtime/pnpm-workspace.yaml" <<'YAML'; \
-packages:
-  - .
-
-# pnpm 10+ refuses to run a dependency's install script until it is reviewed
-# here, and an unlisted script is a hard install error. The policy is DSH's own,
-# because DSH is the one that knows which of its dependencies need to build:
-# deny by default, allow only what the runtime cannot work without.
-allowBuilds:
-  # The persistent shell is a PTY. Without this build the bash tool has no
-  # backend, and the failure would surface as a broken tool at run time rather
-  # than as a failed image build.
-  node-pty: true
-  # Write-through publication for the session log.
-  koffi: true
-  # Restores the executable bit on the spawn helper.
-  '@deepseek-ai/dsh-subprocess-local': true
-  # Lifecycle scripts that are no-ops for this deployment. Denied rather than
-  # unlisted, so the install still succeeds and the decision stays visible.
-  '@google/genai': false
-  protobufjs: false
-YAML
-  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" /opt/evimed/socket; \
-  test -d "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/node-pty/build"; \
+  cp /opt/evimed/profile-pnpm-workspace.yaml "${DSH_HOME_SEED}/profiles/evimed-runtime/pnpm-workspace.yaml"; \
+  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" file:/opt/evimed/socket; \
+  test -n "$(find "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" -name "*.node" -path "*node-pty*" -print -quit)"; \
   DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json; \
   test -s /opt/evimed/dump-config.baseline.json; \
+  relocated="$(mktemp -d)"; \
+  cp -a "${DSH_HOME_SEED}/." "${relocated}/"; \
+  DSH_HOME="${relocated}" dsh --profile evimed-runtime --dump-config > /dev/null; \
+  rm -rf "${relocated}"; \
   chmod -R a-w "${DSH_HOME_SEED}"
 
 ENV DSH_HOME=/runtime/dsh-home

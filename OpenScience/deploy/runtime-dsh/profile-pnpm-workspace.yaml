@@ -1,0 +1,22 @@
+packages:
+  - .
+
+# pnpm 10+ refuses to run a dependency's install script until it is reviewed
+# here, and an unlisted script is a hard install error. The policy is DSH's own,
+# because DSH is the one that knows which of its dependencies must build: deny
+# by default, allow only what the runtime cannot work without. The proof that a
+# permission took effect is the build artefact the image build asserts on, not
+# the presence of a line in this file.
+allowBuilds:
+  # The persistent shell is a PTY. Without this build the bash tool has no
+  # backend, and the failure would surface as a broken tool during a run rather
+  # than as a failed image build.
+  node-pty: true
+  # Write-through publication for the session log.
+  koffi: true
+  # Restores the executable bit on the spawn helper.
+  '@deepseek-ai/dsh-subprocess-local': true
+  # Lifecycle scripts that are no-ops for this deployment. Denied rather than
+  # left unlisted, so install still succeeds and the decision stays visible.
+  '@google/genai': false
+  protobufjs: false
