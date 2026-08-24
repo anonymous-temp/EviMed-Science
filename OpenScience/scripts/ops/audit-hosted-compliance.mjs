@@ -122,6 +122,7 @@ async function checkRootLicense() {
 
 async function checkRuntimePins() {
   const dockerfile = await read("deploy/runtime-opencode/Dockerfile");
+  const dshDockerfile = await read("deploy/runtime-dsh/Dockerfile");
   const workflow = await read(".github/workflows/web.yml");
   const opencode = dockerfile.match(/^ARG OPENCODE_VERSION=([^\s]+)/m)?.[1] ?? "";
   const uv = dockerfile.match(/^ARG UV_VERSION=([^\s]+)/m)?.[1] ?? "";
@@ -134,6 +135,35 @@ async function checkRuntimePins() {
     fail("uv_version_unpinned", "Hosted runtime image must pin UV_VERSION.");
   } else {
     pass("uv_version_pinned", "Hosted runtime image pins UV_VERSION.", { version: uv });
+  }
+
+  // Both kernels are shippable while the switch exists, so both images are
+  // audited. Auditing only the retiring one is how a green compliance run comes
+  // to say nothing about the image the platform actually launches.
+  const dsh = dshDockerfile.match(/^ARG DSH_VERSION=([^\s]+)/m)?.[1] ?? "";
+  const dshUv = dshDockerfile.match(/^ARG UV_VERSION=([^\s]+)/m)?.[1] ?? "";
+  const dshCordis = dshDockerfile.match(/^ARG DSH_CORDIS_VERSION=([^\s]+)/m)?.[1] ?? "";
+  for (const [value, okCode, badCode, label] of [
+    [dsh, "dsh_version_pinned", "dsh_version_unpinned", "DSH_VERSION"],
+    [dshCordis, "dsh_cordis_version_pinned", "dsh_cordis_version_unpinned", "DSH_CORDIS_VERSION"],
+    [dshUv, "dsh_uv_version_pinned", "dsh_uv_version_unpinned", "UV_VERSION"],
+  ]) {
+    if (!value || value === "latest") {
+      fail(badCode, `Hosted DSH runtime image must pin ${label}.`);
+    } else {
+      pass(okCode, `Hosted DSH runtime pins ${label}.`, { version: value });
+    }
+  }
+
+  // The pin is only a pin if it agrees with the one place versions are defined.
+  const depsVersions = JSON.parse(await read("deps-version.json"));
+  if (dsh && dsh !== depsVersions.dsh?.version) {
+    fail("dsh_version_pin_drift", "runtime-dsh Dockerfile disagrees with deps-version.json.", {
+      dockerfile: dsh,
+      depsVersion: depsVersions.dsh?.version ?? null,
+    });
+  } else if (dsh) {
+    pass("dsh_version_pin_single_source", "runtime-dsh pin equals the single definition.", { version: dsh });
   }
 
   const compose = await read("deploy/web/docker-compose.yml");
@@ -279,6 +309,8 @@ async function checkDeepSeekCompatibilityPreflight() {
 }
 
 async function checkRuntimeContainerTopology() {
+  const runtimeDockerfile = await read("deploy/runtime-opencode/Dockerfile");
+  const dshRuntimeDockerfile = await read("deploy/runtime-dsh/Dockerfile");
   const compose = await read("deploy/web/docker-compose.yml");
   const workflow = await read(".github/workflows/web.yml");
   const envExample = await read("deploy/web/.env.example");
@@ -287,7 +319,6 @@ async function checkRuntimeContainerTopology() {
   const commands = await read("apps/server/src/commands.mjs");
   const manager = await read("apps/server/src/runtimeManager.mjs");
   const controller = await read("apps/server/src/runtimeControllerServer.mjs");
-  const runtimeDockerfile = await read("deploy/runtime-opencode/Dockerfile");
   const launcher = await read("deploy/runtime-opencode/open-science-opencode-serve.sh");
   const controllerStart = compose.indexOf("\n  open-science-runtime-controller:\n    image:");
   const runtimeImageStart = compose.indexOf("\n  opencode-runtime-image:");
@@ -377,6 +408,7 @@ async function checkRuntimeContainerTopology() {
     /OPEN_SCIENCE_RUNTIME_TRANSPORT:\s+\$\{OPEN_SCIENCE_RUNTIME_TRANSPORT:-unix\}/.test(compose) &&
     /requestRuntime\(runtime/.test(manager) &&
     /\bsocat\b/.test(runtimeDockerfile) &&
+    /\bsocat\b/.test(dshRuntimeDockerfile) &&
     /UNIX-LISTEN:\$\{socket\}/.test(launcher) &&
     /opencode serve --hostname 127\.0\.0\.1/.test(launcher)
   ) {
@@ -447,7 +479,16 @@ async function checkScientificCapabilityDelivery() {
   const tiered = [...executable, ...conditional, ...instructionOnly].sort();
   const inventoried = (curated.skills ?? []).map((skill) => skill.name).sort();
   const runtimeManager = await read("apps/server/src/runtimeManager.mjs");
-  const runtimeDockerfile = await read("deploy/runtime-opencode/Dockerfile");
+  // Both runtime images must carry the scientific stack the curated skills
+  // import, because either kernel can be the one a deployment launches. An
+  // audit that reads only the retiring image would pass while the executable
+  // tier fails at run time on the other one.
+  const runtimeDockerfiles = [
+    await read("deploy/runtime-opencode/Dockerfile"),
+    await read("deploy/runtime-dsh/Dockerfile"),
+  ];
+  const inEveryRuntimeImage = (probe) =>
+    runtimeDockerfiles.every((file) => (typeof probe === "string" ? file.includes(probe) : probe.test(file)));
   const skillTests = await read("apps/server/test/skillPacks.test.mjs");
   const executableEntrypoints = Object.entries(curatedDelivery.executable ?? {}).flatMap(([skill, contract]) =>
     (contract.entrypoints ?? []).map((entrypoint) => path.join(curatedRoot, skill, entrypoint)),
@@ -463,18 +504,18 @@ async function checkScientificCapabilityDelivery() {
     instructionOnly.length === 0 &&
     JSON.stringify(tiered) === JSON.stringify(inventoried) &&
     executableEntrypoints.every((entrypoint) => existsSync(entrypoint)) &&
-    executableDependencies.every((dependency) => runtimeDockerfile.includes(dependency)) &&
-    /pypdf==6\.7\.0/.test(runtimeDockerfile) &&
-    /openpyxl==3\.1\.5/.test(runtimeDockerfile) &&
-    /ENV VIRTUAL_ENV=\/opt\/evimed\/venv/.test(runtimeDockerfile) &&
-    /uv venv "\$\{VIRTUAL_ENV\}" --python \/usr\/bin\/python3/.test(runtimeDockerfile) &&
-    /uv pip install --python "\$\{VIRTUAL_ENV\}\/bin\/python"/.test(runtimeDockerfile) &&
-    !/uv pip install --system/.test(runtimeDockerfile) &&
+    executableDependencies.every((dependency) => inEveryRuntimeImage(dependency)) &&
+    inEveryRuntimeImage(/pypdf==6\.7\.0/) &&
+    inEveryRuntimeImage(/openpyxl==3\.1\.5/) &&
+    inEveryRuntimeImage(/ENV VIRTUAL_ENV=\/opt\/evimed\/venv/) &&
+    inEveryRuntimeImage(/uv venv "\$\{VIRTUAL_ENV\}" --python \/usr\/bin\/python3/) &&
+    inEveryRuntimeImage(/uv pip install --python "\$\{VIRTUAL_ENV\}\/bin\/python"/) &&
+    !inEveryRuntimeImage(/uv pip install --system/) &&
     /runtimeSkillDelivery\(sourceRoot\)/.test(runtimeManager) &&
     /delivery\.executable/.test(runtimeManager) &&
     /all 38 curated scientific skills have an executable, dependency-pinned, smoke-tested delivery contract/.test(skillTests) &&
-    /Smoke every shared curated-skill implementation in the production dependency image/.test(runtimeDockerfile) &&
-    /len\(shared\) != 36/.test(runtimeDockerfile)
+    inEveryRuntimeImage(/Smoke every shared curated-skill implementation in the production dependency image/) &&
+    inEveryRuntimeImage(/len\(shared\) != 36/)
   ) {
     pass("curated_skill_delivery_contract", "All 38 curated scientific skills have executable entrypoints, pinned runtime dependencies, artifact contracts, and production-image smoke coverage.", {
       inventoried: inventoried.length,
@@ -499,7 +540,7 @@ async function checkScientificCapabilityDelivery() {
     /first-party clean-room/i.test(office.provenance ?? "") &&
     officeExecutable.length === 4 &&
     officeEntrypoints.every((entrypoint) => existsSync(entrypoint)) &&
-    /runtime\/skills\/office/.test(runtimeDockerfile) &&
+    inEveryRuntimeImage(/runtime\/skills\/office/) &&
     /skills-office/.test(tauriConfig) &&
     !/anthropic-skills/.test(tauriConfig) &&
     !/ANTHROPIC_SKILLS_(?:COMMIT|ARCHIVE|LICENSE)/.test(fetchSkills) &&
@@ -1050,6 +1091,7 @@ async function checkHostedMetadataBoundary() {
 async function checkReleaseProvenance() {
   const webDockerfile = await read("deploy/web/Dockerfile");
   const runtimeDockerfile = await read("deploy/runtime-opencode/Dockerfile");
+  const dshRuntimeDockerfile = await read("deploy/runtime-dsh/Dockerfile");
   const compose = await read("deploy/web/docker-compose.yml");
   const releaseGenerator = await read("scripts/ops/generate-release-manifest.mjs");
   const hostPreflight = await read("scripts/ops/host-preflight.mjs");
@@ -1071,8 +1113,12 @@ async function checkReleaseProvenance() {
     /org\.opencontainers\.image\.created="\$\{BUILD_CREATED\}"/,
     /io\.open-science\.app\.version="\$\{APP_VERSION\}"/,
   ];
-  if (commonLabels.every((pattern) => pattern.test(webDockerfile) && pattern.test(runtimeDockerfile))) {
-    pass("release_oci_labels", "Web and runtime images carry version, revision, creation, and app-version labels.");
+  // Every shippable image, not only the retiring one: a release whose labels
+  // cannot say which kernel and which tool versions it carries is a release
+  // whose provenance stops at the tag.
+  const labelledImages = [webDockerfile, runtimeDockerfile, dshRuntimeDockerfile];
+  if (commonLabels.every((pattern) => labelledImages.every((file) => pattern.test(file)))) {
+    pass("release_oci_labels", "Web and both runtime images carry version, revision, creation, and app-version labels.");
   } else {
     fail("release_oci_labels_missing", "Web and runtime images must carry immutable OCI release labels.");
   }
@@ -1084,6 +1130,15 @@ async function checkReleaseProvenance() {
     pass("runtime_tool_labels", "Runtime image labels preserve exact OpenCode and uv versions.");
   } else {
     fail("runtime_tool_labels_missing", "Runtime image must label exact OpenCode and uv versions.");
+  }
+
+  if (
+    /io\.open-science\.dsh\.version="\$\{DSH_VERSION\}"/.test(dshRuntimeDockerfile) &&
+    /io\.open-science\.uv\.version="\$\{UV_VERSION\}"/.test(dshRuntimeDockerfile)
+  ) {
+    pass("dsh_runtime_tool_labels", "DSH runtime image labels preserve exact DSH and uv versions.");
+  } else {
+    fail("dsh_runtime_tool_labels_missing", "DSH runtime image must label exact DSH and uv versions.");
   }
 
   if (
