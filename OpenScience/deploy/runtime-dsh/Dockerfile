@@ -16,6 +16,7 @@ ARG DSH_VERSION=0.1.1-rc.2
 ARG DSH_CORDIS_VERSION=4.0.1
 ARG SOCKET_VERSION=0.1.0
 ARG NODE_VERSION=22.22.0
+ARG PNPM_VERSION=11.7.0
 ARG UV_VERSION=0.11.26
 ARG NODE_SHA256_AMD64=
 ARG NODE_SHA256_ARM64=
@@ -103,6 +104,30 @@ RUN set -eux; \
   test "${installed}" = "${DSH_VERSION}" || { echo "installed dsh ${installed} != pinned ${DSH_VERSION}" >&2; exit 1; }; \
   cordis="$(node -p "require('/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/package.json').version" 2>/dev/null || node -p "require('@deepseek-ai/cordis/package.json').version")"; \
   test "${cordis}" = "${DSH_CORDIS_VERSION}" || { echo "resolved cordis ${cordis} != pinned ${DSH_CORDIS_VERSION}" >&2; exit 1; }
+
+# `dsh plugin add` manages a profile's plugin set with pnpm, so the image has to
+# carry it before a profile can be pre-initialised — without it the command
+# prints "pnpm not found on PATH" and exits 127, which is what a build that had
+# never been run could not have told anyone.
+#
+# Corepack fetches the pinned release, and COREPACK_NPM_REGISTRY has to be set
+# before that fetch: the same ordering defect once failed a production build
+# here by falling back to npmjs.org from a China-hosted host (PROGRESS
+# 2026-07-23).
+#
+# The version tracks DSH's own packageManager, not the workspace's. This pnpm
+# exists to manage a DSH profile, and `dsh plugin` writes a pnpm-workspace.yaml
+# there listing the profile directory as its own package; pnpm 9 refuses to add
+# a dependency into a workspace root without -w, so the workspace pin fails here
+# with ERR_PNPM_ADDING_TO_ROOT. Two tools, two requirements — deps-version.json
+# keeps this one next to the DSH pin that decides it.
+ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}
+RUN set -eux; \
+  corepack enable; \
+  corepack prepare "pnpm@${PNPM_VERSION}" --activate; \
+  pnpm config set registry "${NPM_REGISTRY}"; \
+  installed="$(pnpm --version)"; \
+  test "${installed}" = "${PNPM_VERSION}" || { echo "installed pnpm ${installed} != pinned ${PNPM_VERSION}" >&2; exit 1; }
 
 # The hosted notebook kernel and the agent runtime intentionally share one
 # reviewed image. Keep the scientific stack pinned so a green image build is
@@ -243,10 +268,38 @@ RUN set -eux; \
 # volume-backed `$DSH_HOME` once, the first time a project's runtime volume is
 # empty — the container still never writes to its own *image*, only to the
 # volume that was always its own to write to.
+# Every bundle carries the same exact version as the harness. Most DSH
+# sub-packages still publish a `latest` dist-tag pointing at 0.0.1-rc.1, so an
+# unpinned `add` resolves the first release ever cut and then fails on a
+# dependency that release named and later versions do not — which is what a
+# build proves and a version range hides.
 ENV DSH_HOME_SEED=/opt/evimed/dsh-home-seed
 RUN set -eux; \
   install -d -m 0755 "${DSH_HOME_SEED}/profiles/evimed-runtime"; \
-  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add @deepseek-ai/dsh-base @deepseek-ai/dsh-web-app /opt/evimed/socket; \
+  cat > "${DSH_HOME_SEED}/profiles/evimed-runtime/pnpm-workspace.yaml" <<'YAML'; \
+packages:
+  - .
+
+# pnpm 10+ refuses to run a dependency's install script until it is reviewed
+# here, and an unlisted script is a hard install error. The policy is DSH's own,
+# because DSH is the one that knows which of its dependencies need to build:
+# deny by default, allow only what the runtime cannot work without.
+allowBuilds:
+  # The persistent shell is a PTY. Without this build the bash tool has no
+  # backend, and the failure would surface as a broken tool at run time rather
+  # than as a failed image build.
+  node-pty: true
+  # Write-through publication for the session log.
+  koffi: true
+  # Restores the executable bit on the spawn helper.
+  '@deepseek-ai/dsh-subprocess-local': true
+  # Lifecycle scripts that are no-ops for this deployment. Denied rather than
+  # unlisted, so the install still succeeds and the decision stays visible.
+  '@google/genai': false
+  protobufjs: false
+YAML
+  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" /opt/evimed/socket; \
+  test -d "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/node-pty/build"; \
   DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json; \
   test -s /opt/evimed/dump-config.baseline.json; \
   chmod -R a-w "${DSH_HOME_SEED}"

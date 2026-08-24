@@ -125,3 +125,16 @@ test("the wire split covers every published method exactly once", () => {
     assert.ok(!/^(settings|credentials|workspace|goal|llm)\./.test(method), `${method} must not be reachable from the control plane`);
   }
 });
+
+test("the pnpm the runtime image installs is the one the DSH pin decides", async () => {
+  // `dsh plugin` shells out to pnpm, and which pnpm is a DSH requirement rather
+  // than a workspace preference: pnpm 9 cannot add into the workspace root that
+  // DSH writes for a profile. Keeping the value beside the DSH pin is what stops
+  // the two from being reasoned about separately again.
+  const pins = JSON.parse(await readFile(new URL("../../../deps-version.json", import.meta.url), "utf8"));
+  const dockerfile = await readFile(new URL("../../../deploy/runtime-dsh/Dockerfile", import.meta.url), "utf8");
+  const compose = await readFile(new URL("../../../deploy/web/docker-compose.yml", import.meta.url), "utf8");
+  assert.match(pins.dsh.pnpm, /^\d+\.\d+\.\d+$/);
+  assert.equal(dockerfile.match(/^ARG PNPM_VERSION=(\S+)/m)?.[1], pins.dsh.pnpm);
+  assert.equal(compose.match(/PNPM_VERSION: \$\{OPEN_SCIENCE_PNPM_VERSION:-(\S+?)\}/)?.[1], pins.dsh.pnpm);
+});
