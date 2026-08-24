@@ -15,7 +15,7 @@ import {
 import { deepSeekModelDisplayName, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockOpenCodeRuntime } from "./mockRuntime.mjs";
 import { startMockDshRuntime } from "./mockDshRuntime.mjs";
-import { renderCredentialsFile, renderProfilePatch } from "./dshProfilePatch.mjs";
+import { renderCredentialsFile, renderProfilePatch, runtimeEnvironment } from "./dshProfilePatch.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 import {
@@ -2133,6 +2133,58 @@ function modelGatewayProviderUrl(config) {
 }
 
 /**
+ * The one description of a runtime's deployment settings.
+ *
+ * The patch and the container environment are two halves of it: rows the host
+ * composition owns are written into the patch, and the settings of the plugins
+ * a preset mounts travel as environment, because a profile patch cannot reach a
+ * preset's rows. Deriving both from this function is what keeps the halves from
+ * describing different deployments.
+ *
+ * @param {any} config @param {any} project @param {any} plan @param {string} model @param {string} workloadTokenPath
+ * @returns {import("./dshProfilePatch.mjs").ProfilePatchInput}
+ */
+function dshProfileInput(config, project, plan, model, workloadTokenPath) {
+  return {
+    modelGatewayUrl: modelGatewayProviderUrl(config),
+    model,
+    contextWindow: 1_000_000,
+    sessionsDir: "/runtime/dsh-home/sessions",
+    mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
+    mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenPath }),
+    presetRoot: "/opt/evimed/socket/presets/evimed-universal",
+    capabilitiesDir: "/opt/evimed/capabilities",
+    capabilitySkillsDir: "/opt/evimed/capability-skills",
+    // The capsule product ledger and its recall endpoint are not built yet
+    // (§16 #20's own tracked gap list). An empty URL is not a placeholder that
+    // silently does the wrong thing: `evimed-capsule`'s plugin already checks
+    // for exactly this and disables its own tools with a named diagnostic
+    // rather than erroring, so a deployment without capsule support fails
+    // closed and visibly, not open and silently.
+    capsuleMethodsDir: "",
+    capsuleGatewayUrl: "",
+    workloadTokenFile: workloadTokenPath,
+    bundleVersion: String(config.socketBundleVersion ?? ""),
+    dshVersion: String(config.dshVersion ?? ""),
+    limits: {
+      deliveryAttemptLimit: config.deliveryAttemptLimit,
+      maxParallelChildren: config.maxParallelChildren,
+      maxSteps: config.runMaxSteps,
+      maxTokens: config.runMaxTokens,
+      evidenceStaleMinutes: config.evidenceStaleMinutes,
+      screeningBatchSize: config.screeningBatchSize,
+    },
+    flags: {
+      hosted: Boolean(config.production),
+      askUser: false,
+      review: true,
+      capsule: false,
+      requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
+    },
+  };
+}
+
+/**
  * The DSH equivalent of `syncRuntimeSkills` + `syncRuntimeEviMedMcp` +
  * `syncRuntimeModelProvider` combined into one call, because DSH takes all
  * three as rows of the *same* generated file rather than as separate managed
@@ -2189,43 +2241,8 @@ export async function syncRuntimeDshProfile(
     jti,
   });
   const workloadTokenRuntimePathForDsh = dshWorkloadTokenRuntimePath(plan);
-  const patch = renderProfilePatch({
-    modelGatewayUrl: modelGatewayProviderUrl(config),
-    model,
-    contextWindow: 1_000_000,
-    sessionsDir: "/runtime/dsh-home/sessions",
-    mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
-    mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenRuntimePathForDsh }),
-    presetRoot: "/opt/evimed/socket/presets/evimed-universal",
-    capabilitiesDir: "/opt/evimed/capabilities",
-    capabilitySkillsDir: "/opt/evimed/capability-skills",
-    // The capsule product ledger and its recall endpoint are not built yet
-    // (§16 #20's own tracked gap list). An empty URL is not a placeholder that
-    // silently does the wrong thing: `evimed-capsule`'s plugin already checks
-    // for exactly this and disables its own tools with a named diagnostic
-    // rather than erroring, so a deployment without capsule support fails
-    // closed and visibly, not open and silently.
-    capsuleMethodsDir: "",
-    capsuleGatewayUrl: "",
-    workloadTokenFile: workloadTokenRuntimePathForDsh,
-    bundleVersion: String(config.socketBundleVersion ?? ""),
-    dshVersion: String(config.dshVersion ?? ""),
-    limits: {
-      deliveryAttemptLimit: config.deliveryAttemptLimit,
-      maxParallelChildren: config.maxParallelChildren,
-      maxSteps: config.runMaxSteps,
-      maxTokens: config.runMaxTokens,
-      evidenceStaleMinutes: config.evidenceStaleMinutes,
-      screeningBatchSize: config.screeningBatchSize,
-    },
-    flags: {
-      hosted: Boolean(config.production),
-      askUser: false,
-      review: true,
-      capsule: false,
-      requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
-    },
-  });
+  const profileInput = dshProfileInput(config, project, plan, model, workloadTokenRuntimePathForDsh);
+  const patch = renderProfilePatch(profileInput);
   await writeFile(project.rootDir, path.join(plan.dshHomeDir, "control-plane-patch.yml"), patch, { encoding: "utf8", mode: 0o600 });
 
   const credentials = renderCredentialsFile({ token: modelGatewayToken });
@@ -3030,6 +3047,36 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
                     // accepts nothing, while looking perfectly healthy.
                     "--env",
                     `OPEN_SCIENCE_RUNTIME_AUTHORITY=${runtimeAuthority(config)}`,
+                    // Every deployment-owned setting of the plugins the preset
+                    // mounts. A profile patch cannot reach a preset's rows —
+                    // DSH reports the target as unmatched on stderr and drops
+                    // it — so the rows read these with `!!js`, and a name
+                    // missing here leaves a plugin on its schema default while
+                    // the deployment believes it configured one.
+                    ...Object.entries(runtimeEnvironment({
+                      capabilitiesDir: "/opt/evimed/capabilities",
+                      capabilitySkillsDir: "/opt/evimed/capability-skills",
+                      capsuleMethodsDir: "",
+                      capsuleGatewayUrl: "",
+                      workloadTokenFile: `${runtimeDshHome}/${evimedWorkloadTokenFileName}`,
+                      bundleVersion: String(config.socketBundleVersion ?? ""),
+                      flags: {
+                        hosted: Boolean(config.production),
+                        askUser: false,
+                        review: true,
+                        capsule: false,
+                        requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
+                      },
+                      limits: {
+                        deliveryAttemptLimit: config.deliveryAttemptLimit,
+                        maxParallelChildren: config.maxParallelChildren,
+                        maxSteps: config.runMaxSteps,
+                        maxTokens: config.runMaxTokens,
+                        evidenceStaleMinutes: config.evidenceStaleMinutes,
+                        screeningBatchSize: config.screeningBatchSize,
+                      },
+                    }))
+                      .flatMap(([key, value]) => ["--env", `${key}=${value}`]),
                   ]
                 : []),
               config.runtimeContainerImage,

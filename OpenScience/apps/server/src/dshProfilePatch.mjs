@@ -122,17 +122,18 @@ export function renderProfilePatch(input) {
     "# The research tools. The MCP process runs outside the kernel's sandbox by",
     "# design (its command is trusted executable code), so it holds the workload",
     "# token and nothing else.",
-    "- id: mcp-evimed",
-    "  config:",
-    `    serverName: ${yamlScalar(MCP_SERVER_NAME)}`,
-    "    failOnStartupError: true",
-    "    toolCallTimeoutMs: 180000",
-    "    transport:",
-    "      type: stdio",
-    "      command: python3",
-    "      args:",
-    `        - ${yamlScalar(input.mcpServerPath)}`,
-    "      env:",
+    "- insert:",
+    "    - id: mcp-evimed",
+    "      config:",
+    `        serverName: ${yamlScalar(MCP_SERVER_NAME)}`,
+    "        failOnStartupError: true",
+    "        toolCallTimeoutMs: 180000",
+    "        transport:",
+    "          type: stdio",
+    "          command: python3",
+    "          args:",
+    `            - ${yamlScalar(input.mcpServerPath)}`,
+    "          env:",
     ...environmentRows(input.mcpEnvironment, input.workloadTokenFile),
     "",
     ...presetRows(input),
@@ -141,67 +142,34 @@ export function renderProfilePatch(input) {
 }
 
 /**
- * Rows that configure our own plugins. They live under the preset's ids because
- * that is where the plugins are mounted; a patch overrides by id wherever the
- * row is.
+ * Rows this patch may configure at all.
+ *
+ * Only two of our plugins are mounted in the host composition — the bundle's
+ * patch inserts them — and a profile's `cordis.patch.yml` can reach exactly
+ * those. The six agent-face plugins are mounted in agent scope from the
+ * preset's own `agent.cordis.yml`, so naming them here does not override them:
+ * DSH reports an unmatched target on stderr and drops the row, and the plugins
+ * then run on their schema defaults while the deployment believes it configured
+ * them. Their values travel as container environment instead, which the preset
+ * rows read with `!!js` — see {@link runtimeEnvironment}.
+ *
  * @param {ProfilePatchInput} input
  * @returns {string[]}
  */
 function presetRows(input) {
   return [
-    "# Our plugins' deployment-owned settings. Every limit here is derived from",
-    "# the control plane's config.mjs, which is the single place each is defined.",
+    "# The two plugins the bundle mounts in the host composition. Every other",
+    "# setting of ours travels as container environment, because a profile patch",
+    "# cannot reach a row that a preset mounts.",
     "- id: evimed-seam-probe",
     "  config:",
     `    requiredEnforcement: ${yamlScalar(input.flags.requiredEnforcement)}`,
     `    dshVersion: ${yamlScalar(input.dshVersion)}`,
     "",
-    "- id: evimed-guidance",
-    "  config:",
-    `    capabilitiesDir: ${yamlScalar(input.capabilitiesDir)}`,
-    `    askUserEnabled: ${Boolean(input.flags.askUser)}`,
-    `    capsuleActive: ${Boolean(input.flags.capsule)}`,
-    `    reviewEnabled: ${Boolean(input.flags.review)}`,
     "",
-    "- id: evimed-run-policy",
-    "  config:",
-    `    deliveryAttemptLimit: ${integer(input.limits.deliveryAttemptLimit, 3)}`,
-    `    maxParallelChildren: ${integer(input.limits.maxParallelChildren, 30)}`,
-    `    maxSteps: ${integer(input.limits.maxSteps, 0)}`,
-    `    maxTokens: ${integer(input.limits.maxTokens, 0)}`,
-    `    capabilitiesDir: ${yamlScalar(input.capabilitiesDir)}`,
-    `    skillsDir: ${yamlScalar(input.capabilitySkillsDir)}`,
-    `    bundleVersion: ${yamlScalar(input.bundleVersion)}`,
-    "",
-    "- id: evimed-screening",
-    "  config:",
-    `    batchSize: ${integer(input.limits.screeningBatchSize, 50)}`,
-    // The same ceiling delegation uses, not a second one: a screening child is
-    // a delegation child, and two numbers that must agree is one to forget.
-    `    maxParallelChildren: ${integer(input.limits.maxParallelChildren, 30)}`,
-    "",
-    "- id: evimed-evidence",
-    "  config:",
-    `    evidenceStaleMinutes: ${integer(input.limits.evidenceStaleMinutes, 10)}`,
-    "",
-    "- id: evimed-capsule",
-    "  config:",
-    `    methodsDir: ${yamlScalar(input.capsuleMethodsDir)}`,
-    `    recallUrl: ${yamlScalar(input.capsuleGatewayUrl)}`,
-    `    tokenFile: ${yamlScalar(input.workloadTokenFile)}`,
-    "",
-    "- id: evimed-review",
-    `  disabled: ${!input.flags.review}`,
-    "",
-    "# Asking the user mid-run is a deployment decision. An unattended run writes",
-    "# its assumption into the plan's clarifications instead, which the completion",
-    "# check then requires.",
-    "- id: tool-ask-user",
-    `  disabled: ${!input.flags.askUser}`,
-    "",
-    "# Approvals: `never` is not auto-approve, it is auto-refuse. Inside the",
-    "# sandbox nothing needs approval; the only things that ask are attempts to",
-    "# step outside it, and refusing those is exactly right for an unattended run.",
+    "# Inside a container whose only writable place is the workspace nothing",
+    "# needs approval; the only things that ask are attempts to leave the",
+    "# sandbox, and an unattended run should refuse those rather than hang.",
     "- id: permission-presets",
     "  config:",
     "    presets:",
@@ -210,6 +178,48 @@ function presetRows(input) {
     `        approval: ${input.flags.hosted ? "never" : "ask"}`,
     `    default: ${yamlScalar(input.flags.hosted ? "evimed-hosted" : "workspace-write")}`,
   ];
+}
+
+/**
+ * The environment the container must carry for the preset's rows to resolve.
+ *
+ * Every key here is read by a `!!js` expression in
+ * `presets/evimed-universal/agent.cordis.yml`. The two files are a pair: a name
+ * added on one side and not the other leaves a plugin on its schema default,
+ * silently, which is the failure this whole split exists to make visible. A
+ * test asserts every name this returns appears in the preset.
+ *
+ * The parameter is the settings half of {@link ProfilePatchInput} rather than
+ * the whole of it: a launch plan holds these and has no gateway to validate, so
+ * asking for the full input would make building an environment depend on
+ * something it never reads.
+ *
+ * @typedef {Pick<ProfilePatchInput, 'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'>} RuntimeEnvironmentInput
+ *
+ * @param {RuntimeEnvironmentInput} input
+ * @returns {Record<string, string>}
+ */
+export function runtimeEnvironment(input) {
+  return {
+    EVIMED_CAPABILITIES_DIR: input.capabilitiesDir,
+    EVIMED_CAPABILITY_SKILLS_DIR: input.capabilitySkillsDir,
+    EVIMED_CAPSULE_METHODS_DIR: input.capsuleMethodsDir,
+    EVIMED_CAPSULE_GATEWAY_URL: input.capsuleGatewayUrl,
+    EVIMED_WORKLOAD_TOKEN_FILE: input.workloadTokenFile,
+    EVIMED_BUNDLE_VERSION: input.bundleVersion,
+    EVIMED_ASK_USER: input.flags.askUser ? "1" : "0",
+    EVIMED_CAPSULE_ACTIVE: input.flags.capsule ? "1" : "0",
+    EVIMED_REVIEW_ENABLED: input.flags.review ? "1" : "0",
+    // A nonsense limit falls back to the schema's own default rather than being
+    // written through: a plugin reading `maxParallelChildren: -1` would honour
+    // it, and a misconfiguration should not be able to stop delegation.
+    EVIMED_DELIVERY_ATTEMPT_LIMIT: String(integer(input.limits.deliveryAttemptLimit, 3)),
+    EVIMED_MAX_PARALLEL_CHILDREN: String(integer(input.limits.maxParallelChildren, 30)),
+    EVIMED_MAX_STEPS: String(integer(input.limits.maxSteps, 200)),
+    EVIMED_MAX_TOKENS: String(integer(input.limits.maxTokens, 400_000)),
+    EVIMED_EVIDENCE_STALE_MINUTES: String(integer(input.limits.evidenceStaleMinutes, 10)),
+    EVIMED_SCREENING_BATCH_SIZE: String(integer(input.limits.screeningBatchSize, 50)),
+  };
 }
 
 /**
@@ -224,7 +234,7 @@ function environmentRows(environment, workloadTokenFile) {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => {
       assertLiteral(String(value), `mcpEnvironment.${key}`);
-      return `        ${key}: ${yamlScalar(String(value))}`;
+      return `            ${key}: ${yamlScalar(String(value))}`;
     });
 }
 
