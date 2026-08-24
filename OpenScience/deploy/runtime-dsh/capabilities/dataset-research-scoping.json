@@ -1,0 +1,121 @@
+{
+  "id": "dataset-research-scoping",
+  "version": "1.7.0",
+  "title": "Dataset Research Scoping",
+  "description": "Start from a dataset the researcher already holds, profile it mechanically, map it against the published literature, and decide which research questions it can and cannot support — naming the missing field for every question it cannot.",
+  "whenToUse": "研究者手上已经有数据、要从数据出发找选题时，委派给我——这与从文献出发的证据综述是两条不同的入口。",
+  "persona": "你是数据驱动选题分析师。你先把数据本身摸清楚（结构、质量、时间跨度、缺失），再谈能做什么研究。原始行不进入你的上下文，你只看结构、统计与样例。",
+  "skills": [
+    "dataset-research-scoping",
+    "deep-research",
+    "biomedical-database-search",
+    "research-topic-selection"
+  ],
+  "tools": [
+    "mcp__evimed__literature_search",
+    "mcp__evimed__biomedical_source_search",
+    "mcp__evimed__open_access_full_text",
+    "mcp__evimed__data_source_catalog",
+    "mcp__evimed__web_search",
+    "mcp__evimed__research_topic_selection",
+    "mcp__evimed__bibliometric_analysis",
+    "mcp__evimed__official_page_fetch",
+    "mcp__evimed__guideline_search",
+    "mcp__evimed__clinical_trial_search",
+    "mcp__evimed__term_normalize",
+    "mcp__evimed__evidence_deduplicate",
+    "mcp__evimed__pharmacy_reference_search"
+  ],
+  "produces": [
+    {
+      "contractKind": "dataset-scoping-package",
+      "outputs": [
+        {
+          "path": "data-profile.md",
+          "required": true
+        },
+        {
+          "path": "data-profile.json",
+          "required": true
+        },
+        {
+          "path": "data-profile.py",
+          "required": true
+        },
+        {
+          "path": "data-quality.md",
+          "required": true
+        },
+        {
+          "path": "evidence-map.md",
+          "required": true
+        },
+        {
+          "path": "feasibility-matrix.md",
+          "required": true
+        },
+        {
+          "path": "external-linkage.md",
+          "required": true
+        },
+        {
+          "path": "research-portfolio.md",
+          "required": true
+        },
+        {
+          "path": "study-protocol.md",
+          "required": true
+        },
+        {
+          "path": "scoping-run.json",
+          "required": true
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "citationsResolvable",
+        "skillsLoaded"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "datasetPath"
+    ],
+    "optional": [
+      "researchInterest",
+      "domain",
+      "populationOfInterest",
+      "outputLanguage"
+    ]
+  },
+  "safetyClass": "general",
+  "autopilot": {
+    "taskTypes": [
+      "data-prospecting"
+    ],
+    "costClass": "high",
+    "unattendedInputs": [
+      "datasetPath"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    30,
+    120
+  ],
+  "category": "Research Planning",
+  "dataSources": [
+    "uploaded-files",
+    "literature",
+    "guidelines",
+    "clinical-trials"
+  ],
+  "starterPrompts": [
+    "Profile the uploaded hospital dataset and tell me which studies it can actually support."
+  ]
+}

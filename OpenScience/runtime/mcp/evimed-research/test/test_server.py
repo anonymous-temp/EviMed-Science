@@ -53,32 +53,32 @@ class ToolContractTests(unittest.TestCase):
         tools = self.server.list_tools()
         by_name = {tool["name"]: tool for tool in tools}
         expected = {
-            "evimed_health",
-            "evimed_data_source_catalog",
-            "evimed_biomedical_source_search",
-            "evimed_official_page_fetch",
-            "evimed_open_access_full_text",
-            "evimed_web_search",
-            "evimed_term_normalize",
-            "evimed_drug_term_normalize",
-            "evimed_evidence_deduplicate",
-            "evimed_literature_search",
-            "evimed_guideline_search",
-            "evimed_clinical_trial_search",
-            "evimed_patent_search",
-            "evimed_pharmacy_reference_search",
-            "evimed_drug_label_search",
-            "evimed_adr_case_query",
-            "evimed_adr_signal_analysis",
-            "evimed_offlabel_evidence_packet",
-            "evimed_comprehensive_drug_evaluation",
-            "evimed_drug_selection_evaluation",
-            "evimed_meta_analysis",
-            "evimed_mendelian_randomization",
-            "evimed_bibliometric_analysis",
-            "evimed_research_topic_selection",
-            "evimed_peer_review",
-            "evimed_drug_safety_analysis",
+            "health",
+            "data_source_catalog",
+            "biomedical_source_search",
+            "official_page_fetch",
+            "open_access_full_text",
+            "web_search",
+            "term_normalize",
+            "drug_term_normalize",
+            "evidence_deduplicate",
+            "literature_search",
+            "guideline_search",
+            "clinical_trial_search",
+            "patent_search",
+            "pharmacy_reference_search",
+            "drug_label_search",
+            "adr_case_query",
+            "adr_signal_analysis",
+            "offlabel_evidence_packet",
+            "comprehensive_drug_evaluation",
+            "drug_selection_evaluation",
+            "meta_analysis",
+            "mendelian_randomization",
+            "bibliometric_analysis",
+            "research_topic_selection",
+            "peer_review",
+            "drug_safety_analysis",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:
@@ -86,19 +86,19 @@ class ToolContractTests(unittest.TestCase):
             self.assertEqual(schema["type"], "object")
             self.assertFalse(schema["additionalProperties"])
             self.assertIn("properties", schema)
-        self.assertEqual(by_name["evimed_drug_label_search"]["inputSchema"]["properties"]["limit"]["maximum"], 3)
+        self.assertEqual(by_name["drug_label_search"]["inputSchema"]["properties"]["limit"]["maximum"], 3)
         for name in {
-            "evimed_meta_analysis",
-            "evimed_mendelian_randomization",
-            "evimed_bibliometric_analysis",
-            "evimed_research_topic_selection",
-            "evimed_peer_review",
-            "evimed_drug_safety_analysis",
+            "meta_analysis",
+            "mendelian_randomization",
+            "bibliometric_analysis",
+            "research_topic_selection",
+            "peer_review",
+            "drug_safety_analysis",
         }:
             wait_schema = by_name[name]["inputSchema"]["properties"]["waitSeconds"]
             self.assertEqual(wait_schema, {"type": "integer", "minimum": 0, "maximum": 45})
         self.assertEqual(
-            set(by_name["evimed_biomedical_source_search"]["inputSchema"]["properties"]["source"]["enum"]),
+            set(by_name["biomedical_source_search"]["inputSchema"]["properties"]["source"]["enum"]),
             set(self.server.public_sources.QUERYABLE_BIOMEDICAL_SOURCE_IDS),
         )
         self.assertTrue(
@@ -130,8 +130,8 @@ class ToolContractTests(unittest.TestCase):
         self.assertEqual(sleep.call_count, 2)
 
     def test_catalog_is_searchable_and_never_turns_blocked_sources_into_evidence(self):
-        active = self.server.call_tool("evimed_data_source_catalog", {"status": "connected_public", "limit": 123})
-        blocked = self.server.call_tool("evimed_data_source_catalog", {"status": "blocked_license", "limit": 123})
+        active = self.server.call_tool("data_source_catalog", {"status": "connected_public", "limit": 123})
+        blocked = self.server.call_tool("data_source_catalog", {"status": "blocked_license", "limit": 123})
         self.assert_contract(active)
         self.assert_contract(blocked)
         self.assertEqual(active["status"], "success")
@@ -158,7 +158,7 @@ class ToolContractTests(unittest.TestCase):
 
     def test_biomedical_search_rejects_unregistered_source_before_network(self):
         result = self.server.call_tool(
-            "evimed_biomedical_source_search", {"source": "unreviewed-web-scraper", "query": "observed"}
+            "biomedical_source_search", {"source": "unreviewed-web-scraper", "query": "observed"}
         )
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["error"]["code"], "invalid_input")
@@ -176,13 +176,13 @@ class ToolContractTests(unittest.TestCase):
             "OPEN_SCIENCE_PROJECT_ID": scope["projectId"],
             "OPEN_SCIENCE_WORKSPACE_DIR": scope["workspaceDir"],
         }):
-            first = self.server.call_tool("evimed_health", {})
-            second = self.server.call_tool("evimed_health", {})
+            first = self.server.call_tool("health", {})
+            second = self.server.call_tool("health", {})
             drug_arguments = {"term": "  acetaminophen  "}
             event_arguments = {"term": "心肌梗死", "domain": "adverse_event"}
             with mock.patch.object(self.server.public_sources, "rxnorm_resolve", return_value=None):
-                drug = self.server.call_tool("evimed_drug_term_normalize", drug_arguments)
-            event = self.server.call_tool("evimed_term_normalize", event_arguments)
+                drug = self.server.call_tool("drug_term_normalize", drug_arguments)
+            event = self.server.call_tool("term_normalize", event_arguments)
         self.assert_contract(first)
         self.assertEqual(first, second)
         self.assertEqual(first["data"]["service"], "evimed-research")
@@ -190,20 +190,20 @@ class ToolContractTests(unittest.TestCase):
         self.assertIn("pubmed", first["data"]["dataSourceCatalog"]["activeConnectorIds"])
         self.assertNotIn("retrievedAt", first["data"])
         self.assertEqual(first["data"]["provenance"], {
-            "tool": "evimed_health",
+            "tool": "health",
             "arguments": {},
             "scope": scope,
         })
         self.assertEqual(drug["data"]["preferred"], "paracetamol")
         self.assertIn("acetaminophen", drug["data"]["synonyms"])
         self.assertEqual(drug["data"]["provenance"], {
-            "tool": "evimed_drug_term_normalize",
+            "tool": "drug_term_normalize",
             "arguments": drug_arguments,
             "scope": scope,
         })
         self.assertEqual(event["data"]["preferred"], "myocardial infarction")
         self.assertEqual(event["data"]["provenance"], {
-            "tool": "evimed_term_normalize",
+            "tool": "term_normalize",
             "arguments": event_arguments,
             "scope": scope,
         })
@@ -211,7 +211,7 @@ class ToolContractTests(unittest.TestCase):
     def test_drug_term_normalize_prefers_the_rxnorm_vocabulary(self):
         resolution = {"rxcui": "1191", "preferred": "Aspirin", "synonyms": ["Aspirin", "Acetylsalicylic Acid"]}
         with mock.patch.object(self.server.public_sources, "rxnorm_resolve", return_value=resolution):
-            result = self.server.call_tool("evimed_drug_term_normalize", {"term": "aspirin"})
+            result = self.server.call_tool("drug_term_normalize", {"term": "aspirin"})
         self.assert_contract(result)
         self.assertEqual(result["status"], "success")
         self.assertIn("RxNorm", result["summary"])
@@ -223,7 +223,7 @@ class ToolContractTests(unittest.TestCase):
 
     def test_drug_term_normalize_falls_back_to_the_curated_table_without_rxnorm_match(self):
         with mock.patch.object(self.server.public_sources, "rxnorm_resolve", return_value=None):
-            result = self.server.call_tool("evimed_drug_term_normalize", {"term": "acetaminophen"})
+            result = self.server.call_tool("drug_term_normalize", {"term": "acetaminophen"})
         self.assert_contract(result)
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["data"]["preferred"], "paracetamol")
@@ -233,7 +233,7 @@ class ToolContractTests(unittest.TestCase):
     def test_drug_term_normalize_tolerates_rxnorm_outages(self):
         unavailable = self.server.public_sources.PublicSourceError("public_source_unavailable", "offline", True)
         with mock.patch.object(self.server.public_sources, "rxnorm_resolve", side_effect=unavailable):
-            result = self.server.call_tool("evimed_drug_term_normalize", {"term": "acetaminophen"})
+            result = self.server.call_tool("drug_term_normalize", {"term": "acetaminophen"})
         self.assert_contract(result)
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["data"]["preferred"], "paracetamol")
@@ -241,7 +241,7 @@ class ToolContractTests(unittest.TestCase):
 
     def test_drug_term_normalize_passes_unknown_terms_through_with_a_warning(self):
         with mock.patch.object(self.server.public_sources, "rxnorm_resolve", return_value=None):
-            result = self.server.call_tool("evimed_drug_term_normalize", {"term": "Unregistered Compound"})
+            result = self.server.call_tool("drug_term_normalize", {"term": "Unregistered Compound"})
         self.assert_contract(result)
         self.assertEqual(result["status"], "warning")
         self.assertEqual(result["data"]["preferred"], "unregistered compound")
@@ -269,7 +269,7 @@ class ToolContractTests(unittest.TestCase):
             "OPEN_SCIENCE_PROJECT_ID": scope["projectId"],
             "OPEN_SCIENCE_WORKSPACE_DIR": scope["workspaceDir"],
         }):
-            result = self.server.call_tool("evimed_evidence_deduplicate", arguments)
+            result = self.server.call_tool("evidence_deduplicate", arguments)
         self.assert_contract(result)
         self.assertEqual([item["id"] for item in result["data"]["items"]], ["a", "c", "e"])
         self.assertEqual(result["data"]["duplicates"], [
@@ -277,13 +277,13 @@ class ToolContractTests(unittest.TestCase):
             {"duplicateId": "d", "canonicalId": "c", "matchedBy": "title"},
         ])
         self.assertEqual(result["data"]["provenance"], {
-            "tool": "evimed_evidence_deduplicate",
+            "tool": "evidence_deduplicate",
             "arguments": arguments,
             "scope": scope,
         })
 
     def test_deduplicate_ignores_placeholder_identifiers(self):
-        result = self.server.call_tool("evimed_evidence_deduplicate", {
+        result = self.server.call_tool("evidence_deduplicate", {
             "items": [
                 {"id": "a", "title": "ACC chest pain", "pmid": "N/A"},
                 {"id": "b", "title": "Cochrane Suxiao", "pmid": "N/A"},
@@ -299,7 +299,7 @@ class ToolContractTests(unittest.TestCase):
         ])
 
     def test_invalid_input_returns_actionable_tool_error(self):
-        result = self.server.call_tool("evimed_term_normalize", {"term": "", "extra": True})
+        result = self.server.call_tool("term_normalize", {"term": "", "extra": True})
         self.assert_contract(result)
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["error"]["code"], "invalid_input")
@@ -310,12 +310,12 @@ class ToolContractTests(unittest.TestCase):
     def test_legacy_business_adapters_are_declared_and_fail_honestly_when_unconfigured(self):
         cases = [
             (
-                "evimed_comprehensive_drug_evaluation",
+                "comprehensive_drug_evaluation",
                 {"drug": "dapagliflozin", "indication": "chronic kidney disease"},
                 "EVIMED_COMPREHENSIVE_DRUG_EVALUATION_URL",
             ),
             (
-                "evimed_drug_selection_evaluation",
+                "drug_selection_evaluation",
                 {"candidateDrugs": ["drug-a", "drug-b"], "indication": "hypertension"},
                 "EVIMED_DRUG_SELECTION_EVALUATION_URL",
             ),
@@ -377,7 +377,7 @@ class AdapterTests(unittest.TestCase):
                 f"http://127.0.0.1:{httpd.server_port}/search"
             )
             return self.server.call_tool(
-                "evimed_literature_search", arguments or {"query": "observed"}
+                "literature_search", arguments or {"query": "observed"}
             )
         finally:
             httpd.shutdown()
@@ -422,7 +422,7 @@ class AdapterTests(unittest.TestCase):
 
     def test_managed_status_rejects_waits_that_compete_with_mcp_deadline(self):
         result = self.server.call_tool(
-            "evimed_drug_safety_analysis",
+            "drug_safety_analysis",
             {"action": "status", "jobId": "safety-12345678", "waitSeconds": 60},
         )
 
@@ -432,7 +432,7 @@ class AdapterTests(unittest.TestCase):
     def test_unconfigured_adapter_fails_without_fabricated_evidence(self):
         os.environ.pop("EVIMED_LITERATURE_SEARCH_URL", None)
         os.environ["EVIMED_PUBLIC_CONNECTORS_ENABLED"] = "false"
-        result = self.server.call_tool("evimed_literature_search", {"query": "osimertinib"})
+        result = self.server.call_tool("literature_search", {"query": "osimertinib"})
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["error"]["code"], "adapter_unconfigured")
         self.assertFalse(result["error"]["retryable"])
@@ -486,7 +486,7 @@ class AdapterTests(unittest.TestCase):
             os.environ["OPEN_SCIENCE_PROJECT_ID"] = "project-public"
             os.environ["OPEN_SCIENCE_WORKSPACE_DIR"] = "/workspace/public"
             result = self.server.call_tool(
-                "evimed_literature_search",
+                "literature_search",
                 {"query": "rituximab", "limit": 3, "databases": ["pubmed"]},
             )
         finally:
@@ -523,10 +523,10 @@ class AdapterTests(unittest.TestCase):
             return next(value for suffix, value in responses.items() if url.endswith(suffix))
 
         with mock.patch.object(self.server.public_sources, "_get_json", side_effect=fake_get_json):
-            literature = self.server.call_tool("evimed_literature_search", {"query": "observed", "limit": 2})
-            guideline = self.server.call_tool("evimed_guideline_search", {"query": "observed", "mode": "blocks", "publisher": "NCCN"})
-            trial = self.server.call_tool("evimed_clinical_trial_search", {"query": "observed", "registry": 1})
-            patent = self.server.call_tool("evimed_patent_search", {"query": "observed"})
+            literature = self.server.call_tool("literature_search", {"query": "observed", "limit": 2})
+            guideline = self.server.call_tool("guideline_search", {"query": "observed", "mode": "blocks", "publisher": "NCCN"})
+            trial = self.server.call_tool("clinical_trial_search", {"query": "observed", "registry": 1})
+            patent = self.server.call_tool("patent_search", {"query": "observed"})
 
         self.assertEqual(literature["data"]["items"][0]["id"], "EVIMED-LITERATURE:p1")
         self.assertEqual(guideline["data"]["items"][0]["blocks"], ["Verified recommendation block"])
@@ -542,9 +542,9 @@ class AdapterTests(unittest.TestCase):
             "public_source_unavailable", "source down", True
         )
         with mock.patch.object(self.server.public_sources, "call", side_effect=error):
-            first = self.server.call_tool("evimed_literature_search", {"query": "one"})
-            second = self.server.call_tool("evimed_literature_search", {"query": "two"})
-            third = self.server.call_tool("evimed_literature_search", {"query": "three"})
+            first = self.server.call_tool("literature_search", {"query": "one"})
+            second = self.server.call_tool("literature_search", {"query": "two"})
+            third = self.server.call_tool("literature_search", {"query": "three"})
         self.assertEqual(first["error"]["code"], "public_source_unavailable")
         self.assertEqual(second["error"]["code"], "public_source_unavailable")
         self.assertEqual(third["error"]["code"], "adapter_circuit_open")
@@ -563,13 +563,13 @@ class AdapterTests(unittest.TestCase):
 
         with mock.patch.object(self.server.public_sources, "call", side_effect=public_call) as call:
             failed = self.server.call_tool(
-                "evimed_biomedical_source_search", {"source": "pubchem", "query": "aspirin"}
+                "biomedical_source_search", {"source": "pubchem", "query": "aspirin"}
             )
             paused = self.server.call_tool(
-                "evimed_biomedical_source_search", {"source": "pubchem", "query": "metformin"}
+                "biomedical_source_search", {"source": "pubchem", "query": "metformin"}
             )
             unrelated = self.server.call_tool(
-                "evimed_biomedical_source_search", {"source": "pubmed", "query": "aspirin"}
+                "biomedical_source_search", {"source": "pubmed", "query": "aspirin"}
             )
 
         self.assertEqual(failed["error"]["code"], "public_source_unavailable")
@@ -624,15 +624,15 @@ class AdapterTests(unittest.TestCase):
             mock.patch.object(public, "trials", side_effect=lambda _args: observed("trial")),
             mock.patch.object(public, "literature", side_effect=lambda _args: observed("literature")),
         ):
-            offlabel = public.call("evimed_offlabel_evidence_packet", {
+            offlabel = public.call("offlabel_evidence_packet", {
                 "drug": "observed-drug",
                 "proposedUse": "observed-use",
             })
-            comprehensive = public.call("evimed_comprehensive_drug_evaluation", {
+            comprehensive = public.call("comprehensive_drug_evaluation", {
                 "drug": "observed-drug",
                 "indication": "observed-indication",
             })
-            selection = public.call("evimed_drug_selection_evaluation", {
+            selection = public.call("drug_selection_evaluation", {
                 "candidateDrugs": ["drug-a", "drug-b"],
                 "indication": "observed-indication",
             })
@@ -694,7 +694,7 @@ class AdapterTests(unittest.TestCase):
             os.environ["OPEN_SCIENCE_PROJECT_ID"] = "project-1"
             os.environ["OPEN_SCIENCE_WORKSPACE_DIR"] = "/workspace"
             result = self.server.call_tool(
-                "evimed_literature_search", {"query": "observed", "limit": 5}
+                "literature_search", {"query": "observed", "limit": 5}
             )
         finally:
             httpd.shutdown()
@@ -704,7 +704,7 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["sources"][0]["source"], "pubmed")
         self.assertEqual(result["data"]["provenance"], {
-            "tool": "evimed_literature_search",
+            "tool": "literature_search",
             "arguments": {"query": "observed", "limit": 5},
             "scope": {
                 "tenantId": "user-1",
@@ -726,7 +726,7 @@ class AdapterTests(unittest.TestCase):
         os.environ.pop("EVIMED_WORKLOAD_TOKEN_FILE")
         os.environ["EVIMED_WORKLOAD_TOKEN"] = "caller-controlled-token-must-be-ignored"
         os.environ["EVIMED_LITERATURE_SEARCH_URL"] = "https://evidence.internal/search"
-        result = self.server.call_tool("evimed_literature_search", {"query": "observed"})
+        result = self.server.call_tool("literature_search", {"query": "observed"})
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["error"]["code"], "adapter_workload_token_unavailable")
         self.assertFalse(result["error"]["retryable"])
@@ -763,10 +763,10 @@ class AdapterTests(unittest.TestCase):
             os.environ["EVIMED_LITERATURE_SEARCH_URL"] = (
                 f"http://127.0.0.1:{httpd.server_port}/search"
             )
-            first = self.server.call_tool("evimed_literature_search", {"query": "first"})
+            first = self.server.call_tool("literature_search", {"query": "first"})
             self.token_file.write_text("rotated.signed.workload-token\n", encoding="utf-8")
             self.token_file.chmod(0o600)
-            second = self.server.call_tool("evimed_literature_search", {"query": "second"})
+            second = self.server.call_tool("literature_search", {"query": "second"})
         finally:
             httpd.shutdown()
             thread.join()
@@ -802,7 +802,7 @@ class AdapterTests(unittest.TestCase):
             with self.subTest(label=label):
                 os.environ["EVIMED_WORKLOAD_TOKEN_FILE"] = str(token_file)
                 result = self.server.call_tool(
-                    "evimed_literature_search", {"query": "observed"}
+                    "literature_search", {"query": "observed"}
                 )
                 self.assertEqual(result["status"], "error")
                 self.assertEqual(
@@ -832,7 +832,7 @@ class AdapterTests(unittest.TestCase):
             os.environ["EVIMED_GUIDELINE_SEARCH_URL"] = (
                 f"http://127.0.0.1:{httpd.server_port}/search"
             )
-            result = self.server.call_tool("evimed_guideline_search", {"query": "rare"})
+            result = self.server.call_tool("guideline_search", {"query": "rare"})
         finally:
             httpd.shutdown()
             thread.join()
@@ -846,7 +846,7 @@ class AdapterTests(unittest.TestCase):
     def test_http_failure_reports_root_cause_retry_and_stop_condition(self):
         os.environ["EVIMED_ADR_CASE_QUERY_URL"] = "http://127.0.0.1:1/cases"
         result = self.server.call_tool(
-            "evimed_adr_case_query", {"drug": "osimertinib", "limit": 20}
+            "adr_case_query", {"drug": "osimertinib", "limit": 20}
         )
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["error"]["code"], "adapter_unavailable")
@@ -861,17 +861,17 @@ class AdapterTests(unittest.TestCase):
         os.environ["EVIMED_ADR_CASE_QUERY_URL"] = "http://127.0.0.1:1/cases"
         arguments = {"drug": "osimertinib", "limit": 20}
 
-        first = self.server.call_tool("evimed_adr_case_query", arguments)
-        second = self.server.call_tool("evimed_adr_case_query", arguments)
-        third = self.server.call_tool("evimed_adr_case_query", arguments)
-        health = self.server.call_tool("evimed_health", {})
+        first = self.server.call_tool("adr_case_query", arguments)
+        second = self.server.call_tool("adr_case_query", arguments)
+        third = self.server.call_tool("adr_case_query", arguments)
+        health = self.server.call_tool("health", {})
 
         self.assertEqual(first["error"]["code"], "adapter_unavailable")
         self.assertEqual(second["error"]["code"], "adapter_unavailable")
         self.assertEqual(third["error"]["code"], "adapter_circuit_open")
         connector = next(
             item for item in health["data"]["adapters"]
-            if item["tool"] == "evimed_adr_case_query"
+            if item["tool"] == "adr_case_query"
         )
         self.assertEqual(connector["state"], "open")
         self.assertEqual(connector["failures"], 2)
@@ -1035,7 +1035,7 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["summary"], "Evidence returned.")
         self.assertEqual(result["data"]["provenance"], {
-            "tool": "evimed_literature_search",
+            "tool": "literature_search",
             "arguments": {"query": "observed", "limit": 3},
             "scope": {
                 "tenantId": "user-1",
@@ -1065,7 +1065,7 @@ class AdapterTests(unittest.TestCase):
         result = self.call_with_response(body, {"query": "observed", "limit": 3})
         self.assertEqual(result["status"], "warning")
         self.assertEqual(result["data"]["provenance"], {
-            "tool": "evimed_literature_search",
+            "tool": "literature_search",
             "arguments": {"query": "observed", "limit": 3},
             "scope": {
                 "tenantId": "user-1",
@@ -1115,7 +1115,7 @@ class AdapterTests(unittest.TestCase):
                 f"http://127.0.0.1:{redirect.server_port}/redirect"
             )
             result = self.server.call_tool(
-                "evimed_literature_search", {"query": "observed"}
+                "literature_search", {"query": "observed"}
             )
         finally:
             redirect.shutdown()
@@ -1141,7 +1141,7 @@ class ProtocolTests(unittest.TestCase):
                 "jsonrpc": "2.0",
                 "id": 3,
                 "method": "tools/call",
-                "params": {"name": "evimed_health", "arguments": {}},
+                "params": {"name": "health", "arguments": {}},
             },
         ]
         proc = subprocess.run(
@@ -1158,7 +1158,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual([line["id"] for line in lines], [1, 2, 3])
         self.assertEqual(lines[0]["result"]["serverInfo"]["name"], "evimed-research")
         names = {tool["name"] for tool in lines[1]["result"]["tools"]}
-        self.assertIn("evimed_health", names)
+        self.assertIn("health", names)
         tool_result = lines[2]["result"]["structuredContent"]
         self.assertEqual(tool_result["status"], "success")
         self.assertEqual(
@@ -1186,7 +1186,7 @@ class ProtocolTests(unittest.TestCase):
             "jsonrpc": "2.0",
             "id": 42,
             "method": "tools/call",
-            "params": {"name": "evimed_health", "arguments": {}},
+            "params": {"name": "health", "arguments": {}},
         }).encode() + b"\n"
         proc = subprocess.run(
             [sys.executable, str(SERVER_FILE)],

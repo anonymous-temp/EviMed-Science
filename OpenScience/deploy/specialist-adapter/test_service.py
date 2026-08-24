@@ -239,4 +239,4 @@ def test_evidence_adapter_is_authenticated_and_keeps_fixed_tool_mapping(tmp_path
     )
     assert response.status_code == 200
     assert response.json()["summary"] == "Traceable evidence packet."
-    assert calls == [("evimed_offlabel_evidence_packet", {"drug": "aspirin"})]
+    assert calls == [("offlabel_evidence_packet", {"drug": "aspirin"})]

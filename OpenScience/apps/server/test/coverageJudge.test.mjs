@@ -371,6 +371,64 @@ test("verdicts are capped, and the reason text is bounded", () => {
   for (const verdict of kept) assert.ok(verdict.why.length <= 110);
 });
 
+test("a truncated verdict list says how many verified doubts it is not showing", () => {
+  // Three packages in the corpus came back with exactly 8 kept verdicts — the
+  // cap — so a reader was handed "these are the doubts" when it was "these are
+  // eight of the doubts, and we are not telling you how many there were".
+  // A ledger and report wide enough that 12 distinct, fully verifiable verdicts
+  // exist — one per (entry, line) pair — so nothing but the cap removes any.
+  const wide = wideContext(12);
+  const verdicts = Array.from({ length: 12 }, (_, index) => ({
+    entryId: `E${index}`,
+    kind: "answer-not-responsive",
+    reportLine: index + 1,
+    quote: `子问 ${index} 的正文引文`,
+    why: `理由 ${index}`,
+  }));
+  const { kept, omitted } = verifiedCoverageVerdicts(verdicts, wide);
+  assert.equal(kept.length, 8);
+  assert.equal(omitted, 4, "the four verified verdicts the cap cut must be counted");
+  const notices = coverageJudgeNotices(kept, omitted);
+  assert.match(notices[0], /12 处/, "the total must be the total, not the shown count");
+  assert.match(notices[0], /另有 4 处同样通过核对但未列出/);
+  assert.equal(notices.length, 9);
+  for (const notice of notices) assert.ok(notice.length <= 300, `notice was ${notice.length} characters`);
+  // With nothing cut, the preamble says nothing about a cap.
+  assert.doesNotMatch(coverageJudgeNotices(kept.slice(0, 2), 0)[0], /未列出/);
+});
+
+/** A judgeable context with `count` answered entries, each declaring its own
+ *  anchored report line. Built through the real coverageJudgeContext so the
+ *  verification rules it feeds are the production ones.
+ *  @param {number} count */
+function wideContext(count) {
+  const lines = Array.from({ length: count }, (_, index) => `子问 ${index} 的正文引文。<!-- claim:CLM-${index} -->`);
+  const brief = [
+    "# 研究任务",
+    "",
+    "## 需要回答的问题",
+    "",
+    ...Array.from({ length: count }, (_, index) => `${index + 1}. 子问 ${index} 问的是什么？`),
+    "",
+  ].join("\n");
+  const coverage = JSON.stringify({
+    schemaVersion: 1,
+    entries: Array.from({ length: count }, (_, index) => ({
+      id: `E${index}`,
+      question: `子问 ${index} 问的是什么`,
+      status: "answered",
+      reportLines: [index + 1],
+    })),
+  });
+  const built = coverageJudgeContext({
+    briefText: brief,
+    questionCoverageText: coverage,
+    reportText: lines.join("\n"),
+  });
+  assert.ok(built, "the wide fixture must produce a judgeable context");
+  return built;
+}
+
 test("each notice fits the run ledger's per-notice budget without cutting a quotation", () => {
   const { kept } = verifiedCoverageVerdicts([
     responsiveVerdict,
@@ -514,6 +572,25 @@ test("the verdict is read wherever a reasoning model left it", () => {
   assert.equal(parseJudgeVerdicts("{\"verdicts\": \"nope\"}"), null);
   assert.equal(parseJudgeVerdicts(""), null);
   assert.equal(parseJudgeVerdicts(null), null);
+});
+
+test("the rescue from a reasoning stream survives a brace in the prose and a second object", () => {
+  const answer = JSON.stringify({
+    verdicts: [{ entryId: "1.1", kind: "answer-not-responsive", reportLine: 7, quote: "q", why: "w" }],
+  });
+  // A greedy /\{[\s\S]*\}/ ate from the first brace to the last, so matchAll
+  // produced exactly one span and the reverse-and-retry loop was dead code:
+  // both of these returned null, and the paid-for judgement was thrown away.
+  assert.equal(parseJudgeVerdicts(`先想一下 {population} 的问题。最终答案：${answer}`)?.length, 1);
+  assert.equal(parseJudgeVerdicts(`草稿：{"verdicts":[]} 更正后：${answer}`)?.length, 1);
+  // Last one wins, as the reversal always meant to.
+  assert.equal(parseJudgeVerdicts(`${answer} 再想想，其实没有问题：{"verdicts":[]}`)?.length, 0);
+  // A brace inside a JSON string must not close the object early.
+  const braced = JSON.stringify({ verdicts: [{ entryId: "1.1", kind: "false-gap", reportLine: 7, quote: "a}b", why: "{" }] });
+  assert.equal(parseJudgeVerdicts(`思考中。${braced}`)?.length, 1);
+  // Still nothing to find is still null, not a throw.
+  assert.equal(parseJudgeVerdicts("只有散文，没有 { 花括号对"), null);
+  assert.equal(parseJudgeVerdicts("{\"unrelated\": {\"nested\": 1}}"), null);
 });
 
 test("a reasoning model's verdict list is recovered from reasoning_content", async () => {

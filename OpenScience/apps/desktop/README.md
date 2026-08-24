@@ -23,5 +23,5 @@ The frontend talks to the agent runtime only through `packages/sdk` (`OpenCodeCl
 
 ## Depends on
 
-`packages/ui`, `packages/shared`, `packages/sdk`; at runtime, the OpenCode sidecar
-started by `runtime/manager`.
+`packages/shared`, `packages/sdk`; at runtime, the kernel the control plane
+started for this project.

@@ -1,0 +1,145 @@
+# evimed-universal — the only agent composition in the system.
+#
+# Hidden knowledge: what the model can see. A preset, not a profile, decides the
+# model-visible surface, so "strip the coding tools out of DSH" is not work —
+# it is the absence of a row. Nothing below is a product line and nothing below
+# is a mode: every session mounts this exact composition, and which capabilities
+# a run uses is decided by the model at plan time, because a session's preset
+# cannot be changed once it has produced content.
+#
+# Every row carries an explicit `id`. A row without one is read as a delete plus
+# an insert on every config read, which remounts it and loses its state.
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: >-
+      你是 EviMed 的医学研究助手，基于 {{model}} 模型，工作目录 {{cwd}}。你具备广泛的医学知识。
+      简单问题直接回答；需要交付物的任务，先用 evimed_plan 写下计划（含澄清或假设），把专业工作用 evimed_delegate
+      委派给能力目录中的能力，综合后用 evimed_complete_run 交付。检索顺序：先查记忆与胶囊，再查文献，最后查网页。
+      所有事实性主张尽量附文献依据；不编造文献；不提供具体诊疗建议。
+
+# Orchestration guidance: the capability catalogue, the contract-kind summary,
+# the retrieval order and the citation-hygiene rules. Order 100–199 is DSH's
+# tool-guidance band.
+- id: evimed-guidance
+  name: '@evimed/dsh-socket/plugins/guidance'
+
+# "When is a run finished, and when is it acceptable" — the plan, the
+# delegation, the delivery gate, the completion check, the path guard, the
+# attempt ceiling and the run budget, all in one plugin because they are one
+# piece of knowledge.
+- id: evimed-run-policy
+  name: '@evimed/dsh-socket/plugins/run-policy'
+
+# Evidence ingestion. An observer on the tool pipeline: it can never change what
+# the model sees, which is the point — the ledger may not edit the run it records.
+- id: evimed-evidence
+  name: '@evimed/dsh-socket/plugins/evidence'
+
+# The capsule's runtime face: recall, note, and the user's own distilled methods
+# registered as skills from a deployment-owned read-only directory.
+- id: evimed-capsule
+  name: '@evimed/dsh-socket/plugins/capsule'
+
+# Batch screening as one tool call: the model asks for a screening, the code
+# decides the batch size, the concurrency, the tool restriction and the ledger.
+- id: evimed-screening
+  name: '@evimed/dsh-socket/plugins/screening'
+
+# Cross-deliverable semantic review. Produces notices, never a verdict: on 29
+# real deliveries the semantic judge produced 129 findings of which 3 landed on
+# a human annotation, and five runs at temperature 0 disagreed with each other.
+- id: evimed-review
+  name: '@evimed/dsh-socket/plugins/review'
+  disabled: true
+
+# --- framework tools the model needs to do the work -------------------------
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
+# Skills ship with the preset and are found by relative path. Default root
+# discovery is off: it would treat `.dsh/skills` in the *workspace* as a skill
+# root, and the workspace is where users upload files — an uploaded SKILL.md
+# would become an instruction.
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    includeDefaultRoots: false
+    customSkillDirs:
+      - './skills/core'
+      - './skills/curated-scientific'
+      - './skills/office'
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# Asking the user is a hosted-deployment decision, so the row is present and the
+# profile patch decides. Hosted runs default to writing the assumption into the
+# plan's clarifications instead.
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+  disabled: true
+
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+- id: delegation
+  name: cordis:group
+  group: true
+  isolate:
+    workflowEngine: true
+  config:
+    - id: tool-subagent
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: subagent
+        backgroundMode: continuable
+    - id: tool-subagent-control
+      name: '@deepseek-ai/dsh-tool-subagent-control'
+    # Report delivery is a deployment policy, not a per-call choice: a model
+    # that can pick `next-step` can interrupt its own synthesis at will.
+    - id: tool-subagent-report
+      name: '@deepseek-ai/dsh-tool-subagent-report'
+      config:
+        reportDelivery: quiet
+    - id: workflow-worker-thread
+      name: '@deepseek-ai/dsh-workflow-worker-thread'
+      config:
+        provider: spawn
+    - id: tool-workflow
+      name: '@deepseek-ai/dsh-tool-workflow'
+
+# Deliberately absent, each for a reason:
+#   tool-todo            a second planning surface; the plan is task-plan.json alone
+#   agent-instructions   it injects AGENTS.md from the workspace and from every
+#                        directory the run touches — an uploaded file would
+#                        become an instruction
+#   str_replace_editor   tool-fs covers editing
+#   tool-web             web_fetch is an SSRF surface and web_search needs the
+#                        real DeepSeek key in the container; retrieval goes
+#                        through MCP so the runtime never names a host
+#   plan-mode            planning is a tool call, not a mode
+#   tool-ralph           it waits in the foreground and evaluates nothing
+#   tool-lsp, code-runtime   this is not a coding agent
+#   tool-goal            state, not scheduling; cross-day scheduling is the
+#                        control plane's job

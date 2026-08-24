@@ -172,11 +172,21 @@ async function currentSkills() {
 }
 
 async function currentVersions() {
-  const runtimeDockerfile = await read("deploy/runtime-opencode/Dockerfile");
+  // The kernel a release carries is read from the image that will be built, and
+  // its pinned versions come from deps-version.json — the one place a tracked
+  // upstream pin is written. A manifest that restated them would be the fourth
+  // copy, and the fourth copy is always the one that lags.
+  const runtimeDockerfile = await read("deploy/runtime-dsh/Dockerfile");
+  const depsVersions = JSON.parse(await read("deps-version.json"));
+  const domainPkg = JSON.parse(await read("packages/domain/package.json"));
+  const socketPkg = JSON.parse(await read("packages/socket/package.json"));
   const webCompose = await read("deploy/web/docker-compose.yml");
   const monitoringCompose = await read("deploy/web/docker-compose.monitoring.yml");
   return {
-    opencodeVersion: process.env.OPEN_SCIENCE_OPENCODE_VERSION ?? dockerArg(runtimeDockerfile, "OPENCODE_VERSION"),
+    dshVersion: process.env.OPEN_SCIENCE_DSH_VERSION ?? dockerArg(runtimeDockerfile, "DSH_VERSION") ?? depsVersions.dsh.version,
+    cordisVersion: dockerArg(runtimeDockerfile, "DSH_CORDIS_VERSION") ?? depsVersions.dsh.cordis,
+    socketVersion: process.env.OPEN_SCIENCE_SOCKET_BUNDLE_VERSION ?? socketPkg.version,
+    domainVersion: domainPkg.version,
     uvVersion: process.env.OPEN_SCIENCE_UV_VERSION ?? dockerArg(runtimeDockerfile, "UV_VERSION"),
     caddyVersion: process.env.OPEN_SCIENCE_CADDY_VERSION ?? composeDefault(webCompose, "OPEN_SCIENCE_CADDY_VERSION"),
     monitoring: {
@@ -203,7 +213,7 @@ async function buildManifest() {
   const webImage = process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE ?? `open-science-web:${pkg.version}`;
   const runtimeImage =
     process.env.OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE ??
-    `open-science-opencode:opencode-${versions.opencodeVersion}-uv-${versions.uvVersion}`;
+    `open-science-runtime:dsh-${versions.dshVersion}-uv-${versions.uvVersion}`;
   const proxyImage = `caddy:${versions.caddyVersion}`;
   const manifest = {
     schemaVersion: 2,
@@ -223,7 +233,13 @@ async function buildManifest() {
     runtime: {
       image: runtimeImage,
       imageId: dockerImageId(runtimeImage, "OPEN_SCIENCE_RUNTIME_IMAGE_ID"),
-      opencodeVersion: versions.opencodeVersion,
+      dshVersion: versions.dshVersion,
+      cordisVersion: versions.cordisVersion,
+      // The socket and the domain travel with the image because a receipt names
+      // both, and the server-side gate refuses a receipt whose versions differ
+      // from what the image declares.
+      socketVersion: versions.socketVersion,
+      domainVersion: versions.domainVersion,
       uvVersion: versions.uvVersion,
     },
     proxy: {
@@ -271,7 +287,9 @@ async function checkManifest(manifest, { images = false } = {}) {
     fail("release_manifest_app_mismatch", "Release manifest app metadata does not match package.json.");
   }
   if (
-    manifest.runtime.opencodeVersion !== versions.opencodeVersion ||
+    manifest.runtime.dshVersion !== versions.dshVersion ||
+    manifest.runtime.socketVersion !== versions.socketVersion ||
+    manifest.runtime.domainVersion !== versions.domainVersion ||
     manifest.runtime.uvVersion !== versions.uvVersion ||
     manifest.proxy.caddyVersion !== versions.caddyVersion ||
     JSON.stringify(manifest.monitoring) !== JSON.stringify(versions.monitoring)

@@ -11,13 +11,13 @@ Unless the user requests another language, interact and write deliverables in Si
 
 ## 1. Bind the question
 
-Require medicine and indication. First call `evimed_comprehensive_drug_evaluation` with `action: requirements`. Ask once for the returned missing fields in one concise group. If the user does not provide them, continue retrieval but keep the affected dimensions unscored. Capture population, comparator, jurisdiction, care setting, outcomes, time horizon, decision date, and uploaded evidence when material. If the user requests a quantitative score, set `quantitativeScoringRequested: true` and collect the exact evaluation domains, item definitions, scales, weights, directions, missing-data rules, and versioned scoring policy. Normalize the medicine with `evimed_drug_term_normalize`. State unresolved scope gaps rather than silently broadening the question.
+Require medicine and indication. First call `comprehensive_drug_evaluation` with `action: requirements`. Ask once for the returned missing fields in one concise group. If the user does not provide them, continue retrieval but keep the affected dimensions unscored. Capture population, comparator, jurisdiction, care setting, outcomes, time horizon, decision date, and uploaded evidence when material. If the user requests a quantitative score, set `quantitativeScoringRequested: true` and collect the exact evaluation domains, item definitions, scales, weights, directions, missing-data rules, and versioned scoring policy. Normalize the medicine with `drug_term_normalize`. State unresolved scope gaps rather than silently broadening the question.
 
 ## 2. Retrieve and freeze evidence
 
-Call `evimed_comprehensive_drug_evaluation` with `action: retrieve`. Use label, guideline, trial, literature, and active biomedical-source tools only to fill a declared gap or verify a material claim. Deduplicate records with `evimed_evidence_deduplicate`.
+Call `comprehensive_drug_evaluation` with `action: retrieve`. Use label, guideline, trial, literature, and active biomedical-source tools only to fill a declared gap or verify a material claim. Deduplicate records with `evidence_deduplicate`.
 
-The optional `evimed_pharmacy_reference_search` tool may supply private
+The optional `pharmacy_reference_search` tool may supply private
 terminology, dose-risk, interaction, route, monitoring, or special-population
 context. Treat every returned row as a hypothesis or institution-specific
 decision-support reference, never as current label, guideline, pharmacopoeia,
@@ -51,7 +51,7 @@ explicit stratum counts before writing the claim.
 
 ## 4. Compile deterministically
 
-Call `evimed_comprehensive_drug_evaluation` with `action: compile`, `sourceInventory`, and all domain assessments. Preserve its core-domain coverage and audit hash. If quantitative scoring was requested, also supply the exact `evaluationDomains`, `scoringRubric`, `scoringPolicyVersion`, and item-derived score fields for every domain. The compiler computes a weighted normalized score only when the declared domains are complete, all rules use the supplied version, every value is finite and in range, and any economic context is complete. Otherwise it withholds the score and lists the reasons; missing evidence is never zero. If compilation returns an error, correct the evidence rows; do not bypass the gate. A computed score never determines recommendation strength automatically.
+Call `comprehensive_drug_evaluation` with `action: compile`, `sourceInventory`, and all domain assessments. Preserve its core-domain coverage and audit hash. If quantitative scoring was requested, also supply the exact `evaluationDomains`, `scoringRubric`, `scoringPolicyVersion`, and item-derived score fields for every domain. The compiler computes a weighted normalized score only when the declared domains are complete, all rules use the supplied version, every value is finite and in range, and any economic context is complete. Otherwise it withholds the score and lists the reasons; missing evidence is never zero. If compilation returns an error, correct the evidence rows; do not bypass the gate. A computed score never determines recommendation strength automatically.
 
 The final narrative may describe benefit-harm and decision considerations, but must label uncertainty and leave clinical, HTA, reimbursement, and procurement conclusions to qualified reviewers.
 

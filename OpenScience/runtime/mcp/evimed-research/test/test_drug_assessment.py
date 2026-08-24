@@ -31,7 +31,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
         cls.server = load_server()
 
     def test_off_label_compilation_keeps_four_decision_axes_separate(self):
-        result = self.server.call_tool("evimed_offlabel_evidence_packet", {
+        result = self.server.call_tool("offlabel_evidence_packet", {
             "action": "compile",
             "drug": "observed-drug",
             "proposedUse": "observed-use",
@@ -71,7 +71,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
         self.assertFalse(result["data"]["audit"]["automaticDecision"])
 
     def test_requirements_returns_one_structured_gap_list_without_blocking_retrieval(self):
-        result = self.server.call_tool("evimed_drug_selection_evaluation", {
+        result = self.server.call_tool("drug_selection_evaluation", {
             "action": "requirements",
             "candidateDrugs": ["drug-a", "drug-b"],
             "indication": "observed-indication",
@@ -87,7 +87,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
         self.assertTrue(any("must remain withheld" in item for item in result["warnings"]))
 
     def test_off_label_requirements_clear_supplied_label_dimensions(self):
-        result = self.server.call_tool("evimed_offlabel_evidence_packet", {
+        result = self.server.call_tool("offlabel_evidence_packet", {
             "action": "requirements",
             "drug": "observed-drug",
             "product": "observed-product",
@@ -105,7 +105,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
         self.assertEqual(result["data"]["requestedFields"], [])
 
     def test_off_label_compilation_fails_closed_for_unknown_evidence(self):
-        result = self.server.call_tool("evimed_offlabel_evidence_packet", {
+        result = self.server.call_tool("offlabel_evidence_packet", {
             "action": "compile",
             "drug": "observed-drug",
             "proposedUse": "observed-use",
@@ -123,7 +123,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
         self.assertNotIn("data", result)
 
     def test_off_label_compilation_rejects_cross_jurisdiction_label_rows(self):
-        result = self.server.call_tool("evimed_offlabel_evidence_packet", {
+        result = self.server.call_tool("offlabel_evidence_packet", {
             "action": "compile",
             "drug": "observed-drug",
             "proposedUse": "observed-use",
@@ -141,7 +141,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
         self.assertEqual(result["error"]["code"], "invalid_assessment")
 
     def test_off_label_compilation_never_classifies_without_a_target_jurisdiction(self):
-        result = self.server.call_tool("evimed_offlabel_evidence_packet", {
+        result = self.server.call_tool("offlabel_evidence_packet", {
             "action": "compile",
             "drug": "observed-drug",
             "proposedUse": "observed-use",
@@ -179,7 +179,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
                     "scoreOrigin": "institutional_rubric",
                     "ruleVersion": "hospital-policy-1",
                 })
-        result = self.server.call_tool("evimed_drug_selection_evaluation", {
+        result = self.server.call_tool("drug_selection_evaluation", {
             "action": "compile",
             "candidateDrugs": ["drug-a", "drug-b"],
             "indication": "observed-indication",
@@ -209,7 +209,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
                 "scoreOrigin": "institutional_rubric",
                 "ruleVersion": "hospital-policy-1",
             })
-        result = self.server.call_tool("evimed_drug_selection_evaluation", {
+        result = self.server.call_tool("drug_selection_evaluation", {
             "action": "compile",
             "candidateDrugs": ["drug-a", "drug-b"],
             "indication": "observed-indication",
@@ -233,7 +233,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
             "direction": "higher_is_better",
             "weight": 1,
         } for candidate, value in (("drug-a", 8), ("drug-b", 6))]
-        result = self.server.call_tool("evimed_drug_selection_evaluation", {
+        result = self.server.call_tool("drug_selection_evaluation", {
             "action": "compile",
             "candidateDrugs": ["drug-a", "drug-b"],
             "indication": "observed-indication",
@@ -254,7 +254,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
             }
             for domain in ("effectiveness", "safety", "applicability")
         ]
-        result = self.server.call_tool("evimed_comprehensive_drug_evaluation", {
+        result = self.server.call_tool("comprehensive_drug_evaluation", {
             "action": "compile",
             "drug": "observed-drug",
             "indication": "observed-indication",
@@ -273,7 +273,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
             "evidenceIds": [] if domain == "safety" else ["study-1"],
             "rationale": "No adequate safety evidence was available." if domain == "safety" else "Observed evidence.",
         } for domain in ("effectiveness", "safety", "applicability")]
-        result = self.server.call_tool("evimed_comprehensive_drug_evaluation", {
+        result = self.server.call_tool("comprehensive_drug_evaluation", {
             "action": "compile",
             "drug": "observed-drug",
             "indication": "observed-indication",
@@ -284,7 +284,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
         self.assertEqual(result["data"]["coreDomainCoverage"]["unresolved"], ["safety"])
 
     def test_comprehensive_rejects_bibliographic_metadata_as_observed_domain_evidence(self):
-        result = self.server.call_tool("evimed_comprehensive_drug_evaluation", {
+        result = self.server.call_tool("comprehensive_drug_evaluation", {
             "action": "compile",
             "drug": "observed-drug",
             "indication": "observed-indication",
@@ -308,7 +308,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
             "evidenceIds": ["study-1"],
             "rationale": "Observed domain evidence.",
         } for domain in ("effectiveness", "safety", "applicability")]
-        result = self.server.call_tool("evimed_comprehensive_drug_evaluation", {
+        result = self.server.call_tool("comprehensive_drug_evaluation", {
             "action": "compile",
             "drug": "observed-drug",
             "indication": "observed-indication",
@@ -342,7 +342,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
         for row in rows:
             for key in [key for key, value in row.items() if value is None]:
                 del row[key]
-        result = self.server.call_tool("evimed_comprehensive_drug_evaluation", {
+        result = self.server.call_tool("comprehensive_drug_evaluation", {
             "action": "compile",
             "drug": "observed-drug",
             "indication": "observed-indication",
@@ -353,7 +353,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
         self.assertEqual(result["data"]["audit"]["compilerVersion"], "1.4.0")
 
     def test_off_label_compiles_traceable_evidence_support_by_type(self):
-        result = self.server.call_tool("evimed_offlabel_evidence_packet", {
+        result = self.server.call_tool("offlabel_evidence_packet", {
             "action": "compile",
             "drug": "observed-drug",
             "product": "observed-product",
@@ -409,7 +409,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
             "scoreOrigin": "institutional_rubric",
             "ruleVersion": "published-rubric-v1",
         } for domain, (score_value, weight) in scores.items()]
-        result = self.server.call_tool("evimed_comprehensive_drug_evaluation", {
+        result = self.server.call_tool("comprehensive_drug_evaluation", {
             "action": "compile",
             "drug": "observed-drug",
             "indication": "observed-indication",
@@ -426,7 +426,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
         self.assertEqual(result["data"]["recommendationStrength"], "not_automatically_determined")
 
     def test_comprehensive_requirements_requests_quantitative_scoring_contract(self):
-        result = self.server.call_tool("evimed_comprehensive_drug_evaluation", {
+        result = self.server.call_tool("comprehensive_drug_evaluation", {
             "action": "requirements",
             "drug": "observed-drug",
             "indication": "observed-indication",
@@ -440,7 +440,7 @@ class DrugAssessmentCompilerTests(unittest.TestCase):
         self.assertNotIn("evaluationDomains", fields)
 
     def test_non_finite_scores_are_rejected_by_the_published_schema(self):
-        result = self.server.call_tool("evimed_drug_selection_evaluation", {
+        result = self.server.call_tool("drug_selection_evaluation", {
             "action": "compile",
             "candidateDrugs": ["drug-a"],
             "indication": "observed-indication",

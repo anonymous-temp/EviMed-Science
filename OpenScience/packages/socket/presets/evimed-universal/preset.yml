@@ -1,0 +1,3 @@
+name: evimed-universal
+description: EviMed 统一组合：一个会话一个组合，能力由模型在运行中组合，契约绑在产出上。
+order: 0

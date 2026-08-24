@@ -153,10 +153,19 @@ async function authenticate(baseUrl) {
   return { headers: { Cookie: cookie, "X-Open-Science-CSRF": csrfToken }, mode };
 }
 
+/**
+ * Reads the first frame of a live event stream.
+ *
+ * The stream is the control plane's own now — the browser-to-kernel
+ * pass-through is gone — so the smoke test subscribes to a run's events rather
+ * than to a kernel's. What it proves is unchanged: the deployment can hold an
+ * open stream through whatever proxy sits in front of it, which is the failure
+ * that only shows up in a real deployment.
+ */
 async function readFirstSseEvent(url, headers) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Number(process.env.OPEN_SCIENCE_SMOKE_TIMEOUT_MS ?? 30_000));
-  const res = await fetch(`${url}/event`, { headers, signal: controller.signal });
+  const res = await fetch(url, { headers, signal: controller.signal });
   try {
     assert(res.ok, `Runtime SSE endpoint returned HTTP ${res.status}.`);
     assert((res.headers.get("content-type") ?? "").includes("text/event-stream"), "Runtime endpoint is not SSE.");
@@ -176,22 +185,40 @@ async function readFirstSseEvent(url, headers) {
 async function smokeRuntime(baseUrl, headers) {
   const runtime = await command(baseUrl, "start_runtime", {}, headers);
   const runtimeUrl = runtime.json?.data;
-  assert(typeof runtimeUrl === "string" && runtimeUrl.includes("/api/opencode/"), "start_runtime returned an invalid URL.");
-  await readFirstSseEvent(runtimeUrl, headers);
+  // The value is the control plane's own surface. A deployment that hands a
+  // caller anything naming a kernel has a browser-reachable kernel, which is
+  // the thing this migration removed.
+  assert(typeof runtimeUrl === "string" && runtimeUrl.endsWith("/api/runtime"), "start_runtime returned an invalid URL.");
+  assert(!/opencode|dsh/.test(runtimeUrl), "start_runtime handed back a kernel-shaped URL.");
 
-  const session = await jsonFetch(`${runtimeUrl}/session`, {
+  const session = await jsonFetch(`${runtimeUrl}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: "{}",
   });
-  assert(session.json?.id, "Runtime did not create a session.");
+  assert(session.json?.data?.id, "Runtime did not create a session.");
 
   if (boolEnv("OPEN_SCIENCE_SMOKE_RUNTIME_PROMPT", true)) {
-    await jsonFetch(`${runtimeUrl}/session/${encodeURIComponent(session.json.id)}/prompt_async`, {
+    const bound = await jsonFetch(`${baseUrl}/api/research-sessions/${encodeURIComponent(session.json.data.id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ mode: "open-domain" }),
+    });
+    assert(bound.res.ok, "Could not bind a research session for the smoke prompt.");
+    const dispatched = await jsonFetch(`${baseUrl}/api/agent-runs/dispatch`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({ parts: [{ type: "text", text: "Create a deployment smoke-test artifact." }] }),
+      body: JSON.stringify({
+        sessionId: session.json.data.id,
+        dispatchId: `smoke-${Date.now()}`,
+        text: "Create a deployment smoke-test artifact.",
+      }),
     });
+    assert(dispatched.res.ok, `Dispatch returned HTTP ${dispatched.res.status}.`);
+    // A live stream through the deployment's own proxy is the part that only
+    // fails in a real deployment, so it is read here rather than assumed.
+    const runId = dispatched.json?.data?.id;
+    if (runId) await readFirstSseEvent(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`, headers);
   }
 
   const running = await command(baseUrl, "runtime_status", {}, headers);

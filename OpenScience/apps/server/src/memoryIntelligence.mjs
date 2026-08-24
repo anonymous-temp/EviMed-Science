@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { mcpToolBaseName } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 const candidateKinds = new Set([
@@ -39,13 +40,22 @@ function messageText(message) {
 // lookup: a search strategy that worked, a resolved term, a computed estimate.
 // Reconstructing these from the assistant's prose loses the numbers; this is
 // the one place they exist exactly as produced.
-const KNOWLEDGE_TOOL_PATTERN = /evimed_(?:.*search|.*normalize|.*analysis|meta_analysis|mendelian_randomization|adr_signal_analysis|evidence_deduplicate|.*evaluation|open_access_full_text)/;
+//
+// Matched against the base name, never against `part.tool` directly: the same
+// tool call reaches this function under any of four spellings depending on the
+// kernel and on when the history was recorded (`mcpToolBaseName`'s own doc
+// comment names all four), and a pattern anchored to one literal prefix quietly
+// stops matching the day that prefix changes — which is exactly what happened
+// here when the MCP server's published names were un-prefixed and this pattern
+// was not updated with them.
+const KNOWLEDGE_TOOL_PATTERN = /^(?:.*search|.*normalize|.*analysis|meta_analysis|mendelian_randomization|adr_signal_analysis|evidence_deduplicate|.*evaluation|open_access_full_text)$/;
 
 function toolMemorySources(message, sessionId, messageId) {
   const sources = [];
   for (const [index, part] of (message?.parts ?? []).entries()) {
     if (part?.type !== "tool" || typeof part.tool !== "string") continue;
-    if (!KNOWLEDGE_TOOL_PATTERN.test(part.tool)) continue;
+    const baseName = mcpToolBaseName(part.tool);
+    if (!baseName || !KNOWLEDGE_TOOL_PATTERN.test(baseName)) continue;
     if (part?.state?.status !== "completed") continue;
     let result = null;
     try {

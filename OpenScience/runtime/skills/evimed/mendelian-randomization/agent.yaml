@@ -15,11 +15,11 @@ optionalInputs:
   - analysisDirection
   - uploadedFiles
 requiredTools:
-  - evimed_mendelian_randomization
+  - mendelian_randomization
 optionalTools:
-  - evimed_data_source_catalog
-  - evimed_biomedical_source_search
-  - evimed_literature_search
+  - data_source_catalog
+  - biomedical_source_search
+  - literature_search
 dataSources:
   - opengwas
   - local-gwas

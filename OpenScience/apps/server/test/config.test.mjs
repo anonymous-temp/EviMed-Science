@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -147,4 +147,37 @@ test("the agent run monitor outlasts a systematic review by default", () => {
 test("the agent run monitor timeout is configurable", () => {
   const config = loadConfig({ dataDir: "/tmp/os-config-monitor", agentRunMonitorTimeoutMs: 90 * 60_000 });
   assert.equal(config.agentRunMonitorTimeoutMs, 90 * 60_000);
+});
+
+// The shipped default is a posture, not a preference, so it is pinned by a test
+// rather than left to whoever edits the file next. Flipping it belongs to the
+// change that lands the DSH session view (§16 #15) — and that change should have
+// to delete this assertion to do it, which is the point.
+test("the shipped kernel default is the rollback kernel until the DSH session view lands", () => {
+  const saved = process.env.OPEN_SCIENCE_RUNTIME_KERNEL;
+  delete process.env.OPEN_SCIENCE_RUNTIME_KERNEL;
+  try {
+    assert.equal(loadConfig({ dataDir: "/tmp/os-config-kernel" }).runtimeKernel, "opencode");
+    process.env.OPEN_SCIENCE_RUNTIME_KERNEL = "dsh";
+    assert.equal(loadConfig({ dataDir: "/tmp/os-config-kernel" }).runtimeKernel, "dsh");
+  } finally {
+    if (saved == null) delete process.env.OPEN_SCIENCE_RUNTIME_KERNEL;
+    else process.env.OPEN_SCIENCE_RUNTIME_KERNEL = saved;
+  }
+});
+
+// And the suite itself must not inherit that default. Every other test here is
+// written against the target kernel, so dropping the pin from `package.json`
+// would move the whole suite onto the kernel being retired — and it would still
+// pass, which is the dangerous part. Asserted against the script text rather
+// than against `process.env`, so running one file on its own still checks it.
+test("the server test scripts pin the kernel they are written for", async () => {
+  const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  for (const name of ["test", "test:unit", "test:contract"]) {
+    assert.match(
+      manifest.scripts[name],
+      /^OPEN_SCIENCE_RUNTIME_KERNEL=dsh /,
+      `${name} must pin the kernel; the shipped default is the rollback kernel`,
+    );
+  }
 });

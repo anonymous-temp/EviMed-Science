@@ -39,7 +39,7 @@ PROJECT_ENV_ALLOWLIST = {
 
 
 SPECS = {
-    "evimed_mendelian_randomization": {
+    "mendelian_randomization": {
         "id": "mendelian-randomization",
         "label": "Mendelian randomization",
         "prefix": "mr-",
@@ -50,7 +50,7 @@ SPECS = {
         "required": ("exposure", "outcome"),
         "inputs": ("exposure", "outcome", "outputLanguage", "analysisDirection"),
     },
-    "evimed_bibliometric_analysis": {
+    "bibliometric_analysis": {
         "id": "bibliometric-analysis",
         "label": "Bibliometric analysis",
         "prefix": "bibliometric-",
@@ -61,7 +61,7 @@ SPECS = {
         "required": ("topic",),
         "inputs": ("topic", "dateFrom", "dateTo", "maxRecords", "outputLanguage"),
     },
-    "evimed_research_topic_selection": {
+    "research_topic_selection": {
         "id": "research-topic-selection",
         "label": "Research topic selection",
         "prefix": "topic-",
@@ -72,7 +72,7 @@ SPECS = {
         "required": ("researchDirection",),
         "inputs": ("researchDirection", "outputLanguage"),
     },
-    "evimed_peer_review": {
+    "peer_review": {
         "id": "peer-review",
         "label": "Peer review",
         "prefix": "review-",
@@ -83,7 +83,7 @@ SPECS = {
         "required": ("manuscript",),
         "inputs": ("manuscript", "articleType", "outputLanguage"),
     },
-    "evimed_drug_safety_analysis": {
+    "drug_safety_analysis": {
         "id": "drug-safety-analysis",
         "label": "Drug safety analysis",
         "prefix": "safety-",
@@ -357,7 +357,7 @@ def start_job(tool_name, arguments):
     model_environment = _model_environment()
     workspace = _workspace()
     request = {key: arguments.get(key) for key in spec["inputs"] if arguments.get(key) is not None}
-    if tool_name == "evimed_peer_review":
+    if tool_name == "peer_review":
         request["manuscript"] = str(_workspace_file(workspace, request["manuscript"], {".pdf", ".docx", ".txt", ".md"}))
     job_id = "%s%s-%s" % (spec["prefix"], time.strftime("%Y%m%d%H%M%S"), secrets.token_hex(6))
     run_root = workspace / spec["directory"]
@@ -392,7 +392,7 @@ def start_job(tool_name, arguments):
     environment.update(model_environment)
     environment[spec["rootEnv"]] = str(root)
     environment[spec["pythonEnv"]] = str(python)
-    if tool_name == "evimed_mendelian_randomization" and (root / ".r-lib").is_dir():
+    if tool_name == "mendelian_randomization" and (root / ".r-lib").is_dir():
         environment["R_LIBS_USER"] = str(root / ".r-lib")
     try:
         worker = subprocess.Popen(

@@ -34,7 +34,7 @@ full text.
 
 ## Execute
 
-1. Call `evimed_meta_analysis` with `action=capabilities`. If it is unavailable,
+1. Call `meta_analysis` with `action=capabilities`. If it is unavailable,
    stop and report the exact deployment precondition.
 2. Call it with `action=start`, the complete topic, language, and only the
    applicable optional inputs. Record the returned job id immediately.

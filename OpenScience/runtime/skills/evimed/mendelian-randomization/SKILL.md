@@ -13,7 +13,7 @@ exposure and outcome, and distinguish forward from bidirectional analysis.
 
 ## Execute the managed analysis
 
-1. Call `evimed_mendelian_randomization` with `action=capabilities`. If the R,
+1. Call `mendelian_randomization` with `action=capabilities`. If the R,
    OpenGWAS, model, or Python runtime is unavailable, report that exact blocker.
 2. Start the job with the normalized exposure, outcome, language, and direction.
    Record the job id and poll it with `waitSeconds=45` until terminal.

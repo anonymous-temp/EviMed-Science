@@ -1,0 +1,198 @@
+{
+  "dsh": "0.1.1-rc.2",
+  "cordis": "4.0.1",
+  "services": {
+    "required": [
+      "tools",
+      "systemPrompt",
+      "agents",
+      "sessions",
+      "subagents",
+      "agentPresets",
+      "shell"
+    ],
+    "optional": [
+      "storageDomain",
+      "skills",
+      "fs",
+      "jobs",
+      "workflowEngine"
+    ]
+  },
+  "events": {
+    "toolPolicy": "tools/pre-execute",
+    "toolWrap": "tools/execute",
+    "toolPost": "tools/post-execute",
+    "toolObserved": "tools/result",
+    "sessionEvent": "session/event",
+    "sessionStart": "agent/session-start",
+    "preStep": "agent/pre-step",
+    "turnStopping": "agent/turn-stopping",
+    "domainChanged": "domain/changed"
+  },
+  "sessionEventTypes": [
+    "turn/start",
+    "turn/end",
+    "step/start",
+    "step/end",
+    "user/message",
+    "assistant/chunk",
+    "assistant/message",
+    "tool/call",
+    "tool/result",
+    "subagent/descriptor",
+    "agent-preset/selected",
+    "compaction/start",
+    "compaction/summary",
+    "compaction/end",
+    "tool-workflow/run-start",
+    "tool-workflow/run-end",
+    "tool-workflow/agent-start",
+    "tool-workflow/agent-end"
+  ],
+  "turnEndKinds": [
+    "completed",
+    "aborted",
+    "blocked",
+    "error",
+    "max-tokens",
+    "interrupted"
+  ],
+  "preToolDecisionKinds": [
+    "allow",
+    "deny",
+    "ask"
+  ],
+  "preStepDecisionKinds": [
+    "enter",
+    "reject"
+  ],
+  "sessionStartSources": [
+    "startup",
+    "resume",
+    "clear",
+    "compact"
+  ],
+  "subagentProviders": {
+    "spawn": "spawn",
+    "fork": "fork"
+  },
+  "packages": {
+    "@deepseek-ai/cordis": "peer",
+    "@deepseek-ai/schemastery": "re-exported",
+    "@deepseek-ai/dsh-tools": "dependency",
+    "@deepseek-ai/dsh-storage-domain": "dependency",
+    "@deepseek-ai/dsh-llm": "types-only",
+    "@deepseek-ai/dsh-persona": "config-row",
+    "@deepseek-ai/dsh-mcp-client": "config-row",
+    "@deepseek-ai/dsh-agent-presets": "config-row",
+    "@deepseek-ai/dsh-skill-filesystem": "config-row",
+    "@deepseek-ai/dsh-compaction-basic": "config-row",
+    "@deepseek-ai/dsh-compaction-tool-result-pruner": "config-row",
+    "@deepseek-ai/dsh-tool-subagent": "config-row",
+    "@deepseek-ai/dsh-tool-subagent-control": "config-row",
+    "@deepseek-ai/dsh-tool-subagent-report": "config-row",
+    "@deepseek-ai/dsh-workflow-worker-thread": "config-row",
+    "@deepseek-ai/dsh-tool-workflow": "config-row",
+    "@deepseek-ai/dsh-tool-bash": "config-row",
+    "@deepseek-ai/dsh-tool-fs": "config-row",
+    "@deepseek-ai/dsh-tool-fs-search": "config-row",
+    "@deepseek-ai/dsh-tool-jobs": "config-row",
+    "@deepseek-ai/dsh-tool-skill": "config-row",
+    "@deepseek-ai/dsh-tool-ask-user": "config-row",
+    "@deepseek-ai/dsh-llm-deepseek": "config-row",
+    "@deepseek-ai/dsh-storage-json": "config-row"
+  },
+  "wire": {
+    "unary": [
+      "host.describe",
+      "session.create",
+      "session.prompt",
+      "session.cancel",
+      "session.history",
+      "session.fork",
+      "session.list",
+      "subagent.list",
+      "subagent.history",
+      "skill.list",
+      "agentPreset.list"
+    ],
+    "denied": [
+      "settings.describe",
+      "settings.openDocument",
+      "settings.update",
+      "settings.replace",
+      "settings.mutate",
+      "credentials.describe",
+      "credentials.set",
+      "credentials.unset",
+      "host.pickDirectory",
+      "host.openPath",
+      "host.listDirectory",
+      "host.createDirectory",
+      "workspace.list",
+      "workspace.create",
+      "workspace.rename",
+      "workspace.delete",
+      "workspace.insertBefore",
+      "workspace.insertSessionBefore",
+      "workspace.archiveSession",
+      "session.selectModel",
+      "session.models",
+      "session.rename",
+      "session.search",
+      "session.attachment",
+      "session.updateQueue",
+      "subagent.prompt",
+      "subagent.interrupt",
+      "agentPreset.select",
+      "agentPreset.read",
+      "agentPreset.copy",
+      "agentPreset.openDocument",
+      "agentPreset.remove",
+      "goal.create",
+      "goal.edit",
+      "goal.pause",
+      "goal.resume",
+      "goal.complete",
+      "goal.clear",
+      "llm.providers",
+      "llm.models",
+      "llm.discoverModels"
+    ],
+    "respond": "/api/respond",
+    "downlink": [
+      "/api/events.mux",
+      "/api/events.host"
+    ],
+    "downlinkTransport": "websocket",
+    "muxFrameTypes": [
+      "session/event",
+      "session/subscribed",
+      "approval/requested",
+      "approval/resolved",
+      "question/requested",
+      "question/resolved",
+      "session/queue",
+      "session/jobs",
+      "session/projection",
+      "stream/error"
+    ],
+    "hostFrameTypes": [
+      "host/session-added",
+      "host/session-removed",
+      "host/session-status",
+      "host/agent-error",
+      "host/workspace-changed",
+      "host/workspace-removed",
+      "host/workspace-order-changed",
+      "host/archived-sessions-changed",
+      "host/remote-event",
+      "stream/error"
+    ]
+  },
+  "notes": {
+    "sessionStatusAbsent": "There is no session.status method; running state comes from the events.host running-status frame.",
+    "noVersionField": "The wire protocol carries no version field, so method names matching does not prove frame shapes match. Golden frames are the only check that does."
+  }
+}

@@ -40,7 +40,7 @@ class PublicSourceConnectorTests(unittest.TestCase):
             self.assertEqual(receipt["datasets"], 1)
             self.assertEqual(receipt["rows"], 2)
             with mock.patch.dict(os.environ, {"EVIMED_PHARMACY_REFERENCE_DB": str(database)}):
-                self.assertTrue(sources.configured("evimed_pharmacy_reference_search"))
+                self.assertTrue(sources.configured("pharmacy_reference_search"))
                 result = sources.pharmacy_reference({"query": "阿司匹林", "limit": 5})
             self.assertEqual(result["status"], "warning")
             self.assertEqual(result["data"]["items"][0]["fields"]["药品"], "阿司匹林")

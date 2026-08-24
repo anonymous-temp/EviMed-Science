@@ -1,0 +1,452 @@
+{
+  "$comment": "Golden frames recorded against the pinned kernel. The wire protocol carries no version field, so a method name surviving an upgrade proves nothing about its frames — replaying these through the normalizers is the only check that does. The downlink is a WebSocket (a plain GET answers 426 Upgrade Required) and every frame arrives inside a `server-request` envelope; the first mux entry is captured verbatim from a live kernel and the rest are wrapped in the same shape. There is no automated recorder — the verbatim entry was captured by hand against a real installed `dsh` binary (unary calls over `POST /api/<method>`, the mux frame over `openRuntimeDownlink()` against `/api/events.mux`). When the pin moves, repeat that against the new version, diff the result against this file by hand, and read the diff before accepting it — an untested recorder script would be one more thing to trust without ever having been run against a real bump.",
+  "dsh": "0.1.1-rc.2",
+  "history": [
+    {
+      "event": {
+        "type": "turn/start",
+        "seq": 0,
+        "time": 1000,
+        "data": {
+          "turn": 1
+        }
+      }
+    },
+    {
+      "event": {
+        "type": "user/message",
+        "seq": 1,
+        "time": 1001,
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "source": {
+            "kind": "user"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "分析这个问题的证据现状"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "event": {
+        "type": "step/start",
+        "seq": 2,
+        "time": 1002,
+        "data": {
+          "turn": 1,
+          "step": 1
+        }
+      }
+    },
+    {
+      "event": {
+        "type": "assistant/message",
+        "seq": 3,
+        "time": 1003,
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "reasoning",
+                "text": "先看看能力目录"
+              },
+              {
+                "type": "text",
+                "text": "我先写下计划。"
+              }
+            ]
+          },
+          "usage": {
+            "promptCacheHitTokens": 900,
+            "promptCacheMissTokens": 100,
+            "completionTokens": 42
+          }
+        }
+      }
+    },
+    {
+      "event": {
+        "type": "tool/call",
+        "seq": 4,
+        "time": 1004,
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "callId": "call-1",
+          "name": "mcp__evimed__literature_search",
+          "arguments": "{\"query\":\"metformin lactic acidosis\"}"
+        }
+      }
+    },
+    {
+      "event": {
+        "type": "tool/result",
+        "seq": 5,
+        "time": 1005,
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "message": {
+            "callId": "call-1",
+            "name": "mcp__evimed__literature_search",
+            "content": [
+              {
+                "type": "text",
+                "text": "12 results"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "event": {
+        "type": "tool/call",
+        "seq": 6,
+        "time": 1006,
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "callId": "call-2",
+          "name": "mcp__evimed__open_access_full_text",
+          "arguments": "{\"identifier\":\"10.1/x\"}"
+        }
+      }
+    },
+    {
+      "event": {
+        "type": "tool/result",
+        "seq": 7,
+        "time": 1007,
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "message": {
+            "callId": "call-2",
+            "content": []
+          },
+          "error": {
+            "name": "ToolError",
+            "code": "full_text_not_available"
+          }
+        }
+      }
+    },
+    {
+      "event": {
+        "type": "subagent/descriptor",
+        "seq": 8,
+        "time": 1008,
+        "data": {
+          "sessionId": "child-1",
+          "parentSession": "s-1",
+          "label": "证据综述",
+          "capability": "clinical-evidence-synthesis"
+        }
+      }
+    },
+    {
+      "event": {
+        "type": "tool/call",
+        "seq": 9,
+        "time": 1009,
+        "data": {
+          "turn": 1,
+          "step": 2,
+          "callId": "call-3",
+          "name": "evimed_submit_deliverable",
+          "arguments": "{\"deliverableId\":\"d1\"}"
+        }
+      }
+    },
+    {
+      "event": {
+        "type": "step/end",
+        "seq": 10,
+        "time": 1010,
+        "data": {
+          "turn": 1,
+          "step": 2
+        }
+      }
+    },
+    {
+      "event": {
+        "type": "turn/end",
+        "seq": 11,
+        "time": 1011,
+        "data": {
+          "turn": 1,
+          "reason": {
+            "kind": "completed"
+          }
+        }
+      }
+    }
+  ],
+  "mux": [
+    {
+      "$recorded": "verbatim from a live dsh 0.1.1-rc.2 /api/events.mux websocket, 2026-08-24",
+      "type": "server-request",
+      "rpcId": "9b80d350-4b08-46c0-984b-a144cca3dacd",
+      "method": "session/subscribed",
+      "payload": {
+        "type": "session/subscribed",
+        "sessionId": "session-5d96fa6a-c5e0-4dbe-9b14-658372c96af3",
+        "lastSeq": 2
+      }
+    },
+    {
+      "type": "server-request",
+      "rpcId": "rpc-0",
+      "method": "session/subscribed",
+      "payload": {
+        "type": "session/subscribed",
+        "sessionId": "s-1",
+        "lastSeq": 11
+      }
+    },
+    {
+      "type": "server-request",
+      "rpcId": "rpc-1",
+      "method": "session/event",
+      "payload": {
+        "type": "session/event",
+        "sessionId": "s-1",
+        "event": {
+          "type": "turn/start",
+          "seq": 0,
+          "time": 1000,
+          "data": {
+            "turn": 1
+          }
+        }
+      }
+    },
+    {
+      "type": "server-request",
+      "rpcId": "rpc-2",
+      "method": "session/event",
+      "payload": {
+        "type": "session/event",
+        "sessionId": "s-1",
+        "event": {
+          "type": "assistant/chunk",
+          "seq": 1,
+          "time": 1001,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "chunk": {
+              "type": "text-delta",
+              "text": "我先"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "server-request",
+      "rpcId": "rpc-3",
+      "method": "session/event",
+      "payload": {
+        "type": "session/event",
+        "sessionId": "s-1",
+        "event": {
+          "type": "assistant/chunk",
+          "seq": 2,
+          "time": 1002,
+          "data": {
+            "turn": 1,
+            "step": 1,
+            "chunk": {
+              "type": "reasoning-delta",
+              "text": "考虑证据等级"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "server-request",
+      "rpcId": "rpc-4",
+      "method": "session/event",
+      "payload": {
+        "type": "session/event",
+        "sessionId": "s-1",
+        "event": {
+          "type": "tool/call",
+          "seq": 3,
+          "time": 1003,
+          "data": {
+            "callId": "call-1",
+            "name": "mcp__evimed__guideline_search",
+            "arguments": "{\"query\":\"房颤\"}"
+          }
+        }
+      }
+    },
+    {
+      "type": "server-request",
+      "rpcId": "rpc-5",
+      "method": "session/event",
+      "payload": {
+        "type": "session/event",
+        "sessionId": "s-1",
+        "event": {
+          "type": "tool/result",
+          "seq": 4,
+          "time": 1004,
+          "data": {
+            "message": {
+              "callId": "call-1",
+              "name": "mcp__evimed__guideline_search",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "3 results"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "server-request",
+      "rpcId": "rpc-6",
+      "method": "session/event",
+      "payload": {
+        "type": "session/event",
+        "sessionId": "s-1",
+        "event": {
+          "type": "compaction/end",
+          "seq": 5,
+          "time": 1005,
+          "data": {
+            "replaced": 12,
+            "tokens": 6000
+          }
+        }
+      }
+    },
+    {
+      "type": "server-request",
+      "rpcId": "rpc-7",
+      "method": "session/event",
+      "payload": {
+        "type": "session/event",
+        "sessionId": "s-1",
+        "event": {
+          "type": "tool-workflow/run-start",
+          "seq": 6,
+          "time": 1006,
+          "data": {
+            "runId": "wf-1",
+            "stage": "screen"
+          }
+        }
+      }
+    },
+    {
+      "type": "server-request",
+      "rpcId": "rpc-8",
+      "method": "session/event",
+      "payload": {
+        "type": "session/event",
+        "sessionId": "s-1",
+        "event": {
+          "type": "hook/invoked",
+          "seq": 7,
+          "time": 1007,
+          "data": {}
+        }
+      }
+    },
+    {
+      "type": "server-request",
+      "rpcId": "rpc-9",
+      "method": "session/event",
+      "payload": {
+        "type": "session/event",
+        "sessionId": "s-1",
+        "event": {
+          "type": "turn/end",
+          "seq": 8,
+          "time": 1008,
+          "data": {
+            "turn": 1,
+            "reason": {
+              "kind": "max-tokens"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "server-request",
+      "rpcId": "rpc-10",
+      "method": "session/jobs",
+      "payload": {
+        "type": "session/jobs",
+        "sessionId": "s-1",
+        "jobs": []
+      }
+    }
+  ],
+  "host": [
+    {
+      "type": "host/session-added",
+      "sessionId": "s-1",
+      "blank": true,
+      "cwd": "/workspace",
+      "agentPreset": "evimed-universal"
+    },
+    {
+      "type": "host/session-status",
+      "sessionId": "s-1",
+      "running": true
+    },
+    {
+      "type": "host/session-status",
+      "sessionId": "s-1",
+      "running": false
+    },
+    {
+      "type": "host/agent-error",
+      "sessionId": "s-1",
+      "message": "provider unreachable"
+    }
+  ],
+  "errors": [
+    {
+      "code": "session-not-found",
+      "message": "no such session",
+      "details": {
+        "sessionId": "s-9"
+      }
+    },
+    {
+      "code": "agent-preset-locked",
+      "message": "preset locked",
+      "details": {
+        "sessionId": "s-1",
+        "agentPreset": "evimed-universal"
+      }
+    },
+    {
+      "code": "teleported",
+      "message": "a code this build does not know",
+      "details": {}
+    }
+  ],
+  "muxTransport": "websocket"
+}

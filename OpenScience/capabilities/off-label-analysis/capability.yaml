@@ -1,0 +1,75 @@
+# Capability manifest — the only definition of this capability.
+#
+# It replaced agent.yaml when routing was removed. Under a router, a
+# package was bound to a session and never had to say when it applied;
+# under one composition the orchestrator composes capabilities itself, so
+# `whenToUse` (the catalogue line it reads), `persona` (what the delegated
+# child is) and `produces` (which contract validates the result) are
+# required. `tools` uses the model-visible names.
+id: off-label-analysis
+version: 2.2.1
+title: Off-label Use Analysis
+category: Evidence Synthesis
+description: Assist item-level label comparison and evidence-support scoring for a proposed use.
+whenToUse: 交付物是对某个超说明书用法的证据评估时，委派给我。
+persona: 你是超说明书用药评估分析师。你先核对说明书本身写了什么，再评估拟用用法的证据强度，并明确区分人群、剂量与给药途径。
+safetyClass: clinical
+skills:
+- off-label-analysis
+tools:
+- mcp__evimed__drug_term_normalize
+- mcp__evimed__drug_label_search
+- mcp__evimed__offlabel_evidence_packet
+- mcp__evimed__data_source_catalog
+- mcp__evimed__biomedical_source_search
+- mcp__evimed__guideline_search
+- mcp__evimed__clinical_trial_search
+- mcp__evimed__literature_search
+- mcp__evimed__pharmacy_reference_search
+produces:
+- contractKind: off-label-report
+  outputs:
+  - path: off-label-report.md
+    required: true
+  - path: evidence-table.csv
+    required: true
+  - path: assessment-result.json
+    required: true
+  - path: evidence-snapshot.json
+    required: true
+  checks:
+  - requiredOutputsExist
+  - citationsResolvable
+  - citedSourcesRecorded
+inputs:
+  required:
+  - drug
+  - proposedUse
+  optional:
+  - product
+  - population
+  - dose
+  - route
+  - frequency
+  - duration
+  - formulation
+  - jurisdiction
+  - decisionDate
+  - uploadedFiles
+autopilot:
+  taskTypes: []
+  costClass: medium
+  unattendedInputs:
+  - drug
+  - proposedUse
+estimatedMinutes:
+- 15
+- 35
+dataSources:
+- drug-labels
+- guidelines
+- clinical-trials
+- literature
+starterPrompts:
+- Assess the evidence for an off-label indication in a defined population.
+- Compare a proposed dose and regimen with approved labels across jurisdictions.

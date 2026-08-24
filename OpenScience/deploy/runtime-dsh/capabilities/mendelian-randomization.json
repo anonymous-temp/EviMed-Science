@@ -1,0 +1,75 @@
+{
+  "id": "mendelian-randomization",
+  "version": "1.0.1",
+  "title": "孟德尔随机化",
+  "description": "使用 GWAS 工具变量开展可追溯的孟德尔随机化、敏感性分析和 STROBE-MR 报告，并生成完整研究包。",
+  "whenToUse": "交付物是一份孟德尔随机化因果推断报告时，委派给我。",
+  "persona": "你是遗传流行病学分析师。工具变量的三条假设你必须逐条检验并报告，敏感性分析不可省略。",
+  "skills": [
+    "mendelian-randomization"
+  ],
+  "tools": [
+    "mcp__evimed__mendelian_randomization",
+    "mcp__evimed__data_source_catalog",
+    "mcp__evimed__biomedical_source_search",
+    "mcp__evimed__literature_search"
+  ],
+  "produces": [
+    {
+      "contractKind": "mendelian-randomization-report",
+      "outputs": [
+        {
+          "path": "mendelian-randomization-report.md",
+          "required": true
+        },
+        {
+          "path": "mendelian-randomization-run.json",
+          "required": true
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "citationsResolvable"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "exposure",
+      "outcome"
+    ],
+    "optional": [
+      "outputLanguage",
+      "analysisDirection",
+      "uploadedFiles"
+    ]
+  },
+  "safetyClass": "general",
+  "autopilot": {
+    "taskTypes": [],
+    "costClass": "high",
+    "unattendedInputs": [
+      "exposure",
+      "outcome"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    30,
+    180
+  ],
+  "category": "因果推断",
+  "dataSources": [
+    "opengwas",
+    "local-gwas",
+    "literature",
+    "uploaded-files"
+  ],
+  "starterPrompts": [
+    "使用孟德尔随机化评估体重指数对冠心病的因果效应。"
+  ]
+}

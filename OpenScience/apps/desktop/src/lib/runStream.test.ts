@@ -1,0 +1,260 @@
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  RUN_STREAM_FRAME_TYPES,
+  applyRunEvent,
+  applyRunFrame,
+  emptyRunView,
+  openRunStream,
+  type RunEvent,
+  type RunStreamFrame,
+  runIsSettled,
+  TERMINAL_RUN_STATUSES,
+  transcriptToRunView,
+  type RunView,
+} from "./runStream";
+
+const at = (seq: number) => ({ seq, time: "2026-08-23T00:00:00Z" });
+
+function fold(view: RunView, frames: RunStreamFrame[]): RunView {
+  return frames.reduce(applyRunFrame, view);
+}
+
+describe("the browser's own run vocabulary", () => {
+  it("knows nothing about a kernel", async () => {
+    const source = await import("./runStream?raw" as string).catch(() => null);
+    // The check that matters is structural rather than textual, so it is stated
+    // as one: the frame union is the control plane's, and every member of it is
+    // handled below.
+    expect([...RUN_STREAM_FRAME_TYPES]).toEqual([
+      "run/state",
+      "run/event",
+      "subagent/update",
+      "deliverable/update",
+      "evidence/update",
+      "budget/update",
+      "stream/gap",
+    ]);
+    expect(source).toBeDefined();
+  });
+
+  it("applies a run's state and carries its verdict fields", () => {
+    const view = fold(emptyRunView("run_1"), [
+      { type: "run/state", ...at(1), state: "running", errorCode: null, verification: null, attempts: 0 },
+      { type: "run/state", ...at(2), state: "degraded", errorCode: null, verification: "unverified", attempts: 2 },
+    ]);
+    expect(view.state).toBe("degraded");
+    expect(view.verification).toBe("unverified");
+    expect(view.attempts).toBe(2);
+    expect(view.seq).toBe(2);
+  });
+
+  it("ignores a frame it has already applied, so a reconnect does not duplicate anything", () => {
+    const frame: RunStreamFrame = { type: "run/event", ...at(1), event: { type: "message/user", seq: 1, text: "题面", source: "user" } };
+    const once = applyRunFrame(emptyRunView("run_1"), frame);
+    const twice = applyRunFrame(once, frame);
+    expect(twice.blocks).toHaveLength(1);
+    expect(twice).toBe(once);
+  });
+
+  it("shows an injected context as an injection, never as something the user typed", () => {
+    const view = fold(emptyRunView("run_1"), [
+      { type: "run/event", ...at(1), event: { type: "message/user", seq: 1, text: "我的问题", source: "user" } },
+      { type: "run/event", ...at(2), event: { type: "message/user", seq: 2, text: "<evimed-brief>题面…</evimed-brief>", source: "plugin" } },
+    ]);
+    expect(view.blocks[0]).toEqual({ kind: "user", text: "我的问题" });
+    expect(view.blocks[1]).toMatchObject({ kind: "status-line", tone: "muted" });
+    expect((view.blocks[1] as { text: string }).text).toContain("系统注入的上下文");
+  });
+
+  it("pairs a tool result with its call by id, not by position", () => {
+    const events: RunEvent[] = [
+      { type: "tool/call", seq: 1, callId: "a", tool: "mcp__evimed__literature_search", input: { query: "x" }, narration: "检索文献：「x」" },
+      { type: "tool/call", seq: 2, callId: "b", tool: "bash", input: { command: "ls" }, narration: "执行命令 ls" },
+      { type: "tool/result", seq: 3, callId: "b", tool: "bash", status: "completed", output: "a\nb", narration: "执行命令 ls" },
+      { type: "tool/result", seq: 4, callId: "a", tool: "mcp__evimed__literature_search", status: "error", output: "", errorCode: "full_text_not_available", narration: "检索文献：「x」" },
+    ];
+    const view = events.reduce(applyRunEvent, emptyRunView("run_1"));
+    const [first, second] = view.blocks as Array<{ kind: string; callId?: string; status?: string; meta?: string }>;
+    expect(first.callId).toBe("a");
+    expect(first.status).toBe("failed");
+    expect(first.meta).toContain("全文取不到");
+    expect(second.callId).toBe("b");
+    expect(second.status).toBe("success");
+  });
+
+  it("streams an assistant tail into one block instead of many", () => {
+    const view = ([
+      { type: "assistant/delta", seq: 1, kind: "text", text: "我先" },
+      { type: "assistant/delta", seq: 2, kind: "text", text: "写下计划。" },
+      { type: "assistant/delta", seq: 3, kind: "reasoning", text: "（不显示）" },
+    ] as RunEvent[]).reduce(applyRunEvent, emptyRunView("run_1"));
+    expect(view.blocks).toHaveLength(1);
+    expect(view.blocks[0]).toEqual({ kind: "agent", markdown: "我先写下计划。" });
+  });
+
+  it("marks a compaction without replacing what the reader already saw", () => {
+    const view = ([
+      { type: "message/assistant", seq: 1, text: "早期结论", reasoning: "", usage: null, interrupted: false },
+      { type: "compaction", seq: 2, replaced: 12, estimatedTokens: 6000 },
+    ] as RunEvent[]).reduce(applyRunEvent, emptyRunView("run_1"));
+    expect(view.blocks).toHaveLength(2);
+    expect(view.blocks[0]).toEqual({ kind: "agent", markdown: "早期结论" });
+    expect((view.blocks[1] as { text: string }).text).toContain("已压缩早期对话");
+  });
+
+  it("counts an event it cannot render rather than dropping it", () => {
+    const view = applyRunEvent(emptyRunView("run_1"), { type: "unknown", seq: 1, rawType: "hook/invoked" });
+    expect(view.unknownEvents).toEqual({ "hook/invoked": 1 });
+    expect(view.blocks).toHaveLength(0);
+  });
+
+  it("collects deliverables, evidence and the budget on the same channel as the events", () => {
+    const view = fold(emptyRunView("run_1"), [
+      { type: "deliverable/update", ...at(1), id: "d1", contractKind: "clinical-evidence-report", status: "rejected", issues: [{ code: "x", message: "缺少文件", severity: "required" }] },
+      { type: "deliverable/update", ...at(2), id: "d1", contractKind: "clinical-evidence-report", status: "accepted", issues: [] },
+      { type: "evidence/update", ...at(3), total: 1, byStatus: { ready: 1 } },
+      { type: "evidence/update", ...at(4), total: 2, byStatus: { ready: 1, queued: 1 } },
+      { type: "budget/update", ...at(5), steps: 12, tokens: 4000, children: 3, limits: { maxSteps: 100 } },
+      { type: "subagent/update", ...at(6), childSessionId: "c1", label: "证据综述", capability: "clinical-evidence-synthesis", status: "completed" },
+    ]);
+    expect(view.deliverables).toEqual([{ id: "d1", contractKind: "clinical-evidence-report", status: "accepted", issues: [] }]);
+    expect(view.evidence).toEqual({ total: 2, byStatus: { ready: 1, queued: 1 } });
+    expect(view.budget.steps).toBe(12);
+    expect(view.subagents).toHaveLength(1);
+  });
+
+  it("surfaces a replay gap so a client that fell too far behind re-reads instead of guessing", () => {
+    const view = applyRunFrame(emptyRunView("run_1"), { type: "stream/gap", ...at(500), since: 3, resumedAt: 120 });
+    expect(view.missedRange).toEqual({ since: 3, resumedAt: 120 });
+  });
+
+  it("subscribes with resumption and forwards every frame type", () => {
+    const listeners = new Map<string, EventListener>();
+    const close = vi.fn();
+    let opened = "";
+    const frames: RunStreamFrame[] = [];
+    const handle = openRunStream("run_1", {
+      apiBase: "/api",
+      since: 7,
+      onFrame: (frame) => frames.push(frame),
+      factory: (url) => {
+        opened = url;
+        return {
+          addEventListener: (type: string, listener: EventListener) => listeners.set(type, listener),
+          close,
+          onerror: null,
+        } as unknown as EventSource;
+      },
+    });
+    expect(opened).toBe("/api/runs/run_1/events?since=7");
+    expect([...listeners.keys()]).toEqual([...RUN_STREAM_FRAME_TYPES]);
+
+    listeners.get("run/state")?.(new MessageEvent("run/state", { data: JSON.stringify({ type: "run/state", seq: 8, time: "t", state: "running", errorCode: null, verification: null, attempts: 0 }) }));
+    expect(frames).toHaveLength(1);
+    handle.close();
+    expect(close).toHaveBeenCalled();
+  });
+
+  it("isolates a malformed frame instead of taking the view down", () => {
+    const listeners = new Map<string, EventListener>();
+    const errors: unknown[] = [];
+    openRunStream("run_1", {
+      onFrame: () => { throw new Error("should not be reached"); },
+      onError: (error) => errors.push(error),
+      factory: () => ({
+        addEventListener: (type: string, listener: EventListener) => listeners.set(type, listener),
+        close: () => {},
+        onerror: null,
+      } as unknown as EventSource),
+    });
+    listeners.get("run/event")?.(new MessageEvent("run/event", { data: "{not json" }));
+    expect(errors).toHaveLength(1);
+  });
+});
+
+describe("a reloaded conversation and a watched one cannot drift", () => {
+  it("builds the same blocks from a transcript that the stream builds live", () => {
+    const transcript = {
+      sessionId: "s-1",
+      lastSeq: 6,
+      turnEnd: null,
+      subagents: [{ sessionId: "c1", parentSessionId: "s-1", label: "证据综述", capability: "clinical-evidence-synthesis" }],
+      messages: [
+        { role: "user" as const, source: "user" as const, seq: 1, time: 1, turn: 1, step: 1, parts: [{ type: "text" as const, text: "题面" }], usage: null, interrupted: false },
+        {
+          role: "tool" as const,
+          source: "system" as const,
+          seq: 2,
+          time: 2,
+          turn: 1,
+          step: 1,
+          parts: [{
+            type: "tool" as const,
+            tool: "mcp__evimed__literature_search",
+            callId: "a",
+            status: "completed" as const,
+            input: { query: "x" },
+            output: "12 results",
+            error: null,
+          }],
+          usage: null,
+          interrupted: false,
+        },
+        { role: "assistant" as const, source: "system" as const, seq: 3, time: 3, turn: 1, step: 1, parts: [{ type: "text" as const, text: "结论。" }], usage: null, interrupted: false },
+      ],
+    };
+    const fromTranscript = transcriptToRunView("run_1", transcript);
+
+    const live = ([
+      { type: "message/user", seq: 1, text: "题面", source: "user" },
+      { type: "tool/call", seq: 2, callId: "a", tool: "mcp__evimed__literature_search", input: { query: "x" }, narration: "检索文献：「x」" },
+      { type: "tool/result", seq: 3, callId: "a", tool: "mcp__evimed__literature_search", status: "completed", output: "12 results", narration: "检索文献：「x」" },
+      { type: "message/assistant", seq: 4, text: "结论。", reasoning: "", usage: null, interrupted: false },
+    ] as RunEvent[]).reduce(applyRunEvent, emptyRunView("run_1"));
+
+    expect(fromTranscript.blocks).toEqual(live.blocks);
+    expect(fromTranscript.subagents).toHaveLength(1);
+    expect(fromTranscript.seq).toBe(6);
+  });
+
+  it("leaves a call whose result never arrived visibly unfinished", () => {
+    const view = transcriptToRunView("run_1", {
+      sessionId: "s-1",
+      lastSeq: 2,
+      turnEnd: null,
+      subagents: [],
+      messages: [{
+        role: "tool" as const,
+        source: "system" as const,
+        seq: 1,
+        time: 1,
+        turn: 1,
+        step: 1,
+        parts: [{ type: "tool" as const, tool: "bash", callId: "a", status: "pending" as const, input: {}, output: "", error: null }],
+        usage: null,
+        interrupted: false,
+      }],
+    });
+    expect((view.blocks[0] as { status: string }).status).toBe("running");
+  });
+
+  it("distinguishes a settled run from one nobody has heard about", () => {
+    // The vocabulary is the one the control plane publishes on `run/state`,
+    // which is the run ledger's `run.status` — not `@evimed/domain`'s nine-value
+    // `RUN_PHASES`. This test previously named `accepted` and `degraded`, which
+    // the ledger never assigns, and omitted `succeeded`, which it always does:
+    // a delivered run was therefore never recognized as finished, so the
+    // browser held its subscription open and spun on a completed run.
+    for (const state of TERMINAL_RUN_STATUSES) {
+      expect(runIsSettled({ ...emptyRunView("r"), state })).toBe(true);
+    }
+    expect([...TERMINAL_RUN_STATUSES]).toEqual(["succeeded", "failed", "canceled"]);
+    expect(runIsSettled({ ...emptyRunView("r"), state: "running" })).toBe(false);
+    expect(runIsSettled(emptyRunView("r"))).toBe(false);
+    // Named explicitly so that a ledger which one day *does* distinguish a
+    // degraded delivery cannot start emitting it while the browser quietly
+    // treats it as still running.
+    expect(runIsSettled({ ...emptyRunView("r"), state: "degraded" })).toBe(false);
+  });
+});

@@ -109,7 +109,7 @@ def run_benchmark(cases=None):
         {"computedOrder": computed_order, "reportedOrder": selection["reportedOrder"]},
     )
 
-    guarded_result = compiler.compile_assessment("evimed_drug_selection_evaluation", {
+    guarded_result = compiler.compile_assessment("drug_selection_evaluation", {
         "candidateDrugs": list(candidates),
         "indication": "atopic dermatitis",
         "selectionDomains": list(domains),

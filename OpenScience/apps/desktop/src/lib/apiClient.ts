@@ -5,6 +5,8 @@
  * VITE_OPEN_SCIENCE_API_URL and implement POST /api/commands/:command with a
  * JSON body matching the old Tauri command arguments.
  */
+import type { RunTranscript } from "@/lib/runStream";
+
 export const isTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -244,6 +246,17 @@ export interface WebMemoryProfile {
 
 export type WebAgentRunStatus = "running" | "succeeded" | "failed" | "canceled";
 
+/**
+ * A read derived from `status` (plus dispatch/verification/progress), never a
+ * second status of its own — the control plane computes it fresh on every
+ * read and nothing assigns it directly (§7.1.1, decision 2026-08-24 #20).
+ * `degraded` is the one this page groups by: delivered, but with something —
+ * unresolved verification, or a partial delivery — a person should look at.
+ */
+export type WebRunPhase =
+  | "reserved" | "dispatched" | "running" | "delivering" | "repairing"
+  | "accepted" | "degraded" | "failed" | "canceled";
+
 export interface WebAgentRun {
   id: string;
   dispatchId: string | null;
@@ -264,6 +277,7 @@ export interface WebAgentRun {
   effectiveRouteReason?: string | null;
   model: string;
   status: WebAgentRunStatus;
+  phase?: WebRunPhase;
   createdAt: string;
   startedAt: string;
   finishedAt: string | null;
@@ -271,8 +285,12 @@ export interface WebAgentRun {
   errorCode: string | null;
   artifacts: string[];
   // "unverified" when a clinical package finished with only process-documentation
-  // or presentation gaps and was delivered rather than discarded; null otherwise.
-  verification?: "unverified" | null;
+  // or presentation gaps and was delivered rather than discarded.
+  // "unchecked" when a layer of the gate did not run at all — most often the
+  // per-question coverage comparison, whose brief lives in server memory and is
+  // lost on restart. Null means every layer ran and none of them objected, so
+  // "not checked" must never be reported as null.
+  verification?: "unverified" | "unchecked" | null;
   // Human-readable gate reasons attached to a failed or unverified run.
   qualityNotices?: string[];
   // Liveness for a run that legitimately takes tens of minutes.
@@ -564,12 +582,45 @@ export function getWebOidcStartUrl(returnTo = "/settings"): string {
   return `${apiUrl("/auth/oidc/start")}?returnTo=${encodeURIComponent(safeReturnTo)}`;
 }
 
+/**
+ * Which session view this deployment serves.
+ *
+ * A deployment decision, not a build flag: the kernel is chosen per deployment
+ * and the two views read different sources, so the server says which one and a
+ * kernel rollback does not need a new bundle.
+ */
+export interface WebRuntimeProfile {
+  kernel: "dsh" | "opencode";
+  sessionView: "run-stream" | "legacy";
+}
+
+/**
+ * The deployment's runtime profile, remembered from the last `/api/me`.
+ *
+ * Defaults to the retiring view rather than the new one: before the server has
+ * answered, the safe assumption is the view that has been in production, not
+ * the one still being accepted.
+ */
+let runtimeProfile: WebRuntimeProfile = { kernel: "opencode", sessionView: "legacy" };
+
+function rememberRuntimeProfile(profile: WebRuntimeProfile | undefined): void {
+  if (profile?.sessionView === "run-stream" || profile?.sessionView === "legacy") {
+    runtimeProfile = { kernel: profile.kernel, sessionView: profile.sessionView };
+  }
+}
+
+/** @returns the session view this deployment serves */
+export function webRuntimeProfile(): WebRuntimeProfile {
+  return runtimeProfile;
+}
+
 export async function fetchWebMe(): Promise<{
   user: { id: string; name: string; tenantId?: string };
   tenant?: { id: string; model: "individual-account"; role: "owner" };
   project: WebProject;
   projects: WebProject[];
   csrfToken?: string;
+  runtime?: WebRuntimeProfile;
 } | null> {
   if (!hasWebApi) return null;
   const res = await fetchWithWebAuth(apiUrl("/me"), {
@@ -588,9 +639,11 @@ export async function fetchWebMe(): Promise<{
       project: WebProject;
       projects: WebProject[];
       csrfToken?: string;
+      runtime?: WebRuntimeProfile;
     };
   };
   rememberCsrfToken(body.data);
+  rememberRuntimeProfile(body.data.runtime);
   return body.data;
 }
 
@@ -721,6 +774,25 @@ export async function dispatchWebAgentRun(
   return parseApiResponse<WebAgentRun>(res);
 }
 
+
+/**
+ * One run's transcript, in the control plane's own vocabulary.
+ *
+ * Fetched before the event stream opens, because the stream's replay buffer is
+ * bounded: a run that started before this page did would otherwise render as an
+ * empty thread that claims to be live.
+ */
+export async function fetchWebRunTranscript(sessionId: string): Promise<RunTranscript | null> {
+  if (!hasWebApi) return null;
+  const res = await fetchWithWebAuth(
+    apiUrl(`/runtime/sessions/${encodeURIComponent(sessionId)}/transcript`),
+    { headers: { "X-Open-Science-Project": getWebProjectId() } },
+  );
+  // A session the kernel has not created yet has produced nothing; that is the
+  // baseline every run starts from, not a failure.
+  if (res.status === 404) return null;
+  return parseApiResponse<RunTranscript>(res);
+}
 
 export async function exportWebProject(projectId: string): Promise<Blob> {
   if (!hasWebApi) throw new BackendUnavailableError("projects.export");
@@ -860,6 +932,60 @@ export async function stopWebRuntime(): Promise<void> {
 export async function restartWebRuntime(): Promise<string> {
   if (!hasWebApi) throw new BackendUnavailableError("runtime.restart");
   return invokeWebCommand<string>("restart_runtime");
+}
+
+/**
+ * Creates a run session through the control plane.
+ *
+ * The browser asks the control plane, never a kernel. That is the property the
+ * retired pass-through cost us: with a proxied kernel the page had to know the
+ * kernel's protocol, so every kernel change was a frontend change.
+ */
+export async function createWebRuntimeSession(): Promise<{ id: string; kernel: string }> {
+  if (!hasWebApi) throw new BackendUnavailableError("runtime.session.create");
+  const res = await fetchWithWebAuth(apiUrl("/runtime/sessions"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  return parseApiResponse<{ id: string; kernel: string }>(res);
+}
+
+/** The whole run, in the control plane's vocabulary. */
+export async function fetchWebRuntimeTranscript(sessionId: string): Promise<WebRunTranscript> {
+  if (!hasWebApi) throw new BackendUnavailableError("runtime.session.transcript");
+  const res = await fetchWithWebAuth(apiUrl(`/runtime/sessions/${encodeURIComponent(sessionId)}/transcript`));
+  return parseApiResponse<WebRunTranscript>(res);
+}
+
+/** The transcript shape the control plane serves; mirrors `@evimed/domain`'s RunTranscript. */
+export interface WebRunTranscript {
+  sessionId: string;
+  messages: {
+    role: "user" | "assistant" | "tool";
+    source: "user" | "plugin" | "system" | "subagent";
+    seq: number;
+    time: number;
+    turn: number;
+    step: number;
+    parts: Array<
+      | { type: "text" | "reasoning"; text: string }
+      | {
+        type: "tool";
+        tool: string;
+        callId: string;
+        status: "pending" | "completed" | "error";
+        input: Record<string, unknown>;
+        output: string;
+        error: { name: string; code: string } | null;
+      }
+    >;
+    usage: { input: number; output: number; cacheHit: number; cacheMiss: number } | null;
+    interrupted: boolean;
+  }[];
+  turnEnd: { kind: string; code?: string; subCode?: string } | null;
+  subagents: { sessionId: string; parentSessionId: string; label: string; capability: string }[];
+  lastSeq: number;
 }
 
 export async function fetchWebReadiness(): Promise<WebReadiness> {

@@ -413,9 +413,14 @@ export function createCommandRegistry({ config, runtimeManager }) {
   }
 
   const handlers = {
+    // The value returned is the control plane's own surface, not a kernel's.
+    // It used to be a pass-through base URL the browser then spoke a kernel's
+    // protocol over, which is why the frontend knew that protocol; the browser
+    // now creates sessions and subscribes to events through the control plane,
+    // and the kernel is unreachable from it.
     async start_runtime(_args, ctx) {
       await runtimeManager.start(ctx.project);
-      return `${publicApiBase(ctx)}/opencode/${encodeURIComponent(ctx.project.id)}`;
+      return `${publicApiBase(ctx)}/runtime`;
     },
 
     async runtime_password() {
@@ -429,7 +434,7 @@ export function createCommandRegistry({ config, runtimeManager }) {
 
     async restart_runtime(_args, ctx) {
       await runtimeManager.restart(ctx.project);
-      return `${publicApiBase(ctx)}/opencode/${encodeURIComponent(ctx.project.id)}`;
+      return `${publicApiBase(ctx)}/runtime`;
     },
 
     async runtime_status(_args, ctx) {

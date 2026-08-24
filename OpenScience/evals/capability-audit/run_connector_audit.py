@@ -110,7 +110,7 @@ def probe_case(server, source, query, gateway_used):
     attempts = 0
     while attempts < 3:
         attempts += 1
-        result = server.call_tool("evimed_biomedical_source_search", {
+        result = server.call_tool("biomedical_source_search", {
             "source": source,
             "query": query,
             "limit": 2,
@@ -137,7 +137,7 @@ def probe_case(server, source, query, gateway_used):
         "sourceCountPresent": len(sources) > 0,
         "traceableSources": len(sources) > 0 and all(traceable(item) for item in sources),
         "connectorIdentity": len(sources) > 0 and all(item.get("source") == source for item in sources),
-        "requestProvenance": provenance.get("tool") == "evimed_biomedical_source_search"
+        "requestProvenance": provenance.get("tool") == "biomedical_source_search"
         and provenance.get("arguments", {}).get("source") == source
         and provenance.get("arguments", {}).get("query") == query,
         "recordIdentifiers": len(identifiers) > 0,

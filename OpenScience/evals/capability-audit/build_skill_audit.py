@@ -29,15 +29,15 @@ SKILL_EXECUTION_RESULT = HERE / "results" / "skill-execution-v1.json"
 PLATFORM_SKILL_EXECUTION_RESULT = HERE / "results" / "platform-skill-execution-v1.json"
 TOOL_EXECUTION_RESULT = HERE / "results" / "tool-probe-v3.json"
 SPECIALIST_SKILL_TOOL_MAPPING = {
-    "evimed/adr-analysis": "evimed_drug_safety_analysis",
-    "evimed/bibliometric-analysis": "evimed_bibliometric_analysis",
-    "evimed/comprehensive-drug-evaluation": "evimed_comprehensive_drug_evaluation",
-    "evimed/drug-selection": "evimed_drug_selection_evaluation",
-    "evimed/mendelian-randomization": "evimed_mendelian_randomization",
-    "evimed/meta-analysis": "evimed_meta_analysis",
-    "evimed/off-label-analysis": "evimed_offlabel_evidence_packet",
-    "evimed/peer-review": "evimed_peer_review",
-    "evimed/research-topic-selection": "evimed_research_topic_selection",
+    "evimed/adr-analysis": "drug_safety_analysis",
+    "evimed/bibliometric-analysis": "bibliometric_analysis",
+    "evimed/comprehensive-drug-evaluation": "comprehensive_drug_evaluation",
+    "evimed/drug-selection": "drug_selection_evaluation",
+    "evimed/mendelian-randomization": "mendelian_randomization",
+    "evimed/meta-analysis": "meta_analysis",
+    "evimed/off-label-analysis": "offlabel_evidence_packet",
+    "evimed/peer-review": "peer_review",
+    "evimed/research-topic-selection": "research_topic_selection",
 }
 
 

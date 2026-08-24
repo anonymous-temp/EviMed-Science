@@ -47,9 +47,17 @@ async function command(base, name, args, headers, expectOk = true) {
   );
 }
 
-async function readFirstSseEvent(url, headers) {
+/**
+ * Reads the first frame of the control plane's own run stream.
+ *
+ * It reads our stream rather than a kernel's, because a browser cannot reach a
+ * kernel any more. What it proves is unchanged and is the part that only fails
+ * in a real deployment: an SSE response survives whatever proxy is in front of
+ * it.
+ */
+async function readFirstSseEvent(base, runId, headers) {
   const abort = new AbortController();
-  const res = await fetch(`${url}/event`, { headers, signal: abort.signal });
+  const res = await fetch(`${base}/api/runs/${encodeURIComponent(runId)}/events`, { headers, signal: abort.signal });
   assert.equal(res.status, 200);
   assert.match(res.headers.get("content-type") ?? "", /text\/event-stream/);
   const reader = res.body.getReader();
@@ -62,14 +70,21 @@ async function readFirstSseEvent(url, headers) {
   }
 }
 
+// The run monitor polls on its own interval and the delivery gate runs after
+// it, so a terminal state is a few polls away rather than immediate. Waiting
+// two seconds was enough while the kernel finished its work inside the prompt
+// call; it does not any more, and a wait tuned to the old timing reads as a
+// hang rather than as a slow test.
 async function waitForRun(base, runId, headers) {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
+  const deadlineMs = Number(process.env.OPEN_SCIENCE_E2E_RUN_TIMEOUT_MS ?? 30_000);
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < deadlineMs) {
     const listed = await jsonFetch(`${base}/api/agent-runs`, { headers });
     const run = listed.json.data.find((item) => item.id === runId);
-    if (run?.status !== "running") return run;
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    if (run && run.status !== "running") return run;
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error(`Agent run ${runId} did not reach a terminal state.`);
+  throw new Error(`Agent run ${runId} did not reach a terminal state within ${deadlineMs}ms.`);
 }
 
 test("mock hosted contract pins specialty identity but cannot certify specialist completion", async () => {
@@ -118,19 +133,19 @@ test("mock hosted contract pins specialty identity but cannot certify specialist
     assert.equal(uploaded.json.data.data, "uploaded data");
 
     const runtime = await command(base, "start_runtime", {}, scoped);
-    assert.match(runtime.json.data, /\/api\/opencode\/paper1$/);
+    // The control plane's own surface. A caller that is handed anything naming a
+    // kernel is a caller that can reach one.
+    assert.match(runtime.json.data, /\/api\/runtime$/);
+    assert.ok(!/opencode|dsh/.test(runtime.json.data));
 
-    const sse = await readFirstSseEvent(runtime.json.data, scoped);
-    assert.match(sse, /server\.connected/);
-
-    const session = await jsonFetch(`${runtime.json.data}/session`, {
+    const session = await jsonFetch(`${runtime.json.data}/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...scoped },
       body: "{}",
     });
-    assert.match(session.json.id, /^web_mock_/);
+    assert.match(session.json.data.id, /^web_mock_/);
 
-    const specialistBinding = await jsonFetch(`${base}/api/research-sessions/${encodeURIComponent(session.json.id)}`, {
+    const specialistBinding = await jsonFetch(`${base}/api/research-sessions/${encodeURIComponent(session.json.data.id)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", ...scoped },
       body: JSON.stringify({
@@ -145,7 +160,7 @@ test("mock hosted contract pins specialty identity but cannot certify specialist
       method: "POST",
       headers: { "Content-Type": "application/json", ...scoped },
       body: JSON.stringify({
-        sessionId: session.json.id,
+        sessionId: session.json.data.id,
         dispatchId: "turn_specialist_first",
         text: "Create a short analysis artifact.",
       }),
@@ -154,37 +169,41 @@ test("mock hosted contract pins specialty identity but cannot certify specialist
     assert.equal(firstRun.json.data.agentId, "adr-analysis");
     assert.equal(firstRun.json.data.agentVersion, adrAgent.version);
 
+    // One session runs one turn at a time. The kernel accepts a prompt and then
+    // works, so a second dispatch has to wait for the first to settle — which is
+    // also what a client does.
+    const firstTerminal = await waitForRun(base, firstRun.json.data.id, scoped);
     const secondRun = await jsonFetch(`${base}/api/agent-runs/dispatch`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...scoped },
       body: JSON.stringify({
-        sessionId: session.json.id,
+        sessionId: session.json.data.id,
         dispatchId: "turn_specialist_follow_up",
         text: "Now explain the strongest signal.",
       }),
     });
     assert.equal(secondRun.res.status, 202);
-    const firstTerminal = await waitForRun(base, firstRun.json.data.id, scoped);
     const secondTerminal = await waitForRun(base, secondRun.json.data.id, scoped);
     assert.equal(firstTerminal.status, "failed");
     assert.equal(firstTerminal.errorCode, "specialist_required_output_missing");
     assert.equal(secondTerminal.status, "failed");
     assert.equal(secondTerminal.errorCode, "specialist_required_output_missing");
-    const specialistMessages = await jsonFetch(
-      `${runtime.json.data}/session/${encodeURIComponent(session.json.id)}/message`,
-      { headers: scoped },
-    );
+
+    // Specialty identity is pinned in the ledger, not in a per-turn field on a
+    // kernel message. There is one composition now, so a message carries no
+    // agent name to pin — what identifies the work is which capability the run
+    // was dispatched as, which is a control-plane fact and always was.
     assert.deepEqual(
-      specialistMessages.json.filter((message) => message.info.role === "user").map((message) => message.info.agent),
+      [firstTerminal.effectiveRuntimeAgent, secondTerminal.effectiveRuntimeAgent],
       ["evimed-adr-analysis", "evimed-adr-analysis"],
     );
 
-    const openSession = await jsonFetch(`${runtime.json.data}/session`, {
+    const openSession = await jsonFetch(`${runtime.json.data}/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...scoped },
       body: "{}",
     });
-    await jsonFetch(`${base}/api/research-sessions/${encodeURIComponent(openSession.json.id)}`, {
+    await jsonFetch(`${base}/api/research-sessions/${encodeURIComponent(openSession.json.data.id)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", ...scoped },
       body: JSON.stringify({ mode: "open-domain" }),
@@ -193,18 +212,28 @@ test("mock hosted contract pins specialty identity but cannot certify specialist
       method: "POST",
       headers: { "Content-Type": "application/json", ...scoped },
       body: JSON.stringify({
-        sessionId: openSession.json.id,
+        sessionId: openSession.json.data.id,
         dispatchId: "turn_open_domain",
         text: "Explore an unconstrained research question.",
       }),
     });
     assert.equal(openRun.res.status, 202);
+    // The live stream is ours, and a tab that attaches to a finished run still
+    // gets its state rather than an empty stream that never speaks again.
+    const streamed = await readFirstSseEvent(base, openRun.json.data.id, scoped);
+    assert.match(streamed, /run\/state/);
     assert.equal((await waitForRun(base, openRun.json.data.id, scoped)).status, "succeeded");
-    const openMessages = await jsonFetch(
-      `${runtime.json.data}/session/${encodeURIComponent(openSession.json.id)}/message`,
+    // The transcript is read through the control plane, in the control plane's
+    // vocabulary; the identity of the line the run was dispatched on is a ledger
+    // fact, because there is one composition and a message names no agent.
+    const openTranscript = await jsonFetch(
+      `${base}/api/runtime/sessions/${encodeURIComponent(openSession.json.data.id)}/transcript`,
       { headers: scoped },
     );
-    assert.equal(openMessages.json.find((message) => message.info.role === "user").info.agent, "evimed-open-domain-answer");
+    assert.ok(openTranscript.json.data.messages.some((message) => message.role === "user"));
+    const openLedgerRun = (await jsonFetch(`${base}/api/agent-runs`, { headers: scoped }))
+      .json.data.find((run) => run.id === openRun.json.data.id);
+    assert.equal(openLedgerRun.effectiveRuntimeAgent, "evimed-open-domain-answer");
     const runs = await jsonFetch(`${base}/api/agent-runs`, { headers: scoped });
     assert.equal(runs.json.data.length, 3);
     assert.equal(runs.json.data.filter((run) => run.mode === "specialist").length, 2);

@@ -23,16 +23,16 @@ optionalInputs:
   - decisionDate
   - uploadedFiles
 requiredTools:
-  - evimed_drug_term_normalize
-  - evimed_drug_label_search
-  - evimed_offlabel_evidence_packet
+  - drug_term_normalize
+  - drug_label_search
+  - offlabel_evidence_packet
 optionalTools:
-  - evimed_data_source_catalog
-  - evimed_biomedical_source_search
-  - evimed_guideline_search
-  - evimed_clinical_trial_search
-  - evimed_literature_search
-  - evimed_pharmacy_reference_search
+  - data_source_catalog
+  - biomedical_source_search
+  - guideline_search
+  - clinical_trial_search
+  - literature_search
+  - pharmacy_reference_search
 dataSources:
   - drug-labels
   - guidelines

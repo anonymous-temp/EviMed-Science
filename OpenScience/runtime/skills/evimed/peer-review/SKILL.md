@@ -13,7 +13,7 @@ The review is decision support for authors and editors, not a journal decision.
 ## Execute
 
 1. Confirm the workspace-relative manuscript and its likely article type. Call
-   `evimed_peer_review` with `action=capabilities`, then start and poll the job
+   `peer_review` with `action=capabilities`, then start and poll the job
    with `waitSeconds=45` until terminal.
 2. Preserve the selected reporting rubrics and every evidence location. Separate
    confirmed defects from uncertain findings caused by parsing or retrieval

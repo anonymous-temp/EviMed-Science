@@ -13,10 +13,10 @@ optionalInputs:
   - articleType
   - outputLanguage
 requiredTools:
-  - evimed_peer_review
+  - peer_review
 optionalTools:
-  - evimed_data_source_catalog
-  - evimed_literature_search
+  - data_source_catalog
+  - literature_search
 dataSources:
   - uploaded-files
   - reporting-guidelines

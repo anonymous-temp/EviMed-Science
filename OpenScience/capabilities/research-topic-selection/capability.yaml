@@ -1,0 +1,65 @@
+# Capability manifest — the only definition of this capability.
+#
+# It replaced agent.yaml when routing was removed. Under a router, a
+# package was bound to a session and never had to say when it applied;
+# under one composition the orchestrator composes capabilities itself, so
+# `whenToUse` (the catalogue line it reads), `persona` (what the delegated
+# child is) and `produces` (which contract validates the result) are
+# required. `tools` uses the model-visible names.
+id: research-topic-selection
+version: 1.1.0
+title: 科研选题
+category: 科研规划
+description: 梳理研究版图、矛盾、证据空白与可行性，把宽泛的生物医学方向转化为有证据依据且可检验的研究问题和优先议程。
+whenToUse: 交付物是一份科研选题分析（问题图景、证据缺口、可行议题）时，委派给我。
+persona: 你是科研选题分析师。你把一个方向拆成可做的问题，每个问题都要写清「为什么现在做」与「什么证据说明它还没被回答」。
+safetyClass: general
+skills:
+- research-topic-selection
+tools:
+- mcp__evimed__research_topic_selection
+- mcp__evimed__biomedical_source_search
+- mcp__evimed__literature_search
+- mcp__evimed__open_access_full_text
+- mcp__evimed__web_search
+- mcp__evimed__data_source_catalog
+- mcp__evimed__guideline_search
+- mcp__evimed__bibliometric_analysis
+- mcp__evimed__clinical_trial_search
+- mcp__evimed__patent_search
+- mcp__evimed__pharmacy_reference_search
+produces:
+- contractKind: research-topic-report
+  outputs:
+  - path: research-topic-report.md
+    required: true
+  - path: evidence-map.md
+    required: true
+  - path: research-topic-run.json
+    required: true
+  checks:
+  - requiredOutputsExist
+  - citationsResolvable
+  - skillsLoaded
+inputs:
+  required:
+  - researchDirection
+  optional:
+  - outputLanguage
+  - uploadedFiles
+autopilot:
+  taskTypes:
+  - hypothesis-suggestion
+  costClass: medium
+  unattendedInputs:
+  - researchDirection
+estimatedMinutes:
+- 20
+- 90
+dataSources:
+- literature
+- clinical-trials
+- internal-evidence
+- uploaded-files
+starterPrompts:
+- 为危重症成人抗菌药物精准给药识别高价值、可行的研究选题。

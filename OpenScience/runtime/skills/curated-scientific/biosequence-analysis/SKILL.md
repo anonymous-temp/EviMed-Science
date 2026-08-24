@@ -5,7 +5,7 @@ description: Analyze local nucleotide or protein sequences and traceable public 
 
 # Biosequence analysis
 
-Use `evimed_biomedical_source_search` for supported NCBI, ENA, InterPro, or UniProt lookups. Keep accession, version, organism, genome build, strand, coordinate convention, and retrieval time. Work on local copies and hash inputs.
+Use `biomedical_source_search` for supported NCBI, ENA, InterPro, or UniProt lookups. Keep accession, version, organism, genome build, strand, coordinate convention, and retrieval time. Work on local copies and hash inputs.
 
 Validate alphabet, ambiguity codes, length, duplicate IDs, feature coordinates, and translation frame before analysis. Check Biopython or other dependencies before execution and never install them implicitly. Record versions and deterministic parameters.
 

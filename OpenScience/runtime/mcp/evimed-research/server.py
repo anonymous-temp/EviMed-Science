@@ -223,12 +223,12 @@ ECONOMIC_CONTEXT = object_schema(
 
 TOOL_DEFINITIONS = [
     {
-        "name": "evimed_health",
+        "name": "health",
         "description": "Check whether the local EviMed Research MCP process is ready.",
         "inputSchema": object_schema({}),
     },
     {
-        "name": "evimed_data_source_catalog",
+        "name": "data_source_catalog",
         "description": "Search the audited EviMed data-source registry, including active connectors, credential requirements, licenses, and explicit blockers.",
         "inputSchema": object_schema(
             {
@@ -255,7 +255,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_biomedical_source_search",
+        "name": "biomedical_source_search",
         "description": "Query one audited public biomedical source through a bounded, traceable connector. Results are metadata or selected public fields and require primary-record verification.",
         "inputSchema": object_schema(
             {
@@ -267,7 +267,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_official_page_fetch",
+        "name": "official_page_fetch",
         "description": (
             "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document "
             "through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. "
@@ -284,7 +284,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_web_search",
+        "name": "web_search",
         "description": "Search the open web through the platform's self-hosted metasearch aggregator. Use for what bibliographic indexes do not carry - funding calls, conference programmes, society pages, registries, methods described only on a group's own site. Results are unreviewed pages: follow one to its primary record before any claim from it enters a report.",
         "inputSchema": object_schema(
             {
@@ -303,7 +303,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_open_access_full_text",
+        "name": "open_access_full_text",
         "description": "Resolve a PMCID, PMID, or DOI through Europe PMC, retrieve the complete open-access JATS XML, and write bounded Markdown and XML artifacts into the current workspace for direct, paginated reading.",
         "inputSchema": object_schema(
             {"identifier": {"type": "string", "minLength": 1, "maxLength": 512}},
@@ -311,7 +311,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_term_normalize",
+        "name": "term_normalize",
         "description": "Normalize a medical term using a deterministic bilingual vocabulary.",
         "inputSchema": object_schema(
             {
@@ -325,12 +325,12 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_drug_term_normalize",
+        "name": "drug_term_normalize",
         "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms.",
         "inputSchema": object_schema({"term": STRING}, ("term",)),
     },
     {
-        "name": "evimed_evidence_deduplicate",
+        "name": "evidence_deduplicate",
         "description": "Deduplicate evidence records by DOI, PMID, URL, then normalized title.",
         "inputSchema": object_schema(
             {
@@ -354,7 +354,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_literature_search",
+        "name": "literature_search",
         "description": "Search configured literature sources through the EviMed evidence adapter. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
         "inputSchema": object_schema(
             {
@@ -386,7 +386,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_guideline_search",
+        "name": "guideline_search",
         "description": "Search configured clinical-guideline sources.",
         "inputSchema": object_schema(
             {
@@ -403,7 +403,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_clinical_trial_search",
+        "name": "clinical_trial_search",
         "description": "Search configured clinical-trial registries.",
         "inputSchema": object_schema(
             {
@@ -425,7 +425,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_patent_search",
+        "name": "patent_search",
         "description": "Search traceable EviMed patent records for research-landscape discovery; results are not legal opinions, clinical evidence, or freedom-to-operate conclusions.",
         "inputSchema": object_schema(
             {"query": STRING, "limit": EVIMED_SEARCH_LIMIT},
@@ -433,7 +433,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_pharmacy_reference_search",
+        "name": "pharmacy_reference_search",
         "description": "Search the optional private curated pharmacy reference index. Results are decision-support context, not current clinical authority, and require verification against current official sources.",
         "inputSchema": object_schema(
             {"query": STRING, "limit": {"type": "integer", "minimum": 1, "maximum": 50}},
@@ -441,7 +441,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_drug_label_search",
+        "name": "drug_label_search",
         "description": "Retrieve exact-product drug-label candidates from configured jurisdictions; indexed copies still require official-current verification.",
         "inputSchema": object_schema(
             {"drug": SHORT_STRING, "product": SHORT_STRING, "jurisdiction": SHORT_STRING, "limit": LABEL_LIMIT},
@@ -449,7 +449,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_adr_case_query",
+        "name": "adr_case_query",
         "description": "Query adverse-event cases through the configured pharmacovigilance adapter.",
         "inputSchema": object_schema(
             {
@@ -463,7 +463,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_adr_signal_analysis",
+        "name": "adr_signal_analysis",
         "description": "Run configured ADR signal analysis and return traceable source evidence.",
         "inputSchema": object_schema(
             {
@@ -482,7 +482,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_offlabel_evidence_packet",
+        "name": "offlabel_evidence_packet",
         "description": "Retrieve an evidence packet or deterministically compile separate label-dimension and evidence-type assessments for a proposed off-label use. Compilation never authorizes use.",
         "inputSchema": object_schema(
             {
@@ -506,7 +506,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_comprehensive_drug_evaluation",
+        "name": "comprehensive_drug_evaluation",
         "description": "Retrieve comprehensive medicine evidence or deterministically compile traceable domain assessments and, only with a complete supplied rubric, an assisted score without an automatic recommendation.",
         "inputSchema": object_schema(
             {
@@ -537,7 +537,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_drug_selection_evaluation",
+        "name": "drug_selection_evaluation",
         "description": "Retrieve candidate evidence or deterministically compile a traceable formulary assessment. Ranking is withheld unless every scale, weight, source, and economic context is comparable.",
         "inputSchema": object_schema(
             {
@@ -576,7 +576,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_meta_analysis",
+        "name": "meta_analysis",
         "description": "Start or inspect a managed MetaAgent systematic-review and meta-analysis job. The job runs with DeepSeek V4 Pro, writes its auditable package into the current workspace, and preserves release-gate status.",
         "inputSchema": object_schema(
             {
@@ -594,7 +594,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_mendelian_randomization",
+        "name": "mendelian_randomization",
         "description": "Start or inspect a managed Mendelian-randomization analysis and manuscript job. Statistical results must come from the installed MR engines, never from the language model.",
         "inputSchema": object_schema(
             {
@@ -610,7 +610,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_bibliometric_analysis",
+        "name": "bibliometric_analysis",
         "description": "Start or inspect a managed PubMed bibliometric-analysis job with traceable records, networks, figures, and a research-frontier report.",
         "inputSchema": object_schema(
             {
@@ -627,7 +627,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_research_topic_selection",
+        "name": "research_topic_selection",
         "description": "Start or inspect a managed research-topic selection job that retrieves evidence, maps gaps, and proposes testable research directions.",
         "inputSchema": object_schema(
             {
@@ -641,7 +641,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_peer_review",
+        "name": "peer_review",
         "description": "Start or inspect a managed multi-rubric peer review for a workspace manuscript. A pipeline error is returned as an error and never disguised as a completed review.",
         "inputSchema": object_schema(
             {
@@ -656,7 +656,7 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "evimed_drug_safety_analysis",
+        "name": "drug_safety_analysis",
         "description": "Start or inspect the managed pharmacovigilance specialist. It runs the deterministic signal pipeline, evidence retrieval, and report generation instead of estimating safety metrics in the language model.",
         "inputSchema": object_schema(
             {
@@ -691,24 +691,24 @@ TOOL_DEFINITIONS = [
 TOOLS = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
 
 ADAPTER_ENV = {
-    "evimed_biomedical_source_search": "EVIMED_BIOMEDICAL_SOURCE_SEARCH_URL",
-    "evimed_literature_search": "EVIMED_LITERATURE_SEARCH_URL",
-    "evimed_guideline_search": "EVIMED_GUIDELINE_SEARCH_URL",
-    "evimed_clinical_trial_search": "EVIMED_CLINICAL_TRIAL_SEARCH_URL",
-    "evimed_patent_search": "EVIMED_PATENT_SEARCH_URL",
-    "evimed_pharmacy_reference_search": "EVIMED_PHARMACY_REFERENCE_SEARCH_URL",
-    "evimed_drug_label_search": "EVIMED_DRUG_LABEL_SEARCH_URL",
-    "evimed_adr_case_query": "EVIMED_ADR_CASE_QUERY_URL",
-    "evimed_adr_signal_analysis": "EVIMED_ADR_SIGNAL_ANALYSIS_URL",
-    "evimed_offlabel_evidence_packet": "EVIMED_OFFLABEL_EVIDENCE_PACKET_URL",
-    "evimed_comprehensive_drug_evaluation": "EVIMED_COMPREHENSIVE_DRUG_EVALUATION_URL",
-    "evimed_drug_selection_evaluation": "EVIMED_DRUG_SELECTION_EVALUATION_URL",
-    "evimed_meta_analysis": "EVIMED_META_ANALYSIS_URL",
-    "evimed_mendelian_randomization": "EVIMED_MR_ANALYSIS_URL",
-    "evimed_bibliometric_analysis": "EVIMED_BIBLIOMETRIC_ANALYSIS_URL",
-    "evimed_research_topic_selection": "EVIMED_RESEARCH_TOPIC_SELECTION_URL",
-    "evimed_peer_review": "EVIMED_PEER_REVIEW_URL",
-    "evimed_drug_safety_analysis": "EVIMED_DRUG_SAFETY_ANALYSIS_URL",
+    "biomedical_source_search": "EVIMED_BIOMEDICAL_SOURCE_SEARCH_URL",
+    "literature_search": "EVIMED_LITERATURE_SEARCH_URL",
+    "guideline_search": "EVIMED_GUIDELINE_SEARCH_URL",
+    "clinical_trial_search": "EVIMED_CLINICAL_TRIAL_SEARCH_URL",
+    "patent_search": "EVIMED_PATENT_SEARCH_URL",
+    "pharmacy_reference_search": "EVIMED_PHARMACY_REFERENCE_SEARCH_URL",
+    "drug_label_search": "EVIMED_DRUG_LABEL_SEARCH_URL",
+    "adr_case_query": "EVIMED_ADR_CASE_QUERY_URL",
+    "adr_signal_analysis": "EVIMED_ADR_SIGNAL_ANALYSIS_URL",
+    "offlabel_evidence_packet": "EVIMED_OFFLABEL_EVIDENCE_PACKET_URL",
+    "comprehensive_drug_evaluation": "EVIMED_COMPREHENSIVE_DRUG_EVALUATION_URL",
+    "drug_selection_evaluation": "EVIMED_DRUG_SELECTION_EVALUATION_URL",
+    "meta_analysis": "EVIMED_META_ANALYSIS_URL",
+    "mendelian_randomization": "EVIMED_MR_ANALYSIS_URL",
+    "bibliometric_analysis": "EVIMED_BIBLIOMETRIC_ANALYSIS_URL",
+    "research_topic_selection": "EVIMED_RESEARCH_TOPIC_SELECTION_URL",
+    "peer_review": "EVIMED_PEER_REVIEW_URL",
+    "drug_safety_analysis": "EVIMED_DRUG_SAFETY_ANALYSIS_URL",
 }
 
 TERM_VOCABULARY = {
@@ -1076,7 +1076,7 @@ def _adapter_health():
     adapters = []
     for name, env_name in ADAPTER_ENV.items():
         url = os.environ.get(env_name, "").strip()
-        local_meta = name == "evimed_meta_analysis" and bool(os.environ.get("EVIMED_META_AGENT_ROOT", "").strip())
+        local_meta = name == "meta_analysis" and bool(os.environ.get("EVIMED_META_AGENT_ROOT", "").strip())
         specialist_spec = specialist_jobs.SPECS.get(name)
         local_specialist = bool(
             specialist_spec
@@ -1097,7 +1097,7 @@ def _adapter_health():
 
 
 def _public_adapter_call(name, arguments):
-    source_id = arguments.get("source") if name == "evimed_biomedical_source_search" else None
+    source_id = arguments.get("source") if name == "biomedical_source_search" else None
     circuit_name = "%s:%s" % (name, source_id) if source_id else name
     circuit_url = "public://%s" % circuit_name
     circuit_error = _circuit_before_call(circuit_name, circuit_url, name)
@@ -1414,9 +1414,9 @@ def call_tool(name, arguments):
         )
 
     assessment_tools = {
-        "evimed_offlabel_evidence_packet",
-        "evimed_comprehensive_drug_evaluation",
-        "evimed_drug_selection_evaluation",
+        "offlabel_evidence_packet",
+        "comprehensive_drug_evaluation",
+        "drug_selection_evaluation",
     }
     compile_only_fields = {
         "sourceInventory", "labelComparisons", "evidenceSupportAssessments", "domainAssessments",
@@ -1461,7 +1461,7 @@ def call_tool(name, arguments):
             )
         arguments = {key: value for key, value in arguments.items() if key != "action"}
 
-    if name == "evimed_health":
+    if name == "health":
         return success(
             "EviMed Research MCP is ready.",
             data=_data_with_provenance(
@@ -1480,7 +1480,7 @@ def call_tool(name, arguments):
                 _scope(),
             ),
         )
-    if name == "evimed_data_source_catalog":
+    if name == "data_source_catalog":
         data = source_catalog.search(arguments)
         if data["matched"] == 0:
             return warning(
@@ -1493,7 +1493,7 @@ def call_tool(name, arguments):
             "Matched %d audited data sources." % data["matched"],
             data=_data_with_provenance(data, name, arguments, _scope()),
         )
-    if name == "evimed_web_search":
+    if name == "web_search":
         try:
             result = web_search.search(arguments)
         except web_search.WebSearchError as error:
@@ -1509,17 +1509,17 @@ def call_tool(name, arguments):
             )
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
-    if name == "evimed_open_access_full_text":
+    if name == "open_access_full_text":
         result = open_access_fulltext.fetch(arguments)
         if result["status"] == "success":
             result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
-    if name == "evimed_official_page_fetch":
+    if name == "official_page_fetch":
         return _normalize_tool_result(name, official_pages.fetch(arguments), arguments, _scope())
-    if name in ("evimed_term_normalize", "evimed_drug_term_normalize"):
+    if name in ("term_normalize", "drug_term_normalize"):
         normalized_key = " ".join(arguments["term"].strip().split()).casefold()
         rxnorm = None
-        if name == "evimed_drug_term_normalize" and public_sources.enabled():
+        if name == "drug_term_normalize" and public_sources.enabled():
             try:
                 rxnorm = public_sources.rxnorm_resolve(arguments["term"])
             except public_sources.PublicSourceError:
@@ -1540,7 +1540,7 @@ def call_tool(name, arguments):
             )
             return success("Normalized the supplied term against the RxNorm vocabulary.", data=data)
         data = _normalize_term(arguments["term"])
-        if name == "evimed_term_normalize":
+        if name == "term_normalize":
             data["domain"] = arguments.get("domain", "general")
         else:
             data["domain"] = "drug"
@@ -1554,14 +1554,14 @@ def call_tool(name, arguments):
             ["Verify the term against an authoritative terminology (for example UMLS, RxNorm, or MeSH) before relying on it."],
             data=data,
         )
-    if name == "evimed_evidence_deduplicate":
+    if name == "evidence_deduplicate":
         data = _deduplicate(arguments["items"])
         return success(
             "Deduplicated %d evidence records into %d unique records."
             % (len(arguments["items"]), len(data["items"])),
             data=_data_with_provenance(data, name, arguments, _scope()),
         )
-    if name == "evimed_meta_analysis" and not os.environ.get("EVIMED_META_ANALYSIS_URL", "").strip():
+    if name == "meta_analysis" and not os.environ.get("EVIMED_META_ANALYSIS_URL", "").strip():
         if arguments.get("action") == "status":
             return _managed_status_with_wait(meta_agent.status_job, arguments)
         return meta_agent.call(arguments)

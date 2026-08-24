@@ -10,6 +10,7 @@ import {
   AgentRunStore,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
+  runPhaseHistory,
   terminalEvidenceSourceErrorCodes,
 } from "../src/agentRuns.mjs";
 import { deepResearchPackage, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
@@ -211,7 +212,16 @@ test("starts immutable open-domain and specialist run identities from research-s
     assert.equal((await stat(
       path.join(dataDir, "users", "dev", "projects", "default", ".openscience", "runs.jsonl"),
     )).mode & 0o077, 0);
-    assert.deepEqual(events.map((event) => event.event), ["started", "dispatch", "started", "dispatch"]);
+    // Progress events are timing-dependent — the fake kernel now records a real
+    // session log, so a monitor poll between the two dispatches legitimately
+    // observes one. What this test is about is run identity and the absence of
+    // prompt content, so it asserts the identity events in order and that no
+    // event outside the known vocabulary appears.
+    const identity = events.filter((event) => event.event === "started" || event.event === "dispatch");
+    assert.deepEqual(identity.map((event) => event.event), ["started", "dispatch", "started", "dispatch"]);
+    for (const event of events) {
+      assert.ok(["started", "dispatch", "progress", "notice", "finished"].includes(event.event), `unknown ledger event ${event.event}`);
+    }
     assert.equal(ledger.includes("prompt"), false);
     assert.equal(ledger.includes("content"), false);
     assert.equal(ledger.includes("token"), false);
@@ -987,7 +997,7 @@ test("clinical evidence source artifacts must come from successful retrieval too
         title: "突发压迫性胸闷与速效救心丸的临床判断",
         startedAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
-        tools: ["evimed_official_page_fetch"],
+        tools: ["official_page_fetch"],
         successfulSourceArtifacts: [sourceA, sourceB],
         failedSources: [],
         qualityChecks: { claimsVerified: true, citationsResolved: true, contradictionsChecked: true },
@@ -1128,6 +1138,98 @@ test("enforces bounded run count and ledger bytes without partial mutation", asy
   });
 });
 
+/** A run fixture whose root history and run-side projection are both scriptable. */
+async function delegatingRunFixture(t, { stallPolls = 3 } = {}) {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-projection-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const project = {
+    id: "project-1", userId: "user-1", rootDir: root,
+    metaDir: path.join(root, ".openscience"), workspaceDir: root,
+  };
+  await mkdir(project.metaDir, { recursive: true });
+  await mkdir(path.join(root, ".evimed-run"), { recursive: true });
+  const frames = [];
+  const store = new AgentRunStore({ get: async () => ({ sessionId: "ses_deleg", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null }) }, {
+    model: "deepseek/deepseek-v4-pro",
+    monitorIntervalMs: 1,
+    monitorMaxPolls: 40,
+    monitorStallPolls: stallPolls,
+    // The root session never moves again after this: it delegated and is waiting.
+    readSessionHistory: async () => [{ info: { id: "m1", role: "user" }, parts: [{ type: "text", text: "go" }] }],
+    readSessionStatus: async () => "running",
+    runtimeWorkspaceRoot: () => root,
+    onRunProjection: (_project, _run, type, data) => frames.push({ type, data }),
+  });
+  const writeProjection = (value) => writeFile(path.join(root, ".evimed-run", "state.json"), typeof value === "string" ? value : JSON.stringify(value), "utf8");
+  return { root, project, store, frames, writeProjection };
+}
+
+test("a run whose subagents are working is not judged stalled because its root session went quiet", async (t) => {
+  // The stall threshold reads the root session's message and tool-call counts,
+  // and a delegated stretch is exactly when those stop moving on purpose: the
+  // orchestrator hands work to children and waits. Before the run's own
+  // projection was read, that was indistinguishable from a run that had died,
+  // and the real clinical questions — the ones that delegate most — were the
+  // ones most likely to be killed by it.
+  const { project, store, writeProjection } = await delegatingRunFixture(t);
+  let evidence = 1;
+  await writeProjection({ evidence: { total: evidence, byStatus: { ready: evidence } }, budget: { children: 2 } });
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+
+  // Children keep ingesting evidence while the root says nothing at all.
+  const ticking = setInterval(() => {
+    evidence += 1;
+    void writeProjection({ evidence: { total: evidence, byStatus: { ready: evidence } }, budget: { children: 2 } });
+  }, 2);
+  await store.monitors.get(run.id)?.promise;
+  clearInterval(ticking);
+
+  const [finished] = await store.list(project);
+  assert.notEqual(finished.errorCode, "runtime_monitor_stalled", "a delegating run was killed by the stall threshold");
+  assert.equal(finished.errorCode, "runtime_monitor_timeout", "it should run out the window, not be judged dead");
+});
+
+test("a run-side projection that will not parse is a named notice, never evidence of a stall", async (t) => {
+  // §14 rule 18. Counting an unreadable file as "did not move" would mean the
+  // fix for stall misjudgement introduced a fresh source of it.
+  const { project, store, writeProjection } = await delegatingRunFixture(t, { stallPolls: 2 });
+  await writeProjection("{ this is not json");
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  await store.monitors.get(run.id)?.promise;
+
+  const [finished] = await store.list(project);
+  assert.notEqual(finished.errorCode, "runtime_monitor_stalled", "an unreadable projection fed the stall counter");
+  assert.ok(
+    (finished.qualityNotices ?? []).some((line) => /state\.json/.test(line)),
+    `the unreadable projection was never said out loud: ${JSON.stringify(finished.qualityNotices ?? [])}`,
+  );
+  // Said once, not once per poll: the monitor woke many times over the same file.
+  assert.equal((finished.qualityNotices ?? []).filter((line) => /state\.json/.test(line)).length, 1);
+});
+
+test("projection frames are sent when the projection changes and not on every poll", async (t) => {
+  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0 });
+  await writeProjection({ evidence: { total: 1, byStatus: { ready: 1 } }, budget: { steps: 3, tokens: 10, children: 1, limits: { maxSteps: 100 } } });
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  const afterFirst = frames.length;
+  assert.ok(afterFirst >= 2, `the first read must send both frames, got ${JSON.stringify(frames)}`);
+  assert.deepEqual(frames.filter((frame) => frame.type === "evidence/update")[0].data, { total: 1, byStatus: { ready: 1 } });
+  assert.deepEqual(frames.filter((frame) => frame.type === "budget/update")[0].data, { steps: 3, tokens: 10, children: 1, limits: { maxSteps: 100 } });
+
+  // Many more polls over an unchanged file must add nothing.
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.equal(frames.length, afterFirst, "an unchanged projection was republished");
+
+  // Only what changed goes out again.
+  await writeProjection({ evidence: { total: 2, byStatus: { ready: 2 } }, budget: { steps: 3, tokens: 10, children: 1, limits: { maxSteps: 100 } } });
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  const added = frames.slice(afterFirst);
+  assert.ok(added.length >= 1, "a changed projection was not published");
+  assert.ok(added.every((frame) => frame.type === "evidence/update"), `the budget was unchanged and must not be resent: ${JSON.stringify(added)}`);
+  store.monitors.get(run.id)?.cancel();
+});
+
 test("a run that stops making progress is failed instead of waiting out the timeout", async () => {
   // start/dispatch/finish cannot distinguish a long run from a dead one, so a
   // run that died early still held its slot for the whole monitor window.
@@ -1155,7 +1257,7 @@ test("a run that stops making progress is failed instead of waiting out the time
     const run = await store.start(project, { sessionId: "ses_stall" });
 
     // Move once, then go quiet: the run must be failed for stalling, not for timing out.
-    history = [...history, { info: { id: "m2", role: "assistant" }, parts: [{ type: "tool", tool: "evimed_health" }] }];
+    history = [...history, { info: { id: "m2", role: "assistant" }, parts: [{ type: "tool", tool: "health" }] }];
     await store.monitors.get(run.id)?.promise;
 
     const [finished] = await store.list(project);
@@ -2059,12 +2161,13 @@ test("a definitively rejected prompt terminally fails its reserved run", async (
 
 test("hosted dispatch survives a lost browser response and an idempotent repeat never resends the prompt", async () => {
   await withApp(async ({ base }) => {
-    const createdResponse = await fetch(`${base}/api/opencode/default/session`, {
+    // The browser asks the control plane for a session; it never asks a kernel.
+    const createdResponse = await fetch(`${base}/api/runtime/sessions`, {
       method: "POST",
       headers: projectHeaders("default", true),
       body: "{}",
     });
-    const session = await createdResponse.json();
+    const session = (await createdResponse.json()).data;
     assert.equal(createdResponse.status, 200);
     assert.equal((await bind(base, session.id, { mode: "open-domain" })).status, 200);
     const dispatchId = "turn_lost_response";
@@ -2088,11 +2191,11 @@ test("hosted dispatch survives a lost browser response and an idempotent repeat 
     assert.ok([200, 202].includes(repeated.response.status));
     assert.equal(repeated.body.data.dispatchId, dispatchId);
     const historyResponse = await fetch(
-      `${base}/api/opencode/default/session/${encodeURIComponent(session.id)}/message`,
+      `${base}/api/runtime/sessions/${encodeURIComponent(session.id)}/transcript`,
       { headers: projectHeaders() },
     );
-    const history = await historyResponse.json();
-    assert.equal(history.filter((message) => message?.info?.role === "user").length, 1);
+    const transcript = (await historyResponse.json()).data;
+    assert.equal(transcript.messages.filter((message) => message.role === "user").length, 1);
   });
 });
 
@@ -2768,7 +2871,7 @@ test("every repairable rejection is a code the gate actually returns", async () 
   const missing = /const missingOutputErrorCodes = Object\.freeze\(\{([\s\S]*?)\n\}\);/.exec(source);
   assert.ok(missing, "the missing-deliverable code table moved");
   for (const [, code] of missing[1].matchAll(/:\s*"(specialist_[a-z_]+)"/g)) returned.add(code);
-  const gate = await readFile(new URL("../src/clinicalEvidenceQuality.mjs", import.meta.url), "utf8");
+  const gate = await readFile(new URL("../../../packages/domain/src/clinicalEvidence.mjs", import.meta.url), "utf8");
   const table = /const clinicalEvidenceIssueCodes = Object\.freeze\(\[([\s\S]*?)\n\]\);/.exec(gate);
   assert.ok(table, "the gate's error-code table moved");
   for (const [, code] of table[1].matchAll(/code:\s*"([a-z_-]+)"/g)) returned.add(code);
@@ -3001,7 +3104,7 @@ test("replacing the report during repair is named, not just its shrinkage", asyn
 })
 
 test("an unreachable open web does not fail a complete package", () => {
-  // Adding evimed_web_search without classifying its failure codes failed a run
+  // Adding web_search without classifying its failure codes failed a run
   // that had written all ten deliverables, six full texts and sixty-seven works,
   // because one engine rate-limited. The open web is the channel most expected
   // to be partly unreachable; a miss there is not a broken run.
@@ -3244,8 +3347,18 @@ function coverageJudgeFetchStub(calls) {
 
 /** Deliver the shared fixture package through the store and return the terminal
  *  run, with whatever coverage judge the caller supplies.
+ *
+ *  `finished` is the delivery decision as reconcileSession returned it.
+ *  `delivered` is what a later reader of /api/agent-runs sees, after every
+ *  coverage judgement still in flight at delivery time has landed.
+ *  `forgetBrief` drops the server's in-memory copy of the brief before the gate
+ *  runs, which is exactly the state a restart leaves a run in.
  *  @param {string} label @param {Record<string, any>} options */
-async function deliverClinicalPackage(label, { coverageJudge = null, mutate = null } = {}) {
+async function deliverClinicalPackage(label, {
+  coverageJudge = null,
+  mutate = null,
+  forgetBrief = false,
+} = {}) {
   const root = await mkdtemp(path.join(tmpdir(), `os-agent-run-${label}-`));
   const project = {
     id: "project-1",
@@ -3350,11 +3463,16 @@ async function deliverClinicalPackage(label, { coverageJudge = null, mutate = nu
       { type: "text", text: "Completed." },
     ],
   }];
+  if (forgetBrief) store.dispatchedBriefs.delete(run.id);
   const finished = await store.reconcileSession(project, binding.sessionId);
   assert.equal(finished.id, run.id);
+  // The judgement is no longer awaited by the delivery decision, so read the
+  // run again once it has landed — this is the reader's view, not the gate's.
+  await store.settleCoverageJudgements();
+  const delivered = (await store.list(project)).find((item) => item.id === run.id);
   await store.closeProject(project, "canceled");
   await rm(root, { recursive: true, force: true });
-  return { finished, store, runId: run.id };
+  return { finished, delivered, store, runId: run.id };
 }
 
 test("a semantic coverage verdict rides on a delivered package as a notice, and never withholds it", async () => {
@@ -3369,17 +3487,127 @@ test("a semantic coverage verdict rides on a delivered package as a notice, and 
     production: false,
   }, { fetchImpl: coverageJudgeFetchStub(calls) });
 
-  const { finished, store, runId } = await deliverClinicalPackage("judge", { coverageJudge });
+  const { finished, delivered, store, runId } = await deliverClinicalPackage("judge", { coverageJudge });
   assert.equal(calls.length, 1, "one finished run, one model call");
   // The judgement is a notice about meaning; it cannot fail a package.
   assert.equal(finished.status, "succeeded");
   assert.equal(finished.errorCode, null);
   assert.notEqual(finished.verification, "unverified");
-  assert.match(finished.qualityNotices.join("\n"), /语义覆盖判定/);
-  assert.match(finished.qualityNotices.join("\n"), /台账条目 1\.1/);
-  assert.match(finished.qualityNotices.join("\n"), /未经核对/);
+  // It reaches the reader through the run ledger, which is what /api/agent-runs
+  // serves, rather than through the terminal event the gate wrote.
+  assert.match(delivered.qualityNotices.join("\n"), /语义覆盖判定/);
+  assert.match(delivered.qualityNotices.join("\n"), /台账条目 1\.1/);
+  assert.match(delivered.qualityNotices.join("\n"), /未经核对/);
+  // And it changed nothing about the delivery itself.
+  assert.equal(delivered.status, "succeeded");
+  assert.equal(delivered.errorCode, null);
+  assert.deepEqual(delivered.artifacts, finished.artifacts);
+  assert.equal(delivered.finishedAt, finished.finishedAt);
+  assert.equal(delivered.verification, finished.verification);
   // The brief went to the judge, but the run ledger still holds only a preview.
-  assert.equal(store.coverageJudgements.has(runId), false, "a terminal run releases its judgement");
+  assert.equal(store.coverageJudgements.has(runId), false, "a settled judgement releases its cache entry");
+});
+
+test("the delivery decision does not wait for the judgement", async () => {
+  // 29 live judgements: median 161 s, max 226 s. reconcileSession is awaited by
+  // the dispatch and start HTTP handlers, so awaiting the judge here was three
+  // minutes of a user's request spent on something that cannot change the
+  // answer. The gate must return while the model is still thinking.
+  let release = () => {};
+  const started = [];
+  const coverageJudge = {
+    judge: (context) => new Promise((resolve) => {
+      started.push(context);
+      release = () => resolve({ notices: ["语义覆盖判定（不阻断交付）：迟到的结论。"], judged: true, verdicts: [] });
+    }),
+  };
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-judge-async-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const store = new AgentRunStore({ get: async () => null }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => [],
+      coverageJudge,
+    });
+    store.scheduleMonitor = () => {};
+    const binding = { sessionId: "ses_async", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const { run } = await store.reserveRun(project, binding, { baselineCursor: null });
+    const pending = store.scheduleCoverageJudgement(project, run.id, { entries: [] });
+    assert.equal(started.length, 1, "the judge was started");
+
+    // The run reaches its terminal state with the model still running.
+    const finished = await store.finishInternal(project, run.id, {
+      status: "succeeded",
+      errorCode: null,
+      artifacts: [],
+    });
+    assert.equal(finished.status, "succeeded");
+    assert.deepEqual(finished.qualityNotices, [], "nothing waited for the judge");
+
+    release();
+    await pending;
+    const delivered = (await store.list(project)).find((item) => item.id === run.id);
+    assert.deepEqual(delivered.qualityNotices, ["语义覆盖判定（不阻断交付）：迟到的结论。"]);
+    // Attached without reopening the run.
+    assert.equal(delivered.status, "succeeded");
+    assert.equal(delivered.finishedAt, finished.finishedAt);
+    assert.equal(delivered.durationMs, finished.durationMs);
+    assert.equal(delivered.verification, null, "a judgement that ran does not mark the run unchecked");
+    await store.settleCoverageJudgements();
+    assert.equal(store.coverageJudgements.has(run.id), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a judgement that arrives before the run finishes is not overwritten by the terminal event", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-judge-early-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const store = new AgentRunStore({ get: async () => null }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => [],
+      coverageJudge: { judge: async () => ({ notices: ["语义覆盖判定：早到的结论。"], judged: false, verdicts: [] }) },
+    });
+    store.scheduleMonitor = () => {};
+    const binding = { sessionId: "ses_early", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const { run } = await store.reserveRun(project, binding, { baselineCursor: null });
+    await store.scheduleCoverageJudgement(project, run.id, { entries: [] });
+    const running = (await store.list(project)).find((item) => item.id === run.id);
+    assert.equal(running.status, "running", "a notice must not finish a run");
+    assert.deepEqual(running.qualityNotices, ["语义覆盖判定：早到的结论。"]);
+
+    const finished = await store.finishInternal(project, run.id, {
+      status: "succeeded",
+      errorCode: null,
+      artifacts: [],
+      qualityNotices: ["门禁自己的说明。"],
+    });
+    // The gate's own notices lead; the early judgement survives behind them.
+    assert.deepEqual(finished.qualityNotices, ["门禁自己的说明。", "语义覆盖判定：早到的结论。"]);
+    // And so does the admission it carried: a terminal event that says nothing
+    // about verification must not silently overwrite one that already did.
+    assert.equal(finished.verification, "unchecked");
+    assert.equal((await store.list(project)).find((item) => item.id === run.id).verification, "unchecked");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("the judge is asked at most once per run, however many times the delivery decision is reached", async () => {
@@ -3396,13 +3624,28 @@ test("the judge is asked at most once per run, however many times the delivery d
         },
       },
     });
-    const first = await store.judgeCoverageOnce("run_1", {});
-    const second = await store.judgeCoverageOnce("run_1", {});
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const first = await store.scheduleCoverageJudgement(project, "run_1", { entries: [] });
+    const second = await store.scheduleCoverageJudgement(project, "run_1", { entries: [] });
     assert.equal(calls, 1, "a repeat pass over the same finished run must reuse the answer");
     assert.deepEqual(first, second);
     // In flight, not merely already resolved: two monitor passes landing
     // together must not both issue a call.
-    await Promise.all([store.judgeCoverageOnce("run_2", {}), store.judgeCoverageOnce("run_2", {})]);
+    await Promise.all([
+      store.scheduleCoverageJudgement(project, "run_2", { entries: [] }),
+      store.scheduleCoverageJudgement(project, "run_2", { entries: [] }),
+    ]);
+    assert.equal(calls, 2);
+    // Nothing judgeable is nothing to pay for, and nothing to remember either.
+    assert.equal(store.scheduleCoverageJudgement(project, "run_3", null), null);
     assert.equal(calls, 2);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -3411,16 +3654,41 @@ test("the judge is asked at most once per run, however many times the delivery d
 
 test("a coverage judge that throws leaves the finished package exactly as it was", async () => {
   const coverageJudge = { judge: async () => { throw new Error("judge exploded"); } };
-  const { finished } = await deliverClinicalPackage("judge-throws", { coverageJudge });
+  const { finished, delivered } = await deliverClinicalPackage("judge-throws", { coverageJudge });
   assert.equal(finished.status, "succeeded");
   assert.equal(finished.errorCode, null);
-  assert.doesNotMatch(finished.qualityNotices.join("\n"), /语义覆盖判定/);
+  assert.equal(delivered.status, "succeeded");
+  assert.equal(delivered.errorCode, null);
+  assert.doesNotMatch(delivered.qualityNotices.join("\n"), /语义覆盖判定/);
+  assert.equal(delivered.verification, null);
+});
+
+test("a judge that was asked and could not answer marks the delivery unchecked", async () => {
+  // The one thing that must not happen is the degraded notice riding on a run
+  // whose machine-readable verdict still reads "nothing to report".
+  const coverageJudge = {
+    judge: async () => ({
+      notices: ["本次交付未做语义覆盖判定（「所引正文是否真的在回答这一问」这一层）：判定模型不可用（timeout）。"],
+      judged: false,
+      verdicts: [],
+    }),
+  };
+  const { finished, delivered } = await deliverClinicalPackage("judge-declined", { coverageJudge });
+  assert.equal(finished.status, "succeeded");
+  assert.equal(delivered.status, "succeeded", "an admission never reopens a run");
+  assert.equal(delivered.errorCode, null);
+  assert.match(delivered.qualityNotices.join("\n"), /未做语义覆盖判定/);
+  assert.equal(delivered.verification, "unchecked");
 });
 
 test("no coverage judge configured delivers exactly as before", async () => {
-  const { finished } = await deliverClinicalPackage("judge-absent");
+  const { finished, delivered } = await deliverClinicalPackage("judge-absent");
   assert.equal(finished.status, "succeeded");
   assert.equal(finished.errorCode, null);
+  // A deployment that never turned the judge on is not an unchecked delivery:
+  // a mark on every run of every such deployment would mean nothing.
+  assert.equal(delivered.verification, null);
+  assert.deepEqual(delivered.qualityNotices, finished.qualityNotices);
 });
 
 test("the judge is not consulted while a blocking issue is still holding the package", async () => {
@@ -3442,4 +3710,379 @@ test("the judge is not consulted while a blocking issue is still holding the pac
   // finding, and that is the state in which a semantic opinion is noise.
   assert.match(finished.qualityNotices.join("\n"), /supportQuote was not found in its preserved source artifact/);
   assert.equal(calls, 0);
+});
+
+// --- "not checked" is not "checked and clean" --------------------------------
+
+/** Drop the ledger entry that accounts for the brief's second question, so the
+ *  package is complete and self-consistent and answers one question fewer than
+ *  it was asked. @param {any} pkg */
+function dropSecondQuestionEntry(pkg) {
+  const ledger = JSON.parse(pkg.questionCoverageText);
+  ledger.entries = ledger.entries.filter((entry) => !String(entry.id).startsWith("2."));
+  pkg.questionCoverageText = JSON.stringify(ledger);
+}
+
+test("a delivery whose coverage check could not run says so in the field operations reads", async () => {
+  // Measured, same package, only the availability of the brief changed:
+  //   brief in hand   → succeeded / unverified / "MUST FIX — 题面第 2 问…"
+  //   brief lost      → succeeded / null       / one degradation notice
+  // The second is the more dangerous state and read as the safer one: null is
+  // the value a package that passed every check carries.
+  const withBrief = await deliverClinicalPackage("coverage-brief", { mutate: dropSecondQuestionEntry });
+  assert.equal(withBrief.finished.status, "succeeded");
+  assert.equal(withBrief.finished.verification, "unverified");
+  assert.match(withBrief.finished.qualityNotices.join("\n"), /MUST FIX/);
+  assert.match(withBrief.finished.qualityNotices.join("\n"), /第 2 问/);
+
+  const withoutBrief = await deliverClinicalPackage("coverage-restart", {
+    mutate: dropSecondQuestionEntry,
+    forgetBrief: true,
+  });
+  assert.equal(withoutBrief.finished.status, "succeeded", "a lost brief is not the run's fault");
+  assert.equal(
+    withoutBrief.finished.verification,
+    "unchecked",
+    "a layer that did not run must not be reported as a layer that found nothing",
+  );
+  // The human-readable explanation is kept exactly as it was.
+  assert.match(withoutBrief.finished.qualityNotices.join("\n"), /未按题面逐问核对覆盖/);
+  // And the reader of /api/agent-runs gets the field, not just the prose.
+  assert.equal(withoutBrief.delivered.verification, "unchecked");
+  assert.notEqual(withoutBrief.finished.verification, withBrief.finished.verification);
+});
+
+test("a clean package with every layer run stays null, and a finding still outranks an admission", async () => {
+  // Null must keep meaning "checked, nothing to report", or the third value
+  // buys nothing.
+  const clean = await deliverClinicalPackage("coverage-clean");
+  assert.equal(clean.finished.status, "succeeded");
+  assert.equal(clean.finished.verification, null);
+
+  // Brief lost AND a blocking finding of another kind: "we checked and it did
+  // not hold up" is the more serious statement and is the one shown.
+  const both = await deliverClinicalPackage("coverage-both", {
+    forgetBrief: true,
+    mutate: (pkg) => { pkg.matrix.claims[0].supportQuote = "这句话在它所引的来源里并不存在。"; },
+  });
+  assert.equal(both.finished.verification, "unverified");
+  assert.match(both.finished.qualityNotices.join("\n"), /未按题面逐问核对覆盖/);
+});
+
+test("GET /api/agent-runs serves the unchecked verdict and the notice that landed after delivery", async () => {
+  // The whole point of a machine-readable third value is that the machines
+  // reading it get it. This is the route operations and the UI actually read.
+  await withApp(async ({ base, dataDir }) => {
+    const ledgerDir = path.join(dataDir, "users", "dev", "projects", "default", ".openscience");
+    await mkdir(ledgerDir, { recursive: true });
+    const timestamp = "2026-08-16T00:00:00.000Z";
+    const events = [
+      {
+        event: "started",
+        id: "run_0001",
+        sessionId: "ses_0001",
+        mode: "open-domain",
+        agentId: null,
+        agentVersion: null,
+        runtimeAgent: null,
+        model: "deepseek/deepseek-v4-pro",
+        createdAt: timestamp,
+        startedAt: timestamp,
+      },
+      {
+        event: "finished",
+        id: "run_0001",
+        status: "succeeded",
+        errorCode: null,
+        artifacts: [],
+        verification: "unchecked",
+        qualityNotices: ["本次交付未按题面逐问核对覆盖。"],
+        finishedAt: timestamp,
+        durationMs: 1,
+      },
+      {
+        event: "notice",
+        id: "run_0001",
+        at: timestamp,
+        qualityNotices: ["语义覆盖判定（不阻断交付）：1 处疑点。"],
+      },
+    ];
+    await writeFile(
+      path.join(ledgerDir, "runs.jsonl"),
+      `${events.map((event) => JSON.stringify(event)).join("\n")}\n`,
+      "utf8",
+    );
+    const listed = await listRuns(base);
+    assert.equal(listed.response.status, 200);
+    const run = listed.body.data.find((item) => item.id === "run_0001");
+    assert.equal(run.status, "succeeded");
+    assert.equal(run.verification, "unchecked");
+    assert.deepEqual(run.qualityNotices, [
+      "本次交付未按题面逐问核对覆盖。",
+      "语义覆盖判定（不阻断交付）：1 处疑点。",
+    ]);
+  });
+});
+
+test("a stored verification value outside the three is read as null", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-verification-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const store = new AgentRunStore({ get: async () => null }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => [],
+    });
+    store.scheduleMonitor = () => {};
+    const binding = { sessionId: "ses_v", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const { run } = await store.reserveRun(project, binding, { baselineCursor: null });
+    const finished = await store.finishInternal(project, run.id, {
+      status: "succeeded",
+      errorCode: null,
+      artifacts: [],
+      verification: "definitely-fine",
+    });
+    assert.equal(finished.verification, null);
+    const unchecked = await store.reserveRun(project, { ...binding, sessionId: "ses_v2" }, { baselineCursor: null });
+    const second = await store.finishInternal(project, unchecked.run.id, {
+      status: "succeeded",
+      errorCode: null,
+      artifacts: [],
+      verification: "unchecked",
+    });
+    assert.equal(second.verification, "unchecked", "the third value survives a round trip through the ledger");
+    assert.equal(
+      (await store.list(project)).find((item) => item.id === unchecked.run.id).verification,
+      "unchecked",
+    );
+    // An admission may not overwrite a finding, whichever order they arrive in.
+    const found = await store.reserveRun(project, { ...binding, sessionId: "ses_v3" }, { baselineCursor: null });
+    await store.finishInternal(project, found.run.id, {
+      status: "succeeded",
+      errorCode: null,
+      artifacts: [],
+      verification: "unverified",
+    });
+    const after = await store.appendQualityNotices(project, found.run.id, ["某一层没跑。"], { unchecked: true });
+    assert.equal(after.verification, "unverified");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// Shutdown used to cancel a monitor and return immediately. A monitor reads its
+// cancel flag between polls, so one that was mid-poll kept going: it wrote to a
+// project directory the caller had already finished with, and the failure
+// surfaced as "agent run not found" somewhere unrelated. It only reproduced
+// under load, which is the worst kind of true.
+test("closing a project waits for its monitor instead of only asking it to stop", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-close-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_close", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let reads = 0;
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      // An interval far longer than this test may take, so a close that waited
+      // out the sleep instead of interrupting it would time the test out rather
+      // than pass slowly and unnoticed.
+      monitorIntervalMs: 10 * 60_000,
+      monitorMaxPolls: 50,
+      readSessionHistory: async () => {
+        reads += 1;
+        return [];
+      },
+      readSessionStatus: async () => "busy",
+    });
+    const run = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_close" }, async () => ({ accepted: true }));
+
+    const startedAt = Date.now();
+    await store.closeProject(project, "canceled");
+    const elapsed = Date.now() - startedAt;
+
+    assert.ok(elapsed < 30_000, `closeProject took ${elapsed} ms; a cancel must interrupt the sleep, not wait it out`);
+    assert.equal(store.monitors.has(run.id), false, "a closed project leaves no monitor behind");
+
+    // And nothing touches the project's storage afterwards. The read counter is
+    // the observable proxy: a monitor still alive would keep polling.
+    const after = reads;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(reads, after, "a monitor kept polling after its project was closed");
+
+    const runs = await store.list(project);
+    assert.equal(runs.find((item) => item.id === run.id)?.status, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// §7.1.1 (decision 2026-08-24 #20): `phase` is what `list()` adds beside the
+// ledger's own four-value `status` — computed, never stored, and reachable
+// from an ordinary dispatch → progress → finish sequence without needing
+// anything the ledger does not already record today.
+test("list() exposes the phase projection beside the ledger's own status", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-phase-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_phase", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 100,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "busy",
+    });
+    store.scheduleMonitor = () => {};
+
+    const run = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_phase" }, async () => ({ accepted: true }));
+
+    // Freshly dispatched, no progress observed yet: `dispatched`, not `reserved`
+    // — this store always accepts a dispatch synchronously (`dispatchStatus`
+    // never lingers at `dispatching` once the sender has been awaited).
+    const beforeProgress = (await store.list(project)).find((item) => item.id === run.id);
+    assert.equal(beforeProgress.status, "running");
+    assert.equal(beforeProgress.phase, "dispatched");
+    assert.equal(beforeProgress.phaseIllegalTransitions, 0);
+    assert.equal("phaseNotices" in beforeProgress, false, "a clean sequence carries no notices at all");
+
+    history = [{ info: { id: "msg_1", role: "assistant" }, parts: [{ type: "text", text: "working" }] }];
+    assert.equal(await store.recordProgress(project, run), true);
+    const whileRunning = (await store.list(project)).find((item) => item.id === run.id);
+    assert.equal(whileRunning.phase, "running");
+
+    await store.finishInternal(project, run.id, { status: "succeeded", artifacts: [] });
+    const succeededClean = (await store.list(project)).find((item) => item.id === run.id);
+    assert.equal(succeededClean.status, "succeeded");
+    assert.equal(succeededClean.phase, "accepted", "no verification concern and not partial: accepted, not degraded");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a run degraded by unverified content projects the degraded phase, and canceled/failed project straight across", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-phase-degraded-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const store = new AgentRunStore({ get: async (_p, sessionId) => ({ sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null }) }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 100,
+      readSessionHistory: async () => [],
+      readSessionStatus: async () => "busy",
+    });
+    store.scheduleMonitor = () => {};
+
+    const degraded = await store.dispatch(project, { sessionId: "ses_degraded", dispatchId: "turn_degraded" }, async () => ({ accepted: true }));
+    await store.finishInternal(project, degraded.id, { status: "succeeded", artifacts: [], verification: "unverified" });
+
+    const canceled = await store.dispatch(project, { sessionId: "ses_canceled", dispatchId: "turn_canceled" }, async () => ({ accepted: true }));
+    await store.finishInternal(project, canceled.id, { status: "canceled", artifacts: [] });
+
+    const failed = await store.dispatch(project, { sessionId: "ses_failed", dispatchId: "turn_failed" }, async () => ({ accepted: true }));
+    await store.finishInternal(project, failed.id, { status: "failed", artifacts: [], errorCode: "runtime_tool_error" });
+
+    const byId = new Map((await store.list(project)).map((item) => [item.id, item]));
+    assert.equal(byId.get(degraded.id).phase, "degraded");
+    assert.equal(byId.get(canceled.id).phase, "canceled");
+    assert.equal(byId.get(failed.id).phase, "failed");
+    // Terminal phases are exactly the ledger's four terminal statuses read
+    // straight across, none of them flagged as an illegal sequence.
+    for (const record of byId.values()) assert.equal(record.phaseIllegalTransitions, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// The adjacency check itself, direct: a sequence `foldEvents` accepts (a
+// terminal event only ever requires `status === "running"`, never checking
+// `dispatchStatus` for consistency) but that the *phase* table calls illegal —
+// finishing a run while it is still formally awaiting dispatch acknowledgment,
+// with no `dispatch` event ever landing in between. Not reachable through
+// `AgentRunStore`'s public API (which is exactly why this mechanism exists as
+// a read-time diagnostic rather than a write-time gate: the ledger is allowed
+// to contain sequences nothing written after this design existed would ever
+// produce).
+test("runPhaseHistory counts and names an illegal phase sequence instead of throwing", () => {
+  const events = [
+    { event: "started", id: "run_1", dispatchId: "turn_1", sessionId: "ses_1", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null, model: "deepseek/deepseek-v4-pro", createdAt: "2026-08-24T00:00:00.000Z", startedAt: "2026-08-24T00:00:00.000Z" },
+    { event: "finished", id: "run_1", status: "succeeded", finishedAt: "2026-08-24T00:00:01.000Z", durationMs: 1000, artifacts: [] },
+  ];
+  const result = runPhaseHistory(events, "run_1");
+  assert.equal(result.phase, "accepted", "the final phase is still reported — a diagnostic, not a refusal to answer");
+  assert.equal(result.illegalTransitions, 1);
+  assert.deepEqual(result.notices, ["illegal_state_transition: reserved -> accepted"]);
+
+  // The ordinary path — dispatch acknowledged before the run finishes — is not
+  // flagged, whatever order the acknowledgment and the terminal event actually
+  // reach the ledger's ordinary shape in.
+  const ordinary = runPhaseHistory([
+    events[0],
+    { event: "dispatch", id: "run_1", status: "accepted" },
+    events[1],
+  ], "run_1");
+  assert.equal(ordinary.illegalTransitions, 0);
+  assert.deepEqual(ordinary.notices, []);
+});
+
+// The SSE `run/state` frame's `phase` field and the HTTP `/api/agent-runs`
+// list's `phase` field both trace back to this one call site: every push
+// notification passes through `notifyState`, which is the choke point that has
+// to attach `phase` so `onRunStateChanged` — server.mjs's callback that
+// publishes the SSE frame — never sees a record without it.
+test("every state-change notification carries the phase projection", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-notify-phase-"));
+  try {
+    const project = { id: "project-1", userId: "user-1", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const seen = [];
+    const store = new AgentRunStore({ get: async (_p, sessionId) => ({ sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null }) }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 100,
+      readSessionHistory: async () => [],
+      onRunStateChanged: (_project, run) => seen.push(run.phase),
+    });
+    store.scheduleMonitor = () => {};
+
+    const run = await store.dispatch(project, { sessionId: "ses_notify", dispatchId: "turn_notify" }, async () => ({ accepted: true }));
+    assert.equal(seen.at(-1), "dispatched", "the dispatch notification itself carries the phase, not just list() later");
+
+    await store.finishInternal(project, run.id, { status: "succeeded", artifacts: [] });
+    assert.equal(seen.at(-1), "accepted");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

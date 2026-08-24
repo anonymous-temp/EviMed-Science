@@ -54,6 +54,9 @@ const maxWhyCharacters = 110;
 const maxQuoteCharacters = 60;
 // A quote short enough to appear on any line by accident verifies nothing.
 const minQuoteContentCharacters = 6;
+// How many balanced `{…}` spans of a rambling answer are worth trying. The
+// answer, when it is there at all, is at the end, so the newest are kept.
+const maxJsonCandidates = 32;
 
 const judgeInstructions = [
   "You audit whether a finished clinical evidence report actually answers the questions its research brief asked.",
@@ -91,6 +94,45 @@ async function boundedJsonResponse(response, maximumBytes = 256 * 1024) {
   return JSON.parse(text);
 }
 
+/** Every balanced `{…}` span in the text, in the order each one closes.
+ *
+ *  This replaces a `/\{[\s\S]*\}/g` match that was greedy and therefore always
+ *  a single span running from the first brace to the last, which made the
+ *  reverse-and-retry loop below it dead code: prose containing a stray brace
+ *  („先想一下 {population} 的问题…") and an answer containing two JSON objects
+ *  both parsed as one malformed blob and were thrown away. Only "pure JSON" and
+ *  "prose plus exactly one object" ever survived.
+ *
+ *  Quotes are honoured as JSON string delimiters once inside an object, so a
+ *  brace inside a quotation — every `why` field is free Chinese text — cannot
+ *  close it early. Outside an object the text is prose, not JSON, and its
+ *  punctuation is ignored.
+ *  @param {string} raw @returns {string[]} */
+function balancedObjectSpans(raw) {
+  /** @type {string[]} */
+  const spans = [];
+  /** @type {number[]} */
+  const opens = [];
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === "\"") inString = false;
+      continue;
+    }
+    if (char === "\"" && opens.length > 0) inString = true;
+    else if (char === "{") opens.push(index);
+    else if (char === "}" && opens.length > 0) {
+      spans.push(raw.slice(/** @type {number} */ (opens.pop()), index + 1));
+      if (spans.length > maxJsonCandidates) spans.shift();
+    }
+  }
+  return spans;
+}
+
 /** The verdict list, wherever the model put it. Same recovery as the specialist
  *  classifier: a reasoning model that runs its budget close still often carries
  *  the JSON in reasoning_content, and a judgement already paid for should not be
@@ -104,9 +146,11 @@ export function parseJudgeVerdicts(content) {
   try {
     return fromObject(JSON.parse(raw));
   } catch { /* fall through to the balanced-object scan */ }
-  for (const match of [...raw.matchAll(/\{[\s\S]*\}/g)].reverse()) {
+  // Last first: a model that thinks out loud writes its answer at the end, and
+  // an outer object closes after the inner ones it contains.
+  for (const span of balancedObjectSpans(raw).reverse()) {
     try {
-      const verdicts = fromObject(JSON.parse(match[0]));
+      const verdicts = fromObject(JSON.parse(span));
       if (verdicts) return verdicts;
     } catch { /* keep looking */ }
   }
@@ -134,11 +178,16 @@ function contentOnly(value) {
  *
  * @param {any} rawVerdicts
  * @param {NonNullable<ReturnType<typeof import("./clinicalEvidenceQuality.mjs").coverageJudgeContext>>} context
- * @returns {{ kept: { entryId: string, kind: string, line: number, section: string, quote: string, why: string, question: string }[], discarded: Record<string, number> }}
+ * @returns {{ kept: { entryId: string, kind: string, line: number, section: string, quote: string, why: string, question: string }[], discarded: Record<string, number>, omitted: number }}
  */
 export function verifiedCoverageVerdicts(rawVerdicts, context) {
   /** @type {Record<string, number>} */
   const discarded = {};
+  // Verdicts that passed every check and were still left out for want of room.
+  // Three packages in the 30-package corpus came back with exactly 8 kept
+  // verdicts — the cap — so at least those three were cut, and a list that is
+  // silently the first 8 of an unknown number reads as the whole of it.
+  let omitted = 0;
   const drop = (reason) => { discarded[reason] = (discarded[reason] ?? 0) + 1; return null; };
   const byId = new Map(context.entries.map((entry) => [entry.id, entry]));
   const kept = [];
@@ -205,6 +254,13 @@ export function verifiedCoverageVerdicts(rawVerdicts, context) {
     const key = `${entryId} ${kind} ${line}`;
     if (seen.has(key)) { drop("duplicate"); continue; }
     seen.add(key);
+    if (kept.length >= maxVerdicts) {
+      // Verified, then not shown. Counting it costs nothing — everything above
+      // is a lookup against data already in memory — and it is the difference
+      // between "these are the doubts" and "these are eight of the doubts".
+      omitted += 1;
+      continue;
+    }
     kept.push({
       entryId,
       kind,
@@ -214,9 +270,8 @@ export function verifiedCoverageVerdicts(rawVerdicts, context) {
       why,
       question: entry.question,
     });
-    if (kept.length >= maxVerdicts) break;
   }
-  return { kept, discarded };
+  return { kept, discarded, omitted };
 }
 
 const kindHeading = Object.freeze({
@@ -232,11 +287,14 @@ const kindHeading = Object.freeze({
  *  entry and truncates each at 300 characters; a single joined block would be
  *  cut after the first item.
  *  @param {ReturnType<typeof verifiedCoverageVerdicts>["kept"]} kept
+ *  @param {number} omitted how many equally verified verdicts the cap cut
  *  @returns {string[]} */
-export function coverageJudgeNotices(kept) {
+export function coverageJudgeNotices(kept, omitted = 0) {
   if (!kept.length) return [];
+  const cut = Number.isSafeInteger(omitted) && omitted > 0 ? omitted : 0;
   return [
-    `语义覆盖判定（不阻断交付）：本次交付有 ${kept.length} 处「答非所问 / 缺口与结论不一致」的疑点。`
+    `语义覆盖判定（不阻断交付）：本次交付有 ${kept.length + cut} 处「答非所问 / 缺口与结论不一致」的疑点。`
+    + (cut > 0 ? `每次交付最多列 ${maxVerdicts} 处，以下为模型排在最前的 ${kept.length} 处，另有 ${cut} 处同样通过核对但未列出。` : "")
     + "条目编号、登记状态、行号与引文均已由代码逐条核对："
     + "该行确实存在、有正文、不在参考文献或局限性一节、引文逐字取自该行。"
     + "每条末尾的理由由模型给出，未经核对，请自行判读。",
@@ -325,7 +383,7 @@ export class CoverageJudge {
       const message = body?.choices?.[0]?.message;
       const verdicts = parseJudgeVerdicts(message?.content) ?? parseJudgeVerdicts(message?.reasoning_content);
       if (!verdicts) return this.declined(message?.content?.trim() ? "unparseable" : "empty_content");
-      const { kept, discarded } = verifiedCoverageVerdicts(verdicts, context);
+      const { kept, discarded, omitted } = verifiedCoverageVerdicts(verdicts, context);
       const dropped = Object.values(discarded).reduce((total, count) => total + count, 0);
       if (dropped > 0) {
         process.stderr.write(
@@ -339,7 +397,7 @@ export class CoverageJudge {
         this.lastFailure = "all_verdicts_unverifiable";
         return { notices: [coverageJudgeDegradedNotice("all_verdicts_unverifiable")], judged: false, verdicts: [] };
       }
-      return { notices: coverageJudgeNotices(kept), judged: true, verdicts: kept };
+      return { notices: coverageJudgeNotices(kept, omitted), judged: true, verdicts: kept };
     } catch (error) {
       return this.declined(error?.name === "AbortError" ? "timeout" : `error_${error?.code ?? "unknown"}`);
     } finally {

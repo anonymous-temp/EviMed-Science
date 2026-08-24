@@ -310,9 +310,9 @@ nitroglycerin. One exists, it is the central study on the question, and a
 seven-concept query had returned zero records; two shorter queries return it as
 the first hit.
 
-Use `evimed_literature_search`, `evimed_guideline_search`, and selected audited sources from `evimed_data_source_catalog` or `evimed_biomedical_source_search`. Deduplicate candidate records with `evimed_evidence_deduplicate`.
+Use `literature_search`, `guideline_search`, and selected audited sources from `data_source_catalog` or `biomedical_source_search`. Deduplicate candidate records with `evidence_deduplicate`.
 
-When calling `evimed_evidence_deduplicate`, omit absent identifier keys instead of sending empty `doi`, `pmid`, `pmcid`, or URL strings. If input validation fails, correct the full batch and obtain a successful deduplication result before continuing.
+When calling `evidence_deduplicate`, omit absent identifier keys instead of sending empty `doi`, `pmid`, `pmcid`, or URL strings. If input validation fails, correct the full batch and obtain a successful deduplication result before continuing.
 
 Screen the returned records, deduplicate them, and inspect enough relevant sources to support every material conclusion and important counterpoint. Prefer:
 
@@ -343,7 +343,7 @@ quote, you read.
 
 ### Full-text and source preservation
 
-Use `evimed_official_page_fetch` for approved professional-society, guideline, evidence-review, public-health, or regulatory pages. Use `evimed_open_access_full_text` for key PMID, PMCID, or DOI records with accessible full text.
+Use `official_page_fetch` for approved professional-society, guideline, evidence-review, public-health, or regulatory pages. Use `open_access_full_text` for key PMID, PMCID, or DOI records with accessible full text.
 
 Prefer a PMCID or a search record explicitly marked open access before calling
 the full-text tool. For official pages, use stable URLs returned by the search
@@ -1073,7 +1073,7 @@ Every claim also carries `pico`, `picoMatch`, `denominatorKind`, and `requiredCa
 
 Quote contiguously by default. You may elide a passage you do not need by marking the gap with `…`, as any scholarly quotation does; each side of the gap is then checked on its own and must appear in the source in the order you wrote it. Never join two passages without marking the gap, and never elide across a qualification — a quote reading "the effect was significant … in the subgroup analysis" that hides "not" is a misquotation whether or not the words are all in the document. Copy sentences as they read: an inline citation marker the extractor left mid-sentence ("…in coronary spasm patients.23 Li Jin et al…") is not part of the sentence and may be left out.
 
-**`artifactPath` is copied from a tool result — never typed by hand.** Only two tools preserve an artifact you may cite: `evimed_open_access_full_text` (papers, by DOI or PMCID) and `evimed_official_page_fetch` (labels, guidelines, regulatory and institutional pages). Each returns the workspace path it wrote under `.evimed-sources/`; that exact string is the `artifactPath`. A search hit is not an artifact — search tells you what exists, preservation is a second call.
+**`artifactPath` is copied from a tool result — never typed by hand.** Only two tools preserve an artifact you may cite: `open_access_full_text` (papers, by DOI or PMCID) and `official_page_fetch` (labels, guidelines, regulatory and institutional pages). Each returns the workspace path it wrote under `.evimed-sources/`; that exact string is the `artifactPath`. A search hit is not an artifact — search tells you what exists, preservation is a second call.
 
 So when you want to cite something you have only seen in search results, **preserve it first**: fetch the full text by its DOI or PMCID, or fetch its official page by URL. If neither preserves it — no open-access copy, no reachable official page — then you have not read that source and it cannot carry a claim. Cite the sources you did preserve instead, and if that leaves the point unsupported, say in the report that the evidence was not obtainable. Do not describe the gap in the path field: a string like `abstract-only PMID:15940087` or `regulatory-record NMPA速效救心丸` is not a path, and writing one asserts a verification that never happened.
 
@@ -1711,15 +1711,14 @@ Read every output back before claiming success. Do not use `grep` or another unb
 - the section names are the manuscript ones and no commissioning, acceptance-specification, or self-referential prose survives anywhere in the report (see "Register: what a manuscript never says"). Read the request once more and confirm that no phrase of it was copied into the report — the request's wording is the usual way this register gets in;
 - the practical answer is medically correct, source-supported, and does not encourage delay.
 
-Then run the deterministic structural preflight from the loaded skill directory:
-
-```bash
-python "$XDG_CONFIG_HOME/opencode/skills/clinical-evidence-synthesis/scripts/preflight.py" --workspace .
-```
-
-If it exits non-zero, fix every listed issue and run it again. Do not finish
-until it returns `"ok": true`. The server performs a stricter independent
-evidence and source-integrity gate after this preflight.
+There is no local self-check tool on this line — finish the turn once every
+file above is written. The server validates the package after the session goes
+idle, against the same rules `@evimed/domain` applies everywhere else; there is
+one implementation of them now, so what it accepts here is what it accepts
+under every other line. A first delivery that comes back with issues is the
+normal case, not a failure: the run is resumed with exactly what is listed as
+必修, the fix happens in place — never a wholesale rewrite — and the turn
+finishes again. Repeat until nothing comes back.
 
 The payload also carries `notes`: advice that does not decide `"ok"`, because it
 cannot be settled mechanically. Read it and act where it applies. Today it
@@ -1764,7 +1763,7 @@ evidence report does.
 ### Finishing: check the prose mechanically, do not rewrite it
 
 The report was written under "Prose: written once, not repaired afterwards", so
-by the time the preflight is clean the prose is finished, not a draft awaiting a
+by the time the delivery is accepted the prose is finished, not a draft awaiting a
 rewrite. **The closing step is a self-check, not a reread**, and the point of
 having written the rules into the drafting stage is that this step usually
 changes nothing.
@@ -1838,7 +1837,7 @@ python "$XDG_CONFIG_HOME/opencode/skills/manuscript-humanize/scripts/verify_pres
    `.pre-edit.md` copy once the check is clean — it is not a deliverable and
    must not survive into the delivered set.
 
-5. Run the preflight once more if you edited anything, because prose edits can
+5. Finish once more if you edited anything, because prose edits can
    still break a section-level rule.
 
 `manuscript-humanize` stays loaded and keeps two jobs: it defines the protected

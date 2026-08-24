@@ -42,10 +42,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Fetch bundled OpenCode sidecar
-        shell: bash
-        run: bash scripts/dev/fetch-opencode.sh x86_64-unknown-linux-gnu
-
       - name: Fetch bundled ai4s-skills pack
         shell: bash
         run: bash scripts/dev/fetch-skills.sh
@@ -54,12 +50,21 @@ jobs:
         shell: bash
         run: bash scripts/dev/fetch-uv.sh x86_64-unknown-linux-gnu
 
+      - name: Test domain, port, socket and upstream contracts
+        run: CI=true pnpm test:packages
+
+      - name: Check generated artifacts are current
+        run: |
+          pnpm check:capabilities
+          pnpm check:skill-vocabulary
+          pnpm check:skill-digests
+
       - name: Test Hosted Web API
         run: |
           CI=true pnpm test:mcp
           CI=true pnpm --filter @ai4s/server test
 
-      - name: Test DeepSeek compatibility and real OpenCode fake-chain gates
+      - name: Test DeepSeek compatibility and release gates
         run: >-
           CI=true pnpm --filter @ai4s/server exec node --test
           test/deepseekCompatibility.test.mjs
@@ -112,6 +117,8 @@ jobs:
           echo "OPEN_SCIENCE_BUILD_CREATED=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_WEB_CONTAINER_IMAGE=open-science-web:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-opencode:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE=open-science-runtime:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DSH_VERSION=$(node -p "require('./OpenScience/deps-version.json').dsh.version")" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_CADDY_VERSION=2.11.4-alpine" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=ci-metrics-token-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-0123456789abcdef" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_GRAFANA_ADMIN_PASSWORD=ci-grafana-password-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-0123456789" >> "$GITHUB_ENV"
@@ -210,7 +217,7 @@ jobs:
           pnpm configure:production-state
           pnpm check:production-state
 
-      - name: Build hosted Web and OpenCode runtime images
+      - name: Build hosted Web and agent runtime images
         run: >-
           docker compose --env-file deploy/web/.env.ci
           -f deploy/web/docker-compose.yml
@@ -218,14 +225,22 @@ jobs:
           -f deploy/web/docker-compose.backup.yml
           --profile backup --profile runtime-image build
 
+      # The kernel is installed as an npm global, not as a fetched binary, so
+      # what is checked is that the launcher resolves, that its version is the
+      # pinned one, and that the composed profile the image pre-initialized is
+      # still there — a profile that failed to build at image time would
+      # otherwise only surface as a container that starts and answers nothing.
       - name: Verify runtime binaries and preserved licenses
         run: >-
           docker run --rm --network none
-          "${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE}"
-          sh -ec 'test -x /usr/local/bin/opencode && test -x /usr/local/bin/uv &&
-          test -s /usr/share/licenses/opencode/LICENSE &&
+          "${OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE}"
+          sh -ec 'test -x /usr/local/bin/uv &&
+          test -x /usr/local/bin/open-science-dsh-serve &&
           test -s /usr/share/licenses/uv/LICENSE-MIT &&
-          opencode --version && uv --version'
+          test -s /opt/evimed/dump-config.baseline.json &&
+          dsh --version &&
+          test "$(node -p "require(\"/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json\").version")" = "${OPEN_SCIENCE_DSH_VERSION}" &&
+          uv --version'
 
       - name: Pull pinned TLS proxy image
         run: docker pull "caddy:${OPEN_SCIENCE_CADDY_VERSION}"

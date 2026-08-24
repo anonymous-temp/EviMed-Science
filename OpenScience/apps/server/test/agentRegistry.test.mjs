@@ -24,8 +24,8 @@ const validManifest = {
   starterPrompts: ["Analyze cardiac safety signals for osimertinib."],
   requiredInputs: ["drug"],
   optionalInputs: ["adverseEvent", "dateRange", "uploadedFiles"],
-  requiredTools: ["evimed_drug_term_normalize", "evimed_adr_case_query", "evimed_adr_signal_analysis"],
-  optionalTools: ["evimed_drug_label_search", "evimed_literature_search"],
+  requiredTools: ["drug_term_normalize", "adr_case_query", "adr_signal_analysis"],
+  optionalTools: ["drug_label_search", "literature_search"],
   dataSources: ["faers", "meddra", "drug-labels"],
   outputs: [
     { path: "reports/adr-analysis.md", required: true },
@@ -74,14 +74,14 @@ test("loads the final package contract and derives runtime identity", async () =
     }]);
     assert.equal(Object.hasOwn(registry.list()[0], "packageDir"), false);
     assert.equal(Object.hasOwn(registry.list()[0], "skillText"), false);
-    assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_adr_signal_analysis"));
-    assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_drug_safety_analysis"));
-    assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_data_source_catalog"));
-    assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_biomedical_source_search"));
-    assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_open_access_full_text"));
-    assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_official_page_fetch"));
-    assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_patent_search"));
-    assert.ok(EVIMED_AGENT_TOOL_IDS.has("evimed_pharmacy_reference_search"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("adr_signal_analysis"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("drug_safety_analysis"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("data_source_catalog"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("biomedical_source_search"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("open_access_full_text"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("official_page_fetch"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("patent_search"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("pharmacy_reference_search"));
     assert.ok(EVIMED_AGENT_DATA_SOURCES.has("faers"));
     assert.ok(EVIMED_AGENT_COMPLETION_CHECKS.has("citationsResolvable"));
   });
@@ -111,8 +111,8 @@ test("official skills name every output declared by their manifest", async () =>
   }
   for (const id of ["adr-analysis", "comprehensive-drug-evaluation", "drug-selection", "off-label-analysis"]) {
     const agent = registry.get(id);
-    assert.ok(agent.optionalTools.includes("evimed_data_source_catalog"));
-    assert.ok(agent.optionalTools.includes("evimed_biomedical_source_search"));
+    assert.ok(agent.optionalTools.includes("data_source_catalog"));
+    assert.ok(agent.optionalTools.includes("biomedical_source_search"));
   }
 });
 
@@ -190,7 +190,13 @@ test("official specialist packages preserve domain-specific evidence and release
   );
   assert.match(skills["adr-analysis"], /do not\s+convert any disproportionality metric into incidence/i);
   assert.match(skills["adr-analysis"], /statistical signal proves causality/i);
-  assert.match(skills["adr-analysis"], /evimed_drug_safety_analysis/i);
+  // This is the OpenCode-exclusive tree (officialPackageRoot). It shows the
+  // model bare tool names because the MCP server publishes bare names and
+  // OpenCode adds no prefix of its own — unlike DSH, which prefixes every MCP
+  // tool with mcp__<server>__. capabilities/ (the DSH tree) is the one that
+  // carries the prefixed spelling.
+  assert.match(skills["adr-analysis"], /drug_safety_analysis/i);
+  assert.doesNotMatch(skills["adr-analysis"], /mcp__evimed__/);
   assert.match(skills["adr-analysis"], /suspect_binding/i);
   assert.match(skills["adr-analysis"], /never describe it as PS-only/i);
   assert.match(skills["adr-analysis"], /gps_prior_fitted/i);
@@ -389,7 +395,7 @@ test("a specialist that writes outputs is told to deliver the report, not the fi
     skill: "clinical-evidence-synthesis",
     runtimeAgent: "evimed-clinical-evidence-synthesis",
     companionSkills: [],
-    requiredTools: ["evimed_literature_search"],
+    requiredTools: ["literature_search"],
     optionalTools: [],
     outputs: [{ path: "clinical-evidence-report.md", required: true }],
   });
@@ -405,7 +411,7 @@ test("an answer-only package keeps its reply contract unchanged", () => {
     skill: "open-domain-answer",
     runtimeAgent: "evimed-open-domain-answer",
     companionSkills: [],
-    requiredTools: ["evimed_literature_search"],
+    requiredTools: ["literature_search"],
     optionalTools: [],
     outputs: [],
   });

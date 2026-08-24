@@ -6,7 +6,10 @@
 module.exports = {
   root: true,
   env: { node: true, es2023: true },
-  parserOptions: { ecmaVersion: 2023, sourceType: "module" },
+  // `latest`, not a year: import attributes (`with { type: "json" }`) are how a
+  // JSON module is loaded without reaching for `node:fs`, and pinning the
+  // parser to 2023 makes that a syntax error rather than a supported feature.
+  parserOptions: { ecmaVersion: "latest", sourceType: "module" },
   extends: ["eslint:recommended"],
   rules: {
     "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" }],

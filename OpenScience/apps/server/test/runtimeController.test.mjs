@@ -10,6 +10,21 @@ import { createRuntimeController } from "../src/runtimeControllerServer.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { runtimeReleaseConfig } from "./releaseFixture.mjs";
 
+/**
+ * Removes a test's temp tree, tolerating a child that is still exiting.
+ *
+ * `rm` does not retry by default, so a controller subprocess that writes its
+ * last socket file between the recursive walk and the final `rmdir` fails the
+ * whole test with `ENOTEMPTY` — a cleanup race reported as a product failure,
+ * which is the kind of flake people learn to rerun past.
+ *
+ * @param {string} dir
+ */
+function removeTree(dir) {
+  return rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+}
+
+
 async function shortTempDir(prefix) {
   const compactPrefix = `${prefix.at(0) ?? "o"}-`;
   return realpath(await mkdtemp(path.join(await realpath("/tmp"), compactPrefix)));
@@ -67,6 +82,7 @@ async function fakeDocker(root) {
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+
 
 async function main() {
 const args = process.argv.slice(2);
@@ -281,7 +297,7 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
   const dockerBin = await fakeDocker(tmp);
   const project = await projectTree(dataDir);
   if (await skipUnsupportedRuntimeSocket(t, project)) {
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
     return;
   }
   const previousState = process.env.FAKE_DOCKER_STATE;
@@ -322,7 +338,7 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
     else process.env.FAKE_DOCKER_STATE = previousState;
     if (previousVolume == null) delete process.env.FAKE_VOLUME_ROOT;
     else process.env.FAKE_VOLUME_ROOT = previousVolume;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });
 
@@ -354,7 +370,7 @@ test("runtime controller cannot replace an active controller socket", async () =
     await first.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });
 
@@ -366,7 +382,7 @@ test("runtime controller cleans a runtime when the start client disconnects", as
   const dockerBin = await fakeDocker(tmp);
   const project = await projectTree(dataDir);
   if (await skipUnsupportedRuntimeSocket(t, project)) {
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
     return;
   }
   process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
@@ -422,7 +438,7 @@ test("runtime controller cleans a runtime when the start client disconnects", as
     delete process.env.FAKE_VOLUME_ROOT;
     delete process.env.FAKE_DOCKER_LOG;
     delete process.env.FAKE_DOCKER_RM_DELAY_MS;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });
 
@@ -434,7 +450,7 @@ test("runtime controller serializes start and cleanup for the same project", asy
   const dockerBin = await fakeDocker(tmp);
   const project = await projectTree(dataDir);
   if (await skipUnsupportedRuntimeSocket(t, project)) {
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
     return;
   }
   process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
@@ -464,7 +480,7 @@ test("runtime controller serializes start and cleanup for the same project", asy
     delete process.env.FAKE_VOLUME_ROOT;
     delete process.env.FAKE_DOCKER_LOG;
     delete process.env.FAKE_DOCKER_RM_DELAY_MS;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });
 
@@ -477,7 +493,7 @@ test("runtime controller independently enforces global and per-user runtime limi
   const aliceTwo = await projectTree(dataDir, "alice", "paper2");
   const bobOne = await projectTree(dataDir, "bob", "paper1");
   if (await skipUnsupportedRuntimeSocket(t, aliceOne)) {
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
     return;
   }
   process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
@@ -525,7 +541,7 @@ test("runtime controller independently enforces global and per-user runtime limi
     await controller.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });
 
@@ -569,7 +585,7 @@ test("runtime controller counts Docker-discovered runtimes left by an earlier co
     await controller.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });
 
@@ -606,7 +622,7 @@ test("runtime controller executes and cancels a bounded Docker kernel", async ()
     await controller.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });
 
@@ -671,7 +687,7 @@ test("runtime controller independently enforces global and per-user kernel limit
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
     delete process.env.FAKE_DOCKER_LOG;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });
 
@@ -718,7 +734,7 @@ test("runtime controller removes orphaned kernel containers before listening", a
     await controller.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });
 
@@ -766,7 +782,7 @@ test("runtime controller fails closed when orphaned kernel cleanup fails", async
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
     delete process.env.FAKE_DOCKER_RM_FAIL_NAME;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });
 
@@ -838,7 +854,7 @@ test("runtime controller rejects arbitrary routes and non-canonical project iden
     await controller.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });
 
@@ -885,6 +901,6 @@ test("production readiness verifies the isolated controller and runtime image pr
     await controller.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
-    await rm(tmp, { recursive: true, force: true });
+    await removeTree(tmp);
   }
 });

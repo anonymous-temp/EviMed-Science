@@ -15,11 +15,11 @@ optionalInputs:
   - maxRecords
   - outputLanguage
 requiredTools:
-  - evimed_bibliometric_analysis
+  - bibliometric_analysis
 optionalTools:
-  - evimed_data_source_catalog
-  - evimed_literature_search
-  - evimed_evidence_deduplicate
+  - data_source_catalog
+  - literature_search
+  - evidence_deduplicate
 dataSources:
   - bibliometric-records
   - literature

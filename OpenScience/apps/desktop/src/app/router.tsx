@@ -1,6 +1,6 @@
 import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
 import { AppShell } from "./layout/AppShell";
-import { LiveSessionPage } from "./routes/LiveSessionPage";
+import { SessionRoute } from "./routes/SessionRoute";
 import { FilesPage } from "./routes/FilesPage";
 import { AgentsPage } from "./routes/AgentsPage";
 import { MemoryPage } from "./routes/MemoryPage";
@@ -20,8 +20,8 @@ export const routes: RouteObject[] = [
     element: <AppShell />,
     children: [
       { index: true, element: <Navigate to="/live" replace /> },
-      { path: "live", element: <LiveSessionPage /> },
-      { path: "live/:sessionId", element: <LiveSessionPage /> },
+      { path: "live", element: <SessionRoute /> },
+      { path: "live/:sessionId", element: <SessionRoute /> },
       { path: "notebooks", element: <NotebooksPage /> },
       { path: "runs", element: <RunsPage /> },
       { path: "files", element: <FilesPage /> },

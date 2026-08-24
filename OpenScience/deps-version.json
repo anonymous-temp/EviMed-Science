@@ -1,0 +1,30 @@
+{
+  "$comment": "The single definition of every version we track upstream. A Dockerfile ARG, a seam manifest, a peerDependency and a release manifest that each carried their own copy meant 'bump the pin' was four edits and one of them was always missed. Tests assert every derived copy equals the value here; the nightly compatibility matrix is one job that loops over these keys.",
+  "dsh": {
+    "version": "0.1.1-rc.2",
+    "cordis": "4.0.1",
+    "npmPackage": "@deepseek-ai/dsh",
+    "contractDir": "packages/contracts/dsh",
+    "notes": "Pre-release: no compatibility promise, no tagged release. Subpackage `latest` dist-tags mostly still point at 0.0.1-rc.1, so every install writes an exact version."
+  },
+  "memos": {
+    "version": "2.0.30",
+    "image": "memtensor/memos",
+    "contractDir": "packages/contracts/memos",
+    "notes": "MemTensor/MemOS 2.0 Stardust, self-hosted. Not the vendored usememos note app, which is retired.",
+    "githubRepo": "MemTensor/MemOS"
+  },
+  "openlist": {
+    "version": "4.2.5",
+    "image": "openlistteam/openlist",
+    "contractDir": "packages/contracts/openlist",
+    "notes": "Self-hosted drive aggregator; latest release v4.2.5 (2026-08-07). We call exactly three endpoints. The contract test asserts the pin's discipline only — the service is not deployed here yet, so the endpoint assertions land alongside the deployment, in the shape the dsh test already uses.",
+    "githubRepo": "OpenListTeam/OpenList"
+  },
+  "mineru": {
+    "version": "3.4.5",
+    "pipPackage": "mineru",
+    "contractDir": "packages/contracts/mineru",
+    "notes": "Document parsing for CJK layout, tables and formulas; PyPI 3.4.5. `pypdf` stays as the fast plain-text fallback."
+  }
+}

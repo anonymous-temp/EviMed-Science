@@ -21,43 +21,43 @@ MCP_ROOT = REPO / "runtime" / "mcp" / "evimed-research"
 RESULTS = HERE / "results"
 SPECIALIST_SOURCES = REPO.parent / "项目代码"
 SPECIALISTS = {
-    "evimed_meta_analysis": ("meta-analysis-runs", "meta-"),
-    "evimed_mendelian_randomization": ("mendelian-randomization-runs", "mr-"),
-    "evimed_bibliometric_analysis": ("bibliometric-analysis-runs", "bibliometric-"),
-    "evimed_research_topic_selection": ("research-topic-runs", "topic-"),
-    "evimed_peer_review": ("peer-review-runs", "review-"),
-    "evimed_drug_safety_analysis": ("drug-safety-runs", "safety-"),
+    "meta_analysis": ("meta-analysis-runs", "meta-"),
+    "mendelian_randomization": ("mendelian-randomization-runs", "mr-"),
+    "bibliometric_analysis": ("bibliometric-analysis-runs", "bibliometric-"),
+    "research_topic_selection": ("research-topic-runs", "topic-"),
+    "peer_review": ("peer-review-runs", "review-"),
+    "drug_safety_analysis": ("drug-safety-runs", "safety-"),
 }
 TASK_FIXTURES = {
-    "evimed_health": {},
-    "evimed_data_source_catalog": {"status": "connected_public", "limit": 123},
-    "evimed_biomedical_source_search": {
+    "health": {},
+    "data_source_catalog": {"status": "connected_public", "limit": 123},
+    "biomedical_source_search": {
         "source": "pubmed", "query": "aspirin cardiovascular prevention randomized trial", "limit": 2,
     },
-    "evimed_official_page_fetch": {
+    "official_page_fetch": {
         "url": "https://www.nhs.uk/symptoms/chest-pain/",
     },
-    "evimed_open_access_full_text": {"identifier": "PMC8010506"},
-    "evimed_term_normalize": {"term": "心肌梗死", "domain": "disease"},
-    "evimed_drug_term_normalize": {"term": "acetaminophen"},
-    "evimed_evidence_deduplicate": {"items": [
+    "open_access_full_text": {"identifier": "PMC8010506"},
+    "term_normalize": {"term": "心肌梗死", "domain": "disease"},
+    "drug_term_normalize": {"term": "acetaminophen"},
+    "evidence_deduplicate": {"items": [
         {"id": "a", "title": "Observed trial", "doi": "10.1000/observed"},
         {"id": "b", "title": "Observed trial duplicate", "doi": "https://doi.org/10.1000/observed"},
     ]},
-    "evimed_literature_search": {
+    "literature_search": {
         "query": "aspirin cardiovascular prevention randomized trial", "limit": 2,
         "databases": ["pubmed", "crossref"],
     },
-    "evimed_guideline_search": {"query": "hypertension clinical practice guideline", "limit": 2},
-    "evimed_clinical_trial_search": {"query": "type 2 diabetes metformin", "limit": 2},
-    "evimed_patent_search": {"query": "pembrolizumab biomarker", "limit": 2},
-    "evimed_pharmacy_reference_search": {"query": "阿司匹林", "limit": 2},
-    "evimed_drug_label_search": {"drug": "metformin", "jurisdiction": "US", "limit": 1},
-    "evimed_adr_case_query": {"drug": "aspirin", "adverseEvent": "haemorrhage", "limit": 2},
-    "evimed_adr_signal_analysis": {
+    "guideline_search": {"query": "hypertension clinical practice guideline", "limit": 2},
+    "clinical_trial_search": {"query": "type 2 diabetes metformin", "limit": 2},
+    "patent_search": {"query": "pembrolizumab biomarker", "limit": 2},
+    "pharmacy_reference_search": {"query": "阿司匹林", "limit": 2},
+    "drug_label_search": {"drug": "metformin", "jurisdiction": "US", "limit": 1},
+    "adr_case_query": {"drug": "aspirin", "adverseEvent": "haemorrhage", "limit": 2},
+    "adr_signal_analysis": {
         "drug": "aspirin", "adverseEvent": "nausea", "metrics": ["ror", "prr", "ic"],
     },
-    "evimed_offlabel_evidence_packet": {
+    "offlabel_evidence_packet": {
         "action": "compile",
         "drug": "metformin",
         "proposedUse": "polycystic ovary syndrome",
@@ -85,7 +85,7 @@ TASK_FIXTURES = {
             "rationale": "The bounded release fixture exercises the population comparison path.",
         }],
     },
-    "evimed_comprehensive_drug_evaluation": {
+    "comprehensive_drug_evaluation": {
         "action": "compile",
         "drug": "metformin",
         "indication": "type 2 diabetes",
@@ -105,7 +105,7 @@ TASK_FIXTURES = {
             "rationale": "The bounded release fixture exercises a traceable core-domain assessment.",
         } for domain in ("effectiveness", "safety", "applicability")],
     },
-    "evimed_drug_selection_evaluation": {
+    "drug_selection_evaluation": {
         "action": "compile",
         "candidateDrugs": ["metformin", "glipizide"],
         "indication": "type 2 diabetes",
@@ -221,12 +221,12 @@ def latest_specialist_receipt(tool, roots, max_age_days):
                 state = json.loads(state_path.read_text(encoding="utf-8"))
                 if state.get("status") not in {"succeeded", "blocked"}:
                     continue
-                root_value = state.get("metaRoot") if tool == "evimed_meta_analysis" else state.get("root")
+                root_value = state.get("metaRoot") if tool == "meta_analysis" else state.get("root")
                 # Job state records the absolute path of the host that ran it,
                 # so rebase onto the layout every host shares before hashing.
                 name = Path(str(root_value or "").replace("\\", "/")).name
                 root = (SPECIALIST_SOURCES / name).resolve(strict=True)
-                adapter = MCP_ROOT / ("meta_agent.py" if tool == "evimed_meta_analysis" else "specialist_jobs.py")
+                adapter = MCP_ROOT / ("meta_agent.py" if tool == "meta_analysis" else "specialist_jobs.py")
                 expected_evidence = load_execution_evidence().execution_evidence(root, adapter)
                 if state.get("executionEvidence") != expected_evidence:
                     continue

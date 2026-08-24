@@ -499,7 +499,10 @@ function HostedRunsView() {
     return (runs ?? [])
       .filter(
         (run) =>
-          (!filter.status || run.status === filter.status) &&
+          // "degraded" is not a status value — it is the phase projection
+          // (§7.1.1), so this one filter key reads a different field than the
+          // rest without needing a second filter dimension for it.
+          (!filter.status || (filter.status === "degraded" ? run.phase === "degraded" : run.status === filter.status)) &&
           (!sinceTs || webRunTs(run) >= sinceTs) &&
           (!query ||
             [run.question, run.id, run.sessionId, run.mode, run.agentId, run.effectiveAgentId, run.model, ...run.artifacts]
@@ -513,7 +516,10 @@ function HostedRunsView() {
 
   const statusCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const run of runs ?? []) counts.set(run.status, (counts.get(run.status) ?? 0) + 1);
+    for (const run of runs ?? []) {
+      counts.set(run.status, (counts.get(run.status) ?? 0) + 1);
+      if (run.phase === "degraded") counts.set("degraded", (counts.get("degraded") ?? 0) + 1);
+    }
     return counts;
   }, [runs]);
 
@@ -526,7 +532,7 @@ function HostedRunsView() {
     navigate(`/live/${run.sessionId}`);
   };
 
-  const toggle = (value: WebAgentRunStatus) =>
+  const toggle = (value: WebAgentRunStatus | "degraded") =>
     setFilter((f) => ({ ...f, status: f.status === value ? undefined : value }));
 
   const anyFilter = !!(filter.search || filter.status || filter.since);
@@ -539,6 +545,18 @@ function HostedRunsView() {
       dot: "bg-ok",
       onClick: () => toggle("succeeded"),
     },
+    // Delivered, but with something unresolved — unverified content, or a
+    // partial delivery — that a person should look at before it is trusted the
+    // way an accepted run is. Shown only once at least one run actually needs
+    // it, the same rule "running"/"canceled" below already follow.
+    ...(statusCounts.get("degraded") ? [{
+      key: "degraded",
+      label: "待人工复核",
+      count: statusCounts.get("degraded") ?? 0,
+      active: filter.status === "degraded",
+      dot: "bg-warn",
+      onClick: () => toggle("degraded"),
+    }] : []),
     {
       key: "failed",
       label: "失败",
@@ -871,15 +889,26 @@ function WebRunRow({
           {/* The verdict and its reasons were computed, stored, and returned by
             * the API, and then rendered nowhere: a package delivered with seven
             * named gaps looked exactly like a clean one. */}
-          {(run.verification === "unverified" || (run.qualityNotices?.length ?? 0) > 0) && (
+          {(run.verification != null || (run.qualityNotices?.length ?? 0) > 0) && (
             <div className="rounded-card border border-border-faint bg-surface-2/40 p-2">
               <div className="mb-1 flex items-center gap-1.5 text-caption font-medium uppercase tracking-wider text-muted">
                 <ScrollText size={12} />
-                {run.verification === "unverified" ? "已交付，但未完成核验" : "核验提示"}
+                {run.verification === "unverified" && "已交付，但未完成核验"}
+                {/* Not the same statement, and it used to render as the absence
+                  * of any statement: a layer of the gate did not run here, so
+                  * nothing below says that layer found the package sound. */}
+                {run.verification === "unchecked" && "已交付，但有一层没有检查过"}
+                {run.verification == null && "核验提示"}
               </div>
               {run.verification === "unverified" && (
                 <p className="mb-1.5 text-xs text-text/80">
                   产物可以照常下载和阅读；以下各点是本次分析未能自证的部分，请在引用前自行核对。
+                </p>
+              )}
+              {run.verification === "unchecked" && (
+                <p className="mb-1.5 text-xs text-text/80">
+                  产物可以照常下载和阅读；本次交付有一层核验根本没有执行，以下说明是哪一层、为什么没执行。
+                  没有发现问题不等于检查过。
                 </p>
               )}
               <ul className="space-y-2">

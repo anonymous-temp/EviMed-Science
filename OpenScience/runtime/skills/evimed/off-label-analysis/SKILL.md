@@ -11,15 +11,15 @@ Unless the user requests another language, interact and write deliverables in Si
 
 ## 1. Bind the exact proposed use
 
-Require the drug and proposed indication. First call `evimed_offlabel_evidence_packet` with `action: requirements`. Ask once for the returned missing fields in one concise group. If the user does not provide them, continue retrieval but preserve every unresolved field as a gap and withhold the affected comparison or score. Capture the exact product, population, dose, route, frequency, duration, formulation, jurisdiction, and decision date. Normalize the medicine with `evimed_drug_term_normalize`.
+Require the drug and proposed indication. First call `offlabel_evidence_packet` with `action: requirements`. Ask once for the returned missing fields in one concise group. If the user does not provide them, continue retrieval but preserve every unresolved field as a gap and withhold the affected comparison or score. Capture the exact product, population, dose, route, frequency, duration, formulation, jurisdiction, and decision date. Normalize the medicine with `drug_term_normalize`.
 
 Jurisdiction is a classification boundary. If it is missing, record the gap and do not classify the use as label-concordant. Never substitute an FDA label for China, EMA, PMDA, or another jurisdiction.
 
 ## 2. Retrieve and freeze evidence
 
-Call `evimed_offlabel_evidence_packet` with `action: retrieve`. Verify the exact current official product label with `evimed_drug_label_search`. Use the EviMed NMPA candidate first for a China question, then verify product, approval number, revision date, and currentness. If an exact institutional copy is material but EviMed does not return it, ask once for the current institution label or uploaded file and preserve the gap if it is not supplied. An institutional copy is local evidence and must not be presented as proof of the current NMPA record. If the product originated in another jurisdiction, retrieve that origin-country label separately as evidence support; it must never replace the target-jurisdiction label classification. Use guidelines, trials, literature, and active catalogued biomedical sources only for separate evidence-support questions.
+Call `offlabel_evidence_packet` with `action: retrieve`. Verify the exact current official product label with `drug_label_search`. Use the EviMed NMPA candidate first for a China question, then verify product, approval number, revision date, and currentness. If an exact institutional copy is material but EviMed does not return it, ask once for the current institution label or uploaded file and preserve the gap if it is not supplied. An institutional copy is local evidence and must not be presented as proof of the current NMPA record. If the product originated in another jurisdiction, retrieve that origin-country label separately as evidence support; it must never replace the target-jurisdiction label classification. Use guidelines, trials, literature, and active catalogued biomedical sources only for separate evidence-support questions.
 
-The optional `evimed_pharmacy_reference_search` tool can help normalize private
+The optional `pharmacy_reference_search` tool can help normalize private
 names, routes, frequencies, dose-risk rules, interactions, or special-population
 screening terms. Its output cannot establish target-jurisdiction label status,
 approval, legality, or evidence support. Verify material rows against the exact
@@ -34,7 +34,7 @@ Deduplicate records and freeze the source and query package in `evidence-snapsho
 
 Compare `indication`, `population`, `dose`, `route`, `frequency`, `duration`, and `formulation` independently when supplied. For each dimension use only `match`, `mismatch`, `unclear`, or `not_assessed`, with a rationale and exact label `evidenceIds`. Do not infer a label mismatch from guidelines or literature.
 
-Call `evimed_offlabel_evidence_packet` with `action: compile`, `sourceInventory`, and `labelComparisons`. If it returns an error, correct the structured evidence; do not default to compliant or off-label. `potentially_off_label` is a preliminary label comparison, not a conclusion that use is illegal, unsupported, or clinically inappropriate.
+Call `offlabel_evidence_packet` with `action: compile`, `sourceInventory`, and `labelComparisons`. If it returns an error, correct the structured evidence; do not default to compliant or off-label. `potentially_off_label` is a preliminary label comparison, not a conclusion that use is illegal, unsupported, or clinically inappropriate.
 
 Assess evidence support separately by available type: origin-country label, evidence database, clinical guideline, systematic review, randomized trial, nonrandomized study, case report/series, and reference work. Submit one `evidenceSupportAssessments` row per assessed type. Use `supports`, `mixed`, `does_not_support`, `unclear`, `not_found`, or `not_assessed`; never turn an unavailable type into a zero score. Preserve observed external ratings without converting between systems. When formally appraising evidence, use the method required by the supplied rubric or source type, such as AGREE II, AMSTAR 2, RoB 2, ROBINS-I, Jadad, MINORS, or Newcastle-Ottawa, and record both the appraisal tool and its observed rating. The compiler records type-level support but intentionally does not manufacture an overall evidence grade.
 

@@ -1,0 +1,52 @@
+# Capability manifest — the only definition of this capability.
+#
+# It replaced agent.yaml when routing was removed. Under a router, a
+# package was bound to a session and never had to say when it applied;
+# under one composition the orchestrator composes capabilities itself, so
+# `whenToUse` (the catalogue line it reads), `persona` (what the delegated
+# child is) and `produces` (which contract validates the result) are
+# required. `tools` uses the model-visible names.
+id: peer-review
+version: 1.0.1
+title: 论文同行评审
+category: 研究质量
+description: 按研究类型匹配报告规范，对上传论文的方法学、统计学、完整性和证据位置进行审查，并给出可执行的修改建议。
+whenToUse: 交付物是对一篇稿件的同行评议意见时，委派给我。
+persona: 你是同行评议人。你按适用的报告规范逐条核对，每条意见都写清「问题—依据—建议」，不写空泛评价。
+safetyClass: general
+skills:
+- peer-review
+tools:
+- mcp__evimed__peer_review
+- mcp__evimed__data_source_catalog
+- mcp__evimed__literature_search
+produces:
+- contractKind: peer-review-report
+  outputs:
+  - path: peer-review-report.md
+    required: true
+  - path: peer-review-run.json
+    required: true
+  checks:
+  - requiredOutputsExist
+  - citationsResolvable
+inputs:
+  required:
+  - manuscript
+  optional:
+  - articleType
+  - outputLanguage
+autopilot:
+  taskTypes: []
+  costClass: medium
+  unattendedInputs:
+  - manuscript
+estimatedMinutes:
+- 20
+- 120
+dataSources:
+- uploaded-files
+- reporting-guidelines
+- literature
+starterPrompts:
+- 审查我上传的论文，定位方法学、统计学、报告规范和科研诚信问题。

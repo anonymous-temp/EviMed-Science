@@ -1019,6 +1019,7 @@ async function checkHostedMetadataBoundary() {
   const taskManager = await read("apps/server/src/taskManager.mjs");
   const runtimeManager = await read("apps/server/src/runtimeManager.mjs");
   const serverTests = await read("apps/server/test/server.test.mjs");
+  const adapterTests = await read("apps/server/test/dshRuntimeAdapter.test.mjs");
   const publicTaskBody = taskManager.match(/function publicTask\(task\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   if (
@@ -1031,9 +1032,16 @@ async function checkHostedMetadataBoundary() {
     /unknown commands share a bounded rate key and do not enter audit logs/.test(serverTests) &&
     /public readiness does not disclose the local account count/.test(serverTests) &&
     /async task APIs and logs do not expose command args or results/.test(serverTests) &&
-    /OpenCode proxy rewrites workspace directory and strips browser credentials/.test(serverTests)
+    // The browser can no longer reach a kernel at all, so "strips browser
+    // credentials on the way through" was replaced by something stronger:
+    // there is no way through. What has to be asserted now is that the retired
+    // route stays retired and that the control plane's own calls are still
+    // restricted to a named set of methods.
+    /the retired pass-through says so/.test(serverTests) &&
+    /runtime_passthrough_retired/.test(serverTests) &&
+    /a forbidden method is refused before it reaches the container/.test(adapterTests)
   ) {
-    pass("hosted_metadata_boundary", "Hosted command, readiness, task, audit, and runtime-proxy surfaces use bounded dimensions and omit account counts, command payloads, results, and browser credentials.");
+    pass("hosted_metadata_boundary", "Hosted command, readiness, task, audit, and runtime surfaces use bounded dimensions, omit account counts, command payloads, results, and browser credentials, and expose no path from a browser to an agent kernel.");
   } else {
     fail("hosted_metadata_boundary_missing", "Hosted public and operational metadata surfaces must avoid unbounded identifiers, command payloads/results, account counts, and credential forwarding.");
   }
