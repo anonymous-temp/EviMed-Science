@@ -208,6 +208,18 @@ function readHostLsmList() {
 const MIN_KERNEL = Object.freeze({ major: 5, minor: 13 });
 
 /**
+ * The kernel at which Landlock governs every access the launcher asks it to.
+ *
+ * Having Landlock is not the same as having all of it. DSH's launcher builds a
+ * ruleset up to ABI 5 and, on an older ABI, confines what the kernel supports
+ * and reports `partial enforcement` — which is honest but is not what a hosted
+ * profile asks for: it requires `full`, and the startup probe fails closed
+ * below it. ABI 5 arrived in 6.10. Measured on this project's host: 6.8 gave
+ * ABI 4 and `partially enforced`; 7.0 gave `fully enforced`.
+ */
+const FULL_ENFORCEMENT_KERNEL = Object.freeze({ major: 6, minor: 10 });
+
+/**
  * Whether this host can confine the agent's shell.
  *
  * The failure this prevents is quiet and total. In a container bwrap is
@@ -247,7 +259,19 @@ export function validateSandboxPrerequisites(release, lsmList) {
       + "Boot with `lsm=...,landlock,...` — bwrap is not a fallback inside a container.",
     );
   }
-  return { kernel: release.trim(), landlock: true };
+  const full = major > FULL_ENFORCEMENT_KERNEL.major
+    || (major === FULL_ENFORCEMENT_KERNEL.major && minor >= FULL_ENFORCEMENT_KERNEL.minor);
+  if (!full) {
+    throw failure(
+      "preflight_landlock_partial_enforcement",
+      `Landlock reaches full enforcement at Linux ${FULL_ENFORCEMENT_KERNEL.major}.${FULL_ENFORCEMENT_KERNEL.minor}; `
+      + `found ${release.trim()}, where the launcher confines what the kernel supports and reports partial. `
+      + "A hosted profile requires full, so the runtime's startup probe would refuse to boot. "
+      + "Upgrade the host kernel, or set OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT=partial for this deployment "
+      + "and record which accesses go ungoverned.",
+    );
+  }
+  return { kernel: release.trim(), landlock: true, enforcement: "full" };
 }
 
 export function parseDockerEngineInfo(output) {
