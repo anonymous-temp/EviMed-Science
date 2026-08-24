@@ -5,6 +5,7 @@ import {
   normalizeWorkspaceRelativePath,
   openScopedFileNoFollow,
   randomId,
+  readTextFileNoFollow,
   safeId,
   withProjectStorageMutation,
   writeFileAtomicNoFollow,
@@ -15,6 +16,30 @@ import {
   coverageJudgeContext,
   validateClinicalEvidencePackage,
 } from "./clinicalEvidenceQuality.mjs";
+// The three classifications of a failure — repairable package, recoverable
+// source, terminal source — moved into the domain when the run side started
+// needing them too. They are re-exported here because the ledger's callers and
+// its tests have always imported them from this module, and because a second
+// definition is exactly the drift the move was made to stop.
+import {
+  isMcpToolName,
+  repairableEvidencePackageErrorCodes,
+  recoverableEvidenceSourceErrorCodes,
+  runPhase,
+  terminalEvidenceSourceErrorCodes,
+  transitionEvents,
+  transition as domainTransition,
+  workspaceLayout,
+} from "@evimed/domain";
+
+export { repairableEvidencePackageErrorCodes, recoverableEvidenceSourceErrorCodes, terminalEvidenceSourceErrorCodes };
+
+// Exported for its own direct test: constructing a ledger event sequence that
+// reaches this function while also being illegal under the *phase* table, but
+// not under any of `foldEvents`' own (much stricter) corruption checks, is not
+// reachable through the public `AgentRunStore` API — which is the point of
+// those checks — so the adjacency logic itself needs a seam.
+export { runPhaseHistory };
 
 const ledgerFileName = "runs.jsonl";
 const terminalStatuses = new Set(["succeeded", "failed", "canceled"]);
@@ -124,8 +149,24 @@ function sanitizeErrorCode(value) {
   return /^[a-z][a-z0-9_.-]{0,63}$/.test(normalized) ? normalized : "runtime_error";
 }
 
+// What the verification field is allowed to say, and the whole of it:
+//
+//   null         every layer of the gate ran, and none of them found anything.
+//   "unverified" a layer ran and found something the package cannot self-prove.
+//   "unchecked"  a layer did not run at all.
+//
+// The third value is the one this field was missing. A run whose brief the
+// server no longer holds — the brief lives in memory only, so a restart loses
+// it — has its per-question coverage check skipped entirely, and used to finish
+// with verification null: byte-identical, in the one machine-readable field
+// operations and the UI read, to a package that passed the check. The same
+// package with the brief in hand finished "unverified" with the missing
+// question named. Losing the exam paper made the grade go up.
+const verificationValues = Object.freeze(["unverified", "unchecked"]);
+
+/** @param {any} value */
 function normalizeVerification(value) {
-  return value === "unverified" ? "unverified" : null;
+  return verificationValues.includes(value) ? value : null;
 }
 
 function normalizeQualityNotices(value) {
@@ -256,6 +297,7 @@ function foldEvents(events) {
         qualityNotices: [],
         observedMessages: 0,
         observedToolCalls: 0,
+        observedRunSideActivity: null,
         lastProgressAt: null,
       }));
       continue;
@@ -284,6 +326,12 @@ function foldEvents(events) {
         ...current,
         observedMessages: event.messages,
         observedToolCalls: event.toolCalls,
+        // The run's own side of the same observation. Absent on a run that
+        // writes no projection and on every row written before this field
+        // existed, so it is carried only when present rather than defaulted —
+        // a default would read as "we observed zero activity", which is a
+        // different claim from "we have not been told".
+        ...(typeof event.runSideActivity === "string" ? { observedRunSideActivity: event.runSideActivity } : {}),
         lastProgressAt: storedTimestamp(event.at, "at"),
       }));
       continue;
@@ -303,10 +351,39 @@ function foldEvents(events) {
         durationMs: event.durationMs,
         errorCode,
         artifacts,
-        verification: event.verification === "unverified" ? "unverified" : null,
-        qualityNotices: Array.isArray(event.qualityNotices)
-          ? event.qualityNotices.filter((item) => typeof item === "string").slice(0, maxQualityNotices)
-          : [],
+        // A judgement can land either side of the delivery decision, so both
+        // orders must fold to the same run. An admission already on the record
+        // survives a terminal event that says nothing; a terminal finding
+        // outranks it.
+        verification: normalizeVerification(event.verification)
+          ?? (current.verification === "unchecked" ? "unchecked" : null),
+        // The run's own notices lead; anything appended after the fact — a
+        // coverage judgement that was still running when the run finished —
+        // follows, in whichever order the two events reached the ledger.
+        qualityNotices: [
+          ...(Array.isArray(event.qualityNotices) ? event.qualityNotices.filter((item) => typeof item === "string") : []),
+          ...current.qualityNotices,
+        ].slice(0, maxQualityNotices),
+      }));
+      continue;
+    }
+    // A finding that arrived after the delivery decision was made. It appends
+    // to what the reader is told and may admit that a layer went unchecked; it
+    // can never change a run's status, its error code or its artifacts, and it
+    // can never turn "unverified" back into a clean bill.
+    if (event.event === "notice") {
+      const id = safeStoredId(event.id, "id");
+      const current = runs.get(id);
+      if (!current) throw corrupt("Agent run ledger contains a notice for an unknown run.");
+      const added = Array.isArray(event.qualityNotices)
+        ? event.qualityNotices.filter((item) => typeof item === "string" && item)
+        : [];
+      runs.set(id, Object.freeze({
+        ...current,
+        verification: event.verification === "unchecked" && current.verification === null
+          ? "unchecked"
+          : current.verification,
+        qualityNotices: [...current.qualityNotices, ...added].slice(0, maxQualityNotices),
       }));
       continue;
     }
@@ -332,6 +409,78 @@ function normalizeStoredArtifacts(value) {
   } catch {
     throw corrupt("Agent run artifacts are invalid.");
   }
+}
+
+/**
+ * Whether `to` is reachable from `from` in the `run` phase table by any single
+ * event — not by a specific one, because the raw ledger event that produced a
+ * phase change (`dispatch` / `progress` / `finished`) does not name the phase
+ * table's own event vocabulary (`deliver` / `accept` / `degrade` / …) directly,
+ * and mapping one to the other one-for-one would be a second, narrower
+ * definition of the same table this function already has.
+ * @param {string} from @param {string} to @returns {boolean}
+ */
+function isLegalRunPhaseMove(from, to) {
+  if (from === to) return true
+  return transitionEvents("run", from).some((event) => domainTransition("run", from, event) === to)
+}
+
+/**
+ * The phase sequence a run's own events produce, walked independently of
+ * `foldEvents` (§7.1.1, decision 2026-08-24 #20).
+ *
+ * Deliberately a second, simpler pass rather than instrumentation added inside
+ * `foldEvents` itself: that function's job is deciding whether the ledger is
+ * corrupt, and it throws when it is. This one's job is a diagnostic count that
+ * must never do that — a phase sequence that looks illegal is exactly the
+ * "historical data must not crash reads" case the projection design calls out
+ * — so it stays lenient by construction, on its own copy of the handful of
+ * fields phase computation needs, rather than reusing a function that is
+ * strict on purpose.
+ *
+ * @param {readonly Record<string, any>[]} events @param {string} runId
+ * @returns {{ phase: string, illegalTransitions: number, notices: string[] }}
+ */
+function runPhaseHistory(events, runId) {
+  /** @type {Record<string, any> | null} */
+  let record = null
+  let phase = "reserved"
+  let illegalTransitions = 0
+  /** @type {string[]} */
+  const notices = []
+  for (const event of events) {
+    if (event?.id !== runId) continue
+    if (event.event === "started") {
+      record = { status: "running", dispatchStatus: event.dispatchStatus ?? (event.dispatchId ? "dispatching" : "accepted"), hasProgressEvent: false, verification: null }
+    } else if (!record) {
+      continue // an event for a run this walk has not seen "started" for is not this function's problem to diagnose
+    } else if (event.event === "dispatch") {
+      record = { ...record, dispatchStatus: event.status }
+    } else if (event.event === "progress") {
+      record = { ...record, hasProgressEvent: true }
+    } else if (event.event === "finished") {
+      record = { ...record, status: event.status, verification: event.verification ?? record.verification }
+    } else {
+      continue
+    }
+    let next
+    try {
+      // `record` is built incrementally across four different branches above,
+      // so its inferred type is wider than what `runPhase` accepts; the fields
+      // that matter are exactly the ones assigned in this function, never
+      // anything wider, so the cast just tells the checker what this loop
+      // already guarantees by construction.
+      next = runPhase(/** @type {Parameters<typeof runPhase>[0]} */ (record))
+    } catch {
+      continue // an unrecognized status is foldEvents' corruption check to raise, not this diagnostic's
+    }
+    if (!isLegalRunPhaseMove(phase, next)) {
+      illegalTransitions += 1
+      notices.push(`illegal_state_transition: ${phase} -> ${next}`)
+    }
+    phase = next
+  }
+  return { phase, illegalTransitions, notices }
 }
 
 function serializeNext(events, event, maxBytes) {
@@ -389,56 +538,15 @@ function parsedToolResultStatus(part) {
 // this list, so one upstream returning 502 failed a run that had already found
 // its evidence elsewhere and written every deliverable.
 const evidenceSourceToolSuffixes = Object.freeze([
-  "evimed_official_page_fetch",
-  "evimed_open_access_full_text",
-  "evimed_literature_search",
-  "evimed_guideline_search",
-  "evimed_biomedical_source_search",
-  "evimed_drug_label_search",
-  "evimed_pharmacy_reference_search",
-  "evimed_clinical_trial_search",
-  "evimed_patent_search",
-]);
-// A finished package the gate rejected for something the package itself can
-// fix: a receipt naming the wrong path, a citation whose source was never
-// recorded, a preserved file that was edited. The run has already done the
-// work — the report and every deliverable are on disk — and the repair loop
-// hands the specific issues back rather than regenerating anything.
-//
-// This used to name one code, so a package rejected for provenance was thrown
-// away while an otherwise identical package rejected for traceability was
-// repaired and delivered. Two production runs died that way with complete
-// reports of 42 and 40 kB. The category is "the package is complete and the
-// issue is actionable inside it", not any single member of it.
-export const repairableEvidencePackageErrorCodes = new Set([
-  "specialist_evidence_traceability_failed",
-  "specialist_evidence_provenance_failed",
-  "specialist_evidence_integrity_failed",
-  "specialist_cited_source_unrecorded",
-  "specialist_citation_invalid",
-  "specialist_evidence_snapshot_missing",
-  "specialist_evidence_snapshot_invalid",
-  "specialist_evidence_snapshot_empty",
-  // The delivery gate's own named defects (clinicalEvidencePackageErrorCode).
-  // Each names one element of a finished package — a line, a number, a claim,
-  // a reference — so each is repaired in place like the codes above it, never
-  // regenerated. A code added there and forgotten here would silently turn a
-  // repairable package into a discarded one, which is the failure this set was
-  // introduced to stop.
-  "practical_emergency_trigger_conditioned_on_medication_response",
-  "regulatory_article_without_official_source",
-  "specialist_screening_ledger_mismatch",
-  "declared-appraisal-must-execute",
-  // The question-coverage ledger. A package missing it is otherwise complete —
-  // the report, the matrix, the search log and every citation artifact are on
-  // disk — and the ledger is written from them, so this is the one missing
-  // deliverable the run can supply without redoing any work. It is therefore
-  // repaired rather than discarded, unlike a missing report.
-  "specialist_question_coverage_missing",
-  "specialist_question_coverage_invalid",
-  "specialist_question_coverage_unsupported",
-  "specialist_question_coverage_gap_overstated",
-  "specialist_question_coverage_understated",
+  "official_page_fetch",
+  "open_access_full_text",
+  "literature_search",
+  "guideline_search",
+  "biomedical_source_search",
+  "drug_label_search",
+  "pharmacy_reference_search",
+  "clinical_trial_search",
+  "patent_search",
 ]);
 // Where the run finds the brief it was given. Written by the server at dispatch
 // and read by the run and by its preflight; the delivery gate reads the
@@ -457,251 +565,7 @@ const missingOutputRepairAdvice = Object.freeze({
     + 'An entry with "status":"gap" carries searches:[{"query":"<a search this run actually ran>","database":"PubMed","searchedAt":"YYYY-MM-DD"}] instead, '
     + "and every query must appear in clinical-evidence-search.json. Everything the ledger needs is already in the package you have written.",
 });
-// A source the run could not read is a limitation to report, not a defect in
-// the run. These codes all mean "this document was not obtainable", which the
-// skill already instructs the agent to record in failedSources and work around.
-export const recoverableEvidenceSourceErrorCodes = new Set([
-  "full_text_not_available",
-  "full_text_upstream_unavailable",
-  "official_page_upstream_unavailable",
-  // The deployment simply has no Unpaywall address configured, or no gateway to
-  // reach it through. That is host configuration, and failing the run for it
-  // punished an agent that had handled the gap exactly as instructed: it
-  // recorded the three unreadable sources, declared the limitation, and wrote
-  // every required deliverable.
-  "public_source_unpaywall_credential_missing",
-  "public_source_managed_gateway_required",
-  "public_source_managed_credential_required",
-  "public_source_pdf_not_open_access",
-  "public_source_gateway_upstream_unavailable",
-  // An upstream that was down, slow, or rate-limiting. A search hitting one of
-  // these has not found nothing — it has failed to ask, and the run goes on to
-  // ask elsewhere. HTTP 502 from a single public source failed an otherwise
-  // complete run.
-  "public_source_http_error",
-  "public_source_unavailable",
-  "public_source_invalid_response",
-  "public_source_response_too_large",
-  "public_source_pdf_unavailable",
-  "public_source_pdf_too_large",
-  "public_source_gateway_upstream_error",
-  "public_source_gateway_unavailable",
-  "public_source_gateway_timeout",
-  "public_source_gateway_rate_limited",
-  "public_source_gateway_response_invalid",
-  "public_source_gateway_response_too_large",
-  // The specialist adapter boundary — the Python agents this platform fronts.
-  // These mean the downstream service was unreachable, erroring, or absent from
-  // this deployment, which is the same fact as an unreachable public source: a
-  // limitation to record, not a defect in the run. A pharmacovigilance run that
-  // had written both of its declared deliverables was failed here, because no
-  // adapter code was classified at all and the default is to fail.
-  "adapter_unavailable",
-  "adapter_http_error",
-  "adapter_circuit_open",
-  "adapter_unconfigured",
-  "adapter_workload_token_unavailable",
-  // The open-web gateway's own codes. Only the MCP tool's codes were classified
-  // when this was built; the gateway module was never scanned, so the deployment
-  // lacking a search backend, or the aggregator being down, killed runs that had
-  // found their evidence elsewhere.
-  "web_search_gateway_failed",
-  "web_search_gateway_token_missing",
-  // The long-running specialist workers (meta-analysis, the six Python agents)
-  // and the science connectors. Absent, unconfigured, or not running is this
-  // deployment's state, not the run's mistake: it records that the analysis
-  // could not be produced and works with what it has.
-  "meta_agent_unavailable",
-  "meta_agent_unconfigured",
-  "meta_agent_worker_unavailable",
-  "meta_agent_python_unavailable",
-  "meta_model_config_unavailable",
-  "specialist_agent_unavailable",
-  "specialist_agent_unconfigured",
-  "specialist_worker_unavailable",
-  "specialist_python_unavailable",
-  "specialist_model_config_unavailable",
-  "pharmacy_reference_unconfigured",
-  "evimed_evidence_invalid_response",
-  // The open web is the one channel that is expected to be partly unreachable:
-  // engines rate-limit, serve CAPTCHAs, and suspend themselves, and a
-  // deployment may have no metasearch backend at all. Every one of these means
-  // the run failed to ask, not that it found nothing — it carries on with the
-  // bibliographic channels, which is precisely what the skill tells it to do.
-  // Adding the tool without classifying its codes failed a run that had
-  // produced all ten deliverables, six full texts, and sixty-seven works.
-  "web_search_unconfigured",
-  "web_search_unavailable",
-  "web_search_rate_limited",
-  "web_search_upstream_error",
-  "web_search_timeout",
-  "web_search_response_invalid",
-  "web_search_response_too_large",
-  "web_search_endpoint_invalid",
-  "web_search_gateway_token_invalid",
-  // Host configuration the run cannot do anything about.
-  "public_source_gateway_unconfigured",
-  "public_source_dataset_unconfigured",
-  "public_source_managed_credential_invalid",
-  "public_source_gateway_credential_profile_required",
-  // A refusal is the guardrail working, not the run breaking. The fetch tool
-  // answers official_page_url_forbidden when an agent asks for a page outside
-  // the approved official-document set; the agent is meant to hear "not that
-  // one" and go elsewhere, which is exactly what it does. Failing the run for
-  // it punishes the agent for having asked: one production run explored
-  // professional.heart.org/en/science-news, was refused, obeyed, and went on to
-  // write a complete package that passed preflight — and was then failed for
-  // that single refused request, 50 tool calls after it stopped mattering.
-  // Whether the package is sound is decided by the package checks below.
-  //
-  // The gateway's own refusals are the same judgment, and it answers them with
-  // 403: the run asked for a source outside the approved set and was told no.
-  // Its 401 is the host's credential configuration, which the run can no more
-  // fix than a missing Unpaywall address above.
-  "official_page_url_forbidden",
-  "public_source_unsupported",
-  // A downstream specialist service that could not complete. It is one tool a
-  // run may call among many, and calling it is not what the run is judged on:
-  // a production analysis wrote all seven deliverables, then was failed because
-  // the research-topic service crashed on a PubMed 429 and a missing plotting
-  // library — an outage in a helper container and an upstream rate limit,
-  // neither of which is a defect in the analysis. Whether the package is sound
-  // is what the package checks decide.
-  "specialist_execution_failed",
-  "meta_agent_execution_failed",
-  "upstream_failed",
-  "public_source_document_path_forbidden",
-  "public_source_document_request_forbidden",
-  "public_source_gateway_credential_profile_forbidden",
-  "public_source_gateway_graphql_forbidden",
-  "public_source_gateway_url_forbidden",
-  "public_source_pdf_host_forbidden",
-  "public_source_gateway_token_invalid",
-]);
 
-// The other half of the same judgment, kept explicit so that neither list can
-// quietly become the default. A failure here says the run's own machinery
-// broke — it could not write what it fetched, or it built a request the
-// gateway could not parse — and that is worth failing over even when
-// deliverables exist. The gateway draws the same line by status: it refuses
-// with 403 and rejects a malformed request with 400.
-//
-// Every code an evidence tool emits must appear in one set or the other; the
-// test that enumerates the tool sources holds that line, so a code added to the
-// MCP server cannot silently inherit "fails the run" by never being classified.
-export const terminalEvidenceSourceErrorCodes = new Set([
-  // The artifact could not be preserved, so nothing downstream can quote it.
-  "full_text_workspace_invalid",
-  "official_page_workspace_invalid",
-  "full_text_output_invalid",
-  "official_page_output_invalid",
-  // A malformed request is still the run's own problem: unlike a refusal, the
-  // tool never got far enough to have an opinion about the source.
-  "public_source_query_invalid",
-  "public_source_url_invalid",
-  "public_source_dataset_invalid",
-  "public_source_gateway_invalid",
-  "official_page_url_invalid",
-  "full_text_identifier_invalid",
-  "public_source_gateway_accept_invalid",
-  "public_source_gateway_body_invalid",
-  "public_source_gateway_body_too_large",
-  "public_source_gateway_content_type_invalid",
-  "public_source_gateway_credential_profile_invalid",
-  "public_source_gateway_doi_invalid",
-  "public_source_gateway_evimed_request_invalid",
-  "public_source_gateway_field_invalid",
-  "public_source_gateway_method_invalid",
-  "public_source_gateway_url_invalid",
-  "public_source_gateway_variables_invalid",
-  // Named like a refusal, answered as a 400: the runtime tried to supply
-  // credentials itself, which it must never do. That is the runtime
-  // misbehaving, not a source declining to be read.
-  "public_source_gateway_credential_parameter_forbidden",
-  // Retrieved, but unusable as evidence, which the run must not paper over.
-  "full_text_body_missing",
-  "official_page_content_missing",
-  "full_text_pdf_encrypted",
-  "full_text_pdf_not_machine_readable",
-  "full_text_pdf_reader_missing",
-  "full_text_pdf_unreadable",
-  "full_text_too_large",
-  "full_text_upstream_invalid",
-  "full_text_xml_invalid",
-  "official_page_too_large",
-  "official_page_response_invalid",
-  // The adapter was reached and the request or the answer was wrong. A
-  // malformed call is the run's to correct; a response without provenance
-  // cannot be quoted, whatever it contains.
-  "adapter_url_invalid",
-  "adapter_contract_invalid",
-  "adapter_invalid_response",
-  "adapter_redirect_forbidden",
-  "adapter_missing_provenance",
-  // The MCP server refusing the call itself: a tool that does not exist, input
-  // that does not validate, an assessment request that is not well formed.
-  "unknown_tool",
-  "invalid_input",
-  "invalid_assessment",
-  "invalid_assessment_action",
-  "invalid_assessment_requirements",
-  // A search the gateway could not parse: the query, its bounds, or its size.
-  // The run rewrites and asks again.
-  "web_search_query_invalid",
-  "web_search_request_invalid",
-  "web_search_request_too_large",
-  "web_search_categories_invalid",
-  "web_search_language_invalid",
-  "web_search_limit_invalid",
-  "web_search_time_range_invalid",
-  // Malformed calls into the specialist workers and the science connectors:
-  // a bad action, an id that is not one, a path outside the workspace, an
-  // argument the schema rejects. The run rewrites the call.
-  "meta_action_invalid",
-  "meta_topic_required",
-  "meta_job_id_invalid",
-  "meta_job_state_invalid",
-  "meta_job_state_too_large",
-  "meta_input_path_invalid",
-  "meta_output_scope_invalid",
-  "meta_workspace_invalid",
-  "meta_agent_root_invalid",
-  "specialist_action_invalid",
-  "specialist_input_required",
-  "specialist_input_path_invalid",
-  "specialist_job_id_invalid",
-  "specialist_job_state_invalid",
-  "specialist_job_state_too_large",
-  "specialist_output_scope_invalid",
-  "specialist_workspace_invalid",
-  "specialist_agent_root_invalid",
-  "specialist_project_env_invalid",
-  "science_connector_unknown",
-  "science_connector_tool_invalid",
-  "science_connector_site_invalid",
-  "science_connector_query_invalid",
-  "science_connector_request_invalid",
-  "science_connector_request_too_large",
-  "science_connector_schema_invalid",
-  "science_connector_series_invalid",
-  "science_connector_period_invalid",
-  "science_connector_database_invalid",
-  "science_connector_arguments_invalid",
-  "science_connector_argument_required",
-  "science_connector_argument_unknown",
-  "science_connector_enum_invalid",
-  "science_connector_integer_invalid",
-  "science_connector_number_invalid",
-  "science_connector_string_invalid",
-  "science_connector_string_pattern_invalid",
-  "science_connector_value_above_maximum",
-  "science_connector_value_below_minimum",
-  "pharmacy_reference_invalid",
-  // The worker finished but its output does not match the evidence it claims.
-  // Delivering that is exactly what this gate exists to prevent.
-  "meta_source_evidence_mismatch",
-  "specialist_source_evidence_mismatch",
-]);
 
 // Transport died before either side could say anything. The MCP client reports
 // this as a bare string ("MCP error -32001: Request timed out") with no JSON
@@ -802,9 +666,9 @@ function successfulToolPart(part) {
 
 function successfulEvidenceSearchQueries(messages) {
   const searchTools = [
-    "evimed_literature_search",
-    "evimed_guideline_search",
-    "evimed_biomedical_source_search",
+    "literature_search",
+    "guideline_search",
+    "biomedical_source_search",
   ];
   return messages
     .flatMap((message) => message?.parts ?? [])
@@ -833,7 +697,11 @@ function terminalFromMessages(messages) {
     // fail routinely while an agent explores — one `read` past end of file
     // failed an otherwise complete peer review — and whether the deliverables
     // exist is checked separately against the declared outputs.
-    if (typeof part.tool !== "string" || !part.tool.includes("evimed_")) continue;
+    // Asked of the vocabulary, not by substring. A research tool has three
+    // spellings — bare, `mcp__evimed__`-prefixed and the historic `evimed_` —
+    // and a substring test both misses the bare one the rollback kernel shows
+    // and matches the socket's own `evimed_plan`, which is not research work.
+    if (typeof part.tool !== "string" || !isMcpToolName(part.tool)) continue;
     const errorCode = parsedToolErrorCode(part);
     // Keyed on the code, not on which tool asked. Every code in that set means
     // an external source was unreachable or had nothing to give, and that is
@@ -1047,6 +915,26 @@ function assistantProse(messages) {
     .join("\n");
 }
 
+/**
+ * The specialist completion verdict, named once.
+ *
+ * It was declared on `requiredSpecialistArtifacts` and inferred on the function
+ * that produces it, which held only while the domain's own checks returned
+ * `any`. Once those were typed, the inferred union stopped matching the
+ * declaration and the disagreement surfaced here rather than in whatever read
+ * the field later. One typedef, both ends.
+ *
+ * @typedef {{
+ *   artifacts: any[],
+ *   errorCode: string|null,
+ *   qualityIssues?: string[],
+ *   qualityDegradable?: boolean,
+ *   qualityUnverified?: boolean,
+ *   qualityUnchecked?: boolean,
+ *   qualityNotices?: string[],
+ * }} SpecialistCompletionVerdict
+ */
+
 /** TypeScript infers a destructured parameter as exactly the shape its
  *  defaults name, which rejects every other property a caller passes.
  *  @param {any} project
@@ -1054,14 +942,7 @@ function assistantProse(messages) {
  *  @param {any} agentRegistry
  *  @param {any} sourceArtifactProvenance
  *  @param {any} assistantMessages
- *  @returns {Promise<{
- *    artifacts: any[],
- *    errorCode: string|null,
- *    qualityIssues?: string[],
- *    qualityDegradable?: boolean,
- *    qualityUnverified?: boolean,
- *    qualityNotices?: string[],
- *  }>}
+ *  @returns {Promise<SpecialistCompletionVerdict>}
  */
 async function requiredSpecialistArtifacts(
   project,
@@ -1076,6 +957,11 @@ async function requiredSpecialistArtifacts(
   // because the checks below each return the moment they conclude, so a finding
   // that is not a reason to withhold anything has nowhere else to survive.
   const advisories = [];
+  // Layers that did not run. Separate from the advisories because "we looked
+  // and found nothing to say" and "we did not look" are different facts, and
+  // only the second one has to reach the machine-readable verdict.
+  /** @type {string[]} */
+  const skippedChecks = [];
   const outcome = await specialistCompletionOutcome(
     project,
     run,
@@ -1085,11 +971,13 @@ async function requiredSpecialistArtifacts(
     advisories,
     briefText,
     judgeCoverage,
+    skippedChecks,
   );
-  if (advisories.length === 0) return outcome;
+  const unchecked = skippedChecks.length > 0 ? { qualityUnchecked: true } : {};
+  if (advisories.length === 0) return { ...outcome, ...unchecked };
   return outcome.errorCode
-    ? { ...outcome, qualityIssues: [...(outcome.qualityIssues ?? []), ...advisories] }
-    : { ...outcome, qualityNotices: advisories };
+    ? { ...outcome, ...unchecked, qualityIssues: [...(outcome.qualityIssues ?? []), ...advisories] }
+    : { ...outcome, ...unchecked, qualityNotices: advisories };
 }
 
 /** @param {any} project
@@ -1099,7 +987,9 @@ async function requiredSpecialistArtifacts(
  *  @param {any} assistantMessages
  *  @param {string[]} advisories
  *  @param {any} briefText
- *  @param {((context: any) => Promise<{ notices: string[] }>)|null} judgeCoverage
+ *  @param {((context: any) => void)|null} judgeCoverage
+ *  @param {string[]} skippedChecks
+ *  @returns {Promise<SpecialistCompletionVerdict>}
  */
 async function specialistCompletionOutcome(
   project,
@@ -1110,6 +1000,7 @@ async function specialistCompletionOutcome(
   advisories,
   briefText,
   judgeCoverage = null,
+  skippedChecks = [],
 ) {
   if (!run.effectiveAgentId) return { artifacts: [], errorCode: null };
   const registry = await agentRegistry;
@@ -1439,25 +1330,35 @@ async function specialistCompletionOutcome(
     // delivered run as a notice, and is appended to the issues of a failed one.
     // The alternative — a coverage check that quietly does less after a restart
     // — is a package delivered as if it had been checked against the brief.
-    if (validation.coverageDegradedNotice) advisories.push(validation.coverageDegradedNotice);
+    if (validation.coverageDegradedNotice) {
+      advisories.push(validation.coverageDegradedNotice);
+      // The notice explains it to a human. This is the same fact in the field a
+      // machine reads: the brief-versus-ledger comparison did not happen.
+      skippedChecks.push("brief-question-coverage");
+    }
     // The semantic half, on a package that has already cleared every
     // deterministic check that can withhold it. Deliberately last, deliberately
     // conditional on there being nothing blocking: a package heading back round
     // the repair loop will be judged when it comes back clean, and a model call
-    // per repair attempt is a cost with no reader on the other end. It cannot
-    // change the verdict — judgeCoverage returns notices only — so it is safe
-    // to skip and safe to fail.
+    // per repair attempt is a cost with no reader on the other end.
+    //
+    // Started, not awaited. The judgement's median wall clock is 161 s (max 226
+    // s over 29 live runs) and this function is awaited by reconcileSession,
+    // which is awaited by the dispatch and start HTTP handlers — so awaiting it
+    // here hung a user's request for three minutes to compute something that
+    // cannot change the answer being computed. It produces notices only, so it
+    // is attached to the run when it comes back.
     if (typeof judgeCoverage === "function" && validation.blockingIssues.length === 0) {
       try {
-        const judged = await judgeCoverage(coverageJudgeContext({
+        judgeCoverage(coverageJudgeContext({
           briefText,
           questionCoverageText: files.get("question-coverage.json") ?? "",
           reportText: files.get("clinical-evidence-report.md") ?? "",
         }));
-        advisories.push(...(judged?.notices ?? []));
       } catch {
-        // A judge that throws is a judge that did not run. It is not a reason
-        // to withhold a package that passed everything that can withhold it.
+        // A judge that will not even start is a judge that did not run. It is
+        // not a reason to withhold a package that passed everything that can
+        // withhold it.
       }
     }
     if (!validation.valid) {
@@ -1509,6 +1410,83 @@ async function specialistCompletionOutcome(
   return { artifacts, errorCode: null };
 }
 
+/**
+ * The run's own projection of itself, read from the workspace.
+ *
+ * Hidden knowledge: what the control plane may and may not learn about a run in
+ * flight, and why this file rather than the kernel's storage. DSH's storage
+ * format carries no compatibility promise — rc.8 changed it with no migration —
+ * so the socket projects its four durable tables into `.evimed-run/state.json`
+ * and that is what is read here. The path guard makes the file unwritable by
+ * the model, so it is a projection of what happened rather than a claim about
+ * it.
+ *
+ * Three outcomes, deliberately, because collapsing them is the bug this whole
+ * area keeps producing:
+ *
+ * - `missing` — a run that writes no projection is normal. An answer-mode run
+ *   has no plan, no evidence table and no deliverables, so there is nothing to
+ *   project. This must never read as "not progressing".
+ * - `unreadable` — the file is there and does not parse. That is a named
+ *   failure worth surfacing (§14 rule 18), and it is emphatically not evidence
+ *   of a stall: treating it as one would mean the fix for stall misjudgement
+ *   introduced a fresh source of it.
+ * - `read` — the projection, with the counters that move.
+ *
+ * @param {Record<string, any>} project @param {string} workspaceRoot
+ * @returns {Promise<{ state: 'missing'|'unreadable'|'read', projection?: Record<string, any> }>}
+ */
+async function readRunStateProjection(project, workspaceRoot) {
+  let text;
+  try {
+    text = await readTextFileNoFollow(workspaceRoot, path.join(workspaceRoot, workspaceLayout.runStateFile), "");
+  } catch {
+    // Unreadable for any reason the filesystem gives — including absent, which
+    // `readTextFileNoFollow` reports as an empty string rather than a throw.
+    return { state: "unreadable" };
+  }
+  if (!text) return { state: "missing" };
+  try {
+    const projection = JSON.parse(text);
+    if (!projection || typeof projection !== "object" || Array.isArray(projection)) return { state: "unreadable" };
+    return { state: "read", projection };
+  } catch {
+    return { state: "unreadable" };
+  }
+}
+
+/**
+ * What in the run's own projection counts as the run having done something.
+ *
+ * The root session's message and tool-call counts are the other half of the
+ * progress signal, and they are exactly what goes still during a delegated
+ * stretch: the orchestrator hands work to children and waits. Everything named
+ * here keeps moving while it waits.
+ *
+ * Measured against what the projection actually carries, which is less than it
+ * looks: `subagents` is initialised and never written to by any plugin, and
+ * `budget.steps` counts the *root* session only — a subagent's session never
+ * gets a `runId` (its brief injection returns before that line), so the run
+ * mirror and the gate-run table are never written on its behalf. Evidence is
+ * the one table a child does reach, because the evidence plugin's tool-observed
+ * hook is not gated on a run id.
+ *
+ * @param {Record<string, any>} projection
+ * @returns {string} a signature that changes exactly when the run has moved
+ */
+function runSideActivitySignature(projection) {
+  const evidence = projection?.evidence ?? {};
+  const budget = projection?.budget ?? {};
+  const plan = projection?.plan ?? {};
+  return [
+    Number(evidence.total ?? 0) || 0,
+    Number(budget.children ?? 0) || 0,
+    Number(budget.steps ?? 0) || 0,
+    Number(plan.revision ?? 0) || 0,
+    Array.isArray(projection?.gateRuns) ? projection.gateRuns.length : 0,
+  ].join(":");
+}
+
 export class AgentRunStore {
   constructor(researchSessions, options = {}) {
     this.researchSessions = researchSessions;
@@ -1521,6 +1499,12 @@ export class AgentRunStore {
     this.readSessionHistory = options.readSessionHistory ?? (async () => []);
     this.readSessionStatus = options.readSessionStatus ?? (async () => "idle");
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
+    /** Whoever forwards a run's own projection to the browser. @type {(project: any, run: any, type: string, data: any) => void} */
+    this.onRunProjection = options.onRunProjection ?? (() => {});
+    /** Per-run memory, so a fixed-interval poll does not repeat itself. */
+    this.projectionDigests = new Map();
+    this.projectionAdmissions = new Map();
+    this.projectionNoticed = new Set();
     this.monitorIntervalMs = options.monitorIntervalMs ?? 500;
     this.monitorMaxPolls = options.monitorMaxPolls ?? 3600;
     // Consecutive polls with no new message and no new tool call before a run
@@ -1528,6 +1512,12 @@ export class AgentRunStore {
     this.monitorStallPolls = options.monitorStallPolls ?? 0;
     this.onRunFinished = options.onRunFinished ?? (async () => {});
     this.onRunFinishedError = options.onRunFinishedError ?? (async () => {});
+    // Every state change the ledger commits is announced. The browser's live
+    // view used to be built by re-reading the ledger on a timer, which meant a
+    // run could sit in a state for seconds after reaching it; announcing at the
+    // commit makes "what the ledger says" and "what the page shows" the same
+    // thing without a second polling loop.
+    this.onRunStateChanged = options.onRunStateChanged ?? (() => {});
     this.maxClinicalRepairAttempts = options.maxClinicalRepairAttempts ?? 2;
     if (!Number.isSafeInteger(this.maxClinicalRepairAttempts) || this.maxClinicalRepairAttempts < 0) {
       throw new TypeError("AgentRunStore maxClinicalRepairAttempts must be a non-negative integer.");
@@ -1553,14 +1543,54 @@ export class AgentRunStore {
     // polls, and a repair loop re-enters this path — reuses the answer instead
     // of paying for it again.
     this.coverageJudge = options.coverageJudge ?? null;
-    /** @type {Map<string, Promise<{ notices: string[] }>>} */
+    /** @type {Map<string, Promise<{ notices: string[], judged?: boolean }>>} */
     this.coverageJudgements = new Map();
     if (!this.model) throw new Error("AgentRunStore requires a configured model.");
   }
 
+  /** Announce a committed state change. Isolated: a listener must never be able
+   *  to fail the write it is observing.
+   *  isolated: evimed_run_state_listener_failures_total
+   *  @param {Record<string, any>} project @param {Record<string, any> | null | undefined} run */
+  notifyState(project, run) {
+    if (!run) return;
+    // The one choke point every push notification passes through, so `phase`
+    // (§7.1.1) reaches `run/state` the same way it reaches `list()` — a fresh
+    // record straight from `foldEvents` has the ledger's own four-value
+    // `status` but nothing computed from it yet. Computed outside the isolating
+    // try below: a phase that fails to compute must not silently cancel the
+    // state-change notification itself, only the one field derived from it.
+    let phase = null;
+    try {
+      // `run` is `Record<string, any>` here (every notifyState caller folds a
+      // record from a different branch of `foldEvents`), so the same cast as
+      // `runPhaseHistory` applies for the same reason: the fields `runPhase`
+      // reads are exactly the ones every folded run record carries.
+      phase = runPhase(/** @type {Parameters<typeof runPhase>[0]} */ ({ ...run, hasProgressEvent: Boolean(run.lastProgressAt) }));
+    } catch { /* isolated: evimed_run_phase_projection_failures_total */ }
+    try {
+      this.onRunStateChanged(project, { ...run, phase });
+    } catch { /* isolated: evimed_run_state_listener_failures_total */ }
+  }
+
   async list(project) {
     const events = parseEvents(await readLedgerText(project, this.maxBytes));
-    return [...foldEvents(events).values()].sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+    const runs = [...foldEvents(events).values()];
+    // `phase` is a projection, never a stored field (§7.1.1): computed fresh on
+    // every read from the same four ledger values every other reader already
+    // sees, plus a diagnostic walk of this run's own events that counts an
+    // illegal phase sequence rather than ever refusing to return the run.
+    return runs
+      .map((run) => {
+        const history = runPhaseHistory(events, run.id);
+        return {
+          ...run,
+          phase: history.phase,
+          phaseIllegalTransitions: history.illegalTransitions,
+          ...(history.notices.length ? { phaseNotices: history.notices } : {}),
+        };
+      })
+      .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
   }
 
   async recover(project) {
@@ -1662,6 +1692,7 @@ export class AgentRunStore {
         throw error;
       }
       const run = foldEvents([...events, event]).get(id);
+      this.notifyState(project, run);
       return { run, owner: true };
     });
   }
@@ -1738,19 +1769,90 @@ export class AgentRunStore {
     }
   }
 
-  /** One semantic coverage judgement per run, whatever else happens to it.
+  /** One semantic coverage judgement per run, off the request path.
    *
-   *  The cost ceiling is the point: one finished run, one model call. The
+   *  Started here and never awaited by the caller: the delivery decision does
+   *  not depend on it and must not wait three minutes for it. When it comes
+   *  back, its notices are appended to the run wherever the run has got to —
+   *  including after the run has finished, which is the normal case.
+   *
+   *  The cost ceiling is the other point: one run, one model call. The
    *  in-flight promise is cached rather than its result, so two monitor passes
-   *  landing together do not both issue a call.
-   *  @param {string} runId @param {any} context */
-  judgeCoverageOnce(runId, context) {
+   *  landing together do not both issue a call, and the entry survives a repair
+   *  round so a re-judged package is not paid for twice.
+   *  @param {any} project @param {string} runId @param {any} context */
+  scheduleCoverageJudgement(project, runId, context) {
+    // No judge, or nothing judgeable: no call, and nothing to remember.
+    if (!this.coverageJudge || !context) return null;
     const existing = this.coverageJudgements.get(runId);
     if (existing) return existing;
-    const pending = Promise.resolve(this.coverageJudge.judge(context))
-      .catch(() => ({ notices: [], judged: false, verdicts: [] }));
+    const pending = (async () => {
+      /** @type {any} */
+      let result;
+      try {
+        result = await this.coverageJudge.judge(context);
+      } catch {
+        // A judge that throws is a judge that did not run, and a run already
+        // delivered is not revisited for it.
+        result = { notices: [], judged: false, verdicts: [] };
+      }
+      const notices = Array.isArray(result?.notices) ? result.notices : [];
+      if (notices.length > 0) {
+        try {
+          // A judge that was asked and could not answer says so, and that is
+          // the "this layer was not checked" fact, not a finding about the
+          // package. It may only add the admission, never withdraw one.
+          const unchecked = result?.judged === false;
+          await this.appendQualityNotices(project, runId, notices, { unchecked });
+        } catch (error) {
+          process.stderr.write(
+            `coverage judgement could not be attached to ${runId}: ${error?.code ?? (error instanceof Error ? error.message : String(error))}\n`,
+          );
+        }
+      }
+      return result;
+    })();
     this.coverageJudgements.set(runId, pending);
     return pending;
+  }
+
+  /** Append to what a run tells its reader, after the delivery decision.
+   *
+   *  A separate ledger event rather than a rewrite of the terminal one: the
+   *  terminal event is the delivery decision and stays exactly as it was
+   *  written. This can add notices and can admit that a layer went unchecked;
+   *  it cannot move a run's status, error code or artifacts, and folding is
+   *  order-independent, so a notice that lands before the run finishes reads
+   *  the same as one that lands after.
+   *  @param {any} project @param {string} rawRunId @param {any} notices
+   *  @param {{ unchecked?: boolean }} options */
+  async appendQualityNotices(project, rawRunId, notices, { unchecked = false } = {}) {
+    const runId = safeId(rawRunId, "agent run id");
+    const normalized = normalizeQualityNotices(notices);
+    if (normalized.length === 0) return null;
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const current = foldEvents(events).get(runId);
+      if (!current) return null;
+      const event = {
+        event: "notice",
+        id: runId,
+        at: this.now().toISOString(),
+        qualityNotices: normalized,
+        ...(unchecked ? { verification: "unchecked" } : {}),
+      };
+      const text = serializeNext(events, event, this.maxBytes);
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      const noticed = foldEvents([...events, event]).get(runId);
+      this.notifyState(project, noticed);
+      return noticed;
+    });
+  }
+
+  /** Wait for every coverage judgement still in flight. Shutdown and tests
+   *  only — no request path may call this, which is the whole point of D2. */
+  async settleCoverageJudgements() {
+    await Promise.allSettled([...this.coverageJudgements.values()]);
   }
 
   /** Put a read-only copy of the brief in the workspace.
@@ -1791,7 +1893,9 @@ export class AgentRunStore {
       const event = { event: "dispatch", id: runId, status };
       const text = serializeNext(events, event, this.maxBytes);
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
-      return foldEvents([...events, event]).get(runId);
+      const dispatched = foldEvents([...events, event]).get(runId);
+      this.notifyState(project, dispatched);
+      return dispatched;
     });
   }
 
@@ -1816,7 +1920,9 @@ export class AgentRunStore {
       const event = { event: "finished", id: runId, ...normalized, finishedAt, durationMs };
       const text = serializeNext(events, event, this.maxBytes);
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
-      return { run: foldEvents([...events, event]).get(runId), transitioned: true };
+      const finished = foldEvents([...events, event]).get(runId);
+      this.notifyState(project, finished);
+      return { run: finished, transitioned: true };
     });
     const result = outcome.run;
     if (result.status !== "running") {
@@ -1825,10 +1931,26 @@ export class AgentRunStore {
       this.clinicalRepairBaselineCursors.delete(runId);
       this.clinicalRepairSenders.delete(runId);
       this.clinicalRepairReportSizes.delete(runId);
+      // The projection memories are per-run gauges, not a record: a finished
+      // run's digests and admissions would otherwise be held for the life of
+      // the process.
+      this.projectionDigests.delete(runId);
+      this.projectionAdmissions.delete(runId);
+      this.projectionNoticed.delete(runId);
       // The gate has already run by the time a run reaches a terminal state,
       // so the brief has done its work; keeping it would grow with every run.
       this.dispatchedBriefs.delete(runId);
-      this.coverageJudgements.delete(runId);
+      // The judgement is not on the delivery path any more, so a terminal run
+      // routinely still has one in flight. Dropping the entry here would drop
+      // the only thing stopping a second, separately billed call — so it is
+      // released when the call settles, not when the run does.
+      const pendingJudgement = this.coverageJudgements.get(runId);
+      if (pendingJudgement) {
+        const release = () => {
+          if (this.coverageJudgements.get(runId) === pendingJudgement) this.coverageJudgements.delete(runId);
+        };
+        pendingJudgement.then(release, release);
+      }
     }
     if (outcome.transitioned) {
       try {
@@ -1925,7 +2047,9 @@ export class AgentRunStore {
           // after a restart has no brief here, and the gate is told so rather
           // than reading the copy in the workspace.
           this.dispatchedBriefs.get(run.id) ?? null,
-          this.coverageJudge ? (context) => this.judgeCoverageOnce(run.id, context) : null,
+          // Fire-and-forget by design: the gate hands the judge its context and
+          // carries on deciding. See scheduleCoverageJudgement.
+          this.coverageJudge ? (context) => { this.scheduleCoverageJudgement(project, run.id, context); } : null,
         );
       } catch {
         completion = { artifacts: [], errorCode: "specialist_contract_unavailable" };
@@ -1973,16 +2097,25 @@ export class AgentRunStore {
           // instead of discarding the whole run.
           terminal.status = "succeeded";
           terminal.errorCode = null;
-          terminal.verification = completion.qualityUnverified ? "unverified" : null;
+          // A finding outranks an admission: "we checked and it did not hold
+          // up" is the more serious of the two and is what the reader is shown.
+          terminal.verification = completion.qualityUnverified
+            ? "unverified"
+            : completion.qualityUnchecked ? "unchecked" : null;
           terminal.qualityNotices = completion.qualityIssues;
         } else {
           terminal.status = "failed";
           terminal.errorCode = completion.errorCode;
           if (Array.isArray(completion.qualityIssues)) terminal.qualityNotices = completion.qualityIssues;
         }
-      } else if (Array.isArray(completion.qualityNotices) && completion.qualityNotices.length > 0) {
-        // Nothing withheld the package, but a check still had something to say.
-        terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...completion.qualityNotices];
+      } else {
+        // Nothing withheld the package. A check may still have had something to
+        // say — and a check may not have run at all, which is the one thing a
+        // clean-looking delivery must not be allowed to hide.
+        if (completion.qualityUnchecked) terminal.verification = "unchecked";
+        if (Array.isArray(completion.qualityNotices) && completion.qualityNotices.length > 0) {
+          terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...completion.qualityNotices];
+        }
       }
     }
     // Whatever the verdict, say if repair cost the report its substance. The
@@ -2018,6 +2151,90 @@ export class AgentRunStore {
    * Returns whether the run moved since the last observation, which is what
    * separates a long run from a dead one. Only a change is written, so the
    * ledger does not grow with every poll of a quiet run. */
+  /**
+   * Reads the run's own projection and turns it into the three things the
+   * control plane needs from it.
+   *
+   * One read, three consumers, on the monitor's existing cycle: the stall
+   * signal, the browser's evidence and budget frames, and the run's own
+   * quality notices. They are together because they come from one file and
+   * splitting them would mean reading it three times on three schedules.
+   *
+   * @param {any} project @param {Record<string, any>} run
+   * @returns {Promise<{ signature: string | null, unreadable: boolean }>}
+   */
+  async readRunSideActivity(project, run) {
+    let workspaceRoot;
+    try {
+      workspaceRoot = await this.runtimeWorkspaceRoot(project);
+    } catch {
+      workspaceRoot = project.workspaceDir;
+    }
+    const read = await readRunStateProjection(project, workspaceRoot);
+    if (read.state === "missing") return { signature: null, unreadable: false };
+    if (read.state === "unreadable") {
+      // Said once per run, not once per poll: the monitor wakes on a fixed
+      // interval and a notice per wake would bury the ledger in one repeated
+      // sentence. isolated: evimed_run_projection_unreadable_total
+      if (!this.projectionNoticed.has(run.id)) {
+        this.projectionNoticed.add(run.id);
+        await this.appendQualityNotices(project, run.id, [
+          "运行自述文件 .evimed-run/state.json 无法解析，本次运行的证据与预算明细不可见；运行本身不受影响。",
+        ]).catch(() => {});
+      }
+      return { signature: null, unreadable: true };
+    }
+    const projection = read.projection ?? {};
+    this.publishRunProjection(project, run, projection);
+    return { signature: runSideActivitySignature(projection), unreadable: false };
+  }
+
+  /**
+   * Forwards the projection's own facts to whoever is watching the run.
+   *
+   * Debounced on content rather than on time: the monitor polls on a fixed
+   * interval and most polls change nothing, so an undebounced publish would
+   * send the same two frames every tick forever and a reader could not tell a
+   * change from a heartbeat.
+   *
+   * @param {any} project @param {Record<string, any>} run @param {Record<string, any>} projection
+   */
+  publishRunProjection(project, run, projection) {
+    const evidence = {
+      total: Number(projection?.evidence?.total ?? 0) || 0,
+      byStatus: projection?.evidence?.byStatus && typeof projection.evidence.byStatus === "object" ? projection.evidence.byStatus : {},
+    };
+    const budget = {
+      steps: Number(projection?.budget?.steps ?? 0) || 0,
+      tokens: Number(projection?.budget?.tokens ?? 0) || 0,
+      children: Number(projection?.budget?.children ?? 0) || 0,
+      limits: projection?.budget?.limits && typeof projection.budget.limits === "object" ? projection.budget.limits : {},
+    };
+    const sent = this.projectionDigests.get(run.id) ?? {};
+    const next = { evidence: JSON.stringify(evidence), budget: JSON.stringify(budget) };
+    // isolated: evimed_run_projection_publish_failures_total — a listener that
+    // throws must not end the run whose progress it was told about.
+    try {
+      if (next.evidence !== sent.evidence) this.onRunProjection(project, run, "evidence/update", evidence);
+      if (next.budget !== sent.budget) this.onRunProjection(project, run, "budget/update", budget);
+    } catch { /* isolated */ }
+    this.projectionDigests.set(run.id, next);
+
+    // The run's own admissions ride the ledger, not the stream: they outlive
+    // the socket a browser is holding, and a reader who opens the run tomorrow
+    // must still see that a layer went unchecked.
+    const admissions = [
+      ...(Array.isArray(projection?.degraded) ? projection.degraded : []),
+      ...(Array.isArray(projection?.qualityNotices) ? projection.qualityNotices : []),
+    ].filter((line) => typeof line === "string" && line);
+    const already = this.projectionAdmissions.get(run.id) ?? new Set();
+    const fresh = admissions.filter((line) => !already.has(line));
+    if (!fresh.length) return;
+    for (const line of fresh) already.add(line);
+    this.projectionAdmissions.set(run.id, already);
+    this.appendQualityNotices(project, run.id, fresh).catch(() => {});
+  }
+
   async recordProgress(project, run) {
     let history;
     try {
@@ -2041,12 +2258,35 @@ export class AgentRunStore {
       (total, message) => total + (message?.parts ?? []).filter((part) => part?.type === "tool").length,
       0,
     );
-    if (messages === (run.observedMessages ?? 0) && toolCalls === (run.observedToolCalls ?? 0)) return false;
+
+    // The run's own projection, read on the monitor's existing cycle rather
+    // than on a loop of its own. This is what makes a delegated stretch
+    // distinguishable from a dead run: the two counts above are the root
+    // session's, and the root session is *supposed* to go quiet while its
+    // children work. Before this, a run that delegated and waited looked
+    // exactly like one that had died, and the stall threshold closed it.
+    const runSide = await this.readRunSideActivity(project, run);
+    const activity = runSide.signature;
+
+    const stillByHistory = messages === (run.observedMessages ?? 0) && toolCalls === (run.observedToolCalls ?? 0);
+    const stillByRunSide = activity === null || activity === (run.observedRunSideActivity ?? null);
+    // Unreadable is neither moved nor still. Returning `false` here would make
+    // a corrupt projection feed the stall counter, which is the same mistake
+    // the history read already learned not to make one function up.
+    if (runSide.unreadable && stillByHistory) return null;
+    if (stillByHistory && stillByRunSide) return false;
     await withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const current = foldEvents(events).get(run.id);
       if (!current || current.status !== "running") return;
-      const event = { event: "progress", id: run.id, at: this.now().toISOString(), messages, toolCalls };
+      const event = {
+        event: "progress",
+        id: run.id,
+        at: this.now().toISOString(),
+        messages,
+        toolCalls,
+        ...(activity === null ? {} : { runSideActivity: activity }),
+      };
       // Only the latest observation of a run is worth keeping. Appending every
       // one filled the ledger with 7,800 progress rows across 31 runs and left
       // it 114 bytes under the limit, after which no further run could start at
@@ -2063,6 +2303,17 @@ export class AgentRunStore {
   scheduleMonitor(project, runId) {
     if (this.monitors.has(runId)) return;
     let canceled = false;
+    /**
+     * Wakes the monitor out of its inter-poll sleep.
+     *
+     * Without it, cancelling a monitor only takes effect at the *next* poll,
+     * which by default is four hours away — so shutdown either returned while
+     * the monitor was still writing to the project's storage, or would have had
+     * to wait out the interval. The first is what happened: a canceled monitor
+     * mid-`finishInternal` kept running after its project directory was gone.
+     * @type {(() => void) | null}
+     */
+    let wake = null;
     const promise = (async () => {
       let idlePolls = 0;
       // eslint-disable-next-line no-unmodified-loop-condition -- set by the cancel closure registered below
@@ -2089,10 +2340,21 @@ export class AgentRunStore {
           });
           return;
         }
+        // Checked here as well as in the loop condition. A cancel that lands
+        // while a poll is in flight would otherwise be followed by a sleep that
+        // nothing wakes — the loop only re-reads `canceled` after it — so the
+        // shutdown waiting on this monitor would wait out a full interval,
+        // which is four hours by default.
+        if (canceled) return;
         await new Promise((resolve) => {
           const timer = setTimeout(resolve, this.monitorIntervalMs);
           timer.unref?.();
+          wake = () => {
+            clearTimeout(timer);
+            resolve(undefined);
+          };
         });
+        wake = null;
       }
       if (!canceled) {
         await this.finishInternal(project, runId, {
@@ -2104,13 +2366,20 @@ export class AgentRunStore {
     })().finally(() => {
       if (this.monitors.get(runId)?.promise === promise) this.monitors.delete(runId);
     });
-    this.monitors.set(runId, { promise, cancel: () => { canceled = true; } });
+    this.monitors.set(runId, { promise, cancel: () => { canceled = true; wake?.(); } });
   }
 
   async closeProject(project, status = "canceled") {
     const runs = await this.list(project);
     for (const run of runs.filter((item) => item.status === "running")) {
-      this.monitors.get(run.id)?.cancel();
+      const monitor = this.monitors.get(run.id);
+      monitor?.cancel();
+      // Awaited, not merely cancelled. `cancel()` sets a flag the loop reads
+      // between polls; returning before the loop has actually stopped leaves a
+      // monitor writing to storage the caller believes it has finished with,
+      // and the failure surfaces somewhere else entirely — a run that cannot
+      // be found, in a project directory that has already been removed.
+      await monitor?.promise?.catch(() => {});
       await this.finishInternal(project, run.id, {
         status,
         errorCode: status === "failed" ? "runtime_stopped" : "runtime_canceled",
@@ -2120,9 +2389,21 @@ export class AgentRunStore {
   }
 
   async closeAll() {
-    for (const project of this.projects.values()) await this.closeProject(project, "canceled");
+    for (const project of this.projects.values()) {
+      try {
+        await this.closeProject(project, "canceled");
+      } catch {
+        // isolated: evimed_agent_run_close_all_failures_total — one project's
+        // ledger being unreadable (oversized, corrupted) must not stop every
+        // other project's runs from being marked canceled on shutdown.
+      }
+    }
     this.projects.clear();
     this.dispatchOwners.clear();
+    // Not awaited: a judgement can take minutes and shutdown must not wait on
+    // one. Anything still in flight will fail its append against a store that
+    // is going away, which scheduleCoverageJudgement already swallows.
+    this.coverageJudgements.clear();
     this.clinicalRepairAttempts.clear();
     this.clinicalRepairBaselineCursors.clear();
     this.clinicalRepairSenders.clear();

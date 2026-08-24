@@ -10,10 +10,11 @@ import { assertDockerDataVolumeSupport } from "../src/dockerMounts.mjs";
 import {
   RuntimeManager,
   buildOpenCodeLaunchPlan,
-  cleanupHostRuntimeProcess,
   cleanupDockerContainer,
+  cleanupHostRuntimeProcess,
   requestRuntime,
   runtimeContainerName,
+  runtimeDshHome,
   syncRuntimeAgentPackages,
   syncRuntimeSkills,
 } from "../src/runtimeManager.mjs";
@@ -112,9 +113,9 @@ requiredInputs:
   - topic
 optionalInputs: []
 requiredTools:
-  - evimed_term_normalize
+  - term_normalize
 optionalTools:
-  - evimed_literature_search
+  - literature_search
 dataSources:
   - literature
 outputs:
@@ -999,8 +1000,8 @@ test("syncRuntimeAgentPackages materializes deterministic skills and primary age
     assert.match(firstAgent, /2\. `citation-integrity`/);
     assert.match(firstAgent, /3\. `test-analysis`/);
     assert.match(firstAgent, /Do not claim completion if any required skill was not loaded successfully/);
-    assert.match(firstAgent, /`evimed_term_normalize`/);
-    assert.match(firstAgent, /`evimed_literature_search`/);
+    assert.match(firstAgent, /`term_normalize`/);
+    assert.match(firstAgent, /`literature_search`/);
     assert.match(firstAgent, /`reports\/test-analysis\.md` \(required\)/);
     assert.match(firstAgent, /`artifacts\/test-analysis\.json` \(optional\)/);
     assert.doesNotMatch(firstAgent, /This sentence must not be copied/);
@@ -1793,4 +1794,153 @@ test("RuntimeManager enforces per-user runtime capacity across projects", async 
   const bobRuntime = await manager.start(bobProject);
   assert.equal(bobRuntime.url, "http://127.0.0.1/bob-paper2");
   await manager.closeAll();
+});
+
+test("the DSH launch plan swaps the entrypoint and nothing else about the isolation", () => {
+  const dataDir = "/data";
+  const volumeProject = {
+    ...project,
+    rootDir: "/data/users/alice/projects/paper1",
+    workspaceDir: "/data/users/alice/projects/paper1/workspace/session-1",
+    runtimeDir: "/data/users/alice/projects/paper1/runtime",
+  };
+  const base = {
+    dataDir,
+    runtimeSandboxMode: "docker",
+    runtimeContainerBin: "docker",
+    runtimeContainerImage: "open-science-runtime:test",
+    runtimeDataVolume: "open-science-data",
+    runtimeTransport: "unix",
+    runtimeNetworkMode: "none",
+    runtimeCpuLimit: "1",
+    runtimeMemoryLimit: "1g",
+    runtimePidsLimit: 64,
+    allowRuntimeHostNetwork: false,
+  };
+  const opencode = buildOpenCodeLaunchPlan({ ...base, runtimeKernel: "opencode" }, volumeProject, 4096, "pw-test");
+  const dsh = buildOpenCodeLaunchPlan({ ...base, runtimeKernel: "dsh" }, volumeProject, 4096, "pw-test");
+
+  assert.equal(dsh.runtimeUrl, "http://dsh.runtime");
+  assert.ok(dsh.socketPath.endsWith("/dsh.sock"), dsh.socketPath);
+  assert.ok(opencode.socketPath.endsWith("/opencode.sock"), "a stale socket must not be reachable after a kernel switch");
+  assert.equal(dsh.args.at(-1), "open-science-dsh-serve");
+  assert.equal(opencode.args.at(-1), "open-science-opencode-serve");
+  assert.ok(dsh.args.includes("DSH_TELEMETRY_DISABLED=1"), "telemetry has no redaction rules and must be off in the container too");
+  assert.ok(dsh.args.includes("DSH_PERMISSION_MODE=workspace-write"));
+  assert.ok(dsh.args.includes(`DSH_HOME=${runtimeDshHome}`), "session logs belong on the project volume, not in the container");
+
+  // The Host the control plane will send has to be a host the container will
+  // accept. DSH's /api fence refuses any request whose Host is neither loopback
+  // nor a declared trusted host — every request, not only ones with browser
+  // markers — so a container that declares a different authority starts cleanly
+  // and then refuses every call. The mock kernel cannot catch this: it does not
+  // enforce the fence.
+  assert.ok(
+    dsh.args.includes(`OPEN_SCIENCE_RUNTIME_AUTHORITY=${new URL(dsh.runtimeUrl).host}`),
+    "the container must be told the authority the control plane will send",
+  );
+
+  // Everything that is EviMed's isolation rather than the kernel's must be
+  // identical: the kernel choice may not widen the blast radius.
+  const isolationArgs = (plan) => plan.args.filter((arg) => /^(--cap-drop|--security-opt|--read-only|--pids-limit|--network|--mount|--user|--memory|--cpus)$|^type=volume/.test(String(arg)));
+  assert.deepEqual(isolationArgs(dsh), isolationArgs(opencode));
+});
+
+// Both defects below were invisible to every test in this suite until the real
+// launcher was run: the fake kernel accepts any argv and enforces no fence, so
+// a container that could never have started looked perfectly healthy.
+test("the launcher is invoked in a form dsh accepts", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const serve = await readFile(new URL("../../../deploy/runtime-dsh/open-science-dsh-serve.sh", import.meta.url), "utf8");
+
+  // `web` is an alias for `--profile web`; the launcher refuses both at once
+  // with "web takes none of parent --profile, --patch, --dump-config, or
+  // --dump-default-config", so the container exits on its first line.
+  const invocation = serve.split("\n").find((line) => line.startsWith("dsh --profile"));
+  assert.ok(invocation, "the serve script must launch the kernel");
+  assert.equal(/\bweb\b/.test(invocation), false, invocation);
+  assert.match(invocation, /--trusted-host "\$\{authority\}"/);
+
+  const plan = buildOpenCodeLaunchPlan(
+    {
+      dataDir: "/tmp/os-dsh-argv",
+      runtimeKernel: "dsh",
+      runtimeSandboxMode: "docker",
+      runtimeContainerBin: "docker",
+      runtimeContainerImage: "open-science-runtime:test",
+      runtimeTransport: "tcp",
+      runtimeNetworkMode: "none",
+      runtimeCpuLimit: "1",
+      runtimeMemoryLimit: "1g",
+      runtimePidsLimit: 64,
+      allowRuntimeHostNetwork: false,
+    },
+    {
+      id: "p1",
+      userId: "u1",
+      rootDir: "/tmp/os-dsh-argv/p1",
+      workspaceDir: "/tmp/os-dsh-argv/p1/workspace",
+      runtimeDir: "/tmp/os-dsh-argv/p1/runtime",
+    },
+    4096,
+    "pw-test",
+  );
+  const argv = plan.args.slice(plan.args.indexOf("open-science-runtime:test") + 1);
+  assert.deepEqual(argv, ["dsh", "--profile", "evimed-runtime", "--no-open", "--port", "4096"]);
+});
+
+// The plugin side has no other way to learn the ledger's run id — the wire
+// protocol's session.create/session.prompt only ever carry a session id — so
+// without this file `evimed-run-policy`'s own runId stays empty, every write
+// it makes to the run-mirror tables is gated on that id, and
+// .evimed-run/state.json (what the control plane and browser read for
+// evidence/plan/gate state) is never produced. Found while wiring the SSE
+// event pump: nothing exercised this path before.
+async function dshDispatchFixture() {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "os-dsh-brief-index-"));
+  const project = {
+    id: "paper-brief",
+    userId: "alice",
+    rootDir,
+    metaDir: path.join(rootDir, ".openscience"),
+    workspaceDir: path.join(rootDir, "workspace"),
+    runtimeDir: path.join(rootDir, "runtime"),
+  };
+  const manager = new RuntimeManager({ runtimeKernel: "dsh", allowMockRuntime: true, production: false });
+  return { rootDir, project, manager };
+}
+
+test("dispatching a DSH prompt writes the run's own id into the workspace brief", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => {
+    await manager.closeAll();
+    await rm(rootDir, { recursive: true, force: true });
+  });
+  await manager.start(project);
+  await manager.dshDispatchPrompt(project, "ses_brief", { text: "hello", runId: "run_brief_1" });
+  const written = JSON.parse(await readFile(path.join(project.workspaceDir, ".evimed-brief", "index.json"), "utf8"));
+  assert.deepEqual(written, { runId: "run_brief_1" });
+});
+
+test("dispatching a DSH prompt without a run id leaves the brief index unwritten", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => {
+    await manager.closeAll();
+    await rm(rootDir, { recursive: true, force: true });
+  });
+  await manager.start(project);
+  await manager.dshDispatchPrompt(project, "ses_no_id", { text: "hello" });
+  await assert.rejects(() => readFile(path.join(project.workspaceDir, ".evimed-brief", "index.json"), "utf8"), { code: "ENOENT" });
+});
+
+test("dispatchPrompt threads runId through to the DSH-specific writer", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => {
+    await manager.closeAll();
+    await rm(rootDir, { recursive: true, force: true });
+  });
+  await manager.start(project);
+  await manager.dispatchPrompt(project, "ses_general", { text: "hello", runId: "run_brief_2" });
+  const written = JSON.parse(await readFile(path.join(project.workspaceDir, ".evimed-brief", "index.json"), "utf8"));
+  assert.deepEqual(written, { runId: "run_brief_2" });
 });

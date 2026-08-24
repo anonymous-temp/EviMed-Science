@@ -75,8 +75,14 @@ export interface ToolCallBlock {
   meta?: string;
   /** Display verb rendered before the title ("Ran", "Created", "Edited"…). */
   verb?: string;
-  /** OpenCode tool name ("bash", "write", …) — picks the detail renderer. */
+  /** Model-visible tool name ("bash", "write", "mcp__evimed__…") — picks the detail renderer. */
   tool?: string;
+  /**
+   * The call this block is showing. A result frame arrives separately from its
+   * call, and pairing them by position broke the moment two tools ran at once —
+   * which is the normal case, not the exception.
+   */
+  callId?: string;
   /** Full command line as executed (bash) — shown in the expanded detail. */
   command?: string;
   filePath?: string;

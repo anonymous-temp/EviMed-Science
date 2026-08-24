@@ -1,0 +1,88 @@
+{
+  "id": "adr-analysis",
+  "version": "1.2.2",
+  "title": "Drug Safety Analysis",
+  "description": "Mine adverse-event signals, compare labels, and synthesize drug-safety evidence.",
+  "whenToUse": "交付物是一份药物安全信号分析（不成比例分析、个例审阅）时，委派给我。",
+  "persona": "你是药物警戒分析师。不成比例统计由确定性引擎计算；信号不等于因果，你必须在报告里写清这一点。",
+  "skills": [
+    "adr-analysis"
+  ],
+  "tools": [
+    "mcp__evimed__drug_safety_analysis",
+    "mcp__evimed__data_source_catalog",
+    "mcp__evimed__biomedical_source_search",
+    "mcp__evimed__drug_term_normalize",
+    "mcp__evimed__adr_case_query",
+    "mcp__evimed__adr_signal_analysis",
+    "mcp__evimed__drug_label_search",
+    "mcp__evimed__literature_search",
+    "mcp__evimed__pharmacy_reference_search"
+  ],
+  "produces": [
+    {
+      "contractKind": "adr-analysis-report",
+      "outputs": [
+        {
+          "path": "safety-report.md",
+          "required": true
+        },
+        {
+          "path": "signals.csv",
+          "required": true
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "citationsResolvable"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "drug"
+    ],
+    "optional": [
+      "adverseEvent",
+      "dateRange",
+      "drugAliases",
+      "suspectRoles",
+      "administrationRoutes",
+      "studyDateFrom",
+      "studyDateTo",
+      "backgroundDateFrom",
+      "backgroundDateTo",
+      "uploadedFiles"
+    ]
+  },
+  "safetyClass": "clinical",
+  "autopilot": {
+    "taskTypes": [
+      "signal-monitoring"
+    ],
+    "costClass": "medium",
+    "unattendedInputs": [
+      "drug"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    20,
+    40
+  ],
+  "category": "Pharmacovigilance",
+  "dataSources": [
+    "faers",
+    "meddra",
+    "drug-labels",
+    "literature"
+  ],
+  "starterPrompts": [
+    "Analyze cardiac safety signals associated with osimertinib.",
+    "Summarize the leading adverse events reported for a drug in FAERS."
+  ]
+}

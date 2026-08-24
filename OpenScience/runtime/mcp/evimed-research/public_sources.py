@@ -52,25 +52,25 @@ def enabled():
 
 def supports(name):
     return name in {
-        "evimed_literature_search",
-        "evimed_guideline_search",
-        "evimed_clinical_trial_search",
-        "evimed_patent_search",
-        "evimed_pharmacy_reference_search",
-        "evimed_drug_label_search",
-        "evimed_adr_case_query",
-        "evimed_adr_signal_analysis",
-        "evimed_offlabel_evidence_packet",
-        "evimed_comprehensive_drug_evaluation",
-        "evimed_drug_selection_evaluation",
-        "evimed_biomedical_source_search",
+        "literature_search",
+        "guideline_search",
+        "clinical_trial_search",
+        "patent_search",
+        "pharmacy_reference_search",
+        "drug_label_search",
+        "adr_case_query",
+        "adr_signal_analysis",
+        "offlabel_evidence_packet",
+        "comprehensive_drug_evaluation",
+        "drug_selection_evaluation",
+        "biomedical_source_search",
     }
 
 
 def configured(name):
     if not supports(name):
         return False
-    if name != "evimed_pharmacy_reference_search":
+    if name != "pharmacy_reference_search":
         return True
     try:
         _pharmacy_reference_file()
@@ -3219,28 +3219,28 @@ def biomedical_search(arguments):
 
 
 def call(name, arguments):
-    if name == "evimed_biomedical_source_search":
+    if name == "biomedical_source_search":
         return biomedical_search(arguments)
-    if name == "evimed_literature_search":
+    if name == "literature_search":
         return literature(arguments)
-    if name == "evimed_guideline_search":
+    if name == "guideline_search":
         return guideline(arguments)
-    if name == "evimed_clinical_trial_search":
+    if name == "clinical_trial_search":
         return trials(arguments)
-    if name == "evimed_patent_search":
+    if name == "patent_search":
         return patent(arguments)
-    if name == "evimed_pharmacy_reference_search":
+    if name == "pharmacy_reference_search":
         return pharmacy_reference(arguments)
-    if name == "evimed_drug_label_search":
+    if name == "drug_label_search":
         return labels(arguments)
-    if name == "evimed_adr_case_query":
+    if name == "adr_case_query":
         return adr_cases(arguments)
-    if name == "evimed_adr_signal_analysis":
+    if name == "adr_signal_analysis":
         return adr_signal(arguments)
-    if name == "evimed_offlabel_evidence_packet":
+    if name == "offlabel_evidence_packet":
         return _composite(arguments, "off-label")
-    if name == "evimed_comprehensive_drug_evaluation":
+    if name == "comprehensive_drug_evaluation":
         return _composite(arguments, "comprehensive-drug-evaluation")
-    if name == "evimed_drug_selection_evaluation":
+    if name == "drug_selection_evaluation":
         return drug_selection(arguments)
     raise PublicSourceError("public_source_unsupported", "No public connector is available for %s." % name)

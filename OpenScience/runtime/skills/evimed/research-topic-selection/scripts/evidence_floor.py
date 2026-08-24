@@ -52,7 +52,7 @@ EVIDENCE_CHANNELS = (
     ("bibliometrics", re.compile(r"文献计量|bibliometric", re.I)),
     ("open-web", re.compile(r"开放网络|open[\s_-]?web|web[\s_-]?search|searxng", re.I)),
 )
-# Full texts are not self-reported. `evimed_open_access_full_text` writes each
+# Full texts are not self-reported. `open_access_full_text` writes each
 # retrieved article into .evimed-sources/<slug>/, so the count is recomputed
 # from the workspace rather than read out of a "full text: yes" column.
 FULL_TEXT_DIR = ".evimed-sources"
@@ -119,7 +119,7 @@ def check_evidence_breadth(root: Path, prose_outputs, issues: list[str]) -> dict
         issues.append(
             f"{full_texts} full texts were retrieved into {FULL_TEXT_DIR}/; the floor is {MIN_FULL_TEXTS}. "
             "A method is transferred from a Methods section, not from an abstract — "
-            "call evimed_open_access_full_text on the works the design actually depends on."
+            "call open_access_full_text on the works the design actually depends on."
         )
     missing_from_map = sorted(cited - mapped_works)
     if missing_from_map:

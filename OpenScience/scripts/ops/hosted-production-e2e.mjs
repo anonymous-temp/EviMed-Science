@@ -166,7 +166,7 @@ async function main() {
     if (!agent?.version || agent.runtimeAgent !== "evimed-adr-analysis") {
       throw failure("hosted_e2e_specialist_missing", "The drug-safety specialist is not registered.");
     }
-    if (!agent.requiredInputs?.includes("drug") || !agent.requiredTools?.includes("evimed_drug_safety_analysis")) {
+    if (!agent.requiredInputs?.includes("drug") || !agent.requiredTools?.includes("drug_safety_analysis")) {
       throw failure("hosted_e2e_specialist_contract_invalid", "The drug-safety specialist input or tool contract is incomplete.");
     }
     for (const requiredPath of ["safety-report.md", "signals.csv"]) {
@@ -197,7 +197,7 @@ async function main() {
         dispatchId: `dispatch-${marker}`,
         text: [
           "Analyze aspirin (drug=aspirin) with the registered drug-safety specialist.",
-          "Call evimed_drug_safety_analysis with action=capabilities, then action=start, then poll status with waitSeconds=45 until terminal.",
+          "Call drug_safety_analysis with action=capabilities, then action=start, then poll status with waitSeconds=45 until terminal.",
           "Use the managed specialist data and artifacts; do not synthesize signal values or substitute model knowledge for FAERS statistics.",
           "Write the required safety-report.md and signals.csv files. Preserve source scope, analysis period, suspect binding, counts, and signal metrics, and state spontaneous-reporting limitations.",
           `Use the automatically retrieved knowledge marker ${knowledgeMarker} and Memos memory marker ${memoryMarker}.`,

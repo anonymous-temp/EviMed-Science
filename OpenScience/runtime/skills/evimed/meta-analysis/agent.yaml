@@ -20,7 +20,7 @@ optionalInputs:
   - uploadedFiles
   - ipdData
 requiredTools:
-  - evimed_meta_analysis
+  - meta_analysis
 optionalTools: []
 dataSources:
   - metaagent

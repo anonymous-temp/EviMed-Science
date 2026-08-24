@@ -66,14 +66,14 @@ class SpecialistJobContractTests(unittest.TestCase):
                 self.assertEqual(result["data"]["model"], "deepseek-v4-pro")
 
     def test_unconfigured_specialist_fails_honestly(self):
-        result = self.jobs.call("evimed_peer_review", {"action": "capabilities"})
+        result = self.jobs.call("peer_review", {"action": "capabilities"})
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["error"]["code"], "specialist_agent_unconfigured")
 
     def test_peer_review_rejects_manuscripts_outside_workspace_before_starting(self):
-        self.install_fake_specialist("evimed_peer_review")
+        self.install_fake_specialist("peer_review")
         with mock.patch.object(self.jobs.subprocess, "Popen") as popen:
-            result = self.jobs.call("evimed_peer_review", {
+            result = self.jobs.call("peer_review", {
                 "action": "start",
                 "manuscript": "/tmp/outside.pdf",
             })
@@ -82,10 +82,10 @@ class SpecialistJobContractTests(unittest.TestCase):
         popen.assert_not_called()
 
     def test_background_worker_receives_the_managed_workspace(self):
-        self.install_fake_specialist("evimed_bibliometric_analysis")
+        self.install_fake_specialist("bibliometric_analysis")
         worker = mock.Mock()
         with mock.patch.object(self.jobs.subprocess, "Popen", return_value=worker) as popen:
-            result = self.jobs.call("evimed_bibliometric_analysis", {
+            result = self.jobs.call("bibliometric_analysis", {
                 "action": "start",
                 "topic": "test topic",
                 "maxRecords": 20,
@@ -95,9 +95,9 @@ class SpecialistJobContractTests(unittest.TestCase):
         self.assertEqual(environment["OPEN_SCIENCE_WORKSPACE_DIR"], str(self.workspace))
 
     def test_job_state_binds_the_current_specialist_source(self):
-        root = self.install_fake_specialist("evimed_bibliometric_analysis")
+        root = self.install_fake_specialist("bibliometric_analysis")
         with mock.patch.object(self.jobs.subprocess, "Popen", return_value=mock.Mock()):
-            result = self.jobs.call("evimed_bibliometric_analysis", {
+            result = self.jobs.call("bibliometric_analysis", {
                 "action": "start",
                 "topic": "test topic",
             })
@@ -109,7 +109,7 @@ class SpecialistJobContractTests(unittest.TestCase):
         self.assertNotEqual(state["executionEvidence"], self.jobs._execution_evidence(root))
 
     def test_job_source_evidence_ignores_runtime_cache_mutations(self):
-        root = self.install_fake_specialist("evimed_drug_safety_analysis")
+        root = self.install_fake_specialist("drug_safety_analysis")
         cache = root / ".cache" / "openfda"
         cache.mkdir(parents=True)
         cache_file = cache / "response.json"
@@ -122,13 +122,13 @@ class SpecialistJobContractTests(unittest.TestCase):
         self.assertEqual(before, self.jobs._execution_evidence(root))
 
     def test_project_environment_is_allowlisted_and_cannot_override_model_config(self):
-        root = self.install_fake_specialist("evimed_mendelian_randomization")
+        root = self.install_fake_specialist("mendelian_randomization")
         (root / ".env").write_text(
             "OPENGWAS_JWT=project-token\nDEEPSEEK_API_KEY=untrusted-model-key\nUNRELATED=value\n",
             encoding="utf-8",
         )
         with mock.patch.object(self.jobs.subprocess, "Popen") as popen:
-            result = self.jobs.call("evimed_mendelian_randomization", {
+            result = self.jobs.call("mendelian_randomization", {
                 "action": "start",
                 "exposure": "body mass index",
                 "outcome": "coronary heart disease",
@@ -140,7 +140,7 @@ class SpecialistJobContractTests(unittest.TestCase):
         self.assertNotIn("UNRELATED", environment)
 
     def test_drug_safety_receives_only_allowlisted_evidence_configuration(self):
-        root = self.install_fake_specialist("evimed_drug_safety_analysis")
+        root = self.install_fake_specialist("drug_safety_analysis")
         key_file = pathlib.Path(self.temp.name) / "evimed.api-key"
         key_file.write_text("test-key\n", encoding="utf-8")
         key_file.chmod(0o600)
@@ -152,7 +152,7 @@ class SpecialistJobContractTests(unittest.TestCase):
             encoding="utf-8",
         )
         with mock.patch.object(self.jobs.subprocess, "Popen") as popen:
-            result = self.jobs.call("evimed_drug_safety_analysis", {
+            result = self.jobs.call("drug_safety_analysis", {
                 "action": "start",
                 "drug": "atorvastatin",
                 "reactions": ["myalgia"],
@@ -170,13 +170,13 @@ class SpecialistJobContractTests(unittest.TestCase):
         self.assertEqual(environment["MAX_CONCURRENT_REVIEWS_V2"], "1")
 
     def test_failed_status_preserves_terminal_job_state_for_pollers(self):
-        self.install_fake_specialist("evimed_research_topic_selection")
+        self.install_fake_specialist("research_topic_selection")
         job_id = "topic-20260718120000-abcdef123456"
         jobs = self.workspace / "research-topic-runs" / ".jobs"
         jobs.mkdir(parents=True)
         (jobs / f"{job_id}.json").write_text(
             json.dumps({
-                "tool": "evimed_research_topic_selection",
+                "tool": "research_topic_selection",
                 "jobId": job_id,
                 "status": "failed",
                 "updatedAt": "2026-07-18T04:00:00Z",
@@ -187,7 +187,7 @@ class SpecialistJobContractTests(unittest.TestCase):
         )
 
         result = self.jobs.status_job(
-            "evimed_research_topic_selection",
+            "research_topic_selection",
             {"jobId": job_id},
         )
 
@@ -199,7 +199,7 @@ class SpecialistJobContractTests(unittest.TestCase):
         # A SIGKILL or an OOM kill left the state file saying "running" and
         # this tool answering "not complete, poll again" for as long as anyone
         # asked. There was no liveness check at all, unlike meta_agent.
-        self.install_fake_specialist("evimed_research_topic_selection")
+        self.install_fake_specialist("research_topic_selection")
         job_id = "topic-20260815090000-abcdef123456"
         jobs = self.workspace / "research-topic-runs" / ".jobs"
         jobs.mkdir(parents=True)
@@ -207,7 +207,7 @@ class SpecialistJobContractTests(unittest.TestCase):
         dead_pid = self.a_pid_that_is_not_running()
         state_path.write_text(
             json.dumps({
-                "tool": "evimed_research_topic_selection",
+                "tool": "research_topic_selection",
                 "jobId": job_id,
                 "status": "running",
                 "workerPid": dead_pid,
@@ -216,7 +216,7 @@ class SpecialistJobContractTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        result = self.jobs.status_job("evimed_research_topic_selection", {"jobId": job_id})
+        result = self.jobs.status_job("research_topic_selection", {"jobId": job_id})
 
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["data"]["jobStatus"], "failed")
@@ -229,13 +229,13 @@ class SpecialistJobContractTests(unittest.TestCase):
 
     def test_a_live_worker_is_still_reported_as_running(self):
         # The liveness check must not fail a job that is doing its work.
-        self.install_fake_specialist("evimed_research_topic_selection")
+        self.install_fake_specialist("research_topic_selection")
         job_id = "topic-20260815090100-abcdef123456"
         jobs = self.workspace / "research-topic-runs" / ".jobs"
         jobs.mkdir(parents=True)
         (jobs / f"{job_id}.json").write_text(
             json.dumps({
-                "tool": "evimed_research_topic_selection",
+                "tool": "research_topic_selection",
                 "jobId": job_id,
                 "status": "running",
                 "workerPid": os.getpid(),
@@ -244,7 +244,7 @@ class SpecialistJobContractTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        result = self.jobs.status_job("evimed_research_topic_selection", {"jobId": job_id})
+        result = self.jobs.status_job("research_topic_selection", {"jobId": job_id})
 
         self.assertEqual(result["status"], "warning")
         self.assertEqual(result["data"]["jobStatus"], "running")
@@ -252,13 +252,13 @@ class SpecialistJobContractTests(unittest.TestCase):
     def test_a_job_without_a_recorded_pid_is_left_alone(self):
         # Liveness that cannot be established is not death. A job recorded
         # before its worker pid was written must keep polling, not be failed.
-        self.install_fake_specialist("evimed_research_topic_selection")
+        self.install_fake_specialist("research_topic_selection")
         job_id = "topic-20260815090200-abcdef123456"
         jobs = self.workspace / "research-topic-runs" / ".jobs"
         jobs.mkdir(parents=True)
         (jobs / f"{job_id}.json").write_text(
             json.dumps({
-                "tool": "evimed_research_topic_selection",
+                "tool": "research_topic_selection",
                 "jobId": job_id,
                 "status": "queued",
                 "updatedAt": "2026-08-15T09:02:00Z",
@@ -266,7 +266,7 @@ class SpecialistJobContractTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        result = self.jobs.status_job("evimed_research_topic_selection", {"jobId": job_id})
+        result = self.jobs.status_job("research_topic_selection", {"jobId": job_id})
 
         self.assertEqual(result["status"], "warning")
         self.assertEqual(result["data"]["jobStatus"], "queued")
@@ -296,20 +296,20 @@ class SpecialistJobContractTests(unittest.TestCase):
         self.skipTest("no free pid found to stand in for a dead worker")
 
     def test_virtual_environment_entry_point_is_not_resolved_to_base_python(self):
-        root = self.install_fake_specialist("evimed_peer_review")
+        root = self.install_fake_specialist("peer_review")
         os.environ.pop("EVIMED_PEER_REVIEW_AGENT_PYTHON", None)
         entry_point = root / ".venv" / "bin" / "python"
         entry_point.parent.mkdir(parents=True)
         entry_point.symlink_to(sys.executable)
-        selected = self.jobs._python(self.jobs.SPECS["evimed_peer_review"], root)
+        selected = self.jobs._python(self.jobs.SPECS["peer_review"], root)
         self.assertEqual(selected, entry_point)
         self.assertNotEqual(str(selected), str(entry_point.resolve()))
 
     def test_mendelian_randomization_uses_the_project_r_library(self):
-        root = self.install_fake_specialist("evimed_mendelian_randomization")
+        root = self.install_fake_specialist("mendelian_randomization")
         (root / ".r-lib").mkdir()
         with mock.patch.object(self.jobs.subprocess, "Popen") as popen:
-            result = self.jobs.call("evimed_mendelian_randomization", {
+            result = self.jobs.call("mendelian_randomization", {
                 "action": "start",
                 "exposure": "body mass index",
                 "outcome": "coronary heart disease",

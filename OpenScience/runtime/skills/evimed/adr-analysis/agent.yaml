@@ -22,16 +22,16 @@ optionalInputs:
   - backgroundDateTo
   - uploadedFiles
 requiredTools:
-  - evimed_drug_safety_analysis
+  - drug_safety_analysis
 optionalTools:
-  - evimed_data_source_catalog
-  - evimed_biomedical_source_search
-  - evimed_drug_term_normalize
-  - evimed_adr_case_query
-  - evimed_adr_signal_analysis
-  - evimed_drug_label_search
-  - evimed_literature_search
-  - evimed_pharmacy_reference_search
+  - data_source_catalog
+  - biomedical_source_search
+  - drug_term_normalize
+  - adr_case_query
+  - adr_signal_analysis
+  - drug_label_search
+  - literature_search
+  - pharmacy_reference_search
 dataSources:
   - faers
   - meddra

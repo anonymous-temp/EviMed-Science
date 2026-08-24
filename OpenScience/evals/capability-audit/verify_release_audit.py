@@ -92,8 +92,8 @@ def verify_tools():
     for item in results:
         require(item.get("operation") != "capabilities", "%s was certified by capabilities only" % item.get("tool"))
         if item.get("tool") in {
-            "evimed_meta_analysis", "evimed_mendelian_randomization", "evimed_bibliometric_analysis",
-            "evimed_research_topic_selection", "evimed_peer_review", "evimed_drug_safety_analysis",
+            "meta_analysis", "mendelian_randomization", "bibliometric_analysis",
+            "research_topic_selection", "peer_review", "drug_safety_analysis",
         }:
             require(item.get("probeType") == "completed_managed_job", "%s lacks a completed job receipt" % item.get("tool"))
             require(item.get("operation") == "start_then_poll_to_terminal", "%s did not execute a managed task" % item.get("tool"))
@@ -112,8 +112,8 @@ def verify_tools():
             expected_ready = state.get("status") == "succeeded" and state.get("releaseStatus") in {None, "ready"}
             require(item.get("publicationReady") is expected_ready, "%s publication readiness is misstated" % item.get("tool"))
             require(item.get("status") == ("success" if expected_ready else "warning"), "%s audit status hides its release outcome" % item.get("tool"))
-            root_value = state.get("metaRoot") if item.get("tool") == "evimed_meta_analysis" else state.get("root")
-            adapter = REPO / "runtime" / "mcp" / "evimed-research" / ("meta_agent.py" if item.get("tool") == "evimed_meta_analysis" else "specialist_jobs.py")
+            root_value = state.get("metaRoot") if item.get("tool") == "meta_analysis" else state.get("root")
+            adapter = REPO / "runtime" / "mcp" / "evimed-research" / ("meta_agent.py" if item.get("tool") == "meta_analysis" else "specialist_jobs.py")
             expected_evidence = execution_evidence.execution_evidence(specialist_source_root(root_value, item.get("tool")), adapter)
             require(state.get("executionEvidence") == expected_evidence, "%s job does not match current specialist source" % item.get("tool"))
             require(item.get("executionEvidence") == expected_evidence, "%s audit omitted current specialist source evidence" % item.get("tool"))
@@ -131,9 +131,9 @@ def verify_tools():
             require(response_file.is_relative_to(EVIDENCE) and response_file.is_file() and not response_file.is_symlink(), "%s lacks a retained task response" % item.get("tool"))
             require(response_file.stat().st_size == response.get("bytes") and file_sha256(response_file) == response.get("sha256"), "%s retained task response no longer matches disk" % item.get("tool"))
             assessment_types = {
-                "evimed_offlabel_evidence_packet": "off_label",
-                "evimed_comprehensive_drug_evaluation": "comprehensive_drug_evaluation",
-                "evimed_drug_selection_evaluation": "drug_selection",
+                "offlabel_evidence_packet": "off_label",
+                "comprehensive_drug_evaluation": "comprehensive_drug_evaluation",
+                "drug_selection_evaluation": "drug_selection",
             }
             if item.get("tool") in assessment_types:
                 require(
@@ -329,15 +329,15 @@ def verify_skills():
             require(artifact.stat().st_size == receipt.get("bytes") and file_sha256(artifact) == receipt.get("sha256"), "%s retained platform artifact receipt does not match disk" % package)
 
     specialist_skill_tools = {
-        "evimed/adr-analysis": "evimed_drug_safety_analysis",
-        "evimed/bibliometric-analysis": "evimed_bibliometric_analysis",
-        "evimed/comprehensive-drug-evaluation": "evimed_comprehensive_drug_evaluation",
-        "evimed/drug-selection": "evimed_drug_selection_evaluation",
-        "evimed/mendelian-randomization": "evimed_mendelian_randomization",
-        "evimed/meta-analysis": "evimed_meta_analysis",
-        "evimed/off-label-analysis": "evimed_offlabel_evidence_packet",
-        "evimed/peer-review": "evimed_peer_review",
-        "evimed/research-topic-selection": "evimed_research_topic_selection",
+        "evimed/adr-analysis": "drug_safety_analysis",
+        "evimed/bibliometric-analysis": "bibliometric_analysis",
+        "evimed/comprehensive-drug-evaluation": "comprehensive_drug_evaluation",
+        "evimed/drug-selection": "drug_selection_evaluation",
+        "evimed/mendelian-randomization": "mendelian_randomization",
+        "evimed/meta-analysis": "meta_analysis",
+        "evimed/off-label-analysis": "offlabel_evidence_packet",
+        "evimed/peer-review": "peer_review",
+        "evimed/research-topic-selection": "research_topic_selection",
     }
     tool_results = {row.get("tool"): row for row in read("tool-probe-v3.json").get("results", [])}
     for package, tool in specialist_skill_tools.items():

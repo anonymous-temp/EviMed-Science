@@ -17,7 +17,7 @@ from a direction and never touches data.
 
 ## The specialist job is an input, not the report
 
-`evimed_research_topic_selection` runs the topic agent, and that agent searches
+`research_topic_selection` runs the topic agent, and that agent searches
 **PubMed and nothing else**. Transcribing its output is how this skill produced
 directions that were plausible, unranked against the field, and unpublishable:
 nothing in them said what was already known, so nothing in them could say what
@@ -32,7 +32,7 @@ highly that the wider search shows was answered in 2024 is a finding.
 1. Preserve the user's disease, population, intervention or exposure, outcomes,
    available data, methods, and feasibility constraints. State only assumptions
    that do not materially change the direction.
-2. Call `evimed_research_topic_selection` with `action=capabilities`, start the
+2. Call `research_topic_selection` with `action=capabilities`, start the
    job, record the job id, and poll with `waitSeconds=45` until terminal.
 3. Run the evidence expansion below **while the job runs** — it is long, and the
    two do not depend on each other.
@@ -41,7 +41,7 @@ highly that the wider search shows was answered in 2024 is a finding.
    is not high priority merely because it sounds novel.
 5. Do not fabricate search counts, citations, data availability, sample sizes,
    effect assumptions, or publication probability.
-6. Use `evimed_pharmacy_reference_search` only when configured private
+6. Use `pharmacy_reference_search` only when configured private
    terminology or rule coverage materially informs feasibility, phenotype or
    exposure definition, or data-readiness questions. Private rows are
    institution-specific discovery context, not proof of novelty, prevalence,
@@ -56,26 +56,26 @@ Verified against the deployed host:
 
 | Channel | Tool call | What only this one gives you |
 |---|---|---|
-| PubMed | `evimed_literature_search`, or `evimed_biomedical_source_search` with `sourceId: pubmed` | MeSH-indexed subject search; publication types |
+| PubMed | `literature_search`, or `biomedical_source_search` with `sourceId: pubmed` | MeSH-indexed subject search; publication types |
 | Europe PMC | `sourceId: europe-pmc` | **Full-text** search — a method or a limitation stated only in a Discussion section |
 | OpenAlex | `sourceId: openalex` | Citation counts, concepts, publication year: how large a topic is and how fast it is moving |
 | Semantic Scholar | `sourceId: semantic-scholar` | References and citing works — who built on a paper, and who did not. Rate-limited without a key; retry with backoff |
 | Crossref | `sourceId: crossref` | Very recent DOIs, ahead of MEDLINE indexing |
-| Preprints | `evimed_biomedical_source_search` with `sourceId: europe-pmc` and `SRC:PPR` in the query | What is being done right now and is not yet published. `sourceId: biorxiv`/`medrxiv` resolves a DOI you already have — it is a lookup, not a search |
-| Full text | `evimed_open_access_full_text` | The actual Methods and Limitations paragraphs |
-| Guidelines | `evimed_guideline_search`, `evimed_official_page_fetch` | What practice already recommends, and on what evidence grade |
+| Preprints | `biomedical_source_search` with `sourceId: europe-pmc` and `SRC:PPR` in the query | What is being done right now and is not yet published. `sourceId: biorxiv`/`medrxiv` resolves a DOI you already have — it is a lookup, not a search |
+| Full text | `open_access_full_text` | The actual Methods and Limitations paragraphs |
+| Guidelines | `guideline_search`, `official_page_fetch` | What practice already recommends, and on what evidence grade |
 | Drug and gene facts | `sourceId: dailymed` / `openfda` / `rxnorm` / `clinpgx-pharmgkb` | Label text, adverse-event counts, pharmacogenomic annotation |
-| Trend analysis | `evimed_bibliometric_analysis` | Publication-volume curve, author and institution clusters, emergent terms |
-| Open web | `evimed_web_search` | Everything the indexes do not carry — funding calls, conference programmes, society pages, registries, a method a group describes only on its own site |
+| Trend analysis | `bibliometric_analysis` | Publication-volume curve, author and institution clusters, emergent terms |
+| Open web | `web_search` | Everything the indexes do not carry — funding calls, conference programmes, society pages, registries, a method a group describes only on its own site |
 
 `clinicaltrials.gov` and `arxiv.org` do not resolve from the deployed host. Do
 not spend the run retrying them.
 
-**`evimed_literature_search` returns titles and nothing else.** Its own warning
+**`literature_search` returns titles and nothing else.** Its own warning
 says a title does not establish study design, evidence level, outcome, or effect
 size — so any statement about what a paper *found*, built on that call alone, is
-invented. Use it to find candidates; use `evimed_biomedical_source_search`,
-which returns abstracts, to read them; use `evimed_open_access_full_text` for
+invented. Use it to find candidates; use `biomedical_source_search`,
+which returns abstracts, to read them; use `open_access_full_text` for
 the ones a design actually depends on. This is the mechanism behind a report
 that cites papers and says nothing about any of them.
 
@@ -85,7 +85,7 @@ sources and 123 on the biomedical source search.
 **Open-web results are unreviewed pages.** They widen a direction; they do not
 support a claim. Anything you take from one has to be followed to its primary
 record — and if it is published literature, re-found through
-`evimed_biomedical_source_search` so it carries an identifier. A page cited as
+`biomedical_source_search` so it carries an identifier. A page cited as
 though it were evidence is worse than no page.
 
 Two categories behave differently and both are worth a call:
@@ -98,7 +98,7 @@ Two categories behave differently and both are worth a call:
   reaches it. OpenAIRE, when it answers, carries EU project, funding and dataset
   records nothing else here does — which is where "who is already working on
   this, and on whose grant" shows up. PubMed through this route duplicates
-  `evimed_biomedical_source_search`; prefer that one, which returns abstracts.
+  `biomedical_source_search`; prefer that one, which returns abstracts.
 - `categories: ["general"]` reaches 360search and Baidu, and nothing else:
   Google, DuckDuckGo, Brave and Wikipedia do not resolve from this host, and
   Bing answers it but serves markup the aggregator cannot parse. **The general

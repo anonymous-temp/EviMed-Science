@@ -34,6 +34,7 @@ import { OidcService, validateOidcSettings } from "./oidc.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
   RuntimeManager,
+  runtimeKernelName,
   runtimeNetworkRequiresEgressOptIn,
   runtimeNetworkUsesHostOrContainer,
   validateEviMedAdapterConfig,
@@ -41,6 +42,8 @@ import {
 import { createStore } from "./store.mjs";
 import { readinessSaasProfile } from "./saasProfile.mjs";
 import { TaskManager } from "./taskManager.mjs";
+import { RunEventHub, attachRunStream, resumePosition } from "./runEventStream.mjs";
+import { RuntimeEventPump } from "./dshEventPump.mjs";
 import { readDeepSeekReleaseReceiptFile } from "../../../scripts/ops/deepseek-opencode-release-gate.mjs";
 import {
   HttpError,
@@ -61,6 +64,7 @@ import {
   readJson,
   readJsonWithSize,
   resolveScopedPath,
+  safeId,
   sendError,
   sendJson,
   withProjectStorageMutation,
@@ -188,7 +192,10 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/logs/")) return "/api/logs/:kind";
   if (pathname.startsWith("/api/memory/memos/")) return "/api/memory/memos/:memoId";
   if (pathname.startsWith("/api/memory/")) return "/api/memory/:route";
-  if (pathname.startsWith("/api/opencode/")) return "/api/opencode/:projectId/*";
+  if (pathname.startsWith("/api/opencode/")) return "/api/opencode/:projectId/* (retired)";
+  if (pathname.startsWith("/api/runs/") && pathname.endsWith("/events")) return "/api/runs/:id/events";
+  if (pathname === "/api/runtime/sessions") return "/api/runtime/sessions";
+  if (pathname.startsWith("/api/runtime/sessions/") && pathname.endsWith("/transcript")) return "/api/runtime/sessions/:id/transcript";
   if (pathname.startsWith("/api/files/preview/")) return "/api/files/preview/:path";
   if (pathname.startsWith("/api/files/download/")) return "/api/files/download/:path";
   if (pathname === "/api/files/upload") return pathname;
@@ -363,11 +370,26 @@ export function createWebApiApp(overrides = {}) {
   const coverageJudge = new CoverageJudge(config, {
     fetchImpl: overrides.coverageJudgeFetch ?? globalThis.fetch,
   });
+  // One fan-out per live run. The browser subscribes here, never to a kernel.
+  const runEvents = new RunEventHub();
+  // The kernel's own live stream, decoded onto the same fan-out. DSH-only
+  // (§ dshEventPump module doc): the OpenCode kernel this build can still
+  // select publishes no such downlink.
+  const runtimeEventPump = new RuntimeEventPump({ runEvents, isDshKernel: runtimeKernelName(config) === "dsh" });
   let agentRuns;
   const runtimeManager = new RuntimeManager(config, {
     agentRegistry,
-    onRuntimeStop: (project, status) => agentRuns?.closeProject(project, status),
+    onRuntimeStop: (project, status) => {
+      runtimeEventPump.detach(project);
+      // Returned, not fired-and-forgotten here: `notifyRuntimeStop` already
+      // wraps this call in its own `.catch()`, and returning the promise is
+      // what keeps a rejection — a project whose ledger cannot be read,
+      // oversized or corrupted — flowing through that existing handling
+      // instead of becoming a second, unguarded unhandled rejection.
+      return agentRuns?.closeProject(project, status);
+    },
     onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId),
+    onRuntimeStart: (project, runtime) => runtimeEventPump.attach(project, runtime),
   });
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
@@ -385,7 +407,42 @@ export function createWebApiApp(overrides = {}) {
     readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
+    // A run's own state changes ride the same stream as the kernel's events,
+    // because from a user's point of view they are one story: "it is running",
+    // "the second deliverable came back with three fixes", "it finished".
+    onRunStateChanged: (project, run) => {
+      runEvents.publish(run.id, "run/state", {
+        state: run.status,
+        // The nine-state projection (§7.1.1): `state` stays the ledger's own
+        // four values so nothing that already reads it has to change; `phase`
+        // is the added, richer read for whatever wants it — today's frontend
+        // grouping among them.
+        phase: run.phase ?? null,
+        errorCode: run.errorCode ?? null,
+        verification: run.verification ?? null,
+        attempts: run.attempts ?? 0,
+      });
+      // The event pump's own session map, kept current on the same signal:
+      // a fresh run's session becomes routable the moment the ledger knows
+      // it, and a finished run's stops being routed at all.
+      runtimeEventPump.noteRun(project, run);
+    },
+    // The run's own projection of itself — evidence counts and budget — read
+    // off the monitor's existing cycle and forwarded on the same channel as
+    // everything else about the run. Debounced on content by the store, so a
+    // fixed-interval poll does not send the same frame forever.
+    onRunProjection: (project, run, type, data) => {
+      runEvents.publish(run.id, type, data);
+    },
     onRunFinished: async (project, run) => {
+      runEvents.publish(run.id, "run/state", {
+        state: run.status,
+        phase: run.phase ?? null,
+        errorCode: run.errorCode ?? null,
+        verification: run.verification ?? null,
+        attempts: run.attempts ?? 0,
+      });
+      runtimeEventPump.noteRun(project, run);
       if (!memosClient.configured) {
         if (config.requireMemos) {
           /** @type {Error & Record<string, any>} */
@@ -626,6 +683,16 @@ export function createWebApiApp(overrides = {}) {
             project: { id: project.id, name: project.name },
             projects: await store.listProjects(user),
             csrfToken: session.csrfToken,
+            // Which session view this deployment serves. The browser must not
+            // infer it from a build flag: the kernel is a deployment decision
+            // and the two views read different sources — the retiring one polls
+            // a kernel-shaped store, the new one consumes the control plane's
+            // own `RunEvent` stream — so flipping the kernel has to flip the
+            // view without shipping a new bundle.
+            runtime: {
+              kernel: runtimeKernelName(config),
+              sessionView: runtimeKernelName(config) === "dsh" ? "run-stream" : "legacy",
+            },
           },
         });
         return;
@@ -893,7 +960,7 @@ export function createWebApiApp(overrides = {}) {
           effectiveAgentVersion: effectiveAgent?.agentVersion ?? null,
           effectiveRuntimeAgent: effectiveAgent?.runtimeAgent ?? null,
           effectiveRouteReason: effectiveAgent?.reason ?? null,
-        }, async (session, _run, repairText = null) => {
+        }, async (session, dispatchedRun, repairText = null) => {
           const promptText = typeof repairText === "string" && repairText.trim() ? repairText : text;
           let memories = [];
           let memoryError = null;
@@ -931,6 +998,7 @@ export function createWebApiApp(overrides = {}) {
             system: prepared.system,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
             model: `deepseek/${config.deepseekModel}`,
+            runId: dispatchedRun.id,
           });
         });
         sendJson(res, 202, { data: run });
@@ -1161,14 +1229,69 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
 
+      // The browser-to-kernel pass-through is gone. It was the one route that
+      // put a kernel's own protocol in front of a user's browser, which meant
+      // the frontend knew that kernel's message shapes and every kernel change
+      // was a frontend change. Under the DSH kernel it would also have exposed
+      // the host's settings and credentials methods, which are pinned to
+      // loopback precisely because they are not for remote callers. A request
+      // to it now says what replaced it rather than 404ing into silence.
       if (pathname.startsWith("/api/opencode/")) {
-        const [rawProjectId, ...rest] = pathname.slice("/api/opencode/".length).split("/");
-        if (!rawProjectId) throw new HttpError(404, "not_found", "Route not found.");
-        const projectId = decodeRouteComponent(rawProjectId, "project id");
-        const user = await store.ensureUser(req, res);
-        const project = await store.requireProject(user, projectId);
-        const ctx = { config, store, runtimeManager, commands, req, res, user, project };
-        await runtimeManager.proxy(req, res, ctx.project, `/${rest.join("/")}`);
+        throw new HttpError(
+          410,
+          "runtime_passthrough_retired",
+          "The runtime pass-through route has been retired. Subscribe to GET /api/runs/:id/events instead.",
+        );
+      }
+
+      // Creating a run session is the control plane's job. The browser used to
+      // POST straight through to the kernel; that route is gone, and this is
+      // what replaced it — one shape whatever kernel is running.
+      if (pathname === "/api/runtime/sessions" && req.method === "POST") {
+        const ctx = await context(req, res);
+        const created = await runtimeManager.createRuntimeSession(ctx.project);
+        if (!created.id) throw new HttpError(502, "runtime_session_create_failed", "The runtime returned no session id.");
+        sendJson(res, 200, { data: created });
+        return;
+      }
+
+      if (pathname.startsWith("/api/runtime/sessions/") && pathname.endsWith("/transcript") && req.method === "GET") {
+        const ctx = await context(req, res);
+        // `safeId` after decoding, not before: a percent-encoded separator is
+        // exactly how a caller smuggles one past a route match.
+        const sessionId = safeId(
+          decodeRouteComponent(pathname.slice("/api/runtime/sessions/".length, -"/transcript".length), "session id"),
+          "session id",
+        );
+        sendJson(res, 200, { data: await runtimeManager.sessionTranscript(ctx.project, sessionId, { wake: false }) });
+        return;
+      }
+
+      if (pathname.startsWith("/api/runs/") && pathname.endsWith("/events") && req.method === "GET") {
+        const ctx = await context(req, res);
+        const runId = decodeRouteComponent(
+          pathname.slice("/api/runs/".length, -"/events".length),
+          "run id",
+        );
+        const runs = await agentRuns.list(ctx.project);
+        const run = runs.find((candidate) => candidate.id === runId);
+        if (!run) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
+        const channel = runEvents.channel(runId);
+        // The current state goes out before anything else, so a tab that
+        // attaches to a finished run sees its outcome rather than an empty
+        // stream that never speaks again.
+        channel.publish("run/state", {
+          state: run.status,
+          phase: run.phase ?? null,
+          errorCode: run.errorCode ?? null,
+          verification: run.verification ?? null,
+          attempts: run.attempts ?? 0,
+        });
+        // A reconnecting browser sends Last-Event-ID; a client managing its own
+        // connection sends ?since=. Both are read, so neither has to know which
+        // the other uses.
+        const streamUrl = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+        attachRunStream(res, channel, { since: resumePosition(req, streamUrl) });
         return;
       }
 
@@ -2967,9 +3090,18 @@ async function inspectRuntimeImage(config, unavailableCode, runtimeManager) {
 }
 
 async function readinessRuntime(config, runtimeManager) {
+  // Which agent kernel this deployment is actually on, reported on every branch.
+  // It matters more than it looks: the shipped default is the rollback kernel
+  // while the DSH session view is landing, so "which one am I running" is a
+  // question an operator has to be able to answer without reading env files —
+  // and a deployment that meant to move and did not looks identical otherwise.
+  const kernel = {
+    kernel: runtimeKernelName(config),
+    kernelVersion: runtimeKernelName(config) === "dsh" ? config.dshVersion : config.opencodeVersion,
+  };
   if (config.runtimeMode === "mock") {
     if (config.production && !config.allowMockRuntime) throw readinessFailure("runtime_mock_forbidden");
-    return { mode: "mock", sandboxMode: "mock", explicit: Boolean(config.allowMockRuntime) };
+    return { mode: "mock", sandboxMode: "mock", explicit: Boolean(config.allowMockRuntime), ...kernel };
   }
   if (config.runtimeMode !== "opencode") {
     throw readinessFailure("runtime_mode_invalid");
@@ -3034,6 +3166,7 @@ async function readinessRuntime(config, runtimeManager) {
         controlPlane,
         transport,
         dataMount: config.runtimeDataVolume ? "volume" : "bind",
+        ...kernel,
         ...image,
         ...network,
       };
@@ -3046,14 +3179,20 @@ async function readinessRuntime(config, runtimeManager) {
       dataMount: config.runtimeDataVolume ? "volume" : "bind",
       imageLocal: false,
       imageCheck: "skipped",
+      ...kernel,
       ...network,
     };
   }
   if (config.runtimeSandboxMode === "host") {
     if (config.production || !config.allowUnsandboxedRuntime) throw readinessFailure("runtime_sandbox_required");
-    if (!config.opencodeBin) throw readinessFailure("opencode_bin_missing");
-    await fsp.access(config.opencodeBin, fs.constants.X_OK);
-    return { mode: "opencode", sandboxMode: "host" };
+    // The binary to look for follows the configured kernel. Checking the
+    // retiring kernel's binary either way would report a DSH deployment ready
+    // because a leftover `opencode` was on the path, or not ready because it
+    // was not — and neither answer would be about the kernel it will run.
+    const bin = kernel.kernel === "dsh" ? config.dshBin : config.opencodeBin;
+    if (!bin) throw readinessFailure(kernel.kernel === "dsh" ? "dsh_bin_missing" : "opencode_bin_missing");
+    await fsp.access(bin, fs.constants.X_OK);
+    return { mode: "opencode", sandboxMode: "host", ...kernel };
   }
   throw readinessFailure("runtime_sandbox_invalid");
 }

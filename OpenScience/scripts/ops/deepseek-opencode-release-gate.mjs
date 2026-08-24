@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { certifiedDeepSeekModel, createModelGatewayHandler, supportedDeepSeekModels } from "../../apps/server/src/modelGateway.mjs";
+import { mcpToolBaseName } from "../../packages/domain/index.mjs";
 import {
   RuntimeManager,
   syncRuntimeEviMedMcp,
@@ -44,7 +45,7 @@ const RECEIPT_KEY_DOMAIN = "evimed/model-gateway/deepseek-release-receipt/key/v1
 const RECEIPT_MAC_DOMAIN = "evimed/model-gateway/deepseek-release-receipt/mac/v1";
 const DEFAULT_RECEIPT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_RECEIPT_FUTURE_MS = 5 * 60 * 1000;
-const normalizationTools = new Set(["evimed_term_normalize", "evimed_drug_term_normalize"]);
+const normalizationTools = new Set(["term_normalize", "drug_term_normalize"]);
 
 export function resolveArtifactProvenanceTool(artifactData) {
   const provenance = artifactData?.provenance;
@@ -142,7 +143,13 @@ function writeToolName(body) {
 
 function evimedNormalizeToolName(body) {
   const names = (body.tools ?? []).map((tool) => tool?.function?.name).filter(Boolean);
-  const name = names.find((candidate) => candidate.toLowerCase().includes("evimed_term_normalize"));
+  // Exact, not a substring: `term_normalize` and `drug_term_normalize` are two
+  // distinct published tools and both contain the substring "term_normalize",
+  // so a loose `.includes()` match picks whichever one OpenCode happens to list
+  // first — nondeterministic, and the rest of this fake gateway's validation
+  // (below, and in the test) hardcodes the assumption that the generic
+  // `term_normalize` was the one actually called.
+  const name = names.find((candidate) => mcpToolBaseName(candidate) === "term_normalize");
   if (!name) throw failure("opencode_evimed_mcp_tool_missing");
   return { name, names };
 }
@@ -152,7 +159,7 @@ function fakeArtifactArguments(workspaceDir) {
     filePath: path.join(workspaceDir, "artifacts", "term-normalization.json"),
     content: `${JSON.stringify({
       normalized: "paracetamol",
-      provenanceTool: "evimed_term_normalize",
+      provenanceTool: "term_normalize",
       sourceTerm: "acetaminophen",
     }, null, 2)}\n`,
   });
@@ -228,7 +235,7 @@ async function startFakeProvider(workspaceDir) {
         if (
           result?.status !== "success" ||
           result?.data?.preferred !== "paracetamol" ||
-          result?.data?.provenance?.tool !== "evimed_term_normalize"
+          result?.data?.provenance?.tool !== "term_normalize"
         ) throw failure("opencode_evimed_mcp_result_invalid");
         state.mcpToolResult = result;
         const name = writeToolName(body);
@@ -857,7 +864,7 @@ async function runOpenCodeChain({
       run = await runBoundedProcess(opencodeBin, [
         "run", "--pure", "--format", "json", "--auto", "--model", `deepseek/${REQUIRED_MODEL}`,
         "--dir", workspaceDir,
-        "Normalize acetaminophen in the drug domain with the available EviMed medical tool. Write exactly artifacts/deepseek-release-gate.json with exactly these JSON fields, taking every value from the tool input or result: {\"normalized\":\"paracetamol\",\"provenanceTool\":\"evimed_term_normalize\",\"sourceTerm\":\"acetaminophen\"}. Do not rename or nest those fields. Then return exactly one unfenced JSON object with this schema and no other text: {\"normalized\":\"paracetamol\",\"artifact\":\"artifacts/deepseek-release-gate.json\"}.",
+        "Normalize acetaminophen in the drug domain with the available EviMed medical tool. Write exactly artifacts/deepseek-release-gate.json with exactly these JSON fields, taking every value from the tool input or result: {\"normalized\":\"paracetamol\",\"provenanceTool\":\"term_normalize\",\"sourceTerm\":\"acetaminophen\"}. Do not rename or nest those fields. Then return exactly one unfenced JSON object with this schema and no other text: {\"normalized\":\"paracetamol\",\"artifact\":\"artifacts/deepseek-release-gate.json\"}.",
       ], { cwd: workspaceDir, env, timeoutMs });
     } catch (error) {
       if (mode === "fake" && error && typeof error === "object") {
@@ -948,7 +955,7 @@ async function runOpenCodeChain({
       receiptSigningSecret: signingSecret,
       integrationEvidence: {
         mcp: {
-          toolName: fakeState?.mcpToolName ?? "evimed_term_normalize",
+          toolName: fakeState?.mcpToolName ?? "term_normalize",
           advertisedTools: fakeState?.advertisedTools ?? [],
           result: evidence.mcpResult,
         },

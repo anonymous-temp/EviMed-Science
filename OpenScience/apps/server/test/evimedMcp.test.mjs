@@ -15,6 +15,7 @@ import {
   validateEviMedAdapterConfig,
   verifyEviMedWorkloadToken,
 } from "../src/runtimeManager.mjs";
+import { MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
 
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -959,4 +960,51 @@ test("hosted deployment exposes only MCP source and non-secret adapter URL setti
   assert.match(example, /^OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET=$/m);
   assert.match(example, /^OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_FILE=$/m);
   assert.match(example, /^OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE=\.\/secrets\/evimed-workload-signing-key\.txt$/m);
+});
+
+// The tool table, pinned against the server that publishes it.
+//
+// This is the check that was missing while the two drifted for the whole
+// migration: `MCP_TOOL_BASE_NAMES` was rewritten to bare names and 84 SKILL.md
+// files plus eleven capability manifests were rewritten to
+// `mcp__evimed__<base>` — while `server.py` went on publishing
+// `evimed_<base>`. Under DSH the model would have been shown
+// `mcp__evimed__evimed_literature_search`, and every name the skills referred
+// to would simply not have existed. Nothing caught it because every test on
+// both sides was internally consistent: the Python suite asserted the server's
+// own names, and the manifest validator asserted the vocabulary's own names.
+//
+// Reading the server's source is the point. A test that imported a shared
+// constant would prove the two agree about a constant, not that the server
+// publishes what the vocabulary promises.
+test("the MCP server publishes exactly the tools the vocabulary names", async () => {
+  const source = await readFile(path.join(repoRoot, "runtime/mcp/evimed-research/server.py"), "utf8");
+  const published = [...source.matchAll(/^\s*"name": "([a-z][a-z0-9_]*)",$/gm)].map((match) => match[1]);
+  assert.ok(published.length >= 20, `only ${published.length} tool names found; the extraction pattern has drifted`);
+
+  const declared = [...MCP_TOOL_BASE_NAMES];
+  assert.deepEqual([...published].sort(), [...declared].sort());
+
+  // And none of them carries the prefix a kernel adds. `evimed_x` published
+  // under the server named `evimed` becomes `mcp__evimed__evimed_x`: the prefix
+  // twice, and a name no skill refers to.
+  for (const name of published) {
+    assert.equal(name.startsWith("evimed_"), false, `${name} repeats the server name that the kernel already prefixes`);
+    assert.equal(name.startsWith(MCP_TOOL_PREFIX), false, `${name} hard-codes a kernel's presentation prefix`);
+  }
+});
+
+// The other half: what an agent package may ask for has to be something the
+// server offers. The registry used to keep its own copy of the list, which is
+// how a manifest could name a tool nobody publishes.
+test("every tool an agent package may declare is one the server publishes", async () => {
+  const { EVIMED_AGENT_TOOL_IDS } = await import("../src/agentRegistry.mjs");
+  const source = await readFile(path.join(repoRoot, "runtime/mcp/evimed-research/server.py"), "utf8");
+  const published = new Set([...source.matchAll(/^\s*"name": "([a-z][a-z0-9_]*)",$/gm)].map((match) => match[1]));
+  for (const tool of EVIMED_AGENT_TOOL_IDS) {
+    assert.ok(published.has(tool), `agent packages may declare "${tool}", which the MCP server does not publish`);
+  }
+  // `health` is an operator probe, so it is published but not declarable.
+  assert.equal(EVIMED_AGENT_TOOL_IDS.has("health"), false);
+  assert.equal(published.has("health"), true);
 });

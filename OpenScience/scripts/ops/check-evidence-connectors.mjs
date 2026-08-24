@@ -95,7 +95,7 @@ const manualVerification = [
   "Static audit only; no network calls were made. To verify live connectivity:",
   `1. Public (no-credential) connectors: python3 evals/capability-audit/run_connector_audit.py --workspace <dir> --source pubmed --source europe-pmc --source openalex`,
   `2. Managed-credential connectors through the server gateway: node evals/capability-audit/run_connector_gateway_audit.mjs --workspace <dir>`,
-  "3. Keyless tiers: call the MCP tool evimed_biomedical_source_search with source=semantic-scholar (always keyless-capable) or source=unpaywall (requires EVIMED_UNPAYWALL_EMAIL) and inspect data.credentialMode in the result.",
+  "3. Keyless tiers: call the MCP tool biomedical_source_search with source=semantic-scholar (always keyless-capable) or source=unpaywall (requires EVIMED_UNPAYWALL_EMAIL) and inspect data.credentialMode in the result.",
 ];
 
 if (jsonOutput) {

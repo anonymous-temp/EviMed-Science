@@ -28,7 +28,7 @@ incidence from a reporting database. Use the declared EviMed tools only; do not
 substitute unverified figures from memory.
 
 For an open-domain request that asks for a drug-safety analysis or structured
-pharmacovigilance report, call `evimed_drug_safety_analysis` with
+pharmacovigilance report, call `drug_safety_analysis` with
 `action=capabilities`, then start the managed job with the drug and optional
 reaction terms. Record its job id and poll with `waitSeconds=45` until terminal.
 When the user or protocol declares aliases, exact FAERS role codes,
@@ -53,11 +53,11 @@ false, describe EBGM/EB05 as exploratory output from an unfitted starting
 prior; never call it a paper-grade or full-matrix empirical-Bayes fit.
 
 When the declared safety, label, or literature adapters leave a material gap,
-use `evimed_data_source_catalog` to select a relevant active source and then
-`evimed_biomedical_source_search`. Do not query unrelated databases merely to
+use `data_source_catalog` to select a relevant active source and then
+`biomedical_source_search`. Do not query unrelated databases merely to
 increase source count.
 
-Use `evimed_pharmacy_reference_search` only when a configured private reference
+Use `pharmacy_reference_search` only when a configured private reference
 can clarify a drug alias, route, dose-risk rule, interaction, monitoring item,
 or special-population screening hypothesis. Its rows may be institution-specific
 and are not current clinical authority. Verify every material rule against the

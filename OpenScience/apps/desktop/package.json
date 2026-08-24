@@ -17,6 +17,7 @@
     "3dmol": "^2.5.5",
     "@ai4s/sdk": "workspace:*",
     "@ai4s/shared": "workspace:*",
+    "@evimed/domain": "workspace:*",
     "@fontsource/inter": "^5.0.18",
     "@fontsource/jetbrains-mono": "^5.0.20",
     "@fontsource/source-serif-4": "^5.0.19",

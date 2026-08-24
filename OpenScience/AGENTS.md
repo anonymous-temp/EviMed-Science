@@ -24,7 +24,8 @@ macOS and Windows, but desktop packaging is not the core production release.
 See `README.md`, `docs/PRD.md`, and `docs/TECHNICAL_DESIGN.md`.
 
 Recommended stack: **Tauri 2 + React + TypeScript + Vite**, Tailwind (design-token CSS variables; hand-built components + cmdk + lucide; only one Radix package remains: `react-popover`),
-**OpenCode** as the agent runtime (bundled single-binary sidecar; HTTP + SSE API),
+**DeepSeek Harness** as the agent kernel, one per project runtime container, reached
+only by the control plane (never by a browser),
 local workspace + SQLite + JSONL provenance.
 
 ## Repository map
@@ -35,12 +36,28 @@ local workspace + SQLite + JSONL provenance.
   SegmentedControl, ConfirmDialog, Toaster, EmptyState, Skeletons, ShortcutHelp),
   `src/lib/` (stores, runtime, hooks). There is no `src/features/` — it was removed.
 - `packages/` — `ui` (placeholder README only — real primitives live in
-  `apps/desktop/src/components/ui/`), `shared`, `sdk` (the `OpenCodeClient` wrapper).
-- `runtime/` — `manager`, `opencode-profile` (planned placeholder; the real
-  profile/agents/MCP config is generated per runtime by
-  `apps/server/src/runtimeManager.mjs` and `apps/desktop/src-tauri/src/opencode_config.rs`),
-  `mcp`, `skills` (`skills/evimed/` holds the specialist agent packages plus the
-  default `open-domain-answer` agent that handles unrouted open-domain questions).
+  `apps/desktop/src/components/ui/`), `shared`, `domain` (`@evimed/domain` — the
+  vocabulary every other package derives from: tool names, contract kinds, the
+  workspace layout, the four state vocabularies, the error-code registry and the
+  delivery-gate rules), `harness-port` (the only package that may import
+  `@deepseek-ai/*`), `socket` (`@evimed/dsh-socket` — the plug: the
+  `evimed-universal` composition and its eight plugins — six in the base
+  preset (`guidance`, `run-policy`, `evidence`, `capsule`, `screening`,
+  `review`) plus `seam-probe` and `evidence-store`, inserted by the bundle's
+  own `cordis.patch.yml`), `contracts` (one
+  directory per tracked upstream pin), `sdk` (retiring with the desktop shell).
+- `capabilities/` — one directory per capability: `capability.yaml` (the only
+  definition of a capability) plus its SKILL.md and scripts. `capability-skills/`
+  holds the shared skill bodies delegation pre-injects.
+- `deploy/runtime-dsh/` — the runtime image: Node, the pinned kernel, the socket
+  bundle, the capability manifests and a profile pre-initialized at build time.
+- `deps-version.json` — the one place a tracked upstream pin is written
+  (`dsh` / `memos` / `openlist` / `mineru`). A Dockerfile ARG, a seam manifest,
+  a peer dependency and a release manifest that each carried their own copy
+  meant "bump the pin" was four edits and one was always missed.
+- `runtime/` — `mcp` (the `evimed` research server, 26 tools), `kernel` (the
+  Python/R notebook bridge), `skills` (the general skill libraries the preset
+  ships: `core`, `curated-scientific`, `office`).
 - `docs/` — product and technical specs. `docs/REQUEST_PATH.md` traces one request
   end to end (HTTP boundary → routing → run ledger → runtime → MCP → external
   gateways → delivery gate → artifact retrieval) with each segment's timeout
@@ -51,8 +68,21 @@ local workspace + SQLite + JSONL provenance.
 
 ## Architecture guardrails
 
-- The UI never calls OpenCode directly — it goes through `packages/sdk` (`OpenCodeClient`).
-  Pin the OpenCode version (see `OPENCODE_VERSION`) and bundle it as a sidecar.
+- **The browser never reaches an agent kernel.** It talks to `apps/server`, which
+  decodes the kernel's events into `@evimed/domain`'s `RunEvent` and forwards its
+  own stream (`GET /api/runs/:id/events`). The pass-through route that used to
+  proxy a kernel straight into the page is retired: it made the frontend know a
+  kernel's protocol, so every kernel change was a frontend change.
+- **`@deepseek-ai/*` may be imported in `packages/harness-port` and nowhere else** —
+  including in a JSDoc `import()` type. The port owns its own types and converts
+  shapes, so a rename upstream is one file. `seam-manifest.json` lists every
+  contact point and is the single source the port's exports, the startup probe,
+  the lint allow-list, the contract tests and the method allow-list derive from.
+- **Versions are pinned in one place.** `deps-version.json`; tests assert every
+  derived copy equals it. The kernel makes no compatibility promises before its
+  first tagged release, so the discipline is: exact pin, fail-closed startup
+  self-check, contract tests with golden frames, nightly matrix, security fixes
+  evaluated the day they land.
 - Keep the frontend, desktop shell, and agent runtime decoupled.
 - Skills, MCP servers, and model providers must stay pluggable.
 - Keep the artifact schema and workflow templates stable and versioned.
@@ -77,11 +107,25 @@ local workspace + SQLite + JSONL provenance.
 
 ## Safety defaults (non-negotiable)
 
-- The agent may only access the current workspace.
-- Command execution, file deletion, dependency install, and remote connections
-  require approval (manual approval mode by default — never ship `off`).
+- The agent may only access the current workspace. Writes are fenced by the
+  kernel sandbox; reads and network are not, so the container's filesystem mounts
+  and network policy are what actually bound them.
+- **The runtime never holds a real provider key.** The kernel's `baseURL` points
+  at our model gateway and its `apiKeyEnv` names a reference resolved per request
+  from a 0600 credentials file the control plane rewrites in place — so a token
+  rotation is a file write, not a restart.
+- **Approval policy is `never` in a hosted deployment, and `never` means
+  auto-refuse, not auto-approve.** Inside the sandbox nothing needs approval; the
+  only things that ask are attempts to step outside it, and refusing those is
+  exactly right for an unattended run. A local profile uses `ask`.
+- Telemetry is disabled in the image, in the patch and in the container
+  environment — three places, because any one of them being undone leaks message
+  bodies, tool arguments and workspace paths.
 - API keys go to the OS keychain / credential manager; never into provenance,
   logs, crash reports, git, or exported projects.
+- **A capsule is context, never permission.** Nothing a memory capsule or an
+  imported workstyle pack says can loosen a contract, relax a safety rule, or
+  reach a host the gateway would not.
 
 ## Working conventions
 

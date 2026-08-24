@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import {
+  briefCollapse,
+  briefTermPresent,
   citationIntegrityIssues,
   clinicalEvidencePackageErrorCode,
   numberedReferenceCount,
@@ -1731,7 +1733,7 @@ test("every bookkeeping pattern still matches a message the module actually emit
   // The classification is by message shape, so rewording a message silently
   // stops it being classified — which is what happened when the gate messages
   // gained an instruction and two patterns were still anchored to the old ends.
-  const source = await readFile(new URL("../src/clinicalEvidenceQuality.mjs", import.meta.url), "utf8");
+  const source = await readFile(new URL("../../../packages/domain/src/clinicalEvidence.mjs", import.meta.url), "utf8");
   const block = /const bookkeepingIssuePatterns = Object\.freeze\(\[([\s\S]*?)\n\]\);/.exec(source);
   assert.ok(block, "the pattern list moved");
 
@@ -1762,7 +1764,7 @@ test("the medication-response rule judges the advice, not the discussion of it",
   // were flagged for making precisely the finding the analysis exists to make,
   // and deleting the passage was the cheapest way to comply. The harm lives in
   // the practical answer, so that is what the rule reads.
-  const rules = JSON.parse(await readFile(new URL("../src/clinical-safety-rules.json", import.meta.url), "utf8"));
+  const rules = JSON.parse(await readFile(new URL("../../../packages/domain/src/clinical-safety-rules.json", import.meta.url), "utf8"));
   const rule = rules.rules.find((entry) => entry.id === "medication-response-not-diagnostic");
   assert.equal(rule.kind, "practical_forbidden", "the analysis body must be free to examine the question");
   const pattern = new RegExp(rule.pattern, rule.flags ?? "");
@@ -1799,7 +1801,7 @@ test("the self-care rule reads a prohibition as a prohibition", async () => {
   // 可 lives inside 不可, 建议 inside 不建议, 先 inside 不要先. Matching the
   // recommendation word inside its own negation turned "不可等待观察症状变化" —
   // the instruction the rule exists to require — into the advice it forbids.
-  const rules = JSON.parse(await readFile(new URL("../src/clinical-safety-rules.json", import.meta.url), "utf8"));
+  const rules = JSON.parse(await readFile(new URL("../../../packages/domain/src/clinical-safety-rules.json", import.meta.url), "utf8"));
   const rule = rules.rules.find((entry) => entry.id === "unsupported-self-care");
   const pattern = new RegExp(rule.pattern, rule.flags ?? "");
 
@@ -1824,7 +1826,7 @@ test("the emergency-delay rule accepts the emergency number the skill asks for",
   // The skill instructs the report to localise the emergency number to 120, and
   // the rule demanded 呼救/急救/就医/评估 — so "不得延误呼叫 120", which is what
   // the skill asked for, failed the check that exists to require it.
-  const rules = JSON.parse(await readFile(new URL("../src/clinical-safety-rules.json", import.meta.url), "utf8"));
+  const rules = JSON.parse(await readFile(new URL("../../../packages/domain/src/clinical-safety-rules.json", import.meta.url), "utf8"));
   const rule = rules.rules.find((entry) => entry.id === "suxiao-must-not-delay-emergency");
   const pattern = new RegExp(rule.pattern, rule.flags ?? "");
 
@@ -3123,6 +3125,47 @@ test("an item the brief names that the report never uses is named, item by item"
     assert.ok(!named.includes(`「${term}」`), `${term} is on the page and must not be named: ${named}`);
   }
   assert.equal(clinicalEvidencePackageErrorCode(issues), "specialist_question_coverage_unsupported");
+});
+
+test("a term the report writes differently is not a term the report dropped", () => {
+  // Sixteen single-item alerts from the corpus were read back by hand: three
+  // were real and nine were the brief and the report spelling one thing two
+  // ways. The claim this check makes is that a subject is absent, not that a
+  // phrase is, so it holds when the report says 硝酸酯 for 硝酸酯类, 心绞痛发作
+  // for 心绞痛终点, and 适应症 for 适应证.
+  const report = briefCollapse("本节说明适应症范围与辨症分型标准，比较硝酸酯药物与心绞痛发作频率。");
+  for (const written of ["适应证范围", "辨证分型标准", "硝酸酯类药物", "心绞痛终点"]) {
+    assert.equal(briefTermPresent(written, report), true, `${written} is on the page in another spelling`);
+  }
+  // A subject the report genuinely never raises is still absent.
+  for (const missing of ["儿茶酚胺水平", "房性期前收缩负荷", "肿瘤坏死因子"]) {
+    assert.equal(briefTermPresent(missing, report), false, `${missing} is nowhere on the page`);
+  }
+  // And a term too short to carry the claim is never called absent: 终点 is
+  // "missing" from a report that says 结局 throughout.
+  assert.equal(briefTermPresent("终点", briefCollapse("本文以结局为准")), false);
+  assert.equal(briefCollapse("适应证"), briefCollapse("适应症"));
+});
+
+test("two of a list on the page settles that the list is the subject", () => {
+  // A ratio gate used to require a third of a list to be present before any
+  // absence counted, and it read the strongest case backwards: six of RQ-16's
+  // eight measured effects are missing, which scores 0.25 and was discarded
+  // whole. Two present is what says the list belongs to this report.
+  const brief = researchBrief().replace(
+    "1. 胸口突然发闷发紧",
+    "1. 请给出研究设计、心率变异性、心房颤动发作、儿茶酚胺水平、房性期前收缩负荷、炎症与内皮功能、皮质醇节律水平、压力反射敏感性、血浆去甲肾上腺素、清晨皮质醇峰值、夜间血压下降率、白细胞介素六、肿瘤坏死因子、随访时长各自的实测效应。胸口突然发闷发紧",
+  );
+  const issues = coverageIssues(coverageLedgerObject(), (input) => {
+    input.briefText = brief;
+    input.reportText = input.reportText.replace(
+      "## 讨论\n",
+      "## 讨论\n本节给出心率变异性与心房颤动发作的实测数据。\n",
+    );
+  });
+  const named = issues.find((issue) => /把题面第 1 问登记为 answered/.test(issue));
+  assert.ok(named, issues.join("\n") || "no finding");
+  assert.ok(named.includes("儿茶酚胺水平"), named);
 });
 
 test("an enumeration the report is not working through at all is not read as dropped items", () => {

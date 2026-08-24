@@ -16,13 +16,27 @@ const backupSchedulerScript = path.join(repoRoot, "scripts/ops/backup-scheduler.
 const configureBackupScript = path.join(repoRoot, "scripts/ops/configure-backup.mjs");
 const configureLocalAuthScript = path.join(repoRoot, "scripts/ops/configure-local-auth.mjs");
 
+// Every child here is expected to finish on its own. A bound is still set,
+// because the one that did not — a scheduler that retried forever on failure —
+// took the whole suite down with it and reported nothing at all. A hang that
+// reports as a failed test is a bug you can read; a hang that reports as
+// nothing is a suite people learn to skip.
+const CHILD_TIMEOUT_MS = 120_000;
+
+function describeChildFailure(error, command) {
+  if (error?.killed) {
+    error.message = `${command} did not exit within ${CHILD_TIMEOUT_MS} ms and was killed: ${error.message}`;
+  }
+  return error;
+}
+
 function run(script, args, options = {}) {
   return new Promise((resolve, reject) => {
-    execFile("bash", [script, ...args], { cwd: repoRoot, ...options }, (error, stdout, stderr) => {
+    execFile("bash", [script, ...args], { cwd: repoRoot, timeout: CHILD_TIMEOUT_MS, killSignal: "SIGKILL", ...options }, (error, stdout, stderr) => {
       if (error) {
         error.stdout = stdout;
         error.stderr = stderr;
-        reject(error);
+        reject(describeChildFailure(error, `bash ${script}`));
         return;
       }
       resolve({ stdout, stderr });
@@ -32,11 +46,11 @@ function run(script, args, options = {}) {
 
 function runCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { cwd: repoRoot, ...options }, (error, stdout, stderr) => {
+    execFile(command, args, { cwd: repoRoot, timeout: CHILD_TIMEOUT_MS, killSignal: "SIGKILL", ...options }, (error, stdout, stderr) => {
       if (error) {
         error.stdout = stdout;
         error.stderr = stderr;
-        reject(error);
+        reject(describeChildFailure(error, `${command} ${args.join(" ")}`));
         return;
       }
       resolve({ stdout, stderr });

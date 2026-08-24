@@ -439,8 +439,6 @@ ai4s-workbench/
 
 - `apps/desktop` — Tauri + React desktop app; `src-tauri/src/runtime.rs` supervises the
   bundled OpenCode sidecar (`OpenCodeClient` lives in `packages/sdk`).
-- `runtime/manager` — local runtime manager (detect deps, workspace, provenance, logs).
-- `runtime/opencode-profile` — the AI4S Workbench OpenCode config/skills bundle.
 - `runtime/skills` — self-authored scientific skills.
 - `examples` — the complete demo project.
 

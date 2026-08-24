@@ -21,12 +21,12 @@ import public_sources  # noqa: E402
 
 
 ENDPOINTS = {
-    "/api/v1/evimed/adr-cases": "evimed_adr_case_query",
-    "/api/v1/evimed/adr-signal": "evimed_adr_signal_analysis",
-    "/api/v1/evimed/offlabel-evidence-packet": "evimed_offlabel_evidence_packet",
-    "/api/v1/evimed/comprehensive-drug-evaluation": "evimed_comprehensive_drug_evaluation",
-    "/api/v1/evimed/drug-selection-evaluation": "evimed_drug_selection_evaluation",
-    "/api/v1/evimed/pharmacy-reference-search": "evimed_pharmacy_reference_search",
+    "/api/v1/evimed/adr-cases": "adr_case_query",
+    "/api/v1/evimed/adr-signal": "adr_signal_analysis",
+    "/api/v1/evimed/offlabel-evidence-packet": "offlabel_evidence_packet",
+    "/api/v1/evimed/comprehensive-drug-evaluation": "comprehensive_drug_evaluation",
+    "/api/v1/evimed/drug-selection-evaluation": "drug_selection_evaluation",
+    "/api/v1/evimed/pharmacy-reference-search": "pharmacy_reference_search",
 }
 
 

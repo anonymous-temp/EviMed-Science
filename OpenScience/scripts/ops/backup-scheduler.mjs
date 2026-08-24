@@ -280,6 +280,15 @@ async function run() {
       // Health still reports failed, so the deployment is not pretending to be
       // backed up; it simply is not paying for the attempt every retry window.
       const exhausted = state.consecutiveFailures >= config.maxFailures;
+      // A one-shot invocation retries inside its failure budget — that is what
+      // makes `runOnce` mean "get one backup done" rather than "attempt one
+      // backup" — but once the budget is gone it has to give up and say so.
+      // Falling through to the circuit-breaker sleep instead left a one-shot
+      // run retrying forever: an operator got a process that never exited and
+      // never explained itself, and the test covering this exact path hung
+      // rather than reporting. The failure is already recorded and logged, so
+      // rethrowing is what turns it into a non-zero exit.
+      if (config.runOnce && exhausted) throw error;
       if (exhausted) {
         log("backup.circuit_open", {
           consecutiveFailures: state.consecutiveFailures,

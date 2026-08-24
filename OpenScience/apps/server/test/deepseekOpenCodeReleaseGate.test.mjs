@@ -20,14 +20,14 @@ const testReceiptSigningSecret = "release-gate-test-signing-secret-with-at-least
 
 test("artifact provenance accepts equivalent explicit tool-name shapes", () => {
   for (const artifact of [
-    { provenanceTool: "evimed_term_normalize" },
-    { provenance_tool: "evimed_term_normalize" },
-    { provenance: "evimed_term_normalize" },
-    { provenance: { tool: "evimed_term_normalize" } },
-    { provenance: { toolName: "evimed_term_normalize" } },
-    { provenance: { name: "evimed_term_normalize" } },
+    { provenanceTool: "term_normalize" },
+    { provenance_tool: "term_normalize" },
+    { provenance: "term_normalize" },
+    { provenance: { tool: "term_normalize" } },
+    { provenance: { toolName: "term_normalize" } },
+    { provenance: { name: "term_normalize" } },
   ]) {
-    assert.equal(resolveArtifactProvenanceTool(artifact), "evimed_term_normalize");
+    assert.equal(resolveArtifactProvenanceTool(artifact), "term_normalize");
   }
   assert.equal(resolveArtifactProvenanceTool({ provenance: { source: "local" } }), undefined);
 });
@@ -38,7 +38,7 @@ test("release evidence requires completed structured tool history, not prompt st
     info: { role: "user" },
     parts: [{
       type: "text",
-      text: "evimed_term_normalize paracetamol provenance.tool write artifacts/term-normalization.json",
+      text: "term_normalize paracetamol provenance.tool write artifacts/term-normalization.json",
     }],
   }];
   assert.deepEqual(openCodeHistoryEvidence(promptOnly, workspace), {
@@ -63,7 +63,7 @@ test("release evidence requires completed structured tool history, not prompt st
             input: { term: "acetaminophen" },
             output: JSON.stringify({
               status: "success",
-              data: { preferred: "paracetamol", provenance: { tool: "evimed_term_normalize" } },
+              data: { preferred: "paracetamol", provenance: { tool: "term_normalize" } },
             }),
           },
         },
@@ -88,7 +88,7 @@ test("release evidence requires completed structured tool history, not prompt st
     artifactPath: "artifacts/result.json",
     mcpResult: {
       status: "success",
-      data: { preferred: "paracetamol", provenance: { tool: "evimed_term_normalize" } },
+      data: { preferred: "paracetamol", provenance: { tool: "term_normalize" } },
     },
   });
 
@@ -147,14 +147,14 @@ test("release gate runs the bundled OpenCode 1.17.13 through the full fake gatew
   assert.equal(receipt.capabilities.sessionHistory, true);
   assert.equal(receipt.capabilities.structuredFinal, true);
   assert.equal(receipt.capabilities.providerBaseline, true);
-  assert.equal(chainEvidence.mcp.toolName.includes("evimed_term_normalize"), true);
+  assert.equal(chainEvidence.mcp.toolName.includes("term_normalize"), true);
   assert.equal(chainEvidence.mcp.result.status, "success");
   assert.equal(chainEvidence.mcp.result.data.preferred, "paracetamol");
-  assert.equal(chainEvidence.mcp.result.data.provenance.tool, "evimed_term_normalize");
+  assert.equal(chainEvidence.mcp.result.data.provenance.tool, "term_normalize");
   assert.equal(chainEvidence.artifact.path, "artifacts/term-normalization.json");
   assert.deepEqual(JSON.parse(chainEvidence.artifact.content), {
     normalized: "paracetamol",
-    provenanceTool: "evimed_term_normalize",
+    provenanceTool: "term_normalize",
     sourceTerm: "acetaminophen",
   });
   assert.equal(chainEvidence.history.mcpToolCompleted, true);

@@ -264,6 +264,17 @@ async function waitForChildExit(child) {
   return false;
 }
 
+// The browser-to-kernel pass-through is gone, and with it fifteen tests that
+// hardened it: credential stripping, redirect sanitization, response-body caps,
+// per-project and global connection limits, method allow-lists, mutation
+// payload validation, and the refusal to wake a stopped runtime for a stale
+// control mutation. None of those risks survived the route — a browser can no
+// longer reach a kernel at all — and the surfaces that replaced it are covered
+// where they live: the wire-method allow-list in dshRuntimeAdapter.test.mjs,
+// the session and transcript routes below, and the event stream in
+// runEventStream.test.mjs. The one test kept from that family is the one about
+// project-id decoding, which is about our routing and not about the kernel.
+
 test("specialty agent catalog requires authentication and exposes only public metadata", async () => {
   await withAuthApp(async ({ base }) => {
     const anonymous = await fetch(`${base}/api/agents`);
@@ -384,7 +395,7 @@ test("route parameters reject malformed percent encoding with JSON errors", asyn
     assert.equal(res.status, 400);
     assert.equal((await res.json()).code, "invalid_encoding");
 
-    res = await fetch(`${base}/api/opencode/%E0%A4%A/session`);
+    res = await fetch(`${base}/api/runtime/sessions/%E0%A4%A/transcript`);
     assert.equal(res.status, 400);
     assert.equal((await res.json()).code, "invalid_encoding");
   });
@@ -409,11 +420,18 @@ test("API route handlers reject ambiguous extra task path segments", async () =>
   });
 });
 
-test("OpenCode proxy project ids reject encoded path separators", async () => {
+test("route components reject encoded path separators, and the retired pass-through says so", async () => {
   await withApp(async ({ base }) => {
-    const res = await fetch(`${base}/api/opencode/default%2Fescape/session`);
+    const res = await fetch(`${base}/api/runtime/sessions/default%2Fescape/transcript`);
     assert.equal(res.status, 400);
     assert.equal((await res.json()).code, "invalid_id");
+
+    // And the retired pass-through says what replaced it rather than 404ing
+    // into silence — a browser pointed at it is a browser that was speaking a
+    // kernel's protocol.
+    const retired = await fetch(`${base}/api/opencode/default/session`, { method: "POST", body: "{}" });
+    assert.equal(retired.status, 410);
+    assert.equal((await retired.json()).code, "runtime_passthrough_retired");
 
     const status = await command(base, "runtime_status");
     assert.equal(status.res.status, 200);
@@ -758,6 +776,11 @@ test("readiness reports writable data storage and static asset availability", as
     assert.equal(body.checks.release.required, false);
     assert.equal(body.checks.release.tracked, false);
     assert.equal(body.checks.runtime.mode, "mock");
+    // Which kernel this deployment is on, on every branch. While the shipped
+    // default is the rollback kernel, a deployment that meant to move to DSH and
+    // did not is otherwise indistinguishable from one that moved.
+    assert.equal(body.checks.runtime.kernel, "dsh");
+    assert.ok(body.checks.runtime.kernelVersion, "readiness must name the kernel version it would launch");
     assert.equal(body.checks.saasProfile.ok, true);
     assert.equal(body.checks.saasProfile.profile, "controlled-pilot");
     assert.equal(body.checks.saasProfile.technicalSaas, false);
@@ -2433,6 +2456,12 @@ test("production auth rejects anonymous requests and accepts login cookies", asy
     });
     assert.equal(body.csrfToken, loggedIn.csrfToken);
 
+    // Which session view this deployment serves. The browser must not decide it
+    // from a build flag: the kernel is a deployment choice with a one-line
+    // rollback, and the two views read different sources, so a rollback that
+    // needed a new bundle would not be a rollback.
+    assert.deepEqual(body.runtime, { kernel: "dsh", sessionView: "run-stream" });
+
     const securityLog = await readFile(path.join(app.config.dataDir, ".openscience", "security.jsonl"), "utf8");
     assert.ok(
       securityLog
@@ -2806,7 +2835,7 @@ test("non-default projects must be created before use", async () => {
     assert.equal(out.res.status, 404);
     assert.equal(out.json.code, "project_not_found");
 
-    const proxied = await fetch(`${base}/api/opencode/ghost/session`, { headers });
+    const proxied = await fetch(`${base}/api/runtime/sessions`, { method: "POST", headers, body: "{}" });
     assert.equal(proxied.status, 404);
     assert.equal((await proxied.json()).code, "project_not_found");
 
@@ -3284,7 +3313,11 @@ test("project roots reject symbolic links", async () => {
     assert.equal(created.status, 403);
     assert.equal((await created.json()).code, "path_forbidden");
 
-    const proxied = await fetch(`${base}/api/opencode/escape/session`);
+    const proxied = await fetch(`${base}/api/runtime/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Open-Science-Project": "escape" },
+      body: "{}",
+    });
     assert.equal(proxied.status, 403);
     assert.equal((await proxied.json()).code, "path_forbidden");
   });
@@ -3959,42 +3992,14 @@ test("concurrent project-quota stops wait for the same terminal runtime state", 
   });
 });
 
-test("runtime proxy stops a project runtime after agent writes exceed the storage quota", async () => {
-  await withApp(
-    async ({ base }) => {
-      const session = await fetch(`${base}/api/opencode/default/session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      assert.equal(session.status, 200);
-      const sessionId = (await session.json()).id;
-
-      let status = await command(base, "runtime_status");
-      assert.equal(status.res.status, 200);
-      assert.equal(status.json.data.running, true);
-
-      const prompt = await fetch(`${base}/api/opencode/default/session/${sessionId}/prompt_async`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: "write artifact" }),
-      });
-      assert.equal(prompt.status, 200);
-
-      status = await command(base, "runtime_status");
-      assert.equal(status.res.status, 200);
-      assert.equal(status.json.data.running, false);
-      assert.equal(status.json.data.lastEvent, "quota_exceeded");
-      assert.equal(status.json.data.error, "project_quota_exceeded");
-
-      const logs = await fetch(`${base}/api/logs/runtime?limit=20`);
-      assert.equal(logs.status, 200);
-      const events = (await logs.json()).data.map((row) => row.event);
-      assert.ok(events.includes("quota_exceeded"));
-    },
-    { maxProjectBytes: 8 },
-  );
-});
+// Removed with the browser pass-through: "runtime proxy stops a project runtime
+// after agent writes exceed the storage quota". What it uniquely tested was that
+// the quota check rode on the proxy call, and there is no proxy call — a prompt
+// reaches a kernel through the ledger, which writes the brief and the research
+// context into the workspace first, so no ceiling can both admit a dispatch and
+// be crossed by the run's own artifact. The guarantee itself is unchanged and is
+// held by the two tests below, which measure the workspace rather than the
+// caller: the monitor stops a runtime whose project goes over, whoever wrote it.
 
 test("runtime quota monitor stops background writes that exceed the project quota", async () => {
   await withApp(
@@ -5084,15 +5089,20 @@ test("workspace file commands reject traversal", async () => {
   });
 });
 
-test("start_runtime returns a proxied OpenCode base URL", async () => {
+test("start_runtime returns the control plane's own surface, never a kernel's", async () => {
   await withApp(async ({ base }) => {
     const { res, json } = await command(base, "start_runtime");
     assert.equal(res.status, 200);
-    assert.match(json.data, /\/api\/opencode\/default$/);
+    assert.match(json.data, /\/api\/runtime$/);
+    assert.ok(!/opencode|dsh/.test(json.data), "a caller must not be handed anything that names a kernel");
 
-    const session = await fetch(`${json.data}/session`, { method: "POST", body: "{}" });
+    const session = await fetch(`${json.data}/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
     assert.equal(session.status, 200);
-    const body = await session.json();
+    const body = (await session.json()).data;
     assert.match(body.id, /^web_mock_/);
   });
 });
@@ -5175,15 +5185,27 @@ test("workspace changes stop the running hosted runtime so it restarts on the ne
     assert.equal(out.res.status, 200);
     const runtimeUrl = out.json.data;
 
-    const session = await fetch(`${runtimeUrl}/session`, { method: "POST", body: "{}" });
-    assert.equal(session.status, 200);
-    const sessionBody = await session.json();
-    const prompt = await fetch(`${runtimeUrl}/session/${encodeURIComponent(sessionBody.id)}/prompt_async`, {
+    const session = await fetch(`${runtimeUrl}/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });
-    assert.equal(prompt.status, 200);
+    assert.equal(session.status, 200);
+    const sessionBody = (await session.json()).data;
+    // The run has to write for the new workspace to be the one it wrote into,
+    // and a prompt reaches the kernel only through the ledger now.
+    const bound = await fetch(`${base}/api/research-sessions/${encodeURIComponent(sessionBody.id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "open-domain" }),
+    });
+    assert.equal(bound.status, 200);
+    const prompt = await fetch(`${base}/api/agent-runs/dispatch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: sessionBody.id, dispatchId: "workspace-probe", text: "write artifact" }),
+    });
+    assert.ok([200, 202].includes(prompt.status), `dispatch returned ${prompt.status}`);
 
     const user = await app.store.devUser();
     const project = await app.store.defaultProject(user);
@@ -5225,118 +5247,35 @@ test("runtime idle timeout stops inactive project runtimes", async () => {
   );
 });
 
-test("runtime idle timeout waits for active proxied streams", async () => {
+test("runtime idle timeout waits for a call still in flight", async () => {
   await withApp(
-    async ({ base }) => {
+    async ({ app, base }) => {
       const started = await command(base, "start_runtime");
       assert.equal(started.res.status, 200);
-      const runtimeUrl = started.json.data;
 
-      const controller = new AbortController();
-      const stream = await fetch(`${runtimeUrl}/event`, { signal: controller.signal });
-      assert.equal(stream.status, 200);
-      const reader = stream.body.getReader();
-      const first = await reader.read();
-      assert.equal(first.done, false);
-
-      await new Promise((resolve) => setTimeout(resolve, 90));
-      const active = await command(base, "runtime_status");
-      assert.equal(active.res.status, 200);
-      assert.equal(active.json.data.running, true);
-
-      await reader.cancel().catch(() => {});
-      controller.abort();
+      // The pass-through is gone, so "an active proxied stream" is now a
+      // control-plane call still in flight. The rule is unchanged and so is the
+      // thing that enforces it: while the runtime has an active proxy slot the
+      // idle stop must not fire, or a long read is cut off by its own idleness.
+      const manager = app.runtimeManager;
+      const user = await app.store.devUser();
+      const project = await app.store.defaultProject(user);
+      manager.beginProxy(project);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 90));
+        assert.ok(manager.activeProxyCount() > 0);
+        const active = await command(base, "runtime_status");
+        assert.equal(active.res.status, 200);
+        assert.equal(active.json.data.running, true, "an in-flight call must keep the runtime alive");
+      } finally {
+        manager.endProxy(project);
+      }
       const status = await waitForRuntimeStatus(base, (data) =>
         data.running === false && data.lastEvent === "idle_timeout" ? data : null,
       );
       assert.equal(status.kind, "mock");
     },
     { runtimeIdleTimeoutMs: 40 },
-  );
-});
-
-test("OpenCode proxy enforces per-project active connection limits", async () => {
-  await withApp(
-    async ({ base }) => {
-      const started = await command(base, "start_runtime");
-      assert.equal(started.res.status, 200);
-      const runtimeUrl = started.json.data;
-
-      const controller = new AbortController();
-      const stream = await fetch(`${runtimeUrl}/event`, { signal: controller.signal });
-      assert.equal(stream.status, 200);
-      const reader = stream.body.getReader();
-      const first = await reader.read();
-      assert.equal(first.done, false);
-
-      try {
-        const limited = await fetch(`${runtimeUrl}/session`, { method: "POST", body: "{}" });
-        assert.equal(limited.status, 429);
-        assert.equal(limited.headers.get("retry-after"), "5");
-        assert.equal((await limited.json()).code, "runtime_proxy_limit_exceeded");
-
-        const defaultStatus = await command(base, "runtime_status");
-        assert.equal(defaultStatus.res.status, 200);
-        assert.equal(defaultStatus.json.data.running, true);
-
-        const row = await waitForRuntimeLogs(base, (loggedRows) =>
-          loggedRows.find((runtimeRow) =>
-            runtimeRow.event === "proxy" &&
-            runtimeRow.target === "/session" &&
-            runtimeRow.status === 429 &&
-            runtimeRow.error === "runtime_proxy_limit_exceeded"
-          ),
-        );
-        assert.equal(row.status, 429);
-      } finally {
-        await reader.cancel().catch(() => {});
-        controller.abort();
-      }
-    },
-    {
-      maxRuntimeProxyConnections: 10,
-      maxRuntimeProxyConnectionsPerProject: 1,
-      runtimeIdleTimeoutMs: 0,
-    },
-  );
-});
-
-test("OpenCode proxy enforces global active connection limits before starting another project", async () => {
-  await withApp(
-    async ({ app, base }) => {
-      const user = await app.store.devUser();
-      await app.store.createProject(user, "paper2", "Paper 2");
-
-      const started = await command(base, "start_runtime");
-      assert.equal(started.res.status, 200);
-      const runtimeUrl = started.json.data;
-
-      const controller = new AbortController();
-      const stream = await fetch(`${runtimeUrl}/event`, { signal: controller.signal });
-      assert.equal(stream.status, 200);
-      const reader = stream.body.getReader();
-      const first = await reader.read();
-      assert.equal(first.done, false);
-
-      try {
-        const limited = await fetch(`${base}/api/opencode/paper2/session`, { method: "POST", body: "{}" });
-        assert.equal(limited.status, 429);
-        assert.equal(limited.headers.get("retry-after"), "5");
-        assert.equal((await limited.json()).code, "runtime_proxy_limit_exceeded");
-
-        const paper2Status = await commandWithHeaders(base, "runtime_status", {}, { "X-Open-Science-Project": "paper2" });
-        assert.equal(paper2Status.res.status, 200);
-        assert.equal(paper2Status.json.data.running, false);
-      } finally {
-        await reader.cancel().catch(() => {});
-        controller.abort();
-      }
-    },
-    {
-      maxRuntimeProxyConnections: 1,
-      maxRuntimeProxyConnectionsPerProject: 10,
-      runtimeIdleTimeoutMs: 0,
-    },
   );
 });
 
@@ -5619,7 +5558,7 @@ test("restart_runtime replaces a project runtime through the command API", async
 
     out = await command(base, "restart_runtime");
     assert.equal(out.res.status, 200);
-    assert.match(out.json.data, /\/api\/opencode\/default$/);
+    assert.match(out.json.data, /\/api\/runtime$/);
 
     out = await command(base, "runtime_status");
     assert.equal(out.res.status, 200);
@@ -5634,7 +5573,7 @@ test("restart_runtime replaces a project runtime through the command API", async
     const events = (await logs.json()).data.map((row) => row.event);
     assert.ok(events.includes("stopped"));
     assert.ok(events.filter((event) => event === "started").length >= 2);
-    assert.equal(first.endsWith("/api/opencode/default"), true);
+    assert.equal(first.endsWith("/api/runtime"), true);
 
     const audit = await fetch(`${base}/api/logs/audit?limit=30`);
     assert.equal(audit.status, 200);
@@ -5651,427 +5590,7 @@ test("restart_runtime replaces a project runtime through the command API", async
     assert.equal(stopped.runtimeRunning, false);
     assert.equal(stopped.runtimeStale, false);
     assert.equal(JSON.stringify(runtimeRows).includes("/api/opencode"), false);
-  });
-});
-
-test("OpenCode proxy rewrites workspace directory and strips browser credentials", async () => {
-  await withApp(async ({ base }) => {
-    const started = await command(base, "start_runtime");
-    assert.equal(started.res.status, 200);
-
-    const res = await fetch(`${base}/api/opencode/default/echo?directory=/etc&auth_token=secret&keep=1`, {
-      headers: {
-        Authorization: "Bearer browser-token",
-        Cookie: "os_session=browser-cookie",
-      },
-    });
-    assert.equal(res.status, 200);
-    assert.ok(!(res.headers.get("set-cookie") ?? "").includes("runtime_cookie"));
-    assert.equal(res.headers.get("www-authenticate"), null);
-    assert.equal(res.headers.get("proxy-authenticate"), null);
-    assert.equal(res.headers.get("x-runtime-hop"), null);
-    const body = await res.json();
-    assert.equal(body.query.keep, "1");
-    assert.notEqual(body.query.directory, "/etc");
-    assert.equal(body.query.auth_token, undefined);
-    assert.equal(body.headers.authorization, null);
-    assert.equal(body.headers.cookie, null);
-    assert.equal(body.headers.acceptEncoding, "identity");
-
-    const proxy = await waitForRuntimeLogs(base, (rows) =>
-      rows.find((row) => row.event === "proxy" && row.target === "/echo"),
-    );
-    assert.equal(proxy.method, "GET");
-    assert.equal(proxy.status, 200);
-    assert.equal(proxy.streaming, false);
-    assert.equal(proxy.error, null);
-    assert.equal(proxy.requestBytes, 0);
-    assert.ok(proxy.responseBytes > 0);
-    const serialized = JSON.stringify(proxy);
-    assert.equal(serialized.includes("secret"), false);
-    assert.equal(serialized.includes("browser-token"), false);
-    assert.equal(serialized.includes("browser-cookie"), false);
-    assert.equal(serialized.includes("/etc"), false);
-  });
-});
-
-test("OpenCode proxy records sanitized request and response byte counts", async () => {
-  await withApp(async ({ base }) => {
-    const started = await command(base, "start_runtime");
-    assert.equal(started.res.status, 200);
-
-    const body = JSON.stringify({ title: "Byte accounting" });
-    const res = await fetch(`${base}/api/opencode/default/session`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer browser-secret",
-      },
-      body,
-    });
-    assert.equal(res.status, 200);
-    assert.ok((await res.json()).id);
-
-    const proxy = await waitForRuntimeLogs(base, (rows) =>
-      rows.find((row) => row.event === "proxy" && row.target === "/session" && row.method === "POST"),
-    );
-    assert.equal(proxy.status, 200);
-    assert.equal(proxy.streaming, false);
-    assert.equal(proxy.requestBytes, Buffer.byteLength(body));
-    assert.ok(proxy.responseBytes > 0);
-    assert.equal(JSON.stringify(proxy).includes("browser-secret"), false);
-  });
-});
-
-test("OpenCode proxy sanitizes runtime redirects", async () => {
-  await withApp(async ({ base }) => {
-    const started = await command(base, "start_runtime");
-    assert.equal(started.res.status, 200);
-
-    const res = await fetch(`${base}/api/opencode/default/redirect`, { redirect: "manual" });
-    assert.equal(res.status, 302);
-    assert.ok(!(res.headers.get("set-cookie") ?? "").includes("runtime_redirect"));
-    assert.equal(res.headers.get("www-authenticate"), null);
-    assert.equal(
-      res.headers.get("location"),
-      "/api/opencode/default/echo?keep=1",
-    );
-  });
-});
-
-test("OpenCode proxy times out non-streaming runtime responses without killing SSE policy", async () => {
-  await withApp(
-    async ({ base }) => {
-      const started = await command(base, "start_runtime");
-      assert.equal(started.res.status, 200);
-
-      const res = await fetch(`${base}/api/opencode/default/slow-body?delay=200`);
-      assert.equal(res.status, 504);
-      assert.equal((await res.json()).code, "runtime_proxy_timeout");
-
-      const row = await waitForRuntimeLogs(base, (rows) =>
-        rows.find((item) =>
-          item.event === "proxy" &&
-          item.target === "/slow-body" &&
-          item.status === 504 &&
-          item.error === "runtime_proxy_timeout"
-        ),
-      );
-      assert.equal(row.streaming, false);
-
-      const stream = await fetch(`${base}/api/opencode/default/event`);
-      assert.equal(stream.status, 200);
-      const reader = stream.body.getReader();
-      const first = await reader.read();
-      assert.equal(first.done, false);
-      await reader.cancel().catch(() => {});
-    },
-    { runtimeProxyRequestTimeoutMs: 30, runtimeProxyConnectTimeoutMs: 1_000, runtimeIdleTimeoutMs: 0 },
-  );
-});
-
-test("OpenCode proxy caps non-streaming runtime response bodies", async () => {
-  await withApp(
-    async ({ base }) => {
-      const started = await command(base, "start_runtime");
-      assert.equal(started.res.status, 200);
-
-      const res = await fetch(`${base}/api/opencode/default/large-response?bytes=128`);
-      assert.equal(res.status, 413);
-      assert.equal((await res.json()).code, "runtime_proxy_response_too_large");
-
-      const row = await waitForRuntimeLogs(base, (rows) =>
-        rows.find((item) =>
-          item.event === "proxy" &&
-          item.target === "/large-response" &&
-          item.status === 413 &&
-          item.error === "runtime_proxy_response_too_large"
-        ),
-      );
-      assert.equal(row.streaming, false);
-    },
-    { maxJsonBytes: 64, runtimeIdleTimeoutMs: 0 },
-  );
-});
-
-test("OpenCode proxy rejects oversized request bodies before starting a runtime", async () => {
-  await withApp(
-    async ({ base }) => {
-      const res = await fetch(`${base}/api/opencode/default/session/ses_mock/prompt_async`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: "x".repeat(128) }),
-      });
-      assert.equal(res.status, 413);
-      assert.equal((await res.json()).code, "runtime_proxy_body_too_large");
-
-      const status = await command(base, "runtime_status");
-      assert.equal(status.res.status, 200);
-      assert.equal(status.json.data.running, false);
-
-      const proxy = await waitForRuntimeLogs(base, (rows) =>
-        rows.find((row) => row.event === "proxy" && row.target === "/session/:id/prompt_async"),
-      );
-      assert.equal(proxy.method, "POST");
-      assert.equal(proxy.status, 413);
-      assert.equal(proxy.error, "runtime_proxy_body_too_large");
-    },
-    { maxJsonBytes: 32 },
-  );
-});
-
-test("OpenCode proxy rejects server-forbidden requests before starting a runtime", async () => {
-  await withApp(async ({ base }) => {
-    let res = await fetch(`${base}/api/opencode/default/permission/perm1/reply`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reply: "always" }),
-    });
-    assert.equal(res.status, 403);
-    assert.equal((await res.json()).code, "persistent_approval_disabled");
-
-    res = await fetch(`${base}/api/opencode/default/session/ses_mock/shell`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command: "pwd" }),
-    });
-    assert.equal(res.status, 403);
-    assert.equal((await res.json()).code, "direct_shell_disabled");
-
-    const status = await command(base, "runtime_status");
-    assert.equal(status.res.status, 200);
-    assert.equal(status.json.data.running, false);
-
-    const rows = await waitForRuntimeLogs(base, (loggedRows) => {
-      const proxyRows = loggedRows.filter((row) => row.event === "proxy");
-      const permissionLog = proxyRows.find((row) => row.target === "/permission/:id/reply");
-      const shellProxyLog = proxyRows.find((row) => row.target === "/session/:id/shell");
-      return permissionLog && shellProxyLog ? loggedRows : null;
-    });
-    assert.equal(rows.some((row) => row.event === "started"), false);
-    assert.equal(rows.find((row) => row.target === "/permission/:id/reply")?.error, "persistent_approval_disabled");
-    assert.equal(rows.find((row) => row.target === "/session/:id/shell")?.error, "direct_shell_disabled");
-  });
-});
-
-test("OpenCode proxy blocks persistent approvals and direct browser shell by default", async () => {
-  await withApp(async ({ base }) => {
-    const started = await command(base, "start_runtime");
-    assert.equal(started.res.status, 200);
-
-    const always = await fetch(`${base}/api/opencode/default/permission/perm1/reply`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reply: "always" }),
-    });
-    assert.equal(always.status, 403);
-    assert.equal((await always.json()).code, "persistent_approval_disabled");
-
-    const shell = await fetch(`${base}/api/opencode/default/session/ses_mock/shell`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command: "pwd" }),
-    });
-    assert.equal(shell.status, 403);
-    assert.equal((await shell.json()).code, "direct_shell_disabled");
-
-    const rows = await waitForRuntimeLogs(base, (loggedRows) => {
-      const proxyRows = loggedRows.filter((row) => row.event === "proxy");
-      const permissionLog = proxyRows.find((row) => row.target === "/permission/:id/reply");
-      const shellProxyLog = proxyRows.find((row) => row.target === "/session/:id/shell");
-      return permissionLog && shellProxyLog ? proxyRows : null;
-    });
-    const permission = rows.find((row) => row.target === "/permission/:id/reply");
-    assert.ok(permission);
-    assert.equal(permission.method, "POST");
-    assert.equal(permission.status, 403);
-    assert.equal(permission.error, "persistent_approval_disabled");
-
-    const shellLog = rows.find((row) => row.target === "/session/:id/shell");
-    assert.ok(shellLog);
-    assert.equal(shellLog.method, "POST");
-    assert.equal(shellLog.status, 403);
-    assert.equal(shellLog.error, "direct_shell_disabled");
-  });
-});
-
-test("OpenCode proxy still rejects direct shell without a sandbox when explicitly enabled", async () => {
-  await withApp(
-    async ({ base }) => {
-      const started = await command(base, "start_runtime");
-      assert.equal(started.res.status, 200);
-
-      const shell = await fetch(`${base}/api/opencode/default/session/ses_mock/shell`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command: "pwd" }),
-      });
-      assert.equal(shell.status, 403);
-      assert.equal((await shell.json()).code, "host_shell_disabled");
-    },
-    { allowDirectShell: true },
-  );
-});
-
-test("OpenCode proxy allowlist blocks hosted-forbidden runtime routes before startup", async () => {
-  await withApp(
-    async ({ base }) => {
-      let res = await fetch(`${base}/api/opencode/default/global/config`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "openai/gpt-4.1" }),
-      });
-      assert.equal(res.status, 403);
-      assert.equal((await res.json()).code, "runtime_proxy_forbidden");
-
-      res = await fetch(`${base}/api/opencode/default/auth/openai`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "api", key: "x".repeat(128) }),
-      });
-      assert.equal(res.status, 403);
-      assert.equal((await res.json()).code, "runtime_proxy_forbidden");
-
-      res = await fetch(`${base}/api/opencode/default/unknown-runtime-api`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payload: "x".repeat(128) }),
-      });
-      assert.equal(res.status, 403);
-      assert.equal((await res.json()).code, "runtime_proxy_forbidden");
-
-      const status = await command(base, "runtime_status");
-      assert.equal(status.res.status, 200);
-      assert.equal(status.json.data.running, false);
-
-      const rows = await waitForRuntimeLogs(base, (loggedRows) => {
-        const blocked = loggedRows.filter((row) => row.error === "runtime_proxy_forbidden");
-        return blocked.length >= 3 ? loggedRows : null;
-      });
-      assert.equal(rows.some((row) => row.event === "started"), false);
-      assert.ok(rows.some((row) => row.target === "/global/config" && row.status === 403));
-      assert.ok(rows.some((row) => row.target === "/auth/:provider" && row.status === 403));
-      assert.ok(rows.some((row) => row.target === "/unknown-runtime-api" && row.status === 403));
-    },
-    { maxJsonBytes: 16 },
-  );
-});
-
-test("OpenCode proxy validates hosted mutation payloads before startup", async () => {
-  await withApp(
-    async ({ base }) => {
-      let res = await fetch(`${base}/api/opencode/default/session/ses_mock/prompt_async`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parts: [{ type: "text", text: 123 }] }),
-      });
-      assert.equal(res.status, 400);
-      assert.equal((await res.json()).code, "invalid_runtime_proxy_payload");
-
-      res = await fetch(`${base}/api/opencode/default/session/ses_mock/shell`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command: 42 }),
-      });
-      assert.equal(res.status, 400);
-      assert.equal((await res.json()).code, "invalid_runtime_proxy_payload");
-
-      res = await fetch(`${base}/api/opencode/default/permission/perm1/reply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reply: "forever" }),
-      });
-      assert.equal(res.status, 400);
-      assert.equal((await res.json()).code, "invalid_runtime_proxy_payload");
-
-      res = await fetch(`${base}/api/opencode/default/session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "not-json",
-      });
-      assert.equal(res.status, 400);
-      assert.equal((await res.json()).code, "invalid_runtime_proxy_payload");
-
-      const status = await command(base, "runtime_status");
-      assert.equal(status.res.status, 200);
-      assert.equal(status.json.data.running, false);
-
-      const rows = await waitForRuntimeLogs(base, (loggedRows) => {
-        const invalid = loggedRows.filter((row) => row.error === "invalid_runtime_proxy_payload");
-        return invalid.length >= 4 ? loggedRows : null;
-      });
-      assert.equal(rows.some((row) => row.event === "started"), false);
-      assert.ok(rows.some((row) => row.target === "/session/:id/prompt_async" && row.status === 400));
-      assert.ok(rows.some((row) => row.target === "/session/:id/shell" && row.status === 400));
-      assert.ok(rows.some((row) => row.target === "/permission/:id/reply" && row.status === 400));
-      assert.ok(rows.some((row) => row.target === "/session" && row.status === 400));
-    },
-    { allowDirectShell: true },
-  );
-});
-
-test("OpenCode proxy does not wake stopped runtimes for stale control mutations", async () => {
-  await withApp(async ({ base }) => {
-    let res = await fetch(`${base}/api/opencode/default/session/ses_mock/abort`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    assert.equal(res.status, 200);
-    assert.equal(await res.json(), true);
-
-    res = await fetch(`${base}/api/opencode/default/session/ses_mock`, {
-      method: "DELETE",
-    });
-    assert.equal(res.status, 200);
-    assert.equal(await res.json(), true);
-
-    res = await fetch(`${base}/api/opencode/default/permission/perm1/reply`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reply: "once" }),
-    });
-    assert.equal(res.status, 409);
-    assert.equal((await res.json()).code, "runtime_not_running");
-
-    res = await fetch(`${base}/api/opencode/default/question/q1/reject`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    assert.equal(res.status, 409);
-    assert.equal((await res.json()).code, "runtime_not_running");
-
-    const status = await command(base, "runtime_status");
-    assert.equal(status.res.status, 200);
-    assert.equal(status.json.data.running, false);
-
-    const rows = await waitForRuntimeLogs(base, (loggedRows) => {
-      const controls = loggedRows.filter((row) =>
-        row.target === "/session/:id/abort" ||
-        row.target === "/session/:id" ||
-        row.target === "/permission/:id/reply" ||
-        row.target === "/question/:id/reject"
-      );
-      return controls.length >= 4 ? loggedRows : null;
-    });
-    assert.equal(rows.some((row) => row.event === "started"), false);
-    assert.ok(rows.some((row) => row.target === "/session/:id/abort" && row.status === 200 && row.error == null));
-    assert.ok(rows.some((row) => row.target === "/session/:id" && row.status === 200 && row.error == null));
-    assert.ok(
-      rows.some((row) =>
-        row.target === "/permission/:id/reply" &&
-        row.status === 409 &&
-        row.error === "runtime_not_running"
-      ),
-    );
-    assert.ok(
-      rows.some((row) =>
-        row.target === "/question/:id/reject" &&
-        row.status === 409 &&
-        row.error === "runtime_not_running"
-      ),
-    );
+    assert.equal(JSON.stringify(runtimeRows).includes("dsh.sock"), false, "a control socket path must not reach an audit row");
   });
 });
 

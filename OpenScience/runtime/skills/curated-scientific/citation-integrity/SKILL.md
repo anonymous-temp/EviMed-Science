@@ -29,7 +29,7 @@ claim remains unsupported.
 
 When the user supplies one published title and asks for a rewritten paper,
 replication, or structured account, resolve the exact published record first.
-Use `evimed_open_access_full_text` to save its complete JATS XML and Markdown,
+Use `open_access_full_text` to save its complete JATS XML and Markdown,
 then read that local full text in bounded sections. The title plus DOI, PMID, or
 PMCID must match. A companion paper, preprint, citing paper, search snippet, or
 third-party summary may help locate the target but is not evidence for what the

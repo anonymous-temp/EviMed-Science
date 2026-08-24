@@ -17,7 +17,7 @@
     "eval:drug-evidence": "python3 evals/drug-evidence-quality/run_benchmark.py",
     "eval:open-domain": "python3 evals/open-domain-answer-quality/run_eval.py && python3 evals/open-domain-answer-quality/judge.py",
     "test:server": "pnpm --filter @ai4s/server test",
-    "test:web": "pnpm test:mcp && pnpm test:server && pnpm lint:server && pnpm typecheck:server && pnpm typecheck && pnpm test",
+    "test:web": "pnpm test:mcp && pnpm test:packages && pnpm test:server && pnpm lint:server && pnpm lint:domain && pnpm lint:port && pnpm lint:socket && pnpm typecheck:domain && pnpm typecheck:server && pnpm typecheck && pnpm test",
     "test:web:e2e": "pnpm --filter @ai4s/server test:e2e",
     "audit:hosted-compliance": "node scripts/ops/audit-hosted-compliance.mjs",
     "audit:saas-alignment": "node scripts/ops/audit-saas-alignment.mjs",
@@ -50,9 +50,25 @@
     "typecheck": "pnpm --filter @ai4s/desktop typecheck",
     "check:tauri": "cd apps/desktop/src-tauri && cargo check",
     "ci:web": "pnpm test:web && pnpm audit:source-secrets && pnpm audit:hosted-compliance && pnpm audit:saas-alignment && pnpm audit:capabilities && pnpm audit:dependencies && pnpm build:web",
-    "lint": "pnpm --filter @ai4s/desktop lint && pnpm lint:server",
+    "lint": "pnpm --filter @ai4s/desktop lint && pnpm lint:server && pnpm lint:domain && pnpm lint:port && pnpm lint:socket",
     "lint:server": "pnpm --filter @ai4s/server lint",
-    "typecheck:server": "pnpm --filter @ai4s/server typecheck"
+    "lint:domain": "pnpm --filter @evimed/domain lint",
+    "typecheck:server": "pnpm --filter @ai4s/server typecheck",
+    "build:capabilities": "node scripts/build/generate-capability-manifests.mjs",
+    "check:capabilities": "node scripts/build/generate-capability-manifests.mjs --check",
+    "test:contracts": "pnpm --filter @evimed/contracts test",
+    "verify:seams": "node scripts/ops/verify-harness-seams.mjs",
+    "test:domain": "pnpm --filter @evimed/domain test",
+    "test:port": "pnpm --filter @evimed/harness-port test",
+    "test:socket": "pnpm --filter @evimed/dsh-socket test",
+    "test:packages": "pnpm test:domain && pnpm test:port && pnpm test:socket && pnpm test:contracts",
+    "check:skill-digests": "node scripts/build/repin-curated-skill-digests.mjs --check",
+    "check:skill-vocabulary": "node scripts/build/rewrite-skill-vocabulary.mjs --check",
+    "matrix:upstream": "node scripts/ops/upstream-compat-matrix.mjs",
+    "matrix:upstream:offline": "node scripts/ops/upstream-compat-matrix.mjs --offline",
+    "lint:socket": "pnpm --filter @evimed/dsh-socket lint",
+    "lint:port": "pnpm --filter @evimed/harness-port lint",
+    "typecheck:domain": "pnpm --filter @evimed/domain typecheck"
   },
   "engines": {
     "node": ">=22.22.0"
@@ -67,5 +83,9 @@
       "pptx-preview>echarts": "6.1.0",
       "pptx-preview>uuid": "11.1.1"
     }
+  },
+  "devDependencies": {
+    "@evimed/domain": "workspace:*",
+    "yaml": "2.8.3"
   }
 }

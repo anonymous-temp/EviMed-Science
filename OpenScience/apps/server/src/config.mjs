@@ -3,6 +3,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
 
+// The one place a tracked upstream pin is written. A Dockerfile ARG, a seam
+// manifest, a peer dependency and a release manifest that each carried their
+// own copy meant "bump the pin" was four edits and one was always missed.
+//
+// Read rather than imported as a JSON module: the control plane already reads
+// files, and an import attribute is a parse error on the linter this repo pins.
+// The domain package uses the import form because it must not touch `node:fs`.
+const depsVersions = JSON.parse(
+  fs.readFileSync(new URL("../../../deps-version.json", import.meta.url), "utf8"),
+);
+
 const defaultSessionTtlMs = 7 * 24 * 60 * 60 * 1000;
 const bundledExamplesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../examples");
 const bundledAgentPackagesDir = path.resolve(
@@ -151,6 +162,40 @@ export function loadConfig(overrides = {}) {
     overrides.runtimeMode ??
     process.env.OPEN_SCIENCE_RUNTIME_MODE ??
     "opencode";
+  // Which agent kernel runs inside a project container.
+  //
+  // `dsh` is the target and the whole point of the rewrite. The shipped default
+  // is nevertheless `opencode`, and that is a deliberate posture rather than a
+  // leftover: the control plane speaks DSH end to end and its suite proves it,
+  // but the browser's session view still renders from the old store, so a
+  // hosted deployment defaulting to `dsh` today would serve a session page that
+  // cannot show its own run. The default flips in the same change that lands the
+  // DSH session view and passes its acceptance walkthrough (§16 #15).
+  //
+  // Two consequences worth stating, because both are easy to get wrong:
+  // a deployment left on `opencode` after that point stops receiving the
+  // delivery gate's newer rules — those live on the run side now — and the test
+  // suite must therefore pin `dsh` explicitly rather than inherit this default,
+  // or flipping it would silently move every test onto the retiring kernel.
+  const runtimeKernel = String(
+    overrides.runtimeKernel ?? process.env.OPEN_SCIENCE_RUNTIME_KERNEL ?? "opencode",
+  ).trim().toLowerCase();
+  if (!["dsh", "opencode"].includes(runtimeKernel)) {
+    throw new Error(`OPEN_SCIENCE_RUNTIME_KERNEL must be "dsh" or "opencode", got "${runtimeKernel}".`);
+  }
+  // Renamed variables fail loudly for one release rather than aliasing quietly:
+  // a deployment still exporting the old name is a deployment configuring
+  // something that no longer exists, and a silent alias hides that until the
+  // alias is removed.
+  for (const [oldName, newName] of [
+    ["OPEN_SCIENCE_OPENCODE_BIN", "OPEN_SCIENCE_DSH_BIN"],
+    ["OPEN_SCIENCE_OPENCODE_VERSION", "OPEN_SCIENCE_DSH_VERSION"],
+  ]) {
+    if (runtimeKernel === "dsh" && process.env[oldName] && !process.env[newName]) {
+      throw new Error(`${oldName} is not read under the DSH kernel. Set ${newName} instead.`);
+    }
+  }
+  const dshBin = overrides.dshBin ?? process.env.OPEN_SCIENCE_DSH_BIN ?? "dsh";
   const legacyDevAuth = overrides.devAuth ?? boolEnv("OPEN_SCIENCE_DEV_AUTH", true);
   const authMode = String(
     overrides.authMode ?? process.env.OPEN_SCIENCE_AUTH_MODE ?? (legacyDevAuth ? "development" : "local"),
@@ -554,6 +599,8 @@ export function loadConfig(overrides = {}) {
       overrides.maxRunningRuntimesPerUser ?? process.env.OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER ?? 4,
     ),
     runtimeMode,
+    runtimeKernel,
+    dshBin,
     allowMockRuntime: overrides.allowMockRuntime ?? boolEnv("OPEN_SCIENCE_ALLOW_MOCK_RUNTIME", !production),
     opencodeBin,
     runtimeSandboxMode: overrides.runtimeSandboxMode ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_MODE ?? "host",
@@ -587,6 +634,49 @@ export function loadConfig(overrides = {}) {
       "1.17.13",
     uvVersion:
       overrides.uvVersion ?? process.env.OPEN_SCIENCE_UV_VERSION ?? release.manifest?.runtime.uvVersion ?? "0.11.26",
+    // Every version below is derived from deps-version.json, which is the one
+    // place a tracked upstream pin is written. A test asserts they are equal.
+    dshVersion:
+      overrides.dshVersion ??
+      process.env.OPEN_SCIENCE_DSH_VERSION ??
+      release.manifest?.runtime?.dshVersion ??
+      depsVersions.dsh?.version ??
+      "0.1.1-rc.2",
+    socketBundleVersion:
+      overrides.socketBundleVersion ??
+      process.env.OPEN_SCIENCE_SOCKET_BUNDLE_VERSION ??
+      release.manifest?.runtime?.socketVersion ??
+      "0.1.0",
+    // The one knob for the whole retry story: the run-side submit ceiling and
+    // the control plane's repair loop are the same number (§10.4).
+    deliveryAttemptLimit: Number(
+      overrides.deliveryAttemptLimit ?? process.env.OPEN_SCIENCE_DELIVERY_ATTEMPT_LIMIT ?? 3,
+    ),
+    maxParallelChildren: Number(
+      overrides.maxParallelChildren ?? process.env.OPEN_SCIENCE_MAX_PARALLEL_CHILDREN ?? 30,
+    ),
+    runMaxSteps: Number(overrides.runMaxSteps ?? process.env.OPEN_SCIENCE_RUN_MAX_STEPS ?? 0),
+    runMaxTokens: Number(overrides.runMaxTokens ?? process.env.OPEN_SCIENCE_RUN_MAX_TOKENS ?? 0),
+    evidenceStaleMinutes: Number(
+      overrides.evidenceStaleMinutes ?? process.env.OPEN_SCIENCE_EVIDENCE_STALE_MINUTES ?? 10,
+    ),
+    // Records per screening child. The plugin hard-coded 50 and the control
+    // plane had no way to say otherwise, so a deployment whose records are
+    // long had to edit the bundle. Concurrency is deliberately absent here:
+    // screening children are delegation children, and giving them a second
+    // ceiling would mean two numbers that must agree and one place to forget
+    // (§10.4) — `maxParallelChildren` above governs both.
+    screeningBatchSize: Number(
+      overrides.screeningBatchSize ?? process.env.OPEN_SCIENCE_SCREENING_BATCH_SIZE ?? 50,
+    ),
+    // A hosted container must have a working Landlock backend or the shell tool
+    // fails closed while the runtime still looks healthy; a laptop gets
+    // Seatbelt, which reports partial.
+    runtimeSandboxEnforcement: String(
+      overrides.runtimeSandboxEnforcement ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT ?? (production ? "full" : "partial"),
+    ).trim().toLowerCase(),
+    runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", false),
+    runtimeReviewEnabled: overrides.runtimeReviewEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_REVIEW_ENABLED", false),
     runtimeRequireImageLocal:
       overrides.runtimeRequireImageLocal ?? boolEnv("OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL", production),
     runtimeDataVolume,

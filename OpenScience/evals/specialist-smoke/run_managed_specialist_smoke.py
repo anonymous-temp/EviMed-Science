@@ -20,35 +20,35 @@ MCP_ROOT = REPO_ROOT / "runtime" / "mcp" / "evimed-research"
 RESULTS_ROOT = HERE / "results"
 
 REQUESTS = {
-    "evimed_meta_analysis": {
+    "meta_analysis": {
         "topic": "SGLT2 inhibitors versus placebo for chronic kidney disease progression in adults",
         "outputLanguage": "zh",
         "maxPapers": 20,
         "analysisType": "pairwise",
     },
-    "evimed_mendelian_randomization": {
+    "mendelian_randomization": {
         "exposure": "LDL cholesterol",
         "outcome": "coronary heart disease",
         "outputLanguage": "zh",
         "analysisDirection": "forward",
     },
-    "evimed_bibliometric_analysis": {
+    "bibliometric_analysis": {
         "topic": "osimertinib cardiotoxicity",
         "dateFrom": "2021",
         "dateTo": "2025",
         "maxRecords": 20,
         "outputLanguage": "zh",
     },
-    "evimed_drug_safety_analysis": {
+    "drug_safety_analysis": {
         "drug": "aspirin",
         "reactions": ["gastrointestinal hemorrhage"],
         "outputLanguage": "zh",
     },
-    "evimed_research_topic_selection": {
+    "research_topic_selection": {
         "researchDirection": "precision dosing of antibiotics in critically ill adults",
         "outputLanguage": "zh",
     },
-    "evimed_peer_review": {
+    "peer_review": {
         "manuscript": "specialist-smoke-input.md",
         "articleType": "original-research",
         "outputLanguage": "zh",
@@ -95,7 +95,7 @@ def main() -> int:
         if not model_config.is_file():
             raise RuntimeError("Model config must be a regular file.")
         os.environ["EVIMED_MODEL_CONFIG_FILE"] = str(model_config)
-    if args.tool == "evimed_peer_review" and not args.job_id:
+    if args.tool == "peer_review" and not args.job_id:
         if not args.manuscript_source or not args.manuscript_source.is_file():
             raise RuntimeError("Peer review requires --manuscript-source.")
         shutil.copyfile(args.manuscript_source, workspace / "specialist-smoke-input.md")

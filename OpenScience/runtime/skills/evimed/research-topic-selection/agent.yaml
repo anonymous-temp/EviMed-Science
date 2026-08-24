@@ -13,18 +13,18 @@ optionalInputs:
   - outputLanguage
   - uploadedFiles
 requiredTools:
-  - evimed_research_topic_selection
-  - evimed_biomedical_source_search
-  - evimed_literature_search
-  - evimed_open_access_full_text
+  - research_topic_selection
+  - biomedical_source_search
+  - literature_search
+  - open_access_full_text
 optionalTools:
-  - evimed_web_search
-  - evimed_data_source_catalog
-  - evimed_guideline_search
-  - evimed_bibliometric_analysis
-  - evimed_clinical_trial_search
-  - evimed_patent_search
-  - evimed_pharmacy_reference_search
+  - web_search
+  - data_source_catalog
+  - guideline_search
+  - bibliometric_analysis
+  - clinical_trial_search
+  - patent_search
+  - pharmacy_reference_search
 dataSources:
   - literature
   - clinical-trials

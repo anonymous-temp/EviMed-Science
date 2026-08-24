@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
@@ -752,8 +752,14 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   assert.match(workflow, /--profile backup/);
   assert.match(workflow, /Verify runtime binaries and preserved licenses/);
   assert.match(workflow, /docker run --rm --network none/);
-  assert.match(workflow, /\/usr\/share\/licenses\/opencode\/LICENSE/);
   assert.match(workflow, /\/usr\/share\/licenses\/uv\/LICENSE-MIT/);
+  // The kernel arrives as an npm global rather than as a fetched binary, so what
+  // CI can check is that the launcher resolves at the pinned version and that
+  // the profile the image pre-composed survived the build — an image whose
+  // profile failed to compose starts fine and then answers nothing.
+  assert.match(workflow, /OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE/);
+  assert.match(workflow, /dump-config\.baseline\.json/);
+  assert.match(workflow, /dsh --version/);
   assert.match(workflow, /--profile backup --profile monitoring --profile tls up -d/);
   assert.match(workflow, /OPEN_SCIENCE_PUBLIC_URL=https:\/\/localhost/);
   assert.match(workflow, /OPEN_SCIENCE_DOMAIN=localhost/);
@@ -829,4 +835,119 @@ test("backup retention bounds the archive count, not only their age", async () =
   const left = (await readdir(dir)).filter((name) => name.endsWith(".enc"));
   assert.ok(left.length <= 14, `retention left ${left.length} archives, none of them old enough to expire`);
   assert.ok(left.length > 0, "retention must not empty the directory");
+});
+
+// Both kernels have to be buildable, not just the one currently in production.
+// The kernel is a per-deployment choice with a one-line rollback, and a
+// rollback to an image nobody builds is not a rollback — the DSH image existed
+// for a while with nothing in the deploy stack referencing it.
+test("the deploy stack builds an image for each kernel", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  assert.match(compose, /\n {2}opencode-runtime-image:/);
+  assert.match(compose, /\n {2}dsh-runtime-image:/);
+  assert.match(compose, /dockerfile: deploy\/runtime-dsh\/Dockerfile/);
+  assert.match(compose, /DSH_VERSION: \$\{OPEN_SCIENCE_DSH_VERSION/);
+
+  // Both under the same profile, so one command produces both and neither can
+  // quietly stop being built.
+  const services = compose.split(/\n {2}(?=[a-z])/);
+  for (const name of ["opencode-runtime-image", "dsh-runtime-image"]) {
+    const block = services.find((item) => item.startsWith(`${name}:`));
+    assert.ok(block, `${name} is missing`);
+    assert.match(block, /profiles: \["runtime-image"\]/, `${name} is not built by the runtime-image profile`);
+  }
+
+  // And the pinned version comes from the one place versions are written.
+  const pins = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8"));
+  assert.match(compose, new RegExp(`OPEN_SCIENCE_DSH_VERSION:-${pins.dsh.version.replace(/\./g, "\\.")}`));
+});
+
+// The build actually has to run, not merely reference plausible-looking paths.
+// Every `COPY <src> ...` naming a path inside the repository (as opposed to a
+// path produced earlier in the same build stage) has to exist on disk before
+// `docker build` starts, or the build fails on that line. Two of these
+// (`deploy/runtime-dsh/socket`, `deploy/runtime-dsh/capability-skills`) never
+// existed — the real sources are `packages/socket` and `capability-skills` at
+// the repo root — so the image could never have been built.
+test("every COPY source the DSH runtime Dockerfile names exists in the repository", async () => {
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const copies = [...dockerfile.matchAll(/^COPY\s+(\S+)\s+\S+$/gm)].map((match) => match[1]);
+  assert.ok(copies.length >= 5, `only found ${copies.length} COPY instructions; the extraction pattern has drifted`);
+  for (const source of copies) {
+    // `deploy/runtime-dsh/capabilities` is the one committed exception: a
+    // compiled artifact (`capability.yaml` → JSON), not a source directory, so
+    // its absence on a machine that never ran `pnpm build:capabilities` is not
+    // this test's concern.
+    if (source === "deploy/runtime-dsh/capabilities") continue;
+    const stat = await lstat(path.join(repoRoot, source)).catch(() => null);
+    assert.ok(stat, `COPY source "${source}" does not exist in the repository`);
+  }
+  // And the two sources that were missing are now the real ones, by name —
+  // catching a COPY line that resolves to *something* but the wrong something
+  // (e.g. pointed back at an empty deploy/runtime-dsh/socket someone created
+  // to silence the check above) is what this half asserts.
+  assert.match(dockerfile, /^COPY packages\/socket \/opt\/evimed\/socket$/m);
+  assert.match(dockerfile, /^COPY capability-skills \/opt\/evimed\/capability-skills$/m);
+});
+
+// G-class bug, confirmed by construction rather than by inspection: `/runtime`
+// is bind-mounted per project at container start (session logs belong on that
+// project's own volume), and a bind mount replaces everything under its
+// target. A profile pre-installed at build time under `/runtime/dsh-home` —
+// the same path the running container is later told to use — would be built,
+// baked into the image, and then be invisible to every container that ever
+// actually starts: DSH would reinitialize (and re-fetch its plugins over the
+// network) on every single boot, silently defeating the entire point of
+// pre-initializing anything.
+test("the profile is pre-initialized outside the path the runtime volume mounts over", async () => {
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const seedMatch = dockerfile.match(/^ENV DSH_HOME_SEED=(\S+)$/m);
+  assert.ok(seedMatch, "the build-time profile must be initialized at a seed path distinct from the runtime DSH_HOME");
+  const seedPath = seedMatch[1];
+  assert.equal(seedPath.startsWith("/runtime"), false, `DSH_HOME_SEED (${seedPath}) is under /runtime and would be shadowed by the runtime volume mount, same as the bug this test exists to catch`);
+
+  const runtimeMatch = dockerfile.match(/^ENV DSH_HOME=(\S+)$/m);
+  assert.ok(runtimeMatch);
+  const runtimeDshHomeModule = await import("../src/runtimeManager.mjs");
+  assert.equal(runtimeMatch[1], runtimeDshHomeModule.runtimeDshHome, "the image's runtime DSH_HOME must match what the control plane sets with --env at container start");
+
+  // The plugin install and dump-config baseline must run against the seed
+  // path, not the runtime path — otherwise this test's own premise (the
+  // profile is built at a path the volume mount cannot shadow) is false.
+  assert.match(dockerfile, /DSH_HOME="\$\{DSH_HOME_SEED\}" dsh plugin --profile evimed-runtime add/);
+  assert.match(dockerfile, /DSH_HOME="\$\{DSH_HOME_SEED\}" dsh --profile evimed-runtime --dump-config/);
+
+  // And the entrypoint has to actually move it into place before dsh starts:
+  // pre-initializing a profile nothing ever copies out of the seed is the same
+  // failure by a different route.
+  const entrypoint = await readFile(path.join(repoRoot, "deploy/runtime-dsh/open-science-dsh-serve.sh"), "utf8");
+  assert.match(entrypoint, /DSH_HOME_SEED/);
+  assert.match(entrypoint, /cp -a "\$\{DSH_HOME_SEED\}\/\." "\$\{DSH_HOME\}\/"/);
+  // Idempotent: a restarted or resumed project must not re-copy over a profile
+  // it (or a prior boot) already wrote to, which could silently discard
+  // whatever the control plane's own profile patch had already laid down.
+  assert.match(entrypoint, /\[ ! -d "\$\{DSH_HOME\}\/profiles\/\$\{profile\}" \]/);
+});
+
+// Confirmed against a real installed `dsh` binary: `--patch` is a *launcher*
+// flag, resolved before the web app's own arguments begin — `dsh --profile web
+// --no-open --port 0 --patch x.yml` answers "error: unknown option '--patch'"
+// and exits, because by the time the parser reaches it the app's own flags
+// have already started. `dsh --profile web --patch x.yml --no-open --port 0`
+// is the only ordering that boots. A container that got this wrong would fail
+// this exact way on every single start.
+test("the entrypoint places --patch before the web app's own arguments", async () => {
+  const entrypoint = await readFile(path.join(repoRoot, "deploy/runtime-dsh/open-science-dsh-serve.sh"), "utf8");
+  const invocation = entrypoint.split("\n").find((line) => line.trimStart().startsWith("dsh --profile"));
+  assert.ok(invocation, "the serve script must launch the kernel");
+  const patchIndex = invocation.indexOf("${patch_args[@]}");
+  const noOpenIndex = invocation.indexOf("--no-open");
+  assert.ok(patchIndex >= 0, "the launcher-level --patch must be assembled and passed");
+  assert.ok(noOpenIndex >= 0);
+  assert.ok(patchIndex < noOpenIndex, "--patch (a launcher flag) must precede --no-open (the web app's own flag)");
+
+  // And it is conditional: a deployment with the DeepSeek provider disabled
+  // never has `syncRuntimeDshProfile` write a patch file, so the entrypoint
+  // must not hand `dsh` a `--patch` pointed at a file that was never written.
+  assert.match(entrypoint, /\[ -f "\$\{patch_file\}" \]/);
 });

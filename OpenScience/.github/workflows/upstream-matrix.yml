@@ -1,0 +1,59 @@
+# The nightly compatibility matrix.
+#
+# One job for every tracked upstream, because four copies of the same discipline
+# is four things to keep in step. It never upgrades anything: it reports whether
+# each pin's contract still passes and whether upstream has moved, so an upgrade
+# PR starts from a verdict instead of from a search.
+#
+# A failing row means the pin may not move yet, and names the seam that moved. A
+# row that is merely behind is information — treating that as a failure trains
+# everyone to ignore the job.
+name: upstream-matrix
+
+on:
+  schedule:
+    # 02:00 UTC, which is outside the peak model-pricing window and outside the
+    # hours a reviewer would be reading the result.
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  matrix:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run the matrix
+        id: matrix
+        working-directory: OpenScience
+        run: node scripts/ops/upstream-compat-matrix.mjs --out compat-matrix.json
+
+      # The matrix reads registries and replays golden frames; this reads the
+      # shipped code. It is the only step that notices upstream renaming a seam,
+      # which is the failure DSH's own README promises before its first tag.
+      - name: Verify the seams against a real harness install
+        working-directory: OpenScience
+        run: node scripts/ops/verify-harness-seams.mjs --install
+
+      - name: Upload the matrix
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-matrix
+          path: OpenScience/compat-matrix.json

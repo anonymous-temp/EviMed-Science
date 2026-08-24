@@ -7,14 +7,24 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { OPENCODE_MCP_SERVER_NAME, workspaceLayout } from "@evimed/domain";
 import {
   dockerRuntimeMount,
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
 import { deepSeekModelDisplayName, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockOpenCodeRuntime } from "./mockRuntime.mjs";
+import { startMockDshRuntime } from "./mockDshRuntime.mjs";
+import { renderCredentialsFile, renderProfilePatch } from "./dshProfilePatch.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
+import {
+  isAllowedWireMethod,
+  legacyMessagesToTranscript,
+  mapWireError,
+  normalizeTranscript,
+  transcriptToLedgerMessages,
+} from "./dshRuntimeAdapter.mjs";
 import {
   HttpError,
   appendJsonLineNoFollow,
@@ -284,6 +294,15 @@ function connectionHeaderTokens(headers) {
   );
 }
 
+/**
+ * Rewrites a redirect a kernel emitted so it can never point a caller at the
+ * kernel's own origin.
+ *
+ * There is no browser-facing pass-through any more, so this is only reached by
+ * the control plane's own calls — but a redirect that leaks a kernel origin
+ * would leak it into a log or a stored location just as effectively, so the
+ * rewrite stays.
+ */
 function proxiedRuntimeLocation(value, runtime, project) {
   if (!value) return null;
   try {
@@ -292,7 +311,7 @@ function proxiedRuntimeLocation(value, runtime, project) {
     if (target.origin !== runtimeOrigin) return null;
     target.searchParams.delete("directory");
     target.searchParams.delete("auth_token");
-    return `/api/opencode/${encodeURIComponent(project.id)}${target.pathname}${target.search}${target.hash}`;
+    return `/api/runtime/${encodeURIComponent(project.id)}${target.pathname}${target.search}${target.hash}`;
   } catch {
     return null;
   }
@@ -1443,7 +1462,11 @@ export async function syncRuntimeAgentPackages(project, plan, agentRegistry) {
   return { skills, agents, delegates };
 }
 
-const evimedMcpName = "evimed-research";
+// Kept as its own binding, not inlined at each call site: every reference below
+// existed before @evimed/domain did, and the literal is now the domain's single
+// definition (mcpToolBaseName has to know it too, to unwrap OpenCode's own
+// session-history tool-name prefix).
+const evimedMcpName = OPENCODE_MCP_SERVER_NAME;
 // How many consecutive quota measurements must fail before the guard stops a
 // runtime. One failure is a busy workspace; three in a row is a workspace the
 // server genuinely cannot read.
@@ -1856,7 +1879,15 @@ function modelConfigRuntimePath(plan) {
     : path.join(plan.xdgConfigDir, "opencode", "opencode.json");
 }
 
-function evimedMcpEnvironment(config, project, plan) {
+/**
+ * @param {any} config @param {any} project @param {any} plan
+ * @param {{ workloadTokenPath?: string }} [options] `workloadTokenPath`
+ *   overrides the OpenCode-specific default below — DSH's workload token file
+ *   lives under `$DSH_HOME`, not `$XDG_CONFIG_HOME/opencode`, and `plan` for a
+ *   DSH launch carries no `xdgConfigDir` at all for `workloadTokenRuntimePath`
+ *   to compute a (wrong, and for DSH unused) answer from.
+ */
+function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {}) {
   const environment = {
     OPEN_SCIENCE_TENANT_ID: String(project.tenantId ?? project.userId),
     OPEN_SCIENCE_USER_ID: String(project.userId),
@@ -2004,7 +2035,7 @@ function evimedMcpEnvironment(config, project, plan) {
   validateEviMedAdapterConfig(config);
   const signingSecret = String(config.evimedWorkloadSigningSecret ?? "");
   if (signingSecret) {
-    environment.EVIMED_WORKLOAD_TOKEN_FILE = workloadTokenRuntimePath(plan);
+    environment.EVIMED_WORKLOAD_TOKEN_FILE = workloadTokenPath ?? workloadTokenRuntimePath(plan);
   }
   for (const [key, envName] of Object.entries(evimedAdapterEnvironment)) {
     const value = String(configured[key] ?? "").trim();
@@ -2099,6 +2130,127 @@ function modelGatewayProviderUrl(config) {
     throw new HttpError(500, "runtime_model_gateway_url_invalid", "Model gateway internal URL is invalid.");
   }
   return url.toString().replace(/\/$/, "");
+}
+
+/**
+ * The DSH equivalent of `syncRuntimeSkills` + `syncRuntimeEviMedMcp` +
+ * `syncRuntimeModelProvider` combined into one call, because DSH takes all
+ * three as rows of the *same* generated file rather than as separate managed
+ * config trees the way OpenCode does.
+ *
+ * Hidden knowledge: what was missing before this existed. `dshProfilePatch.mjs`
+ * renders correct, tested YAML; nothing called it. A container built from the
+ * image alone boots with no gateway address, no MCP command, and no way to
+ * reach the model — every row `renderProfilePatch` exists to generate — so it
+ * would start, answer its own health probe, and satisfy nothing a real run
+ * needs. This is the seam that makes the render actually reach the container:
+ * write the patch and the credentials file to the host path that becomes
+ * `$DSH_HOME` once the runtime volume mounts, before the container starts.
+ *
+ * The model-gateway token and the MCP workload token are two different
+ * credentials for two different consumers (the kernel's own LLM calls; the MCP
+ * subprocess's HTTP calls to the platform's connectors) and reuse the exact
+ * issuance functions OpenCode's bootstrap already uses — the credential logic
+ * is not kernel-specific, only where the result is written is.
+ *
+ * @param {any} config
+ * @param {any} project
+ * @param {any} plan
+ * @param {{ nowSeconds?: number, jti?: string, writeFile?: typeof writeFileAtomicNoFollow }} [options]
+ * @returns {Promise<{ configured: boolean, workloadTokenFile: string | null, workloadTokenRefreshMs: number | null }>}
+ */
+export async function syncRuntimeDshProfile(
+  config,
+  project,
+  plan,
+  { nowSeconds = Math.floor(Date.now() / 1000), jti = randomId("mgw_"), writeFile = writeFileAtomicNoFollow } = {},
+) {
+  if (!config.deepseekProviderEnabled) return { configured: false, workloadTokenFile: null, workloadTokenRefreshMs: null };
+  if (!plan.dshHomeDir || !plan.proxyWorkspaceDir) {
+    throw new HttpError(500, "runtime_dsh_profile_plan_invalid", "Runtime launch plan is missing its DSH bootstrap paths.");
+  }
+  const model = String(config.deepseekModel ?? "").trim();
+  if (!supportedDeepSeekModels.has(model)) {
+    throw new HttpError(500, "runtime_model_gateway_model_invalid",
+      `The managed DeepSeek model must be one of ${[...supportedDeepSeekModels].join(", ")}.`);
+  }
+  if (config.modelGatewaySigningSecretError) {
+    throw new HttpError(500, config.modelGatewaySigningSecretError, "Model gateway signing secret could not be loaded.");
+  }
+  await assertNoSymlinkPath(project.rootDir, plan.dshHomeDir, { allowMissingTail: true });
+  await fs.mkdir(plan.dshHomeDir, { recursive: true, mode: 0o700 });
+  await assertNoSymlinkPath(project.rootDir, plan.dshHomeDir);
+
+  const modelGatewayToken = issueModelGatewayRuntimeToken({
+    secret: config.modelGatewaySigningSecret,
+    userId: String(project.userId),
+    projectId: String(project.id),
+    nowSeconds,
+    jti,
+  });
+  const workloadTokenRuntimePathForDsh = dshWorkloadTokenRuntimePath(plan);
+  const patch = renderProfilePatch({
+    modelGatewayUrl: modelGatewayProviderUrl(config),
+    model,
+    contextWindow: 1_000_000,
+    sessionsDir: "/runtime/dsh-home/sessions",
+    mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
+    mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenRuntimePathForDsh }),
+    presetRoot: "/opt/evimed/socket/presets/evimed-universal",
+    capabilitiesDir: "/opt/evimed/capabilities",
+    capabilitySkillsDir: "/opt/evimed/capability-skills",
+    // The capsule product ledger and its recall endpoint are not built yet
+    // (§16 #20's own tracked gap list). An empty URL is not a placeholder that
+    // silently does the wrong thing: `evimed-capsule`'s plugin already checks
+    // for exactly this and disables its own tools with a named diagnostic
+    // rather than erroring, so a deployment without capsule support fails
+    // closed and visibly, not open and silently.
+    capsuleMethodsDir: "",
+    capsuleGatewayUrl: "",
+    workloadTokenFile: workloadTokenRuntimePathForDsh,
+    bundleVersion: String(config.socketBundleVersion ?? ""),
+    dshVersion: String(config.dshVersion ?? ""),
+    limits: {
+      deliveryAttemptLimit: config.deliveryAttemptLimit,
+      maxParallelChildren: config.maxParallelChildren,
+      maxSteps: config.runMaxSteps,
+      maxTokens: config.runMaxTokens,
+      evidenceStaleMinutes: config.evidenceStaleMinutes,
+      screeningBatchSize: config.screeningBatchSize,
+    },
+    flags: {
+      hosted: Boolean(config.production),
+      askUser: false,
+      review: true,
+      capsule: false,
+      requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
+    },
+  });
+  await writeFile(project.rootDir, path.join(plan.dshHomeDir, "control-plane-patch.yml"), patch, { encoding: "utf8", mode: 0o600 });
+
+  const credentials = renderCredentialsFile({ token: modelGatewayToken });
+  await writeFile(project.rootDir, path.join(plan.dshHomeDir, ".credentials.yaml"), credentials, { encoding: "utf8", mode: 0o600 });
+
+  const workloadTokenFile = dshWorkloadTokenHostPath(plan);
+  await refreshEviMedWorkloadToken(config, project, workloadTokenFile, { nowSeconds, writeToken: writeFile });
+
+  return {
+    configured: true,
+    workloadTokenFile,
+    workloadTokenRefreshMs: evimedWorkloadRefreshIntervalMs(config),
+  };
+}
+
+/** Host path for the MCP workload token file DSH's `EVIMED_WORKLOAD_TOKEN_FILE` names — the `dsh-home` analogue of `workloadTokenHostPath`. */
+function dshWorkloadTokenHostPath(plan) {
+  return path.join(plan.dshHomeDir, evimedWorkloadTokenFileName);
+}
+
+/** Container-internal path to the same file, read by the MCP subprocess. */
+function dshWorkloadTokenRuntimePath(plan) {
+  return plan.sandboxMode === "docker"
+    ? `${runtimeDshHome}/${evimedWorkloadTokenFileName}`
+    : dshWorkloadTokenHostPath(plan);
 }
 
 /** TypeScript infers a destructured parameter as exactly the shape its
@@ -2800,7 +2952,7 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
             .slice(0, 24),
         )
       : (transport === "unix" ? path.join(runtimeRoot, "control") : null);
-    const socketPath = transport === "unix" ? path.join(controlDir, "opencode.sock") : null;
+    const socketPath = transport === "unix" ? path.join(controlDir, runtimeSocketFileName(config)) : null;
     const containerName = runtimeContainerName(project);
     return {
       sandboxMode,
@@ -2850,32 +3002,63 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
         "XDG_STATE_HOME=/runtime/xdg-state",
         "--env",
         "HOME=/runtime/home",
+        // The kernel decides only the entrypoint and the socket name. Everything
+        // above it — the mounts, the capability drops, the network policy, the
+        // read-only root — is EviMed's isolation, and none of it was ever about
+        // which agent ran inside.
         ...(transport === "unix"
           ? [
               "--env",
               `OPEN_SCIENCE_RUNTIME_PORT=${port}`,
               "--env",
-              `OPEN_SCIENCE_RUNTIME_SOCKET=${isolatedControlMount ? "/runtime-control" : "/runtime/control"}/opencode.sock`,
+              `OPEN_SCIENCE_RUNTIME_SOCKET=${isolatedControlMount ? "/runtime-control" : "/runtime/control"}/${runtimeSocketFileName(config)}`,
+              ...(runtimeKernelName(config) === "dsh"
+                ? [
+                    // Telemetry has no redaction rules; it is disabled in the
+                    // image, in the patch and here, because any one of the three
+                    // being undone is a leak of message bodies.
+                    "--env",
+                    "DSH_TELEMETRY_DISABLED=1",
+                    "--env",
+                    "DSH_PERMISSION_MODE=workspace-write",
+                    "--env",
+                    `DSH_HOME=${runtimeDshHome}`,
+                    // The authority the control plane will send as `Host`. DSH
+                    // refuses every `/api` request whose Host is neither
+                    // loopback nor a declared trusted host — not just browser
+                    // requests — so a container that declares a different one
+                    // accepts nothing, while looking perfectly healthy.
+                    "--env",
+                    `OPEN_SCIENCE_RUNTIME_AUTHORITY=${runtimeAuthority(config)}`,
+                  ]
+                : []),
               config.runtimeContainerImage,
-              "open-science-opencode-serve",
+              runtimeKernelName(config) === "dsh" ? "open-science-dsh-serve" : "open-science-opencode-serve",
             ]
           : [
               config.runtimeContainerImage,
-              "opencode",
-              "serve",
-              "--hostname",
-              "0.0.0.0",
-              "--port",
-              String(port),
+              ...(runtimeKernelName(config) === "dsh"
+                // No `web` subcommand: it is an alias for `--profile web`, and
+                // the launcher refuses both at once ("web takes none of parent
+                // --profile, --patch, ..."). A profile's own app receives the
+                // arguments that follow the launcher flags, so the flags below
+                // reach the web app exactly as they would after `dsh web`.
+                ? ["dsh", "--profile", "evimed-runtime", "--no-open", "--port", String(port)]
+                : ["opencode", "serve", "--hostname", "0.0.0.0", "--port", String(port)]),
             ]),
       ],
       cwd: project.workspaceDir,
       env: process.env,
       proxyWorkspaceDir: "/workspace",
-      runtimeUrl: transport === "unix" ? "http://opencode.runtime" : `http://127.0.0.1:${port}`,
+      runtimeUrl: transport === "unix" ? `http://${runtimeAuthority(config)}` : `http://127.0.0.1:${port}`,
       socketPath,
       socketTrustRoot: isolatedControlMount ? config.dataDir : project.rootDir,
       xdgConfigDir,
+      // Host path for `/runtime/dsh-home` (see `runtimeDshHome`): the control
+      // plane writes the generated profile patch and credentials file here,
+      // host-side, before the container ever starts, the same way it writes
+      // `xdgConfigDir` for OpenCode.
+      dshHomeDir: path.join(runtimeRoot, "dsh-home"),
       runtimeDirs: [
         runtimeRoot,
         ...(transport === "unix" ? [controlDir] : []),
@@ -2884,6 +3067,7 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
         path.join(runtimeRoot, "xdg-cache"),
         path.join(runtimeRoot, "xdg-state"),
         path.join(runtimeRoot, "home"),
+        ...(runtimeKernelName(config) === "dsh" ? [path.join(runtimeRoot, "dsh-home")] : []),
       ],
     };
   }
@@ -2925,6 +3109,61 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
   };
 }
 
+/**
+ * `$DSH_HOME` inside a runtime container. It sits on the project's own data
+ * volume, so session logs, attachments and plugin storage are backed up,
+ * exported and deleted with the project rather than with the container.
+ */
+export const runtimeDshHome = "/runtime/dsh-home";
+
+/**
+ * Which agent kernel a launch plan is for.
+ *
+ * The fallback is `opencode` rather than the configured default, and only for
+ * a config object that never went through `loadConfig` — which in practice
+ * means a test that builds a plan by hand. A real config always carries the
+ * field, and `loadConfig` refuses any value but the two.
+ * @param {Record<string, any>} config
+ * @returns {'dsh' | 'opencode'}
+ */
+/**
+ * The authority the control plane sends as `Host` over the unix transport.
+ *
+ * There is no real hostname on a unix socket, so this is a label — but it is a
+ * label DSH enforces: its `/api` fence refuses any request whose `Host` is
+ * neither loopback nor one of the container's declared trusted hosts, and that
+ * applies to every request, not only ones carrying browser markers. So the same
+ * value has to reach both sides, and it is derived here rather than written
+ * twice.
+ *
+ * @param {any} config
+ * @returns {string}
+ */
+export function runtimeAuthority(config) {
+  return `${runtimeKernelName(config)}.runtime`;
+}
+
+export function runtimeKernelName(config) {
+  return config?.runtimeKernel === "dsh" ? "dsh" : "opencode";
+}
+
+/**
+ * The control socket's file name.
+ *
+ * It carries the kernel's name so a container restarted after a kernel switch
+ * cannot be reached through the previous kernel's socket: the two speak
+ * different protocols, and a stale socket that still accepts connections is a
+ * runtime that looks alive and answers nothing the caller understands.
+ * @param {Record<string, any>} config
+ * @returns {string}
+ */
+export function runtimeSocketFileName(config) {
+  return `${runtimeKernelName(config)}.sock`;
+}
+
+/** The one agent composition. A second one would be a design change (§9.2). */
+export const EVIMED_AGENT_PRESET = "evimed-universal";
+
 export function runtimeNetworkUsesHostOrContainer(mode) {
   const value = String(mode ?? "").trim().toLowerCase();
   return value === "host" || value.startsWith("container:");
@@ -2951,6 +3190,7 @@ export class RuntimeManager {
     clearWorkloadTimer = clearTimeout,
     onRuntimeStop = async () => {},
     onSessionAbort = async () => {},
+    onRuntimeStart = () => {},
   } = {}) {
     this.config = config;
     this.agentRegistry = agentRegistry;
@@ -2972,6 +3212,8 @@ export class RuntimeManager {
     this.onRuntimeStop = onRuntimeStop;
     /** @type {(project: any, sessionId: any) => any} */
     this.onSessionAbort = onSessionAbort;
+    /** @type {(project: any, runtime: any) => any} */
+    this.onRuntimeStart = onRuntimeStart;
     this.lastOrphanCleanup = null;
   }
 
@@ -3173,7 +3415,12 @@ export class RuntimeManager {
         throw new HttpError(503, "runtime_mock_forbidden", "Mock runtime is not allowed in production mode.");
       }
 
-      const mock = await startMockOpenCodeRuntime();
+      // The fake kernel follows the configured kernel. A fake that speaks the
+      // other protocol would make every test in the suite exercise a code path
+      // production does not have.
+      const mock = runtimeKernelName(this.config) === "dsh"
+        ? await startMockDshRuntime()
+        : await startMockOpenCodeRuntime();
       const runtime = {
         kind: "mock",
         url: mock.url,
@@ -3210,7 +3457,15 @@ export class RuntimeManager {
     })();
     this.starts.set(key, started);
     try {
-      return await started;
+      const runtime = await started;
+      try {
+        this.onRuntimeStart(project, runtime);
+      } catch {
+        // isolated: evimed_runtime_start_hook_failures_total — a live-stream
+        // attachment failure must not fail the run itself; request/response
+        // calls never depend on it.
+      }
+      return runtime;
     } finally {
       this.starts.delete(key);
     }
@@ -3314,11 +3569,28 @@ export class RuntimeManager {
     };
     let modelGatewaySync = { configured: 0, token: null, payload: null };
     try {
-      skillSync = await syncRuntimeSkills(this.config, project, plan);
-      const loadedAgentRegistry = this.agentRegistry ? await this.agentRegistry : null;
-      agentPackageSync = await syncRuntimeAgentPackages(project, plan, loadedAgentRegistry);
-      mcpSync = await syncRuntimeEviMedMcp(this.config, project, plan);
-      modelGatewaySync = await syncRuntimeModelProvider(this.config, project, plan);
+      if (runtimeKernelName(this.config) === "dsh") {
+        // DSH takes the general skills, the specialist packages and the MCP
+        // command as rows of one generated file (`renderProfilePatch`) rather
+        // than as separate managed config trees copied per project the way
+        // OpenCode's three calls below do — the general skills and the MCP
+        // source are baked into the image instead (read-only, shared across
+        // every project), so there is nothing here for those three to copy.
+        const dshSync = await syncRuntimeDshProfile(this.config, project, plan);
+        mcpSync = {
+          copied: 0,
+          configured: dshSync.configured ? 1 : 0,
+          workloadTokenFile: dshSync.workloadTokenFile,
+          workloadTokenRefreshMs: dshSync.workloadTokenRefreshMs,
+        };
+        modelGatewaySync = { configured: dshSync.configured ? 1 : 0, token: null, payload: null };
+      } else {
+        skillSync = await syncRuntimeSkills(this.config, project, plan);
+        const loadedAgentRegistry = this.agentRegistry ? await this.agentRegistry : null;
+        agentPackageSync = await syncRuntimeAgentPackages(project, plan, loadedAgentRegistry);
+        mcpSync = await syncRuntimeEviMedMcp(this.config, project, plan);
+        modelGatewaySync = await syncRuntimeModelProvider(this.config, project, plan);
+      }
     } catch (error) {
       await appendRuntimeEvent(project, "bootstrap_failed", {
         kind: "opencode",
@@ -3638,7 +3910,19 @@ export class RuntimeManager {
     }
   }
 
+  /**
+   * The whole run, as the ledger reads it.
+   *
+   * Under the DSH kernel the history arrives as a session event log and is
+   * normalized here, then projected into the message shape the ledger has
+   * always read. The projection is a migration step with a stated end (see
+   * `transcriptToLedgerMessages`), not a permanent compatibility layer.
+   */
   async sessionMessages(project, sessionId, { wake = true } = {}) {
+    if (runtimeKernelName(this.config) === "dsh") {
+      const transcript = await this.sessionTranscript(project, sessionId, { wake });
+      return transcriptToLedgerMessages(transcript);
+    }
     const runtime = wake
       ? await this.start(project)
       : this.runtimes.get(this.key(project));
@@ -3697,7 +3981,194 @@ export class RuntimeManager {
     }
   }
 
+  /**
+   * The run as `@evimed/domain` describes it. Under the OpenCode kernel it is
+   * derived from that kernel's message list; under DSH it is the normalized
+   * event log. Either way the caller reads one vocabulary.
+   * @param {Record<string, any>} project @param {string} sessionId @param {{ wake?: boolean }} options
+   * @returns {Promise<import('@evimed/domain').RunTranscript>}
+   */
+  async sessionTranscript(project, sessionId, { wake = true } = {}) {
+    const runtime = wake ? await this.start(project) : this.runtimes.get(this.key(project));
+    if (!runtime) {
+      throw new HttpError(409, "runtime_not_running", "Runtime is not running for session history monitoring.");
+    }
+    if (runtimeKernelName(this.config) !== "dsh") {
+      return legacyMessagesToTranscript(sessionId, await this.sessionMessages(project, sessionId, { wake }));
+    }
+    this.beginProxy(project);
+    try {
+      /** @type {Record<string, any>[]} */
+      const entries = [];
+      /** @type {number | undefined} */
+      let beforeSeq;
+      for (let page = 0; page < 50; page += 1) {
+        let value;
+        try {
+          value = await this.withRuntimeDeadline(
+            (signal) => this.callKernel(runtime, project, "session.history", {
+              sessionId,
+              maxMessages: 200,
+              ...(beforeSeq == null ? {} : { beforeSeq }),
+            }, signal),
+            "runtime_history_unavailable",
+            "Runtime session history did not answer in time.",
+          );
+        } catch (error) {
+          // A session the kernel has not created yet has produced nothing. That
+          // is the baseline every run starts from, not a failure — treating it
+          // as one would make the first read of every run an error.
+          if (error?.code === "runtime_session_not_found") break;
+          throw error;
+        }
+        const pageEntries = Array.isArray(value?.events) ? value.events : [];
+        entries.unshift(...pageEntries);
+        if (!value?.hasMore || !pageEntries.length) break;
+        const firstSeq = Number(pageEntries[0]?.event?.seq ?? NaN);
+        if (!Number.isFinite(firstSeq)) break;
+        beforeSeq = firstSeq;
+      }
+      return normalizeTranscript(sessionId, entries);
+    } finally {
+      this.endProxy(project);
+    }
+  }
+
+  /**
+   * Running state under the DSH kernel.
+   *
+   * There is no `session.status` method — the kernel publishes running-state
+   * flips on its host event stream instead. `session.list` carries the same bit
+   * per session and is a request rather than a subscription, which is what a
+   * monitor poll needs. A session the kernel has never heard of is `idle`, not
+   * an error: that is the state every run starts in.
+   * @param {Record<string, any>} project @param {string} sessionId @param {{ wake?: boolean }} options
+   * @returns {Promise<'idle'|'busy'>}
+   */
+  async dshSessionStatus(project, sessionId, { wake = true } = {}) {
+    const runtime = wake ? await this.start(project) : this.runtimes.get(this.key(project));
+    if (!runtime) {
+      throw new HttpError(409, "runtime_not_running", "Runtime is not running for session status monitoring.");
+    }
+    this.beginProxy(project);
+    try {
+      const value = await this.withRuntimeDeadline(
+        (signal) => this.callKernel(runtime, project, "session.list", {}, signal),
+        "runtime_status_unavailable",
+        "Runtime session status did not answer in time.",
+      );
+      const items = Array.isArray(value?.items) ? value.items : [];
+      const entry = items.find((item) => String(item?.sessionId) === String(sessionId));
+      return entry?.running ? "busy" : "idle";
+    } finally {
+      this.endProxy(project);
+    }
+  }
+
+  /**
+   * Sends a prompt to a DSH session, creating the session if the kernel has not
+   * seen it yet.
+   *
+   * The research context does not travel with the prompt: this protocol has no
+   * `system` field, and inventing a side channel for it would have broken the
+   * runtime's own invariant that everything the model sees is in the log. It is
+   * written into the workspace before dispatch and injected by the socket at
+   * session start, where it becomes a first-class logged message.
+   *
+   * @param {Record<string, any>} project @param {string} sessionId
+   * @param {{ text: string, system?: string | null, runId?: string | null }} input
+   * @returns {Promise<void>}
+   */
+  async dshDispatchPrompt(project, sessionId, { text, system = null, runId = null }) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime) {
+      const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
+      error.definitivelyRejected = true;
+      throw error;
+    }
+    if (typeof system === "string" && system.trim()) {
+      await this.writeRunContextFile(project, system);
+    }
+    if (typeof runId === "string" && runId) {
+      await this.writeRunBriefIndex(project, runId);
+    }
+    await this.enforceProjectQuota(project);
+    this.beginProxy(project);
+    try {
+      await this.withRuntimeDeadline(
+        (signal) => this.callKernel(runtime, project, "session.create", {
+          sessionId,
+          cwd: runtime.proxyWorkspaceDir ?? project.workspaceDir,
+          agentPreset: EVIMED_AGENT_PRESET,
+        }, signal),
+        "runtime_prompt_rejected",
+        "The runtime did not create the session in time.",
+      );
+      await this.withRuntimeDeadline(
+        (signal) => this.callKernel(runtime, project, "session.prompt", {
+          sessionId,
+          mode: "queue",
+          content: [{ type: "text", text }],
+        }, signal),
+        "runtime_prompt_acceptance_unknown",
+        "Runtime prompt acceptance could not be confirmed.",
+      );
+    } finally {
+      this.endProxy(project);
+    }
+  }
+
+  /**
+   * Materializes the research context into the workspace.
+   *
+   * Failure is not a reason to refuse a dispatch: the run still has the brief
+   * itself, and losing the knowledge slices degrades the answer rather than
+   * invalidating the run.
+   * @param {Record<string, any>} project @param {string} context
+   * @returns {Promise<void>}
+   */
+  async writeRunContextFile(project, context) {
+    // isolated: evimed_run_context_write_failures_total
+    try {
+      const briefDir = path.join(project.workspaceDir, ".evimed-brief");
+      await fs.mkdir(briefDir, { recursive: true, mode: 0o700 });
+      await writeFileAtomicNoFollow(project.workspaceDir, path.join(briefDir, "context.md"), context, {
+        encoding: "utf8",
+        mode: 0o444,
+      });
+    } catch { /* isolated: evimed_run_context_write_failures_total */ }
+  }
+
+  /**
+   * Writes the run's own id into the workspace.
+   *
+   * The `evimed-run-policy` plugin has no other way to learn it: the wire
+   * protocol's `session.create`/`session.prompt` carry a session id, never the
+   * ledger's run id, so absent this file the plugin's own `runId` stays empty
+   * and every write it makes to the run-mirror tables (`runMirror`, `planIndex`,
+   * `gateRuns`) is gated on that id and silently never happens — which in turn
+   * means `.evimed-run/state.json`, the projection the control plane and the
+   * browser read for evidence, plan and gate state, is never produced either.
+   * Failure here is isolated for the same reason `writeRunContextFile`'s is:
+   * the run still has its ledger entry, and losing the projection degrades
+   * what a live viewer sees rather than invalidating the run.
+   * @param {Record<string, any>} project @param {string} runId
+   * @returns {Promise<void>}
+   */
+  async writeRunBriefIndex(project, runId) {
+    // isolated: evimed_run_brief_index_write_failures_total
+    try {
+      const briefDir = path.join(project.workspaceDir, workspaceLayout.briefDir);
+      await fs.mkdir(briefDir, { recursive: true, mode: 0o700 });
+      await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, workspaceLayout.briefIndexFile), `${JSON.stringify({ runId }, null, 2)}\n`, {
+        encoding: "utf8",
+        mode: 0o444,
+      });
+    } catch { /* isolated: evimed_run_brief_index_write_failures_total */ }
+  }
+
   async sessionStatus(project, sessionId, { wake = true } = {}) {
+    if (runtimeKernelName(this.config) === "dsh") return this.dshSessionStatus(project, sessionId, { wake });
     const runtime = wake
       ? await this.start(project)
       : this.runtimes.get(this.key(project));
@@ -3748,7 +4219,8 @@ export class RuntimeManager {
 
   /** @param {Record<string, any>} project @param {string} sessionId
    *  @param {Record<string, any>} options */
-  async dispatchPrompt(project, sessionId, { text, system = null, agent = null, model = null } = {}) {
+  async dispatchPrompt(project, sessionId, { text, system = null, agent = null, model = null, runId = null } = {}) {
+    if (runtimeKernelName(this.config) === "dsh") return this.dshDispatchPrompt(project, sessionId, { text, system, runId });
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
       const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
@@ -4081,6 +4553,92 @@ export class RuntimeManager {
 
     this.lastOrphanCleanup = { ...summary, completedAt: new Date().toISOString() };
     return summary;
+  }
+
+  /**
+   * Creates a kernel session for this project and returns its id.
+   *
+   * The browser asks the control plane for a session; it never asks a kernel.
+   * That is what lets the kernel change without the frontend changing, and what
+   * keeps the kernel's own settings and credentials methods — pinned to
+   * loopback for exactly this reason — out of reach of a remote caller.
+   *
+   * @param {Record<string, any>} project
+   * @returns {Promise<{ id: string, kernel: string }>}
+   */
+  async createRuntimeSession(project) {
+    const runtime = await this.start(project);
+    this.beginProxy(project);
+    try {
+      if (runtimeKernelName(this.config) === "dsh") {
+        const value = await this.withRuntimeDeadline(
+          (signal) => this.callKernel(runtime, project, "session.create", {
+            cwd: runtime.proxyWorkspaceDir ?? project.workspaceDir,
+            agentPreset: EVIMED_AGENT_PRESET,
+          }, signal),
+          "runtime_session_create_failed",
+          "The runtime did not create a session in time.",
+        );
+        return { id: String(value?.sessionId ?? ""), kernel: "dsh" };
+      }
+      const target = new URL(`${runtime.url}/session`);
+      target.searchParams.set("directory", runtime.proxyWorkspaceDir ?? project.workspaceDir);
+      const headers = {
+        "content-type": "application/json",
+        ...(runtime.password ? { authorization: basicAuth(runtime.password) } : {}),
+      };
+      const response = await this.withRuntimeDeadline(
+        (signal) => requestRuntime(runtime, target, { method: "POST", headers, body: Buffer.from("{}", "utf8"), signal }),
+        "runtime_session_create_failed",
+        "The runtime did not create a session in time.",
+      );
+      if (response.status < 200 || response.status >= 300) {
+        await response.body?.cancel().catch(() => {});
+        throw new HttpError(502, "runtime_session_create_failed", "The runtime refused to create a session.");
+      }
+      const payload = await readRuntimeResponseBody(response.body, this.config.maxJsonBytes);
+      const value = JSON.parse(payload.toString("utf8"));
+      return { id: String(value?.id ?? ""), kernel: "opencode" };
+    } finally {
+      this.endProxy(project);
+    }
+  }
+
+  /**
+   * One unary call into the DSH kernel over the project's control socket.
+   * The allow-list is checked by the adapter that owns it; this is the carrier.
+   * @param {Record<string, any>} runtime @param {Record<string, any>} project
+   * @param {string} method @param {Record<string, unknown>} payload @param {AbortSignal} signal
+   * @returns {Promise<any>}
+   */
+  async callKernel(runtime, project, method, payload, signal) {
+    if (!isAllowedWireMethod(method)) {
+      throw new HttpError(403, "runtime_method_forbidden", `Kernel method ${method} is not on the allow-list.`);
+    }
+    const target = new URL(`${runtime.url}/api/${method}`);
+    const rpcId = randomId("rpc_");
+    const body = Buffer.from(JSON.stringify({ type: "client-request", rpcId, method, payload }), "utf8");
+    const response = await requestRuntime(runtime, target, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+      signal,
+    });
+    if (response.status < 200 || response.status >= 300) {
+      await response.body?.cancel().catch(() => {});
+      throw new HttpError(502, "runtime_wire_protocol_mismatch", `Kernel answered HTTP ${response.status} for ${method}.`);
+    }
+    const payloadBytes = await readRuntimeResponseBody(response.body, this.config.maxJsonBytes);
+    let envelope;
+    try {
+      envelope = JSON.parse(payloadBytes.toString("utf8"));
+    } catch {
+      throw new HttpError(502, "runtime_wire_protocol_mismatch", `Kernel answer for ${method} is not JSON.`);
+    }
+    const result = envelope?.result;
+    if (result?.ok) return result.value;
+    const mapped = mapWireError(result?.error ?? {});
+    throw new HttpError(502, mapped.code, mapped.message);
   }
 
   async proxy(req, res, project, suffix) {

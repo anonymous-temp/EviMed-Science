@@ -11,15 +11,15 @@ Unless the user requests another language, interact and write deliverables in Si
 
 ## 1. Bind the decision scope
 
-Require candidate medicines and one indication. First call `evimed_drug_selection_evaluation` with `action: requirements`. Ask once for the returned missing fields in one concise group. If the user does not provide them, continue the evidence comparison but leave affected items blank and withhold quantitative ranking. Capture population, jurisdiction, care setting, comparator, budget perspective, product specification, and decision date when material. Normalize every candidate with `evimed_drug_term_normalize`.
+Require candidate medicines and one indication. First call `drug_selection_evaluation` with `action: requirements`. Ask once for the returned missing fields in one concise group. If the user does not provide them, continue the evidence comparison but leave affected items blank and withhold quantitative ranking. Capture population, jurisdiction, care setting, comparator, budget perspective, product specification, and decision date when material. Normalize every candidate with `drug_term_normalize`.
 
 Record the institution's criteria, domain definitions, weights, thresholds, and policy version. Never invent a rubric or silently use equal weights. If no approved quantitative rubric is supplied, perform a qualitative evidence comparison and withhold ranking.
 
 ## 2. Retrieve and freeze evidence
 
-For every candidate, call `evimed_drug_selection_evaluation` with `action: retrieve`. Use `evimed_drug_label_search`, `evimed_guideline_search`, `evimed_clinical_trial_search`, and `evimed_literature_search` only to fill a declared gap or cross-check a material claim. Use `evimed_data_source_catalog` and `evimed_biomedical_source_search` for an identified active-source gap; a catalog-only or blocked source is not evidence.
+For every candidate, call `drug_selection_evaluation` with `action: retrieve`. Use `drug_label_search`, `guideline_search`, `clinical_trial_search`, and `literature_search` only to fill a declared gap or cross-check a material claim. Use `data_source_catalog` and `biomedical_source_search` for an identified active-source gap; a catalog-only or blocked source is not evidence.
 
-Use `evimed_pharmacy_reference_search` only for configured private formulary
+Use `pharmacy_reference_search` only for configured private formulary
 context such as name mapping, high-alert classification, route/frequency
 normalization, interaction screening, or monitoring hypotheses. Do not convert
 an institution-specific row into a universal criterion or score. Verify it
@@ -40,7 +40,7 @@ Economics is comparable only when currency, price date, dosage basis, treatment 
 
 ## 4. Compile deterministically
 
-Call `evimed_drug_selection_evaluation` with `action: compile`, the exact `selectionDomains`, source inventory, and all domain assessments. Accept a ranking only when the compiler confirms that every candidate exactly covers the declared domains with comparable scoring rules and economic context. Preserve its leave-one-domain-out sensitivity result. If compilation returns an error, correct the structured evidence; do not bypass the gate or write a synthetic result.
+Call `drug_selection_evaluation` with `action: compile`, the exact `selectionDomains`, source inventory, and all domain assessments. Accept a ranking only when the compiler confirms that every candidate exactly covers the declared domains with comparable scoring rules and economic context. Preserve its leave-one-domain-out sensitivity result. If compilation returns an error, correct the structured evidence; do not bypass the gate or write a synthetic result.
 
 Treat a conditional ranking as one committee input. Explain missing domains, contradictions, close scores, sensitivity, and whether the top candidate changes. The authorized pharmacy and therapeutics process remains the final decision maker.
 

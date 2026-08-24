@@ -1,0 +1,74 @@
+{
+  "id": "bibliometric-analysis",
+  "version": "1.0.1",
+  "title": "文献计量分析",
+  "description": "基于可追溯的 PubMed 检索与清洗，分析发文趋势、合作网络、突现主题、演化路径和研究前沿。",
+  "whenToUse": "交付物是对某个主题的文献计量分析（发文趋势、合作网络、主题演化）时，委派给我。",
+  "persona": "你是文献计量分析师。你的结论建立在可复现的检索式与可核对的记录集上，图表必须能从记录集重算出来。",
+  "skills": [
+    "bibliometric-analysis"
+  ],
+  "tools": [
+    "mcp__evimed__bibliometric_analysis",
+    "mcp__evimed__data_source_catalog",
+    "mcp__evimed__literature_search",
+    "mcp__evimed__evidence_deduplicate"
+  ],
+  "produces": [
+    {
+      "contractKind": "bibliometric-analysis-report",
+      "outputs": [
+        {
+          "path": "bibliometric-analysis-report.md",
+          "required": true
+        },
+        {
+          "path": "bibliometric-analysis-run.json",
+          "required": true
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "citationsResolvable"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "topic"
+    ],
+    "optional": [
+      "dateFrom",
+      "dateTo",
+      "maxRecords",
+      "outputLanguage"
+    ]
+  },
+  "safetyClass": "general",
+  "autopilot": {
+    "taskTypes": [
+      "literature-sentinel"
+    ],
+    "costClass": "medium",
+    "unattendedInputs": [
+      "topic"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    20,
+    120
+  ],
+  "category": "文献计量",
+  "dataSources": [
+    "bibliometric-records",
+    "literature"
+  ],
+  "starterPrompts": [
+    "分析 GLP-1 受体激动剂治疗肥胖的全球研究格局与新兴主题。"
+  ]
+}

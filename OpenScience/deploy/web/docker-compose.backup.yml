@@ -17,6 +17,12 @@ services:
       OPEN_SCIENCE_DATA_DIR: /data
       OPEN_SCIENCE_BACKUP_DIR: /backups
       OPEN_SCIENCE_BACKUP_STATE_FILE: /backups/.open-science-backup-state.json
+      # The restore drill extracts a whole archive, and /tmp here is a 2 GB
+      # tmpfs. Unset, the drill defaulted there, ran out of room on a 1.8 GB
+      # data directory, and every backup was recorded as failed — while the
+      # archive it had just written verified fine. That failure is what drove
+      # the retry loop that filled the disk with 107 archives.
+      OPEN_SCIENCE_RESTORE_DRILL_DIR: /backups/.restore-drill
       OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE: /run/secrets/backup-passphrase
       OPEN_SCIENCE_BACKUP_RETENTION_DAYS: ${OPEN_SCIENCE_BACKUP_RETENTION_DAYS:-30}
       OPEN_SCIENCE_BACKUP_INTERVAL_SECONDS: ${OPEN_SCIENCE_BACKUP_INTERVAL_SECONDS:-86400}

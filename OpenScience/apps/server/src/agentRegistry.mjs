@@ -2,9 +2,12 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { parse } from "yaml";
+import { MCP_TOOL_BASE_NAMES } from "@evimed/domain";
 
 const idPattern = /^[a-z0-9][a-z0-9-]{1,62}$/;
-const toolPattern = /^evimed_[a-z0-9_]{1,95}$/;
+// The server publishes bare names; a kernel adds its own prefix when it
+// shows them to the model. A manifest names the tool, not the presentation.
+const toolPattern = /^[a-z][a-z0-9_]{1,95}$/;
 const inputPattern = /^[a-z][A-Za-z0-9]{0,63}$/;
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 const manifestFileName = "agent.yaml";
@@ -32,33 +35,19 @@ const publicManifestFields = Object.freeze([
 ]);
 const optionalManifestFields = new Set(["companionSkills"]);
 
-export const EVIMED_AGENT_TOOL_IDS = new Set([
-  "evimed_data_source_catalog",
-  "evimed_biomedical_source_search",
-  "evimed_web_search",
-  "evimed_official_page_fetch",
-  "evimed_open_access_full_text",
-  "evimed_term_normalize",
-  "evimed_literature_search",
-  "evimed_guideline_search",
-  "evimed_clinical_trial_search",
-  "evimed_patent_search",
-  "evimed_pharmacy_reference_search",
-  "evimed_evidence_deduplicate",
-  "evimed_drug_term_normalize",
-  "evimed_adr_case_query",
-  "evimed_adr_signal_analysis",
-  "evimed_drug_label_search",
-  "evimed_offlabel_evidence_packet",
-  "evimed_comprehensive_drug_evaluation",
-  "evimed_drug_selection_evaluation",
-  "evimed_meta_analysis",
-  "evimed_mendelian_randomization",
-  "evimed_bibliometric_analysis",
-  "evimed_research_topic_selection",
-  "evimed_peer_review",
-  "evimed_drug_safety_analysis",
-]);
+/**
+ * The research tools an agent package may declare.
+ *
+ * Derived from `@evimed/domain` rather than copied. The copy that used to live
+ * here is how the two drifted: the MCP server published names with an `evimed_`
+ * prefix, the vocabulary defined them without one, and this list agreed with
+ * the server — so a manifest could name a tool that the model would never see
+ * under the new kernel and nothing anywhere said so.
+ *
+ * `health` is excluded because it is an operator probe, not something an agent
+ * asks for.
+ */
+export const EVIMED_AGENT_TOOL_IDS = new Set(MCP_TOOL_BASE_NAMES.filter((name) => name !== "health"));
 
 export const EVIMED_AGENT_DATA_SOURCES = new Set([
   "faers",

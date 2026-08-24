@@ -62,8 +62,16 @@ test("release manifest generator records exact images, tools, skills, and source
     });
     assert.equal(manifest.runtime.image, releaseEnv.OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE);
     assert.equal(manifest.runtime.imageId, releaseEnv.OPEN_SCIENCE_RUNTIME_IMAGE_ID);
-    assert.equal(manifest.runtime.opencodeVersion, "1.17.13");
+    // The runtime image records the kernel it carries and the socket bundle
+    // installed into it: a receipt naming a different bundle than the image
+    // declares is a receipt graded by rules nobody shipped.
+    const deps = JSON.parse(await readFile(new URL("../../../deps-version.json", import.meta.url), "utf8"));
+    assert.equal(manifest.runtime.dshVersion, deps.dsh.version);
+    assert.equal(manifest.runtime.cordisVersion, deps.dsh.cordis);
+    assert.equal(manifest.runtime.socketVersion, "0.1.0");
+    assert.equal(manifest.runtime.domainVersion, "0.1.0");
     assert.equal(manifest.runtime.uvVersion, "0.11.26");
+    assert.ok(!("opencodeVersion" in manifest.runtime), "a generated manifest names the kernel that is shipping");
     assert.deepEqual(manifest.proxy, {
       image: "caddy:2.11.4-alpine",
       imageId: releaseEnv.OPEN_SCIENCE_CADDY_IMAGE_ID,

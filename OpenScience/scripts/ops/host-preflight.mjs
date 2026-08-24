@@ -188,6 +188,68 @@ function normalizeArch(value) {
   return arch;
 }
 
+/**
+ * The kernel's active LSM list.
+ * @returns {string}
+ */
+function readHostLsmList() {
+  try {
+    return fs.readFileSync("/sys/kernel/security/lsm", "utf8");
+  } catch {
+    throw failure(
+      "preflight_landlock_unavailable",
+      "/sys/kernel/security/lsm is unreadable, so the host cannot confirm Landlock is enabled. "
+      + "Mount securityfs, or run the preflight where the kernel can be queried.",
+    );
+  }
+}
+
+/** The kernel that first shipped Landlock (`landlock_create_ruleset`). */
+const MIN_KERNEL = Object.freeze({ major: 5, minor: 13 });
+
+/**
+ * Whether this host can confine the agent's shell.
+ *
+ * The failure this prevents is quiet and total. In a container bwrap is
+ * unavailable — it needs an unprivileged user namespace, which Docker's default
+ * seccomp profile and Ubuntu's AppArmor both refuse — so the kernel's sandbox
+ * chain falls through to Landlock. If Landlock is unavailable as well, the
+ * agent's `bash` tool refuses every command it is ever asked to run, while the
+ * container starts, answers health checks and reports itself ready. A run then
+ * fails for reasons no log explains.
+ *
+ * Three prerequisites, checked here because they are host facts a deployment
+ * cannot fix from inside the image: the kernel is new enough to have Landlock,
+ * the LSM list actually has it enabled, and Docker is new enough that its
+ * default seccomp profile permits the `landlock_*` syscalls (moby#43199 —
+ * already covered by the engine check above, which requires a far newer major).
+ *
+ * @param {string} release @param {string} lsmList
+ * @returns {{ kernel: string, landlock: boolean }}
+ */
+export function validateSandboxPrerequisites(release, lsmList) {
+  const parsed = release.trim().match(/^(\d+)\.(\d+)/);
+  if (!parsed) throw failure("preflight_kernel_version_invalid", "The host kernel version could not be read.");
+  const major = Number(parsed[1]);
+  const minor = Number(parsed[2]);
+  if (major < MIN_KERNEL.major || (major === MIN_KERNEL.major && minor < MIN_KERNEL.minor)) {
+    throw failure(
+      "preflight_kernel_too_old",
+      `Landlock needs Linux ${MIN_KERNEL.major}.${MIN_KERNEL.minor} or newer; found ${release.trim()}. `
+      + "Without it the agent's shell tool refuses every command while the runtime still reports healthy.",
+    );
+  }
+  const modules = lsmList.trim().split(",").map((entry) => entry.trim()).filter(Boolean);
+  if (!modules.includes("landlock")) {
+    throw failure(
+      "preflight_landlock_unavailable",
+      `The host kernel does not have Landlock enabled (active LSMs: ${modules.join(", ") || "none reported"}). `
+      + "Boot with `lsm=...,landlock,...` — bwrap is not a fallback inside a container.",
+    );
+  }
+  return { kernel: release.trim(), landlock: true };
+}
+
 export function parseDockerEngineInfo(output) {
   const [version, os, architecture] = output.trim().split("|");
   const major = Number(version?.match(/^(\d+)/)?.[1]);
@@ -652,6 +714,7 @@ export async function runHostPreflight({
   execute = defaultExecute,
   stat = fs.statSync,
   statfs = fs.statfsSync,
+  readLsm = readHostLsmList,
   fetchImpl = fetch,
   onCheck = () => {},
 } = {}) {
@@ -686,6 +749,18 @@ export async function runHostPreflight({
     ),
   );
   onCheck("docker-engine", `${engine.version} linux/${engine.architecture}`);
+
+  // V13: the sandbox backend's host prerequisites. Read from the kernel rather
+  // than assumed, because every other check here passes on a host where the
+  // agent cannot run a single command.
+  const sandbox = validateSandboxPrerequisites(
+    execute("uname", ["-r"], commandOptions),
+    // Injected like `stat` and `statfs` above, so a test can describe a host it
+    // is not running on. An unreadable `/sys/kernel/security/lsm` means
+    // securityfs is not mounted, which is itself the answer.
+    readLsm(),
+  );
+  onCheck("sandbox-backend", `landlock available on kernel ${sandbox.kernel}`);
 
   const composeVersion = execute("docker", ["compose", "version", "--short"], commandOptions);
   if (!/^v?\d+\.\d+(?:\.\d+)?/.test(composeVersion)) {

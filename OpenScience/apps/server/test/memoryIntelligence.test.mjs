@@ -97,7 +97,7 @@ test("a computed tool result can ground a memory, and a paraphrase of one cannot
   const client = new MemoryStoreDouble();
   const toolPart = {
     type: "tool",
-    tool: "evimed_adr_signal_analysis",
+    tool: "adr_signal_analysis",
     state: {
       status: "completed",
       input: { drug: "metformin", event: "lactic acidosis" },

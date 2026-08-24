@@ -86,7 +86,7 @@ def _gap(field, reason, blocking_for):
 def assess_requirements(tool_name, arguments):
     """Return deterministic, pre-retrieval input gaps for one drug workflow."""
     gaps = []
-    if tool_name == "evimed_offlabel_evidence_packet":
+    if tool_name == "offlabel_evidence_packet":
         assessment_type = "off_label"
         checks = (
             ("product", "Exact product or manufacturer is needed to bind the correct label.", "exact_product_label_comparison"),
@@ -99,7 +99,7 @@ def assess_requirements(tool_name, arguments):
             ("formulation", "Formulation must be compared independently with the label.", "formulation_comparison"),
             ("decisionDate", "A decision date is needed to freeze label and evidence versions.", "versioned_reproducibility"),
         )
-    elif tool_name == "evimed_drug_selection_evaluation":
+    elif tool_name == "drug_selection_evaluation":
         assessment_type = "drug_selection"
         checks = (
             ("population", "Candidate comparability depends on the target population.", "candidate_comparability"),
@@ -115,7 +115,7 @@ def assess_requirements(tool_name, arguments):
                 "Economic scoring requires currency, price date, dosage basis, duration, jurisdiction, and perspective.",
                 "economic_scoring",
             ))
-    elif tool_name == "evimed_comprehensive_drug_evaluation":
+    elif tool_name == "comprehensive_drug_evaluation":
         assessment_type = "comprehensive_drug_evaluation"
         checks = (
             ("population", "Applicability cannot be assessed against an undefined population.", "applicability_assessment"),
@@ -718,10 +718,10 @@ def _comprehensive_score(arguments, rows):
 
 def compile_assessment(tool_name, arguments):
     """Compile one of the three structured drug assessment workflows."""
-    if tool_name == "evimed_offlabel_evidence_packet":
+    if tool_name == "offlabel_evidence_packet":
         return _compile_off_label(arguments)
-    if tool_name == "evimed_drug_selection_evaluation":
+    if tool_name == "drug_selection_evaluation":
         return _compile_selection(arguments)
-    if tool_name == "evimed_comprehensive_drug_evaluation":
+    if tool_name == "comprehensive_drug_evaluation":
         return _compile_comprehensive(arguments)
     raise AssessmentInputError("Unsupported assessment compiler tool %s." % tool_name)

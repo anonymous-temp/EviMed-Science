@@ -10,6 +10,7 @@ import {
   runHostPreflight,
   validateDeploymentConfig,
   validateDockerSocketStat,
+  validateSandboxPrerequisites,
 } from "../../../scripts/ops/host-preflight.mjs";
 import { signDeepSeekReleaseReceipt } from "../../../scripts/ops/deepseek-opencode-release-gate.mjs";
 
@@ -304,6 +305,7 @@ test("host preflight verifies Docker, images, Compose, release identity, and pub
   const imageInfo = `sha256:${"b".repeat(64)}|linux|amd64`;
   const execute = (command, args) => {
     calls.push([command, ...args]);
+    if (command === "uname") return "6.8.0-137-generic";
     if (command === "docker" && args[0] === "version") return "26.1.4|linux|amd64";
     if (command === "docker" && args[0] === "compose" && args[1] === "version") return "v2.27.1";
     if (command === "docker" && args[0] === "info") return "/var/lib/docker";
@@ -345,6 +347,7 @@ test("host preflight verifies Docker, images, Compose, release identity, and pub
     execute,
     stat: () => ({ gid: 998, mode: 0o140660, isSocket: () => true }),
     statfs: () => ({ bavail: 4_000_000n, bsize: 4096n }),
+    readLsm: () => "lockdown,capability,landlock,yama,apparmor",
     fetchImpl,
     onCheck: (name) => checks.push(name),
   });
@@ -366,6 +369,7 @@ test("host preflight verifies Docker, images, Compose, release identity, and pub
   assert.ok(checks.includes("docker-socket"));
   assert.ok(checks.includes("production-state-secrets"));
   assert.ok(checks.includes("public-https"));
+  assert.ok(checks.includes("sandbox-backend"), "a deployment host must be shown to be able to confine the agent's shell");
 });
 
 test("host preflight fails before Docker when the deployment env file is not private", async (t) => {
@@ -392,6 +396,7 @@ test("host preflight refuses a runtime image no container references", async (t)
   t.after(() => rm(fixture.dir, { recursive: true, force: true }));
   const imageInfo = `sha256:${"b".repeat(64)}|linux|amd64`;
   const execute = (command, args) => {
+    if (command === "uname") return "6.8.0-137-generic";
     if (command === "docker" && args[0] === "version") return "26.1.4|linux|amd64";
     if (command === "docker" && args[0] === "compose" && args[1] === "version") return "v2.27.1";
     if (command === "docker" && args[0] === "info") return "/var/lib/docker";
@@ -408,6 +413,7 @@ test("host preflight refuses a runtime image no container references", async (t)
       execute,
       stat: () => ({ gid: 998, mode: 0o140660, isSocket: () => true }),
       statfs: () => ({ bavail: 4_000_000n, bsize: 4096n }),
+      readLsm: () => "lockdown,capability,landlock,yama,apparmor",
       onCheck: () => {},
     }),
     (error) => {
@@ -416,5 +422,46 @@ test("host preflight refuses a runtime image no container references", async (t)
       assert.match(error.message, /--profile runtime-image up --no-build --no-start/);
       return true;
     },
+  );
+});
+
+// V13. Every other check in this file passes on a host where the agent cannot
+// run a single command: without Landlock the shell tool refuses everything,
+// and the container still starts, answers health checks and reports ready.
+// bwrap is not a fallback — inside a container it needs an unprivileged user
+// namespace that Docker's seccomp profile and Ubuntu's AppArmor both refuse.
+test("a host that cannot confine the agent's shell is refused before deployment", () => {
+  assert.deepEqual(
+    validateSandboxPrerequisites("6.8.0-137-generic", "lockdown,capability,landlock,yama,apparmor"),
+    { kernel: "6.8.0-137-generic", landlock: true },
+  );
+
+  assert.throws(
+    () => validateSandboxPrerequisites("5.12.9-generic", "landlock"),
+    (error) => {
+      assert.equal(error.code, "preflight_kernel_too_old");
+      assert.match(error.message, /5\.13 or newer/);
+      return true;
+    },
+    "Landlock did not exist before 5.13, whatever the LSM list claims",
+  );
+
+  assert.throws(
+    () => validateSandboxPrerequisites("6.8.0-generic", "capability,yama,apparmor"),
+    (error) => {
+      assert.equal(error.code, "preflight_landlock_unavailable");
+      assert.match(error.message, /capability, yama, apparmor/);
+      return true;
+    },
+    "a new enough kernel still has to have it turned on",
+  );
+
+  assert.throws(
+    () => validateSandboxPrerequisites("not-a-version", "landlock"),
+    (error) => {
+      assert.equal(error.code, "preflight_kernel_version_invalid");
+      return true;
+    },
+    "an unreadable version is unknown, not acceptable",
   );
 });

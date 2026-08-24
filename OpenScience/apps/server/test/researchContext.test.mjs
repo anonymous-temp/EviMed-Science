@@ -95,12 +95,12 @@ test("injects the live specialist registry into open-domain routing without forc
         skill: "adr-analysis",
         title: "Drug Safety Analysis",
         description: "Analyze traceable pharmacovigilance evidence.",
-        requiredTools: ["evimed_drug_safety_analysis"],
+        requiredTools: ["drug_safety_analysis"],
       }],
     });
     assert.match(prepared.system, /开放域科研问答已注册以下专项 Skill/);
     assert.match(prepared.system, /<evimed-specialist id="adr-analysis" skill="adr-analysis">/);
-    assert.match(prepared.system, /evimed_drug_safety_analysis/);
+    assert.match(prepared.system, /drug_safety_analysis/);
     assert.match(prepared.system, /不得为展示能力而无关调用/);
   });
 });

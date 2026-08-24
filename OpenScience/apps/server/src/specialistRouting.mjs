@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { clinicalContentTriggerPattern } from "@evimed/domain";
 
 // The default open-domain handler. It is not a routable specialist: unrouted
 // open-domain dispatches fall back to it in server.mjs, and it must be
@@ -10,13 +10,7 @@ export const OPEN_DOMAIN_ANSWER_AGENT_ID = "open-domain-answer";
 // holds the medicine-specific safety checks, so a plain "速效救心丸疗效分析"
 // still reaches clinical-evidence-synthesis without hardcoding the drug here.
 function loadClinicalRoutingPattern() {
-  const parsed = JSON.parse(readFileSync(new URL("./clinical-safety-rules.json", import.meta.url), "utf8"));
-  const entities = Array.isArray(parsed?.routingEntities)
-    ? parsed.routingEntities.filter((entity) => typeof entity === "string" && entity.trim())
-    : [];
-  if (!entities.length) return null;
-  const escaped = entities.map((entity) => entity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  return new RegExp(`(?:${escaped.join("|")})`, "i");
+  return clinicalContentTriggerPattern();
 }
 
 const clinicalRoutingMedicinePattern = loadClinicalRoutingPattern();

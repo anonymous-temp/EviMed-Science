@@ -25,16 +25,16 @@ optionalInputs:
   - budgetContext
   - uploadedFiles
 requiredTools:
-  - evimed_drug_term_normalize
-  - evimed_drug_selection_evaluation
+  - drug_term_normalize
+  - drug_selection_evaluation
 optionalTools:
-  - evimed_data_source_catalog
-  - evimed_biomedical_source_search
-  - evimed_drug_label_search
-  - evimed_guideline_search
-  - evimed_clinical_trial_search
-  - evimed_literature_search
-  - evimed_pharmacy_reference_search
+  - data_source_catalog
+  - biomedical_source_search
+  - drug_label_search
+  - guideline_search
+  - clinical_trial_search
+  - literature_search
+  - pharmacy_reference_search
 dataSources:
   - drug-labels
   - guidelines

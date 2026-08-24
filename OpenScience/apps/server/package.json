@@ -11,9 +11,9 @@
     "dev": "node src/index.mjs",
     "start": "node src/index.mjs",
     "start:controller": "node src/runtimeControllerIndex.mjs",
-    "test": "node --test test/*.test.mjs",
-    "test:unit": "node --test test/runtimeManager.test.mjs test/security.test.mjs test/server.test.mjs",
-    "test:contract": "node --test test/hosted-web.e2e.test.mjs",
+    "test": "OPEN_SCIENCE_RUNTIME_KERNEL=dsh node --test test/*.test.mjs",
+    "test:unit": "OPEN_SCIENCE_RUNTIME_KERNEL=dsh node --test test/runtimeManager.test.mjs test/security.test.mjs test/server.test.mjs",
+    "test:contract": "OPEN_SCIENCE_RUNTIME_KERNEL=dsh node --test test/hosted-web.e2e.test.mjs",
     "test:e2e": "node ../../scripts/ops/hosted-production-e2e.mjs",
     "lint": "eslint src test --ext .mjs --max-warnings 0",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -22,6 +22,8 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@evimed/domain": "workspace:*",
+    "@evimed/harness-port": "workspace:*",
     "openid-client": "6.8.4",
     "pg": "8.16.3",
     "yaml": "2.8.3"

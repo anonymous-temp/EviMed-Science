@@ -98,6 +98,30 @@ describe("RunsPage (hosted web)", () => {
     expect(screen.getByText("运行超时，未能在时限内完成。")).toBeInTheDocument();
   });
 
+  it("groups a delivered-but-unresolved run under 待人工复核, not under 成功", async () => {
+    // `phase` is the projection (§7.1.1), not the ledger's own `status` — a
+    // degraded run is still `status: "succeeded"`, so a chip keyed on status
+    // could never find it. Filtering has to read the field the design actually
+    // put this distinction in.
+    listWebAgentRuns.mockResolvedValue([
+      webRun({ id: "run-clean", status: "succeeded", phase: "accepted" }),
+      webRun({ id: "run-degraded", status: "succeeded", phase: "degraded", verification: "unverified" }),
+    ]);
+    renderPage();
+    await screen.findByText("run-clean");
+    const chip = screen.getByRole("button", { name: /待人工复核/ });
+    await userEvent.click(chip);
+    await waitFor(() => expect(screen.queryByText("run-clean")).not.toBeInTheDocument());
+    expect(screen.getByText("run-degraded")).toBeInTheDocument();
+  });
+
+  it("does not show the 待人工复核 chip when nothing needs it", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({ status: "succeeded", phase: "accepted" })]);
+    renderPage();
+    await screen.findByText("run-1");
+    expect(screen.queryByRole("button", { name: /待人工复核/ })).not.toBeInTheDocument();
+  });
+
   it("filters by debounced search over id, agent, model and artifacts", async () => {
     renderPage();
     await screen.findByText("run-1");

@@ -7,6 +7,7 @@ import {
   RuntimeManager,
   issueModelGatewayRuntimeToken,
   runtimeNetworkRequiresEgressOptIn,
+  syncRuntimeDshProfile,
   syncRuntimeModelProvider,
   verifyModelGatewayRuntimeToken,
 } from "../src/runtimeManager.mjs";
@@ -175,4 +176,107 @@ test("RuntimeManager accepts only the current active runtime token and rejects i
     () => manager.assertActiveModelGatewayToken(replacementToken),
     (error) => error?.code === "model_gateway_token_invalid",
   );
+});
+
+// The seam that closes the gap `dshProfilePatch.mjs` left: a correct,
+// well-tested renderer that nothing in the bootstrap sequence ever called. A
+// DSH container built from the image alone would boot with no gateway
+// address, no MCP command and no way to reach the model — this is what
+// actually reaches the file the running kernel reads.
+function dshFixtureConfig(overrides = {}) {
+  return {
+    deepseekProviderEnabled: true,
+    deepseekModel: "deepseek-v4-pro",
+    modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1",
+    modelGatewaySigningSecret: secret,
+    evimedWorkloadSigningSecret: "evimed-workload-signing-secret-with-32-bytes",
+    evimedWorkloadTokenTtlSeconds: 300,
+    socketBundleVersion: "0.1.0",
+    dshVersion: "0.1.1-rc.2",
+    deliveryAttemptLimit: 3,
+    maxParallelChildren: 30,
+    runMaxSteps: 0,
+    runMaxTokens: 0,
+    evidenceStaleMinutes: 10,
+    screeningBatchSize: 25,
+    runtimeSandboxEnforcement: "full",
+    production: true,
+    ...overrides,
+  };
+}
+
+async function dshFixture() {
+  const rootDir = await mkdtemp(path.join(tmpdir(), "runtime-dsh-profile-"));
+  const project = { id: "paper-1", userId: "alice", rootDir, workspaceDir: path.join(rootDir, "workspace") };
+  const plan = { sandboxMode: "host", dshHomeDir: path.join(rootDir, "runtime", "dsh-home"), proxyWorkspaceDir: project.workspaceDir };
+  return { rootDir, project, plan };
+}
+
+test("the screening plugin's batch size reaches the container from the control plane", async (t) => {
+  // It was hard-coded at 50 in the bundle with no row addressing it, so a
+  // deployment whose records are long had to edit the plug to change it. The
+  // concurrency ceiling is deliberately the delegation one rather than a second
+  // number: a screening child is a delegation child (§10.4).
+  const { rootDir, project, plan } = await dshFixture();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  await syncRuntimeDshProfile(dshFixtureConfig(), project, plan);
+  const patch = await readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml"), "utf8");
+  const row = patch.slice(patch.indexOf("- id: evimed-screening"));
+  assert.match(row, /^- id: evimed-screening\n  config:\n    batchSize: 25\n    maxParallelChildren: 30\n/);
+});
+
+test("syncRuntimeDshProfile writes a patch and a credentials file the running kernel can actually read", async (t) => {
+  const { rootDir, project, plan } = await dshFixture();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+
+  const result = await syncRuntimeDshProfile(dshFixtureConfig(), project, plan, { nowSeconds: 2_000, jti: "dsh-runtime-1" });
+  assert.equal(result.configured, true);
+  assert.ok(result.workloadTokenFile);
+  assert.ok(result.workloadTokenRefreshMs > 0);
+
+  const patch = await readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml"), "utf8");
+  // The real gateway address and the real model reach the file — this is
+  // exactly the class of row that was missing before this function existed.
+  assert.match(patch, /baseURL: 'http:\/\/127\.0\.0\.1:8787\/internal\/model\/v1'/);
+  assert.match(patch, /id: 'deepseek-v4-pro'/);
+  assert.match(patch, /apiKeyEnv: 'EVIMED_WORKLOAD_TOKEN'/);
+  // In host sandbox mode there is no container indirection, so the runtime
+  // path the MCP subprocess is told and the host path the control plane wrote
+  // to are the same path (unlike the docker case, covered separately below).
+  assert.match(patch, new RegExp(`EVIMED_WORKLOAD_TOKEN_FILE: '${path.join(plan.dshHomeDir, "evimed-workload.token").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'`));
+  // The literal provider key never appears — only the reference name does.
+  assert.equal(patch.includes("must-never-be-written"), false);
+
+  const credentials = await readFile(path.join(plan.dshHomeDir, ".credentials.yaml"), "utf8");
+  assert.match(credentials, /EVIMED_WORKLOAD_TOKEN: '[^']+'/);
+
+  // A capsule endpoint that is not built yet fails closed and visibly — an
+  // empty URL the plugin itself recognizes and disables on — not silently
+  // pointed at something that does not exist.
+  assert.match(patch, /capsuleGatewayUrl|recallUrl: ''/);
+
+  const workloadToken = await readFile(result.workloadTokenFile, "utf8");
+  assert.ok(workloadToken.trim().split(".").length >= 3, "the MCP subprocess token is a signed JWT-shaped value");
+});
+
+test("syncRuntimeDshProfile places --patch's target under $DSH_HOME, matching what the entrypoint passes", async (t) => {
+  const { rootDir, project, plan } = await dshFixture();
+  plan.sandboxMode = "docker";
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  const result = await syncRuntimeDshProfile(dshFixtureConfig(), project, plan);
+  // `result.workloadTokenFile` is the *host* path — `scheduleEviMedWorkloadRefresh`
+  // needs to know where to rewrite the file on disk when the token rotates, and
+  // that is always a host path, docker or not.
+  assert.equal(result.workloadTokenFile, path.join(plan.dshHomeDir, "evimed-workload.token"));
+  const patch = await readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml"), "utf8");
+  assert.match(patch, /EVIMED_WORKLOAD_TOKEN_FILE: '\/runtime\/dsh-home\/evimed-workload\.token'/);
+});
+
+test("syncRuntimeDshProfile does nothing when the DeepSeek provider is disabled", async (t) => {
+  const { rootDir, project, plan } = await dshFixture();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  const result = await syncRuntimeDshProfile(dshFixtureConfig({ deepseekProviderEnabled: false }), project, plan);
+  assert.equal(result.configured, false);
+  assert.equal(result.workloadTokenFile, null);
+  await assert.rejects(readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml")), { code: "ENOENT" });
 });

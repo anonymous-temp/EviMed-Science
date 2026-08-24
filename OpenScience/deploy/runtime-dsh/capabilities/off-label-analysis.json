@@ -1,0 +1,97 @@
+{
+  "id": "off-label-analysis",
+  "version": "2.2.1",
+  "title": "Off-label Use Analysis",
+  "description": "Assist item-level label comparison and evidence-support scoring for a proposed use.",
+  "whenToUse": "交付物是对某个超说明书用法的证据评估时，委派给我。",
+  "persona": "你是超说明书用药评估分析师。你先核对说明书本身写了什么，再评估拟用用法的证据强度，并明确区分人群、剂量与给药途径。",
+  "skills": [
+    "off-label-analysis"
+  ],
+  "tools": [
+    "mcp__evimed__drug_term_normalize",
+    "mcp__evimed__drug_label_search",
+    "mcp__evimed__offlabel_evidence_packet",
+    "mcp__evimed__data_source_catalog",
+    "mcp__evimed__biomedical_source_search",
+    "mcp__evimed__guideline_search",
+    "mcp__evimed__clinical_trial_search",
+    "mcp__evimed__literature_search",
+    "mcp__evimed__pharmacy_reference_search"
+  ],
+  "produces": [
+    {
+      "contractKind": "off-label-report",
+      "outputs": [
+        {
+          "path": "off-label-report.md",
+          "required": true
+        },
+        {
+          "path": "evidence-table.csv",
+          "required": true
+        },
+        {
+          "path": "assessment-result.json",
+          "required": true
+        },
+        {
+          "path": "evidence-snapshot.json",
+          "required": true
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "citationsResolvable",
+        "citedSourcesRecorded"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "drug",
+      "proposedUse"
+    ],
+    "optional": [
+      "product",
+      "population",
+      "dose",
+      "route",
+      "frequency",
+      "duration",
+      "formulation",
+      "jurisdiction",
+      "decisionDate",
+      "uploadedFiles"
+    ]
+  },
+  "safetyClass": "clinical",
+  "autopilot": {
+    "taskTypes": [],
+    "costClass": "medium",
+    "unattendedInputs": [
+      "drug",
+      "proposedUse"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    15,
+    35
+  ],
+  "category": "Evidence Synthesis",
+  "dataSources": [
+    "drug-labels",
+    "guidelines",
+    "clinical-trials",
+    "literature"
+  ],
+  "starterPrompts": [
+    "Assess the evidence for an off-label indication in a defined population.",
+    "Compare a proposed dose and regimen with approved labels across jurisdictions."
+  ]
+}

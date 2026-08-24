@@ -19,20 +19,20 @@ optionalInputs:
   - populationOfInterest
   - outputLanguage
 requiredTools:
-  - evimed_literature_search
-  - evimed_biomedical_source_search
-  - evimed_open_access_full_text
-  - evimed_data_source_catalog
+  - literature_search
+  - biomedical_source_search
+  - open_access_full_text
+  - data_source_catalog
 optionalTools:
-  - evimed_web_search
-  - evimed_research_topic_selection
-  - evimed_bibliometric_analysis
-  - evimed_official_page_fetch
-  - evimed_guideline_search
-  - evimed_clinical_trial_search
-  - evimed_term_normalize
-  - evimed_evidence_deduplicate
-  - evimed_pharmacy_reference_search
+  - web_search
+  - research_topic_selection
+  - bibliometric_analysis
+  - official_page_fetch
+  - guideline_search
+  - clinical_trial_search
+  - term_normalize
+  - evidence_deduplicate
+  - pharmacy_reference_search
 dataSources:
   - uploaded-files
   - literature

@@ -1,0 +1,60 @@
+# Capability manifest — the only definition of this capability.
+#
+# It replaced agent.yaml when routing was removed. Under a router, a
+# package was bound to a session and never had to say when it applied;
+# under one composition the orchestrator composes capabilities itself, so
+# `whenToUse` (the catalogue line it reads), `persona` (what the delegated
+# child is) and `produces` (which contract validates the result) are
+# required. `tools` uses the model-visible names.
+id: meta-analysis
+version: 1.0.0
+title: Automated Meta-Analysis
+category: Evidence Synthesis
+description: Run a traceable systematic review and deterministic meta-analysis pipeline, with risk-of-bias,
+  GRADE, manuscript, figures, and release gates.
+whenToUse: 交付物是一份 Meta 分析或系统综述稿件、需要合并效应量与异质性分析时，委派给我。
+persona: 你是系统综述与 Meta 分析研究者。全部统计由确定性引擎计算，你负责纳排、提取与解释，绝不自己算数。
+safetyClass: clinical
+skills:
+- meta-analysis
+tools:
+- mcp__evimed__meta_analysis
+produces:
+- contractKind: meta-analysis-report
+  outputs:
+  - path: meta-analysis-report.md
+    required: true
+  - path: meta-analysis-run.json
+    required: true
+  checks:
+  - requiredOutputsExist
+  - citationsResolvable
+inputs:
+  required:
+  - topic
+  optional:
+  - population
+  - intervention
+  - comparator
+  - outcomes
+  - studyDesign
+  - analysisType
+  - uploadedFiles
+  - ipdData
+autopilot:
+  taskTypes:
+  - evidence-update
+  costClass: high
+  unattendedInputs:
+  - topic
+estimatedMinutes:
+- 30
+- 180
+dataSources:
+- metaagent
+- literature
+- clinical-trials
+- uploaded-files
+starterPrompts:
+- Conduct a systematic review and meta-analysis for a clearly defined PICO question.
+- Resume an automated meta-analysis job and explain its release-gate status.
