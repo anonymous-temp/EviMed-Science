@@ -305,7 +305,7 @@ test("host preflight verifies Docker, images, Compose, release identity, and pub
   const imageInfo = `sha256:${"b".repeat(64)}|linux|amd64`;
   const execute = (command, args) => {
     calls.push([command, ...args]);
-    if (command === "uname") return "6.8.0-137-generic";
+    if (command === "uname") return "7.0.0-30-generic";
     if (command === "docker" && args[0] === "version") return "26.1.4|linux|amd64";
     if (command === "docker" && args[0] === "compose" && args[1] === "version") return "v2.27.1";
     if (command === "docker" && args[0] === "info") return "/var/lib/docker";
@@ -396,7 +396,7 @@ test("host preflight refuses a runtime image no container references", async (t)
   t.after(() => rm(fixture.dir, { recursive: true, force: true }));
   const imageInfo = `sha256:${"b".repeat(64)}|linux|amd64`;
   const execute = (command, args) => {
-    if (command === "uname") return "6.8.0-137-generic";
+    if (command === "uname") return "7.0.0-30-generic";
     if (command === "docker" && args[0] === "version") return "26.1.4|linux|amd64";
     if (command === "docker" && args[0] === "compose" && args[1] === "version") return "v2.27.1";
     if (command === "docker" && args[0] === "info") return "/var/lib/docker";
@@ -432,8 +432,22 @@ test("host preflight refuses a runtime image no container references", async (t)
 // namespace that Docker's seccomp profile and Ubuntu's AppArmor both refuse.
 test("a host that cannot confine the agent's shell is refused before deployment", () => {
   assert.deepEqual(
-    validateSandboxPrerequisites("6.8.0-137-generic", "lockdown,capability,landlock,yama,apparmor"),
-    { kernel: "6.8.0-137-generic", landlock: true },
+    validateSandboxPrerequisites("7.0.0-30-generic", "lockdown,capability,landlock,yama,apparmor"),
+    { kernel: "7.0.0-30-generic", landlock: true, enforcement: "full" },
+  );
+
+  // 6.8 has Landlock and passes every check this function used to make, and the
+  // launcher on it reports `partial enforcement (older Landlock ABI)` — which a
+  // hosted profile refuses to boot on. Measured on this project's host before
+  // and after the kernel upgrade, so the boundary is 6.10 rather than 5.13.
+  assert.throws(
+    () => validateSandboxPrerequisites("6.8.0-101-generic", "lockdown,capability,landlock,yama,apparmor"),
+    (error) => {
+      assert.equal(error.code, "preflight_landlock_partial_enforcement");
+      assert.match(error.message, /6\.10/);
+      return true;
+    },
+    "having Landlock is not the same as having all of it",
   );
 
   assert.throws(
