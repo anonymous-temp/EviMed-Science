@@ -147,12 +147,34 @@ async function checkRuntimePins() {
     [dsh, "dsh_version_pinned", "dsh_version_unpinned", "DSH_VERSION"],
     [dshCordis, "dsh_cordis_version_pinned", "dsh_cordis_version_unpinned", "DSH_CORDIS_VERSION"],
     [dshUv, "dsh_uv_version_pinned", "dsh_uv_version_unpinned", "UV_VERSION"],
+    [
+      dshDockerfile.match(/^ARG PNPM_VERSION=([^\s]+)/m)?.[1] ?? "",
+      "dsh_pnpm_version_pinned",
+      "dsh_pnpm_version_unpinned",
+      "PNPM_VERSION",
+    ],
   ]) {
     if (!value || value === "latest") {
       fail(badCode, `Hosted DSH runtime image must pin ${label}.`);
     } else {
       pass(okCode, `Hosted DSH runtime pins ${label}.`, { version: value });
     }
+  }
+
+  // A bundle added without a version resolves whatever `latest` points at, and
+  // most DSH sub-packages still tag 0.0.1-rc.1 as latest — so an unpinned add
+  // installs the first release ever cut, under a Dockerfile that claims a pin.
+  const addLine = dshDockerfile.match(/dsh plugin --profile \S+ add ([^;\\]+)/)?.[1] ?? "";
+  const unpinnedBundles = addLine
+    .split(/\s+/)
+    .filter((spec) => spec.startsWith('"@deepseek-ai/') || spec.startsWith("@deepseek-ai/"))
+    .filter((spec) => !/@\$\{DSH_VERSION\}|@\d/.test(spec.replace(/^"|"$/g, "").slice(1)));
+  if (unpinnedBundles.length) {
+    fail("dsh_profile_bundles_unpinned", "Every DSH bundle the image pre-installs must name an exact version.", {
+      unpinned: unpinnedBundles,
+    });
+  } else if (addLine) {
+    pass("dsh_profile_bundles_pinned", "Pre-installed DSH bundles name an exact version.");
   }
 
   // The pin is only a pin if it agrees with the one place versions are defined.

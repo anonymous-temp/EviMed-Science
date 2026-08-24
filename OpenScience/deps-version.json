@@ -5,7 +5,8 @@
     "cordis": "4.0.1",
     "npmPackage": "@deepseek-ai/dsh",
     "contractDir": "packages/contracts/dsh",
-    "notes": "Pre-release: no compatibility promise, no tagged release. Subpackage `latest` dist-tags mostly still point at 0.0.1-rc.1, so every install writes an exact version."
+    "notes": "Pre-release: no compatibility promise, no tagged release. Subpackage `latest` dist-tags mostly still point at 0.0.1-rc.1, so every install writes an exact version. `dsh plugin` manages a profile with pnpm and writes a pnpm-workspace.yaml listing the profile itself, which pnpm 9 refuses to add into without -w; this pin tracks DSH's own packageManager, not the workspace's.",
+    "pnpm": "11.7.0"
   },
   "memos": {
     "version": "2.0.30",
