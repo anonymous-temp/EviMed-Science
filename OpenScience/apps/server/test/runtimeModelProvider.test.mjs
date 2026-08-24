@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import {
   RuntimeManager,
   issueModelGatewayRuntimeToken,
@@ -220,9 +221,30 @@ test("the screening plugin's batch size reaches the container from the control p
   const { rootDir, project, plan } = await dshFixture();
   t.after(() => rm(rootDir, { recursive: true, force: true }));
   await syncRuntimeDshProfile(dshFixtureConfig(), project, plan);
+  // It travels as container environment, not as a patch row: the plugin is
+  // mounted by the preset, and a profile patch that named it would be reported
+  // as an unmatched target and dropped, leaving the schema default in place.
+  const env = runtimeEnvironment({
+    capabilitiesDir: "/opt/evimed/capabilities",
+    capabilitySkillsDir: "/opt/evimed/capability-skills",
+    capsuleMethodsDir: "",
+    capsuleGatewayUrl: "",
+    workloadTokenFile: "/runtime/dsh-home/workload-token",
+    bundleVersion: "0.1.0",
+    flags: { hosted: true, askUser: false, review: true, capsule: false, requiredEnforcement: "full" },
+    limits: {
+      deliveryAttemptLimit: dshFixtureConfig().deliveryAttemptLimit,
+      maxParallelChildren: dshFixtureConfig().maxParallelChildren,
+      maxSteps: dshFixtureConfig().runMaxSteps,
+      maxTokens: dshFixtureConfig().runMaxTokens,
+      evidenceStaleMinutes: dshFixtureConfig().evidenceStaleMinutes,
+      screeningBatchSize: dshFixtureConfig().screeningBatchSize,
+    },
+  });
+  assert.equal(env.EVIMED_SCREENING_BATCH_SIZE, "25");
+  assert.equal(env.EVIMED_MAX_PARALLEL_CHILDREN, "30");
   const patch = await readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml"), "utf8");
-  const row = patch.slice(patch.indexOf("- id: evimed-screening"));
-  assert.match(row, /^- id: evimed-screening\n  config:\n    batchSize: 25\n    maxParallelChildren: 30\n/);
+  assert.ok(!patch.includes("- id: evimed-screening"), "naming a preset row here would be silently dropped");
 });
 
 test("syncRuntimeDshProfile writes a patch and a credentials file the running kernel can actually read", async (t) => {
@@ -253,7 +275,12 @@ test("syncRuntimeDshProfile writes a patch and a credentials file the running ke
   // A capsule endpoint that is not built yet fails closed and visibly — an
   // empty URL the plugin itself recognizes and disables on — not silently
   // pointed at something that does not exist.
-  assert.match(patch, /capsuleGatewayUrl|recallUrl: ''/);
+  assert.equal(runtimeEnvironment({
+    capabilitiesDir: "", capabilitySkillsDir: "", capsuleMethodsDir: "", capsuleGatewayUrl: "",
+    workloadTokenFile: "/t", bundleVersion: "0.1.0",
+    flags: { hosted: true, askUser: false, review: true, capsule: false, requiredEnforcement: "full" },
+    limits: { deliveryAttemptLimit: 3, maxParallelChildren: 30, maxSteps: 200, maxTokens: 400000, evidenceStaleMinutes: 10, screeningBatchSize: 50 },
+  }).EVIMED_CAPSULE_GATEWAY_URL, "", "an unbuilt capsule endpoint is empty, and the plugin disables itself visibly");
 
   const workloadToken = await readFile(result.workloadTokenFile, "utf8");
   assert.ok(workloadToken.trim().split(".").length >= 3, "the MCP subprocess token is a signed JWT-shaped value");

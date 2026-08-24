@@ -10,6 +10,13 @@
 # Every row carries an explicit `id`. A row without one is read as a delete plus
 # an insert on every config read, which remounts it and loses its state.
 
+# Deployment values reach these rows through the environment, not through the
+# profile patch. A profile's `cordis.patch.yml` patches the host composition;
+# these rows are mounted in agent scope from this file, so a patch that names
+# them is reported as an unmatched target on stderr and dropped — the plugins
+# would then run on their schema defaults while the deployment believed it had
+# configured them. `!!js` is how a row reads what the container was given.
+
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
@@ -23,6 +30,11 @@
 # the retrieval order and the citation-hygiene rules. Order 100–199 is DSH's
 # tool-guidance band.
 - id: evimed-guidance
+  config:
+    capabilitiesDir: !!js process.env.EVIMED_CAPABILITIES_DIR
+    askUserEnabled: !!js process.env.EVIMED_ASK_USER === '1'
+    capsuleActive: !!js process.env.EVIMED_CAPSULE_ACTIVE === '1'
+    reviewEnabled: !!js process.env.EVIMED_REVIEW_ENABLED === '1'
   name: '@evimed/dsh-socket/plugins/guidance'
 
 # "When is a run finished, and when is it acceptable" — the plan, the
@@ -30,21 +42,38 @@
 # attempt ceiling and the run budget, all in one plugin because they are one
 # piece of knowledge.
 - id: evimed-run-policy
+  config:
+    deliveryAttemptLimit: !!js Number(process.env.EVIMED_DELIVERY_ATTEMPT_LIMIT ?? 3)
+    maxParallelChildren: !!js Number(process.env.EVIMED_MAX_PARALLEL_CHILDREN ?? 30)
+    maxSteps: !!js Number(process.env.EVIMED_MAX_STEPS ?? 200)
+    maxTokens: !!js Number(process.env.EVIMED_MAX_TOKENS ?? 400000)
+    capabilitiesDir: !!js process.env.EVIMED_CAPABILITIES_DIR
+    skillsDir: !!js process.env.EVIMED_CAPABILITY_SKILLS_DIR
+    bundleVersion: !!js process.env.EVIMED_BUNDLE_VERSION
   name: '@evimed/dsh-socket/plugins/run-policy'
 
 # Evidence ingestion. An observer on the tool pipeline: it can never change what
 # the model sees, which is the point — the ledger may not edit the run it records.
 - id: evimed-evidence
+  config:
+    evidenceStaleMinutes: !!js Number(process.env.EVIMED_EVIDENCE_STALE_MINUTES ?? 10)
   name: '@evimed/dsh-socket/plugins/evidence'
 
 # The capsule's runtime face: recall, note, and the user's own distilled methods
 # registered as skills from a deployment-owned read-only directory.
 - id: evimed-capsule
+  config:
+    methodsDir: !!js process.env.EVIMED_CAPSULE_METHODS_DIR
+    recallUrl: !!js process.env.EVIMED_CAPSULE_GATEWAY_URL
+    tokenFile: !!js process.env.EVIMED_WORKLOAD_TOKEN_FILE
   name: '@evimed/dsh-socket/plugins/capsule'
 
 # Batch screening as one tool call: the model asks for a screening, the code
 # decides the batch size, the concurrency, the tool restriction and the ledger.
 - id: evimed-screening
+  config:
+    batchSize: !!js Number(process.env.EVIMED_SCREENING_BATCH_SIZE ?? 50)
+    maxParallelChildren: !!js Number(process.env.EVIMED_MAX_PARALLEL_CHILDREN ?? 30)
   name: '@evimed/dsh-socket/plugins/screening'
 
 # Cross-deliverable semantic review. Produces notices, never a verdict: on 29
@@ -52,7 +81,7 @@
 # a human annotation, and five runs at temperature 0 disagreed with each other.
 - id: evimed-review
   name: '@evimed/dsh-socket/plugins/review'
-  disabled: true
+  disabled: !!js process.env.EVIMED_REVIEW_ENABLED !== '1'
 
 # --- framework tools the model needs to do the work -------------------------
 - id: tool-bash
@@ -84,7 +113,7 @@
 # plan's clarifications instead.
 - id: tool-ask-user
   name: '@deepseek-ai/dsh-tool-ask-user'
-  disabled: true
+  disabled: !!js process.env.EVIMED_ASK_USER !== '1'
 
 - id: compaction
   name: cordis:group

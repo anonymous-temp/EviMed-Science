@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 
-import { EVIMED_PRESET, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, yamlScalar } from "../src/dshProfilePatch.mjs";
+import { EVIMED_PRESET, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
 
 const input = {
   modelGatewayUrl: "https://open-science-web:8787/internal/model/v1",
@@ -35,11 +36,16 @@ test("the generated patch is literal: no expression evaluation, ever", () => {
 
 test("every generated row carries an explicit id", () => {
   const patch = renderProfilePatch(input);
-  const rows = patch.split("\n").filter((line) => /^- /.test(line));
-  for (const row of rows) {
-    assert.match(row, /^- id: /, `row without an id: ${row}`);
+  // A row without an id is read as a delete plus an insert on every config
+  // read, which remounts it. An `insert:` block carries its ids one level down.
+  const top = patch.split("\n").filter((line) => /^- /.test(line));
+  for (const row of top) {
+    assert.ok(/^- id: /.test(row) || row === "- insert:", `row without an id: ${row}`);
   }
-  assert.ok(rows.length >= 10);
+  for (const row of patch.split("\n").filter((line) => /^ {4}- /.test(line))) {
+    assert.match(row, /^ {4}- id: /, `inserted row without an id: ${row}`);
+  }
+  assert.ok(top.length >= 8);
 });
 
 test("the kernel is pointed at our gateway and never at a provider key", () => {
@@ -57,33 +63,37 @@ test("telemetry, the preset root and the approval policy are pinned by the deplo
   assert.match(patch, /trust: system/, "our preset must not be shadowable by a user copy");
   assert.match(patch, new RegExp(`default: '${EVIMED_PRESET}'`));
   assert.match(patch, /approval: never/, "an unattended run auto-refuses anything asking to leave the sandbox");
-  assert.match(patch, /- id: tool-ask-user\n\s+disabled: true/);
 });
 
 test("a local profile asks instead of refusing, and turns the reviewer on", () => {
   const local = renderProfilePatch({ ...input, flags: { hosted: false, askUser: true, review: true, capsule: true, requiredEnforcement: "partial" } });
   assert.match(local, /approval: ask/);
-  assert.match(local, /- id: tool-ask-user\n\s+disabled: false/);
-  assert.match(local, /- id: evimed-review\n\s+disabled: false/);
   assert.match(local, /requiredEnforcement: 'partial'/);
-  assert.match(local, /askUserEnabled: true/);
+  // Whether the reviewer and the question tool are mounted is decided by rows
+  // the preset owns, so the patch carries the environment for them instead.
+  const env = runtimeEnvironment({ ...input, flags: { hosted: false, askUser: true, review: true, capsule: true, requiredEnforcement: "partial" } });
+  assert.equal(env.EVIMED_ASK_USER, "1");
+  assert.equal(env.EVIMED_REVIEW_ENABLED, "1");
 });
 
 test("limits reach the plugins from the control plane, not from a second default", () => {
-  const patch = renderProfilePatch(input);
-  assert.match(patch, /deliveryAttemptLimit: 3/);
-  assert.match(patch, /maxParallelChildren: 30/);
-  assert.match(patch, /maxSteps: 200/);
-  assert.match(patch, /evidenceStaleMinutes: 10/);
-  const odd = renderProfilePatch({ ...input, limits: { ...input.limits, deliveryAttemptLimit: -1, maxParallelChildren: 1.5 } });
-  assert.match(odd, /deliveryAttemptLimit: 3/, "a nonsense limit falls back rather than being written through");
-  assert.match(odd, /maxParallelChildren: 30/);
+  // The plugins that hold these limits are mounted by the preset, so the values
+  // travel as container environment; the patch cannot reach those rows.
+  const env = runtimeEnvironment(input);
+  assert.equal(env.EVIMED_DELIVERY_ATTEMPT_LIMIT, "3");
+  assert.equal(env.EVIMED_MAX_PARALLEL_CHILDREN, "30");
+  assert.equal(env.EVIMED_MAX_STEPS, "200");
+  assert.equal(env.EVIMED_EVIDENCE_STALE_MINUTES, "10");
+
+  const odd = runtimeEnvironment({ ...input, limits: { ...input.limits, deliveryAttemptLimit: -1, maxParallelChildren: 1.5 } });
+  assert.equal(odd.EVIMED_DELIVERY_ATTEMPT_LIMIT, "3", "a nonsense limit falls back rather than being written through");
+  assert.equal(odd.EVIMED_MAX_PARALLEL_CHILDREN, "30");
 });
 
 test("the MCP environment is sorted, empty values are dropped, and the token file is always present", () => {
   const patch = renderProfilePatch(input);
-  const envBlock = patch.slice(patch.indexOf("      env:"));
-  const keys = [...envBlock.matchAll(/^ {8}([A-Z_]+):/gm)].map((match) => match[1]);
+  const envBlock = patch.slice(patch.indexOf("          env:"));
+  const keys = [...envBlock.matchAll(/^ {12}([A-Z_]+):/gm)].map((match) => match[1]);
   assert.deepEqual(keys, [...keys].sort(), "a stable order keeps the generated file diffable");
   assert.ok(keys.includes("EVIMED_WORKLOAD_TOKEN_FILE"));
   assert.ok(!keys.includes("EMPTY_VALUE"), "an empty value is an unset variable, not an empty one");
@@ -111,4 +121,51 @@ test("the credentials file carries a reference, is refreshable, and refuses cont
   assert.match(file, new RegExp(`refs:\\n\\s+${WORKLOAD_TOKEN_REF}: 'wl_abc\\.def'`));
   assert.match(file, /Rewritten in place/, "a token that needs a restart to rotate will expire mid-run");
   assert.throws(() => renderCredentialsFile({ token: "a\nb" }), /control characters/);
+});
+
+test("the patch only names rows that exist in the host composition", async () => {
+  // DSH reports an unmatched patch target on stderr and drops the row. A patch
+  // that names a preset's row therefore looks applied and is not: the plugin
+  // runs on its schema defaults while the deployment believes it was
+  // configured. Only the two rows the bundle inserts, plus stock rows, are
+  // reachable from here.
+  const bundlePatch = await readFile(new URL("../../../packages/socket/cordis.patch.yml", import.meta.url), "utf8");
+  const preset = await readFile(
+    new URL("../../../packages/socket/presets/evimed-universal/agent.cordis.yml", import.meta.url),
+    "utf8",
+  );
+  const patch = renderProfilePatch(input);
+
+  const overridden = [...patch.matchAll(/^- id: (\S+)/gm)].map((match) => match[1]);
+  const insertedHere = [...patch.matchAll(/^ {4}- id: (\S+)/gm)].map((match) => match[1]);
+  const insertedByBundle = [...bundlePatch.matchAll(/^ {4}- id: (\S+)/gm)].map((match) => match[1]);
+  const presetRowIds = [...preset.matchAll(/^- id: (\S+)/gm)].map((match) => match[1]);
+
+  const ours = overridden.filter((id) => id.startsWith("evimed-"));
+  const unreachable = ours.filter((id) => !insertedByBundle.includes(id) && !insertedHere.includes(id));
+  assert.deepEqual(unreachable, [], "a row this patch names is mounted by the preset, not by the host");
+
+  for (const id of ours) {
+    assert.ok(!presetRowIds.includes(id) || insertedByBundle.includes(id), `${id} is a preset row`);
+  }
+  assert.ok(insertedHere.includes("mcp-evimed"), "the MCP client is inserted, since nothing else mounts it");
+});
+
+test("every deployment value the preset reads is a value the container is given", async () => {
+  // The preset's `!!js` expressions and this mapping are one contract in two
+  // files. A name on one side only leaves a plugin on its default, silently.
+  const preset = await readFile(
+    new URL("../../../packages/socket/presets/evimed-universal/agent.cordis.yml", import.meta.url),
+    "utf8",
+  );
+  const provided = runtimeEnvironment(input);
+  const read = new Set([...preset.matchAll(/process\.env\.([A-Z0-9_]+)/g)].map((match) => match[1]));
+
+  assert.ok(read.size >= 10, `the preset reads ${read.size} names; this test expected the rows to be bound`);
+  for (const name of read) {
+    assert.ok(name in provided, `the preset reads ${name} and nothing provides it`);
+  }
+  for (const name of Object.keys(provided)) {
+    assert.ok(read.has(name), `${name} is provided and no row reads it`);
+  }
 });
