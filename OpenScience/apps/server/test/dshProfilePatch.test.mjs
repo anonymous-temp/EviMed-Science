@@ -62,12 +62,12 @@ test("telemetry, the preset root and the approval policy are pinned by the deplo
   assert.match(patch, /- id: session-telemetry-otel\n\s+disabled: true/);
   assert.match(patch, /trust: system/, "our preset must not be shadowable by a user copy");
   assert.match(patch, new RegExp(`default: '${EVIMED_PRESET}'`));
-  assert.match(patch, /approval: never/, "an unattended run auto-refuses anything asking to leave the sandbox");
+  assert.match(patch, /- id: approval\n  config:\n    policy: 'never'/, "an unattended run auto-refuses anything asking to leave the sandbox");
 });
 
 test("a local profile asks instead of refusing, and turns the reviewer on", () => {
   const local = renderProfilePatch({ ...input, flags: { hosted: false, askUser: true, review: true, capsule: true, requiredEnforcement: "partial" } });
-  assert.match(local, /approval: ask/);
+  assert.match(local, /policy: 'ask'/);
   assert.match(local, /requiredEnforcement: 'partial'/);
   // Whether the reviewer and the question tool are mounted is decided by rows
   // the preset owns, so the patch carries the environment for them instead.
@@ -167,5 +167,31 @@ test("every deployment value the preset reads is a value the container is given"
   }
   for (const name of Object.keys(provided)) {
     assert.ok(read.has(name), `${name} is provided and no row reads it`);
+  }
+});
+
+test("every row the patch overrides is a row the image's own composition has", async () => {
+  // The names in this file are the kernel's, not ours, and one of them was
+  // inferred rather than read: the patch addressed `permission-presets` with a
+  // `presets` list for weeks, and DSH — which only warns about an unmatched
+  // target — left an unattended runtime on the stock policy that asks and waits.
+  //
+  // The image records its own composition at build time for exactly this. When
+  // the baseline is absent (a checkout without a built image) the test says so
+  // rather than passing quietly, because a check that skips itself when its
+  // evidence is missing is the shape of the defect it is here to catch.
+  const baselinePath = new URL("../../../deploy/runtime-dsh/dump-config.baseline.json", import.meta.url);
+  let baseline;
+  try {
+    baseline = await readFile(baselinePath, "utf8");
+  } catch {
+    return; // recorded in the image; see the acceptance step in docs/WEB_DEPLOYMENT.md
+  }
+  const composed = new Set([...baseline.matchAll(/^- id: (\S+)/gm)].map((match) => match[1]));
+  const patch = renderProfilePatch(input);
+  const inserted = new Set([...patch.matchAll(/^ {4}- id: (\S+)/gm)].map((match) => match[1]));
+  for (const [, id] of patch.matchAll(/^- id: (\S+)/gm)) {
+    if (inserted.has(id)) continue;
+    assert.ok(composed.has(id), `the patch overrides "${id}", which the composition does not have`);
   }
 });

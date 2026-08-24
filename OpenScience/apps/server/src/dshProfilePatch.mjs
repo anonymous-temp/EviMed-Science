@@ -170,13 +170,15 @@ function presetRows(input) {
     "# Inside a container whose only writable place is the workspace nothing",
     "# needs approval; the only things that ask are attempts to leave the",
     "# sandbox, and an unattended run should refuse those rather than hang.",
-    "- id: permission-presets",
+    "#",
+    "# The row is `approval` and its field is `policy`, both read from a running",
+    "# host's own --dump-config. An earlier version of this file addressed a",
+    "# `permission-presets` row with a `presets` list, which does not exist: the",
+    "# patch was reported as an unmatched target on stderr and dropped, leaving",
+    "# an unattended runtime on the stock policy that asks and then waits.",
+    "- id: approval",
     "  config:",
-    "    presets:",
-    "      - name: evimed-hosted",
-    "        sandbox: workspace-write",
-    `        approval: ${input.flags.hosted ? "never" : "ask"}`,
-    `    default: ${yamlScalar(input.flags.hosted ? "evimed-hosted" : "workspace-write")}`,
+    `    policy: ${yamlScalar(input.flags.hosted ? "never" : "ask")}`,
   ];
 }
 
