@@ -334,3 +334,23 @@ test("no source file writes an event name as a literal outside the manifest", as
     }
   }
 });
+
+test("a tool outcome carries its structure whether the tool is native or MCP", () => {
+  // The research tools are all MCP tools, and `dsh-mcp-client` answers in the
+  // MCP shape — `structuredContent`, never `value`. A converter that read only
+  // `value` handed every retrieval to the evidence ledger as structurally
+  // empty, so the ledger stayed at zero rows while the workspace filled with
+  // preserved sources, and every downstream check that reads the ledger —
+  // quote resolution, provenance, the stale sweep — had nothing to work from.
+  const native = toToolOutcome({ value: { sources: [{ id: "a" }] }, content: [] });
+  assert.deepEqual(native.structured, { sources: [{ id: "a" }] });
+
+  const mcp = toToolOutcome({ structuredContent: { sources: [{ id: "b" }] }, content: [{ type: "text", text: "t" }] });
+  assert.deepEqual(mcp.structured, { sources: [{ id: "b" }] }, "an MCP result's structure must survive the conversion");
+  assert.equal(mcp.status, "completed");
+
+  // `value` still wins when both are present: a native tool that also carries
+  // an MCP-shaped field is answering in its own vocabulary.
+  const both = toToolOutcome({ value: { sources: [{ id: "native" }] }, structuredContent: { sources: [{ id: "mcp" }] }, content: [] });
+  assert.deepEqual(both.structured, { sources: [{ id: "native" }] });
+});

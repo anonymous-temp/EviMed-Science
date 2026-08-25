@@ -14,8 +14,9 @@
  * @module @evimed/dsh-socket/plugins/evidence
  */
 
+import { mcpToolBaseName } from '@evimed/domain'
 import { configSchema, onToolObserved } from '@evimed/harness-port'
-import { evidenceFromOutcome, mergeEvidence } from '../src/evidenceIngest.mjs'
+import { EVIDENCE_TOOL_BASE_NAMES, evidenceFromOutcome, mergeEvidence } from '../src/evidenceIngest.mjs'
 import { advanceEvidence } from '../src/runMirror.mjs'
 import { staleEvidence } from '../src/runMirror.mjs'
 
@@ -65,7 +66,24 @@ export async function apply(ctx, config) {
       const store = ctx.get('evimedRun')
       const runId = String(ctx.get('evimedRunId')?.(call.sessionId) ?? call.sessionId)
       const records = evidenceFromOutcome(call, outcome, { runId, now: new Date().toISOString(), digest })
-      if (!records.length) return
+      if (!records.length) {
+        // A retrieval tool that produced no evidence row is the one case worth
+        // saying out loud. The ledger is what every downstream check reads —
+        // quote resolution, provenance, the stale sweep — and an empty one is
+        // indistinguishable from a run that retrieved nothing. On the first
+        // real end-to-end run eleven full texts sat preserved on disk while
+        // this table held zero rows, and nothing anywhere said so.
+        //
+        // Named parts only, never the payload: this is a diagnostic, and tool
+        // results carry source text.
+        const base = mcpToolBaseName(call?.name ?? '')
+        if (base && EVIDENCE_TOOL_BASE_NAMES.includes(base) && outcome?.status === 'completed') {
+          ctx.get('evimedDiagnostics')?.degrade?.(
+            `evidence ingest found no source in a completed ${base} result (structured=${outcome?.structured === undefined ? 'absent' : typeof outcome.structured})`,
+          )
+        }
+        return
+      }
       const previous = bySession.get(call.sessionId) ?? []
       const merged = mergeEvidence(previous, records)
       bySession.set(call.sessionId, merged)

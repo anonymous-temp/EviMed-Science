@@ -89,7 +89,16 @@ export function toToolOutcome(result) {
   return {
     status: error ? 'error' : 'completed',
     text,
-    structured: source.value,
+    // Two shapes reach this converter, and it knew one of them. A native DSH
+    // tool answers with `value`; an MCP tool proxied by `dsh-mcp-client`
+    // answers in the MCP shape, `{ content, structuredContent }`, with no
+    // `value` at all. Reading only `value` meant every MCP result arrived here
+    // structurally empty — and since all twenty-six research tools are MCP
+    // tools, the evidence ledger recorded nothing for any retrieval a run ever
+    // made. Eleven preserved full texts sat in the workspace beside a table
+    // with zero rows, and the failure was silent by construction: an empty
+    // ledger reads exactly like a run that retrieved nothing.
+    structured: source.value ?? source.structuredContent,
     error,
     meta: source.meta,
   }
