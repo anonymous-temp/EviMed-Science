@@ -4062,24 +4062,46 @@ export class RuntimeManager {
       }, probeTimeoutMs);
       probeTimer.unref?.();
       try {
-        const headers = runtime.password ? { authorization: basicAuth(runtime.password) } : {};
-        const res = await requestRuntime(runtime, `${runtime.url}/config`, {
-          headers,
+        // Probed in the kernel's own language, because "ready" means different
+        // things to the two of them.
+        //
+        // `/config` is OpenCode's; DSH does not serve it at all, so the probe
+        // got a permanent 404 there. Accepting anything under 500 hid that —
+        // and hid the real race too: DSH binds its port before mounting
+        // `/api`, so the first `session.create` after readiness could still
+        // come back `runtime_wire_protocol_mismatch`. Rejecting 404 without
+        // changing the endpoint turned the same wrong probe into a three-minute
+        // timeout, which is the regression this replaces.
+        //
+        // For DSH the probe is one real wire call. It answers exactly the
+        // question the caller has — is the protocol up — rather than whether
+        // something is listening.
+        const dsh = runtimeKernelName(this.config) === "dsh";
+        const target = dsh ? `${runtime.url}/api/host.describe` : `${runtime.url}/config`;
+        const headers = runtime.password && !dsh ? { authorization: basicAuth(runtime.password) } : {};
+        const res = await requestRuntime(runtime, target, {
+          ...(dsh
+            ? {
+                method: "POST",
+                headers: { ...headers, "content-type": "application/json" },
+                body: Buffer.from(JSON.stringify({
+                  type: "client-request",
+                  rpcId: randomId("rpc_"),
+                  method: "host.describe",
+                  payload: {},
+                }), "utf8"),
+              }
+            : { headers }),
           signal: probeController.signal,
         });
         const status = res.status;
         await res.body?.cancel().catch(() => {});
-        // 404 is not ready, it is early.
-        //
-        // "Anything short of a server error means it answered" was written for
-        // a kernel that binds its port and its routes together. DSH binds the
-        // port first and mounts `/api` a moment later, so a 404 here means the
-        // socket is up and the protocol is not — and readiness returned on it,
-        // after which the very first `session.create` came back
-        // `runtime_wire_protocol_mismatch`. A retrying caller hides that; a
-        // single-shot one does not.
         if (status === 404) {
-          lastError = new Error("runtime answered HTTP 404: listening, but its API is not mounted yet");
+          lastError = new Error(
+            dsh
+              ? "runtime is listening but its /api routes are not mounted yet"
+              : "runtime answered HTTP 404 for /config",
+          );
         } else if (status < 500) {
           return;
         } else {
