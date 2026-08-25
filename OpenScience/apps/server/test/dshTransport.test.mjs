@@ -55,3 +55,43 @@ test("a control socket path the kernel cannot connect to is refused at plan time
     /runtime_socket_path_too_long|108/,
   );
 });
+
+test("the DSH profile sync hands the gateway token back, not only to the credentials file", async () => {
+  // The gateway authenticates on an *active* jti and only the caller can
+  // register one. Returning the token solely by writing `.credentials.yaml`
+  // left `activateModelGatewayRuntime` with nothing to register, so the
+  // runtime's very first model call came back 401 while the file on disk held
+  // a valid token — a failure that looks like a credential problem and is a
+  // bookkeeping one.
+  const { syncRuntimeDshProfile } = await import("../src/runtimeManager.mjs");
+  const fs = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "dsh-sync-"));
+  const config = loadConfig({
+    runtimeKernel: "dsh",
+    runtimeSandboxMode: "docker",
+    runtimeTransport: "unix",
+    dataDir: root,
+    production: false,
+    deepseekProviderEnabled: true,
+    deepseekApiKey: "sk-not-a-real-key",
+    deepseekModel: "deepseek-v4-pro",
+    modelGatewaySigningSecret: "a".repeat(64),
+    evimedWorkloadSigningSecret: "b".repeat(64),
+  });
+  const project = { userId: "u", id: "p", rootDir: root, workspaceDir: path.join(root, "workspace") };
+  await fs.mkdir(project.workspaceDir, { recursive: true });
+  const plan = {
+    sandboxMode: "docker",
+    dshHomeDir: path.join(root, "dsh-home"),
+    proxyWorkspaceDir: "/workspace",
+  };
+
+  const result = await syncRuntimeDshProfile(config, project, plan);
+  assert.equal(result.configured, true);
+  assert.ok(result.token, "the caller cannot register a token it was not given");
+  assert.ok(result.payload?.jti, "the jti is what the gateway matches on");
+  await fs.rm(root, { recursive: true, force: true });
+});

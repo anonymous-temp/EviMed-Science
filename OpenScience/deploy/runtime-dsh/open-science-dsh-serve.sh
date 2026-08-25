@@ -79,6 +79,21 @@ patch_args=()
 # the app flags would hand it to the web app instead, which does not know it.
 dsh --profile "${profile}" "${patch_args[@]}" --no-open --port "${port}" --trusted-host "${authority}" &
 dsh_pid=$!
+
+# Wait for the kernel to bind before bridging.
+#
+# socat started immediately writes one "connection refused" line per probe for
+# the whole minute the kernel spends composing its plugin tree — dozens of
+# lines, each unique because it carries a different child pid, so nothing
+# deduplicates them. Harmless in themselves, but the control plane now keeps
+# only a bounded tail of this output to explain a container that dies, and that
+# noise is exactly what would push the real cause out of it.
+for _ in $(seq 1 300); do
+  kill -0 "${dsh_pid}" 2>/dev/null || break
+  (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null && exec 3<&- && break
+  sleep 1
+done
+
 socat "UNIX-LISTEN:${socket},fork,unlink-early,mode=0600" "TCP:127.0.0.1:${port}" &
 socat_pid=$!
 

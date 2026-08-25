@@ -306,6 +306,72 @@ class PublicSourceConnectorTests(unittest.TestCase):
         )
         self.assertEqual(literature.call_args.args[0]["requiredTitleConcepts"], ["观察药"])
 
+    def test_a_bare_token_file_is_preferred_over_the_other_kernel_s_config(self):
+        """The DSH kernel writes no `opencode.json`.
+
+        Reading the gateway token out of the OpenCode kernel's config file was
+        the only path this had, so a DSH runtime booted cleanly and then failed
+        every source fetch with `public_source_gateway_unconfigured` — a message
+        that says the token is unavailable without saying nobody was ever going
+        to write it there. Both files are present here so the test proves the
+        bare token WINS, not merely that it works when it is the only option.
+        """
+        class Headers:
+            @staticmethod
+            def get_content_type():
+                return "application/json"
+
+        class Response:
+            headers = Headers()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            @staticmethod
+            def read(_limit):
+                return b'{"observed": true}'
+
+        with tempfile.TemporaryDirectory() as temporary:
+            config = pathlib.Path(temporary) / "opencode.json"
+            config.write_text(json.dumps({
+                "provider": {"deepseek": {"options": {"apiKey": "the-other-kernels-token"}}}
+            }), encoding="utf-8")
+            token_file = pathlib.Path(temporary) / "model-gateway.token"
+            token_file.write_text("dsh-workload-token\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, {
+                "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": "http://internal.test/internal/sources/v1/fetch",
+                "EVIMED_MODEL_CONFIG_FILE": str(config),
+                "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(token_file),
+            }):
+                with mock.patch.object(sources._OPENER, "open", return_value=Response()) as opener:
+                    value = sources._get_json("https://api.crossref.org/works?query=observed")
+            self.assertEqual(value, {"observed": True})
+            self.assertEqual(
+                opener.call_args.args[0].get_header("Authorization"),
+                "Bearer dsh-workload-token",
+            )
+
+    def test_an_unreadable_bare_token_file_refuses_rather_than_falling_back(self):
+        """Falling back to the other kernel's config on a bad token file would
+        make a rotation failure look like a working runtime using a stale
+        credential."""
+        with tempfile.TemporaryDirectory() as temporary:
+            config = pathlib.Path(temporary) / "opencode.json"
+            config.write_text(json.dumps({
+                "provider": {"deepseek": {"options": {"apiKey": "the-other-kernels-token"}}}
+            }), encoding="utf-8")
+            with mock.patch.dict(os.environ, {
+                "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": "http://internal.test/internal/sources/v1/fetch",
+                "EVIMED_MODEL_CONFIG_FILE": str(config),
+                "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(pathlib.Path(temporary) / "absent.token"),
+            }):
+                with self.assertRaises(sources.PublicSourceError) as raised:
+                    sources._gateway_settings()
+            self.assertEqual(raised.exception.code, "public_source_gateway_unconfigured")
+
     def test_managed_gateway_reuses_the_active_runtime_token_without_direct_egress(self):
         class Headers:
             @staticmethod
