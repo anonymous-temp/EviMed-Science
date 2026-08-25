@@ -2773,6 +2773,14 @@ function readinessRelease(config) {
     return { required: false, tracked: false };
   }
 
+  // The kernel row follows whichever kernel the manifest names. Comparing
+  // `config.opencodeVersion` against `manifest.runtime.opencodeVersion`
+  // unconditionally meant that under DSH the expected side was `undefined`
+  // while the actual side held the rollback kernel's version — so production
+  // readiness failed `release_manifest_mismatch` on every DSH deployment, for
+  // the same reason and in the same shape as the image-label check beside it.
+  // `releaseManifest.mjs` had already learned this; this second, parallel
+  // comparison had not, which is what having two of them costs.
   const mismatches = [
     ["releaseId", config.releaseId, manifest.app.releaseId],
     ["appVersion", config.appVersion, manifest.app.version],
@@ -2780,7 +2788,12 @@ function readinessRelease(config) {
     ["buildCreatedAt", config.buildCreatedAt, manifest.source.createdAt],
     ["webContainerImage", config.webContainerImage, manifest.web.image],
     ["runtimeContainerImage", config.runtimeContainerImage, manifest.runtime.image],
-    ["opencodeVersion", config.opencodeVersion, manifest.runtime.opencodeVersion],
+    ...(Object.hasOwn(manifest.runtime, "dshVersion")
+      ? [
+        ["dshVersion", config.dshVersion, manifest.runtime.dshVersion],
+        ["socketBundleVersion", config.socketBundleVersion, manifest.runtime.socketVersion],
+      ]
+      : [["opencodeVersion", config.opencodeVersion, manifest.runtime.opencodeVersion]]),
     ["uvVersion", config.uvVersion, manifest.runtime.uvVersion],
   ];
   const mismatch = mismatches.find(([, actual, expected]) => actual !== expected);

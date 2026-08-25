@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
 import { createWebApiApp } from "../src/server.mjs";
-import { productionReleaseConfig, releaseManifestFixture } from "./releaseFixture.mjs";
+import { dshProductionReleaseConfig, productionReleaseConfig, releaseManifestFixture } from "./releaseFixture.mjs";
 
 const hasPython3 = spawnSync("python3", ["--version"], { stdio: "ignore" }).status === 0;
 const hasR = spawnSync("Rscript", ["--version"], { stdio: "ignore" }).status === 0;
@@ -1296,6 +1296,72 @@ test("readiness requires a validated release manifest in production", async () =
       allowMockRuntime: true,
       ...productionReadinessReady,
       releaseManifest: null,
+    },
+  );
+});
+
+test("readiness accepts a DSH release the way it accepts an opencode one", async () => {
+  // Two readiness comparisons read the manifest's runtime row, and each had to
+  // learn the kernel switch separately. `readinessRelease` had not: it compared
+  // `config.opencodeVersion` against `manifest.runtime.opencodeVersion`, which
+  // a DSH manifest does not carry, so the expected side was `undefined` while
+  // the actual side held the rollback kernel's version — `release_manifest_
+  // mismatch` on every DSH deployment, unconditionally, and invisible in dev
+  // because the whole block is behind `config.production`.
+  await withApp(
+    async ({ base }) => {
+      const res = await fetch(`${base}/api/ready`);
+      const body = (await res.json()).data;
+      assert.equal(body.checks.release.ok, true, `release check: ${JSON.stringify(body.checks.release)}`);
+      assert.equal(body.checks.release.code, undefined);
+    },
+    {
+      production: true,
+      devAuth: false,
+      bootstrapUser: "alice",
+      bootstrapPassword: "correct horse battery staple",
+      publicUrl: "https://science.example.com",
+      runtimeMode: "mock",
+      allowMockRuntime: true,
+      backupMode: "external",
+      backupExternalAck: true,
+      restoreDrillAck: true,
+      operatorMetricsToken: "metrics-token-for-production-readiness-tests",
+      trustProxy: true,
+      ...dshProductionReleaseConfig,
+    },
+  );
+});
+
+test("a DSH release whose kernel version drifts is still caught", async () => {
+  // The negative control. Making the check kernel-aware must not make it
+  // toothless: a manifest naming one DSH build while the deployment runs
+  // another is exactly what this comparison is for, and reporting `dshVersion`
+  // by name is what tells an operator which half to fix.
+  await withApp(
+    async ({ base }) => {
+      const res = await fetch(`${base}/api/ready`);
+      assert.equal(res.status, 503);
+      const check = (await res.json()).data.checks.release;
+      assert.equal(check.ok, false);
+      assert.equal(check.code, "release_manifest_mismatch");
+      assert.equal(check.field, "dshVersion");
+    },
+    {
+      production: true,
+      devAuth: false,
+      bootstrapUser: "alice",
+      bootstrapPassword: "correct horse battery staple",
+      publicUrl: "https://science.example.com",
+      runtimeMode: "mock",
+      allowMockRuntime: true,
+      backupMode: "external",
+      backupExternalAck: true,
+      restoreDrillAck: true,
+      operatorMetricsToken: "metrics-token-for-production-readiness-tests",
+      trustProxy: true,
+      ...dshProductionReleaseConfig,
+      dshVersion: "0.1.1-rc.9",
     },
   );
 });
