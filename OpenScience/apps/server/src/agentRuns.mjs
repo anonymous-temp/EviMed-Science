@@ -754,8 +754,16 @@ function clinicalEvidenceRepairPrompt(issues, shrinkage = null) {
     "citation-audit.md must record the citation checks actually performed and their findings, including unresolved identifiers, duplicates, corrections or retractions, metadata-only records, and claim-source mismatches.",
     "Keep only limitations that materially affect interpretation, and synthesize them rather than writing a checklist. Remove tool names, gateway names, and first-person retrieval diaries from the analysis; a material limit on evidence accessibility (for example, a guideline whose full text is not openly available) belongs in the Limitations section, stated as a property of the evidence base rather than a narration of the retrieval run.",
     "The safety-first practical section must come before the reference list. Remove unsupported self-care details; every numbered step and bullet must have direct support, a numbered citation, and a matching hidden claim marker.",
-    "After fixing the files, run: python \"$XDG_CONFIG_HOME/opencode/skills/clinical-evidence-synthesis/scripts/preflight.py\" --workspace .",
-    "Fix every preflight issue, rerun it until it returns ok=true, and read every required deliverable back before finishing:",
+    // The check is a tool call now, not a script.
+    //
+    // This used to name `$XDG_CONFIG_HOME/opencode/skills/.../preflight.py` —
+    // an OpenCode path, for a script this repository no longer contains. Every
+    // clinical repair therefore opened by ordering the run to execute something
+    // that is not there, and spent one of its bounded attempts finding out. The
+    // run-side gate is what preflight became: submitting is how a package asks
+    // whether it passes, and its issues are the same issues.
+    "After fixing the files, submit the package again with evimed_submit_deliverable.",
+    "Fix every issue it returns and resubmit until it accepts, then read every required deliverable back before finishing:",
     bounded,
   ].join("\n");
 }
