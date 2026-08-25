@@ -15,9 +15,12 @@
 set -euo pipefail
 
 profile=evimed-runtime
+# The agent preset the control plane asks for by name. Kept beside the profile
+# so a rename shows up here rather than in a failed session in production.
+profile_preset=evimed-universal
 home="$(mktemp -d)"
 log="$(mktemp)"
-trap 'rm -rf "${home}" "${log}" "${unusable_cache:-}"' EXIT
+trap 'rm -rf "${home}" "${log}" "${unusable_cache:-}" "${workspace:-}"' EXIT
 
 cp -a "${DSH_HOME_SEED}/." "${home}/"
 chmod -R u+w "${home}"
@@ -66,19 +69,77 @@ export NARB_NATIVE_CACHE_DIR="${unusable_cache}"
 # built the image. A builder that happens to have full Landlock still passes.
 patch=/usr/local/share/evimed/build-smoke-patch.yml
 
-set +e
-DSH_HOME="${home}" timeout 60 dsh --profile "${profile}" --patch "${patch}" \
-  --no-open --port "${SMOKE_PORT:-45999}" --trusted-host dsh.runtime > "${log}" 2>&1
-status=$?
-set -e
+port="${SMOKE_PORT:-45999}"
+workspace="$(mktemp -d)"
 
+DSH_HOME="${home}" dsh --profile "${profile}" --patch "${patch}" \
+  --no-open --port "${port}" --trusted-host dsh.runtime > "${log}" 2>&1 &
+kernel=$!
 
-# A clean boot serves until `timeout` kills it: exit 124. Any other exit means
-# it died on its own, and the log says why.
-if grep -q "failed to apply loader entry" "${log}" || [ "${status}" -ne 124 ]; then
-  echo "build smoke: the seeded profile did not boot (exit ${status})" >&2
+fail() {
+  echo "build smoke: $1" >&2
   echo "  (the addon cache was deliberately made unusable; see the note above)" >&2
-  sed -n '1,80p' "${log}" >&2
+  grep -vE '^[[:space:]]+at |ExperimentalWarning|--trace-warnings' "${log}" | sed -n '1,60p' >&2
+  kill "${kernel}" 2>/dev/null || true
+  exit 1
+}
+
+# Boot takes about a minute: composing the plugin tree is most of it.
+for _ in $(seq 1 90); do
+  kill -0 "${kernel}" 2>/dev/null || fail "the seeded profile did not boot"
+  grep -q "dsh web: " "${log}" && break
+  sleep 2
+done
+grep -q "failed to apply loader entry" "${log}" && fail "an entry did not apply"
+grep -q "dsh web: " "${log}" || fail "the kernel never began serving"
+
+# Creating a session is the second half of the proof, and it is the half that
+# matters most.
+#
+# Booting validates the HOST composition. Our preset is mounted in AGENT scope,
+# so none of its rows are touched until a session exists — three defects reached
+# a real container through that gap: a preset the kernel could not see, a
+# permission pair matching no preset, and a required key on `tool-fs-search`
+# with no default. Every one of them was invisible to a boot-only check and
+# obvious the instant a session was requested.
+#
+# Same wire shape the control plane uses: POST /api/<method> with a
+# client-request envelope, Host set to the declared trusted host.
+session_probe=$(cat <<PROBE
+import json, sys, urllib.error, urllib.request
+body = json.dumps({
+    "type": "client-request",
+    "rpcId": "rpc_build_smoke",
+    "method": "session.create",
+    "payload": {"cwd": "${workspace}", "agentPreset": "${profile_preset}"},
+}).encode()
+request = urllib.request.Request(
+    "http://127.0.0.1:${port}/api/session.create",
+    data=body,
+    headers={"content-type": "application/json", "Host": "dsh.runtime"},
+)
+try:
+    envelope = json.load(urllib.request.urlopen(request, timeout=60))
+except urllib.error.HTTPError as error:
+    print("HTTP %s: %s" % (error.code, error.read().decode("utf-8", "replace")[:800]))
+    sys.exit(1)
+except Exception as error:
+    print("%s: %s" % (type(error).__name__, error))
+    sys.exit(1)
+result = envelope.get("result") or {}
+if not result.get("ok"):
+    print(json.dumps(result.get("error"), ensure_ascii=False)[:800])
+    sys.exit(1)
+print("session " + str((result.get("value") or {}).get("sessionId", "?")))
+PROBE
+)
+if ! session_output=$(python3 -c "${session_probe}" 2>&1); then
+  echo "build smoke: the preset would not mount a session — ${session_output}" >&2
+  kill "${kernel}" 2>/dev/null || true
   exit 1
 fi
-echo "build smoke: profile ${profile} booted with every entry applied"
+
+kill "${kernel}" 2>/dev/null || true
+wait "${kernel}" 2>/dev/null || true
+rm -rf "${workspace}"
+echo "build smoke: profile ${profile} booted with every entry applied, and mounted a ${profile_preset} session (${session_output})"

@@ -26,47 +26,70 @@
       委派给能力目录中的能力，综合后用 evimed_complete_run 交付。检索顺序：先查记忆与胶囊，再查文献，最后查网页。
       所有事实性主张尽量附文献依据；不编造文献；不提供具体诊疗建议。
 
-# Orchestration guidance: the capability catalogue, the contract-kind summary,
-# the retrieval order and the citation-hygiene rules. Order 100–199 is DSH's
-# tool-guidance band.
-- id: evimed-guidance
+# One realm for the four rows that share state.
+#
+# Three of them publish services — `evimedCapabilities`, `evimedCapsuleMethods`,
+# `evimedEvidence` — and a preset row may not publish into the process-global
+# scope: the kernel refuses to mount the preset, saying a preset service must
+# sit behind an `isolate` realm or move to the host composition. It is right to
+# refuse. One container serves one project but not one session, and a
+# process-global evidence service would be shared by every session in it, so
+# two runs would write one ledger.
+#
+# `evimed-run-policy` is inside the realm because it is the only consumer: it
+# reads the capability manifest and the capsule methods when it validates a
+# delegation. Everything else these rows use — `tools`, `agents`, `sessions`,
+# `subagents`, `systemPrompt` — is not named here and so still resolves from
+# the parent, which is what `isolate` means.
+- id: evimed-core
+  name: cordis:group
+  group: true
+  isolate:
+    evimedCapabilities: true
+    evimedCapsuleMethods: true
+    evimedEvidence: true
   config:
-    capabilitiesDir: !!js process.env.EVIMED_CAPABILITIES_DIR
-    askUserEnabled: !!js process.env.EVIMED_ASK_USER === '1'
-    capsuleActive: !!js process.env.EVIMED_CAPSULE_ACTIVE === '1'
-    reviewEnabled: !!js process.env.EVIMED_REVIEW_ENABLED === '1'
-  name: '@evimed/dsh-socket/plugins/guidance'
+    # Orchestration guidance: the capability catalogue, the contract-kind summary,
+    # the retrieval order and the citation-hygiene rules. Order 100–199 is DSH's
+    # tool-guidance band.
+    - id: evimed-guidance
+      config:
+        capabilitiesDir: !!js process.env.EVIMED_CAPABILITIES_DIR
+        askUserEnabled: !!js process.env.EVIMED_ASK_USER === '1'
+        capsuleActive: !!js process.env.EVIMED_CAPSULE_ACTIVE === '1'
+        reviewEnabled: !!js process.env.EVIMED_REVIEW_ENABLED === '1'
+      name: '@evimed/dsh-socket/plugins/guidance'
 
-# "When is a run finished, and when is it acceptable" — the plan, the
-# delegation, the delivery gate, the completion check, the path guard, the
-# attempt ceiling and the run budget, all in one plugin because they are one
-# piece of knowledge.
-- id: evimed-run-policy
-  config:
-    deliveryAttemptLimit: !!js Number(process.env.EVIMED_DELIVERY_ATTEMPT_LIMIT ?? 3)
-    maxParallelChildren: !!js Number(process.env.EVIMED_MAX_PARALLEL_CHILDREN ?? 30)
-    maxSteps: !!js Number(process.env.EVIMED_MAX_STEPS ?? 200)
-    maxTokens: !!js Number(process.env.EVIMED_MAX_TOKENS ?? 400000)
-    capabilitiesDir: !!js process.env.EVIMED_CAPABILITIES_DIR
-    skillsDir: !!js process.env.EVIMED_CAPABILITY_SKILLS_DIR
-    bundleVersion: !!js process.env.EVIMED_BUNDLE_VERSION
-  name: '@evimed/dsh-socket/plugins/run-policy'
+    # "When is a run finished, and when is it acceptable" — the plan, the
+    # delegation, the delivery gate, the completion check, the path guard, the
+    # attempt ceiling and the run budget, all in one plugin because they are one
+    # piece of knowledge.
+    - id: evimed-run-policy
+      config:
+        deliveryAttemptLimit: !!js Number(process.env.EVIMED_DELIVERY_ATTEMPT_LIMIT ?? 3)
+        maxParallelChildren: !!js Number(process.env.EVIMED_MAX_PARALLEL_CHILDREN ?? 30)
+        maxSteps: !!js Number(process.env.EVIMED_MAX_STEPS ?? 200)
+        maxTokens: !!js Number(process.env.EVIMED_MAX_TOKENS ?? 400000)
+        capabilitiesDir: !!js process.env.EVIMED_CAPABILITIES_DIR
+        skillsDir: !!js process.env.EVIMED_CAPABILITY_SKILLS_DIR
+        bundleVersion: !!js process.env.EVIMED_BUNDLE_VERSION
+      name: '@evimed/dsh-socket/plugins/run-policy'
 
-# Evidence ingestion. An observer on the tool pipeline: it can never change what
-# the model sees, which is the point — the ledger may not edit the run it records.
-- id: evimed-evidence
-  config:
-    evidenceStaleMinutes: !!js Number(process.env.EVIMED_EVIDENCE_STALE_MINUTES ?? 10)
-  name: '@evimed/dsh-socket/plugins/evidence'
+    # Evidence ingestion. An observer on the tool pipeline: it can never change what
+    # the model sees, which is the point — the ledger may not edit the run it records.
+    - id: evimed-evidence
+      config:
+        evidenceStaleMinutes: !!js Number(process.env.EVIMED_EVIDENCE_STALE_MINUTES ?? 10)
+      name: '@evimed/dsh-socket/plugins/evidence'
 
-# The capsule's runtime face: recall, note, and the user's own distilled methods
-# registered as skills from a deployment-owned read-only directory.
-- id: evimed-capsule
-  config:
-    methodsDir: !!js process.env.EVIMED_CAPSULE_METHODS_DIR
-    recallUrl: !!js process.env.EVIMED_CAPSULE_GATEWAY_URL
-    tokenFile: !!js process.env.EVIMED_WORKLOAD_TOKEN_FILE
-  name: '@evimed/dsh-socket/plugins/capsule'
+    # The capsule's runtime face: recall, note, and the user's own distilled methods
+    # registered as skills from a deployment-owned read-only directory.
+    - id: evimed-capsule
+      config:
+        methodsDir: !!js process.env.EVIMED_CAPSULE_METHODS_DIR
+        recallUrl: !!js process.env.EVIMED_CAPSULE_GATEWAY_URL
+        tokenFile: !!js process.env.EVIMED_WORKLOAD_TOKEN_FILE
+      name: '@evimed/dsh-socket/plugins/capsule'
 
 # Batch screening as one tool call: the model asks for a screening, the code
 # decides the batch size, the concurrency, the tool restriction and the ledger.
@@ -90,6 +113,14 @@
   name: '@deepseek-ai/dsh-tool-fs'
 - id: tool-fs-search
   name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    # Required with no default — the plugin refuses to mount without it, and
+    # because this row is in the *agent* scope that refusal arrives when a
+    # session is created, not when the host composition boots. `false` is what
+    # the kernel's own presets set: an over-cap glob keeps the
+    # modification-time-ordered head rather than sampling across the tree,
+    # which for a run's workspace means the files it just wrote come first.
+    sampleOverCapGlobResults: false
 - id: tool-jobs
   name: '@deepseek-ai/dsh-tool-jobs'
 

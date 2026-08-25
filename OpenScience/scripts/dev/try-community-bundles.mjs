@@ -25,15 +25,40 @@ const image = process.argv[2] ?? "evimed-runtime-dsh:latest";
 
 // One container per candidate: a bundle that breaks the composition must not be
 // able to decide the verdict for the ones after it.
+//
+// The scratch profile composes the SAME base the real one does. An earlier
+// version installed only the candidate, which has no host app at all — every
+// candidate "failed to boot" and the verdict said nothing about the candidate.
+// A harness that fails everything is indistinguishable from a harness that
+// works and everything is broken, so it has to compose what production
+// composes.
 const script = (name, version) => `
-set -e
 export DSH_HOME=/var/tmp/try-${name}
+# From the binary, not from a build ARG: DSH_VERSION exists at build time and
+# is not an image environment variable, so reading it here yielded an empty
+# pin and \`@deepseek-ai/dsh-base@\` — which resolves to the \`latest\` dist-tag,
+# i.e. the first release ever cut (see the pinning note in the Dockerfile).
+dsh_version=$(dsh --version 2>/dev/null | head -1 | tr -d '[:space:]')
 rm -rf "$DSH_HOME"; mkdir -p "$DSH_HOME/profiles/t"
 cp /opt/evimed/profile-pnpm-workspace.yaml "$DSH_HOME/profiles/t/pnpm-workspace.yaml"
-dsh plugin --profile t add "${name}@${version}" >/dev/null 2>&1 || { echo "INSTALL_FAILED"; exit 0; }
-out=$(timeout 40 dsh --profile t --no-open --port 45997 2>&1 || true)
-if echo "$out" | grep -q "dsh web:"; then echo "BOOTED"
-else echo "BOOT_FAILED: $(echo "$out" | grep -oE "failed to apply loader entry [a-z-]+|Cannot find package .[^ ]+" | head -1)"; fi
+install_log=$(dsh plugin --profile t add \
+  "@deepseek-ai/dsh-base@\${dsh_version}" "@deepseek-ai/dsh-web-app@\${dsh_version}" \
+  "${name}@${version}" 2>&1)
+if [ $? -ne 0 ]; then
+  echo "INSTALL_FAILED: $(echo "$install_log" | grep -vE '^$' | tail -2 | tr '\n' ' ' | cut -c1-300)"
+  exit 0
+fi
+# A baseline boot of base+web-app alone would also have to pass for the verdict
+# to mean anything; it does, because that is what the image's own seed profile
+# is built from and the build smoke boots it every time.
+out=$(timeout 60 dsh --profile t --no-open --port 45997 2>&1)
+if echo "$out" | grep -q "dsh web:"; then
+  echo "BOOTED"
+else
+  reason=$(echo "$out" | grep -vE '^[[:space:]]+at |ExperimentalWarning|--trace-warnings' \
+    | grep -oE "failed to apply loader entry [a-z0-9-]+ \\([^)]*\\)[^\"]{0,120}|Cannot find package .[^ ]+|invalid config:.{0,120}" | head -1)
+  echo "BOOT_FAILED: \${reason:-$(echo "$out" | grep -vE '^[[:space:]]+at ' | tail -2 | tr '\n' ' ' | cut -c1-300)}"
+fi
 `;
 
 /** @type {{name: string, verdict: string}[]} */

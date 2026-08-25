@@ -1144,6 +1144,15 @@ async function checkDshLoaderResolution() {
   } else {
     fail("dsh_build_smoke_fidelity_missing", "The DSH build smoke must boot with a representative patch and an unusable addon cache.");
   }
+
+  // Booting validates the host composition; the preset is mounted in agent
+  // scope and none of its rows are touched until a session exists. Three
+  // defects reached a real container through exactly that gap.
+  if (/session\.create/.test(smoke) && /agentPreset/.test(smoke)) {
+    pass("dsh_build_smoke_session", "The build-time proof creates a session, so the agent-scope preset rows are validated too.");
+  } else {
+    fail("dsh_build_smoke_session_missing", "The DSH build smoke must create a session; booting alone never mounts the preset.");
+  }
 }
 
 async function checkReleaseProvenance() {

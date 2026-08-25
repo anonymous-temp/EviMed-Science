@@ -2285,7 +2285,7 @@ export async function syncRuntimeDshProfile(
   plan,
   { nowSeconds = Math.floor(Date.now() / 1000), jti = randomId("mgw_"), writeFile = writeFileAtomicNoFollow } = {},
 ) {
-  if (!config.deepseekProviderEnabled) return { configured: false, workloadTokenFile: null, workloadTokenRefreshMs: null };
+  if (!config.deepseekProviderEnabled) return { configured: false, workloadTokenFile: null, workloadTokenRefreshMs: null, token: null, payload: null };
   if (!plan.dshHomeDir || !plan.proxyWorkspaceDir) {
     throw new HttpError(500, "runtime_dsh_profile_plan_invalid", "Runtime launch plan is missing its DSH bootstrap paths.");
   }
@@ -2307,6 +2307,15 @@ export async function syncRuntimeDshProfile(
     projectId: String(project.id),
     nowSeconds,
     jti,
+  });
+  // Verified here for the same reason the OpenCode path verifies it: the caller
+  // needs the payload to register the token as active, and the gateway rejects
+  // any token whose jti it has not been told about.
+  const modelGatewayPayload = verifyModelGatewayRuntimeToken(modelGatewayToken, {
+    secret: config.modelGatewaySigningSecret,
+    userId: String(project.userId),
+    projectId: String(project.id),
+    nowSeconds,
   });
   const workloadTokenRuntimePathForDsh = dshWorkloadTokenRuntimePath(plan);
   const profileInput = dshProfileInput(config, project, plan, model, workloadTokenRuntimePathForDsh);
@@ -2341,6 +2350,14 @@ export async function syncRuntimeDshProfile(
     configured: true,
     workloadTokenFile,
     workloadTokenRefreshMs: evimedWorkloadRefreshIntervalMs(config),
+    // Handed back, not just written to the credentials file. The gateway
+    // authenticates on an *active* jti, and only the caller can register one —
+    // returning `token: null` here meant `activateModelGatewayRuntime` returned
+    // on its first line, no jti was ever registered, and every model call the
+    // runtime made came back 401 `model_gateway_token_invalid` while the
+    // credentials file on disk held a perfectly valid token.
+    token: modelGatewayToken,
+    payload: modelGatewayPayload,
   };
 }
 
@@ -3749,7 +3766,11 @@ export class RuntimeManager {
           workloadTokenFile: dshSync.workloadTokenFile,
           workloadTokenRefreshMs: dshSync.workloadTokenRefreshMs,
         };
-        modelGatewaySync = { configured: dshSync.configured ? 1 : 0, token: null, payload: null };
+        modelGatewaySync = {
+          configured: dshSync.configured ? 1 : 0,
+          token: dshSync.token ?? null,
+          payload: dshSync.payload ?? null,
+        };
       } else {
         skillSync = await syncRuntimeSkills(this.config, project, plan);
         const loadedAgentRegistry = this.agentRegistry ? await this.agentRegistry : null;
