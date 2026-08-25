@@ -57,11 +57,16 @@ test("the kernel is pointed at our gateway and never at a provider key", () => {
   assert.match(patch, /thinking: enabled/);
 });
 
-test("telemetry, the preset root and the approval policy are pinned by the deployment", () => {
+test("telemetry, the default preset and the approval policy are pinned by the deployment", () => {
   const patch = renderProfilePatch(input);
   assert.match(patch, /- id: session-telemetry-otel\n\s+disabled: true/);
-  assert.match(patch, /trust: system/, "our preset must not be shadowable by a user copy");
   assert.match(patch, new RegExp(`default: '${EVIMED_PRESET}'`));
+  // Deliberately absent: a preset root. The kernel overwrites this row's
+  // `roots` with its own shipped directory on every boot, so naming one here
+  // produced a row that read as configured and a preset the kernel could not
+  // see. The image installs the preset into the kernel's root instead, and this
+  // asserts we have stopped pretending otherwise.
+  assert.doesNotMatch(patch, /^\s+roots:/m, "a root the kernel discards is worse than no root: it reads as configured");
   assert.match(patch, /- id: approval\n  config:\n    policy: 'never'/, "an unattended run auto-refuses anything asking to leave the sandbox");
 });
 
@@ -92,8 +97,9 @@ test("limits reach the plugins from the control plane, not from a second default
 
 test("the MCP environment is sorted, empty values are dropped, and the token file is always present", () => {
   const patch = renderProfilePatch(input);
-  const envBlock = patch.slice(patch.indexOf("          env:"));
-  const keys = [...envBlock.matchAll(/^ {12}([A-Z_]+):/gm)].map((match) => match[1]);
+  const envBlock = patch.slice(patch.indexOf("        env:"));
+  const keys = [...envBlock.matchAll(/^ {10}([A-Z_]+):/gm)].map((match) => match[1]);
+  assert.ok(keys.length > 0, "the env block must be found at the indentation the row actually uses");
   assert.deepEqual(keys, [...keys].sort(), "a stable order keeps the generated file diffable");
   assert.ok(keys.includes("EVIMED_WORKLOAD_TOKEN_FILE"));
   assert.ok(!keys.includes("EMPTY_VALUE"), "an empty value is an unset variable, not an empty one");
@@ -194,4 +200,47 @@ test("every row the patch overrides is a row the image's own composition has", a
     if (inserted.has(id)) continue;
     assert.ok(composed.has(id), `the patch overrides "${id}", which the composition does not have`);
   }
+});
+
+test("an inserted row names the plugin it inserts", () => {
+  // `id` identifies an existing row for configuration. On an insert there is no
+  // existing row, so `id` alone leaves the loader nothing to import: it reports
+  // `mcp-evimed (undefined)` and fails on "Cannot read properties of undefined
+  // (reading 'startsWith')", which names neither the row nor what is missing.
+  // The research tools were absent from every run until a container said so.
+  const patch = renderProfilePatch(input);
+  const insertBlocks = [...patch.matchAll(/^- insert:\n((?: {2,}.*\n|\n)*)/gm)].map((match) => match[1]);
+  assert.ok(insertBlocks.length > 0, "the patch inserts at least one row; if it stopped, this test is stale");
+  for (const block of insertBlocks) {
+    for (const [, id] of block.matchAll(/^ {4}- id: (\S+)/gm)) {
+      const row = block.slice(block.indexOf(`- id: ${id}`));
+      const name = /^ {6}name: (\S+)/m.exec(row);
+      assert.ok(name, `inserted row "${id}" has no name, so nothing will be imported for it`);
+    }
+  }
+});
+
+test("the build-time smoke patch has the same shape as the one the control plane sends", async () => {
+  // The image's smoke boots with a fixture instead of a real patch, because a
+  // build has no project to render one for. That is only worth anything while
+  // the fixture keeps the renderer's shape: the row it exists to cover —
+  // `mcp-evimed`, created by the patch and therefore absent from the bundle's
+  // own composition — was shipped with a config the plugin's schema rejects,
+  // and no build-time check ever saw it.
+  //
+  // Values are deliberately not compared: the fixture's are placeholders.
+  const fixtureUrl = new URL("../../../deploy/runtime-dsh/build-smoke-patch.yml", import.meta.url);
+  let fixture;
+  try {
+    fixture = await readFile(fixtureUrl, "utf8");
+  } catch {
+    assert.fail("the smoke fixture is missing; the image would boot without a patch again");
+  }
+  const shape = (text) => [...text.matchAll(/^(\s*)(- id: (\S+)|- insert:|([a-zA-Z][\w-]*):)/gm)]
+    .map((match) => `${match[1].length}:${match[3] ?? match[4] ?? "insert"}`);
+  assert.deepEqual(
+    shape(fixture),
+    shape(renderProfilePatch(input)),
+    "the fixture and the renderer disagree on rows or keys; regenerate the fixture",
+  );
 });

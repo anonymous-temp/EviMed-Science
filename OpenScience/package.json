@@ -68,7 +68,10 @@
     "matrix:upstream:offline": "node scripts/ops/upstream-compat-matrix.mjs --offline",
     "lint:socket": "pnpm --filter @evimed/dsh-socket lint",
     "lint:port": "pnpm --filter @evimed/harness-port lint",
-    "typecheck:domain": "pnpm --filter @evimed/domain typecheck"
+    "typecheck:domain": "pnpm --filter @evimed/domain typecheck",
+    "vendor:community-skills": "node scripts/dev/vendor-community-skills.mjs",
+    "check:community-skills": "node scripts/dev/vendor-community-skills.mjs --check",
+    "try:community-bundles": "node scripts/dev/try-community-bundles.mjs"
   },
   "engines": {
     "node": ">=22.22.0"

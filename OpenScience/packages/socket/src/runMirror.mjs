@@ -15,8 +15,14 @@
 
 import { transition } from '@evimed/domain'
 
-/** Domain name and version. A medium stamped with another version refuses to open. */
-export const RUN_DOMAIN_NAME = 'evimed-run'
+/** Domain name and version. A medium stamped with another version refuses to open.
+ *
+ *  Underscore, not hyphen: the harness validates domain names against
+ *  `/^[a-z][a-z0-9_]*$/` and refuses to register one with a hyphen. This is the
+ *  storage domain's identifier only — the workspace directory the projection
+ *  lands in stays `.evimed-run`, because that is a path the control plane and
+ *  the browser both read by name. */
+export const RUN_DOMAIN_NAME = 'evimed_run'
 export const RUN_DOMAIN_VERSION = 1
 
 /**
@@ -27,9 +33,14 @@ export const RUN_DOMAIN_VERSION = 1
 export const RUN_DOMAIN_SPEC = Object.freeze({
   name: RUN_DOMAIN_NAME,
   version: RUN_DOMAIN_VERSION,
+  // Table names are snake_case because the medium says so: the harness
+  // validates every table name against the same /^[a-z][a-z0-9_]*$/ it applies
+  // to the domain name, and refuses to open a domain that breaks it. The
+  // camelCase names the code reads by are mapped onto these where the handles
+  // are built, so the medium's vocabulary stops at the medium.
   tables: Object.freeze({
     /** runId → the run's identity and its running totals. */
-    runMirror: Object.freeze({
+    run_mirror: Object.freeze({
       runId: 'string',
       sessionId: 'string',
       // Where the run's workspace is. The projection has to be written into it,
@@ -48,7 +59,7 @@ export const RUN_DOMAIN_SPEC = Object.freeze({
       startedAt: 'string',
     }),
     /** runId → an index over task-plan.json. Not a second plan: an index. */
-    planIndex: Object.freeze({
+    plan_index: Object.freeze({
       runId: 'string',
       revision: 'number',
       items: 'json',
@@ -67,7 +78,7 @@ export const RUN_DOMAIN_SPEC = Object.freeze({
       recordedAt: 'string',
     }),
     /** `${runId}:${n}` → one gate verdict, with its four verification metrics. */
-    gateRuns: Object.freeze({
+    gate_runs: Object.freeze({
       runId: 'string',
       attempt: 'number',
       deliverableId: 'string',

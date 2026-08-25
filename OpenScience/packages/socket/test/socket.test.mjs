@@ -127,7 +127,16 @@ test("no plugin holds a regular expression or a threshold of its own", async () 
 });
 
 test("the run domain declares four tables and no claims table", () => {
-  assert.deepEqual(Object.keys(RUN_DOMAIN_SPEC.tables).sort(), ["evidence", "gateRuns", "planIndex", "runMirror"]);
+  assert.deepEqual(Object.keys(RUN_DOMAIN_SPEC.tables).sort(), ["evidence", "gate_runs", "plan_index", "run_mirror"]);
+  // The medium's own rule, asserted here rather than discovered at boot: the
+  // harness validates the domain name and every table name against this
+  // pattern and refuses to open a domain that breaks it. A camelCase table name
+  // shipped once and took the whole plugin tree down with it.
+  const UNIT_NAME_RE = /^[a-z][a-z0-9_]*$/;
+  assert.match(RUN_DOMAIN_SPEC.name, UNIT_NAME_RE, "the domain name must satisfy the harness's identifier rule");
+  for (const table of Object.keys(RUN_DOMAIN_SPEC.tables)) {
+    assert.match(table, UNIT_NAME_RE, `table ${table} must satisfy the harness's identifier rule`);
+  }
   assert.ok(!("claims" in RUN_DOMAIN_SPEC.tables), "the matrix already binds claims to sources; a copy is a second truth");
   assert.equal(RUN_DOMAIN_SPEC.version, 1);
 });

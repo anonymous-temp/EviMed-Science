@@ -1110,6 +1110,42 @@ async function checkHostedMetadataBoundary() {
   }
 }
 
+async function checkDshLoaderResolution() {
+  const dockerfile = await read("deploy/runtime-dsh/Dockerfile");
+  const launcher = await read("deploy/runtime-dsh/open-science-dsh-serve.sh");
+  const smoke = await read("deploy/runtime-dsh/build-smoke.sh");
+
+  // The plugin loader reaches Node's own module loader through a native addon,
+  // and resolves every plugin's bare specifier against the profile directory
+  // only while it has it. The addon's default is to dlopen a copy of itself
+  // from /tmp, which the runtime mounts noexec — and when that fails the loader
+  // says nothing about the addon: every one of our plugins reports "Cannot find
+  // package", pointing at the wrong component entirely.
+  if (
+    /^ENV NARB_DISABLE_NATIVE_CACHE=1$/m.test(dockerfile) &&
+    /^export NARB_DISABLE_NATIVE_CACHE=1$/m.test(launcher)
+  ) {
+    pass("dsh_loader_native_binding", "The DSH image and its launcher both keep the loader's native binding off a noexec /tmp.");
+  } else {
+    fail("dsh_loader_native_binding_missing", "NARB_DISABLE_NATIVE_CACHE=1 must be set in the DSH image and re-exported by its launcher.");
+  }
+
+  // The build's boot proof is only worth its runtime if it boots what the
+  // runtime boots. Two things it used to omit, each of which cost a defect: the
+  // control plane's patch (which creates the MCP row) and a cache the addon
+  // cannot use (which is what noexec amounts to from its side).
+  if (
+    /--patch "\$\{patch\}"/.test(smoke) &&
+    /build-smoke-patch\.yml/.test(smoke) &&
+    /NARB_NATIVE_CACHE_DIR/.test(smoke) &&
+    /COPY deploy\/runtime-dsh\/build-smoke-patch\.yml/.test(dockerfile)
+  ) {
+    pass("dsh_build_smoke_fidelity", "The build-time boot proof applies a representative control-plane patch and an unusable addon cache.");
+  } else {
+    fail("dsh_build_smoke_fidelity_missing", "The DSH build smoke must boot with a representative patch and an unusable addon cache.");
+  }
+}
+
 async function checkReleaseProvenance() {
   const webDockerfile = await read("deploy/web/Dockerfile");
   const runtimeDockerfile = await read("deploy/runtime-opencode/Dockerfile");
@@ -1418,6 +1454,7 @@ async function main() {
   await checkHostedEventStreamRecovery();
   await checkTaskResourceControl();
   await checkHostedMetadataBoundary();
+  await checkDshLoaderResolution();
   await checkReleaseProvenance();
 
   const failed = findings.filter((finding) => finding.status === "fail");

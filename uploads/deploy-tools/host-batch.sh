@@ -80,7 +80,6 @@ for BRIEF in "${BRIEF_DIR}"/${GLOB}; do
   if grep -q "^succeeded" "${DEST}/.status" 2>/dev/null; then
     echo "[$NAME] 已成功，跳过"; SKIP=$((SKIP + 1)); continue
   fi
-  mkdir -p "$DEST"
   echo "=== [$NAME] 派发 ==="
 
   # The session id is what the runtime knows; a session opened while its
@@ -88,6 +87,12 @@ for BRIEF in "${BRIEF_DIR}"/${GLOB}; do
   RUN=""; SID=""
   for attempt in 1 2 3 4 5 6; do
     login || true
+    # A project's runtime is a container, and recreating the web service leaves
+    # the project without one. Opening a session then fails for as long as
+    # nobody asks for a runtime — six times over, silently, because the retry
+    # loop treats it as "still binding its port". Ask every attempt: it is
+    # idempotent, and it is the only thing that turns the wait into progress.
+    api POST /api/commands/start_runtime '{}' >/dev/null 2>&1
     OUT=$(api POST "/api/opencode/${PROJ}/session" '{}')
     SID=$(printf '%s' "$OUT" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('id') or (d.get('data') or {}).get('id',''))" 2>/dev/null)
     if [ -z "$SID" ]; then echo "  第 ${attempt} 次开会话失败，等待运行时…"; sleep 20; continue; fi
@@ -108,7 +113,13 @@ print(json.dumps({'sessionId': os.environ['SID'],
     echo "  第 ${attempt} 次派发失败: $(printf '%s' "$OUT" | head -c 200)"
     sleep 20
   done
+  # The output directory is created only once a run exists. Creating it before
+  # dispatching left an empty directory behind every failed dispatch, and
+  # counting directories then reported eight questions collected when nothing
+  # had been produced at all — an empty result that looks like a delivered one
+  # is worse than a visible failure.
   if [ -z "$RUN" ]; then echo "[$NAME] 派发始终失败"; FAIL=$((FAIL + 1)); continue; fi
+  mkdir -p "$DEST"
   printf '%s' "$RUN" > "${DEST}/.run"
 
   STATUS=""

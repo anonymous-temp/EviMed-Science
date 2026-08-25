@@ -70,6 +70,9 @@ class RemoteRuntimeProcess extends EventEmitter {
     this.pid = null;
     this.exitCode = null;
     this.signalCode = null;
+    /** What the container said before it died, as reported by the controller.
+     *  Read by `waitUntilReady` so the 502 a caller receives names a cause. */
+    this.exitOutput = "";
     this.startedAt = Date.now();
     this.consecutiveErrors = 0;
     this.timer = null;
@@ -103,6 +106,7 @@ class RemoteRuntimeProcess extends EventEmitter {
         this.setTimer();
         return;
       }
+      this.exitOutput = typeof status.output === "string" ? status.output : "";
       this.markExited(status.exitCode ?? 1);
     } catch {
       this.consecutiveErrors += 1;
@@ -574,7 +578,11 @@ function waitForProcess(child, timeoutMs = 10_000) {
   });
 }
 
-function appendCappedOutput(current, chunk, maxBytes) {
+/** Tail size for a runtime's dying words. Shared with the runtime controller,
+ *  which keeps one of these per container. */
+export const RUNTIME_EXIT_OUTPUT_BYTES = 4096;
+
+export function appendCappedOutput(current, chunk, maxBytes) {
   const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
   const existing = Buffer.byteLength(current);
   const remaining = maxBytes - existing;
@@ -838,6 +846,54 @@ function isMissingDockerContainer(stderr) {
 
 function compactProcessError(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 512);
+}
+
+/** What a dying runtime said, with the parts that are never the answer removed.
+ *
+ *  A kernel's last words open with Node's experimental warnings and close with
+ *  a stack trace repeated once per `cause` level; the sentence that names the
+ *  cause sits between them. Compacting the raw text to 512 characters returned
+ *  the warnings and cut off before the cause — the first real diagnosis this
+ *  produced still had to be read by re-running the container by hand.
+ *  @param {unknown} value @returns {string} */
+function compactRuntimeOutput(value) {
+  const lines = String(value ?? "")
+    .split("\n")
+    .filter((line) => !/^\s+at /.test(line))
+    .filter((line) => !/ExperimentalWarning|--trace-warnings|^\s*\.\.\. \d+ lines/.test(line))
+    .filter((line) => line.trim().length > 0);
+  // Deduplicated because `cause` chains restate the same message at every level,
+  // and three copies of one sentence crowd out everything else.
+  return [...new Set(lines.map((line) => line.trim()))].join(" ").slice(0, 1200);
+}
+
+/** Why a runtime container died, in the message the caller actually receives.
+ *
+ *  This used to be the fixed sentence "Runtime exited before it became ready",
+ *  which is the one fact the caller could already infer from the status code.
+ *  Everything that would identify the cause — the exit status, whatever the
+ *  container printed on its way out, the last readiness probe's complaint — was
+ *  collected and then dropped. Diagnosing a container that refused to start
+ *  meant re-running its `docker run` argv by hand off a `ps` capture, because
+ *  the deployment keeps no other copy of it.
+ *  @param {{ child?: { exitCode?: number|null, signalCode?: string|null, exitOutput?: string }|null }} runtime
+ *  @param {unknown} lastError the last readiness probe failure, if there was one
+ *  @returns {string} */
+function runtimeExitDiagnosis(runtime, lastError) {
+  const child = runtime.child;
+  const how = child?.signalCode
+    ? `on ${child.signalCode}`
+    : `with exit code ${child?.exitCode ?? "unknown"}`;
+  const said = compactRuntimeOutput(child?.exitOutput);
+  const probe = lastError instanceof Error ? compactProcessError(lastError.message) : "";
+  return [
+    `Runtime exited ${how} before it became ready.`,
+    said ? `Runtime output: ${said}` : "",
+    // Only when the container said nothing: a probe error next to a real
+    // message is noise, since a container that died mid-probe always produces
+    // one and it is always the same connection failure.
+    !said && probe ? `Last readiness probe: ${probe}` : "",
+  ].filter(Boolean).join(" ");
 }
 
 export async function cleanupDockerContainer(plan) {
@@ -2037,6 +2093,18 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   if (signingSecret) {
     environment.EVIMED_WORKLOAD_TOKEN_FILE = workloadTokenPath ?? workloadTokenRuntimePath(plan);
   }
+  // Under the DSH kernel there is no `opencode.json`, so the gateway token the
+  // MCP needs is written on its own instead; `EVIMED_MODEL_CONFIG_FILE` stays
+  // set for the OpenCode kernel, and the MCP prefers this one when present.
+  if (runtimeKernelName(config) === "dsh") {
+    environment.EVIMED_MODEL_GATEWAY_TOKEN_FILE = `${runtimeDshHome}/${modelGatewayTokenFileName}`;
+    // The other two facts `opencode.json` used to carry. Named separately
+    // rather than reconstructed from the patch, because the MCP is a separate
+    // process and should not have to parse a kernel's configuration to learn
+    // which gateway it is talking to.
+    environment.EVIMED_MODEL_GATEWAY_URL = modelGatewayProviderUrl(config);
+    environment.EVIMED_MODEL_GATEWAY_MODEL = String(config.deepseekModel ?? "");
+  }
   for (const [key, envName] of Object.entries(evimedAdapterEnvironment)) {
     const value = String(configured[key] ?? "").trim();
     if (!value) continue;
@@ -2248,6 +2316,24 @@ export async function syncRuntimeDshProfile(
   const credentials = renderCredentialsFile({ token: modelGatewayToken });
   await writeFile(project.rootDir, path.join(plan.dshHomeDir, ".credentials.yaml"), credentials, { encoding: "utf8", mode: 0o600 });
 
+  // The same gateway token, in a file the MCP server can read.
+  //
+  // The kernel resolves it from `.credentials.yaml`; the research MCP is a
+  // separate process that has always taken it from `EVIMED_MODEL_CONFIG_FILE` —
+  // which under the OpenCode kernel meant reading `provider.deepseek.options
+  // .apiKey` out of `opencode.json`. There is no `opencode.json` under this
+  // kernel, so that read fails and every source fetch returns
+  // `public_source_gateway_unconfigured`: a runtime that boots cleanly and then
+  // cannot retrieve a single source. Written as a bare token rather than as an
+  // imitation of the other kernel's config file, because a file whose shape is
+  // a lie about who wrote it is worse than a second reader.
+  await writeFile(
+    project.rootDir,
+    path.join(plan.dshHomeDir, modelGatewayTokenFileName),
+    `${modelGatewayToken}\n`,
+    { encoding: "utf8", mode: 0o600 },
+  );
+
   const workloadTokenFile = dshWorkloadTokenHostPath(plan);
   await refreshEviMedWorkloadToken(config, project, workloadTokenFile, { nowSeconds, writeToken: writeFile });
 
@@ -2257,6 +2343,10 @@ export async function syncRuntimeDshProfile(
     workloadTokenRefreshMs: evimedWorkloadRefreshIntervalMs(config),
   };
 }
+
+/** The file `EVIMED_MODEL_GATEWAY_TOKEN_FILE` names inside a DSH runtime: the
+ *  model-gateway token on its own, one line, mode 0600. */
+export const modelGatewayTokenFileName = "model-gateway.token";
 
 /** Host path for the MCP workload token file DSH's `EVIMED_WORKLOAD_TOKEN_FILE` names — the `dsh-home` analogue of `workloadTokenHostPath`. */
 function dshWorkloadTokenHostPath(plan) {
@@ -2970,6 +3060,7 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
         )
       : (transport === "unix" ? path.join(runtimeRoot, "control") : null);
     const socketPath = transport === "unix" ? path.join(controlDir, runtimeSocketFileName(config)) : null;
+    if (socketPath) assertConnectableSocketPath(socketPath, Boolean(config.runtimeDataVolume));
     const containerName = runtimeContainerName(project);
     return {
       sandboxMode,
@@ -3173,6 +3264,34 @@ export const runtimeDshHome = "/runtime/dsh-home";
  * @param {Record<string, any>} config
  * @returns {'dsh' | 'opencode'}
  */
+/** `sockaddr_un.sun_path` is a fixed 108-byte field on Linux, NUL included, so
+ *  a socket path at or past that length cannot be connected to. Not a limit
+ *  anything reports usefully: the container binds its own short path inside the
+ *  mount and comes up healthy — its log even says `dsh web: http://127.0.0.1:
+ *  <port>` — while the control plane's connect fails with ENAMETOOLONG inside a
+ *  readiness probe whose errors were being discarded. The observable result was
+ *  a runtime that starts, serves, and is unreachable.
+ *
+ *  The volume-backed layout puts the socket in a short hashed directory and
+ *  never comes near this; a deployment without it puts the socket under the
+ *  project, where the length depends on how deep the operator put the data
+ *  directory. */
+const UNIX_SOCKET_PATH_LIMIT = 108;
+
+/** @param {string} socketPath @param {boolean} volumeBacked */
+function assertConnectableSocketPath(socketPath, volumeBacked) {
+  const bytes = Buffer.byteLength(socketPath, "utf8") + 1; // the terminating NUL counts
+  if (bytes <= UNIX_SOCKET_PATH_LIMIT) return;
+  throw new HttpError(
+    500,
+    "runtime_socket_path_too_long",
+    `The runtime control socket path needs ${bytes} bytes and the kernel allows ${UNIX_SOCKET_PATH_LIMIT}. ` +
+      (volumeBacked
+        ? "Shorten OPEN_SCIENCE_DATA_DIR."
+        : "Shorten OPEN_SCIENCE_DATA_DIR, or set OPEN_SCIENCE_RUNTIME_DATA_VOLUME, which places the socket in a short hashed directory instead of under the project."),
+  );
+}
+
 /**
  * The authority the control plane sends as `Host` over the unix transport.
  *
@@ -3714,9 +3833,21 @@ export class RuntimeManager {
     } else {
       child = spawn(plan.command, plan.args, {
         cwd: plan.cwd,
-        stdio: "ignore",
+        stdio: ["ignore", "pipe", "pipe"],
         env: plan.env,
       });
+      // The unsandboxed path needs the same last words as the controller path,
+      // and gets them the same way: a small tail, both streams, read by
+      // `runtimeExitDiagnosis`. Piping rather than ignoring also means a
+      // runtime that writes faster than anyone reads no longer blocks — these
+      // handlers drain it.
+      const local = /** @type {any} */ (child);
+      local.exitOutput = "";
+      const collect = (chunk) => {
+        local.exitOutput = appendCappedOutput(local.exitOutput, chunk, RUNTIME_EXIT_OUTPUT_BYTES);
+      };
+      child.stdout?.on("data", collect);
+      child.stderr?.on("data", collect);
     }
     const runtime = {
       kind: "opencode",
@@ -3867,7 +3998,16 @@ export class RuntimeManager {
   }
 
   async waitUntilReady(runtime) {
-    const timeoutMs = this.config.runtimeProxyConnectTimeoutMs;
+    // Not the per-call connect timeout: starting is not calling. See the note
+    // on `runtimeReadyTimeoutMs` in config.mjs.
+    //
+    // The longer allowance is for a container, which is where composing a
+    // plugin tree takes a minute. A host runtime starts a process that either
+    // binds a port or does not, and giving it three minutes to do so would turn
+    // "the binary is missing" into a three-minute wait.
+    const timeoutMs = runtime.sandboxMode === "docker"
+      ? (this.config.runtimeReadyTimeoutMs ?? this.config.runtimeProxyConnectTimeoutMs)
+      : this.config.runtimeProxyConnectTimeoutMs;
     const deadline = Date.now() + timeoutMs;
     let lastError = null;
     while (Date.now() < deadline) {
@@ -3896,7 +4036,7 @@ export class RuntimeManager {
         clearTimeout(probeTimer);
       }
       if (runtime.child?.exitCode != null || runtime.child?.signalCode != null) {
-        throw new HttpError(502, "runtime_exited", "Runtime exited before it became ready.");
+        throw new HttpError(502, "runtime_exited", runtimeExitDiagnosis(runtime, lastError));
       }
       if (runtime.spawnError) {
         throw new HttpError(502, "runtime_spawn_failed", runtime.spawnError.message);

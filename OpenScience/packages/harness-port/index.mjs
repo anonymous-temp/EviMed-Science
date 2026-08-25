@@ -619,8 +619,20 @@ async function probeToolPipeline(ctx) {
 async function probeSandbox(ctx, required) {
   const shell = ctx.get('shell')
   if (!shell) return { error: 'seam missing: ctx.shell', enforcement: 'none' }
+  // `run()` takes a spec from `resolve()`, never a raw request — the executor's
+  // own documentation says so, and the sandboxing subclass is where it bites:
+  // `resolve()` is what fills `sandboxPolicy` from `ctx.sandboxPolicy`, and
+  // `run()` destructures that policy without a default. Calling `run()`
+  // directly crashed the probe on "Cannot destructure property 'mode' of
+  // 'policy'" — a probe written to prove the seams work, failing on the seam it
+  // was using to test them, because until a real container booted nothing had
+  // ever executed it.
+  if (typeof shell.resolve !== 'function') {
+    return { error: 'seam missing: ctx.shell.resolve', enforcement: 'none' }
+  }
   try {
-    const result = await shell.run({ command: 'true', signal: AbortSignal.timeout(10_000) })
+    const spec = shell.resolve({ command: 'true', signal: AbortSignal.timeout(10_000) })
+    const result = await shell.run(spec)
     // The harness reports this as `{ mode, denied, enforcement?, runnerFailed? }`
     // under `sandbox`; the flat read is a fallback for a shape that moves.
     const sandbox = result?.sandbox && typeof result.sandbox === 'object' ? result.sandbox : {}

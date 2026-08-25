@@ -44,10 +44,12 @@ export async function apply(ctx, config) {
   const domain = await openDomain(ctx, RUN_DOMAIN_SPEC)
   const store = {
     domain,
-    runMirror: domain.table('runMirror'),
-    planIndex: domain.table('planIndex'),
+    // camelCase handle, snake_case table: the medium requires the latter and
+    // every reader in this bundle was written against the former.
+    runMirror: domain.table('run_mirror'),
+    planIndex: domain.table('plan_index'),
     evidence: domain.table('evidence'),
-    gateRuns: domain.table('gateRuns'),
+    gateRuns: domain.table('gate_runs'),
     /** @type {Set<string>} */
     qualityNotices: new Set(),
     /** @type {Set<string>} */

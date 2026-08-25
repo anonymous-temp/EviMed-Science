@@ -63,15 +63,26 @@ function fakeContext(overrides = {}) {
   // runnerFailed? }` under `sandbox`, with `enforcement` optional. The fake used
   // to return it flat, which meant the probe's real read path was never
   // exercised by any test.
+  // Two methods, not one, because the executor's contract is two methods:
+  // `resolve()` turns a request into a spec — filling `sandboxPolicy` from the
+  // deployment's policy service — and `run()` accepts only a resolved spec,
+  // destructuring that policy without a default. A double offering just `run`
+  // let the probe call it with a raw request and pass, while the real container
+  // died on "Cannot destructure property 'mode' of 'policy'". The double now
+  // refuses a raw request the same way the real one does.
   services.set("shell", {
-    run: async () => ({
-      sandbox: {
-        mode: "workspace-write",
-        denied: overrides.denied ?? false,
-        ...(overrides.enforcement === null ? {} : { enforcement: overrides.enforcement ?? "full" }),
-        ...(overrides.runnerFailed == null ? {} : { runnerFailed: overrides.runnerFailed }),
-      },
-    }),
+    resolve: (request) => ({ ...request, workdir: "/workspace", timeoutMs: 10_000, sandboxPolicy: { mode: "workspace-write" } }),
+    run: async (spec) => {
+      if (!spec?.sandboxPolicy) throw new TypeError("Cannot destructure property 'mode' of 'policy' as it is undefined.");
+      return {
+        sandbox: {
+          mode: "workspace-write",
+          denied: overrides.denied ?? false,
+          ...(overrides.enforcement === null ? {} : { enforcement: overrides.enforcement ?? "full" }),
+          ...(overrides.runnerFailed == null ? {} : { runnerFailed: overrides.runnerFailed }),
+        },
+      };
+    },
   });
   // A real cordis Context exposes each service as `ctx.<key>` as well as through
   // `ctx.get(key)`; the port uses the property form for required seams and the
