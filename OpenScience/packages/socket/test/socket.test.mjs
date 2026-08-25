@@ -335,3 +335,32 @@ test("the guidance names the capability catalogue as the edge of what we can do"
   assert.ok(!/evimed_review_run/.test(text), "a disabled capability must not be advertised");
   assert.ok(CONTRACT_KINDS.includes("clinical-evidence-report"));
 });
+
+test("an empty or unconfigured capability catalogue says so instead of disabling delegation quietly", async () => {
+  // Delegation is refused for every capability when the catalogue is empty, and
+  // the refusal names the request ("not in the catalogue") rather than the
+  // deployment. The same silence cost a whole real run when the skill roots
+  // resolved to `undefined/…`: nothing loaded, nothing complained, and the model
+  // did not know what it was supposed to do.
+  const { loadCapabilities } = await import("../plugins/guidance.mjs");
+  const said = [];
+  const ctx = {
+    get: (key) => (key === "evimedDiagnostics" ? { degrade: (line) => said.push(line) } : undefined),
+  };
+  Object.defineProperty(ctx, "fs", { get: () => undefined, configurable: true });
+
+  assert.deepEqual(await loadCapabilities(ctx, ""), []);
+  assert.ok(said.some((line) => /no capabilities directory is configured/.test(line)), `unset directory said: ${said}`);
+
+  said.length = 0;
+  const empty = {
+    get: (key) => (key === "evimedDiagnostics" ? { degrade: (line) => said.push(line) } : undefined),
+    // `listDirAt` calls `fs.listDir`, not `fs.list` — the double has to offer
+    // the method the port actually uses.
+    fs: { resolve: async (relative, options) => `${options?.cwd ?? ""}/${relative}`, listDir: async () => [] },
+  };
+  Object.defineProperty(empty, "fs", { get: () => empty._fs, configurable: true });
+  empty._fs = { resolve: async (relative, options) => `${options?.cwd ?? ""}/${relative}`, listDir: async () => [] };
+  assert.deepEqual(await loadCapabilities(empty, "/opt/evimed/capabilities"), []);
+  assert.ok(said.some((line) => /catalogue is empty/.test(line)), `empty directory said: ${said}`);
+});
