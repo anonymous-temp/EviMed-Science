@@ -90,8 +90,15 @@ export async function apply(ctx, config) {
     // already treats an absent projection as "no run-side detail available".
     try {
       await writeWorkspaceFile(ctx, String(run.cwd ?? ctx.get('workspaceCwd') ?? '.'), workspaceLayout.runStateFile, `${JSON.stringify(projection, null, 2)}\n`)
-    } catch {
-      store.degraded.add('run-state projection unwritable')
+    } catch (error) {
+      // The reason, not just the fact. This catch swallowed everything, so a
+      // projection that never appeared was indistinguishable from a run that
+      // had nothing to project — and the only place the fact survived was a
+      // set nothing outside this process reads. Two experiments were spent
+      // ruling out causes this line already knew.
+      const reason = `run-state projection unwritable: ${error?.message ?? error}`
+      store.degraded.add(reason)
+      ctx.get('evimedDiagnostics')?.degrade?.(reason)
     }
   }
   const schedule = () => {

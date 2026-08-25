@@ -38,6 +38,16 @@ chmod 600 "${home}/.credentials.yaml"
 # The deployment-owned settings the preset rows read. Values are the shipped
 # defaults; this proves the rows bind, not that a particular deployment is
 # configured.
+# The skill roots the preset composes into absolute paths. Asserted below,
+# because a wrong value here is not an error: the loader simply finds no skills,
+# and a run degrades in a way that reads as the model ignoring its instructions.
+export EVIMED_PRESET_SKILLS_DIR=/opt/evimed/socket/presets/evimed-universal/skills
+for root in core curated-scientific office community; do
+  [ -d "${EVIMED_PRESET_SKILLS_DIR}/${root}" ] || {
+    echo "build smoke: skill root ${root} is missing under ${EVIMED_PRESET_SKILLS_DIR}" >&2
+    exit 1
+  }
+done
 export EVIMED_CAPABILITIES_DIR=/opt/evimed/capabilities
 export EVIMED_CAPABILITY_SKILLS_DIR=/opt/evimed/capability-skills
 export EVIMED_CAPSULE_METHODS_DIR="" EVIMED_CAPSULE_GATEWAY_URL=""

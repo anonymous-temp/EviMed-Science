@@ -651,3 +651,71 @@ test("a screening ledger path aimed at a protected file is refused, not written"
   assert.equal(ok.value.data.ledgerPath, "screening-ledger.csv");
   assert.ok(written.some((target) => target.endsWith("screening-ledger.csv")));
 });
+
+// §7.2 scenario: the run mirror reaches the workspace.
+//
+// The projection is what the control plane reads to see a run's evidence,
+// budget and stall signals, and on the first real end-to-end run it was never
+// produced — while the mirror row itself was written correctly. Two container
+// experiments went into ruling out causes (`isolate` scope, a missing parent
+// directory, an unavailable `fs`) that a test at this level settles in
+// milliseconds, so the wiring gets a test rather than another experiment.
+test("a mirror write produces the workspace projection the control plane reads", async () => {
+  const { apply: applyEvidenceStore } = await import("../plugins/evidence-store.mjs");
+
+  /** @type {Map<string, Function[]>} */
+  const listeners = new Map();
+  /** @type {Map<string, any>} */
+  const written = new Map();
+  /** @type {Map<string, Map<string, any>>} */
+  const tables = new Map();
+  const table = (name) => {
+    if (!tables.has(name)) tables.set(name, new Map());
+    const rows = tables.get(name);
+    return {
+      put: async (key, value) => { rows.set(key, value); ctx.emit("domain/changed", { domain: "evimed_run", table: name, key, operation: "put", value }); },
+      entries: () => [...rows.entries()],
+      values: () => [...rows.values()],
+    };
+  };
+  const services = new Map([
+    // `openDomain` reaches for `ctx.storageDomain` as a property, not through
+    // `ctx.get`, so the double has to offer both — a real cordis Context does.
+    ["storageDomain", { open: async () => ({ table, close: async () => {} }) }],
+    // The write path the projection uses. Records rather than touching a disk:
+    // what is under test is that it is *called*, with which base and path.
+    ["fs", {
+      resolve: async (relative, options) => `${options?.cwd ?? ""}/${relative}`,
+      writeText: async (target, content) => { written.set(target, content); },
+    }],
+  ]);
+  const disposers = [];
+  const ctx = {
+    get: (key) => services.get(key),
+    on(event, handler) {
+      const list = listeners.get(event) ?? [];
+      list.push(handler);
+      listeners.set(event, list);
+      return () => listeners.set(event, (listeners.get(event) ?? []).filter((item) => item !== handler));
+    },
+    emit: (event, ...args) => (listeners.get(event) ?? []).map((handler) => handler(...args)),
+    effect(fn) { const dispose = fn(); if (typeof dispose === "function") disposers.push(dispose); return dispose; },
+    provide(name, value) { services.set(name, value); },
+  };
+  for (const key of ["storageDomain", "fs"]) {
+    Object.defineProperty(ctx, key, { get: () => services.get(key), configurable: true });
+  }
+
+  await applyEvidenceStore(ctx, { projectionDebounceMs: 1 });
+  const store = ctx.get("evimedRun");
+  assert.ok(store, "evidence-store must publish the run store the policy plugin writes through");
+
+  await store.runMirror.put("run_test", { runId: "run_test", sessionId: "s1", cwd: "/workspace", startedAt: "2026-01-01T00:00:00Z" });
+  await new Promise((resolve) => setTimeout(resolve, 40));
+
+  const target = [...written.keys()].find((key) => key.endsWith("state.json"));
+  assert.ok(target, `no projection was written; got ${JSON.stringify([...written.keys()])}`);
+  assert.ok(target.startsWith("/workspace/"), `the projection must land in the run's own workspace, got ${target}`);
+  const projection = JSON.parse(written.get(target));
+  assert.equal(projection.runId ?? projection.run?.runId, "run_test");
+});

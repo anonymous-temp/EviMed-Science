@@ -1130,6 +1130,26 @@ async function checkDshLoaderResolution() {
     fail("dsh_loader_native_binding_missing", "NARB_DISABLE_NATIVE_CACHE=1 must be set in the DSH image and re-exported by its launcher.");
   }
 
+  // Before anything about its content: that the build RUNS it.
+  //
+  // These checks read the script and the Dockerfile's COPY line, and both stay
+  // green on an image that copies the proof in and never executes it — a gate
+  // vouching for an effect that does not happen, which is the shape two
+  // defects already came in through. The RUN line is the only evidence that
+  // the proof is part of the build rather than a file in it.
+  // Matched as an INVOCATION, not a mention. The first version of this check
+  // matched `chmod 0755 /usr/local/bin/evimed-build-smoke` in the same RUN and
+  // stayed green with the execution deleted — it carried the very defect it
+  // was written to catch, and only the negative control said so.
+  const smokeInvoked = dockerfile
+    .split("\n")
+    .some((line) => line.includes("evimed-build-smoke") && !/\b(chmod|COPY|#)/.test(line));
+  if (smokeInvoked) {
+    pass("dsh_build_smoke_executed", "The DSH image runs its boot proof rather than only shipping it.");
+  } else {
+    fail("dsh_build_smoke_not_executed", "The DSH Dockerfile must RUN evimed-build-smoke; copying it in proves nothing.");
+  }
+
   // The build's boot proof is only worth its runtime if it boots what the
   // runtime boots. Two things it used to omit, each of which cost a defect: the
   // control plane's patch (which creates the MCP row) and a cache the addon
@@ -1143,6 +1163,19 @@ async function checkDshLoaderResolution() {
     pass("dsh_build_smoke_fidelity", "The build-time boot proof applies a representative control-plane patch and an unusable addon cache.");
   } else {
     fail("dsh_build_smoke_fidelity_missing", "The DSH build smoke must boot with a representative patch and an unusable addon cache.");
+  }
+
+  // The committed composition snapshot is compared to the image's own, in the
+  // build. Without it the patch contract test reads a file a human maintains
+  // and vouches for a composition that may have drifted — the same shape as a
+  // patch naming a row the kernel does not have.
+  if (
+    /COPY deploy\/runtime-dsh\/dump-config\.baseline\.json/.test(dockerfile) &&
+    dockerfile.split("\n").some((line) => line.includes("diff") && line.includes("dump-config.baseline.json"))
+  ) {
+    pass("dsh_composition_baseline_pinned", "The build fails when the committed composition snapshot no longer matches the image.");
+  } else {
+    fail("dsh_composition_baseline_unpinned", "The DSH build must diff the committed dump-config baseline against the one it generates.");
   }
 
   // Booting validates the host composition; the preset is mounted in agent

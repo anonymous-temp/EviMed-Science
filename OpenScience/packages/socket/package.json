@@ -5,7 +5,13 @@
   "type": "module",
   "description": "The EviMed socket: a DSH bundle carrying the evimed-universal composition, the orchestration guidance, and the run-side delivery gate.",
   "license": "MIT",
-  "files": ["index.mjs", "plugins", "presets", "src", "cordis.patch.yml"],
+  "files": [
+    "index.mjs",
+    "plugins",
+    "presets",
+    "src",
+    "cordis.patch.yml"
+  ],
   "exports": {
     ".": "./index.mjs",
     "./plugins/*": "./plugins/*.mjs",
@@ -23,17 +29,24 @@
     "lint": "eslint plugins src test index.mjs --ext .mjs --max-warnings 0",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "engines": { "node": ">=22.22.0" },
+  "engines": {
+    "node": ">=22.22.0"
+  },
   "dependencies": {
     "@evimed/domain": "workspace:*",
     "@evimed/harness-port": "workspace:*"
   },
-  "bundledDependencies": ["@evimed/domain", "@evimed/harness-port"],
+  "bundledDependencies": [
+    "@evimed/domain",
+    "@evimed/harness-port"
+  ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.0.1"
   },
   "peerDependenciesMeta": {
-    "@deepseek-ai/cordis": { "optional": true }
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "eslint": "^8.57.1",

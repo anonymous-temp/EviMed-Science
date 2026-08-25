@@ -132,15 +132,22 @@
   name: '@deepseek-ai/dsh-skill-filesystem'
   config:
     includeDefaultRoots: false
+    # Absolute, and not by accident. The loader resolves each root with
+    # `path.resolve`, so a relative one lands under `process.cwd()` — which in a
+    # runtime container is `/workspace`. These four were written `./skills/...`
+    # and therefore pointed into the user's upload directory: none of the
+    # shipped skills were found, and an uploaded `skills/core/x/SKILL.md` would
+    # have been read as an instruction — the very thing the note above says
+    # default root discovery is disabled to prevent.
     customSkillDirs:
-      - './skills/core'
-      - './skills/curated-scientific'
-      - './skills/office'
+      - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/core'
+      - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/curated-scientific'
+      - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/office'
       # Community skills, vendored at pinned commits and last in the order: the
       # first root wins a name collision, so nothing taken from the ecosystem
       # can displace a skill we wrote. What is in here is recorded in
       # runtime/skills/community/sources.json, one entry per skill.
-      - './skills/community'
+      - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/community'
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'
 

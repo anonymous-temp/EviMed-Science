@@ -264,3 +264,27 @@ test("the composed sandbox and approval pair is a named preset, hosted or not", 
   assert.match(local, /defaultPreset: 'workspace-write'/);
   assert.doesNotMatch(local, new RegExp(`${HOSTED_PERMISSION_PRESET}:`));
 });
+
+test("no skill root is relative, because a relative one resolves into the user's workspace", async () => {
+  // `@deepseek-ai/dsh-skill-filesystem` maps each configured root through
+  // `path.resolve`, which anchors a relative path at `process.cwd()` — and the
+  // runtime container's working directory is `/workspace`, where uploads land.
+  // The four roots shipped as `./skills/...`: nothing we ship was ever found,
+  // and an uploaded `skills/core/<name>/SKILL.md` would have been discovered as
+  // an instruction. The row's own comment says default root discovery is off to
+  // stop precisely that.
+  const preset = await readFile(
+    new URL("../../../packages/socket/presets/evimed-universal/agent.cordis.yml", import.meta.url),
+    "utf8",
+  );
+  const block = preset.slice(preset.indexOf("customSkillDirs:"));
+  const entries = [...block.slice(0, block.indexOf("- id:")).matchAll(/^\s+- (.+)$/gm)].map((m) => m[1].trim());
+  assert.ok(entries.length >= 4, `expected the four shipped roots, found ${entries.length}`);
+  for (const entry of entries) {
+    assert.ok(
+      entry.startsWith("!!js"),
+      `skill root ${entry} is a literal; it must be built from EVIMED_PRESET_SKILLS_DIR so it is absolute`,
+    );
+    assert.ok(!/['"]\.\//.test(entry), `skill root ${entry} is relative and would resolve under /workspace`);
+  }
+});
