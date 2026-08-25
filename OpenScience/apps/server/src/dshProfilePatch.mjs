@@ -38,6 +38,10 @@ export const EVIMED_PRESET = "evimed-universal";
  *  against the loader's directory, and that is the one tree they reach. */
 export const MCP_CLIENT_PLUGIN = "@deepseek-ai/dsh-mcp-client";
 
+/** The permission preset a hosted deployment runs under: confined *and*
+ *  unattended, which is a pair the kernel does not ship. */
+export const HOSTED_PERMISSION_PRESET = "evimed-hosted";
+
 /**
  * @typedef {object} ProfilePatchInput
  * @property {string} modelGatewayUrl        absolute URL of /internal/model/v1
@@ -200,6 +204,43 @@ function presetRows(input) {
     "- id: approval",
     "  config:",
     `    policy: ${yamlScalar(input.flags.hosted ? "never" : "ask")}`,
+    "",
+    "# The pair above has to be a NAMED preset, or nothing starts.",
+    "#",
+    "# `dsh-permission-presets` derives the default preset from the composed",
+    "# sandbox mode and approval policy, and refuses to load when the pair",
+    "# matches none of them: \"composed sandbox and approval defaults match no",
+    "# preset; configure defaultPreset explicitly\". Its three shipped presets",
+    "# pair a confined sandbox with `ask` and an unconfined one with `never` —",
+    "# and a hosted run wants neither. It wants `workspace-write` with `never`,",
+    "# because inside the sandbox nothing needs approval and the only things",
+    "# that ask are attempts to leave it, which an unattended run should refuse.",
+    "#",
+    "# The table is replaced wholesale rather than extended, so the three shipped",
+    "# rows are restated here; dropping one would remove a preset a user could",
+    "# otherwise select.",
+    "- id: permission",
+    "  config:",
+    "    presets:",
+    "      read-only:",
+    "        sandbox: read-only",
+    "        approval: ask",
+    "      workspace-write:",
+    "        sandbox: workspace-write",
+    "        approval: ask",
+    "      danger-full-access:",
+    "        sandbox: danger-full-access",
+    "        approval: never",
+    ...(input.flags.hosted
+      ? [
+          `      ${HOSTED_PERMISSION_PRESET}:`,
+          "        sandbox: workspace-write",
+          "        approval: never",
+          `        name: ${yamlScalar(HOSTED_PERMISSION_PRESET)}`,
+          "        description: 'Confined to the workspace, and refuses anything that asks to leave it.'",
+        ]
+      : []),
+    `    defaultPreset: ${yamlScalar(input.flags.hosted ? HOSTED_PERMISSION_PRESET : "workspace-write")}`,
   ];
 }
 
