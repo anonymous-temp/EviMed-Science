@@ -78,10 +78,30 @@ export async function apply(ctx, config) {
  * @returns {Promise<Record<string, any>[]>}
  */
 export async function loadCapabilities(ctx, directory) {
-  if (!directory) return []
+  // An empty catalogue disables delegation entirely, so it says so.
+  //
+  // A single unreadable manifest already degrades loudly below. The directory
+  // itself was the quiet case: unset, absent or empty, this returned `[]`, and
+  // every later delegation failed with "not in the catalogue" — a message about
+  // the request rather than about the deployment. The same shape cost a whole
+  // run when `EVIMED_PRESET_SKILLS_DIR` went unset and the skill roots resolved
+  // to `undefined/…`: nothing loaded, nothing complained, and the model simply
+  // did not know what it was supposed to do.
+  if (!directory) {
+    ctx.get('evimedDiagnostics')?.degrade?.(
+      'capability catalogue disabled: no capabilities directory is configured (EVIMED_CAPABILITIES_DIR)',
+    )
+    return []
+  }
   /** @type {Record<string, any>[]} */
   const manifests = []
   const entries = await listDirAt(ctx, directory, '.')
+  if (!entries.length) {
+    ctx.get('evimedDiagnostics')?.degrade?.(
+      `capability catalogue is empty: ${directory} holds no manifests, so every delegation will be refused`,
+    )
+    return []
+  }
   for (const entry of entries.filter((item) => item.name.endsWith('.json')).sort((left, right) => left.name.localeCompare(right.name))) {
     const text = await readFileAt(ctx, directory, entry.name)
     if (!text) {
