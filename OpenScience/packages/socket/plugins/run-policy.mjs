@@ -175,6 +175,14 @@ export async function apply(ctx, config) {
     if (event.type !== 'assistant/message') return
     const entry = sessionState(session.sessionId)
     entry.budget = accumulateBudget(entry.budget, toUsage(event.data?.usage))
+    // Mirrored here as well, because this is the only event that happens on
+    // every run. The other three call sites hang off a turn ending or a
+    // deliverable being submitted, and a run that does neither — the shape of
+    // every failing run, which is exactly when the control plane needs to see
+    // it — wrote the mirror once, at brief injection, with the counters still
+    // at zero. This function's own note says a mirror written once is a mirror
+    // of the first second; that is what the projection showed.
+    void putRunMirror(ctx, entry, config.bundleVersion)
     // The reply the user will read, kept as it goes past. It used to be asked
     // of a service called `evimedFinalReply` that nothing anywhere provides, so
     // the safety scan below ran over an empty string on every run and reported
