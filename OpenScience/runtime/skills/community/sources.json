@@ -1,0 +1,48 @@
+{
+  "$schema": "./sources.schema.md",
+  "$comment": "Community skills vendored into the composition, each pinned to one commit. This file is the whole record: what we took, from where, at which commit, under which licence, and why. `pnpm vendor:community-skills` reads it, fetches exactly these commits, runs the intake checks and rewrites the directories. Nothing here updates on its own — the ecosystem moves weekly and a skill that changes under us changes what the model is told to do.",
+  "skills": [
+    {
+      "name": "dsh-ppt",
+      "repo": "STARDUSTLC666/dsh-ppt",
+      "commit": "0db836e8251a10bf93f26e702534ab9d8b2a1818",
+      "license": "MIT",
+      "subpath": "skills/dsh-ppt",
+      "requiresTools": [],
+      "reviewedOn": "2026-08-25",
+      "why": "One sentence or a document to an HTML deck plus an editable PPTX. Self-contained: the deck builder ships inside the skill directory and runs under the bash tool, so nothing outside the sandbox is needed. Covers the teaching-deck and report-readout requests that manuscript-support has no answer for."
+    },
+    {
+      "name": "deep-structural-analysis",
+      "repo": "tetckx/deep-structural-analysis-skill",
+      "commit": "07b5ad8564cbbb352ad93e8a733ca835e43a448e",
+      "license": "MIT",
+      "subpath": "skills/deep-structural-analysis",
+      "requiresTools": [],
+      "reviewedOn": "2026-08-25",
+      "why": "Sixteen adversarial lenses with calibrated confidence, as an extra review perspective beside our own rubric. Taken despite naming web search as a phase, because it declares a search-unavailable fallback that labels every framework-anchored conclusion as theoretical inference at low confidence and prints a visible notice — which is what our own runtime, having no direct egress, needs it to do."
+    }
+  ],
+  "deferred": [
+    {
+      "name": "writing-guard",
+      "repo": "xmutfyh/dsh-plugin-writing-guard",
+      "reason": "Bundle-form, not skill-form: its SKILL.md calls `writing_audit()` twelve times, and that tool comes from the plugin half of the package. Vendoring the prose alone would instruct the model to call a tool that does not exist. Belongs in the try-install lane, where the bundle is pinned into the image whole."
+    },
+    {
+      "name": "dsh-cite",
+      "repo": "STARDUSTLC666/dsh-cite",
+      "reason": "Registers a model-facing tool (`cite`), not a skill. Try-install lane."
+    },
+    {
+      "name": "academic-writing",
+      "repo": "863683348/dsh-plugin-academic-writing",
+      "reason": "Registers the `academic_writing` tool. Try-install lane."
+    },
+    {
+      "name": "translation",
+      "repo": "863683348/dsh-plugin-translation",
+      "reason": "Registers a translation tool. Try-install lane."
+    }
+  ]
+}

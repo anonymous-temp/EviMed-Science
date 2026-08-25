@@ -105,6 +105,11 @@
       - './skills/core'
       - './skills/curated-scientific'
       - './skills/office'
+      # Community skills, vendored at pinned commits and last in the order: the
+      # first root wins a name collision, so nothing taken from the ecosystem
+      # can displace a skill we wrote. What is in here is recorded in
+      # runtime/skills/community/sources.json, one entry per skill.
+      - './skills/community'
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'
 

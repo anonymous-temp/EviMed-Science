@@ -543,8 +543,8 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   assert.ok(row.startedAt, "a row with no start time cannot answer how long a run has been quiet");
 
   // And the table the projection reads is the table that was written.
-  assert.ok(Object.keys(RUN_DOMAIN_SPEC.tables).includes("runMirror"));
-  assert.ok("cwd" in RUN_DOMAIN_SPEC.tables.runMirror, "the field the projection reads must be declared");
+  assert.ok(Object.keys(RUN_DOMAIN_SPEC.tables).includes("run_mirror"));
+  assert.ok("cwd" in RUN_DOMAIN_SPEC.tables.run_mirror, "the field the projection reads must be declared");
 });
 
 // The final-reply scan has to be able to fail.

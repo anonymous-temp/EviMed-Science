@@ -39,9 +39,16 @@ if [ -n "${DSH_HOME:-}" ] && [ -n "${DSH_HOME_SEED:-}" ] && [ ! -d "${DSH_HOME}/
   chmod -R u+w "${DSH_HOME}"
 fi
 
-# Telemetry off and the sandbox mode fixed here as well as in the image: a
-# container started with an overridden environment must not be able to turn
-# either back on.
+# Telemetry off, the sandbox mode fixed, and the loader's native binding kept
+# off /tmp — all three set here as well as in the image, because a container
+# started with an overridden environment must not be able to undo any of them.
+#
+# The third one is not hardening but survival: `node-addon-require-builtin` is
+# what lets the plugin loader resolve bare specifiers against the profile
+# directory, and its default is to dlopen a copy of itself from /tmp — which is
+# mounted noexec here. When that fails the loader says nothing about the addon
+# and every plugin of ours becomes "Cannot find package '@evimed/dsh-socket'".
+export NARB_DISABLE_NATIVE_CACHE=1
 export DSH_TELEMETRY_DISABLED=1
 export DSH_PERMISSION_MODE="${DSH_PERMISSION_MODE:-workspace-write}"
 # The real provider key is never in this container. The workload token is a

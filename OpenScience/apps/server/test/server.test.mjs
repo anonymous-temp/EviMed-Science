@@ -139,6 +139,9 @@ async function withAuthApp(fn, overrides = {}) {
     dataDir,
     port: 0,
     runtimeMode: "mock",
+    // Named because /api/me reports it and this test asserts it; the value was
+    // previously the default and the assertion was never reached.
+    runtimeKernel: "dsh",
     devAuth: false,
     bootstrapUser: "alice",
     bootstrapPassword: "correct horse battery staple",
@@ -165,6 +168,10 @@ async function withStaticApp(fn) {
     staticDir,
     port: 0,
     runtimeMode: "mock",
+    // The kernel is named because readiness reports it, and this assertion was
+    // unreachable while the gateway check refused any runtime shape it did not
+    // recognise — it never ran, so it never disagreed with the default.
+    runtimeKernel: "dsh",
     devAuth: true,
     operatorMetricsToken: "",
   });
@@ -2010,6 +2017,12 @@ test("readiness rejects invalid Docker data volumes and incompatible transports"
       assert.equal((await res.json()).data.checks.runtime.code, "runtime_transport_volume_mismatch");
     },
     {
+      // The kernel is pinned because the suite runs under
+      // OPEN_SCIENCE_RUNTIME_KERNEL=dsh, and the DSH kernel now refuses a TCP
+      // transport at config load — earlier than readiness, on purpose. The
+      // mismatch under test here is volume-vs-transport, which is an OpenCode
+      // combination; the DSH rule has its own test.
+      runtimeKernel: "opencode",
       runtimeMode: "opencode",
       runtimeSandboxMode: "docker",
       runtimeContainerBin: "/bin/true",

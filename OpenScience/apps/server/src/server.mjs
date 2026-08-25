@@ -2689,7 +2689,12 @@ function readinessScienceConnectors(config) {
 
 function readinessModelGateway(config) {
   if (!config.deepseekProviderEnabled) return { enabled: false, skipped: true };
-  if (config.runtimeMode !== "opencode") throw readinessFailure("model_gateway_runtime_mode_invalid");
+  // `runtimeMode` names the runtime's *shape* — a managed kernel container vs
+  // the mock — and not which kernel runs inside it; the literal "opencode" is
+  // the name that shape has carried since before there was a second kernel.
+  // The gateway's requirement is that a real runtime exists to hold a workload
+  // token, which is true of either kernel.
+  if (config.runtimeMode === "mock") throw readinessFailure("model_gateway_runtime_mode_invalid");
   if (config.deepseekApiKeyError) throw readinessFailure(config.deepseekApiKeyError);
   if (config.modelGatewaySigningSecretError) throw readinessFailure(config.modelGatewaySigningSecretError);
   const apiKey = String(config.deepseekApiKey ?? "");

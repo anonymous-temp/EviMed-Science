@@ -19,7 +19,7 @@
     # before a run can be accepted and quietly under-protected.
     - id: evimed-seam-probe
       name: '@evimed/dsh-socket/plugins/seam-probe'
-    # The run mirror: the durable domain `evimed-run@1` plus its projection to
+    # The run mirror: the durable domain `evimed_run@1` plus its projection to
     # `.evimed-run/state.json`, which is the only run state the control plane
     # and the browser read. They never read DSH's own storage format, which
     # carries no compatibility promise.

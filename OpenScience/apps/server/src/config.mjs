@@ -408,10 +408,23 @@ export function loadConfig(overrides = {}) {
   const release = releaseManifestConfig(overrides);
   const runtimeDataVolume =
     overrides.runtimeDataVolume ?? process.env.OPEN_SCIENCE_RUNTIME_DATA_VOLUME ?? "";
+  // The DSH kernel has no TCP transport, and this is where that fact belongs.
+  // Its web host refuses to bind anything but loopback, so a published port
+  // maps to an interface nothing is listening on; and the container entrypoint
+  // that seeds the profile, disables telemetry and injects the deployment's
+  // settings is the same script that runs the socat bridge, so the TCP path
+  // skipped all of it. A non-production DSH deployment used to take the TCP
+  // default silently and produce a container that died during boot saying it
+  // had no profile.
   const runtimeTransport =
     overrides.runtimeTransport ??
     process.env.OPEN_SCIENCE_RUNTIME_TRANSPORT ??
-    (production ? "unix" : "tcp");
+    (production || runtimeKernel === "dsh" ? "unix" : "tcp");
+  if (runtimeKernel === "dsh" && runtimeTransport !== "unix") {
+    throw new Error(
+      `OPEN_SCIENCE_RUNTIME_TRANSPORT must be "unix" when OPEN_SCIENCE_RUNTIME_KERNEL is "dsh", got "${runtimeTransport}".`,
+    );
+  }
   const backupDir = overrides.backupDir ?? process.env.OPEN_SCIENCE_BACKUP_DIR ?? "";
 
   return {
@@ -569,6 +582,18 @@ export function loadConfig(overrides = {}) {
       overrides.maxQueuedTasksPerProject ?? process.env.OPEN_SCIENCE_MAX_QUEUED_TASKS_PER_PROJECT ?? 25,
     ),
     commandTimeoutMs: Number(overrides.commandTimeoutMs ?? process.env.OPEN_SCIENCE_COMMAND_TIMEOUT_MS ?? 120_000),
+    // How long a fresh runtime may take to answer its first request. Separate
+    // from the per-call connect timeout below because they answer different
+    // questions: that one asks "is this call hung", this one asks "has the
+    // kernel finished starting". Under DSH those differ by an order of
+    // magnitude — composing the profile's plugin tree takes about a minute on
+    // this hardware, and a 30s deadline killed runtimes that were merely still
+    // composing and reported them as failures.
+    runtimeReadyTimeoutMs: Number(
+      overrides.runtimeReadyTimeoutMs
+        ?? process.env.OPEN_SCIENCE_RUNTIME_READY_TIMEOUT_MS
+        ?? (runtimeKernel === "dsh" ? 180_000 : 30_000),
+    ),
     runtimeProxyConnectTimeoutMs: Number(
       overrides.runtimeProxyConnectTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PROXY_CONNECT_TIMEOUT_MS ?? 30_000,
     ),

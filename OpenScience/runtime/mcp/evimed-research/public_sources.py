@@ -98,6 +98,31 @@ def _timeout():
         return 20
 
 
+def _read_bare_token(path):
+    """One token, one line, mode 0600. Same refusals as the config-file path:
+    absolute, no symlink at the tail, bounded size, no whitespace inside."""
+    if not os.path.isabs(path) or "\0" in path:
+        raise PublicSourceError("public_source_gateway_unconfigured", "The managed public-source gateway token is unavailable.")
+    descriptor = None
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        metadata = os.fstat(descriptor)
+        if metadata.st_size <= 0 or metadata.st_size > MAX_GATEWAY_CONFIG_BYTES:
+            raise ValueError("invalid gateway token size")
+        token = os.read(descriptor, MAX_GATEWAY_CONFIG_BYTES + 1).decode("utf-8").strip()
+        if not token or len(token) > 8 * 1024 or any(character.isspace() for character in token):
+            raise ValueError("invalid runtime gateway token")
+        return token
+    except (OSError, UnicodeDecodeError, ValueError) as error:
+        raise PublicSourceError(
+            "public_source_gateway_unconfigured",
+            "The managed public-source gateway token is unavailable.",
+        ) from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 def _gateway_settings():
     gateway_url = os.environ.get("EVIMED_PUBLIC_SOURCE_GATEWAY_URL", "").strip()
     if not gateway_url:
@@ -105,6 +130,17 @@ def _gateway_settings():
     parsed = urllib.parse.urlsplit(gateway_url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password:
         raise PublicSourceError("public_source_gateway_invalid", "The managed public-source gateway URL is invalid.")
+    # The gateway token, from whichever file the kernel in front of us writes.
+    #
+    # A bare token file is preferred and is what the DSH kernel writes: the
+    # older path reads `provider.deepseek.options.apiKey` out of the OpenCode
+    # kernel's `opencode.json`, a file that does not exist under DSH — so a
+    # DSH runtime booted cleanly and then failed every source fetch with
+    # `public_source_gateway_unconfigured`, which says the token is
+    # unavailable without saying that nobody was ever going to write it there.
+    token_file = os.environ.get("EVIMED_MODEL_GATEWAY_TOKEN_FILE", "").strip()
+    if token_file:
+        return gateway_url, _read_bare_token(token_file)
     config_file = os.environ.get("EVIMED_MODEL_CONFIG_FILE", "").strip()
     if not config_file or not os.path.isabs(config_file) or "\0" in config_file:
         raise PublicSourceError("public_source_gateway_unconfigured", "The managed public-source gateway token is unavailable.")

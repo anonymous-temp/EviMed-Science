@@ -1,6 +1,6 @@
 # EviMed × DeepSeek Harness「插排-插头」架构方案
 
-- 文档状态：**v3.8 定版（2026-08-24）**——锁定清单见 §20；v3.8 记入 P0 首次真机验收的结果（§30）：V13 已在生产宿主实测并解决（内核升 7.0，Landlock `fully enforced`），另七个只有真容器才暴露的缺陷已修并各配可验齿的检查；v3.7 裁决运行状态词汇：公开 `status` 四值不变，九态改为投影 `phase`（§7.1.1、§16 #20）；v3.6 为执行后的裁决修订：cordis 实为 4.0.1、preflight 删除只限 clinical（§16 #2 补注）、执行裁决记录见 §16 #15–#19；v3.5 为收口版：联网复核全部算法（§29.1）、删 9 项过度设计（§29.2）、阻断点收敛到 6 个（§29.3）、规范符合性核对与 14 处改名（§29.4）、补 Nuwa 蒸馏配方（§27.3.1）、不训练任何模型；v3.4 新增蒸馏模型与用户模型（§27）、胶囊容器格式与密钥（§28）；v3.3 新增记忆胶囊的统一分析层（§26：原始库在用户网盘 / 本地、经 OpenList 与本地代理接入，分流 → 抽取 → 审计 → 归并），并按用户 2026-08-23 拍板移除同意卡与合规 / 版权内容；v3.2 新增第四轮全对话缺口复审（§22）、前端设计与交互细则（§23）、主动式科研 Autopilot（§24）、计量 / 额度 / 通知（§25）；v3.1 补记忆底座定案与协同算法（§19.21–19.22）、资产封装与接入总表（§21）；v2 纳入用户 2026-08-22 的拍板（§16）：全面换内核、**取消 Mode Router 与产品线 preset，改为统一组合 + 能力清单 + 按产出绑定契约**（§9）；第二轮联网 + 源码复审的缺口与修订见 §17；前端适配（§18）与记忆胶囊（§19）为 2026-08-22 晚新增；§19.16–19.20 为第三轮复审（记忆层选型、平台自演化、参考产品、交互设计、残余风险）
+- 文档状态：**v3.9 定版（2026-08-24）**——锁定清单见 §20；v3.9 增生态接入决策（§16 #22、§21.8、V41）：生态优先三档（直接用 > 小改 > 仅护城河自建）、社区技能根 `skills/community`、preset 四条融合路径、插件按 npm 依赖对待不设审批流，首扫清单在 `plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md`；v3.8 记入 P0 首次真机验收的结果（§30）：V13 已在生产宿主实测并解决（内核升 7.0，Landlock `fully enforced`），另七个只有真容器才暴露的缺陷已修并各配可验齿的检查；v3.7 裁决运行状态词汇：公开 `status` 四值不变，九态改为投影 `phase`（§7.1.1、§16 #20）；v3.6 为执行后的裁决修订：cordis 实为 4.0.1、preflight 删除只限 clinical（§16 #2 补注）、执行裁决记录见 §16 #15–#19；v3.5 为收口版：联网复核全部算法（§29.1）、删 9 项过度设计（§29.2）、阻断点收敛到 6 个（§29.3）、规范符合性核对与 14 处改名（§29.4）、补 Nuwa 蒸馏配方（§27.3.1）、不训练任何模型；v3.4 新增蒸馏模型与用户模型（§27）、胶囊容器格式与密钥（§28）；v3.3 新增记忆胶囊的统一分析层（§26：原始库在用户网盘 / 本地、经 OpenList 与本地代理接入，分流 → 抽取 → 审计 → 归并），并按用户 2026-08-23 拍板移除同意卡与合规 / 版权内容；v3.2 新增第四轮全对话缺口复审（§22）、前端设计与交互细则（§23）、主动式科研 Autopilot（§24）、计量 / 额度 / 通知（§25）；v3.1 补记忆底座定案与协同算法（§19.21–19.22）、资产封装与接入总表（§21）；v2 纳入用户 2026-08-22 的拍板（§16）：全面换内核、**取消 Mode Router 与产品线 preset，改为统一组合 + 能力清单 + 按产出绑定契约**（§9）；第二轮联网 + 源码复审的缺口与修订见 §17；前端适配（§18）与记忆胶囊（§19）为 2026-08-22 晚新增；§19.16–19.20 为第三轮复审（记忆层选型、平台自演化、参考产品、交互设计、残余风险）
 - 日期：2026-08-22
 - 上位方案：[EviMed SaaS 科研 Agent 统一底座最终方案](./2026-07-16-evimed-openscience-platform-design.md)（v4 Final）、[EviMed × Grok Build Harness 融合建设方案](./2026-07-17-evimed-grok-build-fusion-design.md)（v2 Implemented Baseline）
 - 核查对象：
@@ -372,7 +372,7 @@ bundle 的 `cordis.patch.yml` **只放与部署无关、不含路径的行**；�
 - insert:
     - id: evimed-seam-probe          # 启动自检（§5.6）；门禁级缝缺失即抛错
       name: '@evimed/dsh-socket/plugins/seam-probe'
-    - id: evimed-evidence-store      # storageDomain 域 evimed-run@1（§7.2），provide 服务 evimedRun
+    - id: evimed-evidence-store      # storageDomain 域 evimed_run@1（§7.2），provide 服务 evimedRun
       name: '@evimed/dsh-socket/plugins/evidence-store'
 - id: hmr                            # 两种部署都不需要源码热重载
   disabled: true
@@ -585,6 +585,20 @@ export async function apply(ctx, config) {
 
 ## 7. 任务状态与事件
 
+
+**「科研者桌面」推荐组（2026-08-25，生态一期第 3 项）**。本地面能做而托管面做不到的，不是"更快"或"更便宜"，是**连接用户自己已有的桌面软件**——托管容器里没有他的 Origin、他的 Stata、他的 Zotero 库、他的 Overleaf 项目。这是白捡的差异化，一条也不需要我们实现：
+
+| 装什么 | 连的是用户自己的什么 | 来源 |
+|---|---|---|
+| `Fantasality/dsh-origin-plugin` | 本机 OriginLab（写数据、画图、导 PNG/SVG） | 医学科研用户的作图刚需 |
+| `ZihaoVistonWang/Stata-AI-Skill` | 本机 Stata（回归、do 文件） | 流行病学/卫生经济常用 |
+| `Hongcheng-LI/dsh-zotero` | 本地 Zotero API（检索库、读附件全文、生成引文） | 同时是 §26 分析层连接器的现成一员 |
+| `fly233338/dsh-overleaf` | 用户的 Overleaf 项目 | 与 `dsh-cite` 的 GB/T 7714 配套 |
+| `dsh-market` / `Dariandai/dsh-starter-pack` | 一键装上面这些 | 让"推荐组"是一条命令而不是一页文档 |
+
+托管面**一条都不装**：它们要么需要本机软件，要么要出网到用户账号，两者托管面都给不了。这条分界本身是产品线的说明——本地面不是托管面的降级版，是它够不着的那一半。
+
+
 ### 7.1 状态（权威在控制面账本）与计划（权威在工作区）
 
 ```text
@@ -627,7 +641,7 @@ reserved ─► dispatched ─► running ─┬─► delivering ─┬─► a
 - 连带的账本语义修正（与 §3.1 的账本四件事一起做，不是改名）：插座以 `evimed_complete_run{partial: true}` 交付时，账本写 `succeeded` + `partial: true` + `verification: unchecked`（→ `degraded`），**不再写** `failed{specialist_evidence_repair_failed}`；`failed` 只留给运行时 / 专科硬失败（§7.5「次数用尽 → degraded 而非 failed」）。
 - 规则 7「状态只有一个写入者」的适用范围据此明确：domain 三张表（planIndex / evidence / gateRuns）与 `phase` 投影经 `transition()`；账本的四值 `status` 是账本自己的折叠逻辑写的，不经 `transition()`。
 
-### 7.2 运行侧镜像：`storageDomain` 域 `evimed-run@1`
+### 7.2 运行侧镜像：`storageDomain` 域 `evimed_run@1`
 
 ```js
 export const EVIMED_RUN_DOMAIN = {
@@ -736,6 +750,9 @@ guardTools(ctx, call => call.name === 'evimed_submit_deliverable' && attemptsOf(
 
 `evimed_review_run`（P2，`evimed-review` 插件）：一个 `spawn` 子代理（**全新上下文**），`toolFilter` = 只读文件工具 + `mcp__evimed__*` 检索 + **固定附加**推理者没用过的接地工具（`web_search`、官方页），`outputSchema` 固定为裁定数组；对同一实体跨 `deliverables/*` 的 claims 做冲突审查（产出 `contradicts` 边）、抽样事实核查（只接受 MCP 解析结果）、草稿审查（复用 `coverageJudge` 的 12 条核验规则）。结果经 `inject` 作为建议，写 `qualityNotices`，**不改 `status`**（§4.2：实测精度不支持阻断）。
 
+
+> **生态借鉴（2026-08-25，一期第 4 项）**：`LeslieWylie/review-workflow` 用 N 个隔离子代理**盲评**再由主席合议。我们的 rubric 是护城河、不换；可借的是**隔离**——同一份稿子分给互不可见的几路评审，比一路评审多轮自查更能撞出分歧。落到本层的做法：`evimed_review_run` 的多视角评审改为各自独立会话（互不见彼此结论），分歧本身作为一条输出，不做合议裁决（本层不阻断）。`tetckx/deep-structural-analysis` 已作为技能收进 `skills/community/`，正是"额外视角"的现成来源。
+
 ### 8.4 回环
 
 - 回合内：`agent/turn-stopping` 最多 `steer` 一次。
@@ -803,7 +820,7 @@ guardTools(ctx, call => call.name === 'evimed_submit_deliverable' && attemptsOf(
   name: '@deepseek-ai/dsh-skill-filesystem'
   config:
     includeDefaultRoots: false                                   # 关闭项目根 .dsh/skills、.agents/skills 的自动发现：工作区可被上传文件污染
-    customSkillDirs: ['./skills/core', './skills/curated-scientific', './skills/office']   # 随 preset 发行，相对 preset 目录解析
+    customSkillDirs: ['./skills/core', './skills/curated-scientific', './skills/office', './skills/community']   # 随 preset 发行，相对 preset 目录解析；community = 生态技能包原样收录（§21.8）
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'
 - id: tool-ask-user
@@ -916,7 +933,7 @@ OpenScience/
   packages/harness-port/       @evimed/harness-port
   packages/socket/             @evimed/dsh-socket（本文的 dsh-bundle）：cordis.patch.yml、plugins/、presets/evimed-universal/
   capabilities/<id>/           capability.yaml + SKILL.md + scripts/ + references/（原 runtime/skills/evimed）
-  skills/{core,curated-scientific,office}/   通用技能（原 runtime/skills/*）
+  skills/{core,curated-scientific,office,community}/   通用技能（原 runtime/skills/*）；community = 生态技能包（§21.8）
   tools/mcp-evimed/            MCP 服务（原 runtime/mcp/evimed-research）
   tools/mcp-geo/               P3
   tools/kernel-bridge/         原 runtime/kernel（控制面的 notebook 内核仍用）
@@ -1201,6 +1218,7 @@ nightly:
 | V38 | CIPHER 式「从编辑推断偏好」在中文医学写作上的精确率与对编辑距离的实际改善 | §27.4 | 标准层的主要来源 |
 | V39 | 我们 Node 版本的 `crypto` 对 x25519 / ed25519 / hkdf / aes-256-gcm / scrypt 的支持与性能（2 GB 包的流式加密） | §28.3 | 零依赖前提 |
 | V40 | MemOS 对外部导入的 `textual_memory.json` 的 schema 约束（能否携带 provenance / valid_from 等扩展字段）与只读 cube 的加载方式 | §28.2 | 客体 cube |
+| V41 | 第三方 bundle 的工具行在我们 preset 作用域下能否干净组合（真实组合测试，接首个生态 bundle 时核）；能力清单 `tools[]` 对生态原生工具的构建期校验扩展（对组合后注册表而非仅 MCP `tools/list`） | §21.8 | 生态接入 |
 
 ---
 
@@ -1229,6 +1247,7 @@ nightly:
 | 19（2026-08-24 执行裁决） | 工程加固 | ESM 星导出重名静默 `undefined` 的断言防回归**保留**，并建议 domain 入口禁 `export *`（lint）；ESLint 8 不识别 import attributes：`config.mjs` 用 `readFileSync`、domain 保留 import 形式的现状**接受** | §14 |
 | 20（2026-08-24 执行裁决） | 运行状态词汇 | **公开 `status` 四值不变，九态改为投影 `phase`**（`RUN_PHASES`，`runPhase()` 纯函数派生、不存储；`/api/runs` 与 `run/state` 加 `phase`；折叠时相序断言只计数不抛；`partial` 交付写 `succeeded + partial` 而非 `failed`）——不动评测 / e2e / 历史账本 | §7.1.1 |
 | 21（2026-08-24 执行裁决） | 装饰性配置类 | **domain `typecheck` 分段接线**：先修 clinicalEvidence 之外的 ~17 个错，`typecheck:domain` 进 `test:web`，`clinicalEvidence.mjs` 以 tsconfig `exclude` 暂缓并用**钉数测试**锁死（exclude 恰一个文件、点名），126 个错的清偿单列；`@deepseek-ai` 禁令以 **grep 测试为主承力**（全仓走查含 JSDoc `import(` 形，排除 harness-port），ESLint 配置补齐为辅并让 packages 的 lint 脚本停止报错；screening 参数经 profile patch 从 `config.mjs` 派生，`ledgerPath` 过 `isProtectedWritePath`；口令包 `maxmem` 按 header 的 N·r 推算但**设上限**（默认 1 GiB，超出拒开并给专用错误码）——header 可控的资源分配必须有界 | §29.4、§28.3、§10.4 |
+| 22（2026-08-24 用户拍板） | 生态优先 | **尽可能利用 DSH 插件 / 技能生态，默认姿势是采用而不是设防**：三档取舍 直接用 > 小改 > 仅护城河（统计引擎、证据规则、契约）自建；社区技能零适配进 `skills/community` 根；「不整套挂载运行别人的 preset」只是 DSH 机制约束（一会话一组合），源码层四条融合路径照用——抄 persona、抄行配置、拎随包技能、整只映射成 capability（委派形态一次运行可组合多只，比原生 preset 更好用）；插件按 npm 依赖对待（pin + 冒烟 + 夜间矩阵），**不设审批流、不新增阻断点**（§29.3 的 6 个不变，生态接入不经过它们）；进厂检验用工具自动化（guardwall / dep-audit 类）而非流程。首扫清单：`plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md` | §21.8、§9.2、V41 |
 
 ---
 
@@ -1258,6 +1277,8 @@ nightly:
 
 | # | 缺口 | 严重度 | 修订（已写回） |
 |---|---|---|---|
+> **生态借鉴（G1 视觉适配器，2026-08-25）**：`good-boy4069/dsh-vision-guard`、`liustack/modlens`、auto-vision 系做的正是"给纯文本模型架一座透明的视觉桥"——模型不知道自己没有视觉，工具替它看。我们的 G1 适配器要做的是同一件事，可直接借的是它们的**降级语义**：桥不可用时不是报错，而是把"这一步没有视觉"写成一条可见事实带进上下文，让模型据此调整结论强度——与 §8 的"降级要留名"同源。
+
 | G1 | **研究上下文没有入口。** 今天每次派发把 `prepareResearchContext` 生成的知识库切片 + 记忆 + 能力目录作为 `system` 发给 OpenCode；DSH 的 `session.prompt` 只有 `content`，没有 `system` | **P0 必撞** | 控制面派发前把上下文写入工作区 `.evimed-brief/context.md`；插头在 `agent/session-start` 读取并 `agent.inject()` 成一等 `user/message`（模型可见 ⟺ 已记录）；`<evimed-knowledge>` / `<evimed-memory>` 包裹规则照旧（§6.4、§7.4） |
 | G2 | **容器内沙箱未落实。** v2 写「bwrap 私有 PID 命名空间」，但容器里 bwrap 不可用；若 Landlock 也不可用，DSH `bash` 工具整体 fail-closed，运行时看似健康实则不能执行任何命令 | **P0 必撞** | 明确以 Landlock 为后端；镜像/宿主前提写进 §11 与 §15（V13）；启动自检增加「经 `ctx.shell` 执行一条空命令」并要求 `enforcement: 'full'`（§5.6、§11） |
 | G3 | **子代理写权限与目录冲突。** v2 §9.5 只给子代理「只读文件工具」，但它必须写交付物；多个子代理共享父代理 `cwd`，互相覆盖无防护 | **P0 必撞** | 子代理工具集加 `write / edit / bash`；约定每个交付物写在 `deliverables/<deliverableId>/`，契约校验器只认该目录，回执摘要防事后改写；`writeScopes` 等 agentTeams 转正后再上（§9.5） |
@@ -1498,6 +1519,10 @@ capsule_activations (user_id, own_capsule_id, guest_version_id?, mode: own|guest
 | 激活 | 接收方把它作为**客体工作方式包**（只读、带来源标签）挂入：`guest`（默认激活模式）= A 的方法、标准与依赖知识生效，**我的身份、课题、知识与会话记忆不变**；`blend` = 只取 A 的方法与知识，标准仍用我的；`own` = 取消客体。融合语义见 §19.15；切换即时生效于下一次派发；审计日志记录每次激活 |
 | 导出 | `capsule-<ver>.tgz`：`capsule.yaml`、`profile.md`、`methods/<slug>/SKILL.md`、`knowledge/`（可选）、`timeline.jsonl`、`provenance.json`。`methods/` 目录本身是合法的技能根：放进 `evimed-web` 本地 profile 的 `$DSH_HOME/skills`，或任何采用 Agent Skills 标准的工具，立刻可用 |
 | 社区 | 用户可把方法集发布为 `dsh-plugin` 话题下的技能包——EviMed 的胶囊成为 DSH 生态的一等公民 |
+
+
+> **生态借鉴（胶囊冷启动导入，2026-08-25）**：`Shiye-10Pages/dsh-memory-porter` 做的是一键导入 Claude / ChatGPT 的既有记忆。**这值得做成产品功能而不只是参考**：胶囊最大的门槛是冷启动——新用户的胶囊是空的，而他多半已经在别处攒了一年的对话。导入不是"迁移数据"，是把第一天的胶囊从零变成有东西可蒸馏。落点：§19.6 摄入流水线加一个 importer 类型（外部助手导出包），走与上传同一条统一分析层，不新开路径。
+
 
 ### 19.10 安全与合规
 
@@ -1779,6 +1804,10 @@ score = w_rel · relevance + w_imp · importance/10 + w_rec · γ^(Δhours) + w_
 
 本节把散落在 §0.2、§16、§19.14 的决定合并为一份**锁定清单**；此后改动任何一条都需要新版本号。未列入的都是实现细节，由各章约束。
 
+
+> **生态对照（2026-08-25）**：`WODE25500/dsh-skillopt`（Microsoft SkillOpt-Sleep）在野实现了同一条回路——夜间收割会话、挖出重复任务、**过 held-out 门之后**才固化成技能。值得对照的是那道门：我们的 A3 巩固目前按聚类与频次晋升，它多了一步「在留出集上先证明这条技能有用」。这正是"断言结果而非断言机制"在记忆侧的形态，A3 的晋升条件应当照此补一条实证关卡（§30.2 同源）。
+
+
 ### 20.1 锁定的架构决策
 
 | # | 决策 | 章节 |
@@ -1891,7 +1920,33 @@ score = w_rel · relevance + w_imp · importance/10 + w_rec · γ^(Δhours) + w_
 
 今天子代理要自己轮询 `status{waitSeconds ≤ 45}`；P2 起 `run-policy` 在 `tools/execute` 上包裹六个管理作业工具的 `start` 动作：成功返回后 `ctx.jobs.start({ kind: 'evimed-job', label, owner: call.agent, run: poller })`，poller 周期调用 `status`、把进度写入输出流、结算时给出结果；模型改用 `job_list / job_output / job_kill`，父代理收到结算通知，UI 的作业面板直接可见。前提核实 V24：`tools/execute` 包裹器内能拿到 `exec.agent` 并调用 `ctx.jobs.start`（cookbook 的 `run_in_background` 范式表明可行）。
 
+### 21.8 生态接入：三档与动作（2026-08-24，§16 #22）
+
+社区资产（GitHub `topic:dsh-plugin` 1.1 万仓库；awesome 列表人工核验收录 2,112 项）按形态各有一条机械的接入路，全程不新增阻断点：
+
+| 形态 | 动作 | 备注 |
+|---|---|---|
+| 技能包（SKILL.md） | 放进 `skills/community/`（§9.2 customSkillDirs 已含该根），记来源 URL + commit | 零适配（Agent Skills 开放标准，DSH 原生消费）；不套 curated 统一执行器——那是给自有 38 技能的，卡社区技能只会抬高采用成本 |
+| 工具 bundle | preset / patch 加一行，tarball pin 进镜像；可 `disabled: true` 烘入、按部署开 | 与 socket 同层组合；新增 bundle 需镜像发布；按 npm 依赖对待（pin + 冒烟 + 夜间矩阵） |
+| MCP server | `dsh-mcp-client` 行 | 托管面出网经 `publicSourceGateway`，做不到则仅本地面 |
+| agent preset | 不整套运行（DSH 机制：一会话一组合、产出后不能换）；四条融合路径：persona 文本 / 行配置 / 随包技能 / 整只映射成 `capability.yaml` | 映射后一次运行可委派多只、互相接力——比原生 preset 形态更好用 |
+
+技能收录的机械检查（2026-08-24 对 rc.2 源码核实，`dsh:packages/skill/skill-filesystem`）：发现只认**一层深**（`<root>/<name>/SKILL.md` 或平铺 `<name>.md`，嵌套树收录前先摊平）；frontmatter 必填 kebab-case `name` + `description`（开放 YAML，多余字段无害，但 `disable-model-invocation` / `user-invocable` 两键拼写或取值错误会**整技能被静默丢弃**，只留 warning——失败即关死是上游有意为之）；与四根内已有技能重名则收录时改名（注册表分层裁决：近层胜，同层按 rank / provider 次序，不报错）；bundle 自带技能（如 dsh-zotero 包内 `skills/`）随 bundle 行一并生效，不必拆出。已知 rc 期安装缺陷（`peerDependencies` 声明错致安装挂起 #4236、`plugin remove` 残留 bundle 条目、dsh-tools 重复副本致所有工具调用崩溃）都只咬**运行期活装**；托管面在镜像构建期预初始化只读 profile，天然免疫——本地面备 `dsh-fix-duplicate-loader-id` 与「删残留行重装」流程即可。
+
+配套两件（V41）：能力清单 `tools[]` 的构建期校验从「仅对 MCP `tools/list`」扩展为对组合后工具注册表（`--dump-config` 一致性套件）；接首个第三方 bundle 时用真实组合测试核其工具行在我们 preset 作用域下干净组合。判据一句话：**裁决与数学封进引擎，通用手艺留在过程层**——留在技能 / 工具层的每个步骤，生态都在免费替我们升级；埋进黑盒作业的步骤，升级永远得自己写。首扫清单与首批动作：`plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md`。
+
 ---
+
+### 21.9 一期执行结果（2026-08-25）：清单说的形态，有一半不是真的
+
+`skills/community/` 根已建（`customSkillDirs` 末位——首根赢名字冲突，社区技能永远盖不掉自研），随附 `sources.json`（逐条 repo / commit / license / 为什么）与 `scripts/dev/vendor-community-skills.mjs`（按 commit 拉、跑进厂检验、写 `PROVENANCE.md`）。
+
+**清单里「技能形态五件」中，四件其实是工具形态。** 六个候选包都带 `dsh.bundle`，但只有三个真正随包发 `SKILL.md`；`dsh-cite`、`academic-writing`、`translation` 注册的是模型可见的**工具**（`academic_writing` 等），`writing-guard` 的 SKILL.md 则在正文里调 `writing_audit()` / `writing_journal_profile()` 各若干次——**把它的正文单独收进技能根，等于让模型去调一个不存在的工具**。
+
+这不是靠人读出来的。进厂检验里加了一条：技能正文中出现的、本编排未挂载的工具名一律拒收，并已验齿（把 writing-guard 塞进清单，当场被点名两个工具拒收）。它是这批检查里唯一一条**针对「技能是给模型看的文本」这一性质**的检查——一个技能引用了不存在的工具，不会报错，只会让模型照做、工具缺席、运行以「模型不太行」的样子降级。
+
+一期实收两件（`dsh-ppt`、`deep-structural-analysis`），四件转入试装档（工具 bundle 要么整包 pin 进镜像，要么不要）。`deep-structural-analysis` 明写 web search 是一个阶段，仍然收——因为它自带「搜索不可用」的退路：所有框架锚定结论标注为理论推断、置低置信度、执行摘要前加可见提示，正是托管面（无直连出网）需要它做的事。
+
 
 ## 22. 第四轮复审（2026-08-23）：全对话缺口清单
 
@@ -2575,6 +2630,10 @@ coverage_ledger(source_id, unit_id, unitType: page|slide|segment|column|chunk|ro
 
 所以「模型更了解我」在本方案里的确切含义是：**每次派发时注入的上下文更准、更省、更像我**——画像区块、按情境召回的偏好、作为技能的方法、我自己的范例。这与「胶囊是上下文不是权限」「开放格式」两条原则是同一件事。
 
+
+> **生态对照（2026-08-25）**：`zhangyoufu-123/stylotrace` 就是本节表格第 2 行（PRELUDE / CIPHER 从编辑对学偏好）的在野实现。可对照的是它的**表示**：把偏好存成可读的一句话描述而不是向量，用户能看见、能改、能删。这与 §27.3 「理解要可展示、可纠正」同向，也是我们不训练模型时唯一能让用户信任"它更懂我了"的形式。
+
+
 ### 27.3 蒸馏流水线：模型分工、五层 schema、四问、核验
 
 **模型分工**：V4 Flash 做批量（分流、槽位抽取、重要度评分、QA 审计出题）；V4 Pro 做难综合（方法归纳、立场归纳、反思、研究档案聚合、冲突裁决、编辑偏好推断）；视觉模型做图表。**当前不训练任何模型**（§27.7 只记录后期选项）。
@@ -2800,7 +2859,7 @@ capsule-<capsuleId>-v<version>.evimedcap          zip（仅存储或 deflate）
 
 ---
 
-## 30. P0 首次真机验收（2026-08-24）：八个缺陷与它们的共同形状
+## 30. P0 真机验收：二十一个缺陷与它们的共同形状（2026-08-24 起）
 
 > 本节记录换内核后**第一次真正构建镜像并起容器**的结果。价值不在修了什么，而在于：这八个缺陷全部发生在 988 项服务端测试、657 项前端测试、73 项合规检查、全套契约测试**都绿**之后，且每一个都只有真机能暴露。裁决 #16 把"真机验收先于翻默认"排在第一位，本节是它的兑现。
 
@@ -2817,6 +2876,48 @@ capsule-<capsuleId>-v<version>.evimedcap          zip（仅存储或 deflate）
 | 7 | corepack shim 每次调用都联网解析版本；运行时容器无外网 → `EAI_AGAIN` | 构建期有网 | 改为真实全局安装 | 构建期把 registry 指向死地址跑一次 pnpm |
 | 8 | **profile patch 够不着 preset 的行**；DSH 只在 stderr 告警。七行落空，其中 `mcp-evimed` 从未被插入 → **研究工具一个都没挂**，六个插件用默认值跑 | patch 生成器的注释写了一个错误假设，测试照着它断言"patch 里有这些行" | `mcp-evimed` 改 `insert`；preset 行改 `!!js process.env.*`，控制面注入容器环境 | 两个契约测试：patch 只能命名宿主组合的行；preset 读的每个变量都必须有人提供，反之亦然 |
 
+### 30.1b 第二轮（2026-08-25）：容器终于能说话之后的六个
+
+第一轮修完，容器仍然起不来，而控制面能说的只有一句「Runtime exited before it became ready」。所以这一轮的第一项修的不是缺陷，是**看不见缺陷**这件事本身。
+
+| # | 缺陷 | 为什么测试测不到 | 修法 |
+|---|---|---|---|
+| 12 | `runtime_exited` 丢弃退出码、容器输出、最后一次探测错误。容器又是 `--rm` + `stdio:"ignore"`——死后没有 `docker logs`，活着时也没人在听 | 单元测试断言的是错误**码**，而这句话里本来就没有信息可断言 | 控制器改 stdio pipe + 每容器 4KB 尾巴（仅随非 running 的 status 返回）；`runtimeExitDiagnosis` 把退出码/信号 + 容器原话拼进 502 |
+| 13 | `runtimeTransport` 默认 `production ? unix : tcp`，而 **DSH 的入口脚本与全部 `EVIMED_*` 只存在于 unix 分支**；tcp 分支跑裸 `dsh`，没播种、没配置 | 没有测试用非生产 + DSH 内核组合起过容器 | 不是补齐 tcp 分支——DSH 的 web host 拒绝绑非 loopback，publish 的端口没人监听，tcp 对 DSH 本就不可能。改为 kernel=dsh 时默认 unix，显式 tcp 在 `loadConfig` 即报错 |
+| 14 | `.credentials.yaml` 缺 `version: 1`，被当作 pre-release 扁平布局拒绝加载，整棵插件树随之失败 | 渲染器的测试断言的是它自己的输出格式 | 补 `version: 1` |
+| 15 | `@evimed/domain` / `@evimed/harness-port` **根本不在镜像里**。Dockerfile 注释断言 `bundledDependencies` 会让 `dsh plugin add` 带上它们——而 `bundledDependencies` 只是**打包**指令，`workspace:*` 在非 workspace 里无法解析 | 又一次「断言机制」：注释描述了一个机制，没有任何检查验证结果 | 把两个包复制进 `/opt/evimed/socket/node_modules/@evimed/`，让那条打包指令成立 |
+| 16 | seam-probe 调 `shell.run({command})`。`run()` 只接受 `resolve()` 产出的 spec——`resolve()` 才是填 `sandboxPolicy` 的那一步，而 `run()` 无默认地解构它 | 测试替身只提供 `run`，于是探针用错的调法在替身上永远成立 | 按契约先 `resolve()` 再 `run()`；替身补 `resolve`，并在收到原始请求时像真实现一样抛错 |
+| 17 | storageDomain 的**域名与表名**都必须匹配 `/^[a-z][a-z0-9_]*$/`；`evimed-run` 与 `runMirror` 一律被拒 | 规则在 DSH 的 `defineDomain` 里，我们这边没有任何地方复述过它 | 域名改 `evimed_run`、表名改 snake_case（JS 句柄仍 camelCase，只在建句柄处映射）；把这条标识符规则写成断言钉住 |
+
+**写探针的人自己用错了接缝**（#16），是这一轮最值得记住的一条：seam-probe 存在的理由就是「DSH 改名了我们要立刻知道」，而它从写出来到这一天，**从未被一个真的 DSH 执行过**。
+
+### 30.1c 构建期加了一道「启动冒烟」
+
+原有的三道自证——原生绑定可加载、`--dump-config` 非空、换路径仍能 dump——**没有一道会 import 插件**。所以在一个 bundle 根本无法导入的镜像上，三道全绿。
+
+`deploy/runtime-dsh/build-smoke.sh` 用一次性凭证文件 + 全套 `EVIMED_*` **真启动** profile，任何 entry 未 apply 即构建失败。#14–#17 中的每一个，它都会当场拦住。
+
+另有一条同族：`.dockerignore` 的 `node_modules` 只匹配上下文根（dockerignore 按整条相对路径匹配，裸名不匹配深层），于是 `packages/socket/node_modules` 一直被打进镜像，其中一条 pnpm 工作区软链把 #15 的 COPY 悄悄重定向到了别处——**镜像是靠巧合工作的**。改 `**/node_modules`。
+
+### 30.1d 冒烟绿了之后还剩三个：构建期与运行期不同的那部分
+
+启动冒烟拦住了 #14–#17，然后容器还是起不来。原因很简单也很值得记：**冒烟在构建里跑，构建里没有那层 tmpfs**。
+
+| # | 缺陷 | 为什么连冒烟也测不到 | 修法 |
+|---|---|---|---|
+| 19 | `node-addon-require-builtin` 是 Cordis loader 用来拿 Node 内部模块加载器的原生插件。**拿到了，bare specifier 按 profile 目录解析；拿不到，退回按 loader 自己的目录解析**——而我们的 bundle 不在全局 dsh 安装里，于是每个插件都报 "Cannot find package '@evimed/dsh-socket'"，**全程没有一个字提到那个插件加载失败**。它默认把 `.node` 复制到 `/tmp` 再 dlopen，而 docker `--tmpfs` 隐含 `noexec` | 构建期的 `/tmp` 是可执行的，所以冒烟永远不会撞上 | `NARB_DISABLE_NATIVE_CACHE=1`——不给 /tmp 开 exec（它是只读容器里少数可写路径之一，noexec 值得留着），改为直接从可执行根文件系统上的安装包加载。冒烟同步改为把 cache 指向一个不可用目录，等价复现 noexec 的后果 |
+| 18 | patch 的 `- insert:` 行只有 `id` 没有 `name`，loader 没有可 import 的东西 | 契约测试断言的是"patch 能命名的行"，插入行没有被要求带名字 | 补 `name`；新增断言：任何 insert 行必须带 name |
+| 20 | `dsh-mcp-client` 的配置是**扁平**的（`transport` 是判别字段，`command`/`args`/`env` 与 `serverName` 平级），我们按嵌套生成 | 冒烟不带控制面 patch，`mcp-evimed` 那一行在构建期根本不存在 | 改扁平。**冒烟的下一步是把一份代表性的控制面 patch 也带上** |
+| 21 | 研究 MCP 一直从 **OpenCode 的 `opencode.json`** 里读网关令牌，DSH 内核不写这个文件 | 它不在启动路径上：运行时会**干净启动**，然后每一次取源失败 | DSH 侧另写一份只含令牌的 0600 文件 + 网关 URL/模型两个环境变量；MCP 两个读点改为"有裸令牌优先"，两条路合到同一套拒绝条件与同一个 return |
+
+| 22 | 宿主侧控制套接字路径 129 字节，超过内核 `sockaddr_un.sun_path` 的 108 字节上限 | 容器在挂载内绑**自己的**短路径，启动完全正常，日志真的打出 `dsh web: http://127.0.0.1:<port>`；连不上的是控制面这一端，而 libuv 截断后报的是 ENOENT——看起来像"套接字还没创建" | 组装 launch plan 时即拒，named error 报出实际字节数与上限。卷支撑布局把套接字放进短哈希目录不会碰到；非卷布局的长度取决于运维把数据目录放多深 |
+| 23 | 就绪超时 30s 是 OpenCode 时代的值，DSH 组合 137 行插件树实测约 62s | 没有任何测试真的等过一个容器组合完插件树 | 拆成两个超时——"这次调用卡住了吗"与"内核启动完了吗"是两个问题。`runtimeReadyTimeoutMs`（dsh 默认 180s）**只对 docker 沙箱生效**：宿主运行时要么绑上端口要么没绑，给它三分钟只会把"二进制不存在"变成三分钟的等待 |
+
+| 24 | `agent-presets` 行的 `roots` 由 DSH 在**每次启动**用它自己的 shipped preset 根覆盖——`composeProfile` 末尾推一层 overlay，保留其余键、只换掉这一个 | 与 #8 同族：行看起来配好了、`default` 也确实生效，只有目录不可见。契约测试断言的是"patch 里有 `trust: system`"——那一行确实在文件里 | 与 #8 同解：把东西放到内核真正会看的地方。镜像把 preset 装进 DSH 自己的 `config/agent-presets/`，构建期两侧对名字；patch 删掉 `roots`，测试改为断言**不得**出现 `roots` |
+
+#19 是整轮里最贵的一条，也是最能说明问题的一条：**一个组件失败之后，报错的是另一个组件**，而且报的是一个完全说得通、完全指向错误方向的错误。会绿的构建、会过的冒烟、会读的日志，全都指着"我们的包没装上"，而真正坏的是一个谁也没提到的原生插件。这类缺陷唯一能被系统性抓住的方式，是**让验收环境与生产环境的差异清单本身成为一份要维护的东西**——目前它是：tmpfs 及其 noexec、能力掉落、只读根、网络策略、pid 上限。
+
+
 ### 30.2 共同形状：断言机制，而不是断言结果
 
 八个里有三个（5、8，以及我自己在修复过程中写坏的两处断言）是同一个错误：**验证了"命令成功"而没有验证"想要的效果发生了"**。
@@ -2826,6 +2927,8 @@ capsule-<capsuleId>-v<version>.evimedcap          zip（仅存储或 deflate）
 - 五个既有测试断言"patch 里有 `evimed-run-policy` 这一行" → 这一行确实在文件里，但 DSH 会丢弃它。测试在为一个从未发生的效果背书。
 
 **规则**：验收条件要写成"我要的东西在不在"，不能写成"我做的动作有没有报错"。
+
+**推论（#8 与 #24 两次之后）**：还有一类更难看见的——**配了一个上游会覆盖的位置**。patch 够不着 preset 的行、`agent-presets.roots` 每次启动被换掉，两次都是"文件里确实有这一行"，两次的契约测试也都据此为一个从未发生的效果背书。对上游配置面的断言必须落在**上游读到的值**上，而不是落在我们写出去的文本上——`--dump-config` 的快照能证明前者，grep 我们自己的输出只能证明后者。
 
 ### 30.3 第二个形状：只有掉权限才现形
 

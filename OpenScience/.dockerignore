@@ -1,3 +1,11 @@
+# `node_modules` alone matches only the context root: dockerignore patterns are
+# matched against the whole relative path, and a bare name does not match at
+# depth. `packages/socket/node_modules` was therefore copied into the image —
+# its dev-only eslint and typescript links included — and a pnpm workspace
+# symlink inside it (`@evimed/domain -> ../../../domain`) silently redirected a
+# later COPY out of the package and into /opt/evimed/domain. The image worked
+# through that accident. This pattern is the one that actually excludes them.
+**/node_modules
 node_modules
 .git
 apps/*/node_modules

@@ -235,17 +235,34 @@ RUN set -eux; \
 # regenerate" from "nothing changed", rather than generating fresh and being
 # unable to tell the difference.
 COPY runtime/skills/core /opt/evimed/skills/core
+COPY runtime/skills/community /opt/evimed/skills/community
 COPY runtime/mcp/evimed-research /opt/evimed/mcp/evimed-research
 COPY packages/socket /opt/evimed/socket
 COPY deploy/runtime-dsh/capabilities /opt/evimed/capabilities
 COPY capability-skills /opt/evimed/capability-skills
 
-# `packages/socket/node_modules` is excluded by `.dockerignore`'s bare
-# `node_modules` pattern (it matches at any depth), so the two dev-only
-# entries actually installed there today (eslint, typescript) never reach the
-# image. The bundle's real runtime dependencies (`@evimed/domain`,
-# `@evimed/harness-port`) are bundled by `dsh plugin add` below, which resolves
-# them from `packages/socket/package.json`'s own `bundledDependencies`.
+# The bundle's two runtime dependencies, placed where the packer will find
+# them.
+#
+# `packages/socket/node_modules` is excluded by `.dockerignore`'s `**/node_modules`
+# — the bare `node_modules` above it does not match at depth, which is how the
+# workspace's own symlinks reached the image and quietly redirected this COPY.
+#
+# `packages/socket/package.json` declares them `workspace:*` and lists them in
+# `bundledDependencies`. Neither fact installs anything on its own:
+# `bundledDependencies` is a *packing* instruction — it tells the packer to
+# include `node_modules/<name>` in the tarball — and `workspace:*` cannot
+# resolve at all outside a workspace, which a standalone profile is not. With
+# `packages/socket/node_modules` excluded by `.dockerignore`, both dependencies
+# were simply absent from the image, and the failure surfaced only at the first
+# `import` inside a running container: "Cannot find package '@evimed/domain'".
+# The build was green throughout, because nothing it asserted ever imported the
+# bundle.
+#
+# Copying them here makes the packing instruction true. `harness-port` depends
+# on `domain` in turn and resolves it by walking up to this same directory.
+COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
+COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
 
 # The preset ships inside the bundle as a *system*-trusted root, so a copy a
 # user made into their own root cannot shadow it: the first root wins on a name
@@ -255,7 +272,37 @@ RUN set -eux; \
   cp -a /opt/evimed/skills/core /opt/evimed/socket/presets/evimed-universal/skills/core; \
   cp -a /usr/local/share/evimed/skills/curated-scientific /opt/evimed/socket/presets/evimed-universal/skills/curated-scientific; \
   cp -a /usr/local/share/evimed/skills/office /opt/evimed/socket/presets/evimed-universal/skills/office; \
+  cp -a /opt/evimed/skills/community /opt/evimed/socket/presets/evimed-universal/skills/community; \
   chmod -R a-w /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills /opt/evimed/mcp
+
+# The preset also goes into the kernel's OWN preset root, because that is the
+# only root the kernel reads.
+#
+# The bundle mounts an `agent-presets` row whose `roots` names the bundle's
+# preset directory, and the control plane's patch names it again. Neither
+# survives: `composeProfile` pushes a final overlay that REPLACES
+# `agent-presets.config.roots` with the shipped root on every boot, keeping the
+# rest of the row. So the row's `default: evimed-universal` was honoured while
+# the directory it names was invisible, and every session creation failed with
+# `preset "evimed-universal" not found (available: standard, code, minimal,
+# cordis)` — the kernel listing its own four and none of ours.
+#
+# This is the same shape as the profile patch not reaching a preset's rows: a
+# configuration target that DSH silently overrides. The answer is the same —
+# put the thing where the kernel actually looks, rather than configuring a
+# location it will discard.
+# The two assertions below check the name on both sides: the control plane asks
+# for this exact string, and a rename on either side would otherwise show up
+# only as a failed session in production. (No comments inside the RUN: a
+# backslash-continued line and a `#` comment do not mix, and the silent result
+# is the rest of the command disappearing.)
+ARG DSH_PRESET_ROOT=/usr/local/lib/node_modules/@deepseek-ai/dsh/config/agent-presets
+RUN set -eux; \
+  test -d "${DSH_PRESET_ROOT}"; \
+  cp -a /opt/evimed/socket/presets/evimed-universal "${DSH_PRESET_ROOT}/evimed-universal"; \
+  chmod -R a-w "${DSH_PRESET_ROOT}/evimed-universal"; \
+  grep -q "^name: evimed-universal$" "${DSH_PRESET_ROOT}/evimed-universal/preset.yml"; \
+  test -f "${DSH_PRESET_ROOT}/evimed-universal/agent.cordis.yml"
 
 # Pre-initialize the profile at build time so a container never has to install
 # its own plugins over the network while serving — built at a path outside
@@ -287,12 +334,15 @@ COPY deploy/runtime-dsh/profile-pnpm-workspace.yaml /opt/evimed/profile-pnpm-wor
 # resolves under /runtime and the profile cannot compose. `file:` copies the
 # package into the profile's own store, which is what makes the seed relocatable.
 #
-# The seed then proves itself three ways: a loadable native binding shows the
+# The seed then proves itself four ways: a loadable native binding shows the
 # build permission took effect (node-pty ships prebuilds and never creates
 # build/, so asserting that directory would fail on a working image); a
-# non-empty --dump-config shows the composition resolves; and composing again
-# from a copy at a different path shows it will still resolve after the boot
-# script relocates it, which is the one thing a test in place cannot show.
+# non-empty --dump-config shows the composition resolves; composing again from
+# a copy at a different path shows it will still resolve after the boot script
+# relocates it, which is the one thing a test in place cannot show; and
+# `build-smoke.sh` BOOTS the relocated copy, which is the only one of the four
+# that imports a plugin. The first three all passed on an image whose bundle
+# could not be imported at all — see that script's header.
 RUN set -eux; \
   install -d -m 0755 "${DSH_HOME_SEED}/profiles/evimed-runtime"; \
   cp /opt/evimed/profile-pnpm-workspace.yaml "${DSH_HOME_SEED}/profiles/evimed-runtime/pnpm-workspace.yaml"; \
@@ -305,6 +355,35 @@ RUN set -eux; \
   DSH_HOME="${relocated}" dsh --profile evimed-runtime --dump-config > /dev/null; \
   rm -rf "${relocated}"; \
   chmod -R a-w "${DSH_HOME_SEED}"
+
+# Load the loader's native binding from the package it is installed in, rather
+# than from a copy the addon makes under /tmp.
+#
+# `node-addon-require-builtin` is what lets Cordis's loader reach Node's own
+# module loader, and the loader uses it to resolve every plugin's bare specifier
+# against the profile directory. Without it the loader falls back to resolving
+# bare names against its own directory — the global DSH install — where our
+# bundle does not exist, and every one of our plugins reports "Cannot find
+# package '@evimed/dsh-socket'" with nothing said about the addon at all.
+#
+# The addon's default is to copy its `.node` into a cache under `/tmp` and
+# dlopen it there. Docker's `--tmpfs` mounts `noexec` by default, so in the
+# runtime container that dlopen fails — and `noexec` on /tmp is a property worth
+# keeping, since /tmp is one of the few writable paths a read-only container
+# has. Disabling the cache keeps the binding on the executable root filesystem
+# and makes the whole question moot.
+ENV NARB_DISABLE_NATIVE_CACHE=1
+
+# The boot proof. Separate RUN so its failure names itself in the build log, and
+# after the seed is sealed read-only, because the boot script copies the seed
+# exactly the way the runtime entrypoint does — including the copy's read-only
+# bits, which is the failure that only appears once capabilities are dropped.
+COPY deploy/runtime-dsh/build-smoke.sh /usr/local/bin/evimed-build-smoke
+COPY deploy/runtime-dsh/build-smoke-patch.yml /usr/local/share/evimed/build-smoke-patch.yml
+RUN set -eux; \
+  chmod 0755 /usr/local/bin/evimed-build-smoke; \
+  SOCKET_VERSION="${SOCKET_VERSION}" /usr/local/bin/evimed-build-smoke
+
 
 ENV DSH_HOME=/runtime/dsh-home
 

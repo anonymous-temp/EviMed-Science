@@ -212,22 +212,41 @@ def _python(spec, root):
 
 
 def _model_environment():
-    raw = os.environ.get("EVIMED_MODEL_CONFIG_FILE", "").strip()
-    if not raw or not os.path.isabs(raw) or "\0" in raw:
-        raise SpecialistJobError("specialist_model_config_unavailable", "The managed model configuration is unavailable.", True)
-    config = _read_json(raw)
-    provider = config.get("provider", {}).get("deepseek", {})
-    options = provider.get("options", {}) if isinstance(provider, dict) else {}
-    models = provider.get("models", {}) if isinstance(provider, dict) else {}
-    base_url = options.get("baseURL") if isinstance(options, dict) else None
-    api_key = options.get("apiKey") if isinstance(options, dict) else None
+    # The DSH kernel writes no `opencode.json`, so the three facts this needs —
+    # gateway URL, model, token — arrive as environment plus a bare token file.
+    # Preferred when present; the config-file path below stays for the OpenCode
+    # kernel, which is the only thing that writes one.
+    token_file = os.environ.get("EVIMED_MODEL_GATEWAY_TOKEN_FILE", "").strip()
+    if token_file:
+        from public_sources import _read_bare_token  # noqa: PLC0415 — one reader, one implementation
+
+        base_url = os.environ.get("EVIMED_MODEL_GATEWAY_URL", "").strip()
+        model = os.environ.get("EVIMED_MODEL_GATEWAY_MODEL", "").strip()
+        if model != "deepseek-v4-pro":
+            raise SpecialistJobError("specialist_model_config_unavailable", "DeepSeek V4 Pro is not configured for this runtime.", True)
+        try:
+            api_key = _read_bare_token(token_file)
+        except Exception as error:  # noqa: BLE001 — the reader's own error type is not this module's vocabulary
+            raise SpecialistJobError("specialist_model_config_unavailable", "The managed model configuration is unavailable.", True) from error
+    else:
+        raw = os.environ.get("EVIMED_MODEL_CONFIG_FILE", "").strip()
+        if not raw or not os.path.isabs(raw) or "\0" in raw:
+            raise SpecialistJobError("specialist_model_config_unavailable", "The managed model configuration is unavailable.", True)
+        config = _read_json(raw)
+        provider = config.get("provider", {}).get("deepseek", {})
+        options = provider.get("options", {}) if isinstance(provider, dict) else {}
+        models = provider.get("models", {}) if isinstance(provider, dict) else {}
+        base_url = options.get("baseURL") if isinstance(options, dict) else None
+        api_key = options.get("apiKey") if isinstance(options, dict) else None
+        if not isinstance(models, dict) or "deepseek-v4-pro" not in models:
+            raise SpecialistJobError("specialist_model_config_unavailable", "DeepSeek V4 Pro is not configured for this runtime.", True)
+    # One set of refusals and one return whatever the source was: the two paths
+    # differ in where the three facts come from, not in what counts as valid.
     if (
         not isinstance(base_url, str)
         or not base_url.startswith(("http://", "https://"))
         or not isinstance(api_key, str)
         or not api_key
-        or not isinstance(models, dict)
-        or "deepseek-v4-pro" not in models
     ):
         raise SpecialistJobError("specialist_model_config_unavailable", "DeepSeek V4 Pro is not configured for this runtime.", True)
     return {

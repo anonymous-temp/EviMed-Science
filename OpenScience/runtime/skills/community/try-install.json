@@ -1,0 +1,34 @@
+{
+  "$comment": "Tool-form community bundles: candidates for the image, tried in a throwaway profile first. A bundle registers model-facing tools and joins the host composition, so unlike a skill it cannot be taken piecemeal — either it is pinned into the image whole or it is not taken. `pnpm try:community-bundles` installs each into a scratch profile, boots it, and reports which ones survive. Nothing here is installed by the runtime image until it moves into the Dockerfile with an exact version.",
+  "candidates": [
+    {
+      "name": "dsh-cite",
+      "repo": "STARDUSTLC666/dsh-cite",
+      "version": "0.2.0",
+      "registers": ["cite"],
+      "why": "DOI/Crossref verification plus GB/T 7714 / APA / MLA / Chicago / BibTeX. GB/T 7714 is the format Chinese journals require and nothing we ship produces it."
+    },
+    {
+      "name": "dsh-plugin-academic-writing",
+      "repo": "863683348/dsh-plugin-academic-writing",
+      "version": "0.2.0",
+      "registers": ["academic_writing"],
+      "why": "Outline, title/abstract skeletons, citation formatting, submission checklist. Overlaps manuscript-support; worth measuring against it rather than assuming."
+    },
+    {
+      "name": "dsh-plugin-translation",
+      "repo": "863683348/dsh-plugin-translation",
+      "version": "0.2.0",
+      "registers": ["translation"],
+      "why": "Sentence splitting, glossary, and number/unit/parenthesis consistency checks — the mechanical half of bilingual manuscript work."
+    },
+    {
+      "name": "dsh-plugin-writing-guard",
+      "repo": "xmutfyh/dsh-plugin-writing-guard",
+      "version": "1.7.0",
+      "registers": ["writing_audit", "writing_journal_profile"],
+      "why": "Deterministic, zero-network. Protects numbers, citations, claim strength, negation and scope from being changed by language polishing, and detects working-context residue leaking into deliverables — the same family as our own leakage bans, from the other side. Reclassified here from the skills lane: its SKILL.md calls its own tools, so the prose cannot be taken alone."
+    }
+  ],
+  "notInstalledYet": "None of these are in the runtime image. Moving one there is a Dockerfile edit with an exact version, a --dump-config diff, and the build smoke."
+}

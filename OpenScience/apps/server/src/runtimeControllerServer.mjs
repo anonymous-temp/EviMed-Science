@@ -12,6 +12,8 @@ import { loadConfig } from "./config.mjs";
 import { assertDockerDataVolumeSupport } from "./dockerMounts.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
+  RUNTIME_EXIT_OUTPUT_BYTES,
+  appendCappedOutput,
   buildOpenCodeLaunchPlan,
   cleanupDockerContainer,
   runtimeContainerName,
@@ -346,6 +348,15 @@ export function createRuntimeController(overrides = {}) {
   const config = loadConfig(overrides);
   const runtimeChildren = new Map();
   const runtimeOwners = new Map();
+  // The last words of each runtime container, kept past its own death. A
+  // runtime is launched with `--rm`, so by the time anything notices it exited
+  // the container is already reaped and `docker logs` has nothing to say; and
+  // it was launched with `stdio: "ignore"`, so nobody was listening while it
+  // was alive either. Between the two, "Runtime exited before it became ready"
+  // was the entire diagnosis available to an operator — the reason the
+  // container gave for dying was written to a pipe pointed at /dev/null.
+  // Bounded per container and dropped when the next start replaces it.
+  const runtimeExitOutput = new Map();
   const kernelChildren = new Map();
   const kernelOwners = new Map();
   const projectOperations = new Map();
@@ -426,6 +437,7 @@ export function createRuntimeController(overrides = {}) {
       runtimeChildren.delete(containerName);
     }
     runtimeOwners.delete(containerName);
+    runtimeExitOutput.delete(containerName);
     if (cleanup.failed) {
       throw controllerFailure(502, "runtime_cleanup_failed", "Runtime controller could not clean up the runtime container.");
     }
@@ -454,7 +466,7 @@ export function createRuntimeController(overrides = {}) {
     try {
       child = spawn(plan.command, plan.args, {
         cwd: plan.cwd,
-        stdio: "ignore",
+        stdio: ["ignore", "pipe", "pipe"],
         env: plan.env,
       });
     } catch (error) {
@@ -462,6 +474,19 @@ export function createRuntimeController(overrides = {}) {
       throw error;
     }
     runtimeChildren.set(plan.containerName, child);
+    // Both streams, not just stderr: the kernel's own startup failures come out
+    // on stdout as often as not, and `docker run`'s complaints about the image
+    // or the mounts come out on stderr. The cap is per container and small —
+    // this is a tail for a human to read, not a log store.
+    runtimeExitOutput.set(plan.containerName, "");
+    const collect = (chunk) => {
+      runtimeExitOutput.set(
+        plan.containerName,
+        appendCappedOutput(runtimeExitOutput.get(plan.containerName) ?? "", chunk, RUNTIME_EXIT_OUTPUT_BYTES),
+      );
+    };
+    child.stdout?.on("data", collect);
+    child.stderr?.on("data", collect);
     child.once("exit", () => {
       if (runtimeChildren.get(plan.containerName) === child) {
         runtimeChildren.delete(plan.containerName);
@@ -481,8 +506,12 @@ export function createRuntimeController(overrides = {}) {
     const containerName = runtimeContainerName(project);
     const tracked = runtimeChildren.get(containerName);
     if (tracked && tracked.exitCode == null && tracked.signalCode == null) {
-      return { state: "running", running: true, exitCode: null, containerName };
+      return { state: "running", running: true, exitCode: null, containerName, output: "" };
     }
+    // Only on the not-running paths. A running container's output is not a
+    // diagnosis of anything, and shipping it on every poll would put the
+    // runtime's chatter through the controller socket several times a second.
+    const output = compactError(runtimeExitOutput.get(containerName));
     const result = spawnSync(
       config.runtimeContainerBin,
       ["container", "inspect", "--format", "{{.State.Status}}|{{.State.ExitCode}}", containerName],
@@ -490,7 +519,7 @@ export function createRuntimeController(overrides = {}) {
     );
     if (result.status !== 0) {
       if (missingContainerPattern.test(compactError(result.stderr))) {
-        return { state: "missing", running: false, containerName };
+        return { state: "missing", running: false, containerName, output };
       }
       throw controllerFailure(503, "runtime_status_unavailable", "Runtime controller could not inspect the runtime container.");
     }
@@ -501,6 +530,7 @@ export function createRuntimeController(overrides = {}) {
       running: state === "running" || state === "created" || state === "restarting",
       exitCode: Number.isSafeInteger(exitCode) ? exitCode : null,
       containerName,
+      output,
     };
   }
 
