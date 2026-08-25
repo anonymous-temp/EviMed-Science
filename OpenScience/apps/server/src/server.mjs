@@ -3054,7 +3054,7 @@ async function readinessBackup(config) {
 
 async function inspectRuntimeImage(config, unavailableCode, runtimeManager) {
   let imageId;
-  let opencodeVersion;
+  let kernelVersion;
   let uvVersion;
   if (runtimeManager.usesRuntimeController()) {
     let image;
@@ -3063,10 +3063,17 @@ async function inspectRuntimeImage(config, unavailableCode, runtimeManager) {
     } catch (error) {
       throw readinessFailure(error?.code ?? unavailableCode);
     }
-    ({ imageId, opencodeVersion, uvVersion } = image);
+    ({ imageId, uvVersion } = image);
+    kernelVersion = image.kernelVersion || image.opencodeVersion;
   } else {
+    // Two readings on purpose — see `inspectRuntimeImage` in the controller.
+    // The gate read only `io.open-science.opencode.version`, which a DSH image
+    // does not publish, so production readiness failed
+    // `runtime_image_metadata_missing` on every DSH deployment: a check that
+    // could not survive the kernel it was gating.
     const format = [
       "{{.Id}}",
+      '{{index .Config.Labels "io.open-science.runtime.version"}}',
       '{{index .Config.Labels "io.open-science.opencode.version"}}',
       '{{index .Config.Labels "io.open-science.uv.version"}}',
     ].join("|");
@@ -3076,18 +3083,26 @@ async function inspectRuntimeImage(config, unavailableCode, runtimeManager) {
       { encoding: "utf8", timeout: 5_000 },
     );
     if (image.status !== 0) throw readinessFailure(unavailableCode);
-    [imageId, opencodeVersion, uvVersion] = image.stdout.trim().split("|");
+    const [id, neutralVersion, opencodeVersion, uv] = image.stdout.trim().split("|");
+    imageId = id;
+    kernelVersion = neutralVersion || opencodeVersion;
+    uvVersion = uv;
   }
   if (!config.production) return { imageLocal: true, imageVerified: false };
 
-  if (!imageId || !opencodeVersion || !uvVersion) {
+  if (!imageId || !kernelVersion || !uvVersion) {
     throw readinessFailure("runtime_image_metadata_missing");
   }
   const recorded = config.releaseManifest?.runtime;
   if (!recorded) throw readinessFailure("release_manifest_missing");
+  // Compared against whichever kernel the manifest names, for the same reason
+  // the manifest schema requires one kernel's fields rather than making both
+  // optional: a manifest naming one kernel while the image ships the other is
+  // exactly the mismatch this is here to catch.
+  const recordedKernelVersion = Object.hasOwn(recorded, "dshVersion") ? recorded.dshVersion : recorded.opencodeVersion;
   const mismatch = [
     ["imageId", imageId, recorded.imageId],
-    ["opencodeVersion", opencodeVersion, recorded.opencodeVersion],
+    ["kernelVersion", kernelVersion, recordedKernelVersion],
     ["uvVersion", uvVersion, recorded.uvVersion],
   ].find(([, actual, expected]) => actual !== expected);
   if (mismatch) throw readinessFailure("runtime_image_provenance_mismatch", { field: mismatch[0] });

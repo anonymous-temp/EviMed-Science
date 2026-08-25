@@ -104,7 +104,27 @@ if (args[0] === "info") {
   process.exit(0);
 }
 if (args[0] === "image" && args[1] === "inspect") {
-  process.stdout.write(${JSON.stringify(`sha256:${"a".repeat(64)}|1.17.13|0.11.26\n`)});
+  // Answers per placeholder, as docker does. A fixed field count misaligns the
+  // moment the reader asks for one more, and then every assertion downstream
+  // measures the misalignment instead of the thing under test.
+  //
+  // This image publishes both labels: it stands for an image built after the
+  // neutral label landed, so the controller's preferred reading is the one
+  // exercised here while server.test.mjs covers the rollback fallback.
+  // (No backticks in this comment: it lives inside a template literal, and the
+  // first version of it terminated the string that generates this file.)
+  const labels = {
+    "io.open-science.runtime.version": "1.17.13",
+    "io.open-science.runtime.kernel": "opencode",
+    "io.open-science.opencode.version": "1.17.13",
+    "io.open-science.uv.version": "0.11.26",
+  };
+  const format = args[args.indexOf("--format") + 1] ?? "";
+  process.stdout.write(format.split("|").map((token) => {
+    if (token === "{{.Id}}") return "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const label = token.match(/"([^"]+)"/)?.[1];
+    return label && Object.hasOwn(labels, label) ? labels[label] : "";
+  }).join("|") + "\\n");
   process.exit(0);
 }
 if (args[0] === "ps") {

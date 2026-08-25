@@ -111,9 +111,15 @@ function dockerInfo(config) {
 }
 
 function inspectRuntimeImage(config) {
+  // Both readings, deliberately. The neutral label is what every image
+  // publishes now; the kernel-specific one is what images built before this
+  // change carry, and a rollback to one of those must not be reported as an
+  // image with no metadata. Whichever answers first is the kernel's version.
   const format = [
     "{{.Id}}",
+    '{{index .Config.Labels "io.open-science.runtime.version"}}',
     '{{index .Config.Labels "io.open-science.opencode.version"}}',
+    '{{index .Config.Labels "io.open-science.runtime.kernel"}}',
     '{{index .Config.Labels "io.open-science.uv.version"}}',
   ].join("|");
   const result = spawnSync(
@@ -124,11 +130,16 @@ function inspectRuntimeImage(config) {
   if (result.status !== 0) {
     throw controllerFailure(503, "runtime_image_unavailable", "Runtime image is unavailable to the runtime controller.");
   }
-  const [imageId, opencodeVersion, uvVersion] = result.stdout.trim().split("|");
-  if (!imageId || !opencodeVersion || !uvVersion) {
+  const [imageId, neutralVersion, opencodeVersion, kernel, uvVersion] = result.stdout.trim().split("|");
+  const kernelVersion = neutralVersion || opencodeVersion;
+  if (!imageId || !kernelVersion || !uvVersion) {
     throw controllerFailure(503, "runtime_image_metadata_missing", "Runtime image metadata is incomplete.");
   }
-  return { imageId, opencodeVersion, uvVersion };
+  // `opencodeVersion` is still returned under its old name so a controller and
+  // a control plane on different sides of this change still understand each
+  // other; `RUNTIME_CONTROLLER_PROTOCOL_VERSION` gates the shape, not the
+  // meaning of a field that now answers for either kernel.
+  return { imageId, kernel: kernel || "", kernelVersion, opencodeVersion: kernelVersion, uvVersion };
 }
 
 function runtimeCapacityLimits(config) {
