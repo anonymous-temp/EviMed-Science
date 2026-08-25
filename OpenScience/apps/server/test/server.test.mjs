@@ -35,7 +35,24 @@ if (args[0] === "info") {
   process.exit(0);
 }
 if (args[0] === "image" && args[1] === "inspect") {
-  process.stdout.write(${JSON.stringify(`${releaseManifestFixture.runtime.imageId}|${releaseManifestFixture.runtime.opencodeVersion}|${releaseManifestFixture.runtime.uvVersion}\n`)});
+  // Answers per placeholder, the way docker does, instead of echoing a fixed
+  // field count. A stub with a hardcoded three-field reply silently misaligns
+  // the moment the reader asks for a fourth, and every assertion downstream
+  // then measures the misalignment rather than the thing under test.
+  //
+  // This image publishes ONLY the kernel-specific label — it stands for an
+  // image built before the neutral label existed, so the readiness gate's
+  // rollback fallback is exercised on a real code path rather than asserted.
+  const labels = ${JSON.stringify({
+    "io.open-science.opencode.version": releaseManifestFixture.runtime.opencodeVersion,
+    "io.open-science.uv.version": releaseManifestFixture.runtime.uvVersion,
+  })};
+  const format = args[args.indexOf("--format") + 1] ?? "";
+  process.stdout.write(format.split("|").map((token) => {
+    if (token === "{{.Id}}") return ${JSON.stringify(releaseManifestFixture.runtime.imageId)};
+    const label = token.match(/"([^"]+)"/)?.[1];
+    return label && Object.hasOwn(labels, label) ? labels[label] : "";
+  }).join("|") + "\\n");
   process.exit(0);
 }
 if (args[0] === "rm") process.exit(0);
@@ -1936,7 +1953,12 @@ test("readiness rejects Docker image metadata that disagrees with the release ma
     [
       "#!/bin/sh",
       'if [ "$1" = "info" ]; then exit 0; fi',
-      `if [ "$1" = "image" ]; then echo 'sha256:${"f".repeat(64)}|1.17.13|0.11.26'; exit 0; fi`,
+      // Id | runtime.version | opencode.version | uv.version — this image
+      // publishes the neutral label and not the kernel-specific one, which is
+      // what a DSH image looks like. Before the gate read the neutral label,
+      // this shape failed `runtime_image_metadata_missing` instead of ever
+      // reaching the provenance comparison below.
+      `if [ "$1" = "image" ]; then echo 'sha256:${"f".repeat(64)}|1.17.13||0.11.26'; exit 0; fi`,
       "exit 1",
       "",
     ].join("\n"),

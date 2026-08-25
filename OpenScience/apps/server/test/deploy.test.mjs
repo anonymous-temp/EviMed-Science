@@ -30,6 +30,43 @@ function splitDockerWords(line) {
     .filter(Boolean);
 }
 
+test("every runtime image publishes the label the readiness gate reads, whichever kernel it ships", async () => {
+  // The readiness gate asked docker for `io.open-science.opencode.version`.
+  // The DSH image publishes `io.open-science.dsh.version` and never that one,
+  // so `!opencodeVersion` was true and production readiness failed
+  // `runtime_image_metadata_missing` on every DSH deployment — a provenance
+  // check that could not survive the kernel it was gating, and silent in dev
+  // because `config.production` returns before the check runs.
+  const dsh = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const opencode = await readFile(path.join(repoRoot, "deploy/runtime-opencode/Dockerfile"), "utf8");
+
+  for (const [name, dockerfile, kernel] of [["dsh", dsh, "dsh"], ["opencode", opencode, "opencode"]]) {
+    assert.match(dockerfile, /LABEL io\.open-science\.runtime\.version="\$\{\w+\}"/, `${name} image publishes no neutral version label`);
+    assert.match(dockerfile, new RegExp(`LABEL io\\.open-science\\.runtime\\.kernel="${kernel}"`), `${name} image does not name its kernel`);
+  }
+
+  // The negative control, and the production failure itself: the DSH image
+  // genuinely does not carry the label the old reader asked for. Without this
+  // the test above would pass just as well against the broken reader.
+  // Matched as a LABEL instruction, not as a mention: the first version of this
+  // assertion was a substring check, and it matched the comment three lines
+  // above explaining the defect. A check that counts mentions is the same
+  // mistake as a scan that counts tool calls the model never makes.
+  assert.ok(
+    !/^LABEL io\.open-science\.opencode\.version=/m.test(dsh),
+    "the DSH image must not be made to answer under the other kernel's name",
+  );
+  assert.match(opencode, /^LABEL io\.open-science\.opencode\.version=/m, "the opencode image still publishes its own label for rollback");
+
+  // Both readers ask for the neutral label first and still accept the old one,
+  // so an image built before this change is not reported as having no metadata.
+  for (const file of ["apps/server/src/server.mjs", "apps/server/src/runtimeControllerServer.mjs"]) {
+    const source = await readFile(path.join(repoRoot, file), "utf8");
+    assert.ok(source.includes('io.open-science.runtime.version'), `${file} does not read the neutral label`);
+    assert.ok(source.includes('io.open-science.opencode.version'), `${file} dropped the transition fallback`);
+  }
+});
+
 test("web Dockerfile only copies sources that exist in the build context", async () => {
   const dockerfilePath = path.join(repoRoot, "deploy/web/Dockerfile");
   const dockerfile = await readFile(dockerfilePath, "utf8");

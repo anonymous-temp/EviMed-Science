@@ -41,6 +41,12 @@ LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED}"
 LABEL io.open-science.app.version="${APP_VERSION}"
 LABEL io.open-science.dsh.version="${DSH_VERSION}"
+# Kernel-neutral pair. The readiness gate used to read
+# `io.open-science.opencode.version`, which a DSH image does not publish,
+# so production readiness failed `runtime_image_metadata_missing` on every
+# DSH deployment — the check could not survive the kernel it was gating.
+LABEL io.open-science.runtime.kernel="dsh"
+LABEL io.open-science.runtime.version="${DSH_VERSION}"
 LABEL io.open-science.socket.version="${SOCKET_VERSION}"
 LABEL io.open-science.uv.version="${UV_VERSION}"
 

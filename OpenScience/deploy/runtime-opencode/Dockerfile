@@ -27,6 +27,9 @@ LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED}"
 LABEL io.open-science.app.version="${APP_VERSION}"
 LABEL io.open-science.opencode.version="${OPENCODE_VERSION}"
+# The same neutral pair the DSH image publishes, so one reader serves both.
+LABEL io.open-science.runtime.kernel="opencode"
+LABEL io.open-science.runtime.version="${OPENCODE_VERSION}"
 LABEL io.open-science.uv.version="${UV_VERSION}"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
