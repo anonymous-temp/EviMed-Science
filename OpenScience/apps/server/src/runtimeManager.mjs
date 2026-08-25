@@ -4069,8 +4069,22 @@ export class RuntimeManager {
         });
         const status = res.status;
         await res.body?.cancel().catch(() => {});
-        if (status < 500) return;
-        lastError = new Error(`runtime returned HTTP ${status}`);
+        // 404 is not ready, it is early.
+        //
+        // "Anything short of a server error means it answered" was written for
+        // a kernel that binds its port and its routes together. DSH binds the
+        // port first and mounts `/api` a moment later, so a 404 here means the
+        // socket is up and the protocol is not — and readiness returned on it,
+        // after which the very first `session.create` came back
+        // `runtime_wire_protocol_mismatch`. A retrying caller hides that; a
+        // single-shot one does not.
+        if (status === 404) {
+          lastError = new Error("runtime answered HTTP 404: listening, but its API is not mounted yet");
+        } else if (status < 500) {
+          return;
+        } else {
+          lastError = new Error(`runtime returned HTTP ${status}`);
+        }
       } catch (err) {
         lastError = err;
       } finally {
