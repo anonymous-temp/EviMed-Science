@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 
-import { EVIMED_PRESET, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
+import { EVIMED_PRESET, HOSTED_PERMISSION_PRESET, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
 
 const input = {
   modelGatewayUrl: "https://open-science-web:8787/internal/model/v1",
@@ -243,4 +243,24 @@ test("the build-time smoke patch has the same shape as the one the control plane
     shape(renderProfilePatch(input)),
     "the fixture and the renderer disagree on rows or keys; regenerate the fixture",
   );
+});
+
+test("the composed sandbox and approval pair is a named preset, hosted or not", () => {
+  // `dsh-permission-presets` derives its default from the composed pair and
+  // refuses to load when that pair matches no preset — which takes down the
+  // whole plugin tree, not just permissions. Its shipped presets pair a
+  // confined sandbox with `ask` and an unconfined one with `never`; a hosted
+  // run is confined AND unattended, which is neither.
+  const hosted = renderProfilePatch(input);
+  assert.match(hosted, /policy: 'never'/);
+  assert.match(hosted, new RegExp(`defaultPreset: '${HOSTED_PERMISSION_PRESET}'`));
+  const presetBlock = hosted.slice(hosted.indexOf("- id: permission"));
+  assert.match(presetBlock, new RegExp(`${HOSTED_PERMISSION_PRESET}:\\n\\s+sandbox: workspace-write\\n\\s+approval: never`));
+
+  const local = renderProfilePatch({ ...input, flags: { ...input.flags, hosted: false } });
+  assert.match(local, /policy: 'ask'/);
+  // `workspace-write` + `ask` is a preset the kernel already ships, so the local
+  // profile names that one rather than inventing a second.
+  assert.match(local, /defaultPreset: 'workspace-write'/);
+  assert.doesNotMatch(local, new RegExp(`${HOSTED_PERMISSION_PRESET}:`));
 });
