@@ -52,6 +52,7 @@ import {
   completionCheck,
   contentTriggerIssues,
   delegatableItems,
+  evidenceSourceErrorCode,
   gateDeliverable,
   indexPlan,
   rejectionEnvelope,
@@ -104,6 +105,17 @@ export const Config = Schema.object({
  * @param {Config} config
  * @returns {Promise<void>}
  */
+/**
+ * One delegated child's durable record, keyed by deliverable so a retry
+ * replaces its first attempt rather than accumulating beside it.
+ * @param {any} ctx @param {string} key @param {Record<string, any>} record
+ */
+function recordSubagent(ctx, key, record) {
+  const store = ctx.get('evimedRun')
+  if (!store) return
+  store.subagents.set(key, record)
+}
+
 export async function apply(ctx, config) {
   /** Per-session state. A run is one session, and the sessions in one host are separate runs. */
   const state = new Map()
@@ -220,7 +232,7 @@ export async function apply(ctx, config) {
   // ---- one retry for a recoverable source failure, inside the run ---------
   ctx.effect(() => onToolWrap(ctx, async (call, proceed) => {
     const result = await proceed()
-    const code = String(result?.error?.code ?? '')
+    const code = evidenceSourceErrorCode(result)
     if (!code || !call.name.startsWith('mcp__evimed__')) return result
     const { classifyEvidenceSourceError } = await import('@evimed/domain')
     if (classifyEvidenceSourceError(code) !== 'recoverable') return result
@@ -394,14 +406,40 @@ export async function apply(ctx, config) {
         Object.assign(item, advancePlanItem(item, 'delegate'))
         await putPlanIndex(store(), entry)
 
+        // Recorded before the child starts, and again when it settles. The
+        // `subagents` medium had no writer at all: `projectRunState` published
+        // an empty array beside a `budget.children` that counted delegations,
+        // so the durable record said "no children" for a run that had them.
+        //
+        // `skills` is the injection receipt. `skillsLoaded` is true by
+        // construction here — the bodies travel inside the child's prompt, so
+        // the model never calls the `skill` tool and a transcript scan for that
+        // call can only ever conclude the skill was missing.
+        const injected = skillBodies.map((skill) => skill.name)
+        recordSubagent(ctx, item.id, { deliverableId: item.id, capability: item.capability, skills: injected, status: 'running' })
         const run = await startSubagent(ctx, request, call.agent ?? ctx.get('agents')?.get?.(call.agentId), call.signal)
-        const outcome = toSubagentOutcome({ info: run?.info ?? {}, result: await run.result })
+        const outcome = toSubagentOutcome(run, await run.result)
         item.childSessionId = outcome.childSessionId
+        recordSubagent(ctx, item.id, {
+          deliverableId: item.id,
+          capability: item.capability,
+          skills: injected,
+          status: outcome.stopReason,
+          childSessionId: outcome.childSessionId,
+        })
         const settlement = settleDelegation({ item, outcome, alreadyRetried: entry.redelegated.has(item.id) })
         if (settlement.action === 'redelegate') {
           entry.redelegated.add(item.id)
           const retry = await startSubagent(ctx, { ...request, prompt: `${request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` }, call.agent, call.signal)
-          const retried = toSubagentOutcome({ info: retry?.info ?? {}, result: await retry.result })
+          const retried = toSubagentOutcome(retry, await retry.result)
+          recordSubagent(ctx, item.id, {
+            deliverableId: item.id,
+            capability: item.capability,
+            skills: injected,
+            status: retried.stopReason,
+            childSessionId: retried.childSessionId,
+            retried: true,
+          })
           if (retried.stopReason !== 'completed') {
             Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_failed', settlement.reason)] }))
             await putPlanIndex(store(), entry)

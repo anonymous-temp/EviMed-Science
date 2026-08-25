@@ -46,6 +46,7 @@ export {
   buildDelegation,
   completionCheck,
   delegatableItems,
+  evidenceSourceErrorCode,
   gateDeliverable,
   guardedBashTarget,
   indexPlan,

@@ -31,12 +31,6 @@ export const OPENCODE_MCP_SERVER_NAME = 'evimed-research'
 /** Prefix DSH gives every tool of that server on the model-visible surface. */
 export const MCP_TOOL_PREFIX = `mcp__${MCP_SERVER_NAME}__`
 
-/** DSH publishes an MCP tool as `${serverName}__${rawName}` — the server name,
- *  two underscores, the tool's own name. Distinct from the single-underscore
- *  spelling below, and the difference is not cosmetic: stripping `evimed_` off
- *  `evimed__literature_search` leaves `_literature_search`, which matches
- *  nothing, so every research tool call parsed as "not one of ours". */
-export const DSH_MCP_TOOL_PREFIX = `${MCP_SERVER_NAME}__`
 
 /** Prefix OpenCode gives every tool call it reports from this server in session history. */
 export const OPENCODE_MCP_TOOL_PREFIX = `${OPENCODE_MCP_SERVER_NAME}_`
@@ -170,12 +164,6 @@ export function mcpToolBaseName(name) {
   }
   if (text.startsWith(MCP_TOOL_PREFIX)) {
     const base = text.slice(MCP_TOOL_PREFIX.length)
-    return MCP_TOOL_BASE_NAMES.includes(base) ? base : null
-  }
-  // Checked before the single-underscore spelling, which would otherwise
-  // consume the first of the two and leave a leading underscore behind.
-  if (text.startsWith(DSH_MCP_TOOL_PREFIX)) {
-    const base = text.slice(DSH_MCP_TOOL_PREFIX.length)
     return MCP_TOOL_BASE_NAMES.includes(base) ? base : null
   }
   if (text.startsWith('evimed_')) {

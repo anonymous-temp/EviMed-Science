@@ -627,6 +627,28 @@ function successfulEvidenceSourceArtifacts(messages, runtimeWorkspaceRoot) {
   return artifacts;
 }
 
+/**
+ * Skill names this run's own durable record says were injected.
+ *
+ * Under pre-injection a capability's skill bodies travel inside the child's
+ * prompt, so the model never calls the `skill` tool and a transcript scan for
+ * that call concludes the skill was missing — for every run, always. The
+ * capability manifest requires `skills[]` precisely so delegation can inject
+ * them, which is what makes the check answerable by construction instead of by
+ * asking the model to confirm it loaded something.
+ * @param {Record<string, any> | null | undefined} projection
+ * @returns {Set<string>}
+ */
+function injectedSkills(projection) {
+  const injected = new Set();
+  for (const record of projection?.subagents ?? []) {
+    for (const name of record?.skills ?? []) {
+      if (typeof name === "string" && name.trim()) injected.add(name.trim());
+    }
+  }
+  return injected;
+}
+
 function successfullyLoadedSkills(messages) {
   const loaded = new Set();
   for (const message of messages) {
@@ -1039,6 +1061,21 @@ async function requiredSpecialistArtifacts(
     : { ...outcome, ...unchecked, qualityNotices: advisories };
 }
 
+/**
+ * Every skill this run actually had, from either route: the model loaded it
+ * with the `skill` tool, or delegation injected its body into the child's
+ * prompt. Both are "the capability's method was in front of the model"; only
+ * the first leaves a tool call to scan for.
+ * @param {any} project @param {any} assistantMessages @returns {Promise<Set<string>>}
+ */
+async function loadedOrInjectedSkills(project, assistantMessages) {
+  const loaded = successfullyLoadedSkills(assistantMessages);
+  const read = await readRunStateProjection(project, project.workspaceDir);
+  if (read.state !== "read") return loaded;
+  for (const name of injectedSkills(read.projection)) loaded.add(name);
+  return loaded;
+}
+
 /** @param {any} project
  *  @param {any} run
  *  @param {any} agentRegistry
@@ -1077,7 +1114,7 @@ async function specialistCompletionOutcome(
     // violation: deliver the reply marked "unverified" instead of discarding a
     // sound answer.
     if (agent.completionChecks.includes("skillsLoaded")) {
-      const loadedSkills = successfullyLoadedSkills(assistantMessages);
+      const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages);
       const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
       if (requiredSkills.some((skill) => !loadedSkills.has(skill))) {
         return {
@@ -1122,7 +1159,7 @@ async function specialistCompletionOutcome(
     return { artifacts: [], errorCode: null };
   }
   if (agent.completionChecks.includes("skillsLoaded")) {
-    const loadedSkills = successfullyLoadedSkills(assistantMessages);
+    const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages);
     const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
     if (requiredSkills.some((skill) => !loadedSkills.has(skill))) {
       return { artifacts: [], errorCode: "specialist_required_skill_missing" };
@@ -2043,9 +2080,16 @@ export class AgentRunStore {
       // run that died mid-flight is exactly when its last recorded state is
       // worth having.
       const projection = await readRunStateProjection(project, project.workspaceDir);
-      const notices = projection.state === "read"
+      // Deduplicated against what the run already admitted while it was alive.
+      // `publishRunProjection` puts these same lines on the ledger as they
+      // appear, so re-adding the whole set here reported every admission twice
+      // for a run the monitor had been watching, and not at all for one that
+      // died before its first poll. The set is the same one that path keeps.
+      const admitted = this.projectionAdmissions.get(run.id) ?? new Set();
+      const notices = (projection.state === "read"
         ? [...(projection.projection?.degraded ?? []), ...(projection.projection?.qualityNotices ?? [])]
-        : [];
+        : []
+      ).filter((line) => typeof line === "string" && line && !admitted.has(line));
       return this.finishInternal(project, run.id, {
         status: "failed",
         errorCode: "runtime_stopped",
@@ -2563,9 +2607,25 @@ export class AgentRunStore {
       // and the failure surfaces somewhere else entirely — a run that cannot
       // be found, in a project directory that has already been removed.
       await monitor?.promise?.catch(() => {});
+      if (status === "failed") {
+        // The container exiting is what makes the transcript unreadable, so
+        // this path and `reconcileSession`'s `runtime_not_running` branch are
+        // two routes out of one event — and this one wins the race, because it
+        // is driven by the exit itself rather than by the next read that
+        // notices it. `finishInternal` no-ops on an already-terminal run, so
+        // whichever arrives first decides. Writing `runtime_stopped` here
+        // therefore made the durable bridge unreachable in exactly the case it
+        // was built for: a finished package on disk, graded and receipted,
+        // reported as a run that stopped before delivering.
+        //
+        // A cancel keeps its own verdict below: the operator asked for the run
+        // to stop, and answering "succeeded" would contradict them.
+        await this.finishFromDurableRecord(project, run);
+        continue;
+      }
       await this.finishInternal(project, run.id, {
         status,
-        errorCode: status === "failed" ? "runtime_stopped" : "runtime_canceled",
+        errorCode: "runtime_canceled",
         artifacts: [],
       });
     }
@@ -2591,4 +2651,10 @@ export class AgentRunStore {
     this.clinicalRepairBaselineCursors.clear();
     this.clinicalRepairSenders.clear();
   }
+}
+
+/** Test seam: the skill check's two routes, without a whole run around them.
+ *  @param {any} project @param {any} assistantMessages @returns {Promise<Set<string>>} */
+export function loadedOrInjectedSkillsForTest(project, assistantMessages) {
+  return loadedOrInjectedSkills(project, assistantMessages);
 }

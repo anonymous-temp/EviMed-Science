@@ -441,3 +441,45 @@ export function settleDelegation(input) {
   }
   return { action: 'fail', reason: `分工连续两次以 ${input.outcome.stopReason} 结束：${input.outcome.diagnostic || '无诊断信息'}。` }
 }
+
+/**
+ * The failure code of an `evimed` MCP tool call, or `''`.
+ *
+ * Three shapes have to line up for this to be readable, and reading the
+ * obvious one returned nothing:
+ *
+ * 1. Our MCP server frames a failure as `isError: true` with the whole
+ *    `failure()` object JSON-encoded into the text block AND repeated in
+ *    `structuredContent`.
+ * 2. The kernel's MCP bridge throws before it looks at `structuredContent`:
+ *    `if (result.isError === true) throw new Error(text)` — a plain `Error`,
+ *    so the structured copy is discarded and only the text survives.
+ * 3. `ToolFailure.info` (the declared `{name, code}`) is populated *only* for
+ *    `HarnessError` subclasses — `errorInfo()` returns `undefined` for
+ *    anything else — so an MCP failure never has one.
+ *
+ * `result.error.code` was therefore always `undefined`, the guard below
+ * short-circuited on every failure, and the single backoff-and-retry for a
+ * transiently unreachable source never ran once: a source that blinked became
+ * a permanent retrieval gap that surfaced fifty tool calls later as a delivery
+ * failure with nothing recording why. Reading `error.info.code` instead — the
+ * correction the declarations suggest — would have been just as dead.
+ * @param {any} result a raw `ToolExecutionResult`
+ * @returns {string}
+ */
+export function evidenceSourceErrorCode(result) {
+  const error = result?.error
+  if (!error) return ''
+  const info = error.info
+  if (info && typeof info.code === 'string' && info.code) return info.code
+  const message = typeof error.message === 'string' ? error.message : ''
+  if (!message.startsWith('{')) return ''
+  try {
+    const parsed = JSON.parse(message)
+    const code = parsed?.error?.code
+    return typeof code === 'string' ? code : ''
+  } catch {
+    return ''
+  }
+}
+
