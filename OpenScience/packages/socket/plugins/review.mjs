@@ -92,7 +92,7 @@ export async function apply(ctx, config) {
         maxDepth: 1,
       }
       const run = await startSubagent(ctx, request, parent, call.signal)
-      const outcome = toSubagentOutcome({ info: run?.info ?? {}, result: await run.result })
+      const outcome = toSubagentOutcome(run, await run.result)
       if (outcome.stopReason !== 'completed') {
         return { ok: false, code: 'review_unavailable', issues: [{ code: 'review_unavailable', severity: 'advisory', message: `审查未完成：${outcome.diagnostic || outcome.stopReason}` }] }
       }

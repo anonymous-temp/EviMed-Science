@@ -17,6 +17,7 @@ import {
   completionCheck,
   delegatableItems,
   evidenceFromOutcome,
+  evidenceSourceErrorCode,
   gateDeliverable,
   guardedBashTarget,
   indexPlan,
@@ -209,6 +210,38 @@ test("a child that did not complete is retried once and then reported, never dro
   assert.deepEqual(settleDelegation({ item: {}, outcome: { stopReason: "completed", diagnostic: "" }, alreadyRetried: false }), { action: "settled", reason: "" });
   assert.equal(settleDelegation({ item: {}, outcome: { stopReason: "error", diagnostic: "boom" }, alreadyRetried: false }).action, "redelegate");
   assert.equal(settleDelegation({ item: {}, outcome: { stopReason: "error", diagnostic: "boom" }, alreadyRetried: true }).action, "fail");
+});
+
+test("a recoverable source failure is recognized from where its code actually survives", () => {
+  // Our MCP server JSON-encodes the whole `failure()` object into the text
+  // block; the kernel's bridge throws `new Error(text)` before it reads
+  // `structuredContent`; and `ToolFailure.info` is populated only for
+  // `HarnessError` subclasses, which an MCP failure never is. So this is the
+  // one surviving copy.
+  const payload = {
+    status: "error",
+    summary: "Public source returned HTTP 502.",
+    next_actions: ["retry"],
+    error: { code: "public_source_http_error", message: "Public source returned HTTP 502.", retryable: true, stopReason: null },
+  };
+  const failure = { isError: true, content: [], error: { message: JSON.stringify(payload) } };
+  assert.equal(evidenceSourceErrorCode(failure), "public_source_http_error");
+
+  // A `HarnessError`-shaped failure still reports through the declared field.
+  assert.equal(evidenceSourceErrorCode({ isError: true, error: { message: "x", info: { name: "ToolError", code: "full_text_not_available" } } }), "full_text_not_available");
+
+  // Negative controls. Each of these is a shape the pre-fix reading treated as
+  // equivalent to "no failure", and each must stay distinguishable from a real
+  // code rather than throwing or inventing one.
+  assert.equal(evidenceSourceErrorCode({ isError: false, value: {}, content: [] }), "", "a success has no code");
+  assert.equal(evidenceSourceErrorCode({ isError: true, error: { message: "plain text, not JSON" } }), "");
+  assert.equal(evidenceSourceErrorCode({ isError: true, error: { message: "{not valid json" } }), "");
+  assert.equal(evidenceSourceErrorCode({ isError: true, error: { message: JSON.stringify({ status: "error" }) } }), "");
+  assert.equal(evidenceSourceErrorCode(undefined), "");
+  // The reading the code used to do, and the reading the declarations suggest,
+  // both return nothing on the real shape — which is why the retry was dead.
+  assert.equal(failure.error.code, undefined);
+  assert.equal(failure.error.info, undefined);
 });
 
 test("the gate answers with a value and the rejection is layered", () => {

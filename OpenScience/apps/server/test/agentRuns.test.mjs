@@ -8,11 +8,13 @@ import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
 import {
   AgentRunStore,
+  loadedOrInjectedSkillsForTest,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
   runPhaseHistory,
   terminalEvidenceSourceErrorCodes,
 } from "../src/agentRuns.mjs";
+import { workspaceLayout } from "@evimed/domain";
 import { deepResearchPackage, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 
@@ -4148,6 +4150,170 @@ test("a run whose container is already gone is judged from its receipt, not fail
     assert.equal(finished?.status, "succeeded", "a receipt that verifies is a delivered run, whatever became of the container");
     assert.deepEqual(finished?.artifacts, ["deliverables/d1/clinical-evidence-report.md"]);
     assert.deepEqual(finished?.qualityNotices, ["one advisory"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a pre-injected skill counts as loaded, because the model is never asked to load it", async () => {
+  // `skillsLoaded` was judged by scanning the transcript for `tool/call{skill}`.
+  // Delegation puts the capability's skill bodies inside the child's prompt —
+  // that is what `skills[]` in a capability manifest is for — so the model has
+  // no reason to call that tool and the scan concludes "missing" for every run
+  // that worked exactly as designed.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-skills-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.runStateDir), { recursive: true });
+    const write = async (subagents) => writeFile(
+      path.join(project.workspaceDir, workspaceLayout.runStateFile),
+      JSON.stringify({ formatVersion: 1, runId: "run_x", subagents }),
+      "utf8",
+    );
+
+    // A run whose child was delegated with the skill injected.
+    await write([{ deliverableId: "d1", capability: "clinical-evidence-synthesis", skills: ["clinical-evidence-synthesis"], status: "completed" }]);
+    const injected = await loadedOrInjectedSkillsForTest(project, []);
+    assert.ok(injected.has("clinical-evidence-synthesis"), "the injection receipt is what makes this answerable");
+
+    // Negative control: an empty receipt must still read as "not loaded", or
+    // the check would pass for a run that never had the skill at all.
+    await write([{ deliverableId: "d1", capability: "clinical-evidence-synthesis", skills: [], status: "completed" }]);
+    const bare = await loadedOrInjectedSkillsForTest(project, []);
+    assert.equal(bare.has("clinical-evidence-synthesis"), false, "no injection recorded must not be mistaken for one");
+
+    // And the transcript route still works on its own, for an agent that does
+    // call the tool.
+    await rm(path.join(project.workspaceDir, workspaceLayout.runStateFile));
+    const viaTool = await loadedOrInjectedSkillsForTest(project, [
+      { parts: [{ type: "tool", tool: "skill", state: { status: "completed", input: { name: "open-domain-answer" } } }] },
+    ]);
+    assert.ok(viaTool.has("open-domain-answer"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("the container exiting judges from the durable record too, not just a later reconcile", async () => {
+  // The timing regression. The container exit and the unreadable transcript are
+  // one event with two exits from it: `notifyRuntimeStop(..., "failed")` →
+  // `closeProject`, and `reconcileSession` catching `runtime_not_running`. Only
+  // the second consulted the durable record — and the first is the one that
+  // fires, because it is driven by the exit itself rather than by the next read
+  // that happens to notice it. `finishInternal` no-ops on an already-terminal
+  // run, so whichever lands first decides, and the bridge was unreachable in
+  // exactly the case it was built for.
+  //
+  // Observed in production run 6: a graded package, a 47 KB state projection on
+  // disk, and a ledger entry reading `failed / runtime_stopped / artifacts 0`.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-exit-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    const deliverableDir = path.join(project.workspaceDir, "deliverables", "d1");
+    await mkdir(deliverableDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const body = "# report\n";
+    await writeFile(path.join(deliverableDir, "clinical-evidence-report.md"), body, "utf8");
+    const sha256 = createHash("sha256").update(body, "utf8").digest("hex");
+    await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_x",
+      bundleVersion: "0.1.0",
+      domainVersion: "0.1.0",
+      entries: [{
+        deliverableId: "d1",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        files: [{ path: "deliverables/d1/clinical-evidence-report.md", sha256, bytes: Buffer.byteLength(body) }],
+        acceptedAt: "2026-01-01T00:00:00.000Z",
+        attempt: 1,
+        notices: ["one advisory"],
+      }],
+    }, null, 2), "utf8");
+
+    const binding = { sessionId: "ses_exit", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => [],
+      monitorIntervalMs: 60_000,
+    });
+    const started = await store.start(project, { sessionId: binding.sessionId });
+    // The container exits. This, not a reconcile, is what the runtime reports.
+    await store.closeProject(project, "failed");
+    const finished = (await store.list(project)).find((item) => item.id === started.id);
+
+    assert.equal(finished?.status, "succeeded", "the exit path must consult the receipt, not assume the run died undelivered");
+    assert.deepEqual(finished?.artifacts, ["deliverables/d1/clinical-evidence-report.md"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a container that exits with nothing durable still says what the run last knew", async () => {
+  // The bridge's own behaviour, called directly. Driving this through
+  // `closeProject` proved nothing: the monitor's live projection path puts the
+  // same lines on the ledger, so the assertion passed with the bridge disabled
+  // — a test green for a reason other than the one it names.
+  //
+  // What matters here is the run that dies before any poll. Then the live path
+  // never ran, and the projection's account of the run exists only in the file
+  // the bridge reads. "The bridge ran and found no receipt" and "the bridge
+  // never ran" both write `failed / runtime_stopped / artifacts 0`; the
+  // notices are the only externally visible difference.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-exit-bare-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.runStateDir), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const admitted = "evidence ingest found no source in a completed literature_search result (structured=object)";
+    const fresh = "capsule recall disabled: no endpoint configured";
+    await writeFile(path.join(project.workspaceDir, workspaceLayout.runStateFile), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_x",
+      degraded: [admitted, fresh],
+      qualityNotices: [],
+    }), "utf8");
+
+    const binding = { sessionId: "ses_bare", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => [],
+      monitorIntervalMs: 60_000,
+    });
+    const started = await store.start(project, { sessionId: binding.sessionId });
+    // Exactly what the live path would have recorded for the first line, so the
+    // dedup has something real to be measured against.
+    store.projectionAdmissions.set(started.id, new Set([admitted]));
+    await store.finishFromDurableRecord(project, { id: started.id, sessionId: binding.sessionId });
+    const finished = (await store.list(project)).find((item) => item.id === started.id);
+
+    assert.equal(finished?.status, "failed");
+    assert.equal(finished?.errorCode, "runtime_stopped");
+    assert.deepEqual(finished?.artifacts, []);
+    assert.ok(finished?.qualityNotices?.includes(fresh), "a line the run admitted only in its final state must still reach the verdict");
+    assert.equal(
+      finished.qualityNotices.filter((line) => line === admitted).length,
+      0,
+      "a line already on the ledger must not be repeated by the verdict that closes the run",
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

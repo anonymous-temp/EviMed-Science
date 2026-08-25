@@ -15,7 +15,7 @@
  * @module @evimed/dsh-socket/plugins/capsule
  */
 
-import { configSchema, defineTool, listDirAt, readFileAt, registerSkill, registerTool } from '@evimed/harness-port'
+import { configSchema, defineTool, listDirAt, readFileAt, registerSkill, registerTool, toSkillName } from '@evimed/harness-port'
 
 const Schema = await configSchema()
 
@@ -52,7 +52,7 @@ export async function apply(ctx, config) {
   ctx.provide('evimedCapsuleMethods', methods, true)
   for (const method of methods) {
     ctx.effect(() => registerSkill(ctx, {
-      name: `capsule:${method.name}`,
+      name: toSkillName(method.name, 'capsule'),
       description: method.description || `用户自己的方法：${method.name}`,
       content: method.body,
       ...(method.whenToUse ? { whenToUse: method.whenToUse } : {}),

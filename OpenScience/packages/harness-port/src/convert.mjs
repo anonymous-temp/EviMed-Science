@@ -74,13 +74,34 @@ export function toToolCall(exec) {
   }
 }
 
+/** The MCP envelope's payload, or the value itself when it is not one.
+ *  @param {unknown} value @returns {unknown} */
+function unwrapStructured(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+  const envelope = /** @type {Record<string, any>} */ (value)
+  // `content` plus `structuredContent` is the envelope's signature; a native
+  // value carrying both is answering in the MCP vocabulary anyway.
+  if (Array.isArray(envelope.content) && 'structuredContent' in envelope) return envelope.structuredContent
+  return value
+}
+
 /**
  * @param {unknown} result  a DSH `ToolExecutionResult`
  * @returns {import('./types.mjs').ToolOutcome}
  */
 export function toToolOutcome(result) {
   const source = record(result)
-  const error = source.error ? { name: str(record(source.error).name), code: str(record(source.error).code) } : null
+  // `ToolFailure` is `{ message, info?: { name, code } }` — the routable pair is
+  // one level below where the obvious reading puts it, and `isError` (not the
+  // presence of `error`) is the declared discriminator. Reading `error.name`
+  // and `error.code` directly yielded two empty strings for every failed call:
+  // a tool that failed for a reason and a tool that failed for none produced
+  // the same record.
+  const failure = source.isError === true || source.error != null ? record(source.error) : null
+  const info = failure ? record(failure.info) : null
+  const error = failure
+    ? { name: str(info?.name), code: str(info?.code), message: str(failure.message) }
+    : null
   const content = Array.isArray(source.content) ? source.content : []
   const text = content
     .map((block) => (record(block).type === 'text' ? str(record(block).text) : ''))
@@ -89,16 +110,22 @@ export function toToolOutcome(result) {
   return {
     status: error ? 'error' : 'completed',
     text,
-    // Two shapes reach this converter, and it knew one of them. A native DSH
-    // tool answers with `value`; an MCP tool proxied by `dsh-mcp-client`
-    // answers in the MCP shape, `{ content, structuredContent }`, with no
-    // `value` at all. Reading only `value` meant every MCP result arrived here
-    // structurally empty — and since all twenty-six research tools are MCP
-    // tools, the evidence ledger recorded nothing for any retrieval a run ever
-    // made. Eleven preserved full texts sat in the workspace beside a table
-    // with zero rows, and the failure was silent by construction: an empty
-    // ledger reads exactly like a run that retrieved nothing.
-    structured: source.value ?? source.structuredContent,
+    // One shape, one level deeper than it looks.
+    //
+    // A tool returns the canonical value its `output.schema` declares, and for
+    // an MCP-bridged tool that value IS the MCP result:
+    // `{ content, structuredContent }`. So `value` was never missing — the
+    // payload is inside it, and reading `value` handed consumers the envelope.
+    // `sourcesOf` looked for its keys at the top level, found an envelope, and
+    // returned nothing. All twenty-six research tools are MCP tools, so the
+    // evidence ledger recorded nothing for any retrieval any run ever made:
+    // eleven preserved full texts in the workspace beside a table with zero
+    // rows, silent because an empty ledger reads exactly like a run that
+    // retrieved nothing.
+    //
+    // An earlier attempt read `value ?? structuredContent`, which changes
+    // nothing at all — `value` is always present. Unwrapping is the fix.
+    structured: unwrapStructured(source.value),
     error,
     meta: source.meta,
   }
@@ -165,8 +192,15 @@ export function toStepInfo(payload, context) {
  */
 export function toUsage(usage) {
   const source = record(usage)
-  const cacheHit = num(source.promptCacheHitTokens ?? source.prompt_cache_hit_tokens ?? source.cachedInputTokens)
-  const cacheMiss = num(source.promptCacheMissTokens ?? source.prompt_cache_miss_tokens)
+  // `cacheReadTokens` / `cacheWriteTokens` are what DSH's `TokenUsage`
+  // declares. The three spellings behind them are DeepSeek's own API vocabulary
+  // and older harness builds, kept because usage also reaches us straight from
+  // a provider response in the model gateway's path. Without the first name the
+  // cache counters were simply always zero — `inputTokens` and `outputTokens`
+  // matched, so the totals looked right and only the cache split was missing,
+  // which is the kind of wrong that never announces itself.
+  const cacheHit = num(source.cacheReadTokens ?? source.promptCacheHitTokens ?? source.prompt_cache_hit_tokens ?? source.cachedInputTokens)
+  const cacheMiss = num(source.cacheWriteTokens ?? source.promptCacheMissTokens ?? source.prompt_cache_miss_tokens)
   const input = num(source.inputTokens ?? source.promptTokens ?? source.prompt_tokens) || cacheHit + cacheMiss
   return {
     input,
@@ -180,17 +214,32 @@ export function toUsage(usage) {
  * @param {unknown} run a DSH `SubagentRun` settled result plus its info
  * @returns {import('./types.mjs').SubagentOutcome}
  */
-export function toSubagentOutcome(run) {
+/** @param {unknown} value @returns {boolean} */
+function isThenable(value) {
+  return Boolean(value) && typeof (/** @type {any} */ (value)?.then) === 'function'
+}
+
+export function toSubagentOutcome(run, settled) {
   const source = record(run)
-  const info = record(source.info)
-  const result = record(source.result)
+  // `SubagentRun.result` is a Promise. Reading fields off it yields an empty
+  // object, so every delegated child came back `stopReason: 'unknown'` with no
+  // output and no structured result — the seam reported nothing about any
+  // child, in a shape that looks exactly like a child that produced nothing.
+  // The settled value is passed in by the caller, which is the only place that
+  // can await it.
+  const result = record(settled ?? (isThenable(source.result) ? null : source.result))
   const stopReason = str(result.stopReason)
-  const known = ['completed', 'error', 'cancelled', 'max-turns']
+  // DSH's own vocabulary, from `SubagentStopReasonMap`. `cancelled` and
+  // `max-turns` were this package's guesses and match nothing DSH emits, so an
+  // aborted or token-capped child read as `unknown` — indistinguishable from a
+  // stop reason we had never seen.
+  const known = ['completed', 'aborted', 'error', 'max-tokens', 'refusal']
   const output = Array.isArray(result.output)
     ? result.output.map((block) => (record(block).type === 'text' ? str(record(block).text) : '')).filter(Boolean).join('\n')
     : str(result.output)
   return {
-    childSessionId: str(info.id ?? source.id),
+    // `SubagentRun` declares `id` directly; there is no `info` on it.
+    childSessionId: str(source.id),
     stopReason: /** @type {any} */ (known.includes(stopReason) ? stopReason : 'unknown'),
     output,
     structured: result.structured,

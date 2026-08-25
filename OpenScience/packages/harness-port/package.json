@@ -43,6 +43,7 @@
     }
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-skill": "0.1.1-rc.2",
     "@deepseek-ai/schemastery": "3.18.1",
     "@eslint/js": "^9.39.0",
     "eslint": "^9.39.0",

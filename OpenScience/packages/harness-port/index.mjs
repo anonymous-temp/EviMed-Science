@@ -333,8 +333,48 @@ export function registerSkill(ctx, skill) {
     name: skill.name,
     description: skill.description,
     content: skill.content,
-    ...(skill.whenToUse ? { metadata: { whenToUse: skill.whenToUse } } : {}),
+    // `whenToUse` is a declared field of `SkillSummary`, and the catalog the
+    // model reads surfaces it as routing guidance. Under `metadata` it is
+    // parsed-frontmatter cargo the catalog never shows, so the skill was
+    // advertised with no statement of when to reach for it.
+    ...(skill.whenToUse ? { whenToUse: skill.whenToUse } : {}),
   })
+}
+
+/**
+ * DSH's public skill-name grammar. Kept as a local copy because
+ * `registerSkill` must stay synchronous (its return value is the effect's
+ * disposer) and the harness modules load lazily; `test/port.test.mjs` pins
+ * this copy against the kernel's own `isSkillName` so it cannot drift.
+ */
+const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+/**
+ * Produce a registrable skill name from a name we do not control.
+ *
+ * `skills.register()` *throws* on a name outside the grammar, and the capsule
+ * registers inside `ctx.effect` during `apply` — so one user method named with
+ * a colon, a capital or a Chinese character does not skip that skill, it fails
+ * the plugin that owns memory recall. The prefix `capsule:<name>` was itself
+ * outside the grammar, so the throw was unconditional for any user who had
+ * distilled even one method.
+ *
+ * Normalization follows the kernel's own precedent for MCP public names: when
+ * slugging changes the identity, an 8-hex digest is appended so two distinct
+ * methods can never collapse into one registration (a collapse reads as "my
+ * method is missing", which is exactly the failure memory must not have).
+ * @param {string} raw   the user's own name for the method
+ * @param {string} prefix  kebab-case namespace, e.g. `capsule`
+ * @returns {string}
+ */
+export function toSkillName(raw, prefix) {
+  const verbatim = `${prefix}-${raw}`
+  if (SKILL_NAME.test(verbatim)) return verbatim
+  const slug = String(raw).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  let digest = 0
+  for (const ch of String(raw)) digest = (Math.imul(digest, 31) + ch.codePointAt(0)) >>> 0
+  const suffix = digest.toString(16).padStart(8, '0')
+  return slug ? `${prefix}-${slug}-${suffix}` : `${prefix}-${suffix}`
 }
 
 /* -------------------------------------------------------------- subagents */

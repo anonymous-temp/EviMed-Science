@@ -519,16 +519,14 @@ test("a safety rule missing what its kind needs is refused at load, not mid-deli
 });
 
 test("a research tool is recognised in the spelling each kernel publishes it under", () => {
-  // Three kernels, three spellings of one tool. DSH publishes MCP tools as
-  // `${serverName}__${rawName}` — two underscores — and that form fell through
-  // to the single-underscore branch, which consumed one of them and left
-  // `_literature_search` behind. The name matched nothing, so every research
-  // call parsed as "not one of ours": no evidence row for any retrieval any run
-  // ever made, and no diagnostic either, because the diagnostic is guarded by
-  // this same check.
-  assert.equal(mcpToolBaseName("evimed__literature_search"), "literature_search", "the DSH spelling");
-  assert.equal(mcpToolBaseName("mcp__evimed__literature_search"), "literature_search", "the OpenCode spelling");
+  // DSH's model-facing name is `mcp__<serverName>__<rawName>` verbatim — the
+  // same form OpenCode used, and the first branch already handled it. A
+  // previous commit added a bare `evimed__` branch on the belief that DSH
+  // published that shape; DSH's own type declarations say otherwise, so the
+  // branch is gone. These spellings stay because the parser must keep accepting
+  // every form a recorded transcript may carry.
+  assert.equal(mcpToolBaseName("mcp__evimed__literature_search"), "literature_search", "the published name");
   assert.equal(mcpToolBaseName("evimed_literature_search"), "literature_search", "the single-underscore spelling");
   assert.equal(mcpToolBaseName("literature_search"), "literature_search", "the bare name");
-  assert.equal(mcpToolBaseName("evimed__not_a_tool"), null, "an unknown name is still unknown in every spelling");
+  assert.equal(mcpToolBaseName("mcp__evimed__not_a_tool"), null, "an unknown name is still unknown in every spelling");
 });

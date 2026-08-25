@@ -34,7 +34,7 @@
  * @property {'completed'|'error'} status
  * @property {string} text               model-facing result text, flattened
  * @property {unknown} structured        the tool's canonical value when it had one
- * @property {{ name: string, code: string } | null} error
+ * @property {{ name: string, code: string, message: string } | null} error
  * @property {unknown} meta
  */
 

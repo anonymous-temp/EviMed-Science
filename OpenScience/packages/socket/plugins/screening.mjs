@@ -103,7 +103,7 @@ export async function apply(ctx, config) {
           maxDepth: 1,
         }, parent, call.signal)))
         for (const run of runs) {
-          const outcome = toSubagentOutcome({ info: run?.info ?? {}, result: await run.result })
+          const outcome = toSubagentOutcome(run, await run.result)
           if (outcome.stopReason !== 'completed') {
             failures.push(outcome.diagnostic || outcome.stopReason)
             continue

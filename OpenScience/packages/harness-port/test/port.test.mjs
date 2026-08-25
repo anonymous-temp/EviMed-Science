@@ -17,6 +17,7 @@ import {
   toStepInfo,
   toSubagentOutcome,
   toToolCall,
+  toSkillName,
   toToolOutcome,
   toTurnEnd,
   toUsage,
@@ -156,9 +157,75 @@ test("a tool execution converts to the port's own shape", () => {
 test("a tool outcome flattens content and preserves the failure identity", () => {
   const ok = toToolOutcome({ value: { ok: true }, content: [{ type: "text", text: "a" }, { type: "text", text: "b" }] });
   assert.deepEqual(ok, { status: "completed", text: "a\nb", structured: { ok: true }, error: null, meta: undefined });
-  const bad = toToolOutcome({ error: { name: "ToolError", code: "full_text_not_available" }, content: [] });
+  // The real `ToolExecutionFailure`: `isError` discriminates and the routable
+  // pair sits under `error.info`, not on `error`. The previous version of this
+  // test asserted against a flat `{name, code}` the kernel never emits, so it
+  // stayed green while every real failure decoded to two empty strings.
+  const bad = toToolOutcome({
+    isError: true,
+    error: { message: "no full text for this DOI", info: { name: "ToolError", code: "full_text_not_available" } },
+    content: [{ type: "text", text: "no full text for this DOI" }],
+  });
   assert.equal(bad.status, "error");
-  assert.equal(bad.error.code, "full_text_not_available");
+  assert.deepEqual(bad.error, { name: "ToolError", code: "full_text_not_available", message: "no full text for this DOI" });
+  // Negative control: reading one level too shallow must NOT satisfy this.
+  const shallow = toToolOutcome({ isError: true, error: { name: "ToolError", code: "flat" }, content: [] });
+  assert.equal(shallow.error.code, "", "a flat name/code is not the kernel's shape and must not be mistaken for it");
+  // `info` is optional — a failure without it is still a failure, with a message.
+  const bare = toToolOutcome({ isError: true, error: { message: "boom" }, content: [] });
+  assert.equal(bare.status, "error");
+  assert.deepEqual(bare.error, { name: "", code: "", message: "boom" });
+});
+
+test("a capsule name the user chose is made registrable, not assumed to be", () => {
+  // The grammar is the kernel's and `skills.register()` *throws* outside it —
+  // inside `ctx.effect` during the capsule plugin's `apply`. So one user method
+  // named with a colon, a capital, or a Chinese character did not skip a skill;
+  // it failed the plugin that owns memory recall. `capsule:<name>` was itself
+  // outside the grammar, so the throw was unconditional for anyone who had
+  // distilled even one method.
+  //
+  // This asserts the production side; `packages/contracts/dsh` pins the local
+  // grammar copy against the kernel's own `isSkillName`.
+  const registrable = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+  // The clean case stays readable.
+  assert.equal(toSkillName("my-method", "capsule"), "capsule-my-method");
+  // Everything else must come back registrable — including the shape that used
+  // to be produced unconditionally, and a name with no ASCII at all.
+  for (const raw of ["My Method", "capsule:x", "我的方法", "", "a".repeat(80), "已有结论/复盘"]) {
+    const name = toSkillName(raw, "capsule");
+    assert.ok(registrable.test(name), `"${raw}" produced unregistrable "${name}"`);
+  }
+  // Distinct methods must not collapse: a collapse silently loses one memory.
+  const collapsed = new Set(["My Method", "my method", "MY-METHOD", "我的方法", "我的方法二"].map((raw) => toSkillName(raw, "capsule")));
+  assert.equal(collapsed.size, 5, "two different user methods normalized to one skill name");
+  // Negative control: the pre-fix name must fail the same check that now
+  // passes, or this test would prove nothing.
+  assert.equal(registrable.test("capsule:my-method"), false);
+});
+
+test("the port's copy of the skill-name grammar is still the kernel's", async () => {
+  // `registerSkill` must stay synchronous (its return value is the effect's
+  // disposer) while harness modules load lazily, so the port carries a literal
+  // copy of DSH's `SKILL_NAME`. A copy is only safe if something fails when it
+  // drifts — and the failure mode here is not a rejected skill but a thrown
+  // `apply`, so the drift would take out memory recall rather than one method.
+  //
+  // This lives in the port rather than `packages/contracts` because the port is
+  // the one package permitted to name `@deepseek-ai/*`; the boundary test
+  // enforces that, and it caught this test in the wrong package first.
+  const { isSkillName } = await import("@deepseek-ai/dsh-skill");
+  const local = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  for (const candidate of [
+    "capsule-method", "a", "a1-b2", "capsule-my-method-0000abcd",
+    "capsule:method", "capsule-Method", "capsule-", "-a", "a--b", "我的方法", "", "a_b", "a.b",
+  ]) {
+    assert.equal(local.test(candidate), isSkillName(candidate), `the port's grammar disagrees with the kernel on "${candidate}"`);
+  }
+  for (const raw of ["My Method", "capsule:x", "我的方法", "", "已有结论/复盘"]) {
+    assert.ok(isSkillName(toSkillName(raw, "capsule")), `"${raw}" produced a name the kernel rejects`);
+  }
 });
 
 test("usage totals cover a provider that reports only the cache split", () => {
@@ -168,9 +235,14 @@ test("usage totals cover a provider that reports only the cache split", () => {
 });
 
 test("a subagent outcome lands unknown stop reasons explicitly", () => {
-  const outcome = toSubagentOutcome({ info: { id: "child-1" }, result: { stopReason: "completed", output: [{ type: "text", text: "done" }], structured: { ok: true } } });
+  // Written against `SubagentRun` as DSH declares it: `id` on the run, and a
+  // `result` the caller has awaited. The earlier version of this test used a
+  // shape nobody produces — `{ info: { id }, result: <plain object> }` — and so
+  // vouched for a contract the real seam never presented.
+  const run = { id: "child-1", result: Promise.resolve({}) };
+  const outcome = toSubagentOutcome(run, { stopReason: "completed", output: [{ type: "text", text: "done" }], structured: { ok: true } });
   assert.deepEqual(outcome, { childSessionId: "child-1", stopReason: "completed", output: "done", structured: { ok: true }, diagnostic: "" });
-  assert.equal(toSubagentOutcome({ info: { id: "c" }, result: { stopReason: "exploded" } }).stopReason, "unknown");
+  assert.equal(toSubagentOutcome(run, { stopReason: "exploded" }).stopReason, "unknown");
 });
 
 test("a subagent session is recognizable from its header", () => {
@@ -345,12 +417,43 @@ test("a tool outcome carries its structure whether the tool is native or MCP", (
   const native = toToolOutcome({ value: { sources: [{ id: "a" }] }, content: [] });
   assert.deepEqual(native.structured, { sources: [{ id: "a" }] });
 
-  const mcp = toToolOutcome({ structuredContent: { sources: [{ id: "b" }] }, content: [{ type: "text", text: "t" }] });
+  // The MCP envelope IS the tool's canonical value, not a sibling of it, so the
+  // payload sits one level down and has to be unwrapped.
+  const mcp = toToolOutcome({
+    value: { content: [{ type: "text", text: "t" }], structuredContent: { sources: [{ id: "b" }] } },
+    content: [{ type: "text", text: "t" }],
+  });
   assert.deepEqual(mcp.structured, { sources: [{ id: "b" }] }, "an MCP result's structure must survive the conversion");
   assert.equal(mcp.status, "completed");
 
-  // `value` still wins when both are present: a native tool that also carries
-  // an MCP-shaped field is answering in its own vocabulary.
-  const both = toToolOutcome({ value: { sources: [{ id: "native" }] }, structuredContent: { sources: [{ id: "mcp" }] }, content: [] });
-  assert.deepEqual(both.structured, { sources: [{ id: "native" }] });
+  // A native value that merely has a `content` array is not an envelope unless
+  // it also declares `structuredContent`.
+  const lookalike = toToolOutcome({ value: { content: ["a"], sources: [{ id: "native" }] }, content: [] });
+  assert.deepEqual(lookalike.structured, { content: ["a"], sources: [{ id: "native" }] });
+});
+
+test("a delegated child's outcome comes from its settled result and its own id", () => {
+  // `SubagentRun` declares `id` and a `result` PROMISE. Reading fields off the
+  // promise yields an empty object, and there is no `info` property at all — so
+  // callers that passed `{ info: run.info ?? {}, result: await run.result }`
+  // got the right result and an empty session id, while anything reading
+  // `run.result` directly got nothing about the child whatsoever.
+  const settled = { output: [{ type: "text", text: "done" }], structured: { ok: true }, stopReason: "completed" };
+  const run = { id: "session-child-1", result: Promise.resolve(settled) };
+
+  const outcome = toSubagentOutcome(run, settled);
+  assert.equal(outcome.childSessionId, "session-child-1");
+  assert.equal(outcome.stopReason, "completed");
+  assert.equal(outcome.output, "done");
+  assert.deepEqual(outcome.structured, { ok: true });
+
+  // DSH's own stop-reason vocabulary, not this package's guesses: `aborted` and
+  // `max-tokens` are real, `cancelled` and `max-turns` never were.
+  assert.equal(toSubagentOutcome(run, { ...settled, stopReason: "aborted" }).stopReason, "aborted");
+  assert.equal(toSubagentOutcome(run, { ...settled, stopReason: "max-tokens" }).stopReason, "max-tokens");
+  assert.equal(toSubagentOutcome(run, { ...settled, stopReason: "refusal" }).stopReason, "refusal");
+  assert.equal(toSubagentOutcome(run, { ...settled, stopReason: "cancelled" }).stopReason, "unknown");
+
+  // Handed the run alone, the promise must not be mistaken for a result.
+  assert.equal(toSubagentOutcome(run).stopReason, "unknown");
 });
