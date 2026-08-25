@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 import {
   HttpError,
@@ -29,6 +30,7 @@ import {
   terminalEvidenceSourceErrorCodes,
   transitionEvents,
   transition as domainTransition,
+  validateDeliveryReceipt,
   workspaceLayout,
 } from "@evimed/domain";
 
@@ -40,6 +42,11 @@ export { repairableEvidencePackageErrorCodes, recoverableEvidenceSourceErrorCode
 // reachable through the public `AgentRunStore` API — which is the point of
 // those checks — so the adjacency logic itself needs a seam.
 export { runPhaseHistory };
+
+// Exported for its own test: the two-kernel resolution rule is not reachable
+// from the public API without standing up a whole run, and the rule itself is
+// what a future kernel change would break.
+export { readRequiredFile as readRequiredFileForTest };
 
 const ledgerFileName = "runs.jsonl";
 const terminalStatuses = new Set(["succeeded", "failed", "canceled"]);
@@ -789,6 +796,31 @@ async function existingArtifacts(project, candidates) {
 }
 
 async function readRequiredFile(project, relative) {
+  const direct = await openWorkspaceText(project, relative);
+  if (direct) return direct;
+  // Then under the deliverable directories.
+  //
+  // A capability declares its outputs as bare names — `clinical-evidence-report
+  // .md` — and the gate's own message still says "at the workspace root",
+  // because that is where the OpenCode composition wrote them. The DSH
+  // composition writes each package into `deliverables/<deliverableId>/`: one
+  // run can deliver several, the path guard fences each one, and §9.5 makes
+  // that directory the only input its validator accepts. So the same declared
+  // name has two homes depending on which kernel produced it, and a gate that
+  // knows only the first reports every DSH package as missing.
+  //
+  // Resolved rather than configured: the deliverable id belongs to the run, not
+  // to the deployment, and the receipt that names it is not always present —
+  // this path also runs while the container is still alive.
+  for (const candidate of await deliverableCandidatePaths(project, relative)) {
+    const found = await openWorkspaceText(project, candidate);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** @param {Record<string, any>} project @param {string} relative */
+async function openWorkspaceText(project, relative) {
   let opened;
   try {
     opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
@@ -799,6 +831,25 @@ async function readRequiredFile(project, relative) {
   } finally {
     await opened?.handle.close().catch(() => {});
   }
+}
+
+/**
+ * `deliverables/<id>/<name>` for every deliverable directory the run made.
+ * @param {Record<string, any>} project @param {string} relative
+ * @returns {Promise<string[]>}
+ */
+async function deliverableCandidatePaths(project, relative) {
+  if (relative.includes("/")) return [];
+  let entries;
+  try {
+    entries = await readdir(path.join(project.workspaceDir, workspaceLayout.deliverablesDir), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `${workspaceLayout.deliverablesDir}/${entry.name}/${relative}`)
+    .sort();
 }
 
 function citedHttpUrls(text) {
@@ -1079,7 +1130,7 @@ async function specialistCompletionOutcome(
         artifacts,
         errorCode: missingOutputErrorCodes[relative] ?? "specialist_required_output_missing",
         qualityIssues: [
-          `The required deliverable ${relative} is not in the workspace. Write it at exactly that path, at the workspace root, before finishing.`,
+          `The required deliverable ${relative} is not in the workspace. Write it at exactly that name, either at the workspace root or inside this deliverable\u0027s ${workspaceLayout.deliverablesDir}/<id>/ directory, before finishing.`,
           ...(missingOutputRepairAdvice[relative] ? [missingOutputRepairAdvice[relative]] : []),
         ],
       };
@@ -1436,6 +1487,69 @@ async function specialistCompletionOutcome(
  * @param {Record<string, any>} project @param {string} workspaceRoot
  * @returns {Promise<{ state: 'missing'|'unreadable'|'read', projection?: Record<string, any> }>}
  */
+/**
+ * The delivery receipt, or null when the run left none.
+ *
+ * Read from the project's own workspace on the host — not from the container
+ * path the runtime reports. Those are two different meanings of "the
+ * workspace": one is where a tool's own paths are relative to, the other is a
+ * directory this process can open, and using the first for the second is how
+ * the run-state projection came to read `/workspace` on a host that has no
+ * such directory.
+ *
+ * @param {Record<string, any>} project
+ * @returns {Promise<import('@evimed/domain').DeliveryReceipt|null>}
+ */
+async function readDeliveryReceipt(project) {
+  let text;
+  try {
+    text = await readTextFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, workspaceLayout.receiptFile), "");
+  } catch {
+    return null;
+  }
+  if (!text) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  // Validated, not trusted: the receipt is written inside the sandbox, and a
+  // malformed one must read as "no receipt" rather than as an accepted run.
+  return validateDeliveryReceipt(parsed) ? parsed : null;
+}
+
+/**
+ * The receipt's files, confirmed present and unchanged since they were graded.
+ * @param {Record<string, any>} project
+ * @param {import('@evimed/domain').DeliveryReceipt} receipt
+ * @returns {Promise<{ artifacts: string[], mismatched: string[] }>}
+ */
+async function verifiedReceiptArtifacts(project, receipt) {
+  /** @type {string[]} */
+  const artifacts = [];
+  /** @type {string[]} */
+  const mismatched = [];
+  for (const entry of receipt.entries ?? []) {
+    for (const file of entry.files ?? []) {
+      const relative = normalizeWorkspaceRelativePath(String(file.path ?? ""), "receipt artifact path");
+      let opened;
+      try {
+        opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
+        if (!opened.stat.isFile()) { mismatched.push(relative); continue; }
+        const digest = createHash("sha256").update(await opened.handle.readFile()).digest("hex");
+        if (digest !== String(file.sha256 ?? "")) mismatched.push(relative);
+        else artifacts.push(relative);
+      } catch {
+        mismatched.push(relative);
+      } finally {
+        await opened?.handle.close().catch(() => {});
+      }
+    }
+  }
+  return { artifacts: [...new Set(artifacts)].slice(0, maxArtifacts).sort(), mismatched: [...new Set(mismatched)] };
+}
+
 async function readRunStateProjection(project, workspaceRoot) {
   let text;
   try {
@@ -1899,6 +2013,58 @@ export class AgentRunStore {
     });
   }
 
+  /**
+   * The verdict a run leaves behind, read from the workspace rather than from
+   * the container.
+   *
+   * `delivery-receipt.json` is written by exactly one caller — the run-side
+   * gate, and only when it accepts — and names every delivered file with its
+   * sha256. That makes it the one thing a control plane can trust after the
+   * runtime is gone: the files it names can be checked against the digests it
+   * carries, so "these are the artifacts that were graded" is provable rather
+   * than assumed.
+   *
+   * @param {Record<string, any>} project @param {Record<string, any>} run
+   * @returns {Promise<Record<string, any>|null>}
+   */
+  async finishFromDurableRecord(project, run) {
+    const receipt = await readDeliveryReceipt(project);
+    if (!receipt) {
+      // Nothing durable: the runtime really did stop before it delivered.
+      // Whatever the projection saw of it travels with the verdict, because a
+      // run that died mid-flight is exactly when its last recorded state is
+      // worth having.
+      const projection = await readRunStateProjection(project, project.workspaceDir);
+      const notices = projection.state === "read"
+        ? [...(projection.projection?.degraded ?? []), ...(projection.projection?.qualityNotices ?? [])]
+        : [];
+      return this.finishInternal(project, run.id, {
+        status: "failed",
+        errorCode: "runtime_stopped",
+        artifacts: [],
+        ...(notices.length ? { qualityNotices: notices.slice(0, 20) } : {}),
+      });
+    }
+    const { artifacts, mismatched } = await verifiedReceiptArtifacts(project, receipt);
+    if (mismatched.length) {
+      // A file that does not match the digest it was graded under is not the
+      // file that was graded. Refusing is the only honest answer: the
+      // alternative is delivering something no gate has seen.
+      return this.finishInternal(project, run.id, {
+        status: "failed",
+        errorCode: "specialist_receipt_digest_mismatch",
+        artifacts: [],
+        qualityNotices: mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches`),
+      });
+    }
+    return this.finishInternal(project, run.id, {
+      status: "succeeded",
+      errorCode: null,
+      artifacts,
+      qualityNotices: receipt.entries.flatMap((entry) => entry.notices ?? []).slice(0, 20),
+    });
+  }
+
   async finishInternal(project, rawRunId, terminal) {
     const runId = safeId(rawRunId, "agent run id");
     if (!terminalStatuses.has(terminal.status)) throw new Error("Invalid internal terminal status.");
@@ -1990,11 +2156,20 @@ export class AgentRunStore {
       history = await this.readSessionHistory(project, sessionId, { wake: false });
     } catch (error) {
       if (error?.code === "runtime_not_running") {
-        return this.finishInternal(project, run.id, {
-          status: "failed",
-          errorCode: "runtime_stopped",
-          artifacts: [],
-        });
+        // A gone container is not a verdict.
+        //
+        // Everything this function derives came from a transcript that exists
+        // only while the runtime is alive, so the end of a run — the moment
+        // the kernel goes idle and the container exits — was read as the run
+        // having failed. The first real end-to-end run was recorded
+        // `failed / artifacts 0` with a complete, valid deliverable set on
+        // disk beside the ledger entry that said there was none.
+        //
+        // The durable record is what decides now: the receipt the run-side
+        // gate writes when it accepts a package, and the run-state projection
+        // beside it. Only when neither exists is a vanished runtime still a
+        // failure, and it is reported as one that says so.
+        return this.finishFromDurableRecord(project, run);
       }
       return run;
     }

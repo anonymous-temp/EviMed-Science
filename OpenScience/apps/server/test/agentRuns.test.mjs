@@ -4086,3 +4086,155 @@ test("every state-change notification carries the phase projection", async () =>
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a run whose container is already gone is judged from its receipt, not failed for being gone", async () => {
+  // The timing this pins: the kernel ends its turn, the container exits, and
+  // the control plane reconciles a moment later. Reading the transcript is
+  // impossible by then — it lives only inside the container — and the ledger
+  // recorded `failed / artifacts 0` for a run that had written a complete,
+  // valid deliverable set. The durable receipt is what decides now.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-durable-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    const deliverableDir = path.join(project.workspaceDir, "deliverables", "d1");
+    await mkdir(deliverableDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const body = "# report\n";
+    await writeFile(path.join(deliverableDir, "clinical-evidence-report.md"), body, "utf8");
+    const sha256 = createHash("sha256").update(body, "utf8").digest("hex");
+    await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_x",
+      bundleVersion: "0.1.0",
+      domainVersion: "0.1.0",
+      entries: [{
+        deliverableId: "d1",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        files: [{ path: "deliverables/d1/clinical-evidence-report.md", sha256, bytes: Buffer.byteLength(body) }],
+        acceptedAt: "2026-01-01T00:00:00.000Z",
+        attempt: 1,
+        notices: ["one advisory"],
+      }],
+    }, null, 2), "utf8");
+
+    const binding = { sessionId: "ses_gone", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let alive = true;
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      // The real sequence: the container is alive when the run starts (the
+      // baseline is captured from it) and gone by the time anything reconciles.
+      readSessionHistory: async () => {
+        if (alive) { alive = false; return []; }
+        const error = new Error("gone");
+        error.code = "runtime_not_running";
+        throw error;
+      },
+      monitorIntervalMs: 60_000,
+    });
+    const started = await store.start(project, { sessionId: binding.sessionId });
+    // Asserted on the ledger rather than on this call's return value: `start`
+    // also schedules the monitor, which reconciles on its own, and the run's
+    // recorded outcome is what the rest of the system reads either way.
+    await store.reconcileSession(project, binding.sessionId).catch(() => {});
+    const finished = (await store.list(project)).find((item) => item.id === started.id);
+
+    assert.equal(finished?.status, "succeeded", "a receipt that verifies is a delivered run, whatever became of the container");
+    assert.deepEqual(finished?.artifacts, ["deliverables/d1/clinical-evidence-report.md"]);
+    assert.deepEqual(finished?.qualityNotices, ["one advisory"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a receipt naming a file that no longer matches its digest is refused, not delivered", async () => {
+  // The receipt's whole value is that it proves the fetched artifacts are the
+  // graded artifacts. A file edited after grading is not the graded file, and
+  // delivering it would put something no gate has seen in front of a reader.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-digest-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    const deliverableDir = path.join(project.workspaceDir, "deliverables", "d1");
+    await mkdir(deliverableDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    await writeFile(path.join(deliverableDir, "clinical-evidence-report.md"), "# edited after grading\n", "utf8");
+    await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_x",
+      bundleVersion: "0.1.0",
+      domainVersion: "0.1.0",
+      entries: [{
+        deliverableId: "d1",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        files: [{ path: "deliverables/d1/clinical-evidence-report.md", sha256: "0".repeat(64), bytes: 1 }],
+        acceptedAt: "2026-01-01T00:00:00.000Z",
+        attempt: 1,
+        notices: [],
+      }],
+    }, null, 2), "utf8");
+
+    const binding = { sessionId: "ses_digest", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let alive = true;
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => {
+        if (alive) { alive = false; return []; }
+        const error = new Error("gone");
+        error.code = "runtime_not_running";
+        throw error;
+      },
+      monitorIntervalMs: 60_000,
+    });
+    const started = await store.start(project, { sessionId: binding.sessionId });
+    await store.reconcileSession(project, binding.sessionId).catch(() => {});
+    const finished = (await store.list(project)).find((item) => item.id === started.id);
+    assert.equal(finished?.status, "failed");
+    assert.equal(finished?.errorCode, "specialist_receipt_digest_mismatch");
+    assert.deepEqual(finished?.artifacts, []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a required deliverable is found under deliverables/<id>/, not only at the workspace root", async () => {
+  // A capability declares bare output names, and the two kernels put them in
+  // different places: the OpenCode composition at the workspace root, the DSH
+  // composition inside `deliverables/<deliverableId>/`, which §9.5 makes the
+  // only directory its validator accepts. A gate that knows only the first
+  // reports every DSH package as missing — which is what the first real
+  // end-to-end run produced, with eight complete files on disk.
+  const { readRequiredFileForTest } = await import("../src/agentRuns.mjs");
+  const root = await mkdtemp(path.join(tmpdir(), "os-required-output-"));
+  try {
+    const project = { workspaceDir: path.join(root, "workspace") };
+    await mkdir(path.join(project.workspaceDir, "deliverables", "d1"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, "deliverables", "d1", "clinical-evidence-report.md"), "# nested\n", "utf8");
+
+    const nested = await readRequiredFileForTest(project, "clinical-evidence-report.md");
+    assert.ok(nested, "the package written by the DSH composition must be found");
+    assert.match(nested.text, /nested/);
+
+    // The root still wins when both exist: a run that wrote the declared path
+    // literally is not made ambiguous by a directory that happens to exist.
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# root\n", "utf8");
+    const rooted = await readRequiredFileForTest(project, "clinical-evidence-report.md");
+    assert.match(rooted.text, /root/);
+
+    assert.equal(await readRequiredFileForTest(project, "absent.md"), null);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -13,7 +13,7 @@ import { assertDockerDataVolumeSupport } from "./dockerMounts.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
   RUNTIME_EXIT_OUTPUT_BYTES,
-  appendCappedOutput,
+  appendTailOutput,
   buildOpenCodeLaunchPlan,
   cleanupDockerContainer,
   runtimeContainerName,
@@ -482,7 +482,7 @@ export function createRuntimeController(overrides = {}) {
     const collect = (chunk) => {
       runtimeExitOutput.set(
         plan.containerName,
-        appendCappedOutput(runtimeExitOutput.get(plan.containerName) ?? "", chunk, RUNTIME_EXIT_OUTPUT_BYTES),
+        appendTailOutput(runtimeExitOutput.get(plan.containerName) ?? "", chunk, RUNTIME_EXIT_OUTPUT_BYTES),
       );
     };
     child.stdout?.on("data", collect);
@@ -511,7 +511,13 @@ export function createRuntimeController(overrides = {}) {
     // Only on the not-running paths. A running container's output is not a
     // diagnosis of anything, and shipping it on every poll would put the
     // runtime's chatter through the controller socket several times a second.
-    const output = compactError(runtimeExitOutput.get(containerName));
+    //
+    // Sent as captured, newlines and all. `compactError` collapses whitespace
+    // to single spaces and cuts at 512 characters, which destroyed this on the
+    // way out: the reader's filters are line-based, so a single joined line
+    // meant they could not fire at all — and if that one line happened to match
+    // one, the whole diagnosis was deleted. Bounded already, by the tail buffer.
+    const output = String(runtimeExitOutput.get(containerName) ?? "");
     const result = spawnSync(
       config.runtimeContainerBin,
       ["container", "inspect", "--format", "{{.State.Status}}|{{.State.ExitCode}}", containerName],

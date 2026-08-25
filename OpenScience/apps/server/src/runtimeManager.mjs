@@ -582,6 +582,24 @@ function waitForProcess(child, timeoutMs = 10_000) {
  *  which keeps one of these per container. */
 export const RUNTIME_EXIT_OUTPUT_BYTES = 4096;
 
+/** Keep the LAST `maxBytes` of a stream, not the first.
+ *
+ *  `appendCappedOutput` keeps the head, which is right for a short-lived
+ *  process whose whole output fits. It is wrong for a runtime container: one
+ *  that boots, prints a minute of startup chatter and then dies has its cause
+ *  at the end, and a head-keeping buffer throws exactly that away — leaving a
+ *  4KB tail full of "SQLite is an experimental feature".
+ *  @param {string} current @param {unknown} chunk @param {number} maxBytes
+ *  @returns {string} */
+export function appendTailOutput(current, chunk, maxBytes) {
+  const text = `${current}${Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk)}`;
+  const bytes = Buffer.from(text, "utf8");
+  if (bytes.byteLength <= maxBytes) return text;
+  // Decode from a byte offset that may split a character; `toString` replaces
+  // the partial one, which costs a character and keeps the rest readable.
+  return bytes.subarray(bytes.byteLength - maxBytes).toString("utf8");
+}
+
 export function appendCappedOutput(current, chunk, maxBytes) {
   const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
   const existing = Buffer.byteLength(current);
@@ -2221,6 +2239,7 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
     mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenPath }),
     presetRoot: "/opt/evimed/socket/presets/evimed-universal",
+    presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
     capabilitySkillsDir: "/opt/evimed/capability-skills",
     // The capsule product ledger and its recall endpoint are not built yet
@@ -2277,7 +2296,7 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
  * @param {any} project
  * @param {any} plan
  * @param {{ nowSeconds?: number, jti?: string, writeFile?: typeof writeFileAtomicNoFollow }} [options]
- * @returns {Promise<{ configured: boolean, workloadTokenFile: string | null, workloadTokenRefreshMs: number | null }>}
+ * @returns {Promise<{ configured: boolean, workloadTokenFile: string | null, workloadTokenRefreshMs: number | null, token: string | null, payload: Record<string, any> | null }>}
  */
 export async function syncRuntimeDshProfile(
   config,
@@ -3162,6 +3181,7 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
                     // missing here leaves a plugin on its schema default while
                     // the deployment believes it configured one.
                     ...Object.entries(runtimeEnvironment({
+                      presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
                       capabilitiesDir: "/opt/evimed/capabilities",
                       capabilitySkillsDir: "/opt/evimed/capability-skills",
                       capsuleMethodsDir: "",
@@ -3865,7 +3885,7 @@ export class RuntimeManager {
       const local = /** @type {any} */ (child);
       local.exitOutput = "";
       const collect = (chunk) => {
-        local.exitOutput = appendCappedOutput(local.exitOutput, chunk, RUNTIME_EXIT_OUTPUT_BYTES);
+        local.exitOutput = appendTailOutput(local.exitOutput, chunk, RUNTIME_EXIT_OUTPUT_BYTES);
       };
       child.stdout?.on("data", collect);
       child.stderr?.on("data", collect);

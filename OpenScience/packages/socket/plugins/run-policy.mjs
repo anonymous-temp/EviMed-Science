@@ -149,6 +149,12 @@ export async function apply(ctx, config) {
     async (step) => {
       const entry = sessionState(step.sessionId)
       entry.cwd = step.cwd || entry.cwd
+      // The brief may have arrived after the session did; see `injectBrief`.
+      // Still before the model's first step, so the context is first-class and
+      // early exactly as it was meant to be — only the trigger is later.
+      if (!entry.contextInjected) {
+        await injectBrief(ctx, ctx.get('agents')?.get?.(step.agentId) ?? step.agent, sessionState, config)
+      }
       const decision = stepPolicy(entry.budget, entry.limits)
       if (!decision.allow) {
         // Rejecting a step without saying why teaches the model nothing. The
@@ -427,6 +433,7 @@ export async function apply(ctx, config) {
         const manifest = (ctx.get('evimedCapabilities') ?? []).find((candidate) => candidate.id === item.capability)
         const expectedOutputs = manifest?.produces?.find((entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
         const files = await readDeliverableFiles(ctx, entry.cwd || call.cwd, item.id, expectedOutputs)
+        const sourceArtifacts = await collectSourceArtifacts(ctx, entry, call)
         const verdict = gateDeliverable({
           contractKind: item.contractKind,
           files,
@@ -435,6 +442,7 @@ export async function apply(ctx, config) {
           workspaceBriefText: await readFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.briefFile),
           matrix: parseJson(files.get('clinical-evidence-matrix.json')),
           runReceipt: parseJson(files.get('clinical-evidence-run.json')),
+          sourceArtifacts,
           staleEvidenceCount: 0,
         })
         await recordGateRun(store(), entry, item, verdict, attempts)
@@ -607,12 +615,30 @@ async function injectBrief(ctx, agent, sessionState, config) {
   const cwd = String(agent?.session?.header?.cwd ?? '')
   const entry = sessionState(sessionId)
   if (entry.contextInjected) return
-  entry.contextInjected = true
   entry.cwd = cwd
   // A subagent inherits its parent's cwd and would otherwise be handed the
-  // whole run brief a second time.
-  if (isSubagentSession(agent)) return
-  const index = parseJson(await readFileAt(ctx, cwd, workspaceLayout.briefIndexFile) ?? '')
+  // whole run brief a second time. Latched, because that is a decision rather
+  // than a thing to retry.
+  if (isSubagentSession(agent)) {
+    entry.contextInjected = true
+    return
+  }
+  // Latched only once the brief is actually there.
+  //
+  // This fires on `agent/session-start`, and the control plane creates the
+  // session BEFORE the dispatch writes the brief — two separate HTTP calls, in
+  // that order. Latching on entry therefore burned the single attempt on an
+  // empty workspace: `runId` stayed '', every `putRunMirror` returned at its
+  // `!entry.runId` guard, no `evimed_run` medium was ever created, and no
+  // `.evimed-run/state.json` was ever produced. The model still received the
+  // question, because that travels in the prompt body — so the run looked
+  // normal and the control plane's whole view of it was empty. Proven by
+  // experiment: identical boots differing only in whether the brief existed
+  // before the session, one writes the medium and one does not.
+  const rawIndex = await readFileAt(ctx, cwd, workspaceLayout.briefIndexFile)
+  if (rawIndex == null) return
+  entry.contextInjected = true
+  const index = parseJson(rawIndex)
   entry.runId = String(index?.runId ?? '')
   entry.limits = {
     maxSteps: Number(index?.budget?.maxSteps ?? config.maxSteps) || 0,
@@ -675,6 +701,49 @@ async function readSkillBodies(ctx, skillsDir, manifest) {
     if (body) bodies.push({ name: skill, body })
   }
   return bodies
+}
+
+/**
+ * The retrieved sources a quote can be checked against, joined from the run's
+ * own evidence table rather than asked of the model.
+ *
+ * Every `direct` and `synthesized` claim must quote a preserved source, and the
+ * validator resolves each quote through `sourceArtifacts[artifactPath]`. That
+ * map arrived empty on every submission, so every quote-bearing claim was
+ * rejected with an issue no run could act on — the model does not have the
+ * artifacts, the evidence ledger does. A rejected deliverable then means no
+ * receipt, and the receipt is the only durable thing the control plane can
+ * read once the container is gone; the first real end-to-end run ended
+ * `failed / artifacts 0` at the end of exactly that chain.
+ *
+ * Read from the domain table rather than from `evimedEvidence.forSession`,
+ * because retrieval happens in subagent sessions and the table is the only
+ * view keyed by the run rather than by one session.
+ *
+ * @param {any} ctx @param {Record<string, any>} entry @param {Record<string, any>} call
+ * @returns {Promise<Record<string, string>>}
+ */
+async function collectSourceArtifacts(ctx, entry, call) {
+  const store = ctx.get('evimedRun')
+  /** @type {Record<string, string>} */
+  const artifacts = {}
+  const records = store
+    ? [...store.evidence.entries()].map(([, value]) => value)
+    : (ctx.get('evimedEvidence')?.forSession?.(call.sessionId) ?? [])
+  const cwd = entry.cwd || call.cwd
+  const seen = new Set()
+  for (const record of records) {
+    if (entry.runId && record?.runId && record.runId !== entry.runId) continue
+    const artifactPath = String(record?.artifactPath ?? '')
+    if (!artifactPath || seen.has(artifactPath)) continue
+    seen.add(artifactPath)
+    // A source that could not be preserved is simply absent: the validator
+    // already reports an unquotable claim, and inventing an empty string here
+    // would turn "we never fetched it" into "the quote is not in it".
+    const text = await readFileAt(ctx, cwd, artifactPath)
+    if (typeof text === 'string' && text) artifacts[artifactPath] = text
+  }
+  return artifacts
 }
 
 /**

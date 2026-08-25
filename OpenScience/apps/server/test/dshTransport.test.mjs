@@ -95,3 +95,28 @@ test("the DSH profile sync hands the gateway token back, not only to the credent
   assert.ok(result.payload?.jti, "the jti is what the gateway matches on");
   await fs.rm(root, { recursive: true, force: true });
 });
+
+test("the runtime's dying words keep the end, and survive the trip through the controller", async () => {
+  // Two defects in one fix, both found by auditing it rather than by running
+  // it. A head-keeping buffer throws away the cause of a container that boots
+  // and *then* dies, and the controller used to collapse the capture to a
+  // single 512-character line before sending it — which left the reader's
+  // line-based filters unable to fire, and able to delete the whole thing when
+  // that one line happened to match.
+  const { appendTailOutput, appendCappedOutput } = await import("../src/runtimeManager.mjs");
+
+  let tail = "";
+  for (const line of ["boot noise\n".repeat(600), "Error: the actual cause\n"]) {
+    tail = appendTailOutput(tail, line, 4096);
+  }
+  assert.ok(tail.includes("Error: the actual cause"), "the end is what explains the exit");
+  assert.ok(Buffer.byteLength(tail, "utf8") <= 4096);
+
+  // The head-keeping helper still exists and still keeps the head: it is right
+  // for short-lived processes, and this is why the two are separate.
+  let head = "";
+  for (const line of ["boot noise\n".repeat(600), "Error: the actual cause\n"]) {
+    head = appendCappedOutput(head, line, 4096);
+  }
+  assert.ok(!head.includes("Error: the actual cause"));
+});

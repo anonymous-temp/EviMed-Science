@@ -327,6 +327,18 @@ ENV DSH_HOME_SEED=/opt/evimed/dsh-home-seed
 # Dockerfile makes the decision reviewable on its own.
 COPY deploy/runtime-dsh/profile-pnpm-workspace.yaml /opt/evimed/profile-pnpm-workspace.yaml
 
+# The committed composition snapshot, brought in so the build can compare it to
+# the one this image actually produces.
+#
+# `dshProfilePatch.test.mjs` checks that every row the profile patch names is a
+# row the composition has, and it reads that snapshot from the repository — a
+# file a human updates. Nothing compared it to the image, so the test could
+# vouch for a composition that had drifted, which is the same shape as a patch
+# naming a row the kernel does not have: the check passes and the effect never
+# happens. The build now refuses when the two differ, and the diff says which
+# rows moved.
+COPY deploy/runtime-dsh/dump-config.baseline.json /opt/evimed/committed-dump-config.baseline.json
+
 # The socket is added as `file:` rather than as a bare path, and the difference
 # decides whether the image works at all. A bare path makes pnpm link the source
 # directory, and the link it writes is relative to the profile — so the moment
@@ -350,6 +362,7 @@ RUN set -eux; \
   test -n "$(find "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" -name "*.node" -path "*node-pty*" -print -quit)"; \
   DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json; \
   test -s /opt/evimed/dump-config.baseline.json; \
+  diff -u /opt/evimed/committed-dump-config.baseline.json /opt/evimed/dump-config.baseline.json; \
   relocated="$(mktemp -d)"; \
   cp -a "${DSH_HOME_SEED}/." "${relocated}/"; \
   DSH_HOME="${relocated}" dsh --profile evimed-runtime --dump-config > /dev/null; \
