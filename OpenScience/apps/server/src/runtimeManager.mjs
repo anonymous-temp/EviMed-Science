@@ -5301,9 +5301,58 @@ export class RuntimeManager {
     schedule();
   }
 
+  /** Sample the container's process count against its ceiling, and record it
+   *  when it gets close. Reading the cgroup directly is the only way: docker's
+   *  own stats round-trip is slower than the monitor's cycle and reports the
+   *  same number.
+   *  @param {any} project @returns {Promise<void>} */
+  async recordRuntimePidPressure(project) {
+    const runtime = this.runtimes.get(this.key(project));
+    const containerName = runtime?.containerName;
+    if (!containerName || runtime.sandboxMode !== "docker") return;
+    const limit = Number(this.config.runtimePidsLimit);
+    if (!Number.isFinite(limit) || limit <= 0) return;
+    const result = spawnSync(
+      this.config.runtimeContainerBin,
+      ["exec", containerName, "cat", "/sys/fs/cgroup/pids.current"],
+      { encoding: "utf8", timeout: 5_000 },
+    );
+    if (result.status !== 0) return;
+    const current = Number(String(result.stdout).trim());
+    if (!Number.isFinite(current)) return;
+    runtime.peakPids = Math.max(Number(runtime.peakPids ?? 0), current);
+    // Four fifths: far enough from the ceiling to act, close enough that it is
+    // not noise on an ordinary run.
+    if (current * 5 < limit * 4) return;
+    if (runtime.pidPressureReported) return;
+    runtime.pidPressureReported = true;
+    void appendRuntimeEvent(project, "pid_pressure", {
+      kind: runtime.kind,
+      containerName,
+      pidsCurrent: current,
+      pidsLimit: limit,
+    }, this.config);
+  }
+
   async checkRuntimeQuota(project, monitor) {
     const key = this.key(project);
     if (this.runtimeQuotaMonitors.get(key) !== monitor || !this.runtimes.has(key)) return;
+    // Say it before it bites.
+    //
+    // The pids ceiling killed three runs and left nothing behind: no OOM, no
+    // signal, no dmesg line, and the container gone. The only trace was one
+    // line of container output -- `socat: E fork(): Resource temporarily
+    // unavailable` -- which the ledger did not carry until today. This puts the
+    // approach on the record while the run is still alive, so a ceiling that is
+    // too low is a warning rather than a post-mortem.
+    //
+    // Sampled on the quota monitor's existing cycle; the cgroup counts THREADS,
+    // which is why a five-minute reading of 17 of 256 told us nothing about the
+    // peak.
+    void this.recordRuntimePidPressure(project).catch(() => {
+      // isolated: evimed_runtime_pid_sample_failures_total -- a cgroup file
+      // this kernel does not expose must not end a healthy run.
+    });
     try {
       await assertProjectUsageWithinQuota(project, this.config);
     } catch (err) {

@@ -731,7 +731,18 @@ export function loadConfig(overrides = {}) {
       boolEnv("OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK", false),
     runtimeCpuLimit: overrides.runtimeCpuLimit ?? process.env.OPEN_SCIENCE_RUNTIME_CPU_LIMIT ?? "2",
     runtimeMemoryLimit: overrides.runtimeMemoryLimit ?? process.env.OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT ?? "4g",
-    runtimePidsLimit: Number(overrides.runtimePidsLimit ?? process.env.OPEN_SCIENCE_RUNTIME_PIDS_LIMIT ?? 256),
+    // 256 was not enough, and the way it failed is why it took nine runs to
+    // find. The cgroup counts THREADS, and a clinical run at full stretch holds
+    // the kernel, its MCP python, one socat per connection, bash subprocesses
+    // and up to `maxParallelChildren` delegated agents at once. Hitting the
+    // ceiling produced `socat: E fork(): Resource temporarily unavailable` and
+    // an exit code of 1 -- no OOM, no signal, nothing in dmesg or the cgroup's
+    // memory events, and the container deleted by `--rm` before anything could
+    // ask. Three runs died that way with no diagnosis available at all.
+    //
+    // Sampled at five minutes into a run it read 17 of 256, which is exactly
+    // how a ceiling like this hides: the sample proves the moment, not the peak.
+    runtimePidsLimit: Number(overrides.runtimePidsLimit ?? process.env.OPEN_SCIENCE_RUNTIME_PIDS_LIMIT ?? 1024),
     runtimeNoNewPrivileges:
       overrides.runtimeNoNewPrivileges ?? boolEnv("OPEN_SCIENCE_RUNTIME_NO_NEW_PRIVILEGES", true),
     runtimeCapDrop: overrides.runtimeCapDrop ?? process.env.OPEN_SCIENCE_RUNTIME_CAP_DROP ?? "ALL",

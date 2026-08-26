@@ -3627,6 +3627,32 @@ export function validateClinicalEvidencePackage({
   const issues = [];
   const claimIds = [];
   const sourceDomains = new Set();
+
+  // An absent report is one problem, not nine.
+  //
+  // A run wrote `临床证据综述.md` where the contract asks for
+  // `clinical-evidence-report.md`. Every rule below then ran over an empty
+  // string and the verdict came back as nine content findings -- no abstract,
+  // no conclusion, no safety section, "must contain academic analysis" -- each
+  // one true of a file that does not exist, and none of them saying so. A child
+  // reading that goes and edits the file it did write.
+  //
+  // Here rather than in the contract registry, because the registry is
+  // forbidden from adding a second list on top of this one: there is a single
+  // implementation and both the run side and the delivery gate reach it, which
+  // is what keeps the two from drifting apart.
+  if (!String(reportText ?? "").trim()) {
+    const absent = "clinical-evidence-report.md is not in the deliverable, or is empty. Write it at exactly that name"
+      + " inside this deliverable's directory before submitting; the checks below cannot read a file that is not there.";
+    return {
+      valid: false,
+      issues: [absent],
+      blockingIssues: [absent],
+      claimIds: [],
+      sourceDomains: [],
+      coverageDegradedNotice: null,
+    };
+  }
   // Annotated rather than inferred: `matrix` arrives as `any` from the caller,
   // so the ternary's two branches union to something TypeScript will not treat
   // as an array of records, and every callback over it downstream then reads as
