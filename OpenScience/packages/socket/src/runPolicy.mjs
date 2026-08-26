@@ -265,8 +265,25 @@ export function completionCheck(input) {
   for (const issue of contentTriggerIssues(input.producedTexts, input.finalReplyText, input.items)) {
     issues.push(issue)
   }
+  if (input.partial) {
+    // Partial delivery waives "not accepted yet" and "no clarifications" -- that
+    // is what partial IS. The waiver used to live only in the ok-condition
+    // below, while the issue list still said `(required)`, and a real run took
+    // the list at its word: three partial completes came back "failed:
+    // run_incomplete / (required) deliverable_not_accepted ...", the model
+    // concluded the exit it had been told to use did not exist, and spent 40
+    // minutes rearranging files before giving up -- one step short of the
+    // retry that would have succeeded. The list must say what the verdict
+    // actually weighs.
+    for (const issue of issues) {
+      if (issue.code === 'deliverable_not_accepted' || issue.code === 'plan_missing_clarifications') {
+        issue.severity = 'advisory'
+        issue.message = `${issue.message}（partial 交付下不阻断，将如实记录在交付摘要中。）`
+      }
+    }
+  }
   const blocking = issues.filter((issue) => issue.severity === 'required')
-  return { ok: input.partial ? blocking.every((issue) => issue.code !== 'clinical_content_without_clinical_contract') : blocking.length === 0, issues }
+  return { ok: blocking.length === 0, issues }
 }
 
 /**
@@ -283,13 +300,28 @@ export function contentTriggerIssues(producedTexts, finalReplyText, items) {
     items.filter((item) => String(item.contractKind ?? '').includes('clinical') || String(item.contractKind ?? '').includes('drug') || String(item.contractKind ?? '').includes('adr'))
       .map((item) => String(item.id)),
   )
+  // Basenames already delivered under a clinical contract. The transition rule
+  // (S153) accepts contract files written at the workspace root, so a root
+  // `references.bib` that duplicates `deliverables/<clinical-id>/references.bib`
+  // is the same artifact in its transitional location -- not uncontracted
+  // clinical content. Flagging it made two of this system's own rules disagree
+  // about one file, on every clinical run that used the root location.
+  const clinicalBasenames = new Set()
+  for (const produced of producedTexts) {
+    const segments = String(produced.path ?? '').split('/').filter((part) => part && part !== 'workspace')
+    if (segments[0] === 'deliverables' && clinicalPaths.has(segments[1] ?? '')) {
+      clinicalBasenames.add(segments.at(-1))
+    }
+  }
   /** @type {any[]} */
   const issues = []
   for (const produced of producedTexts) {
     const triggers = matchedClinicalTriggers(produced.text)
     if (!triggers.length) continue
-    const owner = String(produced.path ?? '').split('/')[1] ?? ''
+    const segments = String(produced.path ?? '').split('/').filter((part) => part && part !== 'workspace')
+    const owner = segments[0] === 'deliverables' ? (segments[1] ?? '') : ''
     if (clinicalPaths.has(owner)) continue
+    if (!owner && clinicalBasenames.has(segments.at(-1))) continue
     issues.push({
       code: 'clinical_content_without_clinical_contract',
       severity: 'required',
