@@ -38,6 +38,11 @@ TASK_FIXTURES = {
         "url": "https://www.nhs.uk/symptoms/chest-pain/",
     },
     "open_access_full_text": {"identifier": "PMC8010506"},
+    # Added 2026-08-26. It had been in the registry, model-facing, and covered
+    # by no fixture: the guard above reported that as "does not exactly cover"
+    # and `ci:web` reported the whole audit as stale evidence, so a tool nobody
+    # had ever probed read like evidence that was merely old.
+    "web_search": {"query": "systematic review reporting guideline PRISMA 2020", "limit": 2},
     "term_normalize": {"term": "心肌梗死", "domain": "disease"},
     "drug_term_normalize": {"term": "acetaminophen"},
     "evidence_deduplicate": {"items": [
@@ -372,8 +377,21 @@ def main():
     os.environ["OPEN_SCIENCE_WORKSPACE_DIR"] = str(workspace)
     server = load_server()
     declared = [item["name"] for item in server.list_tools()]
-    if set(declared) != set(TASK_FIXTURES) | set(SPECIALISTS):
-        raise SystemExit("tool audit fixtures do not exactly cover the declared MCP registry")
+    fixtured = set(TASK_FIXTURES) | set(SPECIALISTS)
+    unaudited = sorted(set(declared) - fixtured)
+    departed = sorted(fixtured - set(declared))
+    if unaudited or departed:
+        # Name them. "does not exactly cover" sent a reader looking for a
+        # mismatch without saying which side, and `ci:web` reported the whole
+        # thing as `tool audit evidence is stale` -- so a registry that had
+        # gained a tool the audit had never probed read exactly like evidence
+        # that was merely old. It stayed that way for twelve days.
+        parts = []
+        if unaudited:
+            parts.append("declared but never probed: " + ", ".join(unaudited))
+        if departed:
+            parts.append("fixtured but no longer declared: " + ", ".join(departed))
+        raise SystemExit("tool audit fixtures do not cover the MCP registry -- " + "; ".join(parts))
     roots = workspace_roots(args.receipt_workspace)
     results = run_task_probes(server, workspace)
     for tool in SPECIALISTS:

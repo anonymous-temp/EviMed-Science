@@ -1935,6 +1935,8 @@ score = w_rel · relevance + w_imp · importance/10 + w_rec · γ^(Δhours) + w_
 
 配套两件（V41）：能力清单 `tools[]` 的构建期校验从「仅对 MCP `tools/list`」扩展为对组合后工具注册表（`--dump-config` 一致性套件）；接首个第三方 bundle 时用真实组合测试核其工具行在我们 preset 作用域下干净组合。判据一句话：**裁决与数学封进引擎，通用手艺留在过程层**——留在技能 / 工具层的每个步骤，生态都在免费替我们升级；埋进黑盒作业的步骤，升级永远得自己写。首扫清单与首批动作：`plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md`。
 
+两条补充（2026-08-26，复审另一份「Cordis 总线当中台 + 业务做成运行时插件 + 服务注入」的接入方案后）：① **插座插件永不 `inject` 第三方服务**——cordis 的 `inject` 是硬依赖，服务缺失时插件静默不 `apply`（又一个「空与确实没有外观相同」）；第三方多在宿主作用域发布服务，会被容器内所有会话共享（#27 内核拒绝我们自己 preset 服务的同一理由）；规则 29（`inject ⊆ seam-manifest.services`）已蕴含此意，此处点明。社区能力只以**工具 / 技能**形态被模型消费。② **「小改」档的正确形态是换 provider 不换 consumer**：DSH 自身按 Service Definition / Provider / Consumer 分层（skills、web 缝均如此，社区已有 Metaso 作为 web 缝 search/reader provider 的先例），适配社区包时先看它是否是某个 DSH 服务的 provider——模型可见契约不动，实现层换成我们的网关或医疗专用逻辑。运行内插件协同只走 port 文档化的缝，跨运行 / 跨用户的协同走控制面（队列、收件箱、`usage_events`），不用 Cordis 事件当平台总线。可借项清单见 plans 文档第十一节。
+
 ---
 
 ### 21.9 一期执行结果（2026-08-25）：清单说的形态，有一半不是真的

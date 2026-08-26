@@ -97,6 +97,36 @@ test("plugin inject sets stay inside the manifest's services", async () => {
   }
 });
 
+test("the seam manifest names only the kernel's own services, so a third-party one cannot be injected", async () => {
+  // The test above proves every `inject` stays inside the manifest. It does not
+  // prove the manifest stays inside the KERNEL — adding a community plugin's
+  // service name to `services.optional` would satisfy it, and spec §21.8's
+  // first addition rules exactly that out.
+  //
+  // `inject` is a hard dependency: when the service is absent the plugin
+  // silently does not `apply` — the same "empty and absent look alike" family
+  // this whole audit is about — and third parties publish into the HOST scope,
+  // where every session in the container shares one instance. Community
+  // capability is consumed as tools or skills, never as an injected service.
+  const declared = [...SEAMS.services.required, ...SEAMS.services.optional];
+
+  // Every name must be a service the pinned kernel itself publishes, which is
+  // what `seam-manifest.packages` enumerates. Read from the manifest rather
+  // than listed here, so adding a kernel service does not need this test edited
+  // — only adding a NON-kernel one fails.
+  const manifest = JSON.parse(await readFile(new URL("../../harness-port/seam-manifest.json", import.meta.url), "utf8"));
+  const vendors = new Set(Object.keys(manifest.packages ?? {}).map((name) => name.split("/")[0]));
+  assert.deepEqual([...vendors], ["@deepseek-ai"], `the manifest names a non-kernel package: ${[...vendors].join(", ")}`);
+
+  // And no declared service may carry a vendor-ish prefix, which is how a
+  // third-party service name would arrive.
+  for (const name of declared) {
+    assert.match(name, /^[a-z][A-Za-z]*$/, `service "${name}" is not a plain kernel service name`);
+    assert.equal(name.includes("-"), false, `service "${name}" looks like a package, not a kernel seam`);
+  }
+  assert.ok(declared.length >= 10, `expected the kernel's service surface, got ${declared.length}`);
+});
+
 test("no plugin imports a harness package or a node builtin directly", async () => {
   const files = (await readdir(new URL("../plugins/", import.meta.url))).filter((name) => name.endsWith(".mjs"));
   const srcFiles = (await readdir(new URL("../src/", import.meta.url))).filter((name) => name.endsWith(".mjs"));
