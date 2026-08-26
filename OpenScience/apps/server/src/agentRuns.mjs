@@ -23,13 +23,14 @@ import {
 // its tests have always imported them from this module, and because a second
 // definition is exactly the drift the move was made to stop.
 import {
+  SOCKET_TOOL_NAMES,
   isMcpToolName,
-  repairableEvidencePackageErrorCodes,
   recoverableEvidenceSourceErrorCodes,
+  repairableEvidencePackageErrorCodes,
   runPhase,
   terminalEvidenceSourceErrorCodes,
-  transitionEvents,
   transition as domainTransition,
+  transitionEvents,
   validateDeliveryReceipt,
   workspaceLayout,
 } from "@evimed/domain";
@@ -987,12 +988,33 @@ function wholeFileRewritesDuringRepair(messages) {
 // to answer a question. The runtime writes an oversized tool result to
 // tool-output/<id>, so a delegation prompt naming that path is by definition a
 // delegated read of evidence the caller will go on to quote.
+/**
+ * Both halves have to widen together, and widening only one is worse than
+ * widening neither.
+ *
+ * `task` is OpenCode's delegation tool. Under DSH no tool of that name exists:
+ * the preset registers `@deepseek-ai/dsh-tool-subagent` as `subagent`, and the
+ * socket registers its own `evimed_delegate`. The adapter passes the kernel's
+ * tool name through verbatim, so `part.tool` is never `task` and this returned
+ * `[]` for every DSH run — which silently unreachable three things: the
+ * `specialist_delegated_evidence_read` verdict, one of the two triggers for
+ * `qualityUnverified`, and the `MUST FIX —` lead line that tells a repair loop
+ * the cause rather than only the symptom.
+ *
+ * And `evimed_delegate` takes `{deliverableId, brief, inputs}` — there is no
+ * `prompt` key. Renaming the tool without also reading `brief` would fix the
+ * kernel's own route and leave every socket delegation reading `""`, which is
+ * the same silence with a shorter list of causes.
+ */
+const delegationToolNames = new Set(["task", "subagent", SOCKET_TOOL_NAMES.delegate]);
+
 function delegatedDocumentReads(messages) {
   return messages
     .flatMap((message) => message?.parts ?? [])
-    .filter((part) => part?.type === "tool" && part.tool === "task")
+    .filter((part) => part?.type === "tool" && delegationToolNames.has(part.tool))
     .filter((part) => {
-      const prompt = String(part?.state?.input?.prompt ?? "");
+      const input = part?.state?.input;
+      const prompt = String(input?.prompt ?? input?.brief ?? "");
       return /tool-output\//.test(prompt) || /\.evimed-sources\//.test(prompt);
     });
 }
@@ -2458,13 +2480,23 @@ export class AgentRunStore {
    * @returns {Promise<{ signature: string | null, unreadable: boolean }>}
    */
   async readRunSideActivity(project, run) {
-    let workspaceRoot;
-    try {
-      workspaceRoot = await this.runtimeWorkspaceRoot(project);
-    } catch {
-      workspaceRoot = project.workspaceDir;
-    }
-    const read = await readRunStateProjection(project, workspaceRoot);
+    // Read from the host, because that is where this process opens files.
+    //
+    // `runtimeWorkspaceRoot()` answers a different question: what root the
+    // model's own absolute paths are relative to. Under docker that is
+    // `/workspace` — the path INSIDE the container — so using it here asked
+    // the host for `/workspace/.evimed-run/state.json`, which does not exist
+    // on the host, and the projection read `missing` for the entire life of
+    // every containerised run. Two production runs recorded
+    // `observedRunSideActivity: null` from start to finish while the file sat
+    // on disk the whole time; the browser got no evidence or budget frames,
+    // the stall signal had nothing to read, and the run's own degraded lines
+    // never reached the ledger.
+    //
+    // One accessor was being used for two questions. `artifactCandidates` and
+    // `successfulEvidenceSourceArtifacts` still take the container root, and
+    // correctly: they relativise paths the model wrote.
+    const read = await readRunStateProjection(project, project.workspaceDir);
     if (read.state === "missing") return { signature: null, unreadable: false };
     if (read.state === "unreadable") {
       // Said once per run, not once per poll: the monitor wakes on a fixed
@@ -2732,4 +2764,12 @@ export function loadedOrInjectedSkillsForTest(project, assistantMessages) {
  *  @param {any} message @param {string} runtimeWorkspaceRoot @returns {string[]} */
 export function artifactCandidatesForTest(message, runtimeWorkspaceRoot) {
   return artifactCandidates(message, runtimeWorkspaceRoot);
+}
+
+/** Test seam: which delegations read evidence the caller will go on to quote.
+ *  Both the tool name and the argument key had to widen together; widening one
+ *  leaves the same silence with a shorter list of causes.
+ *  @param {any[]} messages @returns {any[]} */
+export function delegatedDocumentReadsForTest(messages) {
+  return delegatedDocumentReads(messages);
 }

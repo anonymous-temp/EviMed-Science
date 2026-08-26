@@ -220,6 +220,13 @@ export function loadConfig(overrides = {}) {
           path.join(rootDir, "runtime/skills/curated-scientific"),
           path.join(rootDir, "runtime/skills/office"),
         ]);
+  // Deliberately NOT the list of everything the release binds. This one answers
+  // "which directories does the OpenCode path copy into each project", and the
+  // DSH image bakes its roots in instead — adding `capability-skills` here made
+  // the host runtime try to deliver a tree it must not, which surfaced as a 409
+  // where a timeout was expected. What a release must digest is the generator's
+  // list in `scripts/ops/generate-release-manifest.mjs`, which is a superset, so
+  // `runtimeReleasePolicyError`'s membership check still holds.
   const agentPackageDirs =
     overrides.agentPackageDirs ??
     (process.env.OPEN_SCIENCE_AGENT_PACKAGE_DIRS != null
@@ -701,7 +708,12 @@ export function loadConfig(overrides = {}) {
       overrides.runtimeSandboxEnforcement ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT ?? (production ? "full" : "partial"),
     ).trim().toLowerCase(),
     runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", false),
-    runtimeReviewEnabled: overrides.runtimeReviewEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_REVIEW_ENABLED", false),
+    // Defaults to on, because that is what every hosted run has actually been
+    // getting: both sites that build the container's flags wrote `review: true`
+    // as a literal and read nothing. Wiring them to this setting while it
+    // defaulted to `false` would have turned cross-deliverable semantic review
+    // off everywhere — a silent capability removal disguised as a bug fix.
+    runtimeReviewEnabled: overrides.runtimeReviewEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_REVIEW_ENABLED", true),
     runtimeRequireImageLocal:
       overrides.runtimeRequireImageLocal ?? boolEnv("OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL", production),
     runtimeDataVolume,
