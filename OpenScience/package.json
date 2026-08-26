@@ -71,7 +71,8 @@
     "typecheck:domain": "pnpm --filter @evimed/domain typecheck",
     "vendor:community-skills": "node scripts/dev/vendor-community-skills.mjs",
     "check:community-skills": "node scripts/dev/vendor-community-skills.mjs --check",
-    "try:community-bundles": "node scripts/dev/try-community-bundles.mjs"
+    "try:community-bundles": "node scripts/dev/try-community-bundles.mjs",
+    "check:runtime-image": "node scripts/ops/check-runtime-image-current.mjs"
   },
   "engines": {
     "node": ">=22.22.0"

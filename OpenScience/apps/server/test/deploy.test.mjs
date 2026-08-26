@@ -1135,3 +1135,132 @@ test("every capability's skill bodies are shipped, because delegation injects th
   const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
   assert.match(dockerfile, /^COPY capability-skills /m, "the bodies must ship");
 });
+
+test("every source tree the runtime image executes is bound by the release manifest", async () => {
+  // Two faces of one blind spot, both found on 2026-08-26.
+  //
+  // `packages/socket`, `packages/domain` and `packages/harness-port` are COPYed
+  // into the runtime image and run INSIDE the container. Nothing compared the
+  // image's copy against the working tree, so a day of delivery-gate fixes
+  // synced with every md5 verified and never ran; and the release manifest
+  // bound none of the three, so the release record could not say which code the
+  // image contained either. It bound `deploy/runtime-opencode/Dockerfile` — the
+  // kernel on its way out — and not `deploy/runtime-dsh`.
+  //
+  // Derived from the Dockerfile's own COPY lines rather than listed here: the
+  // point is that adding a tree to the image and forgetting the manifest has to
+  // fail.
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const generator = await readFile(path.join(repoRoot, "scripts/ops/generate-release-manifest.mjs"), "utf8");
+
+  const copied = [...dockerfile.matchAll(/^COPY\s+(packages\/[\w.-]+)\s/gm)].map((match) => match[1]);
+  assert.ok(copied.length >= 3, `expected the image to copy several packages, found ${JSON.stringify(copied)}`);
+
+  const bound = new Set([...generator.matchAll(/^\s*"([^"]+)",/gm)].map((match) => match[1]));
+  const unbound = [...new Set(copied)].filter((tree) => !bound.has(tree)).sort();
+  assert.deepEqual(unbound, [], "the release cannot say which code these run");
+
+  // The image's own build definition is part of what a release ships.
+  assert.ok(bound.has("deploy/runtime-dsh"), "the runtime image's build definition must be bound");
+
+  // Negative control: the check must be able to fail. A tree the image does not
+  // copy is not required to be bound.
+  assert.equal(bound.has("packages/not-a-real-package"), false);
+});
+
+// --- check:runtime-image ------------------------------------------------
+//
+// This check exists because a day of delivery-gate fixes synced, verified, and
+// never ran: the gate executes inside the container and the image predated
+// them. Its first version then had the mirror-image defect — it called every
+// image stale, because `packages/socket` ships 20 files and the built image has
+// 175 under the same path (the Dockerfile `cp -a`s the skill tree in there).
+// Both failures look identical from the outside, so both get a control here.
+
+test("the image carrying more files than the tree ships is not staleness", async () => {
+  const { differingFiles } = await import(
+    pathToFileURL(path.join(repoRoot, "scripts/ops/check-runtime-image-current.mjs")).href
+  );
+  const here = new Map([["index.mjs", "a".repeat(64)], ["src/run.mjs", "b".repeat(64)]]);
+  const there = new Map([
+    ...here,
+    // What the build lands there and the tree never had.
+    ["presets/evimed-universal/skills/core/deep-research/SKILL.md", "c".repeat(64)],
+  ]);
+
+  assert.deepEqual(differingFiles(here, there), []);
+});
+
+test("a shipped file the image does not have, or has differently, is staleness", async () => {
+  const { differingFiles } = await import(
+    pathToFileURL(path.join(repoRoot, "scripts/ops/check-runtime-image-current.mjs")).href
+  );
+  const here = new Map([["index.mjs", "a".repeat(64)], ["src/run.mjs", "b".repeat(64)], ["src/gate.mjs", "c".repeat(64)]]);
+  const there = new Map([["index.mjs", "a".repeat(64)], ["src/run.mjs", "d".repeat(64)], ["src/gate.mjs", "MISSING"]]);
+
+  assert.deepEqual(differingFiles(here, there).sort(), ["src/gate.mjs", "src/run.mjs"]);
+});
+
+/** A stand-in `docker` that replies with whatever `body` makes of the script it
+ *  is given on stdin, so the reader is exercised for real rather than mocked. */
+async function withFakeDocker(body, run) {
+  const { mkdtemp, writeFile, chmod, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(path.join(tmpdir(), "fake-docker-"));
+  const bin = path.join(dir, "docker");
+  await writeFile(bin, `#!/usr/bin/env bash\n${body}\n`);
+  await chmod(bin, 0o755);
+  try {
+    return await run(bin);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+test("an image that answers about fewer files than it was asked about is an error, not a pass", async () => {
+  const modulePath = path.join(repoRoot, "scripts/ops/check-runtime-image-current.mjs");
+  const asked = ["index.mjs", "src/run.mjs", "src/gate.mjs"];
+
+  const answers = await withFakeDocker(
+    // Replies for the first two paths only — the shape a truncated read takes.
+    `cat > /dev/null; echo "${"a".repeat(64)} index.mjs"; echo "${"b".repeat(64)} src/run.mjs"`,
+    async (bin) => {
+      const source = `import { hashInsideImage } from ${JSON.stringify(pathToFileURL(modulePath).href)};`
+        + `process.stdout.write(JSON.stringify(hashInsideImage("/opt/evimed/socket", ${JSON.stringify(asked)})));`;
+      return execFileSync(process.execPath, ["--input-type=module", "--eval", source], {
+        encoding: "utf8",
+        env: { ...process.env, OPEN_SCIENCE_RUNTIME_CONTAINER_BIN: bin, OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: "fake:test" },
+      });
+    },
+  );
+
+  const parsed = JSON.parse(answers);
+  assert.equal(parsed.hashes, undefined, "a partial answer must not be handed back as if it were complete");
+  assert.match(parsed.error, /answered for 2 of 3 files/);
+  assert.match(parsed.error, /src\/gate\.mjs/);
+});
+
+test("the reader asks the image about every shipped path, and reports the ones it lacks", async () => {
+  const modulePath = path.join(repoRoot, "scripts/ops/check-runtime-image-current.mjs");
+  const asked = ["index.mjs", "src/gate.mjs"];
+  const helloSha = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+
+  // A real `sh` running the real script against a directory holding only one of
+  // the two files: proof the MISSING branch is produced by the shipped script,
+  // not by the test describing what it hopes the script does.
+  const answers = await withFakeDocker(
+    'script=$(cat); root=$(mktemp -d); mkdir -p "$root/src"; printf "hello" > "$root/index.mjs";'
+    + ' printf "%s\\n" "$script" | sed "s#^cd \\"/opt/evimed/socket\\"#cd \\"$root\\"#" | sh',
+    async (bin) => {
+      const source = `import { hashInsideImage } from ${JSON.stringify(pathToFileURL(modulePath).href)};`
+        + `const r = hashInsideImage("/opt/evimed/socket", ${JSON.stringify(asked)});`
+        + `process.stdout.write(JSON.stringify(r.hashes ? [...r.hashes] : { error: r.error ?? "no hashes and no error" }));`;
+      return execFileSync(process.execPath, ["--input-type=module", "--eval", source], {
+        encoding: "utf8",
+        env: { ...process.env, OPEN_SCIENCE_RUNTIME_CONTAINER_BIN: bin, OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: "fake:test" },
+      });
+    },
+  );
+
+  assert.deepEqual(new Map(JSON.parse(answers)), new Map([["index.mjs", helloSha], ["src/gate.mjs", "MISSING"]]));
+});

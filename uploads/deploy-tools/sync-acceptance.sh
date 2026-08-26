@@ -53,3 +53,28 @@ if [ "$differing" -gt 0 ]; then
   exit 1
 fi
 echo "sync verified: every tracked file under $(basename "$SRC") matches"
+
+# Files matching is not the same as the change being live.
+#
+# `packages/socket`, `packages/domain` and `packages/harness-port` are COPYed
+# into the runtime image and execute INSIDE the container. Everything else the
+# control plane runs is read from disk at start, so a restart carries it. On
+# 2026-08-26 a day of delivery-gate fixes passed their tests, synced with every
+# md5 verified, and had the control plane restarted -- and never ran once,
+# because the gate runs in the container and the image predated them. This
+# script said "sync verified" and was telling the truth about the wrong thing.
+IMAGE=${IMAGE:-$(ssh -i "$KEY" -o BatchMode=yes "$HOST" \
+  "sudo grep -oE '^OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=.*' $(dirname "$DEST")/../cp.env 2>/dev/null | cut -d= -f2-" 2>/dev/null)}
+if [ -z "$IMAGE" ]; then
+  echo "note: could not read the deployment's runtime image; run 'pnpm check:runtime-image --image <ref>' yourself" >&2
+  exit 0
+fi
+if ssh -i "$KEY" -o BatchMode=yes "$HOST" \
+  "cd $DEST && sudo node scripts/ops/check-runtime-image-current.mjs --image '$IMAGE'" 2>&1; then
+  :
+else
+  echo "" >&2
+  echo "The sync landed, but the runtime image does not carry it. Rebuild before running:" >&2
+  echo "  ssh $HOST 'bash /tmp/p0build3.sh'   # or the current build script" >&2
+  exit 2
+fi
