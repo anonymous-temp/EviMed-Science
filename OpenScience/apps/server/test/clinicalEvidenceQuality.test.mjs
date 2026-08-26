@@ -1833,6 +1833,13 @@ test("the emergency-delay rule accepts the emergency number the skill asks for",
   assert.ok(pattern.test("速效救心丸不适用于该场景的急救决策，服用速效救心丸不得延误呼叫 120"));
   assert.ok(pattern.test("服用任何自救药物均不得延误呼叫 120 急救"));
   assert.ok(pattern.test("不得因服用速效救心丸而延误就医"));
+  // The verb list is where this rule fails, and it failed twice more on
+  // 2026-08-26: two runs wrote the required sentence with 延迟 and 推迟 --
+  // ordinary synonyms of 延误 -- and were rejected three submits each for a
+  // sentence they had written. These are the runs' own words, verbatim.
+  assert.ok(pattern.test("含服速效救心丸不得延迟急救照护：含服不是等待的理由，如需服用，应与呼叫急救（中国为 120）同时进行"), "rq09's sentence");
+  assert.ok(pattern.test("速效救心丸不得作为延迟呼叫急救的理由：如需服用，应与呼叫 120 同时进行"), "rq02c's sentence");
+  assert.ok(pattern.test("是否含服硝酸甘油或速效救心丸、含服后是否缓解，均不构成等待或推迟呼叫急救的理由"), "the 推迟 phrasing");
   // It must still be a requirement, not a formality.
   assert.ok(!pattern.test("立即呼叫 120，保持坐位"));
   assert.ok(!pattern.test("速效救心丸可用于气滞血瘀型心绞痛"));
