@@ -21,6 +21,7 @@ import {
   syncRuntimeAgentPackages,
   syncRuntimeSkills,
 } from "../src/runtimeManager.mjs";
+import { readRuntimeResponseBody } from "../src/runtimeManager.mjs";
 import { runtimeReleaseConfig } from "./releaseFixture.mjs";
 
 const project = {
@@ -2142,4 +2143,78 @@ test("the memory ceiling is read in docker's own grammar, and an unreadable one 
   // unreachable — every real reading is below it — which is the "reports
   // nothing forever" failure in its purest form.
   assert.equal(parseByteSize(`${"9".repeat(400)}g`), 0, "an overflowed ceiling is not a ceiling");
+});
+
+// --- abandoned response bodies -------------------------------------------
+
+test("a body read abandoned over the size limit kills the stream, not just the reader lock", async () => {
+  // `releaseLock()` alone detaches the reader and leaves the response paused
+  // forever. On a unix-socket runtime that is one leaked fd here and one live
+  // socat fork inside the container — measured at 1368 fds on the control
+  // plane after a run whose transcript outgrew maxJsonBytes, because every
+  // history poll threw 413 here and retried.
+  let cancelled = false;
+  const body = new ReadableStream({
+    pull(controller) {
+      controller.enqueue(new Uint8Array(1024));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  await assert.rejects(
+    readRuntimeResponseBody(body, 4096),
+    (error) => error?.code === "runtime_proxy_response_too_large",
+  );
+
+  assert.equal(cancelled, true, "the underlying stream must be cancelled, or its socket never closes");
+});
+
+test("an over-limit response releases its socket, proven at the socket, not at the API", async () => {
+  // The unit test above can be satisfied by calling cancel() on a stream whose
+  // socket stays open anyway. This one watches the server side of a real
+  // connection: the server must observe the close. It fails on the unfixed
+  // code by timing out — which is exactly how the leak behaved in production.
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-leak-"));
+  const socketPath = path.join(tmp, "runtime.sock");
+  /** @type {(value: void) => void} */
+  let sawClose;
+  const closed = new Promise((resolve) => { sawClose = resolve; });
+  const server = createServer((req, res) => {
+    res.socket?.once("close", () => sawClose());
+    res.writeHead(200, { "content-type": "application/octet-stream" });
+    // More than the read limit below, in several chunks, then never end: a
+    // transcript endpoint mid-stream. The close must come from the client.
+    for (let i = 0; i < 8; i += 1) res.write(Buffer.alloc(64 * 1024));
+  });
+  await new Promise((resolve) => server.listen(socketPath, () => resolve(undefined)));
+  try {
+    const runtime = { socketPath, url: "http://runtime.local", password: null };
+    const response = await requestRuntime(runtime, "http://runtime.local/session/history", {});
+    assert.equal(response.status, 200);
+
+    await assert.rejects(
+      readRuntimeResponseBody(response.body, 128 * 1024),
+      (error) => error?.code === "runtime_proxy_response_too_large",
+    );
+
+    /** @type {NodeJS.Timeout | undefined} */
+    let guard;
+    await Promise.race([
+      closed,
+      new Promise((_, reject) => {
+        guard = setTimeout(() => reject(new Error("the server never saw the connection close: the socket leaked")), 5_000);
+        guard.unref?.();
+      }),
+    ]);
+    clearTimeout(guard);
+  } finally {
+    // Force-close whatever is still open. When this test FAILS, the leaked
+    // socket itself would otherwise keep the event loop alive and hang the
+    // whole test process — the bug preventing its own test run from ending.
+    server.closeAllConnections?.();
+    server.close();
+    await rm(tmp, { recursive: true, force: true });
+  }
 });

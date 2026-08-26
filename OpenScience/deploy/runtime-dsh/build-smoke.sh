@@ -42,7 +42,7 @@ chmod 600 "${home}/.credentials.yaml"
 # because a wrong value here is not an error: the loader simply finds no skills,
 # and a run degrades in a way that reads as the model ignoring its instructions.
 export EVIMED_PRESET_SKILLS_DIR=/opt/evimed/socket/presets/evimed-universal/skills
-for root in core curated-scientific office community; do
+for root in core curated-scientific office community evimed; do
   [ -d "${EVIMED_PRESET_SKILLS_DIR}/${root}" ] || {
     echo "build smoke: skill root ${root} is missing under ${EVIMED_PRESET_SKILLS_DIR}" >&2
     exit 1

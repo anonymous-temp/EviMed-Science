@@ -820,7 +820,7 @@ async function bufferProxyRequestBody(req, method, limit) {
   }
 }
 
-async function readRuntimeResponseBody(body, limit, onReader, onBytes) {
+export async function readRuntimeResponseBody(body, limit, onReader, onBytes) {
   const reader = body.getReader();
   onReader?.(reader);
   const chunks = [];
@@ -837,6 +837,22 @@ async function readRuntimeResponseBody(body, limit, onReader, onBytes) {
       }
       chunks.push(chunk);
     }
+  } catch (error) {
+    // A read this function abandons must die with it. `releaseLock()` alone
+    // detaches the reader and leaves the response paused forever: the socket
+    // under it never closes, and on a unix-socket runtime that is one leaked
+    // fd on this side and one live `socat` fork inside the container.
+    //
+    // That was not hypothetical. A run's `session.history` grows with its
+    // transcript; once it crossed `maxJsonBytes`, every poll threw 413 here,
+    // the caller retried, and each retry parked another connection — measured
+    // at 1368 leaked fds on the control plane and 555/665 socat forks in the
+    // two containers they belonged to, still open after the containers died,
+    // climbing at 87/min near the end. The pids ceiling those forks hit was
+    // raised twice (256 -> 1024) before this line existed; the ceiling was
+    // never the problem.
+    await reader.cancel().catch(() => {});
+    throw error;
   } finally {
     onReader?.(null);
     reader.releaseLock();
