@@ -1264,3 +1264,48 @@ test("the reader asks the image about every shipped path, and reports the ones i
 
   assert.deepEqual(new Map(JSON.parse(answers)), new Map([["index.mjs", helloSha], ["src/gate.mjs", "MISSING"]]));
 });
+
+test("every agent whose completion requires a loaded skill can actually reach that skill in the DSH image", async () => {
+  // `open-domain-answer` is the default line for an unrouted question. Its
+  // agent.yaml requires `skillsLoaded`, but its skill body lived only in
+  // `runtime/skills/evimed`, which the DSH Dockerfile did not COPY, and it is
+  // not a delegated capability so nothing ever injected it either. The check
+  // therefore failed on every DSH open-domain run and the reply was stamped
+  // "The open-domain-answer skill was not loaded in this turn" — a deployment
+  // fault rendered to the reader as doubt about the answer.
+  //
+  // Derived from the manifests rather than a list, so the next agent added with
+  // `skillsLoaded` and no delivery route fails here instead of in production.
+  const { readdir } = await import("node:fs/promises");
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const copiedSources = dockerfile
+    .split("\n")
+    .filter((line) => /^COPY\s/.test(line))
+    .map((line) => splitDockerWords(line)[1])
+    .filter(Boolean);
+
+  const agentDirs = await readdir(path.join(repoRoot, "runtime/skills/evimed"), { withFileTypes: true });
+  let checked = 0;
+  for (const entry of agentDirs) {
+    if (!entry.isDirectory()) continue;
+    const manifest = await readFile(
+      path.join(repoRoot, "runtime/skills/evimed", entry.name, "agent.yaml"),
+      "utf8",
+    ).catch(() => null);
+    if (!manifest || !/^\s*-\s*skillsLoaded\s*$/m.test(manifest)) continue;
+    const skill = manifest.match(/^skill:\s*(\S+)\s*$/m)?.[1];
+    assert.ok(skill, `${entry.name}/agent.yaml requires skillsLoaded but names no skill`);
+    checked += 1;
+
+    // Two routes exist and either is sufficient: delegation injects a
+    // capability body, or the kernel reads it from a shipped preset root.
+    const injected = existsSync(path.join(repoRoot, "capability-skills", skill));
+    const shipped = copiedSources.some((source) => source === `runtime/skills/evimed/${skill}`);
+    assert.ok(
+      injected || shipped,
+      `${skill} requires skillsLoaded, but it is neither a capability body under capability-skills/`
+      + ` nor COPYed into the runtime image — so the check can never pass on DSH`,
+    );
+  }
+  assert.ok(checked >= 4, `expected to check several agents, checked ${checked} — the walk found nothing`);
+});

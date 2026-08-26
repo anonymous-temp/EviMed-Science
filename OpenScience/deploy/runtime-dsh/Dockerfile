@@ -242,6 +242,17 @@ RUN set -eux; \
 # unable to tell the difference.
 COPY runtime/skills/core /opt/evimed/skills/core
 COPY runtime/skills/community /opt/evimed/skills/community
+# The agent packages under `runtime/skills/evimed` that are NOT delegated
+# capabilities. The eleven specialists reach a run through
+# `capability-skills`, which delegation injects; `open-domain-answer` is
+# neither a capability nor a preset root, so its skill body reached no DSH
+# container by any route -- and its agent.yaml requires `skillsLoaded`. Every
+# open-domain answer, the default line for an unrouted question, came back
+# stamped "unverified": a deployment fault shown to the reader as doubt about
+# the answer. Copied one package at a time rather than the whole directory,
+# because the specialists are already shipped as capability bodies and a
+# second copy of the same instruction text is what this tree forbids.
+COPY runtime/skills/evimed/open-domain-answer /opt/evimed/skills/evimed/open-domain-answer
 COPY runtime/mcp/evimed-research /opt/evimed/mcp/evimed-research
 COPY packages/socket /opt/evimed/socket
 COPY deploy/runtime-dsh/capabilities /opt/evimed/capabilities
@@ -276,6 +287,7 @@ COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
 RUN set -eux; \
   install -d -m 0755 /opt/evimed/socket/presets/evimed-universal/skills; \
   cp -a /opt/evimed/skills/core /opt/evimed/socket/presets/evimed-universal/skills/core; \
+  cp -a /opt/evimed/skills/evimed /opt/evimed/socket/presets/evimed-universal/skills/evimed; \
   cp -a /usr/local/share/evimed/skills/curated-scientific /opt/evimed/socket/presets/evimed-universal/skills/curated-scientific; \
   cp -a /usr/local/share/evimed/skills/office /opt/evimed/socket/presets/evimed-universal/skills/office; \
   cp -a /opt/evimed/skills/community /opt/evimed/socket/presets/evimed-universal/skills/community; \
