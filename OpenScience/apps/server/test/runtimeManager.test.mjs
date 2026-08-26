@@ -15,6 +15,7 @@ import {
   requestRuntime,
   runtimeContainerName,
   runtimeDshHome,
+  runtimeTmpDir,
   syncRuntimeAgentPackages,
   syncRuntimeSkills,
 } from "../src/runtimeManager.mjs";
@@ -1943,4 +1944,73 @@ test("dispatchPrompt threads runId through to the DSH-specific writer", async (t
   await manager.dispatchPrompt(project, "ses_general", { text: "hello", runId: "run_brief_2" });
   const written = JSON.parse(await readFile(path.join(project.workspaceDir, ".evimed-brief", "index.json"), "utf8"));
   assert.deepEqual(written, { runId: "run_brief_2" });
+});
+
+test("the kernel spills onto the project volume, not into the 64 MiB tmpfs", async () => {
+  // `--tmpfs /tmp:...size=64m` is a security bound. Both spill writers resolve
+  // their directory from `os.tmpdir()` — `dsh-spill-local` writes the FULL text
+  // of every tool result over `maxInlineBytes`, `dsh-subprocess-local` writes
+  // captured bash output — and TMPDIR was set nowhere, so both landed on that
+  // 64 MiB. Neither is pruned and the container is long-lived per project, so
+  // it accumulates across a whole session history.
+  //
+  // What happens when it fills is the part worth a test: `spill-policy` catches
+  // the failed write, warns INSIDE the container where nothing reads it, and
+  // returns — which keeps the full untruncated text inline. The cap stops
+  // applying silently and every oversized result enters the model's context
+  // whole.
+  const plan = buildOpenCodeLaunchPlan(
+    {
+      dataDir: "/tmp/os-dsh-tmpdir",
+      runtimeKernel: "dsh",
+      runtimeSandboxMode: "docker",
+      runtimeContainerBin: "docker",
+      runtimeContainerImage: "evimed-runtime-dsh:test",
+      runtimeTransport: "unix",
+      runtimeNetworkMode: "none",
+      runtimeCpuLimit: "1",
+      runtimeMemoryLimit: "1g",
+      runtimePidsLimit: 64,
+      allowRuntimeHostNetwork: false,
+      // The production default, spelled out: without it the plan emits no
+      // `--tmpfs` at all and the control below would pass by absence rather
+      // than because the bound survived.
+      runtimeTmpfs: "/tmp:rw,nosuid,nodev,size=64m",
+    },
+    {
+      id: "p1",
+      userId: "u1",
+      rootDir: "/tmp/os-dsh-tmpdir/p1",
+      workspaceDir: "/tmp/os-dsh-tmpdir/p1/workspace",
+      runtimeDir: "/tmp/os-dsh-tmpdir/p1/runtime",
+    },
+    4096,
+    "pw-test",
+  );
+
+  assert.ok(plan.args.includes(`TMPDIR=${runtimeTmpDir}`), "the kernel's temp root must be off the tmpfs");
+
+  // The container path has to resolve to a host directory this plan creates,
+  // or the container starts with a TMPDIR it cannot write to — which fails the
+  // same way the tmpfs did, only sooner. Derived from the mount rather than
+  // matched as a string: the host path ends in `container-runtime/tmp` while
+  // the container sees `/runtime/tmp`, and an assertion on either spelling
+  // alone would pass while they pointed at different places.
+  const mount = plan.args.find((arg) => typeof arg === "string" && arg.includes(",dst=/runtime"));
+  assert.ok(mount, "the project volume must be mounted at /runtime");
+  const hostRuntimeRoot = mount.slice(mount.indexOf("src=") + 4, mount.indexOf(",dst="));
+  const expectedHostTmp = path.join(hostRuntimeRoot, runtimeTmpDir.slice("/runtime/".length));
+  assert.ok(
+    plan.runtimeDirs.includes(expectedHostTmp),
+    `the plan must create ${expectedHostTmp}; it creates ${JSON.stringify(plan.runtimeDirs)}`,
+  );
+
+  // Negative controls.
+  // The tmpfs itself must stay: it is a security bound, and moving the spill
+  // off it is not a reason to stop bounding /tmp.
+  assert.ok(plan.args.includes("--tmpfs"), "the tmpfs bound must survive the fix");
+  // And the spill must not be pointed anywhere the project cannot own: this is
+  // per-project state, quota-accounted, deleted with the project.
+  assert.match(runtimeTmpDir, /^\/runtime\//, "the spill belongs on the project volume");
+  assert.notEqual(runtimeTmpDir, runtimeDshHome, "and not inside the kernel's home, which holds credentials");
 });

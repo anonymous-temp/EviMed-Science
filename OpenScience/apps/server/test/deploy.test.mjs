@@ -67,6 +67,52 @@ test("every runtime image publishes the label the readiness gate reads, whicheve
   }
 });
 
+test("every skill root the runtime image ships is a root the release manifest binds", async () => {
+  // The two lists were inverted. `runtime/skills/community` is COPYed into the
+  // DSH image and mounted as the fourth preset root — 20 files of third-party
+  // prose that every run is told to follow — and was bound by nothing: not the
+  // manifest, not a ledger, not the licence gate. `capability-skills` holds the
+  // bodies delegation pre-injects into every child's prompt and was equally
+  // unbound. Meanwhile `runtime/skills/external/ai4s-skills` carried a digest
+  // and is not in the DSH image at all.
+  //
+  // An edit to any file under the unbound roots — an accidental in-place
+  // change, a bad re-vendor, a deliberate one — changes what every run is
+  // instructed to do and passes ci:web, the release manifest and the kernel
+  // loader without a word.
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const generator = await readFile(path.join(repoRoot, "scripts/ops/generate-release-manifest.mjs"), "utf8");
+
+  // What the image copies into the preset root the kernel reads, plus the
+  // capability bodies. Read as COPY instructions, not as mentions.
+  const shipped = [...dockerfile.matchAll(/^COPY\s+(runtime\/skills\/[\w.-]+|capability-skills)\s/gm)].map((match) => match[1]);
+  assert.ok(shipped.length >= 4, `expected the image to ship several skill roots, found ${JSON.stringify(shipped)}`);
+
+  const bound = new Set([...generator.matchAll(/"((?:runtime\/skills\/|capability-skills)[^"]*)"/g)].map((match) => match[1]));
+  const unbound = [...new Set(shipped)].filter((source) => !bound.has(source)).sort();
+  assert.deepEqual(unbound, [], "a model-facing instruction tree that ships with no digest can change under every run silently");
+
+  // Negative control: the check must be able to fail. A root the image does not
+  // ship is not required to be bound, and a bound root that is not shipped is
+  // not an error — only the shipped-and-unbound direction is.
+  assert.equal(bound.has("runtime/skills/does-not-exist"), false);
+  assert.ok(bound.has("runtime/skills/external/ai4s-skills"), "the OpenCode delivery path's root stays bound while that kernel is selectable");
+
+  // Delivery and binding are different questions and must stay different lists.
+  // `config.runtimeSkillDirs` says which directories the OpenCode path COPIES
+  // into a project; the DSH image bakes its roots in instead. Adding a baked-in
+  // root to the delivery list made the host runtime try to deliver a tree it
+  // must not, surfacing as a 409 where a timeout was expected. The manifest
+  // list is a superset of the delivery list, which is what keeps
+  // `runtimeReleasePolicyError`'s membership check satisfiable.
+  const config = await readFile(path.join(repoRoot, "apps/server/src/config.mjs"), "utf8");
+  const delivered = new Set([...config.matchAll(/rootDir, "((?:runtime\/skills|capability-skills)[^"]*)"/g)].map((match) => match[1]));
+  assert.ok(delivered.size > 0, "the delivery list must still exist");
+  const unbacked = [...delivered].filter((source) => !bound.has(source));
+  assert.deepEqual(unbacked, [], "every delivered root must be bound, or readiness fails release_manifest_mismatch");
+  assert.equal(delivered.has("capability-skills"), false, "the DSH image bakes this in; the OpenCode path must not copy it");
+});
+
 test("web Dockerfile only copies sources that exist in the build context", async () => {
   const dockerfilePath = path.join(repoRoot, "deploy/web/Dockerfile");
   const dockerfile = await readFile(dockerfilePath, "utf8");

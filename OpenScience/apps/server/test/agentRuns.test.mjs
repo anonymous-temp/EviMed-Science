@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
@@ -9,6 +10,7 @@ import { createWebApiApp } from "../src/server.mjs";
 import {
   AgentRunStore,
   artifactCandidatesForTest,
+  delegatedDocumentReadsForTest,
   loadedOrInjectedSkillsForTest,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
@@ -4286,12 +4288,6 @@ test("a container that exits with nothing durable still says what the run last k
     await mkdir(project.metaDir, { recursive: true });
     const admitted = "evidence ingest found no source in a completed literature_search result (structured=object)";
     const fresh = "capsule recall disabled: no endpoint configured";
-    await writeFile(path.join(project.workspaceDir, workspaceLayout.runStateFile), JSON.stringify({
-      formatVersion: 1,
-      runId: "run_x",
-      degraded: [admitted, fresh],
-      qualityNotices: [],
-    }), "utf8");
 
     const binding = { sessionId: "ses_bare", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
     const store = new AgentRunStore({ get: async () => binding }, {
@@ -4300,6 +4296,24 @@ test("a container that exits with nothing durable still says what the run last k
       monitorIntervalMs: 60_000,
     });
     const started = await store.start(project, { sessionId: binding.sessionId });
+    // The projection is written only now, and the monitor is quiesced first.
+    //
+    // This assertion is about what the BRIDGE contributes, but it reads the
+    // ledger — which the monitor's live projection path also writes to. That
+    // path was reading the container's `/workspace` on the host, so it never
+    // fired and the race did not exist; fixing that made it real and this test
+    // began failing about one run in fifteen. It had been passing for a reason
+    // that had just stopped being true. With nothing on disk while the monitor
+    // could poll, only the bridge can have written what the verdict carries.
+    const monitor = store.monitors.get(started.id);
+    monitor?.cancel();
+    await monitor?.promise?.catch(() => {});
+    await writeFile(path.join(project.workspaceDir, workspaceLayout.runStateFile), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_x",
+      degraded: [admitted, fresh],
+      qualityNotices: [],
+    }), "utf8");
     // Exactly what the live path would have recorded for the first line, so the
     // dedup has something real to be measured against.
     store.projectionAdmissions.set(started.id, new Set([admitted]));
@@ -4318,6 +4332,70 @@ test("a container that exits with nothing durable still says what the run last k
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("the run's own projection is read from the host, not from the container's view of it", () => {
+  // `runtimeWorkspaceRoot()` answers "what are the model's absolute paths
+  // relative to". Under docker that is `/workspace` — inside the container —
+  // and reading the projection through it asked THIS host for
+  // `/workspace/.evimed-run/state.json`, which is not a path on this host. The
+  // projection therefore read `missing` for the whole life of every
+  // containerised run: no evidence or budget frames to the browser, nothing
+  // for the stall signal to read, and the run's own degraded lines never
+  // reaching the ledger. Two production runs showed
+  // `observedRunSideActivity: null` end to end with the file present the whole
+  // time.
+  //
+  // Asserted on the source because the alternative is standing up a container:
+  // what matters is which of the two roots this call site names, and the two
+  // are indistinguishable in any single-machine test where they are equal.
+  const source = readFileSync(new URL("../src/agentRuns.mjs", import.meta.url), "utf8");
+  // Comments stripped before matching. The first version of this check matched
+  // the comment above the fix, which names the very thing it forbids — the
+  // same "a mention is not an instruction" mistake this audit has now made
+  // three times, in a Dockerfile check, an image-label check, and here.
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const body = code.slice(code.indexOf("async readRunSideActivity("));
+  const call = body.slice(0, body.indexOf("readRunStateProjection(") + 60);
+  assert.match(call, /readRunStateProjection\(project, project\.workspaceDir\)/, "the projection must be read from the host path");
+  assert.equal(
+    /runtimeWorkspaceRoot\(/.test(call),
+    false,
+    "the container's view of the workspace is not a path this process can open",
+  );
+
+  // Negative control: the two call sites that DO need the container root must
+  // keep it, or fixing this would break the paths the model actually wrote.
+  assert.match(code, /artifactCandidates\(message, runtimeWorkspaceRoot\)/);
+  assert.match(code, /successfulEvidenceSourceArtifacts\(allAssistants, runtimeWorkspaceRoot\)/);
+});
+
+test("a delegation that read evidence is recognised under both kernels and both argument keys", () => {
+  // `task` is OpenCode's delegation tool and no tool of that name exists under
+  // DSH: the preset registers `subagent`, the socket registers
+  // `evimed_delegate`, and the adapter passes the kernel's name through
+  // verbatim. This returned [] for every DSH run, which made three things
+  // unreachable without a throw or a log: the delegated-evidence-read verdict,
+  // one of the two triggers for `qualityUnverified`, and the "MUST FIX" lead
+  // line that gives a repair loop the cause instead of only the symptom.
+  const part = (tool, input) => ({
+    info: { role: "assistant", time: { created: 1, completed: 1 } },
+    parts: [{ type: "tool", tool, state: { status: "completed", input } }],
+  });
+  const read = (messages) => delegatedDocumentReadsForTest(messages).length;
+
+  assert.equal(read([part("subagent", { prompt: "read tool-output/abc" })]), 1, "the DSH kernel's own delegation tool");
+  assert.equal(read([part("evimed_delegate", { brief: "quote from .evimed-sources/x/fulltext.md" })]), 1, "the socket's delegation, whose key is `brief`");
+  assert.equal(read([part("task", { prompt: "read tool-output/abc" })]), 1, "the kernel on its way out still counts");
+
+  // Negative controls — each is a way the widening could be wrong.
+  // Widening the name alone leaves every socket delegation reading "", which
+  // is the same silence with a shorter list of causes.
+  assert.equal(read([part("evimed_delegate", { prompt: undefined, brief: "no evidence path here" })]), 0);
+  // A delegation that read nothing evidential is not a delegated evidence read.
+  assert.equal(read([part("subagent", { prompt: "summarise the plan" })]), 0);
+  // And an unrelated tool must not be counted just because its input mentions a path.
+  assert.equal(read([part("write", { file_path: ".evimed-sources/x/fulltext.md" })]), 0, "writing is not delegating");
 });
 
 test("an artifact is recognised from the spelling the model actually sends", () => {

@@ -77,12 +77,24 @@ test("release manifest generator records exact images, tools, skills, and source
       imageId: releaseEnv.OPEN_SCIENCE_CADDY_IMAGE_ID,
       caddyVersion: "2.11.4-alpine",
     });
-    assert.equal(manifest.skills[0].source, "runtime/skills/core");
-    assert.ok(manifest.skills[0].files > 0);
-    assert.match(manifest.skills[0].digest, /^sha256:[a-f0-9]{64}$/);
+    // Every entry is digest-bound, not just whichever one sorts first — that
+    // was the shape of the defect this list grew to close.
+    for (const skill of manifest.skills) {
+      assert.ok(skill.files > 0, `${skill.source} bound zero files`);
+      assert.match(skill.digest, /^sha256:[a-f0-9]{64}$/, `${skill.source} has no content digest`);
+    }
+    // Everything shipped as model-facing instruction text, sorted by source.
+    // `runtime/skills/community` is the fourth preset root the DSH image mounts
+    // and `capability-skills` holds the bodies delegation pre-injects into every
+    // child's prompt; both shipped bound by nothing, while
+    // `runtime/skills/external/ai4s-skills` carried a digest and is not in the
+    // DSH image at all. Binding a tree the running kernel ignores costs nothing;
+    // shipping one it reads with no digest is the defect.
     assert.deepEqual(
       manifest.skills.map((skill) => skill.source),
       [
+        "capability-skills",
+        "runtime/skills/community",
         "runtime/skills/core",
         "runtime/skills/curated-scientific",
         "runtime/skills/external/ai4s-skills",

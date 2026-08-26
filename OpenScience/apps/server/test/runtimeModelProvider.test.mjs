@@ -3,9 +3,11 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { loadConfig } from "../src/config.mjs";
 import { runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import {
   RuntimeManager,
+  buildOpenCodeLaunchPlan,
   issueModelGatewayRuntimeToken,
   runtimeNetworkRequiresEgressOptIn,
   syncRuntimeDshProfile,
@@ -306,4 +308,62 @@ test("syncRuntimeDshProfile does nothing when the DeepSeek provider is disabled"
   assert.equal(result.configured, false);
   assert.equal(result.workloadTokenFile, null);
   await assert.rejects(readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml")), { code: "ENOENT" });
+});
+
+test("the two runtime capability settings reach the container, and the default does not change what ships", async (t) => {
+  // Both sites that build the container's flags wrote `askUser: false,
+  // review: true` as literals and read nothing, while `requiredEnforcement` in
+  // the same object literal did read config — a local omission, not an
+  // architectural one. An operator setting either variable got exactly nothing,
+  // in one case leaving in-run clarification permanently off and in the other
+  // leaving semantic review permanently on.
+  //
+  // The default for review is `true` for a reason: it is what every hosted run
+  // has actually been getting. Wiring these up against the old `false` default
+  // would have turned cross-deliverable review off everywhere — a capability
+  // removal wearing a bug fix's clothes.
+  const { rootDir, project } = await dshFixture();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+
+  // Asserted on the argv the control plane actually emits, not on a
+  // `runtimeEnvironment` this test builds with flags of its own making. The
+  // first version did the latter: it exercised the production path and then
+  // measured something else, so reverting the wiring to literals left it green
+  // — the same "execution without assertion" this audit found in the
+  // profile-sync tests, reproduced while fixing it.
+  const argvFor = (overrides) => buildOpenCodeLaunchPlan(
+    {
+      ...dshFixtureConfig(overrides),
+      // The release-provenance gate is a separate concern and has its own
+      // tests; this one is about whether two settings reach the container.
+      production: false,
+      dataDir: rootDir,
+      runtimeKernel: "dsh",
+      runtimeSandboxMode: "docker",
+      runtimeTransport: "unix",
+      runtimeContainerBin: "docker",
+      runtimeContainerImage: "evimed-runtime-dsh:test",
+      runtimeNetworkMode: "none",
+      runtimeCpuLimit: "1",
+      runtimeMemoryLimit: "1g",
+      runtimePidsLimit: 64,
+      allowRuntimeHostNetwork: false,
+    },
+    { ...project, runtimeDir: path.join(rootDir, "runtime") },
+    4096,
+    "pw-test",
+  ).args;
+
+  const on = argvFor({ runtimeAskUserEnabled: true, runtimeReviewEnabled: true });
+  assert.ok(on.includes("EVIMED_ASK_USER=1"), "clarification must be turnable on");
+  assert.ok(on.includes("EVIMED_REVIEW_ENABLED=1"));
+
+  const off = argvFor({ runtimeAskUserEnabled: false, runtimeReviewEnabled: false });
+  assert.ok(off.includes("EVIMED_ASK_USER=0"));
+  assert.ok(off.includes("EVIMED_REVIEW_ENABLED=0"), "a setting that cannot turn something off is not a setting");
+
+  // The shipped defaults must be the behaviour that was already shipping.
+  const defaults = loadConfig({});
+  assert.equal(defaults.runtimeAskUserEnabled, false, "clarification stays off by default, as it was hardcoded");
+  assert.equal(defaults.runtimeReviewEnabled, true, "review stays on by default, as it was hardcoded");
 });

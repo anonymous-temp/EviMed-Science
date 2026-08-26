@@ -2263,8 +2263,15 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
     },
     flags: {
       hosted: Boolean(config.production),
-      askUser: false,
-      review: true,
+      // Read from config, not written as literals. `requiredEnforcement` in
+      // this same object literal already did, which is what makes this a local
+      // omission rather than an architectural one: an operator could set
+      // OPEN_SCIENCE_RUNTIME_ASK_USER or ..._REVIEW_ENABLED and nothing
+      // downstream would ever look at the result.
+      askUser: Boolean(config.runtimeAskUserEnabled),
+      review: Boolean(config.runtimeReviewEnabled),
+      // Not a setting: the capsule is active when a recall endpoint is
+      // configured, and the plugin reports its own absence.
       capsule: false,
       requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
     },
@@ -3167,6 +3174,31 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
                     "DSH_PERMISSION_MODE=workspace-write",
                     "--env",
                     `DSH_HOME=${runtimeDshHome}`,
+                    // The kernel's temp root, off the 64 MiB tmpfs.
+                    //
+                    // `--tmpfs /tmp:...size=64m` is a security bound, and both
+                    // spill writers resolve their directory from `os.tmpdir()`:
+                    // `dsh-spill-local` writes the FULL text of every tool
+                    // result over `maxInlineBytes` there, and
+                    // `dsh-subprocess-local` writes captured bash output there.
+                    // Neither is ever pruned and the container is long-lived
+                    // per project, so exhaustion accumulates across a whole
+                    // session history.
+                    //
+                    // What happens when it fills is the part that matters:
+                    // `spill-policy` catches the failed write, logs a warning
+                    // INSIDE the container — where nothing reads it, since the
+                    // container's logs die with it and telemetry is off — and
+                    // returns, which keeps the full untruncated text inline.
+                    // The inline cap stops applying, silently, and every
+                    // oversized tool result goes into the model's context whole.
+                    //
+                    // `/runtime` is a per-project rw mount, quota-accounted and
+                    // deleted with the project. `dsh-sandbox`'s `writableRoots()`
+                    // follows `os.tmpdir()`, so the landlock grant moves with it
+                    // and covers only this subtree.
+                    "--env",
+                    `TMPDIR=${runtimeTmpDir}`,
                     // The authority the control plane will send as `Host`. DSH
                     // refuses every `/api` request whose Host is neither
                     // loopback nor a declared trusted host — not just browser
@@ -3190,8 +3222,9 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
                       bundleVersion: String(config.socketBundleVersion ?? ""),
                       flags: {
                         hosted: Boolean(config.production),
-                        askUser: false,
-                        review: true,
+                        // Same two settings as `dshProfileInput`; see there.
+                        askUser: Boolean(config.runtimeAskUserEnabled),
+                        review: Boolean(config.runtimeReviewEnabled),
                         capsule: false,
                         requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
                       },
@@ -3242,7 +3275,9 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
         path.join(runtimeRoot, "xdg-cache"),
         path.join(runtimeRoot, "xdg-state"),
         path.join(runtimeRoot, "home"),
-        ...(runtimeKernelName(config) === "dsh" ? [path.join(runtimeRoot, "dsh-home")] : []),
+        ...(runtimeKernelName(config) === "dsh"
+          ? [path.join(runtimeRoot, "dsh-home"), path.join(runtimeRoot, "tmp")]
+          : []),
       ],
     };
   }
@@ -3290,6 +3325,11 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
  * exported and deleted with the project rather than with the container.
  */
 export const runtimeDshHome = "/runtime/dsh-home";
+
+/** Where the kernel spills, so the 64 MiB `--tmpfs /tmp` stays a security
+ *  bound rather than a capacity one. Both spill writers resolve from
+ *  `os.tmpdir()`, so one variable moves both. */
+export const runtimeTmpDir = "/runtime/tmp";
 
 /**
  * Which agent kernel a launch plan is for.

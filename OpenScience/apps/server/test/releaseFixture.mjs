@@ -32,6 +32,18 @@ export const releaseManifestFixture = Object.freeze({
       digest: `sha256:${"c".repeat(64)}`,
     },
     {
+      name: "capability-skills",
+      source: "capability-skills",
+      files: 1,
+      digest: `sha256:${"a".repeat(64)}`,
+    },
+    {
+      name: "runtime-skills-community",
+      source: "runtime/skills/community",
+      files: 1,
+      digest: `sha256:${"d".repeat(64)}`,
+    },
+    {
       name: "runtime-skills-external-ai4s-skills",
       source: "runtime/skills/external/ai4s-skills",
       files: 1,
