@@ -10,6 +10,7 @@ import { createWebApiApp } from "../src/server.mjs";
 import {
   AgentRunStore,
   artifactCandidatesForTest,
+  clinicalEvidenceRepairPromptForTest,
   delegatedDocumentReadsForTest,
   loadedOrInjectedSkillsForTest,
   recoverableEvidenceSourceErrorCodes,
@@ -4368,6 +4369,38 @@ test("the run's own projection is read from the host, not from the container's v
   // keep it, or fixing this would break the paths the model actually wrote.
   assert.match(code, /artifactCandidates\(message, runtimeWorkspaceRoot\)/);
   assert.match(code, /successfulEvidenceSourceArtifacts\(allAssistants, runtimeWorkspaceRoot\)/);
+});
+
+test("a repair instruction names a check the run can actually run", () => {
+  // It used to open with `$XDG_CONFIG_HOME/opencode/skills/.../preflight.py` —
+  // an OpenCode path, for a script this repository no longer contains. Every
+  // clinical repair therefore began by ordering the run to execute something
+  // that is not there, and spent one of its bounded attempts discovering that.
+  // The run-side gate is what preflight became: submitting IS the check.
+  // Strings, which is what `completion.qualityIssues` is at the one real call
+  // site. The first version of this test passed issue OBJECTS, which the
+  // function filters out — so it reported the issues missing when the code was
+  // right and the fixture was wrong.
+  const prompt = clinicalEvidenceRepairPromptForTest([
+    "RoB 2 named in the methods but never applied to any study",
+  ]);
+
+  assert.match(prompt, /evimed_submit_deliverable/, "the repair must name the check that exists");
+  assert.equal(/preflight\.py/.test(prompt), false, "no run can execute a script that is not shipped");
+  assert.equal(/opencode/i.test(prompt), false, "and the path named must not belong to the other kernel");
+  // The issue itself has to travel, or the run is told to fix something without
+  // being told what.
+  assert.match(prompt, /RoB 2 named in the methods but never applied/);
+  // And an issue shape the function drops must not silently produce a prompt
+  // that says "fix every issue" while listing none.
+  const dropped = clinicalEvidenceRepairPromptForTest([{ message: "an object, not a string" }]);
+  assert.equal(/an object, not a string/.test(dropped), false, "the filter is real, which is why the fixture above must match the call site");
+
+  // Negative control: the assertions must be able to fail. A prompt that named
+  // the deleted script would match the pattern this test forbids.
+  const stale = "Run python $XDG_CONFIG_HOME/opencode/skills/clinical-evidence-synthesis/scripts/preflight.py first.";
+  assert.equal(/preflight\.py/.test(stale), true);
+  assert.equal(/evimed_submit_deliverable/.test(stale), false);
 });
 
 test("a delegation that read evidence is recognised under both kernels and both argument keys", () => {

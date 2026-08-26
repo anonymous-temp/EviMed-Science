@@ -2773,3 +2773,11 @@ export function artifactCandidatesForTest(message, runtimeWorkspaceRoot) {
 export function delegatedDocumentReadsForTest(messages) {
   return delegatedDocumentReads(messages);
 }
+
+/** Test seam: the instruction a rejected clinical package is sent back with.
+ *  It used to open by ordering the run to execute a script this repository no
+ *  longer contains, spending one bounded attempt on finding that out.
+ *  @param {any[]} issues @param {any} [shrinkage] @returns {string} */
+export function clinicalEvidenceRepairPromptForTest(issues, shrinkage = null) {
+  return clinicalEvidenceRepairPrompt(issues, shrinkage);
+}

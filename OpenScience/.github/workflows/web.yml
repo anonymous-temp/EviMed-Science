@@ -59,6 +59,20 @@ jobs:
           pnpm check:skill-vocabulary
           pnpm check:skill-digests
 
+      # The gates `ci:web` runs and this workflow did not. CI is the only thing
+      # standing on PRs and main, and it ran no ESLint at all: a lint failure, a
+      # server type error, a committed secret, an unvendored community skill or
+      # a SaaS-alignment drift could all merge. `apps/server/test/deploy.test.mjs`
+      # now fails if this list falls behind `ci:web` again.
+      - name: Lint, typecheck and audit
+        run: |
+          pnpm lint
+          pnpm typecheck:domain
+          pnpm typecheck:server
+          pnpm audit:source-secrets
+          pnpm check:community-skills
+          pnpm audit:saas-alignment
+
       - name: Test Hosted Web API
         run: |
           CI=true pnpm test:mcp

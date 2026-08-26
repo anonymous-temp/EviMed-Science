@@ -101,6 +101,14 @@ for _ in $(seq 1 90); do
   sleep 2
 done
 grep -q "failed to apply loader entry" "${log}" && fail "an entry did not apply"
+# A patch row naming a target the composition does not have is a WARNING in the
+# kernel and the boot continues without it. That is the exact shape of "a plugin
+# is silently absent": the row was written, the image was built, the container
+# started, and the capability it configures is simply not there. Both spellings
+# come from the installed kernel: "patch: entry %C not found" (replace) and
+# "patch insert: entry %C not found" (insert).
+grep -qE "patch( insert)?: entry .* not found" "${log}" \
+  && fail "a patch row names an entry the composition does not have; the kernel warned and carried on without it"
 grep -q "dsh web: " "${log}" || fail "the kernel never began serving"
 
 # Creating a session is the second half of the proof, and it is the half that
