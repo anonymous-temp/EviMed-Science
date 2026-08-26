@@ -39,7 +39,11 @@ export const PLUGIN_SPECIFIERS = Object.freeze({
 
 export { buildGuidanceText, GUIDANCE_SECTION_NAME, GUIDANCE_SECTION_ORDER } from './src/guidanceText.mjs'
 export { RUN_DOMAIN_SPEC, RUN_STATE_FORMAT_VERSION, projectRunState, staleEvidence } from './src/runMirror.mjs'
-export { evidenceFromOutcome, mergeEvidence } from './src/evidenceIngest.mjs'
+export {
+  evidenceFromOutcome,
+  mergeEvidence,
+  sourceProbe,
+} from './src/evidenceIngest.mjs'
 export { chunk, renderScreeningLedger, screeningPrompt, SCREEN_VERDICT_SCHEMA } from './src/screening.mjs'
 export {
   accumulateBudget,
@@ -53,6 +57,7 @@ export {
   rejectionEnvelope,
   renderDeliverySummary,
   settleDelegation,
+  sourceArtifactPaths,
   stepPolicy,
   toolPolicy,
 } from './src/runPolicy.mjs'

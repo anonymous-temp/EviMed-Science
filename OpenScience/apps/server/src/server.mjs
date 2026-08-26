@@ -44,7 +44,7 @@ import { readinessSaasProfile } from "./saasProfile.mjs";
 import { TaskManager } from "./taskManager.mjs";
 import { RunEventHub, attachRunStream, resumePosition } from "./runEventStream.mjs";
 import { RuntimeEventPump } from "./dshEventPump.mjs";
-import { readDeepSeekReleaseReceiptFile } from "../../../scripts/ops/deepseek-opencode-release-gate.mjs";
+import { DEEPSEEK_RECEIPT_RENEWAL_COMMAND, deepSeekReleaseReceiptFreshness, readDeepSeekReleaseReceiptFile } from "../../../scripts/ops/deepseek-opencode-release-gate.mjs";
 import {
   HttpError,
   apiBaseFromRequest,
@@ -2743,9 +2743,11 @@ function readinessModelGateway(config) {
       throw readinessFailure("runtime_internal_network_required");
     }
   }
+  let receiptFreshness = null;
   if (config.production) {
+    let receipt;
     try {
-      readDeepSeekReleaseReceiptFile(config.deepseekReleaseReceiptFile, {
+      receipt = readDeepSeekReleaseReceiptFile(config.deepseekReleaseReceiptFile, {
         requireProduction: true,
         signingSecret: config.modelGatewaySigningSecret,
         maxAgeMs: config.deepseekReleaseReceiptMaxAgeMs,
@@ -2756,12 +2758,28 @@ function readinessModelGateway(config) {
     } catch (error) {
       throw readinessFailure(error?.code ?? "deepseek_release_receipt_invalid");
     }
+    // Reported while the receipt is still valid, which is the only time the
+    // report is worth anything. The receipt attests what the model did when it
+    // was probed, so it cannot be renewed by re-stamping — renewal means
+    // running the gate again. What was missing was never the expiry: it was
+    // that the first and only signal arrived at the moment it had already
+    // expired, and production then sat red for eight days.
+    const freshness = deepSeekReleaseReceiptFreshness(receipt, {
+      nowMs: Date.now(),
+      maxAgeMs: config.deepseekReleaseReceiptMaxAgeMs,
+    });
+    receiptFreshness = {
+      receiptExpiresInMs: Math.max(0, freshness.remainingMs),
+      receiptRenewalDue: freshness.renewalDue,
+      ...(freshness.renewalDue ? { receiptRenewalCommand: DEEPSEEK_RECEIPT_RENEWAL_COMMAND } : {}),
+    };
   }
   return {
     enabled: true,
     model: config.deepseekModel,
     keySource: config.deepseekApiKeySource,
     signingSecretSource: config.modelGatewaySigningSecretSource,
+    ...(receiptFreshness ?? {}),
   };
 }
 

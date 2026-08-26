@@ -341,6 +341,14 @@ export const RUNTIME_ERROR_CODES = Object.freeze([
   'runtime_preset_unavailable',
   'runtime_bundle_version_mismatch',
   'runtime_domain_version_mismatch',
+  // A run that wrote its deliverable and then stopped without ever submitting
+  // it for grading. Distinct from `runtime_stopped` on purpose: both end with
+  // a container that is gone and no receipt, but one lost work to an
+  // interruption and the other produced a complete package and never asked for
+  // a verdict on it. Reported as the same code, the second reads as
+  // infrastructure trouble and the actual cause — the run stopped short of its
+  // own contract — is invisible.
+  'runtime_deliverable_never_submitted',
 ])
 
 /** Codes the socket's own tools return in the `{ok:false, code}` envelope (§8.1). */
@@ -439,6 +447,9 @@ export function turnEndErrorCode(kind) {
 export const ERROR_CODE_MESSAGES = Object.freeze({
   runtime_canceled: '运行已被取消。可以重新发起，或从某一步分叉后继续。',
   runtime_stopped: '运行进程中断，已按中断记录收尾。重试即可继续。',
+  runtime_deliverable_never_submitted:
+    '运行已经写出交付文件，但没有提交校验就结束了，因此没有通过质量门、也没有可交付的成果。'
+    + '文件仍在工作区里，可以重新发起让它提交；未经校验的文件不会被当作交付物。',
   runtime_session_error: '模型调用失败。稍后重试；若反复出现请缩小题面范围。',
   runtime_session_not_found: '运行时还没有这个会话，因此它还没有产生任何记录。',
   runtime_tool_error: '一次工具调用被拒绝或失败。查看运行树中标红的节点。',

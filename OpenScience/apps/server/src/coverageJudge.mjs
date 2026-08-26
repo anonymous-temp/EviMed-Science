@@ -251,7 +251,12 @@ export function verifiedCoverageVerdicts(rawVerdicts, context) {
     }
     const why = typeof verdict.why === "string" ? verdict.why.replace(/\s+/g, " ").trim().slice(0, maxWhyCharacters) : "";
     if (!why) { drop("no_reason"); continue; }
-    const key = `${entryId} ${kind} ${line}`;
+    // The separator is a NUL, written as an escape. Spelled as a raw byte in
+    // the source it produced the same value and made this entire file
+    // classify as binary: `grep -I`, ugrep and ripgrep all skip it, so 453
+    // lines of the delivery path were invisible to code search. Nothing
+    // failed and nothing said so.
+    const key = `${entryId}\u0000${kind}\u0000${line}`;
     if (seen.has(key)) { drop("duplicate"); continue; }
     seen.add(key);
     if (kept.length >= maxVerdicts) {
@@ -306,13 +311,40 @@ export function coverageJudgeNotices(kept, omitted = 0) {
   ];
 }
 
+/** The judge's own copy of the configured default, so a deployment that passes
+ *  no value waits the same as one that passes the documented default rather
+ *  than the number that default replaced. Asserted equal to `config.mjs` in
+ *  `apps/server/test/coverageJudgeTimeout.test.mjs`. */
+export const COVERAGE_JUDGE_TIMEOUT_DEFAULT_MS = 420_000;
+
+/** Upper bound, above the default rather than below it. A ceiling under the
+ *  configured value silently discards the configuration. */
+export const COVERAGE_JUDGE_TIMEOUT_CEILING_MS = 600_000;
+
 export class CoverageJudge {
   /** @param {Record<string, any>} config */
   constructor(config, { fetchImpl = globalThis.fetch } = {}) {
     this.config = config;
     this.fetchImpl = fetchImpl;
     this.enabled = config?.coverageJudgeEnabled === true;
-    this.timeoutMs = Math.max(1_000, Math.min(300_000, Number(config?.coverageJudgeTimeoutMs ?? 120_000)));
+    // One value, one place. `config.mjs` sets this to 420 s deliberately — its
+    // comment records that at 120 s four deliveries in five aborted and
+    // reported "not judged" — and this line used to clamp it to 300 s and fall
+    // back to the 120 s the default had been raised away from. Three numbers
+    // for one setting, and the configured one was the one that never applied:
+    // the operator sets 420, the judge waits 300, and nothing says so.
+    //
+    // The ceiling stays, because an unbounded wait is a run that never ends;
+    // it is now above the configured default rather than under it.
+    // `Number(...)` of anything unparseable is NaN, and NaN survives both
+    // `Math.min` and `Math.max` — so a mistyped setting produced `timeoutMs =
+    // NaN`, which is neither bounded nor an error, and reaches the timer as a
+    // deadline that never arrives. Found by the negative control for the
+    // clamp, not by the clamp.
+    const requested = Number(config?.coverageJudgeTimeoutMs ?? COVERAGE_JUDGE_TIMEOUT_DEFAULT_MS);
+    this.timeoutMs = Number.isFinite(requested)
+      ? Math.max(1_000, Math.min(COVERAGE_JUDGE_TIMEOUT_CEILING_MS, requested))
+      : COVERAGE_JUDGE_TIMEOUT_DEFAULT_MS;
     /** @type {string|null} */
     this.lastFailure = null;
   }

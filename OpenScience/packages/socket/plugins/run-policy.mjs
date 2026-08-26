@@ -58,6 +58,7 @@ import {
   rejectionEnvelope,
   renderDeliverySummary,
   settleDelegation,
+  sourceArtifactPaths,
   stepPolicy,
   toolPolicy,
 } from '../src/runPolicy.mjs'
@@ -777,12 +778,7 @@ async function collectSourceArtifacts(ctx, entry, call) {
     ? [...store.evidence.entries()].map(([, value]) => value)
     : (ctx.get('evimedEvidence')?.forSession?.(call.sessionId) ?? [])
   const cwd = entry.cwd || call.cwd
-  const seen = new Set()
-  for (const record of records) {
-    if (entry.runId && record?.runId && record.runId !== entry.runId) continue
-    const artifactPath = String(record?.artifactPath ?? '')
-    if (!artifactPath || seen.has(artifactPath)) continue
-    seen.add(artifactPath)
+  for (const artifactPath of sourceArtifactPaths(records, entry.runId)) {
     // A source that could not be preserved is simply absent: the validator
     // already reports an unquotable claim, and inventing an empty string here
     // would turn "we never fetched it" into "the quote is not in it".

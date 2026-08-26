@@ -103,3 +103,49 @@ test("the scan reaches the places a breach would actually happen", async () => {
     "the port is the exception and must not be scanned against its own rule",
   );
 });
+
+// A source file that reads as binary is a source file nobody greps.
+//
+// `coverageJudge.mjs` built a composite key with a NUL separator — a good
+// choice — but spelled it as a raw byte in the file rather than as `\u0000`.
+// The value was identical and every test passed. What changed was that `grep
+// -I`, ugrep and ripgrep all classify the file as binary and skip it, so 453
+// lines sitting on the delivery path returned no matches for any search: not
+// "no results", but never looked at. It went unnoticed for as long as it did
+// precisely because the tool you would use to notice it was the tool it hid
+// from.
+//
+// This lives beside the harness-boundary walk because it is the same kind of
+// rule — one about the repository as a whole that no single module can hold.
+test("no source file reads as binary, because a file that does is a file nobody searches", async () => {
+  const offenders = [];
+  const walk = async (dir) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { await walk(full); continue; }
+      if (!SCANNED_EXTENSIONS.has(path.extname(entry.name))) continue;
+      // Read as bytes: decoding first would turn the thing being looked for
+      // into an ordinary character and hide it again.
+      const bytes = await readFile(full);
+      const relative = path.relative(repoRoot, full);
+      examined.add(relative);
+      if (bytes.includes(0)) offenders.push(relative);
+    }
+  };
+  /** @type {Set<string>} */
+  const examined = new Set();
+  for (const root of SCANNED_ROOTS) await walk(path.join(repoRoot, root));
+  // The walk must prove it walked, and the proof has to be a file actually
+  // opened. Two weaker versions of this line were written first: one counted
+  // the loop over roots rather than the reads, so deleting the `walk()` call
+  // left it green; the next asserted a round-number floor, which is a guess
+  // dressed as a check. Naming the file that motivated the rule proves the
+  // sweep reached it — and that this file, which every binary-skipping search
+  // tool used to drop, is now readable as text.
+  assert.ok(
+    examined.has(path.join("apps", "server", "src", "coverageJudge.mjs")),
+    `the sweep examined ${examined.size} files but not the one that motivated this rule`,
+  );
+  assert.deepEqual(offenders, [], "write the byte as an escape; the value is the same and the file stays searchable");
+});

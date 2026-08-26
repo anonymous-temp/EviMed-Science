@@ -572,7 +572,22 @@ export function decodeMuxFrame(frame) {
  * @returns {Record<string, any>[]}
  */
 export function transcriptToLedgerMessages(transcript) {
-  return transcript.messages.map((message) => ({
+  // The turn's own ending, carried on the last message.
+  //
+  // `normalizeTranscript` decodes `turn/end` — the frame that says whether the
+  // kernel stopped because it was done, refused, hit a token ceiling, or
+  // errored — and this projection returned only `messages`, so the stop reason
+  // was computed and dropped on every read. `readSessionHistory` hands the
+  // control plane this array and nothing else, which is why "the run stopped"
+  // and "the run was refused" and "the run ran out of tokens" all reached the
+  // ledger as the same silence.
+  //
+  // It rides the last message because that is the only carrier this contract
+  // has; `info.error` is set alongside it only when the ending actually maps
+  // to an error, mirroring how `interrupted` already surfaces.
+  const lastIndex = transcript.messages.length - 1;
+  const turnEnd = transcript.turnEnd;
+  return transcript.messages.map((message, index) => ({
     info: {
       // The ledger takes the last message's id as its baseline cursor, so every
       // message needs a stable one. Under this kernel the sequence number is
@@ -584,9 +599,30 @@ export function transcriptToLedgerMessages(transcript) {
       // the kernel emits it after the step closes. The ledger reads a completion
       // timestamp to tell a finished message from a streaming one, and without
       // it every run looked like it was still speaking.
-      ...(message.role === "assistant" ? { time: { created: message.time, completed: message.time } } : {}),
+      //
+      // A tool message needs it for the same reason and did not get it. The
+      // line above rewrites `tool` to `assistant` — which the ledger wants —
+      // but the timestamp was only attached to messages that were already
+      // assistant, so every tool message arrived as an assistant message that
+      // `assistantFinished` reads as still streaming and the delivery gate
+      // filters out. Artifacts, evidence provenance and skill loads are all
+      // derived from tool parts, so the gate saw a run that called no tools:
+      // no artifacts, no provenance, no skills, and nothing anywhere saying
+      // the messages had been dropped rather than never made.
+      //
+      // A tool message is a record of a call that happened; whether the call
+      // finished is `parts[].state.status`, which the gate reads separately.
+      ...(message.role === "assistant" || message.role === "tool"
+        ? { time: { created: message.time, completed: message.time } }
+        : {}),
       ...(message.usage ? { usage: message.usage } : {}),
       ...(message.interrupted ? { error: { name: "interrupted" } } : {}),
+      ...(turnEnd && index === lastIndex
+        ? {
+          turnEnd,
+          ...(message.interrupted || !turnEnd.code ? {} : { error: { name: turnEnd.kind, code: turnEnd.code } }),
+        }
+        : {}),
     },
     parts: message.parts.map((part) => (part.type === "tool"
       ? {

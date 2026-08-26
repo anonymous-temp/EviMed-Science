@@ -737,6 +737,52 @@ export function validateDeepSeekReleaseReceipt(receipt, {
   return receipt;
 }
 
+/**
+ * Share of the window that must still remain before renewal is called for.
+ * A third leaves eight hours of the default day — enough for someone to notice
+ * and act during one working period, rather than at the moment it breaks.
+ */
+const RECEIPT_RENEWAL_FRACTION = 1 / 3;
+
+/** The command that produces a new receipt. Named in the warning, because
+ *  "the receipt is stale" is only actionable together with how to renew it. */
+export const DEEPSEEK_RECEIPT_RENEWAL_COMMAND = "pnpm preflight:deepseek:release";
+
+/**
+ * How much of a receipt's life is left, without deciding anything about it.
+ *
+ * A receipt attests what the model did when it was probed, so it cannot be
+ * renewed by re-stamping a fresh `createdAt` — renewal means running the gate
+ * again. What was missing was not the expiry but the lead time: the window is
+ * a day, nothing renewed it, and the only signal was readiness turning red at
+ * the moment it had already expired. Production sat red for eight days.
+ *
+ * Reported on every readiness poll so a monitor can alert while the receipt is
+ * still valid, and surfaced by the host preflight so a deploy that would be
+ * fine today but broken tomorrow says so.
+ *
+ * @param {Record<string, any>} receipt
+ * @param {{ nowMs?: number, maxAgeMs?: number, renewAtFraction?: number }} [options]
+ * @returns {{ ageMs: number, remainingMs: number, renewalDue: boolean, expired: boolean }}
+ */
+export function deepSeekReleaseReceiptFreshness(receipt, { nowMs = NaN, maxAgeMs = NaN, renewAtFraction = RECEIPT_RENEWAL_FRACTION } = {}) {
+  const createdAtMs = Date.parse(receipt?.createdAt);
+  if (!Number.isSafeInteger(nowMs) || !Number.isSafeInteger(maxAgeMs) || maxAgeMs <= 0 || Number.isNaN(createdAtMs)) {
+    throw failure("deepseek_release_receipt_freshness_invalid");
+  }
+  const ageMs = nowMs - createdAtMs;
+  const remainingMs = maxAgeMs - ageMs;
+  return {
+    ageMs,
+    remainingMs,
+    // Strictly "past the renewal point and not yet expired" would hide the
+    // fact that an expired receipt also needs renewing; due stays true once
+    // it is due.
+    renewalDue: remainingMs <= maxAgeMs * renewAtFraction,
+    expired: remainingMs <= 0,
+  };
+}
+
 /** @param {string} file @param {Record<string, any>} options */
 export function readDeepSeekReleaseReceiptFile(file, options = {}) {
   if (typeof file !== "string" || !file.trim()) throw failure("deepseek_release_receipt_path_missing");

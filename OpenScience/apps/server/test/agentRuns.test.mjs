@@ -8,6 +8,7 @@ import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
 import {
   AgentRunStore,
+  artifactCandidatesForTest,
   loadedOrInjectedSkillsForTest,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
@@ -4314,6 +4315,117 @@ test("a container that exits with nothing durable still says what the run last k
       0,
       "a line already on the ledger must not be repeated by the verdict that closes the run",
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an artifact is recognised from the spelling the model actually sends", () => {
+  // DSH's `write` and `edit` declare `{ file_path, ... }` and camel-case it
+  // internally; the transcript records the raw model-facing arguments. Reading
+  // `filePath` alone therefore recognised no artifact from any DSH write —
+  // indistinguishable from a run that wrote nothing, and invisible on top of
+  // the projection defect that was hiding these messages from the gate
+  // entirely. Two links, each silent, and fixing either one alone changes
+  // nothing observable.
+  const toolMessage = (input) => ({
+    info: { role: "assistant", time: { created: 1, completed: 1 } },
+    parts: [{ type: "tool", tool: "write", state: { status: "completed", input } }],
+  });
+
+  assert.deepEqual(artifactCandidatesForTest(toolMessage({ file_path: "deliverables/d1/report.md" }), "/w"), ["deliverables/d1/report.md"]);
+  // The kernel on its way out still spells it the old ways.
+  assert.deepEqual(artifactCandidatesForTest(toolMessage({ filePath: "a.md" }), "/w"), ["a.md"]);
+  assert.deepEqual(artifactCandidatesForTest(toolMessage({ path: "b.md" }), "/w"), ["b.md"]);
+  // An absolute path inside the runtime workspace is relativised.
+  assert.deepEqual(artifactCandidatesForTest(toolMessage({ file_path: "/w/deliverables/d1/x.md" }), "/w"), ["deliverables/d1/x.md"]);
+
+  // Negative controls. The containment assertions below hold through two
+  // independent layers — the explicit `../`/absolute check here and
+  // `normalizeWorkspaceRelativePath`, which throws into this function\'s catch —
+  // so deleting either one alone leaves them green. That is defence in depth
+  // working, not a check that bites; recorded here rather than left to look
+  // like a control that proves the first layer.
+  assert.deepEqual(artifactCandidatesForTest(toolMessage({ file_path: "/etc/passwd" }), "/w"), [], "outside the workspace is not an artifact");
+  assert.deepEqual(artifactCandidatesForTest(toolMessage({ file_path: "../escape.md" }), "/w"), []);
+  assert.deepEqual(artifactCandidatesForTest(toolMessage({ file_path: 42 }), "/w"), [], "a non-string is not a path");
+  assert.deepEqual(artifactCandidatesForTest({
+    info: { role: "assistant", time: { created: 1, completed: 1 } },
+    parts: [{ type: "tool", tool: "write", state: { status: "pending", input: { file_path: "half.md" } } }],
+  }, "/w"), [], "an unfinished write has not produced a file");
+  assert.deepEqual(artifactCandidatesForTest({
+    info: { role: "assistant", time: { created: 1, completed: 1 } },
+    parts: [{ type: "tool", tool: "read", state: { status: "completed", input: { file_path: "r.md" } } }],
+  }, "/w"), [], "reading a file does not produce one");
+});
+
+test("a package written and never submitted is not reported as a stopped runtime", async () => {
+  // Run 7, exactly: seven deliverable files on disk, the plan item still
+  // `planned` with `attempts: 0`, no gate run, no receipt — and a ledger entry
+  // reading `runtime_stopped`. A run cut off mid-flight and a run that wrote
+  // its whole contract and never asked for a verdict both end with a gone
+  // container and no receipt, so one code for both makes the second read as
+  // infrastructure trouble and hides what actually happened.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-unsubmitted-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.metaDir, { recursive: true });
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.runStateDir), { recursive: true });
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, "d1"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, "d1", "clinical-evidence-report.md"), "# report\n", "utf8");
+    const writeState = (items) => writeFile(
+      path.join(project.workspaceDir, workspaceLayout.runStateFile),
+      JSON.stringify({ formatVersion: 1, runId: "run_x", plan: { revision: 1, items }, degraded: [] }),
+      "utf8",
+    );
+    const finish = async () => {
+      const binding = { sessionId: "ses_u", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+      const store = new AgentRunStore({ get: async () => binding }, {
+        model: "deepseek/deepseek-v4-pro",
+        readSessionHistory: async () => [],
+        monitorIntervalMs: 60_000,
+      });
+      const started = await store.start(project, { sessionId: binding.sessionId });
+      await store.closeProject(project, "failed");
+      return (await store.list(project)).find((item) => item.id === started.id);
+    };
+
+    await writeState([{ id: "d1", status: "planned", attempts: 0 }]);
+    const abandoned = await finish();
+    assert.equal(abandoned?.errorCode, "runtime_deliverable_never_submitted");
+    assert.ok(
+      abandoned?.qualityNotices?.some((line) => line.includes("d1") && line.includes("1")),
+      `the verdict must name the deliverable and what was written: ${JSON.stringify(abandoned?.qualityNotices)}`,
+    );
+    assert.deepEqual(abandoned?.artifacts, [], "ungraded files are still not deliverables");
+
+    // Negative controls — the three ways this could lie.
+    // 1. An item that was submitted and rejected wrote files too; that is a
+    //    graded failure, not an abandoned one.
+    await writeState([{ id: "d1", status: "rejected", attempts: 2 }]);
+    assert.equal((await finish())?.errorCode, "runtime_stopped");
+    // 2. An item never started is a run that stopped, not a package left
+    //    ungraded. The directory must EXIST and be EMPTY: a missing directory
+    //    is rejected one line earlier, so using one proves nothing about the
+    //    file count this control is aimed at — the first version of this case
+    //    stayed green with the count deleted.
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, "d-empty"), { recursive: true });
+    await writeState([{ id: "d-empty", status: "planned", attempts: 0 }]);
+    assert.equal((await finish())?.errorCode, "runtime_stopped");
+    // 3. An id from the projection is input, not a name we chose. The traversal
+    //    has to lead somewhere real for the guard to be under test: pointed at
+    //    a path that does not exist, the read throws and the case passes with
+    //    the guard deleted — which is how the first version of this one lied.
+    await mkdir(path.join(root, "outside"), { recursive: true });
+    await writeFile(path.join(root, "outside", "secret.txt"), "not a deliverable\n", "utf8");
+    await writeState([{ id: "../../outside", status: "planned", attempts: 0 }]);
+    assert.equal((await finish())?.errorCode, "runtime_stopped", "a traversing id must not be read at all");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
