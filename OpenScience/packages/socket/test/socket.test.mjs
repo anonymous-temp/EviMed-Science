@@ -457,6 +457,60 @@ test("completion refuses while a deliverable is unaccepted and allows a partial 
   assert.equal(partial.ok, true, "a partial delivery still delivers");
 });
 
+test("a partial completion's issue list says what the verdict actually weighs", () => {
+  // Observed on a real run: three `evimed_complete_run{partial:true}` calls
+  // came back "failed: run_incomplete / (required) deliverable_not_accepted",
+  // the model took the `(required)` at its word, concluded the exit it had
+  // been told to use did not exist, and gave up one step short of the retry
+  // that would have succeeded.
+  const plan = { clarifications: ["假设成人人群"] };
+  const items = [{ id: "d1", title: "A", contractKind: "research-brief", capability: "research-brief", status: "rejected" }];
+  const partial = completionCheck({ plan, items, producedTexts: [], finalReplyText: "", partial: true });
+  assert.equal(partial.ok, true);
+  const waived = partial.issues.find((issue) => issue.code === "deliverable_not_accepted");
+  assert.ok(waived, "the fact is still recorded");
+  assert.equal(waived.severity, "advisory", "but not as a blocker the verdict ignores");
+});
+
+test("a root copy of a clinical deliverable's own file is its transitional location, not a stray", () => {
+  // S153 accepts contract files written at the workspace root; the content
+  // trigger flagged those same files as uncontracted clinical content. Two
+  // rules disagreed about one file, and a real run's partial completion was
+  // blocked on its own apparatus: /workspace/references.bib mentioned the
+  // medicine that deliverables/<id>/references.bib -- accepted content -- also
+  // mentions, because they are the same file.
+  const items = [{ id: "ce-1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", status: "rejected" }];
+  const duplicated = completionCheck({
+    plan: { clarifications: ["x"] },
+    items,
+    producedTexts: [
+      { path: "deliverables/ce-1/references.bib", text: "速效救心丸相关文献。" },
+      { path: "/workspace/references.bib", text: "速效救心丸相关文献。" },
+    ],
+    finalReplyText: "",
+    partial: true,
+  });
+  assert.ok(
+    !duplicated.issues.some((issue) => issue.code === "clinical_content_without_clinical_contract"),
+    "the root duplicate of contracted content must not block",
+  );
+
+  // The control: a root file the clinical deliverable does NOT carry is still
+  // a stray, and still blocks even a partial delivery.
+  const stray = completionCheck({
+    plan: { clarifications: ["x"] },
+    items,
+    producedTexts: [
+      { path: "deliverables/ce-1/references.bib", text: "文献清单。" },
+      { path: "/workspace/自行建议.md", text: "速效救心丸可以多吃几粒。" },
+    ],
+    finalReplyText: "",
+    partial: true,
+  });
+  assert.equal(stray.ok, false, "a genuine stray still blocks a partial delivery");
+  assert.ok(stray.issues.some((issue) => issue.code === "clinical_content_without_clinical_contract"));
+});
+
 test("completion refuses a plan with no clarifications written down", () => {
   const check = completionCheck({ plan: { clarifications: [] }, items: [], producedTexts: [], finalReplyText: "", partial: false });
   assert.ok(check.issues.some((issue) => issue.code === "plan_missing_clarifications"));
