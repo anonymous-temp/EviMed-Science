@@ -3893,7 +3893,19 @@ export function validateClinicalEvidencePackage({
   }
   const reportClaims = reportClaimIds(reportText);
   const reportSet = new Set(reportClaims);
-  for (const claimId of reportSet) {
+  // With no matrix at all, every marker in the report is unresolvable, and
+  // saying so once per marker buries the one fact that explains all of them.
+  //
+  // Observed on a real run (rq01, 2026-08-26): the run wrote the report and no
+  // `clinical-evidence-matrix.json`, and the verdict came back with 23 blocking
+  // issues, 14 of them "CLM-0NN does not resolve to the evidence matrix" — a
+  // list of claim ids to chase, none of which is the problem. The rule above
+  // already states the problem once. This is the same defect the absent-report
+  // early return was written for, one file over.
+  //
+  // Only when the matrix is absent or empty: a matrix that *has* claims and is
+  // missing the cited one is a genuine per-claim finding, and still reported.
+  for (const claimId of claims.length ? reportSet : []) {
     if (!seen.has(claimId)) issues.push(`Report claim reference ${claimId} does not resolve to the evidence matrix.`);
   }
   for (const claimId of seen) {
