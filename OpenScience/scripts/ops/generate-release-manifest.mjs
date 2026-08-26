@@ -37,6 +37,21 @@ const inputPaths = [
   "packages/sdk/src",
   "packages/shared/package.json",
   "packages/shared/src",
+  // The DSH runtime's own source, which is what the image executes.
+  //
+  // `packages/socket` and, beneath its node_modules, `packages/domain` and
+  // `packages/harness-port` are COPYed into the runtime image and run inside
+  // the container. A release manifest that does not bind them cannot say which
+  // code the image contains -- and on 2026-08-26 a day of delivery-gate fixes
+  // reached the host, passed an md5-verified sync, and never ran, because the
+  // image predated them and nothing compared the two.
+  //
+  // `runtime/skills/evimed` below is the superseded path and stays only while
+  // the OpenCode kernel is still selectable.
+  "packages/socket",
+  "packages/domain",
+  "packages/harness-port",
+  "deploy/runtime-dsh",
   "runtime/mcp/evimed-research",
   "runtime/skills/evimed",
   "runtime/skills/office",

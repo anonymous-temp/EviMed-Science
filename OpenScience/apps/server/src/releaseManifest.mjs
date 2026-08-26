@@ -254,7 +254,9 @@ export async function sha256File(file, { maxBytes = 64 * 1024 * 1024 } = {}) {
   }
 }
 
-export async function digestDirectory(root, { maxFiles = 100_000, errorPrefix = "release_skill" } = {}) {
+const DEFAULT_SKIP_DIRS = Object.freeze(["node_modules"]);
+
+export async function digestDirectory(root, { maxFiles = 100_000, errorPrefix = "release_skill", skipDirs = DEFAULT_SKIP_DIRS } = {}) {
   const rootStat = await fsp.lstat(root);
   if (rootStat.isSymbolicLink()) throw failure(`${errorPrefix}_symlink`);
   if (!rootStat.isDirectory()) throw failure(`${errorPrefix}_not_directory`);
@@ -264,6 +266,18 @@ export async function digestDirectory(root, { maxFiles = 100_000, errorPrefix = 
     const entries = await fsp.readdir(dir, { withFileTypes: true });
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
+      // Installed, not shipped. `packages/socket` and its two siblings became
+      // manifest inputs so the release can say which code the runtime image
+      // contains, and each carries a pnpm `node_modules` whose workspace links
+      // are symlinks -- so the walk hit the symlink guard and `pnpm
+      // release:manifest` failed outright. The image runs `npm install` of its
+      // own, so hashing this tree would bind bytes the image never uses.
+      //
+      // Skipped by name before the lstat, so a symlinked `node_modules` (which
+      // is what pnpm actually creates) is not followed either. Every other
+      // symlink still throws: the guard is what keeps a link from binding a
+      // digest to something outside the tree.
+      if (skipDirs.includes(entry.name)) continue;
       const full = path.join(dir, entry.name);
       const stat = await fsp.lstat(full);
       if (stat.isSymbolicLink()) throw failure(`${errorPrefix}_symlink`);
