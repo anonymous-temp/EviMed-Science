@@ -1110,6 +1110,41 @@ async function checkHostedMetadataBoundary() {
   }
 }
 
+/**
+ * Whether a Dockerfile RUNS the boot proof rather than only shipping it.
+ *
+ * Exported so it can be tested against synthetic text. The alternative — a test
+ * that rewrites the real Dockerfile to make the audit fail — mutates a tracked
+ * file that other test files read while `node --test` runs them in parallel,
+ * and leaves the repository broken if it dies in between. That test existed for
+ * one CI run and took `server.test.mjs` down with it.
+ *
+ * The exclusions matter: the line that makes the proof executable mentions it,
+ * and so does the COPY that puts it there. An earlier version of this check
+ * counted those, so an image that never ran the proof audited clean.
+ * @param {string} dockerfile @returns {boolean}
+ */
+export function dshBuildSmokeIsInvoked(dockerfile) {
+  return String(dockerfile)
+    .split("\n")
+    .map((line) => line.trim())
+    // A comment is a mention. `\b#` only matches when a word character precedes
+    // the `#`, so a whole-line comment naming the proof never matched the old
+    // exclusion and satisfied the check on its own — the same "a mention is not
+    // an instruction" defect this check was rewritten to fix, still living
+    // inside the rewrite. Found by tabulating what the predicate answers.
+    .filter((line) => !line.startsWith("#"))
+    // Per command, not per line. Excluding a whole line that contains `chmod`
+    // discards `chmod 0755 X; X` — which makes it executable AND runs it — so
+    // the line is split on shell separators and each command judged alone.
+    // The Dockerfile instruction is not part of the command: with `RUN` still
+    // attached, `RUN chmod 0755 X` does not start with `chmod` and read as an
+    // invocation.
+    .flatMap((line) => (/^COPY\b/i.test(line) ? [] : line.replace(/^RUN\s+/i, "").split(/[;&|]+/)))
+    .map((command) => command.trim())
+    .some((command) => command.includes("evimed-build-smoke") && !/^chmod\b/.test(command));
+}
+
 async function checkDshLoaderResolution() {
   const dockerfile = await read("deploy/runtime-dsh/Dockerfile");
   const launcher = await read("deploy/runtime-dsh/open-science-dsh-serve.sh");
@@ -1141,9 +1176,7 @@ async function checkDshLoaderResolution() {
   // matched `chmod 0755 /usr/local/bin/evimed-build-smoke` in the same RUN and
   // stayed green with the execution deleted — it carried the very defect it
   // was written to catch, and only the negative control said so.
-  const smokeInvoked = dockerfile
-    .split("\n")
-    .some((line) => line.includes("evimed-build-smoke") && !/\b(chmod|COPY|#)/.test(line));
+  const smokeInvoked = dshBuildSmokeIsInvoked(dockerfile);
   if (smokeInvoked) {
     pass("dsh_build_smoke_executed", "The DSH image runs its boot proof rather than only shipping it.");
   } else {

@@ -306,6 +306,49 @@ test("the sources a quote is checked against come from the ledger, not from the 
   assert.equal(sourceArtifactPaths(rows, "").length, 3, "no runId accepts all rows, deduplicated");
 });
 
+test("a malformed deliverable is rejected for being malformed, not for what that hides", () => {
+  // One unescaped double quote inside a Chinese string ended the JSON early on
+  // a real package. The matrix parsed to `undefined`, passed straight through,
+  // and the gate returned 24 blocking issues of the form "CLM-001 does not
+  // resolve to the evidence matrix" — twenty claim ids to chase and nothing
+  // anywhere saying the file had not parsed. `validateJsonShaped` and the geo
+  // pack already reported this; the clinical contract, which carries the most
+  // traffic, did not.
+  //
+  // A repair loop has bounded attempts. Spending them on the symptom is how a
+  // fixable package dies.
+  const broken = new Map([
+    ["clinical-evidence-report.md", "# report\n"],
+    ["clinical-evidence-matrix.json", '{"claims":[{"id":"CLM-001","applicability":"支撑"立即就医"的处置。"}]}'],
+    ["clinical-evidence-run.json", "{}"],
+  ]);
+  const verdict = gateDeliverable({ contractKind: "clinical-evidence-report", files: broken, sourceArtifacts: {} });
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.issues.length, 1, `a syntax error is one problem, not ${verdict.issues.length}`);
+  assert.match(String(verdict.issues[0].message), /clinical-evidence-matrix\.json is not valid JSON/);
+
+  // Negative controls.
+  // A file that parses must reach the content rules rather than stopping here —
+  // otherwise this check would swallow every package.
+  const parses = new Map(broken);
+  parses.set("clinical-evidence-matrix.json", '{"claims":[{"id":"CLM-001","applicability":"ok"}]}');
+  const onward = gateDeliverable({ contractKind: "clinical-evidence-report", files: parses, sourceArtifacts: {} });
+  assert.ok(onward.issues.length > 1, "a parseable package must be judged on its content");
+  assert.ok(
+    !onward.issues.some((entry) => /is not valid JSON/.test(String(entry.message))),
+    "a file that parses must not be reported as unparseable",
+  );
+  // An absent file is a different failure from a malformed one and must keep
+  // its own report.
+  const absent = new Map(parses);
+  absent.delete("clinical-evidence-matrix.json");
+  const missing = gateDeliverable({ contractKind: "clinical-evidence-report", files: absent, sourceArtifacts: {} });
+  assert.ok(
+    !missing.issues.some((entry) => /is not valid JSON/.test(String(entry.message))),
+    "a missing file has not failed to parse",
+  );
+});
+
 test("the gate answers with a value and the rejection is layered", () => {
   const verdict = gateDeliverable({
     contractKind: "research-brief",
