@@ -4627,3 +4627,58 @@ test("a required deliverable is found under deliverables/<id>/, not only at the 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a restarted control plane adopts runs a previous process left running", async () => {
+  // Observed live: the startup orphan sweep reaped a finished run's container
+  // at 14:18:40, and because nothing re-armed a monitor, the run's last ledger
+  // event stayed a progress row from 12:42 — "running" forever, container
+  // gone, deliverables on disk.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-adopt-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      metaDir: path.join(root, ".openscience"),
+      workspaceDir: path.join(root, "workspace"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "session-adopt-1", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const finished = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => [],
+      monitorIntervalMs: 60_000,
+      onRunFinished: async () => {},
+    });
+    const started = await store.start(project, { sessionId: binding.sessionId });
+
+    // A second store over the same directory is the restarted process. The
+    // ledger says running; the container is not there to answer.
+    const restarted = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => {
+        throw Object.assign(new Error("gone"), { status: 409, code: "runtime_not_running" });
+      },
+      monitorIntervalMs: 60_000,
+      onRunFinished: async (finishedProject, run) => {
+        finished.push({ runId: run.id, status: run.status, errorCode: run.errorCode });
+      },
+    });
+    const adoption = await restarted.adoptRunningRuns([project]);
+    assert.equal(adoption.adopted, 1);
+    await restarted.monitors.get(started.id)?.promise;
+
+    const runs = await restarted.list(project);
+    const run = runs.find((item) => item.id === started.id);
+    assert.equal(run?.status, "failed", "the durable bridge decided, not a timeout four hours out");
+    assert.equal(run?.errorCode, "runtime_stopped");
+
+    // Idempotence and scope: a terminal run is not adopted again.
+    const again = await restarted.adoptRunningRuns([project]);
+    assert.equal(again.adopted, 0, "a finished run must not get a second monitor");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

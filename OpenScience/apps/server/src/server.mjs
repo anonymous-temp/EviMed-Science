@@ -1390,7 +1390,13 @@ export function createWebApiApp(overrides = {}) {
     startupRuntimeCleanup = (async () => {
       try {
         const projects = await store.listStoredProjects();
-        return runtimeManager.cleanupOrphanedRuntimes(projects, { includeHost: false });
+        const summary = await runtimeManager.cleanupOrphanedRuntimes(projects, { includeHost: false });
+        // After the sweep, not before: these monitors read the world the sweep
+        // is done rearranging. Each one either resumes a live run or walks the
+        // durable bridge for a dead one; without this, a restart left every
+        // in-flight run "running" forever with its container gone.
+        const adoption = await agentRuns.adoptRunningRuns(projects);
+        return { ...summary, adoptedRuns: adoption.adopted };
       } catch (err) {
         const summary = {
           scanned: 0,
