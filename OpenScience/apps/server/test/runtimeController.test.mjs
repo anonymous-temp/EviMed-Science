@@ -213,6 +213,16 @@ const socketPath = path.join(runtimeRoot, "opencode.sock");
 fs.mkdirSync(path.dirname(socketPath), { recursive: true });
 fs.rmSync(socketPath, { force: true });
 writeState(name, { pid: process.pid, state: "running", runtime: true, containerName: name, userId: owner });
+// A container that says something and dies, which is the only case whose
+// output is a diagnosis. Both streams, because the kernel's startup failures
+// come out on stdout as often as stderr.
+if (process.env.FAKE_RUNTIME_DIES) {
+  process.stdout.write("dsh: seeded profile failed to boot\\n");
+  process.stderr.write("Error: mount denied for /workspace\\n");
+  writeState(name, { state: "exited", exitCode: 9, containerName: name, userId: owner });
+  setTimeout(() => process.exit(9), 50);
+  return;
+}
 const server = http.createServer((req, res) => {
   if (req.url.startsWith("/config")) {
     res.writeHead(200, { "content-type": "application/json" });
@@ -921,6 +931,63 @@ test("production readiness verifies the isolated controller and runtime image pr
     await controller.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
+    await removeTree(tmp);
+  }
+});
+
+test("a container that dies noisily hands its last words back through the controller", async (t) => {
+  // The capture existed and nothing asserted it: both `child.stdout.on` lines
+  // could be deleted and every test stayed green. It is the only diagnosis an
+  // operator gets for a container that failed to boot — the container is gone,
+  // its logs went with it, and telemetry is off — so "output was dropped" and
+  // "the container said nothing" are the same observation.
+  const tmp = await shortTempDir("osrco-");
+  const dataDir = path.join(tmp, "data");
+  const socketPath = path.join(tmp, "control", "controller.sock");
+  const dockerBin = await fakeDocker(tmp);
+  const project = await projectTree(dataDir);
+  if (await skipUnsupportedRuntimeSocket(t, project)) {
+    await removeTree(tmp);
+    return;
+  }
+  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+  process.env.FAKE_VOLUME_ROOT = dataDir;
+  process.env.FAKE_RUNTIME_DIES = "1";
+  const controller = createRuntimeController(controllerConfig({ dataDir, socketPath, dockerBin }));
+  try {
+    await controller.listen();
+    const client = new RuntimeControllerClient({
+      runtimeControllerSocket: socketPath,
+      runtimeControllerTimeoutMs: 3_000,
+    });
+    await client.startRuntime(project, 49160, "pw_abcdefghijklmnopqrstuvwxyz").catch(() => {});
+    let status;
+    await waitFor(async () => {
+      status = await client.runtimeStatus(project).catch(() => null);
+      return Boolean(status && !status.running);
+    });
+
+    assert.ok(status, "the controller must report a status for a container that exited");
+    assert.match(status.output, /seeded profile failed to boot/, "stdout must survive");
+    assert.match(status.output, /mount denied/, "and stderr too — startup failures use both");
+    // Newlines intact: the reader's filters are line-based, and collapsing the
+    // capture to one line is what previously destroyed it on the way out.
+    assert.ok(status.output.includes("\n"), "the tail must keep its line breaks");
+
+    // Negative control: a running container's output is not a diagnosis, and
+    // shipping it on every poll would put the runtime's chatter through the
+    // socket several times a second.
+    delete process.env.FAKE_RUNTIME_DIES;
+    const live = await projectTree(dataDir, "alice", "paper2");
+    await client.startRuntime(live, 49161, "pw_abcdefghijklmnopqrstuvwxyz").catch(() => {});
+    const liveStatus = await client.runtimeStatus(live).catch(() => null);
+    if (liveStatus?.running) assert.equal(liveStatus.output, "", "a running container reports no tail");
+    await client.cleanupRuntime(live).catch(() => {});
+  } finally {
+    await controller.close().catch(() => {});
+    delete process.env.FAKE_DOCKER_STATE;
+    delete process.env.FAKE_VOLUME_ROOT;
+    delete process.env.FAKE_RUNTIME_DIES;
     await removeTree(tmp);
   }
 });

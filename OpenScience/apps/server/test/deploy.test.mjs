@@ -113,6 +113,67 @@ test("every skill root the runtime image ships is a root the release manifest bi
   assert.equal(delivered.has("capability-skills"), false, "the DSH image bakes this in; the OpenCode path must not copy it");
 });
 
+test("the workflow that gates every PR runs the gates ci:web runs", async () => {
+  // web.yml is the only check on PRs and main, and it ran no ESLint at all —
+  // so a lint failure, a server type error, a committed secret, an unvendored
+  // community skill or a SaaS-alignment drift could each merge. The local
+  // pipeline caught them; nothing that runs without a person did.
+  //
+  // Derived from `ci:web` rather than hand-listed, because a hand-listed copy
+  // is what drifted: the point is that adding a gate to `ci:web` and forgetting
+  // CI has to fail here.
+  const pkg = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
+  const workflow = await readFile(path.join(repoRoot, ".github/workflows/web.yml"), "utf8");
+
+  /** Expand a script into the leaf scripts it runs. */
+  const leaves = (name, seen = new Set()) => {
+    if (seen.has(name)) return [];
+    seen.add(name);
+    const body = pkg.scripts?.[name];
+    if (!body) return [name];
+    // Only names that are themselves scripts. `audit:dependencies` runs
+    // `pnpm audit --prod`, and `audit` is pnpm's builtin, not a gate anyone
+    // schedules — treating it as one asked CI to run a command that does not
+    // exist.
+    const called = [...body.matchAll(/pnpm (?:run )?([\w:-]+)/g)]
+      .map((match) => match[1])
+      .filter((child) => Object.hasOwn(pkg.scripts ?? {}, child));
+    return called.length ? called.flatMap((child) => leaves(child, seen)) : [name];
+  };
+
+  // Steps CI satisfies by a different but equivalent invocation. Each is a
+  // deliberate equivalence, not a hole: recorded here so the exception is
+  // visible rather than absent.
+  const equivalents = {
+    "test:server": /pnpm --filter @ai4s\/server test\b/,
+    test: /pnpm --filter @ai4s\/desktop test\b/,
+    typecheck: /pnpm --filter @ai4s\/desktop typecheck\b/,
+    "build:web": /pnpm --filter @ai4s\/desktop build\b/,
+    "audit:capabilities": /pnpm check:capabilities\b/,
+    // `pnpm test:packages`, which CI runs, is exactly these four.
+    "test:domain": /pnpm test:packages\b/,
+    "test:port": /pnpm test:packages\b/,
+    "test:socket": /pnpm test:packages\b/,
+    "test:contracts": /pnpm test:packages\b/,
+    // `pnpm lint`, which CI now runs, chains desktop + server + domain + port
+    // + socket. Verified against package.json rather than assumed.
+    "lint:server": /pnpm lint\b/,
+    "lint:domain": /pnpm lint\b/,
+    "lint:port": /pnpm lint\b/,
+    "lint:socket": /pnpm lint\b/,
+  };
+
+  const required = [...new Set(leaves("ci:web"))];
+  assert.ok(required.length >= 8, `ci:web should expand to several gates, got ${JSON.stringify(required)}`);
+
+  const missing = required.filter((name) => {
+    if (new RegExp(`pnpm (?:run )?${name.replace(/[:]/g, "[:]")}(?![\\w:-])`).test(workflow)) return false;
+    const alt = equivalents[name];
+    return !(alt && alt.test(workflow));
+  });
+  assert.deepEqual(missing, [], "these gates run locally and nothing runs them on a pull request");
+});
+
 test("web Dockerfile only copies sources that exist in the build context", async () => {
   const dockerfilePath = path.join(repoRoot, "deploy/web/Dockerfile");
   const dockerfile = await readFile(dockerfilePath, "utf8");
@@ -1033,4 +1094,44 @@ test("the entrypoint places --patch before the web app's own arguments", async (
   // never has `syncRuntimeDshProfile` write a patch file, so the entrypoint
   // must not hand `dsh` a `--patch` pointed at a file that was never written.
   assert.match(entrypoint, /\[ -f "\$\{patch_file\}" \]/);
+});
+
+test("every capability's skill bodies are shipped, because delegation injects them rather than loading them", async () => {
+  // `skillsLoaded` is answerable by construction only if the bodies exist to be
+  // injected. A capability naming a skill with no body would delegate a child
+  // with a "## 方法" section that is silently short — no error, no missing
+  // file at runtime, just a child told less than the manifest promised, and a
+  // completion check that now accepts the injection receipt as proof.
+  const { readdir } = await import("node:fs/promises");
+  const capabilitiesDir = path.join(repoRoot, "capabilities");
+  const bodiesDir = path.join(repoRoot, "capability-skills");
+
+  const bodies = new Set((await readdir(bodiesDir, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name));
+  const capabilities = (await readdir(capabilitiesDir, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  assert.ok(capabilities.length >= 10, `expected the capability catalogue, found ${capabilities.length}`);
+
+  let checked = 0;
+  const missing = [];
+  for (const capability of capabilities) {
+    const yaml = await readFile(path.join(capabilitiesDir, capability, "capability.yaml"), "utf8").catch(() => null);
+    if (yaml === null) continue;
+    const block = yaml.match(/^skills:\s*\n((?:\s*-\s*.+\n)+)/m);
+    const named = block ? [...block[1].matchAll(/-\s*(\S+)/g)].map((match) => match[1]) : [];
+    assert.ok(named.length > 0, `${capability} declares no skills; the manifest requires skills[] for exactly this reason`);
+    checked += 1;
+    for (const skill of named) if (!bodies.has(skill)) missing.push(`${capability} -> ${skill}`);
+  }
+  // The sweep must prove it swept: a walk that read nothing reads as a clean
+  // catalogue.
+  assert.equal(checked, capabilities.length, `only ${checked} of ${capabilities.length} capabilities were read`);
+  assert.deepEqual(missing, [], "a capability naming a body that does not ship delegates a child told less than promised");
+
+  // And the tree that holds them has to be in the image, or none of this is
+  // reachable at runtime.
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  assert.match(dockerfile, /^COPY capability-skills /m, "the bodies must ship");
 });
