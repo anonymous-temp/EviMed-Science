@@ -3334,6 +3334,32 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
  * volume, so session logs, attachments and plugin storage are backed up,
  * exported and deleted with the project rather than with the container.
  */
+/**
+ * Fold one process-count sample into a runtime's record, and say whether it is
+ * worth reporting.
+ *
+ * Separated from the cgroup read so the decision can be tested against the real
+ * function rather than a copy of it: a test that reimplements the rule proves
+ * the test, and this rule exists because three runs died at a ceiling nothing
+ * announced.
+ *
+ * Four fifths — far enough from the ceiling to act on, close enough not to fire
+ * on an ordinary run. Reported once per runtime, because the monitor wakes on a
+ * fixed cycle and a line per wake buries the ledger in one repeated sentence.
+ *
+ * @param {Record<string, any>} runtime mutated: `peakPids`, `pidPressureReported`
+ * @param {number} current @param {number} limit
+ * @returns {boolean} whether this sample should be recorded as pressure
+ */
+export function recordPidSample(runtime, current, limit) {
+  if (!Number.isFinite(current) || !Number.isFinite(limit) || limit <= 0) return false;
+  runtime.peakPids = Math.max(Number(runtime.peakPids ?? 0), current);
+  if (current * 5 < limit * 4) return false;
+  if (runtime.pidPressureReported) return false;
+  runtime.pidPressureReported = true;
+  return true;
+}
+
 export const runtimeDshHome = "/runtime/dsh-home";
 
 /** Where the kernel spills, so the 64 MiB `--tmpfs /tmp` stays a security
@@ -5320,12 +5346,7 @@ export class RuntimeManager {
     if (result.status !== 0) return;
     const current = Number(String(result.stdout).trim());
     if (!Number.isFinite(current)) return;
-    runtime.peakPids = Math.max(Number(runtime.peakPids ?? 0), current);
-    // Four fifths: far enough from the ceiling to act, close enough that it is
-    // not noise on an ordinary run.
-    if (current * 5 < limit * 4) return;
-    if (runtime.pidPressureReported) return;
-    runtime.pidPressureReported = true;
+    if (!recordPidSample(runtime, current, limit)) return;
     void appendRuntimeEvent(project, "pid_pressure", {
       kind: runtime.kind,
       containerName,

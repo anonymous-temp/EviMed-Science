@@ -14,6 +14,7 @@ import {
   cleanupHostRuntimeProcess,
   requestRuntime,
   runtimeContainerName,
+  recordPidSample,
   runtimeDshHome,
   runtimeTmpDir,
   syncRuntimeAgentPackages,
@@ -2079,4 +2080,31 @@ test("every runtime record names the kernel that is running, not the one this co
   const literals = code.match(/kind: "opencode"/g) ?? [];
   assert.deepEqual(literals, [], `${literals.length} runtime records still hardcode the kernel name`);
   assert.ok((code.match(/kind: runtimeKernelName\(this\.config\)/g) ?? []).length >= 10, "the records must ask which kernel is running");
+});
+
+test("pid pressure is reported while the run is alive, and only once", () => {
+  // The ceiling that killed three runs left one line of container output as its
+  // only trace, readable solely after the fact. This says it during the run.
+  //
+  // Asserted against the real `recordPidSample`. The first version of this test
+  // substituted the manager's method with a reimplementation of the same rule
+  // and passed — proving the copy in the test, which is the exact defect this
+  // audit has spent the day removing, committed while removing it.
+  const runtime = {};
+  assert.equal(recordPidSample(runtime, 40, 100), false, "well under the ceiling is not pressure");
+  assert.equal(recordPidSample(runtime, 79, 100), false, "one below four fifths is still not pressure");
+  assert.equal(recordPidSample(runtime, 80, 100), true, "four fifths of the ceiling is worth saying out loud");
+  assert.equal(recordPidSample(runtime, 95, 100), false, "said once per runtime, not once per poll");
+
+  // The peak is kept regardless, because "how close did it get" is the question
+  // a raised ceiling has to answer, and a run that never crossed the threshold
+  // still has an answer to it.
+  assert.equal(runtime.peakPids, 95);
+
+  // Negative controls: a missing or nonsensical limit must not report pressure,
+  // and must not claim a peak it did not measure.
+  const bare = {};
+  assert.equal(recordPidSample(bare, 500, 0), false, "no ceiling means no pressure to report");
+  assert.equal(recordPidSample(bare, Number.NaN, 100), false);
+  assert.equal(bare.peakPids, undefined, "a rejected sample is not a measurement");
 });
