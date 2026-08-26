@@ -141,6 +141,10 @@
     # default root discovery is disabled to prevent.
     customSkillDirs:
       - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/core'
+      # Our own agent packages that are not delegated capabilities --
+      # today just `open-domain-answer`. Ahead of the ecosystem roots for
+      # the same reason `core` is: the first root wins a name collision.
+      - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/evimed'
       - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/curated-scientific'
       - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/office'
       # Community skills, vendored at pinned commits and last in the order: the
