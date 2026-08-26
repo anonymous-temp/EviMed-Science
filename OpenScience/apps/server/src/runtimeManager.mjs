@@ -820,6 +820,12 @@ async function bufferProxyRequestBody(req, method, limit) {
   }
 }
 
+/** One transcript page's byte ceiling. Transcript pages are the one payload
+ *  that legitimately dwarfs every other kernel response — see the note at the
+ *  session.history call — so they get their own bound instead of a global
+ *  raise, which would let every OTHER endpoint balloon unnoticed. */
+const HISTORY_PAGE_MAX_BYTES = 64 * 1024 * 1024;
+
 export async function readRuntimeResponseBody(body, limit, onReader, onBytes) {
   const reader = body.getReader();
   onReader?.(reader);
@@ -4418,15 +4424,25 @@ export class RuntimeManager {
       const entries = [];
       /** @type {number | undefined} */
       let beforeSeq;
-      for (let page = 0; page < 50; page += 1) {
+      // 200 pages x 25 messages bounds a transcript at 5000 messages -- the
+      // page shrink above must not quietly shrink the whole readable run.
+      for (let page = 0; page < 200; page += 1) {
         let value;
         try {
           value = await this.withRuntimeDeadline(
             (signal) => this.callKernel(runtime, project, "session.history", {
               sessionId,
-              maxMessages: 200,
+              // The kernel pages by MESSAGE, but each page carries every
+              // assistant/chunk delta between its messages. A real run's
+              // single 74-step turn put 130k chunk events under 49 messages:
+              // one 200-message page weighed 24MB, every read of it threw 413
+              // against maxJsonBytes, and the ledger went blind mid-run — no
+              // progress events, no turn/end, a finished run left running.
+              // Small pages bound the per-read weight; the raised byte cap
+              // below absorbs the worst single page.
+              maxMessages: 25,
               ...(beforeSeq == null ? {} : { beforeSeq }),
-            }, signal),
+            }, signal, { maxBytes: HISTORY_PAGE_MAX_BYTES }),
             "runtime_history_unavailable",
             "Runtime session history did not answer in time.",
           );
@@ -5025,9 +5041,10 @@ export class RuntimeManager {
    * The allow-list is checked by the adapter that owns it; this is the carrier.
    * @param {Record<string, any>} runtime @param {Record<string, any>} project
    * @param {string} method @param {Record<string, unknown>} payload @param {AbortSignal} signal
+   * @param {{ maxBytes?: number }} [options]
    * @returns {Promise<any>}
    */
-  async callKernel(runtime, project, method, payload, signal) {
+  async callKernel(runtime, project, method, payload, signal, { maxBytes } = {}) {
     if (!isAllowedWireMethod(method)) {
       throw new HttpError(403, "runtime_method_forbidden", `Kernel method ${method} is not on the allow-list.`);
     }
@@ -5044,7 +5061,7 @@ export class RuntimeManager {
       await response.body?.cancel().catch(() => {});
       throw new HttpError(502, "runtime_wire_protocol_mismatch", `Kernel answered HTTP ${response.status} for ${method}.`);
     }
-    const payloadBytes = await readRuntimeResponseBody(response.body, this.config.maxJsonBytes);
+    const payloadBytes = await readRuntimeResponseBody(response.body, maxBytes ?? this.config.maxJsonBytes);
     let envelope;
     try {
       envelope = JSON.parse(payloadBytes.toString("utf8"));
