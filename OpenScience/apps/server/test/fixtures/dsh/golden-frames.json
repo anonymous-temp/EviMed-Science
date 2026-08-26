@@ -1,5 +1,5 @@
 {
-  "$comment": "Golden frames recorded against the pinned kernel. The wire protocol carries no version field, so a method name surviving an upgrade proves nothing about its frames — replaying these through the normalizers is the only check that does. The downlink is a WebSocket (a plain GET answers 426 Upgrade Required) and every frame arrives inside a `server-request` envelope; the first mux entry is captured verbatim from a live kernel and the rest are wrapped in the same shape. There is no automated recorder — the verbatim entry was captured by hand against a real installed `dsh` binary (unary calls over `POST /api/<method>`, the mux frame over `openRuntimeDownlink()` against `/api/events.mux`). When the pin moves, repeat that against the new version, diff the result against this file by hand, and read the diff before accepting it — an untested recorder script would be one more thing to trust without ever having been run against a real bump.",
+  "$comment": "Golden frames recorded against the pinned kernel. The wire protocol carries no version field, so a method name surviving an upgrade proves nothing about its frames — replaying these through the normalizers is the only check that does. The downlink is a WebSocket (a plain GET answers 426 Upgrade Required) and every frame arrives inside a `server-request` envelope; the first mux entry is captured verbatim from a live kernel and the rest are wrapped in the same shape. There is no automated recorder — the verbatim entry was captured by hand against a real installed `dsh` binary (unary calls over `POST /api/<method>`, the mux frame over `openRuntimeDownlink()` against `/api/events.mux`). When the pin moves, repeat that against the new version, diff the result against this file by hand, and read the diff before accepting it — an untested recorder script would be one more thing to trust without ever having been run against a real bump. History tool/result frames use the live nested shape (message.source.callId + tool-result block) observed on a real 2026-08-26 run; the mux tool/result keeps the flat legacy shape so both decoders stay honest.",
   "dsh": "0.1.1-rc.2",
   "history": [
     {
@@ -95,14 +95,23 @@
           "turn": 1,
           "step": 1,
           "message": {
-            "callId": "call-1",
             "name": "mcp__evimed__literature_search",
             "content": [
               {
-                "type": "text",
-                "text": "12 results"
+                "type": "tool-result",
+                "toolCallId": "call-1",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "12 results"
+                  }
+                ]
               }
-            ]
+            ],
+            "source": {
+              "kind": "tool",
+              "callId": "call-1"
+            }
           }
         }
       }
@@ -130,8 +139,17 @@
           "turn": 1,
           "step": 1,
           "message": {
-            "callId": "call-2",
-            "content": []
+            "content": [
+              {
+                "type": "tool-result",
+                "toolCallId": "call-2",
+                "content": []
+              }
+            ],
+            "source": {
+              "kind": "tool",
+              "callId": "call-2"
+            }
           },
           "error": {
             "name": "ToolError",
