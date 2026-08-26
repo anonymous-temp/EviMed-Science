@@ -336,6 +336,61 @@ test("the sources a quote is checked against come from the ledger, not from the 
   assert.equal(sourceArtifactPaths(rows, "").length, 3, "no runId accepts all rows, deduplicated");
 });
 
+test("a file that is not there is one problem, not nine", () => {
+  // Run 9 submitted `临床证据综述.md` where the contract asks for
+  // `clinical-evidence-report.md`. The gate answered with ten issues: one
+  // saying the report "must contain academic analysis" — which reads as "your
+  // content is thin", not "your filename is wrong" — and nine more listing
+  // sections missing from a file that does not exist, every one of them a
+  // content rule run over an empty string. A child reading that goes and edits
+  // the file it did write.
+  //
+  // Fixed in `validateClinicalEvidencePackage`, the single implementation both
+  // the run side and the delivery gate reach, because the contract registry is
+  // forbidden from adding a second list on top of it — that prohibition is what
+  // keeps the two from drifting, and it is asserted in
+  // `clinicalEvidenceSingleImplementation.test.mjs`.
+  const outputs = [
+    { path: "clinical-evidence-report.md", required: true },
+    { path: "clinical-evidence-matrix.json", required: true },
+  ];
+  const gate = (files) => gateDeliverable({ contractKind: "clinical-evidence-report", files, expectedOutputs: outputs, sourceArtifacts: {} });
+
+  const wrongName = gate(new Map([["临床证据综述.md", "# 综述\n\n## 摘要\n\n实质内容。\n"]]));
+  assert.equal(wrongName.ok, false);
+  const blocking = wrongName.issues.filter((entry) => (entry.severity ?? "required") === "required");
+  assert.equal(blocking.length, 1, `one absence is one problem, got ${blocking.length}: ${blocking.map((e) => e.message).join(" | ")}`);
+  assert.match(String(blocking[0].message), /clinical-evidence-report\.md is not in the deliverable/);
+  assert.match(String(blocking[0].message), /exactly that name/, "the run must be told what to rename to, and where");
+  // And none of the nine symptoms survive.
+  assert.equal(
+    wrongName.issues.some((entry) => /missing a required section|must contain academic analysis/.test(String(entry.message))),
+    false,
+    "no rule may describe the contents of a file that is not there",
+  );
+
+  // Negative controls.
+  // A report that IS there must be judged on its content, or this check would
+  // swallow every rejection.
+  const present = gate(new Map([
+    ["clinical-evidence-report.md", "# 综述\n"],
+    ["clinical-evidence-matrix.json", "{}"],
+  ]));
+  assert.ok(present.issues.length > 1, "a thin report is still judged on its content");
+  assert.equal(
+    present.issues.some((entry) => /is not in the deliverable/.test(String(entry.message))),
+    false,
+    "a file that is present must not be reported as absent",
+  );
+  // Whitespace is not content: an empty file fails the same way an absent one
+  // does, because every rule below reads the same empty string either way.
+  const blank = gate(new Map([
+    ["clinical-evidence-report.md", "   \n  "],
+    ["clinical-evidence-matrix.json", "{}"],
+  ]));
+  assert.match(String(blank.issues[0].message), /is not in the deliverable, or is empty/);
+});
+
 test("a malformed deliverable is rejected for being malformed, not for what that hides", () => {
   // One unescaped double quote inside a Chinese string ended the JSON early on
   // a real package. The matrix parsed to `undefined`, passed straight through,
