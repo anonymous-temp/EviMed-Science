@@ -1,48 +1,48 @@
 {
-  "schemaVersion": 1,
-  "description": "Drug- and scenario-specific clinical safety rules for the clinical-evidence-synthesis quality gate. Kept as data so pharmacists can review, add, or retire medicine/scenario rules without changing server code. Each pattern is a JavaScript regular-expression source. Generic, non-drug-specific safety rules (emergency-call support, exclusive-safety language) stay in clinicalEvidenceQuality.mjs. Supported kinds: report_forbidden (forbid a pattern in the whole report, after optional substitutions), practical_forbidden (forbid a pattern in the safety-first practical section), entity_requires_question_mention (an entity may appear in the report only if the user's question mentions it), practical_required_when_report_matches (when triggerPattern appears anywhere in the report, pattern must appear in the practical section).",
-  "routingEntities": [
-    "速效救心丸",
-    "Suxiao Jiuxin Wan"
-  ],
-  "routingEntitiesNote": "High-risk medicines whose plain mention (with an evidence/analysis intent) routes an open-domain question to clinical-evidence-synthesis, so these safety rules are actually applied. specialistRouting.mjs reads this list; add a medicine here to bring its questions under the clinical gate.",
-  "rules": [
+ "schemaVersion": 1,
+ "description": "Drug- and scenario-specific clinical safety rules for the clinical-evidence-synthesis quality gate. Kept as data so pharmacists can review, add, or retire medicine/scenario rules without changing server code. Each pattern is a JavaScript regular-expression source. Generic, non-drug-specific safety rules (emergency-call support, exclusive-safety language) stay in clinicalEvidenceQuality.mjs. Supported kinds: report_forbidden (forbid a pattern in the whole report, after optional substitutions), practical_forbidden (forbid a pattern in the safety-first practical section), entity_requires_question_mention (an entity may appear in the report only if the user's question mentions it), practical_required_when_report_matches (when triggerPattern appears anywhere in the report, pattern must appear in the practical section).",
+ "routingEntities": [
+  "速效救心丸",
+  "Suxiao Jiuxin Wan"
+ ],
+ "routingEntitiesNote": "High-risk medicines whose plain mention (with an evidence/analysis intent) routes an open-domain question to clinical-evidence-synthesis, so these safety rules are actually applied. specialistRouting.mjs reads this list; add a medicine here to bring its questions under the clinical gate.",
+ "rules": [
+  {
+   "id": "medication-response-not-diagnostic",
+   "kind": "practical_forbidden",
+   "reportSubstitutions": [
     {
-      "id": "medication-response-not-diagnostic",
-      "kind": "practical_forbidden",
-      "reportSubstitutions": [
-        {
-          "find": "不良反应",
-          "replace": "药品安全信息",
-          "flags": "g"
-        }
-      ],
-      "pattern": "(?:(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:速效救心丸|胃药|抗酸药|硝酸甘油|含服|服药)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,60}(?:反应|缓解)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,40}(?:说明(?:不)?是|提示(?:不)?是|即为|即非|就是|应该(?:不)?是|可(?:以)?诊断|可(?:以)?排除|基本(?:可以)?排除|据此(?:判断|区分|决定)|在家观察|无需就医|不必就医|不用去医院|是否需要(?:去)?(?:医院|就医|急诊)|要不要(?:去)?(?:医院|就医|急诊))|(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:速效救心丸|胃药|抗酸药|硝酸甘油|含服|服药)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,60}(?:反应|缓解)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,60}(?:诊断|排除|区分|判断)|(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:诊断|排除|区分|判断)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,60}(?:速效救心丸|胃药|抗酸药|硝酸甘油|含服|服药)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,60}(?:反应|缓解))",
-      "flags": "i",
-      "message": "Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms. State instead that relief after a sublingual dose does not distinguish cardiac from non-cardiac pain, cite the evidence for that, and say that persisting symptoms call for emergency assessment regardless of the response."
-    },
-    {
-      "id": "unsupported-self-care",
-      "kind": "practical_forbidden",
-      "pattern": "(?:(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:(?<!不)可以?|(?<!不)建议|不妨|(?<!不要)(?<!别)先|服用后)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,24}(?:胃药|抗酸药)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,40}(?:等待|观察)|(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:胃药|抗酸药)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,40}(?:后再|并|然后)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,20}(?:等待|观察)|(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:(?<!不)可以?|(?<!不)建议|不妨|(?<!不要)(?<!别)先)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,20}(?:等待|观察)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,30}(?:症状|变化|缓解))",
-      "flags": "i",
-      "message": "The practical answer must not add unsupported advice about antacids or waiting for symptom changes. Give only steps carried by a cited claim; if a step seems clinically sensible but has no source in this package, leave it out and say the evidence was not retrieved."
-    },
-    {
-      "id": "medicine-absent-from-question",
-      "kind": "entity_requires_question_mention",
-      "pattern": "(?:速效救心丸|Suxiao Jiuxin Wan)",
-      "flags": "i",
-      "message": "A medicine-free question must not introduce Suxiao Jiuxin Wan into the report. Answer the question that was asked; if the medicine is genuinely relevant, the reader has to raise it."
-    },
-    {
-      "id": "suxiao-must-not-delay-emergency",
-      "kind": "practical_required_when_report_matches",
-      "triggerPattern": "速效救心丸",
-      "triggerFlags": "",
-      "pattern": "(?:(?:速效救心丸|任何(?:自救)?药物|任何急救药|含服(?:任何)?药物).{0,120}(?:不应|不能|不得|不要).{0,50}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估|120|呼叫)|(?:不应|不能|不得|不要).{0,50}(?:因|以|让|为了)?.{0,30}(?:速效救心丸|任何(?:自救)?药物|任何急救药|含服(?:任何)?药物).{0,60}(?:延误|替代).{0,30}(?:呼救|急救|就医|评估|120|呼叫))",
-      "flags": "s",
-      "message": "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after."
+     "find": "不良反应",
+     "replace": "药品安全信息",
+     "flags": "g"
     }
-  ]
+   ],
+   "pattern": "(?:(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:速效救心丸|胃药|抗酸药|硝酸甘油|含服|服药)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,60}(?:反应|缓解)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,40}(?:说明(?:不)?是|提示(?:不)?是|即为|即非|就是|应该(?:不)?是|可(?:以)?诊断|可(?:以)?排除|基本(?:可以)?排除|据此(?:判断|区分|决定)|在家观察|无需就医|不必就医|不用去医院|是否需要(?:去)?(?:医院|就医|急诊)|要不要(?:去)?(?:医院|就医|急诊))|(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:速效救心丸|胃药|抗酸药|硝酸甘油|含服|服药)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,60}(?:反应|缓解)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,60}(?:诊断|排除|区分|判断)|(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:诊断|排除|区分|判断)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,60}(?:速效救心丸|胃药|抗酸药|硝酸甘油|含服|服药)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,60}(?:反应|缓解))",
+   "flags": "i",
+   "message": "Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms. State instead that relief after a sublingual dose does not distinguish cardiac from non-cardiac pain, cite the evidence for that, and say that persisting symptoms call for emergency assessment regardless of the response."
+  },
+  {
+   "id": "unsupported-self-care",
+   "kind": "practical_forbidden",
+   "pattern": "(?:(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:(?<!不)可以?|(?<!不)建议|不妨|(?<!不要)(?<!别)先|服用后)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,24}(?:胃药|抗酸药)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,40}(?:等待|观察)|(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:胃药|抗酸药)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,40}(?:后再|并|然后)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,20}(?:等待|观察)|(?<!(?:不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏)[^。；！？\\n]{0,30})(?:(?<!不)可以?|(?<!不)建议|不妨|(?<!不要)(?<!别)先)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,20}(?:等待|观察)(?:(?!不能|不可|不得|无法|不足以|不具备|不应|不足|并非|均不|没有|难以|不宜|切勿|禁止|严禁|不要|勿|否定|阴性|缺乏).){0,30}(?:症状|变化|缓解))",
+   "flags": "i",
+   "message": "The practical answer must not add unsupported advice about antacids or waiting for symptom changes. Give only steps carried by a cited claim; if a step seems clinically sensible but has no source in this package, leave it out and say the evidence was not retrieved."
+  },
+  {
+   "id": "medicine-absent-from-question",
+   "kind": "entity_requires_question_mention",
+   "pattern": "(?:速效救心丸|Suxiao Jiuxin Wan)",
+   "flags": "i",
+   "message": "A medicine-free question must not introduce Suxiao Jiuxin Wan into the report. Answer the question that was asked; if the medicine is genuinely relevant, the reader has to raise it."
+  },
+  {
+   "id": "suxiao-must-not-delay-emergency",
+   "kind": "practical_required_when_report_matches",
+   "triggerPattern": "速效救心丸",
+   "triggerFlags": "",
+   "pattern": "(?:(?:速效救心丸|任何(?:自救)?药物|任何急救药|含服(?:任何)?药物).{0,120}(?:不应|不能|不得|不要|不可|不构成|不作为).{0,50}(?:延误|延迟|推迟|耽误|替代).{0,30}(?:呼救|急救|就医|评估|120|呼叫)|(?:不应|不能|不得|不要|不可|不构成|不作为).{0,50}(?:因|以|让|为了)?.{0,30}(?:速效救心丸|任何(?:自救)?药物|任何急救药|含服(?:任何)?药物).{0,60}(?:延误|延迟|推迟|耽误|替代).{0,30}(?:呼救|急救|就医|评估|120|呼叫))",
+   "flags": "s",
+   "message": "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after."
+  }
+ ]
 }
