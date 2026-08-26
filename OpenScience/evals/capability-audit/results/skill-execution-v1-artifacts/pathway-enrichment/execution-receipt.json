@@ -8,10 +8,10 @@
     {
       "bytes": 954,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/pathway-enrichment/pathway-enrichment-report.md",
-      "sha256": "48a896424a3f32328907c91f0506a65bcd662cd4d397c6bba04af4059e767438"
+      "sha256": "6a25029a3bc94fc8299863f84d99d7817528cd99f314212be413177592d27189"
     }
   ],
-  "finishedAt": "2026-07-30T06:49:02.995076Z",
+  "finishedAt": "2026-08-26T05:24:51.480480Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "pathway-enrichment",
-  "startedAt": "2026-07-30T06:49:02.994513Z",
+  "startedAt": "2026-08-26T05:24:51.479774Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for pathway-enrichment and wrote 2 verified artifacts.",
   "warnings": [

@@ -3111,7 +3111,17 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
       command: config.runtimeContainerBin,
       args: [
         "run",
-        "--rm",
+        // No `--rm`. Docker deletes the container the instant it dies, so by
+        // the time anything polls `docker inspect` there is no corpse: the
+        // exit code, the OOM flag and the last output are gone before the
+        // question is asked. That is the mechanism behind an `exited` ledger
+        // record carrying a pid, a name and a timestamp and nothing about why
+        // — a run 19 minutes long that ended with no explanation available
+        // even from `docker events`, whose history this host does not retain.
+        //
+        // `cleanupDockerContainer` already removes it explicitly with `rm -f`,
+        // so the container is still cleaned; it is cleaned AFTER it has been
+        // asked what happened.
         "--init",
         "--name",
         containerName,
@@ -3739,13 +3749,13 @@ export class RuntimeManager {
       const cleanup = await this.cleanupHostRuntime(plan, previousState);
       if (cleanup.cleaned) {
         await appendRuntimeEvent(project, "cleaned_orphan", {
-          kind: "opencode",
+          kind: runtimeKernelName(this.config),
           sandboxMode: plan.sandboxMode,
           pid: cleanup.pid,
         }, this.config);
       } else if (cleanup.failed) {
         await appendRuntimeEvent(project, "cleanup_failed", {
-          kind: "opencode",
+          kind: runtimeKernelName(this.config),
           sandboxMode: plan.sandboxMode,
           pid: cleanup.pid ?? previousState?.pid ?? null,
           reason: cleanup.reason,
@@ -3753,7 +3763,7 @@ export class RuntimeManager {
         }, this.config);
         await recordRuntimeState(project, "failed", {
           running: false,
-          kind: "opencode",
+          kind: runtimeKernelName(this.config),
           startedAt: previousState?.startedAt ?? null,
           pid: cleanup.pid ?? previousState?.pid ?? null,
           exitedAt: null,
@@ -3772,20 +3782,20 @@ export class RuntimeManager {
       const cleanup = await this.cleanupDocker(plan, project);
       if (cleanup.cleaned) {
         await appendRuntimeEvent(project, "cleaned_orphan", {
-          kind: "opencode",
+          kind: runtimeKernelName(this.config),
           sandboxMode: plan.sandboxMode,
           containerName: plan.containerName,
         }, this.config);
       } else if (cleanup.failed) {
         await appendRuntimeEvent(project, "cleanup_failed", {
-          kind: "opencode",
+          kind: runtimeKernelName(this.config),
           sandboxMode: plan.sandboxMode,
           containerName: plan.containerName,
           error: cleanup.error,
         }, this.config);
         await recordRuntimeState(project, "failed", {
           running: false,
-          kind: "opencode",
+          kind: runtimeKernelName(this.config),
           startedAt: null,
           pid: null,
           exitedAt: null,
@@ -3840,7 +3850,7 @@ export class RuntimeManager {
       }
     } catch (error) {
       await appendRuntimeEvent(project, "bootstrap_failed", {
-        kind: "opencode",
+        kind: runtimeKernelName(this.config),
         sandboxMode: plan.sandboxMode,
         networkMode: this.config.runtimeNetworkMode,
         containerName: plan.containerName ?? null,
@@ -3848,7 +3858,7 @@ export class RuntimeManager {
       }, this.config);
       await recordRuntimeState(project, "failed", {
         running: false,
-        kind: "opencode",
+        kind: runtimeKernelName(this.config),
         startedAt: null,
         pid: null,
         exitedAt: null,
@@ -3876,7 +3886,7 @@ export class RuntimeManager {
       );
     }
     await appendRuntimeEvent(project, "starting", {
-      kind: "opencode",
+      kind: runtimeKernelName(this.config),
       sandboxMode: plan.sandboxMode,
       networkMode: this.config.runtimeNetworkMode,
       cpuLimit: this.config.runtimeCpuLimit,
@@ -3890,7 +3900,7 @@ export class RuntimeManager {
     }, this.config);
     await recordRuntimeState(project, "starting", {
       running: false,
-      kind: "opencode",
+      kind: runtimeKernelName(this.config),
       startedAt: null,
       pid: null,
       exitedAt: null,
@@ -3931,7 +3941,13 @@ export class RuntimeManager {
       child.stderr?.on("data", collect);
     }
     const runtime = {
-      kind: "opencode",
+      // The kernel that is actually running, not the name this code grew up
+      // with. Written as a literal in twelve places, so every `exited`,
+      // `cleaned_orphan` and state record a DSH container produced was
+      // labelled `opencode` — harmless on its own, and kernel-blind for any
+      // reader that branches on it, which is the same family as the label and
+      // manifest comparisons that had to learn the switch separately.
+      kind: runtimeKernelName(this.config),
       url: plan.runtimeUrl ?? `http://127.0.0.1:${port}`,
       socketPath: plan.socketPath ?? null,
       password,
@@ -3989,8 +4005,19 @@ export class RuntimeManager {
         error: err instanceof Error ? err.message : String(err),
       });
     });
-    /** @type {any} */ (child).once("exit", () => {
+    // `(code, signal)`, not `()`.
+    //
+    // Node hands the exit status to this callback and it was discarded, so the
+    // ledger's `exited` record carried a pid, a container name and a timestamp
+    // and nothing about why. A 19-minute run ended with no explanation
+    // available anywhere: the container was started `--rm` so docker had
+    // already deleted it, and this host's `docker events` does not retain
+    // history. The status was in the argument list the whole time.
+    /** @type {any} */ (child).once("exit", (/** @type {number|null} */ code, /** @type {string|null} */ signal) => {
       runtime.exitedAt = new Date().toISOString();
+      runtime.exitCode = typeof code === "number" ? code : null;
+      runtime.exitSignal = signal ?? null;
+      runtime.exitOutput = String(/** @type {any} */ (child).exitOutput ?? "");
       const current = this.runtimes.get(key);
       if (current === runtime) this.runtimes.delete(key);
       this.deactivateModelGatewayRuntime(runtime);
@@ -4006,7 +4033,26 @@ export class RuntimeManager {
         pid: runtime.pid,
         containerName: runtime.containerName,
         exitedAt: runtime.exitedAt,
+        // Why, not just when. 137 with a signal is a kill; 137 without one is
+        // usually the kernel's OOM killer, and the two lead to opposite fixes.
+        exitCode: runtime.exitCode,
+        exitSignal: runtime.exitSignal,
+        // The container's last words, already bounded by the tail buffer. A
+        // run whose kernel refused to start says so here and nowhere else.
+        exitOutput: runtime.exitOutput ? String(runtime.exitOutput).slice(-RUNTIME_EXIT_OUTPUT_BYTES) : "",
       }, this.config);
+      // Removed here, after the record above has been written.
+      //
+      // `close()` cleans up when the manager stops a runtime, but a container
+      // that dies on its own never reaches it — that was `--rm`'s job, and
+      // `--rm` is what deleted the evidence before anyone could read it. The
+      // order is the whole point: ask, then remove.
+      if (plan.sandboxMode === "docker" && !this.runtimeController) {
+        void cleanupDockerContainer(plan).catch(() => {
+          // isolated: a container that cannot be removed is a leak worth a
+          // metric, not a reason to fail a run that has already ended.
+        });
+      }
       void recordRuntimeState(project, "exited", {
         running: false,
         kind: runtime.kind,
@@ -5276,7 +5322,7 @@ export class RuntimeManager {
       const consecutive = (monitor.consecutiveCheckFailures ?? 0) + 1;
       monitor.consecutiveCheckFailures = consecutive;
       await appendRuntimeEvent(project, "quota_check_failed", {
-        kind: "opencode",
+        kind: runtimeKernelName(this.config),
         error,
         consecutive,
         stopping: consecutive >= quotaCheckFailureTolerance,

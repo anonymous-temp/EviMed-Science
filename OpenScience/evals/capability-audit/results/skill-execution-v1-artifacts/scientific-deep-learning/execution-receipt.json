@@ -8,10 +8,10 @@
     {
       "bytes": 1815,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/scientific-deep-learning/scientific-deep-learning-report.md",
-      "sha256": "2928ed93a1833349184904dfb86265fa081e0bbb7dd8be10f7ece76fd9554530"
+      "sha256": "b7e5bb611b324bf330c3739c3ab003d868bf22e1419339ba38ed2aaadfb042b7"
     }
   ],
-  "finishedAt": "2026-07-30T06:49:07.202845Z",
+  "finishedAt": "2026-08-26T05:24:56.751313Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "scientific-deep-learning",
-  "startedAt": "2026-07-30T06:49:06.703643Z",
+  "startedAt": "2026-08-26T05:24:56.167726Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for scientific-deep-learning and wrote 2 verified artifacts.",
   "warnings": [

@@ -8,10 +8,10 @@
     {
       "bytes": 936,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/time-series-forecasting/time-series-forecasting-report.md",
-      "sha256": "95875f1d36c0cace6b27e1ea50eddaed53b6caf50728e6ba58c0a5e939b4eeab"
+      "sha256": "76c2ecacda2996e1c2a16e6193836c057a096f85b7dd6fabea379c01de3a0811"
     }
   ],
-  "finishedAt": "2026-07-30T06:49:11.150609Z",
+  "finishedAt": "2026-08-26T05:25:01.605494Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "time-series-forecasting",
-  "startedAt": "2026-07-30T06:49:11.149521Z",
+  "startedAt": "2026-08-26T05:25:01.604179Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for time-series-forecasting and wrote 2 verified artifacts.",
   "warnings": [

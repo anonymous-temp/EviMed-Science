@@ -8,10 +8,10 @@
     {
       "bytes": 918,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biosequence-analysis/biosequence-analysis-report.md",
-      "sha256": "332d3a9624df3278101649c7794705bcbbc0f1fe6464ef30a6ee4953e65db569"
+      "sha256": "b8658df9c366a371d981ad4fb82246e5aaacef1362cf176992f38294d00fdb48"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:50.168925Z",
+  "finishedAt": "2026-08-26T05:24:35.885948Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "biosequence-analysis",
-  "startedAt": "2026-07-30T06:48:50.168552Z",
+  "startedAt": "2026-08-26T05:24:35.885560Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for biosequence-analysis and wrote 2 verified artifacts.",
   "warnings": [

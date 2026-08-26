@@ -8,10 +8,10 @@
     {
       "bytes": 639,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/markdown-mermaid-writing/markdown-mermaid-writing-report.md",
-      "sha256": "95d072637e8134ade3e2408ed1cfed97ff0948c4c2adb80f69ed576b93e0b723"
+      "sha256": "688a832b19c9ab7da8437e12281ab1089520848f48d50a14804a2c1aabec6e55"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:58.945983Z",
+  "finishedAt": "2026-08-26T05:24:46.624027Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "markdown-mermaid-writing",
-  "startedAt": "2026-07-30T06:48:58.945663Z",
+  "startedAt": "2026-08-26T05:24:46.623637Z",
   "status": "success",
   "summary": "Executed the bounded deterministic baseline for markdown-mermaid-writing and wrote 2 verified artifacts.",
   "warnings": []

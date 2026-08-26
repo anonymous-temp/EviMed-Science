@@ -531,7 +531,10 @@ export function createRuntimeController(overrides = {}) {
     const output = String(runtimeExitOutput.get(containerName) ?? "");
     const result = spawnSync(
       config.runtimeContainerBin,
-      ["container", "inspect", "--format", "{{.State.Status}}|{{.State.ExitCode}}", containerName],
+      // OOMKilled and the signal alongside the code: 137 alone cannot tell an
+      // out-of-memory kill from a SIGKILL sent by anything else, and those two
+      // lead to opposite fixes.
+      ["container", "inspect", "--format", "{{.State.Status}}|{{.State.ExitCode}}|{{.State.OOMKilled}}|{{.State.Error}}", containerName],
       { encoding: "utf8", timeout: 5_000 },
     );
     if (result.status !== 0) {
@@ -540,12 +543,16 @@ export function createRuntimeController(overrides = {}) {
       }
       throw controllerFailure(503, "runtime_status_unavailable", "Runtime controller could not inspect the runtime container.");
     }
-    const [state, exitCodeRaw] = result.stdout.trim().split("|");
+    const [state, exitCodeRaw, oomRaw, stateError] = result.stdout.trim().split("|");
     const exitCode = Number(exitCodeRaw);
     return {
       state: state || "unknown",
       running: state === "running" || state === "created" || state === "restarting",
       exitCode: Number.isSafeInteger(exitCode) ? exitCode : null,
+      oomKilled: oomRaw === "true",
+      // Docker's own account of why it could not run or keep running the
+      // container, which is empty for an ordinary exit.
+      stateError: stateError ? String(stateError).slice(0, 500) : "",
       containerName,
       output,
     };

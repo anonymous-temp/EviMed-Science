@@ -8,10 +8,10 @@
     {
       "bytes": 1881,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/medical-imaging-data/medical-imaging-data-report.md",
-      "sha256": "84a2653dc91e7a93e6bb5202cfe3bacb05c1939028a92d31a83a423313ace973"
+      "sha256": "80ee8d17575389cffd8f15b363fa4a066e8f43eff4ce86f435f1ff508f393fed"
     }
   ],
-  "finishedAt": "2026-07-30T06:49:01.764103Z",
+  "finishedAt": "2026-08-26T05:24:49.999435Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "medical-imaging-data",
-  "startedAt": "2026-07-30T06:49:01.758517Z",
+  "startedAt": "2026-08-26T05:24:49.996320Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for medical-imaging-data and wrote 2 verified artifacts.",
   "warnings": [

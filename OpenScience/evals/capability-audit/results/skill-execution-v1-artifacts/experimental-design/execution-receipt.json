@@ -8,10 +8,10 @@
     {
       "bytes": 1307,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/experimental-design/experimental-design-report.md",
-      "sha256": "91deaecd8ffac6e1734ef9c34d243c166d3a3f3a4507370d9d465150261a7bee"
+      "sha256": "fc66adfea2dec3252148588d055080642a4c998198bb7c3262764dc8dc5c9704"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:55.180880Z",
+  "finishedAt": "2026-08-26T05:24:42.054361Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "experimental-design",
-  "startedAt": "2026-07-30T06:48:55.180592Z",
+  "startedAt": "2026-08-26T05:24:42.054033Z",
   "status": "success",
   "summary": "Executed the bounded deterministic baseline for experimental-design and wrote 2 verified artifacts.",
   "warnings": []

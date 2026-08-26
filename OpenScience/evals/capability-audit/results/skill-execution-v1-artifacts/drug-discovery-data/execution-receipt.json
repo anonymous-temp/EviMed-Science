@@ -8,10 +8,10 @@
     {
       "bytes": 1853,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/drug-discovery-data/drug-discovery-data-report.md",
-      "sha256": "f9afb05998263fefb5865451a4f61dca8c413293d6fb7707654427af1943f241"
+      "sha256": "5740a42c34012d0261ef504a22ed76ddd72a6e356d5b993b827fcf044fece92e"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:54.551887Z",
+  "finishedAt": "2026-08-26T05:24:41.227464Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "drug-discovery-data",
-  "startedAt": "2026-07-30T06:48:54.548863Z",
+  "startedAt": "2026-08-26T05:24:41.223659Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for drug-discovery-data and wrote 2 verified artifacts.",
   "warnings": [

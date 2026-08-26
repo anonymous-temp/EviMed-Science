@@ -8,10 +8,10 @@
     {
       "bytes": 767,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/metabolic-network-modeling/metabolic-network-modeling-report.md",
-      "sha256": "169f97b2bb71e4f4eb17bf23ed426e1ac9fbbbf90359cdba6391f71b7c563d91"
+      "sha256": "0a673ac64f969b0a4c16c4d2068dcfc08e66bb129d70cb831ea0e4282151620c"
     }
   ],
-  "finishedAt": "2026-07-30T06:49:02.382097Z",
+  "finishedAt": "2026-08-26T05:24:50.753769Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "metabolic-network-modeling",
-  "startedAt": "2026-07-30T06:49:02.380321Z",
+  "startedAt": "2026-08-26T05:24:50.740541Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for metabolic-network-modeling and wrote 2 verified artifacts.",
   "warnings": [

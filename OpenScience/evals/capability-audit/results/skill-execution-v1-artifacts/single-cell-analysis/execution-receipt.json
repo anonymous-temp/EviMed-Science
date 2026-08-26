@@ -8,10 +8,10 @@
     {
       "bytes": 2007,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/single-cell-analysis/single-cell-analysis-report.md",
-      "sha256": "58e2f056d627d390c3a293f09752513b927c08b5d6f57bb01063eeb7419d641e"
+      "sha256": "202ffb29f02b4766ddeb1008dcc0a53bd2c6d603fe4aaac546d3e54f4e094ebf"
     }
   ],
-  "finishedAt": "2026-07-30T06:49:08.525694Z",
+  "finishedAt": "2026-08-26T05:24:58.411718Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "single-cell-analysis",
-  "startedAt": "2026-07-30T06:49:08.521510Z",
+  "startedAt": "2026-08-26T05:24:58.406823Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for single-cell-analysis and wrote 2 verified artifacts.",
   "warnings": [

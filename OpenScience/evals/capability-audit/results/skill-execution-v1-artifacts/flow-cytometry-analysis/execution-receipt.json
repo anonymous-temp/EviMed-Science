@@ -8,10 +8,10 @@
     {
       "bytes": 2103,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/flow-cytometry-analysis/flow-cytometry-analysis-report.md",
-      "sha256": "34a95073860bc34a5d61fdf1c30665aed262ebe2f02c295c325b8cbddc04da9c"
+      "sha256": "d5d7bc07a0291495ef442806b6d2ee90ccef822a81ce2034ff5a8b91aec3a452"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:56.419563Z",
+  "finishedAt": "2026-08-26T05:24:43.465745Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "flow-cytometry-analysis",
-  "startedAt": "2026-07-30T06:48:56.413591Z",
+  "startedAt": "2026-08-26T05:24:43.462322Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for flow-cytometry-analysis and wrote 2 verified artifacts.",
   "warnings": [

@@ -8,10 +8,10 @@
     {
       "bytes": 777,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/citation-integrity/citation-integrity-report.md",
-      "sha256": "866c0594bf86e92a338e570c0af83ab000e19955111b66ce7a792393d08ba5f0"
+      "sha256": "598e44bfe43c51c5542b28f2e38122a8ca9a45a8f47a207d2faabea383587522"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:52.659342Z",
+  "finishedAt": "2026-08-26T05:24:38.868579Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "citation-integrity",
-  "startedAt": "2026-07-30T06:48:52.658716Z",
+  "startedAt": "2026-08-26T05:24:38.867600Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for citation-integrity and wrote 2 verified artifacts.",
   "warnings": [

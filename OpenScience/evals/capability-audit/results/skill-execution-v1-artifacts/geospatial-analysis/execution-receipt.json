@@ -8,10 +8,10 @@
     {
       "bytes": 1697,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/geospatial-analysis/geospatial-analysis-report.md",
-      "sha256": "4b3dadf252259b534efaaff526ae1a2f8d66b10daf36b86b45c0680314290570"
+      "sha256": "9337f9d0b1b968f674cd56b25c2b7b740d6cbe9e8d473ff1251273d3152c67e0"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:57.712863Z",
+  "finishedAt": "2026-08-26T05:24:44.976667Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "geospatial-analysis",
-  "startedAt": "2026-07-30T06:48:57.710116Z",
+  "startedAt": "2026-08-26T05:24:44.973797Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for geospatial-analysis and wrote 2 verified artifacts.",
   "warnings": [
