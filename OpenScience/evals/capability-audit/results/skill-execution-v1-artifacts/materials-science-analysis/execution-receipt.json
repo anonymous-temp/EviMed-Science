@@ -8,10 +8,10 @@
     {
       "bytes": 777,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/materials-science-analysis/materials-science-analysis-report.md",
-      "sha256": "c705724709c60455036df07a731b753ac00104dbf6b71a25f81504446f001cb5"
+      "sha256": "b16076049df1816a6e068a63d04b964bc5f32709ddaa9f82516c8405de72c7ba"
     }
   ],
-  "finishedAt": "2026-07-30T06:49:00.188445Z",
+  "finishedAt": "2026-08-26T05:24:48.160363Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "materials-science-analysis",
-  "startedAt": "2026-07-30T06:49:00.188101Z",
+  "startedAt": "2026-08-26T05:24:48.159969Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for materials-science-analysis and wrote 2 verified artifacts.",
   "warnings": [

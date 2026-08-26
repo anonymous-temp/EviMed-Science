@@ -8,10 +8,10 @@
     {
       "bytes": 1731,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/astronomy-data-analysis/astronomy-data-analysis-report.md",
-      "sha256": "c02002ae374528a79ea0f19f612a55e3d316f68a9dcd5ec824238799a57d415e"
+      "sha256": "ee1d7f2fbc0ef589319fd5357d792ecba9ccbdb16737d740b8159a2689fb747b"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:47.067065Z",
+  "finishedAt": "2026-08-26T05:24:31.984979Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "astronomy-data-analysis",
-  "startedAt": "2026-07-30T06:48:47.064270Z",
+  "startedAt": "2026-08-26T05:24:31.978085Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for astronomy-data-analysis and wrote 2 verified artifacts.",
   "warnings": [

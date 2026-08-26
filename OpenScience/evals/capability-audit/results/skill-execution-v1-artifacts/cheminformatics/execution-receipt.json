@@ -8,10 +8,10 @@
     {
       "bytes": 731,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/cheminformatics/cheminformatics-report.md",
-      "sha256": "d988c7fc8faea7ff51a81a64956e341ae5826e8bfda46c1f83137114f96b534e"
+      "sha256": "fa14f4b353f29f753f0344280a275e75e4c39751996301439bdc4f90e4eca93f"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:52.048988Z",
+  "finishedAt": "2026-08-26T05:24:38.042310Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "cheminformatics",
-  "startedAt": "2026-07-30T06:48:52.048650Z",
+  "startedAt": "2026-08-26T05:24:38.041912Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for cheminformatics and wrote 2 verified artifacts.",
   "warnings": [

@@ -8,10 +8,10 @@
     {
       "bytes": 1830,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/cancer-functional-genomics/cancer-functional-genomics-report.md",
-      "sha256": "3a72a1ee4a9e0b7c58ab15128f080f5e159c5a87237787e8bb7695e4ea04d35a"
+      "sha256": "80133df7e4dfa5c98168abea2df39ff4bf6452149c408ac1e27ec5e52d48fb4b"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:51.411964Z",
+  "finishedAt": "2026-08-26T05:24:37.318683Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "cancer-functional-genomics",
-  "startedAt": "2026-07-30T06:48:51.409066Z",
+  "startedAt": "2026-08-26T05:24:37.315393Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for cancer-functional-genomics and wrote 2 verified artifacts.",
   "warnings": [

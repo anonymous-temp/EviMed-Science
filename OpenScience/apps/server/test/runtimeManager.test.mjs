@@ -292,7 +292,14 @@ test("buildOpenCodeLaunchPlan generates a container sandbox launch command", () 
   assert.equal(plan.sandboxMode, "docker");
   assert.equal(plan.containerName, runtimeContainerName(project));
   assert.equal(plan.proxyWorkspaceDir, "/workspace");
-  assert.deepEqual(plan.args.slice(0, 7), ["run", "--rm", "--init", "--name", plan.containerName, "--label", "open-science.web.runtime=true"]);
+  // No `--rm`, deliberately. Docker deletes the container the instant it dies,
+  // so `docker inspect` finds nothing and the exit code, the OOM flag and the
+  // last output are gone before anything asks. A 19-minute run ended with no
+  // explanation available from any source — the corpse was already deleted and
+  // this host's `docker events` keeps no history. Removal moved into the exit
+  // handler, after the record is written.
+  assert.deepEqual(plan.args.slice(0, 6), ["run", "--init", "--name", plan.containerName, "--label", "open-science.web.runtime=true"]);
+  assert.equal(plan.args.includes("--rm"), false, "a container deleted on death cannot be asked why it died");
   assert.ok(plan.args.includes(`open-science.user=${project.userId}`));
   assert.ok(plan.args.includes(`open-science.project=${project.id}`));
   assert.ok(plan.args.includes("--security-opt"));
@@ -2013,4 +2020,63 @@ test("the kernel spills onto the project volume, not into the 64 MiB tmpfs", asy
   // per-project state, quota-accounted, deleted with the project.
   assert.match(runtimeTmpDir, /^\/runtime\//, "the spill belongs on the project volume");
   assert.notEqual(runtimeTmpDir, runtimeDshHome, "and not inside the kernel's home, which holds credentials");
+});
+
+test("a container that dies on its own is asked why, and only then removed", async () => {
+  // Two halves that must both hold. Recording the cause is useless if the
+  // container leaks; removing it first is what made the cause unavailable.
+  const source = await readFile(new URL("../src/runtimeManager.mjs", import.meta.url), "utf8");
+  // Comments stripped: they name the very things being checked, and a check
+  // that matches its own explanation proves nothing — a mistake this audit has
+  // now made three times.
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+  // The runtime's own exit handler, not the two unrelated ones earlier in the
+  // file — `indexOf` found `waitForProcess`'s first and the assertions below
+  // then measured the wrong function.
+  const marker = 'appendRuntimeEvent(project, "exited"';
+  const at = code.indexOf(marker);
+  assert.ok(at > 0, "the runtime exit handler must record an `exited` event");
+  const handlerStart = code.lastIndexOf('once("exit"', at);
+  assert.ok(handlerStart > 0, "that record must live inside an exit handler");
+  const body = code.slice(handlerStart, code.indexOf("recordRuntimeState", at));
+
+  // The exit status is an argument, not something to go looking for. It was
+  // discarded by a `()` parameter list for the life of this handler.
+  // Asserted on the assignments, not on the parameter list or the field names.
+  // `once("exit", () => {` also matches a pattern looking for an open paren,
+  // and `exitCode` still appears in the record even when nothing sets it — the
+  // first version of this control stayed green with the status discarded.
+  for (const [field, from] of [["exitCode", "code"], ["exitSignal", "signal"]]) {
+    const assignment = new RegExp(`runtime\\.${field}\\s*=[^;]*\\b${from}\\b`);
+    assert.match(body, assignment, `${field} must be taken from the callback's own ${from} argument`);
+  }
+  assert.match(body, /runtime\.exitOutput\s*=/, "the container's last words must be captured onto the record");
+  for (const field of ["exitCode", "exitSignal", "exitOutput"]) {
+    assert.ok(body.includes(`${field}: runtime.${field}`) || body.includes(`${field}: runtime.exitOutput`), `the exited record must carry ${field}`);
+  }
+  // Removal comes after the record, or the evidence is gone again.
+  const recordAt = body.indexOf(marker);
+  const removeAt = body.indexOf("cleanupDockerContainer(plan)");
+  assert.ok(recordAt >= 0, "the exit must be recorded");
+  assert.ok(removeAt >= 0, "a container that dies on its own must still be removed, or dropping --rm leaks it");
+  assert.ok(removeAt > recordAt, "ask, then remove — the other order is what deleted the evidence");
+
+  // And the controller reports what a code alone cannot distinguish.
+  const controller = await readFile(new URL("../src/runtimeControllerServer.mjs", import.meta.url), "utf8");
+  assert.match(controller, /\{\{\.State\.OOMKilled\}\}/, "137 with and without an OOM kill lead to opposite fixes");
+  assert.match(controller, /oomKilled:/);
+});
+
+test("every runtime record names the kernel that is running, not the one this code grew up with", async () => {
+  // Twelve literals said `opencode`, so every `exited`, `cleanup_failed` and
+  // state record a DSH container produced was labelled with the other kernel.
+  // Harmless alone, and kernel-blind for any reader that branches on it —
+  // the same family as the image-label and release-manifest comparisons that
+  // each had to learn the switch separately.
+  const source = await readFile(new URL("../src/runtimeManager.mjs", import.meta.url), "utf8");
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const literals = code.match(/kind: "opencode"/g) ?? [];
+  assert.deepEqual(literals, [], `${literals.length} runtime records still hardcode the kernel name`);
+  assert.ok((code.match(/kind: runtimeKernelName\(this\.config\)/g) ?? []).length >= 10, "the records must ask which kernel is running");
 });

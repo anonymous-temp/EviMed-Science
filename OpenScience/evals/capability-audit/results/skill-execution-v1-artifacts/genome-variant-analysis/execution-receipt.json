@@ -8,10 +8,10 @@
     {
       "bytes": 713,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/genome-variant-analysis/genome-variant-analysis-report.md",
-      "sha256": "052e776141647932703a31647c2531530ea2dc1bf66a8d949e1e7f3f65019d1d"
+      "sha256": "8df544cd537618d3fcb4efe9fdf3d90ecb36258e4b61ab67f888b9298f18c109"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:57.040357Z",
+  "finishedAt": "2026-08-26T05:24:44.244807Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "genome-variant-analysis",
-  "startedAt": "2026-07-30T06:48:57.040032Z",
+  "startedAt": "2026-08-26T05:24:44.244491Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for genome-variant-analysis and wrote 2 verified artifacts.",
   "warnings": [

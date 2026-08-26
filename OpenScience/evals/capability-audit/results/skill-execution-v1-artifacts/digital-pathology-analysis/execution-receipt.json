@@ -8,10 +8,10 @@
     {
       "bytes": 1887,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/digital-pathology-analysis/digital-pathology-analysis-report.md",
-      "sha256": "0d4e024b6225a9c97edda362ba5a0fd3e3ff053c086a67f9e1448cfcc511f1ad"
+      "sha256": "35de0ba162b0e78fa1106e35f64628c5bace075126e258978434376cf0f0a547"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:53.924756Z",
+  "finishedAt": "2026-08-26T05:24:40.361750Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "digital-pathology-analysis",
-  "startedAt": "2026-07-30T06:48:53.921841Z",
+  "startedAt": "2026-08-26T05:24:40.358443Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for digital-pathology-analysis and wrote 2 verified artifacts.",
   "warnings": [

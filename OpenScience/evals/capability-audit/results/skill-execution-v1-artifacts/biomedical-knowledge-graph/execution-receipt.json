@@ -8,10 +8,10 @@
     {
       "bytes": 671,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-knowledge-graph/biomedical-knowledge-graph-report.md",
-      "sha256": "bf5b5373a4c2e1106dcc93eaff7338f85a633e52308021fb670cdcbcc62ed955"
+      "sha256": "722acd4bd9b3755540bc6c1146b7c6de546efd7ca6a671dc53a3ba0eb446d0a9"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:48.956718Z",
+  "finishedAt": "2026-08-26T05:24:34.150600Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "biomedical-knowledge-graph",
-  "startedAt": "2026-07-30T06:48:48.956391Z",
+  "startedAt": "2026-08-26T05:24:34.150275Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for biomedical-knowledge-graph and wrote 2 verified artifacts.",
   "warnings": [

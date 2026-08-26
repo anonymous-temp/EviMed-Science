@@ -8,10 +8,10 @@
     {
       "bytes": 1841,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/statistical-analysis/statistical-analysis-report.md",
-      "sha256": "275f2ae659209bbd84576812dfa0a0e31ed3114f8e434b7b47258adbd971ae1a"
+      "sha256": "2d4efe1b761ffdec7f48643ab0b2ae4e28d1f201d4a337c2e1953d203beda795"
     }
   ],
-  "finishedAt": "2026-07-30T06:49:09.135643Z",
+  "finishedAt": "2026-08-26T05:24:59.132342Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "statistical-analysis",
-  "startedAt": "2026-07-30T06:49:09.132352Z",
+  "startedAt": "2026-08-26T05:24:59.125891Z",
   "status": "success",
   "summary": "Executed the bounded deterministic baseline for statistical-analysis and wrote 2 verified artifacts.",
   "warnings": []

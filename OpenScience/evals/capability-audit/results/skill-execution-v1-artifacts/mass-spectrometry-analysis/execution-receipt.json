@@ -8,10 +8,10 @@
     {
       "bytes": 743,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/mass-spectrometry-analysis/mass-spectrometry-analysis-report.md",
-      "sha256": "1658011dd7d7172fbc67af0ba0d472ee3ddea0f91b4f2ab2b39369bdaccae73f"
+      "sha256": "a83a3fb414b0532b4398d0105801ecc697912b4be18fd99f0e5857fdb19ba9cd"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:59.570944Z",
+  "finishedAt": "2026-08-26T05:24:47.417202Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "mass-spectrometry-analysis",
-  "startedAt": "2026-07-30T06:48:59.570575Z",
+  "startedAt": "2026-08-26T05:24:47.416773Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for mass-spectrometry-analysis and wrote 2 verified artifacts.",
   "warnings": [

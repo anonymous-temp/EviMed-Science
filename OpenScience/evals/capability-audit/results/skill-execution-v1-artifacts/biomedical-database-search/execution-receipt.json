@@ -8,10 +8,10 @@
     {
       "bytes": 766,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-database-search/biomedical-database-search-report.md",
-      "sha256": "2e1e054b3f2b3ef50029a11700fcebb35a2491517fa1760c19e35e36cc24cff3"
+      "sha256": "4d746a12e8c8c7a5129bddb1d382239ce8950eb3cbb26b437fa0fd51061eec18"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:48.346448Z",
+  "finishedAt": "2026-08-26T05:24:33.393163Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "biomedical-database-search",
-  "startedAt": "2026-07-30T06:48:48.346154Z",
+  "startedAt": "2026-08-26T05:24:33.392818Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for biomedical-database-search and wrote 2 verified artifacts.",
   "warnings": [

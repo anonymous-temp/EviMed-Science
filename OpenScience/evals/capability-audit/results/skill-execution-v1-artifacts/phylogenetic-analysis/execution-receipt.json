@@ -8,10 +8,10 @@
     {
       "bytes": 1341,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/phylogenetic-analysis/phylogenetic-analysis-report.md",
-      "sha256": "a72f289c5a239405f828c8a4ba68d1a83d5969b1d6a4cdc11e1975748c8abd8a"
+      "sha256": "5a4b6f4ab960c60aa6db35f5790a7e03d7b98c3e0b07a363c521f6ae3ce38445"
     }
   ],
-  "finishedAt": "2026-07-30T06:49:03.612083Z",
+  "finishedAt": "2026-08-26T05:24:52.394495Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "phylogenetic-analysis",
-  "startedAt": "2026-07-30T06:49:03.611718Z",
+  "startedAt": "2026-08-26T05:24:52.394020Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for phylogenetic-analysis and wrote 2 verified artifacts.",
   "warnings": [

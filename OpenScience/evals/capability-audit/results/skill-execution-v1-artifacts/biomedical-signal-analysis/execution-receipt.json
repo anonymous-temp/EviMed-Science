@@ -8,10 +8,10 @@
     {
       "bytes": 1014,
       "path": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/skill-execution-v1-artifacts/biomedical-signal-analysis/biomedical-signal-analysis-report.md",
-      "sha256": "8ac1cc3adf5c5fbec1d0840d9fab557810c0e79323e7ae9803e1b099485bfbcc"
+      "sha256": "e8f0a2aa2346ba73af2d3b6e3c7e37442a7d6a8252151b86508a4c2a5b76f80e"
     }
   ],
-  "finishedAt": "2026-07-30T06:48:49.561773Z",
+  "finishedAt": "2026-08-26T05:24:35.018677Z",
   "input": {
     "path": null,
     "sha256": null,
@@ -22,7 +22,7 @@
   ],
   "schemaVersion": 1,
   "skill": "biomedical-signal-analysis",
-  "startedAt": "2026-07-30T06:48:49.560633Z",
+  "startedAt": "2026-08-26T05:24:35.008502Z",
   "status": "warning",
   "summary": "Executed the bounded deterministic baseline for biomedical-signal-analysis and wrote 2 verified artifacts.",
   "warnings": [
