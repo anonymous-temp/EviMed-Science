@@ -130,6 +130,31 @@ function proseHygieneIssues(input, proseFiles) {
 
 /** @param {GateInput} input @returns {GateVerdict} */
 function validateClinicalEvidenceReport(input) {
+  // A syntax error is a syntax error, not two dozen content problems.
+  //
+  // `json()` returns `undefined` for a file that exists and does not parse, and
+  // `validateJsonShaped` already reports that as its own issue. This contract
+  // passed it straight through, so one unescaped quote inside a Chinese string
+  // made the matrix `undefined` and the package came back with 24 blocking
+  // issues of the form "CLM-001 does not resolve to the evidence matrix" —
+  // twenty claim ids to chase and nothing anywhere saying the file had not
+  // parsed. Observed on a real package: `"支撑"立即就医评估"的处置。"`, which
+  // ends the JSON string early.
+  //
+  // Reported before the content rules run, because a repair loop has bounded
+  // attempts and spending them on the symptom is how a fixable package dies.
+  const parseIssues = [];
+  for (const [file, parsed, provided] of [
+    ["clinical-evidence-matrix.json", json(input, "clinical-evidence-matrix.json"), input.matrix],
+    ["clinical-evidence-run.json", json(input, "clinical-evidence-run.json"), input.runReceipt],
+  ]) {
+    if (provided == null && parsed === undefined) {
+      parseIssues.push(issue("deliverable_rejected", `${file} is not valid JSON. Fix the syntax first: a value containing a double quote must escape it (\\"), and every string must close before the next key.`));
+    }
+  }
+  if (parseIssues.length) {
+    return { ok: false, contractKind: input.contractKind, issues: parseIssues, metrics: {}, errorCode: "deliverable_rejected" };
+  }
   const result = validateClinicalEvidencePackage({
     reportText: text(input, 'clinical-evidence-report.md'),
     matrix: input.matrix ?? json(input, 'clinical-evidence-matrix.json'),

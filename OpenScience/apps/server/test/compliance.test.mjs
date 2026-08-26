@@ -81,45 +81,46 @@ test("hosted compliance audit rejects restricted Anthropic skills when configure
   );
 });
 
-test("the boot-proof checks fail when the image only ships the proof", async () => {
-  // These four checks pass today, which says nothing about whether they CAN
-  // fail. The first version of `dsh_build_smoke_executed` matched any line
-  // mentioning `evimed-build-smoke`, so the `chmod` that makes it executable
-  // satisfied it and an image that never ran the proof audited clean — a check
-  // measuring mentions, not instructions. It was only caught by trying to make
-  // it fail.
-  //
-  // Run against a copy of the real Dockerfile with the RUN line removed: if the
-  // audit still passes, the check is decorative.
-  const { mkdtemp, writeFile, rm, cp } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const dockerfilePath = path.join(repoRoot, "deploy/runtime-dsh/Dockerfile");
-  const original = await readFile(dockerfilePath, "utf8");
+test("the boot-proof check tells running the proof apart from mentioning it", async () => {
+  // The previous version of this test rewrote the real Dockerfile to make the
+  // audit fail. `node --test` runs files in parallel, so it corrupted a tracked
+  // file other tests were reading — it took `server.test.mjs` down on its first
+  // CI run — and a crash between the write and the restore would have left the
+  // repository broken. The predicate is exported instead, so the same property
+  // is provable against synthetic text and cannot drift from the audit.
+  const { dshBuildSmokeIsInvoked } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
 
-  // The line that actually invokes it, as opposed to the ones that copy it in
-  // or make it executable.
-  const invocation = original.split("\n").find((line) => line.includes("/usr/local/bin/evimed-build-smoke") && !/\b(chmod|COPY|#)/.test(line));
-  assert.ok(invocation, "the Dockerfile must invoke the proof, or there is nothing for this test to remove");
-
-  const backup = await mkdtemp(path.join(tmpdir(), "smoke-control-"));
-  try {
-    await cp(dockerfilePath, path.join(backup, "Dockerfile"));
-    await writeFile(dockerfilePath, original.replace(invocation, "  true; \\"), "utf8");
-    const result = runAudit();
-    const report = parseAudit(result.stdout);
-    const executed = report.findings.find((finding) => finding.code === "dsh_build_smoke_executed");
-    const notExecuted = report.findings.find((finding) => finding.code === "dsh_build_smoke_not_executed");
-    assert.ok(notExecuted || executed?.ok === false, "an image that only ships the proof must not audit clean");
-    assert.equal(report.ok, false);
-  } finally {
-    await writeFile(dockerfilePath, original, "utf8");
-    await rm(backup, { recursive: true, force: true });
+  // Tabulated rather than described, which is how the surviving half of the
+  // original defect was found: `\b#` only matches when a word character
+  // precedes the `#`, so a whole-line comment naming the proof satisfied the
+  // check on its own.
+  const cases = [
+    ["RUN SOCKET_VERSION=1 /usr/local/bin/evimed-build-smoke", true],
+    ["  SOCKET_VERSION=\"1\" /usr/local/bin/evimed-build-smoke", true],
+    ["RUN chmod 0755 /usr/local/bin/evimed-build-smoke; /usr/local/bin/evimed-build-smoke", true],
+    ["RUN chmod 0755 /usr/local/bin/evimed-build-smoke", false],
+    ["RUN set -eux; chmod 0755 /usr/local/bin/evimed-build-smoke", false],
+    ["COPY deploy/runtime-dsh/build-smoke.sh /usr/local/bin/evimed-build-smoke", false],
+    ["# runs /usr/local/bin/evimed-build-smoke", false],
+    ["  # SOCKET_VERSION=1 /usr/local/bin/evimed-build-smoke", false],
+    ["RUN set -eux; \\", false],
+    ["", false],
+  ];
+  for (const [line, expected] of cases) {
+    assert.equal(dshBuildSmokeIsInvoked(line), expected, `${JSON.stringify(line)} should be ${expected ? "an invocation" : "only a mention"}`);
   }
 
-  // And the restored file must audit clean again, or this test left the tree
-  // broken for everything after it.
-  const restored = parseAudit(runAudit().stdout);
-  assert.equal(restored.ok, true, "the Dockerfile was not restored");
+  // And the real Dockerfile must still read as running it, or the audit that
+  // passes today is passing for the wrong reason.
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  assert.equal(dshBuildSmokeIsInvoked(dockerfile), true);
+  // The negative control on the whole file: strip the invoking command and it
+  // must read as not run. Done on a copy in memory, not on the file.
+  const shipOnly = dockerfile
+    .split("\n")
+    .filter((line) => !(line.includes("evimed-build-smoke") && !/^\s*(#|COPY)/i.test(line) && !/chmod/.test(line)))
+    .join("\n");
+  assert.equal(dshBuildSmokeIsInvoked(shipOnly), false, "an image that only ships the proof must not read as running it");
 });
 
 test("the boot proof fails on a patch row the composition does not have", async () => {
