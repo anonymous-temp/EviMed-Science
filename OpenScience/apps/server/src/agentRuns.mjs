@@ -2695,6 +2695,47 @@ export class AgentRunStore {
     this.monitors.set(runId, { promise, cancel: () => { canceled = true; wake?.(); } });
   }
 
+  /**
+   * Re-arms observation for every run a previous process left running.
+   *
+   * A restarted control plane used to forget its in-flight runs entirely: the
+   * startup orphan sweep killed their containers, and nothing ever monitored
+   * them again, so a run whose turn had already completed -- deliverables,
+   * summary and all on disk -- sat "running" in the ledger forever. Observed
+   * live on 2026-08-26: the sweep reaped the container at 14:18:40 and the
+   * run's last ledger event stayed a progress row from 12:42.
+   *
+   * Adoption is just `scheduleMonitor`, which is idempotent per run id. A
+   * monitor whose container is gone hits `runtime_not_running` on its first
+   * read and finishes the run from the durable record -- the same bridge a
+   * mid-run container death crosses; one that finds the container alive keeps
+   * observing as if the restart never happened. Called after the orphan sweep,
+   * not before, so the monitors read a world the sweep is done rearranging.
+   *
+   * @param {readonly any[]} projects
+   * @returns {Promise<{ adopted: number }>}
+   */
+  async adoptRunningRuns(projects) {
+    let adopted = 0;
+    for (const project of projects) {
+      /** @type {any[]} */
+      let runs = [];
+      try {
+        runs = await this.list(project);
+      } catch {
+        // A project whose ledger cannot be read is not a reason to skip the
+        // rest; its own reads will surface the problem to its own user.
+        continue;
+      }
+      for (const run of runs) {
+        if (run.status !== "running") continue;
+        this.scheduleMonitor(project, run.id);
+        adopted += 1;
+      }
+    }
+    return { adopted };
+  }
+
   async closeProject(project, status = "canceled") {
     const runs = await this.list(project);
     for (const run of runs.filter((item) => item.status === "running")) {
