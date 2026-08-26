@@ -14,6 +14,7 @@ import {
   cleanupHostRuntimeProcess,
   requestRuntime,
   runtimeContainerName,
+  parseByteSize,
   recordPidSample,
   runtimeDshHome,
   runtimeTmpDir,
@@ -2107,4 +2108,38 @@ test("pid pressure is reported while the run is alive, and only once", () => {
   assert.equal(recordPidSample(bare, 500, 0), false, "no ceiling means no pressure to report");
   assert.equal(recordPidSample(bare, Number.NaN, 100), false);
   assert.equal(bare.peakPids, undefined, "a rejected sample is not a measurement");
+});
+
+test("the memory ceiling is read in docker's own grammar, and an unreadable one disables the check", () => {
+  // `runtimeMemoryLimit` is a string because `docker run --memory` takes one.
+  // Comparing a byte count against "8g" without parsing it is how a pressure
+  // check reports nothing forever — the shape of defect this whole audit is
+  // about, and the reason this tiny function has a test at all.
+  assert.equal(parseByteSize("4g"), 4 * 1024 ** 3);
+  assert.equal(parseByteSize("8g"), 8 * 1024 ** 3);
+  assert.equal(parseByteSize("512m"), 512 * 1024 ** 2);
+  assert.equal(parseByteSize("2G"), 2 * 1024 ** 3, "docker accepts either case");
+  assert.equal(parseByteSize("1024"), 1024, "a bare number is bytes");
+
+  // Negative controls: anything unreadable must return 0, which the caller
+  // treats as "no ceiling to compare against" rather than as a ceiling of zero
+  // — the latter would report pressure on every sample of every run.
+  for (const bad of ["bad", "", null, undefined, "-1g", "g", "4x"]) {
+    assert.equal(parseByteSize(bad), 0, `${JSON.stringify(bad)} is not a size`);
+  }
+  // A zero the pattern accepts is the case the positivity guard exists for:
+  // these reach the arithmetic and come out 0, and a caller that read 0 as a
+  // real ceiling would report pressure on every sample of every run. The first
+  // version of this control removed that guard and stayed green, because every
+  // input it tried was already rejected by the pattern one line earlier —
+  // a mutation that changed no behaviour rather than a weak assertion.
+  for (const zero of ["0g", "0", "0.0m", "00"]) {
+    assert.equal(parseByteSize(zero), 0, `${JSON.stringify(zero)} must not read as a ceiling`);
+  }
+  // The case the guard is actually for, and it took two failed controls to
+  // find: the pattern puts no bound on digit count, so a long enough literal
+  // overflows to Infinity. An infinite ceiling makes the pressure check
+  // unreachable — every real reading is below it — which is the "reports
+  // nothing forever" failure in its purest form.
+  assert.equal(parseByteSize(`${"9".repeat(400)}g`), 0, "an overflowed ceiling is not a ceiling");
 });

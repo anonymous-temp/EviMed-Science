@@ -3351,6 +3351,24 @@ export function buildOpenCodeLaunchPlan(config, project, port, password) {
  * @param {number} current @param {number} limit
  * @returns {boolean} whether this sample should be recorded as pressure
  */
+/** Docker's own size grammar, as a number of bytes. `runtimeMemoryLimit` is a
+ *  string like "4g" because that is what `docker run --memory` takes, and a
+ *  comparison against it needs the number.
+ *  @param {unknown} value @returns {number} bytes, or 0 when unreadable */
+export function parseByteSize(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  const match = /^(\d+(?:\.\d+)?)\s*([kmgt]?)b?$/.exec(text);
+  if (!match) return 0;
+  const scale = { "": 1, k: 1024, m: 1024 ** 2, g: 1024 ** 3, t: 1024 ** 4 }[match[2]] ?? 1;
+  const bytes = Number(match[1]) * scale;
+  // `Number.isFinite` is the load-bearing half: the pattern puts no bound on
+  // digit count, so a long enough literal overflows to Infinity, and an
+  // infinite ceiling makes the pressure check silently unreachable — every real
+  // reading is below it. `> 0` is belt: the pattern accepts no sign, so a zero
+  // already maps to zero. Both kept, and only the first has a case.
+  return Number.isFinite(bytes) && bytes > 0 ? bytes : 0;
+}
+
 export function recordPidSample(runtime, current, limit) {
   if (!Number.isFinite(current) || !Number.isFinite(limit) || limit <= 0) return false;
   runtime.peakPids = Math.max(Number(runtime.peakPids ?? 0), current);
@@ -4066,6 +4084,12 @@ export class RuntimeManager {
         // The container's last words, already bounded by the tail buffer. A
         // run whose kernel refused to start says so here and nowhere else.
         exitOutput: runtime.exitOutput ? String(runtime.exitOutput).slice(-RUNTIME_EXIT_OUTPUT_BYTES) : "",
+        // What the run reached before it stopped. 137 is SIGKILL and says
+        // nothing about who sent it: the cgroup OOM killer and an operator's
+        // `docker kill` produce the same code, and the peaks are what tell
+        // them apart. Both ceilings killed a run on consecutive attempts.
+        peakPids: runtime.peakPids ?? null,
+        peakMemoryBytes: runtime.peakMemoryBytes ?? null,
       }, this.config);
       // Removed here, after the record above has been written.
       //
@@ -5338,13 +5362,36 @@ export class RuntimeManager {
     if (!containerName || runtime.sandboxMode !== "docker") return;
     const limit = Number(this.config.runtimePidsLimit);
     if (!Number.isFinite(limit) || limit <= 0) return;
+    // Both ceilings on one exec. A run died at each of them on consecutive
+    // attempts — pids at 256 with `socat: E fork(): EAGAIN`, then memory at
+    // 4 GiB with the cgroup OOM killer taking the kernel — and neither left
+    // anything readable behind. Sampling them together also records the SHAPE:
+    // a working set that plateaus is a limit set too low, one that climbs
+    // without settling is a leak, and raising the ceiling only helps the first.
     const result = spawnSync(
       this.config.runtimeContainerBin,
-      ["exec", containerName, "cat", "/sys/fs/cgroup/pids.current"],
+      ["exec", containerName, "sh", "-c", "cat /sys/fs/cgroup/pids.current; cat /sys/fs/cgroup/memory.current"],
       { encoding: "utf8", timeout: 5_000 },
     );
     if (result.status !== 0) return;
-    const current = Number(String(result.stdout).trim());
+    const [pidsRaw, memoryRaw] = String(result.stdout).trim().split("\n");
+    const current = Number(String(pidsRaw ?? "").trim());
+    const memoryBytes = Number(String(memoryRaw ?? "").trim());
+    if (Number.isFinite(memoryBytes)) {
+      runtime.peakMemoryBytes = Math.max(Number(runtime.peakMemoryBytes ?? 0), memoryBytes);
+      // Every sample, not just the peak: the curve is the diagnosis.
+      runtime.memorySamples = [...(runtime.memorySamples ?? []).slice(-59), memoryBytes];
+      const memoryLimit = parseByteSize(this.config.runtimeMemoryLimit);
+      if (memoryLimit > 0 && !runtime.memoryPressureReported && memoryBytes * 5 >= memoryLimit * 4) {
+        runtime.memoryPressureReported = true;
+        void appendRuntimeEvent(project, "memory_pressure", {
+          kind: runtime.kind,
+          containerName,
+          memoryBytes,
+          memoryLimitBytes: memoryLimit,
+        }, this.config);
+      }
+    }
     if (!Number.isFinite(current)) return;
     if (!recordPidSample(runtime, current, limit)) return;
     void appendRuntimeEvent(project, "pid_pressure", {
@@ -5352,6 +5399,7 @@ export class RuntimeManager {
       containerName,
       pidsCurrent: current,
       pidsLimit: limit,
+      memoryBytes: Number.isFinite(memoryBytes) ? memoryBytes : null,
     }, this.config);
   }
 

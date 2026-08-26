@@ -730,7 +730,13 @@ export function loadConfig(overrides = {}) {
       overrides.runtimeNetworkEgressPolicyAck ??
       boolEnv("OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK", false),
     runtimeCpuLimit: overrides.runtimeCpuLimit ?? process.env.OPEN_SCIENCE_RUNTIME_CPU_LIMIT ?? "2",
-    runtimeMemoryLimit: overrides.runtimeMemoryLimit ?? process.env.OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT ?? "4g",
+    // 4g was not enough: the DSH kernel alone held 2.9 GiB resident when the
+    // cgroup OOM killer took it (`constraint=CONSTRAINT_MEMCG`, dmesg,
+    // 2026-08-26), and the container's own limit is what ran out — the host
+    // had 9.7 GiB free at the time. Raised with the sampler above watching, so
+    // a working set that keeps climbing rather than settling is visible as a
+    // leak instead of being absorbed by a bigger number.
+    runtimeMemoryLimit: overrides.runtimeMemoryLimit ?? process.env.OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT ?? "8g",
     // 256 was not enough, and the way it failed is why it took nine runs to
     // find. The cgroup counts THREADS, and a clinical run at full stretch holds
     // the kernel, its MCP python, one socat per connection, bash subprocesses
