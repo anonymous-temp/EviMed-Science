@@ -346,10 +346,28 @@ export function normalizeTranscript(sessionId, entries) {
         break;
       }
       case "tool/result": {
-        const callId = String(data?.message?.callId ?? data?.callId ?? "");
+        // The pinned kernel's live frames carry the call id at
+        // `message.source.callId` and the text nested inside a
+        // `tool-result` block — not at `message.callId` with a flat text
+        // block, which is what the first golden fixture said and what this
+        // read used to trust. On a real run every one of the 60 tool calls
+        // stayed `pending` with empty output while the run's own state file
+        // showed three gate runs: the results were all there, one level away.
+        // Both shapes are read, because the fixture shape is also the mock
+        // runtime's, and a normalizer that drops one of them fails silently.
+        const message = data?.message ?? {};
+        const callId = String(
+          message?.callId
+            ?? message?.source?.callId
+            ?? (Array.isArray(message?.content)
+              ? message.content.find((block) => block?.toolCallId)?.toolCallId
+              : undefined)
+            ?? data?.callId
+            ?? "",
+        );
         const part = pendingCalls.get(callId);
         const error = data.error ? { name: String(data.error.name ?? ""), code: String(data.error.code ?? "") } : null;
-        const output = contentText(data?.message?.content);
+        const output = toolResultText(message?.content);
         if (part) {
           part.status = error ? "error" : "completed";
           part.output = output;
@@ -407,6 +425,32 @@ function contentParts(content) {
     else if (record.type === "reasoning") parts.push({ type: "reasoning", text: String(record.text ?? record.reasoning ?? "") });
   }
   return parts;
+}
+
+/**
+ * The text of a tool result, whichever nesting the kernel used.
+ *
+ * Live `tool/result` frames wrap their text one level down:
+ * `content: [{ type: "tool-result", content: [{ type: "text", text }] }]`.
+ * The flat `[{ type: "text", text }]` shape also exists (the mock runtime,
+ * and the fixture recorded before the live shape was observed). `contentText`
+ * alone read the flat shape only, so live results decoded to "".
+ * @param {unknown} content @returns {string}
+ */
+function toolResultText(content) {
+  if (!Array.isArray(content)) return contentText(content);
+  const texts = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const record = /** @type {Record<string, any>} */ (block);
+    if (record.type === "text") texts.push(String(record.text ?? ""));
+    else if (Array.isArray(record.content)) {
+      for (const inner of record.content) {
+        if (inner && typeof inner === "object" && inner.type === "text") texts.push(String(inner.text ?? ""));
+      }
+    }
+  }
+  return texts.join("\n");
 }
 
 /** @param {unknown} content @returns {string} */
@@ -507,13 +551,22 @@ export function decodeMuxFrame(frame) {
     case "tool/result": {
       const tool = String(data?.message?.name ?? data.name ?? "");
       const status = data.error ? "error" : "completed";
-      const output = contentText(data?.message?.content);
+      // Same two shapes as the transcript normalizer above; see the note there.
+      const output = toolResultText(data?.message?.content);
       return {
         sessionId,
         event: {
           type: "tool/result",
           seq,
-          callId: String(data?.message?.callId ?? data.callId ?? ""),
+          callId: String(
+            data?.message?.callId
+              ?? data?.message?.source?.callId
+              ?? (Array.isArray(data?.message?.content)
+                ? data.message.content.find((block) => block?.toolCallId)?.toolCallId
+                : undefined)
+              ?? data.callId
+              ?? "",
+          ),
           tool,
           status: /** @type {any} */ (status),
           output,
