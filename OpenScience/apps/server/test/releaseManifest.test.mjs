@@ -120,6 +120,14 @@ test("release manifest generator records exact images, tools, skills, and source
         "packages/sdk/src",
         "packages/shared/package.json",
         "packages/shared/src",
+        // The three trees the runtime image COPYs and executes inside the
+        // container, and the Dockerfile that puts them there. Unbound until
+        // 2026-08-26, which is how a day of gate fixes reached the host and
+        // never ran: the manifest could not say which code the image held.
+        "packages/socket",
+        "packages/domain",
+        "packages/harness-port",
+        "deploy/runtime-dsh",
         "runtime/mcp/evimed-research",
         "runtime/skills/evimed",
         "runtime/skills/office",
@@ -264,6 +272,44 @@ test("release manifest reader refuses symbolic links", async () => {
     const loaded = readReleaseManifestFile(link);
     assert.equal(loaded.manifest, null);
     assert.equal(loaded.error, "release_manifest_file_symlink");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("node_modules is not part of a source digest, and every other symlink still fails the walk", async () => {
+  // `packages/socket` and its two siblings became manifest inputs so a release
+  // can say which code the runtime image contains. Each carries a pnpm
+  // `node_modules` whose workspace entries are symlinks, so the walk hit the
+  // symlink guard and `pnpm release:manifest` failed outright — the whole
+  // server suite went red on it. The image installs its own dependencies, so
+  // these bytes are not what it runs.
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-skipdirs-"));
+  try {
+    const source = path.join(tmp, "pkg");
+    await mkdir(path.join(source, "src"), { recursive: true });
+    await writeFile(path.join(source, "src/index.mjs"), "export const shipped = true;\n", "utf8");
+    const before = await digestDirectory(source, { errorPrefix: "release_input" });
+    assert.equal(before.files, 1);
+
+    // A pnpm workspace link: a *symlinked* node_modules, which is what pnpm
+    // actually creates. Skipped by name before the lstat, so never followed.
+    await mkdir(path.join(tmp, "elsewhere"), { recursive: true });
+    await writeFile(path.join(tmp, "elsewhere/dep.mjs"), "export const dep = 1;\n", "utf8");
+    await symlink(path.join(tmp, "elsewhere"), path.join(source, "node_modules"));
+
+    const after = await digestDirectory(source, { errorPrefix: "release_input" });
+    assert.equal(after.files, 1, "node_modules must contribute no files");
+    assert.equal(after.digest, before.digest, "and must not change the digest");
+
+    // The control. Skipping node_modules must not have retired the guard: any
+    // other symlink still fails, because that is what stops a link from binding
+    // a digest to bytes outside the tree.
+    await symlink(path.join(tmp, "elsewhere/dep.mjs"), path.join(source, "src/linked.mjs"));
+    await assert.rejects(
+      digestDirectory(source, { errorPrefix: "release_input" }),
+      (error) => error?.code === "release_input_symlink",
+    );
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
