@@ -66,12 +66,37 @@ export function evidenceFromOutcome(call, outcome, context) {
   if (outcome?.status !== 'completed') return []
   const query = String(call.args?.query ?? call.args?.identifier ?? call.args?.url ?? call.args?.drug ?? '')
   const preserved = PRESERVING_TOOL_BASE_NAMES.has(base)
+  const sources = sourcesOf(outcome.structured)
+  // Where the preserving tools actually put the path. The MCP contract returns
+  // `data.markdownPath` and a top-level `artifacts` list; the per-source
+  // entries carry id/title/url/retrievedAt and nothing else. This function
+  // looked for `source.artifactPath`, found nothing, and recorded every
+  // full-text fetch as `queued` -- so the stale sweep flipped the entire
+  // evidence table, preserved artifacts included: two real runs showed 91/91
+  // and 126/126 stale with the fulltext files sitting on disk.
+  //
+  // Applied only when the result carries exactly one source: with several,
+  // attributing the outcome's single artifact to each of them would invent
+  // readability the run does not have.
+  const structured = /** @type {Record<string, any>} */ (
+    outcome.structured && typeof outcome.structured === 'object' ? outcome.structured : {}
+  )
+  const outcomeArtifact = sources.length === 1
+    ? String(
+        structured?.data?.markdownPath
+          ?? (Array.isArray(structured?.artifacts)
+            ? structured.artifacts.find((entry) => typeof entry === 'string' && entry.endsWith('.md'))
+            : undefined)
+          ?? '',
+      ).trim()
+    : ''
   /** @type {EvidenceRecord[]} */
   const records = []
-  for (const source of sourcesOf(outcome.structured)) {
+  for (const source of sources) {
     const sourceId = String(source.id ?? source.doi ?? source.pmid ?? source.url ?? source.identifier ?? '').trim()
     if (!sourceId) continue
     const artifactPath = String(source.artifactPath ?? source.path ?? '').trim()
+      || (preserved ? outcomeArtifact : '')
     records.push({
       evidenceId: context.digest(`${context.runId}:${base}:${sourceId}`),
       runId: context.runId,

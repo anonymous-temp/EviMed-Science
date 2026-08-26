@@ -447,6 +447,63 @@ test("the gate answers with a value and the rejection is layered", () => {
   assert.equal(envelope.issues[0].severity, "required");
 });
 
+test("a preserved full text is ready even though its path lives on the outcome, not the source", () => {
+  // The real MCP contract, verbatim from open_access_fulltext.py: the source
+  // entry carries id/title/url/retrievedAt only; the artifact path lives at
+  // data.markdownPath and in the top-level artifacts list. The ingest looked
+  // for source.artifactPath, found nothing, and two real runs recorded every
+  // preserved full text as queued -- 91/91 and 126/126 stale ten minutes
+  // later, with the files on disk.
+  const context = { runId: "run-1", now: "2026-08-26T15:00:00Z", digest: (value) => `d:${value}` };
+  const outcome = {
+    status: "completed",
+    structured: {
+      status: "success",
+      summary: "Retrieved the complete open-access article into the managed workspace.",
+      data: {
+        route: "europe-pmc-xml",
+        markdownPath: ".evimed-sources/PMC4548722/fulltext.md",
+        xmlPath: ".evimed-sources/PMC4548722/fulltext.xml",
+      },
+      sources: [{
+        id: "PMC4548722",
+        title: "A trial",
+        url: "https://europepmc.org/articles/PMC4548722",
+        source: "europe-pmc-fulltext",
+        retrievedAt: "2026-08-26T15:00:00Z",
+      }],
+      artifacts: [".evimed-sources/PMC4548722/fulltext.md", ".evimed-sources/PMC4548722/fulltext.xml"],
+    },
+    text: "",
+  };
+  const records = evidenceFromOutcome({ name: "mcp__evimed__open_access_full_text", args: { identifier: "PMC4548722" } }, outcome, context);
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].status, "ready", "a preserved artifact on disk must not be recorded as merely queued");
+  assert.equal(records[0].artifactPath, ".evimed-sources/PMC4548722/fulltext.md");
+
+  // Control 1: the same shape from a non-preserving tool stays a lead. A
+  // search result naming a file it did not write must not read as readable.
+  const searchRecords = evidenceFromOutcome({ name: "mcp__evimed__literature_search", args: { query: "x" } }, outcome, context);
+  assert.equal(searchRecords[0].status, "queued");
+
+  // Control 2: several sources and one outcome-level artifact is ambiguous --
+  // attributing it to each would invent readability the run does not have.
+  const multi = {
+    ...outcome,
+    structured: {
+      ...outcome.structured,
+      sources: [
+        ...outcome.structured.sources,
+        { id: "PMC9999999", title: "Another", url: "https://europepmc.org/articles/PMC9999999", source: "europe-pmc-fulltext", retrievedAt: "2026-08-26T15:00:00Z" },
+      ],
+    },
+  };
+  for (const record of evidenceFromOutcome({ name: "mcp__evimed__open_access_full_text", args: { identifier: "x" } }, multi, context)) {
+    assert.equal(record.status, "queued", `${record.sourceId} must not inherit an ambiguous artifact`);
+  }
+});
+
 test("completion refuses while a deliverable is unaccepted and allows a partial delivery", () => {
   const plan = { clarifications: ["假设成人人群"] };
   const items = [{ id: "d1", title: "A", contractKind: "research-brief", capability: "research-brief", status: "rejected" }];
