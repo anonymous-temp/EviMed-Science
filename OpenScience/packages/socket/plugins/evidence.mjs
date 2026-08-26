@@ -16,7 +16,7 @@
 
 import { mcpToolBaseName } from '@evimed/domain'
 import { configSchema, onToolObserved } from '@evimed/harness-port'
-import { EVIDENCE_TOOL_BASE_NAMES, evidenceFromOutcome, mergeEvidence } from '../src/evidenceIngest.mjs'
+import { EVIDENCE_TOOL_BASE_NAMES, evidenceFromOutcome, mergeEvidence, sourceProbe } from '../src/evidenceIngest.mjs'
 import { advanceEvidence } from '../src/runMirror.mjs'
 import { staleEvidence } from '../src/runMirror.mjs'
 
@@ -78,9 +78,22 @@ export async function apply(ctx, config) {
         // results carry source text.
         const base = mcpToolBaseName(call?.name ?? '')
         if (base && EVIDENCE_TOOL_BASE_NAMES.includes(base) && outcome?.status === 'completed') {
-          ctx.get('evimedDiagnostics')?.degrade?.(
-            `evidence ingest found no source in a completed ${base} result (structured=${outcome?.structured === undefined ? 'absent' : typeof outcome.structured})`,
-          )
+          // Two different things end up here and only one is a defect. A tool
+          // that answered under a container we recognise, with nothing in it,
+          // searched and found nothing — a fact about the literature. A tool
+          // whose payload has no container we can read is a shape we cannot
+          // ingest, which empties the ledger for every run and reads exactly
+          // like the first. Saying "no source" for both is how the envelope
+          // bug survived: the diagnostic that should have caught it described
+          // it in the same words as an ordinary empty search.
+          const { reason } = sourceProbe(outcome?.structured)
+          if (reason === 'empty-container') {
+            ctx.get('evimedDiagnostics')?.notice?.(`${base} searched and returned no source`)
+          } else {
+            ctx.get('evimedDiagnostics')?.degrade?.(
+              `evidence ingest cannot read a completed ${base} result: no recognised source container (${reason}, structured=${outcome?.structured === undefined ? 'absent' : typeof outcome.structured})`,
+            )
+          }
         }
         return
       }

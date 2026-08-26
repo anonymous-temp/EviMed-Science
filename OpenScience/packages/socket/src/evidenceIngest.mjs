@@ -97,17 +97,43 @@ export function evidenceFromOutcome(call, outcome, context) {
  * @returns {Record<string, any>[]}
  */
 export function sourcesOf(structured) {
-  if (!structured || typeof structured !== 'object') return []
+  return sourceProbe(structured).sources
+}
+
+/** Container keys a retrieval tool may answer under. */
+const SOURCE_KEYS = ['sources', 'results', 'records', 'items', 'entries', 'hits', 'documents']
+
+/**
+ * `sourcesOf` plus the reason it found what it found.
+ *
+ * Two very different things produce an empty list, and reporting them with one
+ * sentence is the defect this whole area keeps repeating: a search that
+ * honestly returned nothing looks exactly like a payload whose shape we cannot
+ * read. The first is a fact about the literature; the second is a bug that
+ * empties the evidence ledger for every run.
+ *
+ * @param {unknown} structured
+ * @returns {{ sources: Record<string, any>[], reason: 'found'|'empty-container'|'no-container'|'not-an-object' }}
+ */
+export function sourceProbe(structured) {
+  if (!structured || typeof structured !== 'object') return { sources: [], reason: 'not-an-object' }
   const record = /** @type {Record<string, any>} */ (structured)
-  for (const key of ['sources', 'results', 'records', 'items', 'entries', 'hits', 'documents']) {
+  for (const key of SOURCE_KEYS) {
     const value = record[key]
-    if (Array.isArray(value)) return value.filter((item) => item && typeof item === 'object')
+    if (!Array.isArray(value)) continue
+    const sources = value.filter((item) => item && typeof item === 'object')
+    // The container was there and it was empty: the tool answered "nothing
+    // found", which is an answer.
+    return { sources, reason: sources.length ? 'found' : 'empty-container' }
   }
   // A single-document tool answers with the document itself.
-  if (record.doi || record.pmid || record.url || record.identifier) return [record]
+  if (record.doi || record.pmid || record.url || record.identifier) return { sources: [record], reason: 'found' }
   const data = record.data
-  if (data && typeof data === 'object') return sourcesOf(data)
-  return []
+  if (data && typeof data === 'object') {
+    const nested = sourceProbe(data)
+    return nested.reason === 'no-container' ? { sources: [], reason: 'no-container' } : nested
+  }
+  return { sources: [], reason: 'no-container' }
 }
 
 /**

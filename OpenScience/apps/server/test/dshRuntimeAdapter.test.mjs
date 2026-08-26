@@ -12,6 +12,7 @@ import {
   isAllowedWireMethod,
   mapWireError,
   normalizeTranscript,
+  transcriptToLedgerMessages,
 } from "../src/dshRuntimeAdapter.mjs";
 
 const golden = JSON.parse(await readFile(new URL("./fixtures/dsh/golden-frames.json", import.meta.url), "utf8"));
@@ -33,6 +34,108 @@ function scriptedTransport(script) {
     },
   };
 }
+
+test("a projected tool message reaches the gate, which reads only finished assistant messages", () => {
+  // The projection rewrites `tool` to `assistant` — which the ledger wants —
+  // but the completion timestamp was attached only to messages that were
+  // already assistant. `assistantFinished` reads `info.time.completed`, so
+  // every tool message arrived looking like a message still being streamed
+  // and the delivery gate filtered it out. Artifacts, evidence provenance and
+  // skill loads are all derived from tool parts: the gate saw a run that had
+  // called no tools, and nothing said the messages had been dropped rather
+  // than never made.
+  const transcript = {
+    sessionId: "ses_1",
+    messages: [
+      {
+        role: "tool", source: "system", seq: 2, time: 1_700_000_000_000, turn: 1, step: 1,
+        parts: [{ type: "tool", tool: "write", callId: "c1", status: "completed", input: { file_path: "a.md" }, output: "ok", error: null }],
+        usage: null, interrupted: false,
+      },
+      {
+        role: "assistant", source: "system", seq: 3, time: 1_700_000_000_100, turn: 1, step: 2,
+        parts: [{ type: "text", text: "done" }], usage: null, interrupted: false,
+      },
+      {
+        role: "user", source: "user", seq: 1, time: 1_699_999_999_000, turn: 1, step: 0,
+        parts: [{ type: "text", text: "go" }], usage: null, interrupted: false,
+      },
+    ],
+  };
+  const messages = transcriptToLedgerMessages(transcript);
+
+  // The gate's own filter, verbatim in shape: role assistant AND finished.
+  const finished = (message) => Boolean(message?.info?.time?.completed ?? message?.completed ?? message?.info?.error);
+  const visible = messages.filter((message) => message.info.role === "assistant" && finished(message));
+
+  assert.equal(visible.length, 2, "the tool message and the assistant message must both be visible to the gate");
+  const toolMessage = visible.find((message) => message.parts.some((part) => part.type === "tool"));
+  assert.ok(toolMessage, "the message carrying the tool part is the one the gate derives artifacts from");
+  assert.equal(toolMessage.parts[0].tool, "write");
+  assert.equal(toolMessage.parts[0].state.status, "completed");
+  assert.equal(toolMessage.parts[0].state.input.file_path, "a.md");
+
+  // Negative controls.
+  // A user message must not become visible: widening the timestamp to every
+  // role would make the gate read the question as an answer.
+  assert.equal(messages.find((message) => message.info.role === "user")?.info?.time, undefined);
+  // And whether the call finished still travels in the part, not in the
+  // message: a pending call must stay pending while its message is readable.
+  const pending = transcriptToLedgerMessages({
+    sessionId: "ses_1",
+    messages: [{
+      role: "tool", source: "system", seq: 4, time: 1_700_000_000_200, turn: 1, step: 3,
+      parts: [{ type: "tool", tool: "read", callId: "c2", status: "pending", input: {}, output: "", error: null }],
+      usage: null, interrupted: false,
+    }],
+  })[0];
+  assert.ok(finished(pending), "the record of the call is complete even when the call is not");
+  assert.equal(pending.parts[0].state.status, "pending", "and the call's own status must not be overwritten by that");
+});
+
+test("how the turn ended reaches the ledger instead of being computed and dropped", () => {
+  // `normalizeTranscript` decodes `turn/end` — done, refused, out of tokens,
+  // errored — and this projection returned only `messages`, so the stop reason
+  // was worked out on every read and thrown away. `readSessionHistory` hands
+  // the control plane this array and nothing else, which is why a run that was
+  // refused, a run that hit a token ceiling and a run that simply stopped all
+  // reached the ledger as the same silence. Run 7 stopped after writing its
+  // whole deliverable set and there was no way to say why.
+  const base = {
+    sessionId: "ses_1",
+    messages: [
+      { role: "assistant", source: "system", seq: 1, time: 10, turn: 1, step: 1, parts: [{ type: "text", text: "a" }], usage: null, interrupted: false },
+      { role: "assistant", source: "system", seq: 2, time: 20, turn: 1, step: 2, parts: [{ type: "text", text: "b" }], usage: null, interrupted: false },
+    ],
+  };
+
+  const errored = transcriptToLedgerMessages({ ...base, turnEnd: { kind: "error", code: "runtime_session_error" } });
+  assert.deepEqual(errored.at(-1).info.turnEnd, { kind: "error", code: "runtime_session_error" }, "the last message carries the ending");
+  assert.deepEqual(errored.at(-1).info.error, { name: "error", code: "runtime_session_error" });
+  assert.equal(errored[0].info.turnEnd, undefined, "only the last message ends the turn");
+  assert.equal(errored[0].info.error, undefined);
+
+  // An ordinary completion is carried too — "it finished normally" is an answer
+  // and must be distinguishable from "nothing was recorded".
+  const done = transcriptToLedgerMessages({ ...base, turnEnd: { kind: "completed" } });
+  assert.deepEqual(done.at(-1).info.turnEnd, { kind: "completed" });
+  assert.equal(done.at(-1).info.error, undefined, "finishing is not an error");
+
+  // Negative controls.
+  // No ending recorded must stay distinguishable from an ending that says so.
+  const silent = transcriptToLedgerMessages({ ...base, turnEnd: null });
+  assert.equal(silent.at(-1).info.turnEnd, undefined);
+  // An interrupted message keeps its own error rather than having it replaced:
+  // "the container went away mid-message" and "the turn ended with an error"
+  // are different facts and the first is the more specific one.
+  const interrupted = transcriptToLedgerMessages({
+    sessionId: "ses_1",
+    messages: [{ ...base.messages[0], interrupted: true }],
+    turnEnd: { kind: "error", code: "runtime_session_error" },
+  });
+  assert.deepEqual(interrupted.at(-1).info.error, { name: "interrupted" });
+  assert.deepEqual(interrupted.at(-1).info.turnEnd, { kind: "error", code: "runtime_session_error" });
+});
 
 test("the method allow-list is derived from the seam manifest and covers every published method", () => {
   assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 52);

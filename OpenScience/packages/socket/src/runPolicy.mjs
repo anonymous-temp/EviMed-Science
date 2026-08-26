@@ -483,3 +483,38 @@ export function evidenceSourceErrorCode(result) {
   }
 }
 
+/**
+ * Which preserved artifacts a submission's quotes may be checked against.
+ *
+ * The pure half of the join: given the run's evidence records, decide the
+ * distinct artifact paths that belong to this run. Reading them is the
+ * plugin's job; deciding which ones is the part that was wrong and the part
+ * worth pinning.
+ *
+ * This map arrived empty on every submission, and the validator resolves every
+ * `direct` and `synthesized` quote through it — so every quote-bearing claim
+ * was rejected with an issue no run could act on. A rejected deliverable means
+ * no receipt, and the receipt is the only durable thing the control plane can
+ * read once the container is gone. That is six links from "an empty map" to a
+ * complete package reported as `failed / artifacts 0`.
+ *
+ * @param {readonly Record<string, any>[]} records evidence rows for this run
+ * @param {string} runId the run these must belong to; '' accepts all
+ * @returns {string[]} distinct artifact paths, in first-seen order
+ */
+export function sourceArtifactPaths(records, runId) {
+  /** @type {string[]} */
+  const paths = []
+  const seen = new Set()
+  for (const record of records ?? []) {
+    // A row carrying no runId predates the mirror latching one; it belongs to
+    // this run by virtue of being in this run's table. Dropping it would be
+    // the same empty-map failure in a narrower form.
+    if (runId && record?.runId && record.runId !== runId) continue
+    const artifactPath = String(record?.artifactPath ?? '')
+    if (!artifactPath || seen.has(artifactPath)) continue
+    seen.add(artifactPath)
+    paths.push(artifactPath)
+  }
+  return paths
+}

@@ -799,7 +799,16 @@ function artifactCandidates(message, runtimeWorkspaceRoot) {
       !["write", "edit"].includes(part.tool) ||
       part?.state?.status !== "completed"
     ) continue;
-    const value = part?.state?.input?.filePath ?? part?.state?.input?.path;
+    // `file_path` is what the model actually sends. DSH's `write` and `edit`
+    // declare `{ file_path, content }` / `{ file_path, old_string, ... }` and
+    // camel-case it internally in `parseWriteArgs`/`parseEditArgs` — the
+    // transcript records the raw model-facing arguments, so `filePath` is the
+    // spelling that never arrives. Reading only it recognised no artifact from
+    // any DSH write, which is indistinguishable from a run that wrote nothing.
+    //
+    // The older spellings stay for the kernel on its way out.
+    const input = part?.state?.input;
+    const value = input?.file_path ?? input?.filePath ?? input?.path;
     if (typeof value !== "string") continue;
     try {
       const relative = path.isAbsolute(value)
@@ -1615,6 +1624,46 @@ async function readRunStateProjection(project, workspaceRoot) {
 }
 
 /**
+ * Deliverables the run wrote and never submitted.
+ *
+ * Both halves must hold, because either alone is a different story: a plan
+ * item that was never attempted might simply never have been started, and
+ * files on disk might belong to an item that was submitted and rejected. Only
+ * "planned, never attempted, and its directory has files in it" means the run
+ * did the work and stopped without asking for a verdict.
+ *
+ * @param {any} project @param {{ state: string, projection?: Record<string, any> }} projection
+ * @returns {Promise<{ id: string, files: number }[]>}
+ */
+async function unsubmittedDeliverables(project, projection) {
+  if (projection.state !== "read") return [];
+  const items = projection.projection?.plan?.items;
+  if (!Array.isArray(items)) return [];
+  /** @type {{ id: string, files: number }[]} */
+  const found = [];
+  for (const item of items) {
+    if (item?.status !== "planned" || Number(item?.attempts ?? 0) !== 0) continue;
+    // The id comes out of a file the container wrote, so it is input, not a
+    // name we chose. One path segment only — the same rule
+    // `deliverableCandidatePaths` applies, and for the same reason: joined
+    // unchecked, `../..` here reads a directory outside the workspace.
+    const id = String(item?.id ?? "");
+    if (!id || id.includes("/") || id.includes("\\") || id === "." || id === "..") continue;
+    let files = 0;
+    try {
+      const entries = await readdir(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, id), { withFileTypes: true });
+      files = entries.filter((entry) => entry.isFile()).length;
+    } catch {
+      // No directory means nothing was written for it: an item that was never
+      // started, not one that was written and abandoned.
+      continue;
+    }
+    if (files > 0) found.push({ id, files });
+  }
+  return found;
+}
+
+/**
  * What in the run's own projection counts as the run having done something.
  *
  * The root session's message and tool-call counts are the other half of the
@@ -2072,6 +2121,7 @@ export class AgentRunStore {
    * @param {Record<string, any>} project @param {Record<string, any>} run
    * @returns {Promise<Record<string, any>|null>}
    */
+
   async finishFromDurableRecord(project, run) {
     const receipt = await readDeliveryReceipt(project);
     if (!receipt) {
@@ -2090,11 +2140,28 @@ export class AgentRunStore {
         ? [...(projection.projection?.degraded ?? []), ...(projection.projection?.qualityNotices ?? [])]
         : []
       ).filter((line) => typeof line === "string" && line && !admitted.has(line));
+      // Two failures end here and they are not the same failure. A run cut off
+      // mid-flight lost its work; a run that wrote every file its contract asks
+      // for and never submitted any of them for grading produced a complete
+      // package and stopped short of asking for a verdict. Both leave a gone
+      // container and no receipt, so reported under one code the second reads
+      // as infrastructure trouble and its actual cause is invisible — which is
+      // what run 7 looked like: seven deliverable files on disk, the plan item
+      // still `planned`, `attempts: 0`, and a ledger entry saying the runtime
+      // stopped.
+      //
+      // Decided from the record, never from a guess: the projection has to say
+      // a deliverable was planned and never attempted, and the files it names
+      // have to actually be there.
+      const unsubmitted = await unsubmittedDeliverables(project, projection);
       return this.finishInternal(project, run.id, {
         status: "failed",
-        errorCode: "runtime_stopped",
+        errorCode: unsubmitted.length ? "runtime_deliverable_never_submitted" : "runtime_stopped",
         artifacts: [],
-        ...(notices.length ? { qualityNotices: notices.slice(0, 20) } : {}),
+        qualityNotices: [
+          ...unsubmitted.map((entry) => `交付物「${entry.id}」的文件已经写好（${entry.files} 个），但从未提交校验，因此没有通过质量门。`),
+          ...notices,
+        ].slice(0, 20),
       });
     }
     const { artifacts, mismatched } = await verifiedReceiptArtifacts(project, receipt);
@@ -2657,4 +2724,12 @@ export class AgentRunStore {
  *  @param {any} project @param {any} assistantMessages @returns {Promise<Set<string>>} */
 export function loadedOrInjectedSkillsForTest(project, assistantMessages) {
   return loadedOrInjectedSkills(project, assistantMessages);
+}
+
+/** Test seam: which files a message claims to have written, without a run
+ *  around it. The spelling of one argument decided whether any DSH run was
+ *  ever seen to produce an artifact.
+ *  @param {any} message @param {string} runtimeWorkspaceRoot @returns {string[]} */
+export function artifactCandidatesForTest(message, runtimeWorkspaceRoot) {
+  return artifactCandidates(message, runtimeWorkspaceRoot);
 }

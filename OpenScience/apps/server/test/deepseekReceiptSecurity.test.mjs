@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
 import {
+  deepSeekReleaseReceiptFreshness,
   signDeepSeekReleaseReceipt,
   validateDeepSeekReleaseReceipt,
 } from "../../../scripts/ops/deepseek-opencode-release-gate.mjs";
@@ -82,6 +83,46 @@ test("release receipts reject stale and future timestamps", () => {
     () => validateDeepSeekReleaseReceipt(future, { requireProduction: true, signingSecret, nowMs: now }),
     (error) => error?.code === "deepseek_release_receipt_future",
   );
+});
+
+test("a receipt announces that it needs renewing while it is still valid", () => {
+  // The expiry was never the problem. A receipt attests what the model did when
+  // it was probed, so it cannot be renewed by re-stamping `createdAt` — renewal
+  // means running the gate again. What was missing is that the first and only
+  // signal was readiness turning red at the moment the window had already
+  // closed, with no lead time and no named remedy, and production then sat red
+  // for eight days.
+  const day = 24 * 60 * 60 * 1000;
+  const at = (ageMs) => deepSeekReleaseReceiptFreshness({ createdAt: new Date(now - ageMs).toISOString() }, { nowMs: now, maxAgeMs: day });
+
+  const fresh = at(0);
+  assert.equal(fresh.renewalDue, false);
+  assert.equal(fresh.expired, false);
+  assert.equal(fresh.remainingMs, day);
+
+  // Still valid, and already asking. This is the whole point: the warning has
+  // to arrive while there is still time to act on it.
+  const due = at(day - day / 3 + 1);
+  assert.equal(due.renewalDue, true, "renewal must be announced before the window closes");
+  assert.equal(due.expired, false, "and while the receipt still passes validation");
+  assert.ok(
+    validateDeepSeekReleaseReceipt(signedReceipt({ createdAt: new Date(now - (day - day / 3 + 1)).toISOString() }), {
+      requireProduction: true,
+      signingSecret,
+      nowMs: now,
+    }),
+    "a receipt that is due for renewal is still a valid receipt",
+  );
+
+  // Negative controls. A receipt with most of its life left must not cry wolf —
+  // a warning that is always on is the same as no warning.
+  assert.equal(at(day / 2).renewalDue, false, "half a window left must not read as due");
+  assert.equal(at(day - day / 3 - 1).renewalDue, false, "one millisecond before the threshold is not yet due");
+  // And an expired receipt stays due: "past renewing" is not "no longer needs renewing".
+  const expired = at(day + 1);
+  assert.equal(expired.expired, true);
+  assert.equal(expired.renewalDue, true);
+  assert.ok(expired.remainingMs < 0);
 });
 
 test("fake or unsigned receipts never satisfy production validation", () => {

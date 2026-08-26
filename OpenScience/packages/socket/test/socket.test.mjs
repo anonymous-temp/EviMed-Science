@@ -18,12 +18,14 @@ import {
   delegatableItems,
   evidenceFromOutcome,
   evidenceSourceErrorCode,
+  sourceProbe,
   gateDeliverable,
   guardedBashTarget,
   indexPlan,
   mergeEvidence,
   projectRunState,
   rejectionEnvelope,
+  sourceArtifactPaths,
   renderDeliverySummary,
   settleDelegation,
   staleEvidence,
@@ -242,6 +244,66 @@ test("a recoverable source failure is recognized from where its code actually su
   // both return nothing on the real shape — which is why the retry was dead.
   assert.equal(failure.error.code, undefined);
   assert.equal(failure.error.info, undefined);
+});
+
+test("an empty search and an unreadable payload are not the same answer", () => {
+  // The envelope bug survived a diagnostic that was pointed straight at it.
+  // `sourcesOf` returned `[]` both when a tool honestly found nothing and when
+  // its payload had no container we could read, and the degrade line said "no
+  // source" for both — so twenty-six tools returning an unreadable shape read
+  // exactly like twenty-six searches that came up empty.
+  assert.deepEqual(sourceProbe({ sources: [{ doi: "10.1/x" }] }).reason, "found");
+  assert.deepEqual(sourceProbe({ status: "warning", summary: "no evidence", sources: [] }).reason, "empty-container");
+  assert.deepEqual(sourceProbe({ status: "ok", summary: "done" }).reason, "no-container");
+  // The MCP envelope itself, which is what was actually arriving: recognisable
+  // as unreadable rather than as an empty result.
+  assert.deepEqual(sourceProbe({ content: [{ type: "text", text: "{}" }], structuredContent: { status: "ok" } }).reason, "no-container");
+  assert.deepEqual(sourceProbe(undefined).reason, "not-an-object");
+  assert.deepEqual(sourceProbe("a string").reason, "not-an-object");
+  // Nested data still resolves, and an empty nested container still counts as
+  // an answer rather than a shape failure.
+  assert.deepEqual(sourceProbe({ data: { items: [{ url: "https://x" }] } }).reason, "found");
+  assert.deepEqual(sourceProbe({ data: { items: [] } }).reason, "empty-container");
+  // Negative control: the old reading cannot tell any of these apart.
+  const old = (v) => sourceProbe(v).sources.length;
+  assert.equal(old({ status: "warning", sources: [] }), old({ status: "ok", summary: "done" }));
+});
+
+test("the sources a quote is checked against come from the ledger, not from the model", () => {
+  // This map arrived empty on every submission, and every `direct` and
+  // `synthesized` quote resolves through it — so every quote-bearing claim was
+  // rejected with an issue no run could act on: the model does not hold the
+  // artifacts, the evidence ledger does. No accepted deliverable means no
+  // receipt, and the receipt is the only durable thing left once the container
+  // is gone. Six links from an empty map to a complete package reported as
+  // `failed / artifacts 0`.
+  const rows = [
+    { runId: "run_a", artifactPath: ".evimed-sources/x/fulltext.md" },
+    { runId: "run_a", artifactPath: ".evimed-sources/y/page.md" },
+    { runId: "run_a", artifactPath: ".evimed-sources/x/fulltext.md" },
+    { runId: "run_b", artifactPath: ".evimed-sources/z/other.md" },
+    { runId: "run_a", artifactPath: "" },
+    { runId: "run_a" },
+  ];
+  assert.deepEqual(sourceArtifactPaths(rows, "run_a"), [
+    ".evimed-sources/x/fulltext.md",
+    ".evimed-sources/y/page.md",
+  ], "distinct, in first-seen order, and only this run's");
+
+  // A row written before the mirror latched a runId still belongs to the table
+  // it is in. Dropping it would be the same empty-map failure, narrower.
+  assert.deepEqual(
+    sourceArtifactPaths([{ artifactPath: ".evimed-sources/x/fulltext.md" }], "run_a"),
+    [".evimed-sources/x/fulltext.md"],
+  );
+
+  // Negative controls: the shapes that used to produce an empty map must stay
+  // distinguishable from a run that genuinely retrieved nothing.
+  assert.deepEqual(sourceArtifactPaths([], "run_a"), []);
+  assert.deepEqual(sourceArtifactPaths(undefined, "run_a"), []);
+  assert.deepEqual(sourceArtifactPaths(rows, "run_zzz"), [], "another run's rows are not this run's sources");
+  // And an unfiltered read must not silently pull in a foreign run.
+  assert.equal(sourceArtifactPaths(rows, "").length, 3, "no runId accepts all rows, deduplicated");
 });
 
 test("the gate answers with a value and the rejection is layered", () => {
