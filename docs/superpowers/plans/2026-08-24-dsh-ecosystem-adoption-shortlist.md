@@ -101,6 +101,23 @@
 - 整只映射成 capability 的样例:`sailoumili/novel-writer`(指挥家+5 专职子代理)、`Andiii208/dsh-ultramath` 与 `Crayonnan/dsh-math-modeling-skills`(五阶段带关卡)、`linxichen/dsh-rigorquant`(无人值守围栏式多代理研究)、`songoao25/dsh-virtual-product-team`。
 - 抄行/抄 persona:`kaijia323/dsh-preset-router-*`(任务感知行为带)、`duyanta123/dsh-preset-scaffold`(五阶段 init runbook)、`hatsuyuki0103/oh-my-deepseek-harness` 的 **deep-interview**(§27 冷启动访谈的现成问法)。
 
+## 十一、复审另一份「插件接入方案」后的可借项(2026-08-26)
+
+那份方案答对了三件事(能并行、能共存、能协同),但把整个产品设计成跑在一个 DSH 进程里;它的三种协同模式与五个社区插件用法有六处撞上核实事实或已锁定决策(裁决见 spec §21.8 末段补充)。核实过的事实:并行工具调用真(`isConcurrencySafe` 是工具定义的宿主侧调度元数据);Cordis 五种分发真;`dsh-agent-teams`(1026★)/`dsh-at-file`(475★)/`dsh-memory-evolve`(249★)存在;`dsh-record-replay` 真身是 macOS 桌面操作演示录制;`dsh-sandbox` 作为隔离环境插件不存在;ModLens 以技能+工具形态存在、未核到服务键。**可借的只有下面这些**,其余我们已有或已裁定不用。
+
+| # | 借什么 | 来源 | 落点 | 阶段 |
+|---|---|---|---|---|
+| 1 | 空闲成员自动认领就绪任务;**重派前先撤销陈旧尝试**;冷恢复重试悬空尝试 | dsh-agent-teams | `evimed_screen_batch` 的认领/撤销语义(防双写);§9.5 第 4 步自动重派前加撤销;冷恢复对应 `state.json` 续跑 | P1(screen_batch 上线时) |
+| 2 | 持久成员 = continuable 子代理被唤醒做后续回合 | dsh-agent-teams | 已推迟的「delegate 异步 / continuable」设计的参考实现;preset 已 `backgroundMode: continuable` | P1 设计输入 |
+| 3 | 成员间持久邮箱(不经队长) | dsh-agent-teams | 委派子代理之间的有界消息(如 research-brief 向其依赖的报告子代理追问);形态为工作区 `.evimed-run/mail/` 文件 + 一个 run-policy 工具,不加缝 | P2,与 #2 一起设计 |
+| 4 | 活动面板:交互式任务 DAG,归档保留成员与任务全史 | dsh-agent-teams | §18/§23 运行树加 `task-plan.json` 的 DAG 视图 | F 轨 |
+| 5 | 「粘贴即视觉」两条语义:图像落为工作区私有文件、路径进上下文、视觉工具**按需**解析(不贴图即转写);医学域预设(组织病理/临床) | ModLens;xiaoyuink/dsh-image-vision | G1 图像适配器;视觉工具经网关出网 | P1 视觉打通 |
+| 6 | 记忆按上下文作用域标记生效范围(它按 git 分支;我们按项目阶段 / 数据集版本) | dsh-memory-evolve | 胶囊事实的 scope 标签(§19.4)。**不借**它的写前确认——v3.5 已删事前确认,UX 优先 | P2 |
+| 7 | 跨线业务事件词汇表(patient/enrolled、recruitment/match-completed…) | 方案本身 | 落在**控制面**:`@evimed/domain` 的 `eventType` 枚举(命名规则 21,`kind` 保留),供 §25 通知与 §24 队列使用;患者管理 / 招募线立项时定 | 立项时 |
+| 8 | 「接口-实现-消费者」分离 = 我们「小改」档的定义:换 provider 不换 consumer | 方案本身 + DSH 自身分层(skills、web 缝);社区已有 Metaso 作为 web 缝 provider 的先例 | spec §21.8 补充②;适配社区包时先看它是否是某个 DSH 服务的 provider | 即刻生效 |
+
+**明确不借(已裁)**:Cordis 事件总线当中台消息队列(进程内、单容器、随容器消失;平台总线是控制面);dsh-agent-teams 当编排器(与 evimed_plan/delegate 双编排,绕开契约);第三方服务 `inject`(硬依赖、缺失静默不 apply、宿主作用域跨会话共享——#27 同类);dsh-routing-suite(§16 #7 已取消输入路由);dsh-memory-evolve 当记忆底座(单机本地文件,§19 定案 MemOS);dsh-record-replay(名实不符,审计链在控制面账本)。dsh-agent-teams / at-file / memory-evolve 三者**本地面**个人使用不受影响。
+
 ## 首批动作建议(一个下午的量)
 
 1. 建 `skills/community/` 根(customSkillDirs 追加一行,§9.2 已改),首批放技能形态五件:`dsh-cite`、`academic-writing`、`translation`、`writing-guard`、`dsh-ppt`;各记来源 URL + commit。
