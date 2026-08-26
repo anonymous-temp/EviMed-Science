@@ -3290,3 +3290,42 @@ test("a workspace brief the run has rewritten is reported, and never used", () =
     );
   }
 });
+
+test("an absent evidence matrix is one problem, not one per claim marker in the report", () => {
+  // Observed on a real run (rq01, 2026-08-26): the run wrote the report and
+  // never wrote `clinical-evidence-matrix.json`. The verdict came back with 23
+  // blocking issues, 14 of them naming a different CLM id that "does not
+  // resolve to the evidence matrix" — fourteen ids to chase, and not one of
+  // them the problem. Same shape as the absent-report case, one file over.
+  const input = deepResearchPackage();
+  input.matrix = null;
+
+  const result = validateClinicalEvidencePackage(input);
+  const unresolved = result.issues.filter((issue) => /does not resolve to the evidence matrix/.test(issue));
+
+  assert.deepEqual(unresolved, [], "the missing file must not be restated once per claim marker");
+  assert.ok(
+    result.issues.some((issue) => /evidence matrix must contain the report's material claims/.test(issue)),
+    "and it must still be reported once",
+  );
+});
+
+test("a matrix that exists and lacks a cited claim still names that claim", () => {
+  // The control for the case above: suppressing the per-claim finding when
+  // there is no matrix must not suppress it when there is one. Without this,
+  // the fix above would silently retire a real rule and every package missing a
+  // single claim would pass.
+  const input = deepResearchPackage();
+  const citedByReport = [...String(input.reportText).matchAll(/claim:(CLM-\d+)/g)].map((m) => m[1]);
+  assert.ok(citedByReport.length >= 2, "fixture must cite at least two claims for this control to mean anything");
+  const dropped = citedByReport[citedByReport.length - 1];
+  input.matrix = { ...input.matrix, claims: input.matrix.claims.filter((c) => (c.claimId ?? c.id) !== dropped) };
+  assert.ok(input.matrix.claims.length > 0, "the matrix must still be non-empty, or this tests the other branch");
+
+  const result = validateClinicalEvidencePackage(input);
+
+  assert.ok(
+    result.issues.some((issue) => issue.includes(`Report claim reference ${dropped} does not resolve`)),
+    `${dropped} was dropped from a non-empty matrix and must still be reported`,
+  );
+});
