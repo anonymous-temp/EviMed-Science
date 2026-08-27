@@ -870,6 +870,12 @@ export function loadConfig(overrides = {}) {
       (production
         ? "http://open-science-web:8787/internal/model/v1"
         : `http://127.0.0.1:${port}/internal/model/v1`),
+    // The ToolUniverse sidecar's MCP endpoint. Empty by default: a deployment
+    // that does not run one emits no MCP row and is unchanged. The runtime
+    // container reaches this over the internal network; the sidecar, not the
+    // container, is what holds ToolUniverse's own credentials.
+    toolUniverseMcpUrl:
+      overrides.toolUniverseMcpUrl ?? process.env.OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL ?? "",
     publicSourceGatewayInternalUrl:
       overrides.publicSourceGatewayInternalUrl ??
       process.env.OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_INTERNAL_URL ??

@@ -2260,6 +2260,9 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
     sessionsDir: "/runtime/dsh-home/sessions",
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
     mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenPath }),
+    // Empty when no sidecar is deployed, and then no row is emitted -- a
+    // deployment without one behaves exactly as it did before.
+    toolUniverseUrl: String(config.toolUniverseMcpUrl ?? "").trim(),
     presetRoot: "/opt/evimed/socket/presets/evimed-universal",
     presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
