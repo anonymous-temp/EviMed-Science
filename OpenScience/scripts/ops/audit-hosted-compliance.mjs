@@ -1552,10 +1552,118 @@ async function checkCredentialHostVariablesAgree() {
   }
 }
 
+// A specialist agent reads its credentials from its own environment. Compose
+// is the only thing that puts them there, and the two lists were never
+// compared: `evimed-bibliometric-agent` reads NCBI_API_KEY, `meta` reads
+// PUBMED_API_KEY, `mr` reads UMLS_API_KEY -- and compose handed none of them
+// over. Same silence as the OpenGWAS split: an unset key is a normal state, so
+// the agent runs, the tool degrades, and nothing says why.
+//
+// Derived from the agents' own source, not from a list, so an agent that
+// starts reading a new credential fails here rather than in production.
+async function checkSpecialistAgentCredentialsWired() {
+  const compose = await read("deploy/web/docker-compose.yml");
+  // The Python agent trees live beside OpenScience, one level above repoRoot.
+  const agentRoot = path.resolve(repoRoot, "..");
+  // Split into service blocks first, then read each one.
+  //
+  // The first version ran one `matchAll` of
+  // `(evimed-…-agent):[\s\S]*?AGENT_DIR:` over the whole file. `matchAll`
+  // resumes after the previous match's END, so a lazy span that reached into
+  // the next service consumed its header too: `evimed-mr-agent` was skipped
+  // entirely and its credentials were attributed to `evimed-meta-agent`. A
+  // scanner that silently drops an entry reports a clean result over an
+  // incomplete set.
+  const blocks = new Map();
+  const serviceHeader = /^ {2}([a-z][a-z0-9-]*):$/gm;
+  const headers = [...compose.matchAll(serviceHeader)];
+  for (let index = 0; index < headers.length; index += 1) {
+    const start = headers[index].index ?? 0;
+    const end = index + 1 < headers.length ? headers[index + 1].index : compose.length;
+    blocks.set(headers[index][1], compose.slice(start, end));
+  }
+
+  const agentDirs = new Map();
+  for (const [service, block] of blocks) {
+    if (!/^evimed-[a-z0-9-]+-agent$/.test(service)) continue;
+    // Two shapes: the shared adapter passes the tree as `AGENT_DIR` and builds
+    // from the repo root, while `meta` has its own Dockerfile and names the
+    // tree as its build `context`. Reading only the first silently skipped it.
+    const dir = /AGENT_DIR:\s*(\S+)/.exec(block)?.[1]
+      ?? /context:\s*\.\.\/\.\.\/\.\.\/(\S+)/.exec(block)?.[1];
+    if (dir) agentDirs.set(service, dir);
+  }
+  // Every specialist service compose defines must be reachable, or this check
+  // passes over the ones it failed to see.
+  const agentServices = [...blocks.keys()].filter((name) => /^evimed-[a-z0-9-]+-agent$/.test(name));
+  if (agentDirs.size !== agentServices.length) {
+    fail("specialist_agent_credentials_unreadable", "Some specialist agent services name no build directory, so their credentials were never checked.", {
+      services: agentServices.filter((name) => !agentDirs.has(name)),
+    });
+    return;
+  }
+  if (agentDirs.size === 0) {
+    fail("specialist_agent_credentials_unreadable", "No specialist agent build directories were found in compose.");
+    return;
+  }
+
+  const missing = [];
+  for (const [service, dir] of agentDirs) {
+    const passed = new Set([...(blocks.get(service) ?? "").matchAll(/^ {6}([A-Z_][A-Z0-9_]*):/gm)].map((m) => m[1]));
+    let names;
+    try {
+      names = await credentialNamesInTree(path.join(agentRoot, dir));
+    } catch {
+      continue; // the archived Python trees are untracked; absent is not a failure
+    }
+    for (const name of names) {
+      if (!passed.has(name) && !passed.has(`${name}_FILE`)) missing.push(`${service}: ${name}`);
+    }
+  }
+
+  if (missing.length === 0) {
+    pass("specialist_agent_credentials_wired", "Every credential a specialist agent reads is passed to it by compose.");
+  } else {
+    fail(
+      "specialist_agent_credentials_unwired",
+      "These specialist agents read credentials compose never hands them, so the tools that need them degrade silently.",
+      { entries: missing.sort() },
+    );
+  }
+}
+
+/** Credential-shaped environment names a Python tree reads. Tuning knobs
+ *  (`LLM_MAX_TOKENS`) and legacy platform wiring (`JAVA_TOKEN_URL`, Aliyun OSS)
+ *  are excluded: they are not credentials this deployment owns, and counting
+ *  them made the first run of this check report 37 failures of which 5 were
+ *  real. @param {string} dir @returns {Promise<string[]>} */
+async function credentialNamesInTree(dir) {
+  const found = new Set();
+  const skip = new Set([".venv", "node_modules", "__pycache__", ".git", "output", "outputs"]);
+  const walk = async (current) => {
+    for (const entry of await fs.readdir(current, { withFileTypes: true })) {
+      if (skip.has(entry.name)) continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) { await walk(full); continue; }
+      if (!entry.name.endsWith(".py")) continue;
+      const text = await fs.readFile(full, "utf8").catch(() => "");
+      for (const [, name] of text.matchAll(/(?:getenv|environ(?:\.get)?)\s*\(?\s*\[?\s*["']([A-Z][A-Z0-9_]{3,})["']/g)) {
+        if (!/API_KEY$|_JWT$|_TOKEN$|_SECRET$|_EMAIL$/.test(name)) continue;
+        if (/^(JAVA_|OSS_|METAAGENT_|MINERU_|HUNYUAN_|DASHSCOPE_)/.test(name)) continue;
+        if (/^LLM_|^DEEPSEEK_/.test(name)) continue; // supplied by the adapter, not compose
+        found.add(name);
+      }
+    }
+  };
+  await walk(dir);
+  return [...found].sort();
+}
+
 async function main() {
   await checkBuildMirrorSources();
   await checkPublicSourceCredentialsWired();
   await checkCredentialHostVariablesAgree();
+  await checkSpecialistAgentCredentialsWired();
   await checkRootLicense();
   await checkRuntimePins();
   await checkHostedPackaging();
