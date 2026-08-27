@@ -1507,9 +1507,55 @@ async function checkPublicSourceCredentialsWired() {
   }
 }
 
+// One credential, one host variable.
+//
+// `OPENGWAS_JWT` was read by the MR agent from `${OPENGWAS_JWT}` while the
+// control plane read the same credential from `${OPEN_SCIENCE_OPENGWAS_JWT}`.
+// Setting the documented one left the agent's JWT empty, and a shipped
+// Mendelian-randomization capability sat healthy for two days answering 401 to
+// its only data source. Nothing was broken enough to notice: both spellings
+// exist, both default to empty, and an empty credential is a normal state.
+//
+// Checked as a shape, not a list: any service reading a bare `${X}` for a
+// credential the control plane reads as `${OPEN_SCIENCE_X}` is the same trap.
+async function checkCredentialHostVariablesAgree() {
+  const raw = await read("deploy/web/docker-compose.yml");
+  // Comments are not wiring. The first version of this check read the whole
+  // file and flagged the sentence explaining the bug it was written to catch.
+  const compose = raw.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
+  const controlPlane = new Set(
+    [...compose.matchAll(/\$\{(OPEN_SCIENCE_([A-Z0-9_]*(?:API_KEY|JWT|TOKEN|EMAIL|SECRET)[A-Z0-9_]*))\b/g)]
+      .map((match) => match[2]),
+  );
+  const split = [];
+  // Per binding, not per occurrence: `${OPEN_SCIENCE_X:-${X:-}}` is one
+  // binding that prefers the documented name and falls back to the old one,
+  // which is the fix, not the defect. Only a binding whose FIRST reference is
+  // the bare name reads a variable the control plane never sets.
+  for (const [, value] of compose.matchAll(/^\s+[A-Z_][A-Z0-9_]*:\s*(\$\{[^\n]*)$/gm)) {
+    const first = /\$\{([A-Z0-9_]+)/.exec(value)?.[1];
+    if (!first || first.startsWith("OPEN_SCIENCE_")) continue;
+    if (!/(?:API_KEY|JWT|TOKEN|EMAIL|SECRET)/.test(first)) continue;
+    // A bare spelling is fine on its own; it is a split only when the control
+    // plane reads the SAME credential under the prefixed name.
+    if (controlPlane.has(first) && !split.includes(first)) split.push(first);
+  }
+
+  if (split.length === 0) {
+    pass("credential_host_variables_agree", "Every credential two services share is read from one host variable.");
+  } else {
+    fail(
+      "credential_host_variables_split",
+      "These credentials are read from two different host variables, so setting the documented one leaves the other service empty.",
+      { variables: split.sort() },
+    );
+  }
+}
+
 async function main() {
   await checkBuildMirrorSources();
   await checkPublicSourceCredentialsWired();
+  await checkCredentialHostVariablesAgree();
   await checkRootLicense();
   await checkRuntimePins();
   await checkHostedPackaging();

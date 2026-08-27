@@ -483,7 +483,13 @@ services:
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-v4-pro
-      OPENGWAS_JWT: ${OPENGWAS_JWT:-}
+      # One credential, one host variable. This read `${OPENGWAS_JWT}` while
+      # the control plane read `${OPEN_SCIENCE_OPENGWAS_JWT}`, so setting the
+      # documented one left this container's JWT empty -- which is exactly
+      # what a live check found: api.opengwas.io answering 401 to a shipped
+      # Mendelian-randomization agent that had been healthy for two days.
+      # The old name stays as a fallback so an existing .env keeps working.
+      OPENGWAS_JWT: ${OPEN_SCIENCE_OPENGWAS_JWT:-${OPENGWAS_JWT:-}}
     volumes:
       - open-science-data:/data
       - type: bind
@@ -539,6 +545,7 @@ services:
       OMIM_API_KEY: ${OPEN_SCIENCE_OMIM_API_KEY:-}
       BIOGRID_API_KEY: ${OPEN_SCIENCE_BIOGRID_API_KEY:-}
       DISGENET_API_KEY: ${OPEN_SCIENCE_DISGENET_API_KEY:-}
+      OPENGWAS_JWT: ${OPEN_SCIENCE_OPENGWAS_JWT:-}
       NVIDIA_API_KEY: ${OPEN_SCIENCE_NVIDIA_API_KEY:-}
       USPTO_API_KEY: ${OPEN_SCIENCE_USPTO_API_KEY:-}
       HF_TOKEN: ${OPEN_SCIENCE_HF_TOKEN:-}
