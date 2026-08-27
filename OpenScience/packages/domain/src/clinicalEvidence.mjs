@@ -3799,6 +3799,35 @@ export function validateClinicalEvidencePackage({
   }
 
   if (!claims.length) issues.push("The evidence matrix must contain the report's material claims.");
+  // A matrix written to a different schema is one problem, not one per field
+  // per claim.
+  //
+  // Fourth appearance of this family today. A real run (rq03d) wrote 25 claims
+  // shaped `{id, claim, evidence, certainty}` instead of the contract's, and
+  // the verdict came back with 386 required issues -- roughly fifteen field
+  // errors for each of twenty-five claims, none of which says "you used the
+  // wrong shape". The run has to infer the schema from the wreckage.
+  //
+  // The test is deliberately narrow: EVERY claim missing `claimId` is a schema
+  // mismatch, and one claim missing it is a bad claim. A single malformed
+  // entry is still reported per field, because there the field list IS the
+  // useful answer.
+  const objectClaims = claims.filter((claim) => claim && typeof claim === "object" && !Array.isArray(claim));
+  if (objectClaims.length && objectClaims.every((claim) => !nonEmpty(claim.claimId))) {
+    const found = [...new Set(objectClaims.flatMap((claim) => Object.keys(claim)))].slice(0, 8);
+    const absent = "clinical-evidence-matrix.json uses a different claim shape from the contract's."
+      + ` Every one of its ${objectClaims.length} claims is missing \`claimId\`; the keys present are: ${found.join(", ")}.`
+      + ` Each claim needs ${claimFields.join(", ")} — \`claimId\` matching CLM-NNN, \`supportQuote\` quoted verbatim`
+      + " from the file named by `artifactPath`. Rewrite the matrix to that shape and resubmit.";
+    return {
+      valid: false,
+      issues: [...issues, absent],
+      blockingIssues: [absent],
+      claimIds: [],
+      sourceDomains: [],
+      coverageDegradedNotice: null,
+    };
+  }
   const seen = new Set();
   const derivedClaims = [];
   for (const [index, value] of claims.entries()) {

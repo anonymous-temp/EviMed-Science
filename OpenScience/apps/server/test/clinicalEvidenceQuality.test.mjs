@@ -3443,3 +3443,54 @@ test("every file the capability manifest requires is named by the run-side gate 
     );
   }
 });
+
+test("a matrix written to a different schema is one problem, not one per field per claim", () => {
+  // Fourth appearance of this family today. A real run (rq03d) wrote 25 claims
+  // shaped {id, claim, evidence, certainty} instead of the contract's, and the
+  // verdict came back with 386 required issues — roughly fifteen field errors
+  // for each of twenty-five claims, and not one of them saying "you used the
+  // wrong shape". The run has to infer the schema from the wreckage, with two
+  // repair attempts left.
+  const input = deepResearchPackage();
+  input.matrix = {
+    schemaVersion: 1,
+    claims: Array.from({ length: 25 }, (_, index) => ({
+      id: `CLM-${String(index + 1).padStart(3, "0")}`,
+      claim: `命题 ${index + 1}`,
+      evidence: ["[1]"],
+      certainty: "high",
+      certaintyFramework: "GRADE",
+    })),
+  };
+
+  const result = validateClinicalEvidencePackage(input);
+
+  assert.equal(result.blockingIssues.length, 1, `one shape mismatch is one problem, got ${result.blockingIssues.length}`);
+  const message = result.blockingIssues[0];
+  assert.match(message, /different claim shape/);
+  assert.match(message, /25 claims/, "the run should know this is systematic, not one bad entry");
+  assert.match(message, /claimId/, "and what the contract actually asks for");
+  assert.match(message, /id, claim, evidence/, "and what it wrote instead, so it can see the mismatch");
+});
+
+test("one malformed claim among good ones is still reported field by field", () => {
+  // The control, and the reason the test above is narrow. Collapsing on any
+  // missing claimId would hide a single bad entry behind a schema complaint
+  // that is not true of the other twenty-four — there the field list IS the
+  // useful answer.
+  const input = deepResearchPackage();
+  const good = input.matrix.claims;
+  assert.ok(good.length >= 1, "fixture must have a well-formed claim to keep");
+  input.matrix = { ...input.matrix, claims: [...good, { claim: "缺了几乎所有字段的一条" }] };
+
+  const result = validateClinicalEvidencePackage(input);
+
+  assert.ok(
+    !result.blockingIssues.some((entry) => /different claim shape/.test(entry)),
+    "a matrix with valid claims must not be called a schema mismatch",
+  );
+  assert.ok(
+    result.issues.some((entry) => new RegExp(`claims\\[${good.length}\\]\\.claimId`).test(entry)),
+    "the bad entry must still be named field by field",
+  );
+});
