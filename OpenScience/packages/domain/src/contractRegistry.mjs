@@ -176,14 +176,55 @@ function validateClinicalEvidenceReport(input) {
   // can fix, which is the failure the distinction was introduced to stop.
   const blocking = new Set(result.blockingIssues ?? result.issues ?? [])
   const errorCode = clinicalEvidencePackageErrorCode(result.blockingIssues ?? [])
-  // No generic required-output check here. The clinical validator already has a
-  // message for every file it needs, phrased so the run can act on it, and
-  // adding the manifest's list on top would be a second implementation of the
-  // same rule — the exact thing this contract kind exists to have only one of.
-  // It would also be *stricter* than the server, which is the failure mode that
-  // cost three finished packages: a run told it is not done for something the
-  // server would have delivered.
+  // The manifest's own required-output check runs here too.
+  //
+  // It used to be left out, on the stated grounds that "the clinical validator
+  // already has a message for every file it needs". Nothing tested that claim
+  // and it was false for three of the eight: with `citation-ledger.csv`,
+  // `references.bib` or `citation-audit.md` absent, this gate returned ok=true
+  // with zero required issues, and the server's own check then failed the run
+  // with `specialist_required_output_missing`. Two gates, one package, opposite
+  // verdicts — exactly the drift the single-implementation rule exists to stop.
+  //
+  // It cost RQ-03 two full runs. Both spent all three repair attempts on
+  // citation binding, were told nothing about the two files they had never
+  // created, and died at the server boundary after the attempts were gone.
+  //
+  // Not a second implementation: `requiredOutputIssues` is the same function
+  // every other contract kind calls, reading the same `expectedOutputs` the
+  // capability manifest supplies and the server's `agent.outputs` mirrors. And
+  // it cannot be stricter than the server, because it is the server's list.
+  // Only the files this contract's own validator has nothing to say about.
+  //
+  // Adding the manifest check wholesale reported every absence twice -- once
+  // as "X is missing." and once in the validator's own words -- which is the
+  // opposite of the rule this contract kind is built on: one absent file is
+  // one problem, not two. Three existing tests said so, and they were right.
+  //
+  // So the two are complementary, not stacked. The validator speaks for the
+  // files it knows (report, matrix, run receipt, coverage ledger); the manifest
+  // speaks for the rest, which is how citation-ledger.csv, references.bib and
+  // citation-audit.md went unmentioned while the server failed the run for
+  // them.
+  // "Already spoken for" means the validator BLOCKS on that file's absence, not
+  // merely that its name appears somewhere. Matching on the name alone let a
+  // rule about `citation-ledger.csv`'s header column order — advisory, and
+  // about a file that exists — suppress the report that the file is missing
+  // entirely. The gate then passed a package the server would reject, which is
+  // the exact drift this change was made to close.
+  const blockedOn = new Set(result.blockingIssues ?? []);
+  const namedByValidator = (relative) => [...blockedOn].some((message) => String(message).includes(relative));
+  // The validator early-returns on an absent report, because with no report
+  // nothing below it can be read. Listing the other absences beside that one
+  // turns "write the report" into a wall — and every one of them is downstream
+  // of the same missing file. One absence, one problem, and this is the
+  // absence that explains the rest.
+  const reportAbsent = !String(input.files.get("clinical-evidence-report.md") ?? "").trim();
+  const manifestIssues = reportAbsent
+    ? []
+    : requiredOutputIssues(input).filter((entry) => !namedByValidator(String(entry.path ?? "")));
   const issues = [
+    ...manifestIssues,
     ...(result.issues ?? []).map((message) => issue(
       blocking.has(message) ? (errorCode ?? 'clinical_evidence_issue') : 'clinical_evidence_notice',
       String(message),

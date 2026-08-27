@@ -3388,3 +3388,58 @@ test("a matrix that exists and lacks an id the ledger names still reports that i
   assert.ok(issues.some((issue) => /claimIds 提到 "CLM-999"/.test(issue)), "a dangling id against a real matrix must still be named");
   assert.ok(!issues.some((issue) => new RegExp(`claimIds 提到 "${real}"`).test(issue)), "and a resolvable id must not be");
 });
+
+test("every file the capability manifest requires is named by the run-side gate when it is absent", async () => {
+  // The invariant the tree states in prose: whatever the server gate rejects,
+  // the run-side gate must already catch. It was asserted in a comment and
+  // enforced by nothing, and it was false for three of the eight required
+  // outputs — with citation-ledger.csv, references.bib or citation-audit.md
+  // absent, the run-side gate returned ok=true with zero required issues while
+  // the server failed the run with specialist_required_output_missing.
+  //
+  // Two gates, one package, opposite verdicts. It cost RQ-03 two full runs:
+  // both spent all three repair attempts on citation binding, were told
+  // nothing about the two files they had never created, and died at the server
+  // boundary with the attempts gone.
+  //
+  // Derived from the manifest, not from a list here, so a file added to
+  // `produces.outputs` tomorrow is covered without anyone remembering to.
+  const { runGate } = await import("@evimed/domain");
+  const manifest = await readFile(
+    new URL("../../../capabilities/clinical-evidence-synthesis/capability.yaml", import.meta.url),
+    "utf8",
+  );
+  const produces = manifest.slice(manifest.indexOf("- contractKind: clinical-evidence-report"));
+  const required = [...produces.matchAll(/- path:\s*(\S+)\s*\n\s*required:\s*true/g)].map((match) => match[1]);
+  assert.ok(required.length >= 8, `expected the manifest's required outputs, found ${required.length}`);
+
+  const input = deepResearchPackage();
+  const complete = new Map([
+    ["clinical-evidence-report.md", input.reportText],
+    ["clinical-evidence-matrix.json", JSON.stringify(input.matrix)],
+    ["clinical-evidence-run.json", JSON.stringify(input.runReceipt)],
+    ["clinical-evidence-search.json", input.searchLogText ?? "{}"],
+    ["citation-ledger.csv", input.citationLedgerText ?? "claimId,referenceNumber,supportQuote\n"],
+    ["references.bib", input.referencesText ?? "@article{a,title={x}}\n"],
+    ["citation-audit.md", input.citationAuditText ?? "# audit\n"],
+    ["question-coverage.json", input.questionCoverageText ?? "{}"],
+  ]);
+  const expectedOutputs = required.map((relative) => ({ path: relative, required: true }));
+
+  for (const relative of required) {
+    const files = new Map(complete);
+    files.delete(relative);
+    const verdict = runGate({
+      contractKind: "clinical-evidence-report",
+      files,
+      expectedOutputs,
+      sourceArtifacts: input.sourceArtifacts ?? {},
+    });
+
+    assert.equal(verdict.ok, false, `${relative} is required and its absence must fail the gate`);
+    assert.ok(
+      verdict.issues.some((entry) => String(entry.message).includes(relative)),
+      `${relative} is missing and no issue names it — the run cannot fix what it is not told about`,
+    );
+  }
+});
