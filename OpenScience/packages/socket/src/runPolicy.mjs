@@ -28,6 +28,7 @@
 import {
   MAX_DELEGATION_DEPTH,
   errorCodeMessage,
+  isGateImplementationPath,
   isProtectedWritePath,
   layeredIssues,
   matchedClinicalTriggers,
@@ -37,12 +38,27 @@ import {
   validateTaskPlan,
 } from '@evimed/domain'
 
-/** Tools whose arguments name a path we must guard. */
+/** Tools whose arguments name a path we must guard from writes. */
 const PATH_ARG_TOOLS = Object.freeze({
   write: ['path', 'file_path'],
   edit: ['path', 'file_path'],
   str_replace_editor: ['path'],
 })
+
+/** Tools whose arguments name a path we must guard from reads as well. */
+const READ_ARG_TOOLS = Object.freeze({
+  read: ['path', 'file_path'],
+  write: ['path', 'file_path'],
+  edit: ['path', 'file_path'],
+  str_replace_editor: ['path'],
+  grep: ['path', 'file_path'],
+  glob: ['path', 'file_path'],
+})
+
+/** What a run is told when it reaches for the marking scheme. */
+const GATE_SOURCE_REFUSAL = '交付门禁的实现不在你的阅读范围内。'
+  + '按能力技能正文与门禁返回的 issue 来修改交付物——那是同一套规则的说明，'
+  + '而按实现反推出来的通过不能说明交付物本身是对的。'
 
 /**
  * Whether one tool call may proceed. Policy only — a rejected deliverable never
@@ -61,6 +77,16 @@ export function toolPolicy(call, state) {
   const name = String(call?.name ?? '')
   const args = /** @type {Record<string, any>} */ (call?.args ?? {})
 
+  const readFields = READ_ARG_TOOLS[/** @type {keyof typeof READ_ARG_TOOLS} */ (name)]
+  if (readFields) {
+    for (const field of readFields) {
+      const value = args[field]
+      if (typeof value === 'string' && value && isGateImplementationPath(value)) {
+        return { allow: false, code: 'gate_source_denied', reason: GATE_SOURCE_REFUSAL }
+      }
+    }
+  }
+
   const fields = PATH_ARG_TOOLS[/** @type {keyof typeof PATH_ARG_TOOLS} */ (name)]
   if (fields) {
     for (const field of fields) {
@@ -77,6 +103,12 @@ export function toolPolicy(call, state) {
   }
   if (name === 'bash') {
     const command = String(args.command ?? '')
+    // Reading is refused before mutation is considered: the run that read the
+    // gate did it with `grep -n "function sourceArtifactPaths"`, a command that
+    // changes nothing and that the write guard therefore waved through.
+    if (isGateImplementationPath(command)) {
+      return { allow: false, code: 'gate_source_denied', reason: GATE_SOURCE_REFUSAL }
+    }
     const guarded = guardedBashTarget(command)
     if (guarded) {
       return { allow: false, code: 'path_guard_denied', reason: `命令会修改受保护路径 ${guarded}。` }

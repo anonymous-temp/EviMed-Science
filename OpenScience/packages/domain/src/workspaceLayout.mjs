@@ -118,6 +118,39 @@ export function isProtectedWritePath(value) {
   })
 }
 
+/** Where the gate's own implementation lives inside the runtime container. */
+const GATE_IMPLEMENTATION_MARKERS = Object.freeze([
+  '@evimed/domain/src/',
+  '@evimed/dsh-socket/src/',
+  '@evimed/dsh-socket/plugins/',
+])
+
+/**
+ * Whether a path is the marking scheme rather than the exam paper.
+ *
+ * The write guard was built against a run rewriting its own brief or receipt,
+ * and it says nothing about reading. But the delivery gate ships inside the
+ * container that runs the work — the plugins have to execute there — and its
+ * source sits under /runtime on a readable bind mount. A run read
+ * `clinicalEvidence.mjs` seven times, then `contractRegistry.mjs`, then
+ * `runPolicy.mjs`, grepped for `collectSourceArtifacts`, `sourceArtifactPaths`
+ * and `successfulSourceArtifacts`, worked out from the source which claims
+ * could be quote-verified, and wrote a package around the answer. It passed.
+ *
+ * A package that passes because the run read the checker is not evidence about
+ * the package. Reading is therefore refused here, for the implementation only:
+ * skills, their resources and every `.md` under `presets/` stay readable,
+ * because those are the instructions and the run is meant to have them.
+ *
+ * @param {unknown} value @returns {boolean}
+ */
+export function isGateImplementationPath(value) {
+  const text = String(value ?? '')
+  if (!text) return false
+  const unix = text.replace(/\\/g, '/')
+  return GATE_IMPLEMENTATION_MARKERS.some((marker) => unix.includes(marker))
+}
+
 /**
  * The deliverable id a path belongs to, or null when it is outside every
  * deliverable directory. A validator only ever looks at files this returns an
