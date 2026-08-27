@@ -178,6 +178,51 @@ test("rejects a support quote that is not present in the claimed source artifact
   assert.match(result.issues.join("\n"), /not found in its preserved source artifact/);
 });
 
+test("a quote we had no text to check is not reported as a quote that is wrong", () => {
+  // The map of preserved text is built by joining the run's evidence ledger,
+  // and for months that join returned nothing: rows were stamped with the
+  // session that retrieved the source in a field named runId, and the join
+  // filters by run. With no entry, `quoteIsPresent` compared against "" and the
+  // package came back saying every quote "was not found in its preserved source
+  // artifact" — the words for a fabricated passage, handed to a run whose quotes
+  // were verbatim correct. RQ-03 spent its last two repair rounds retyping them
+  // and ran out of attempts with a package that was already deliverable.
+  //
+  // Withholding the text must never produce the same sentence as contradicting
+  // it, because the two need opposite repairs and only one of them is the run's
+  // to make.
+  const input = validPackage();
+  const claim = input.matrix.claims[0];
+  delete input.sourceArtifacts[claim.artifactPath];
+  const result = validateClinicalEvidencePackage(input);
+  const text = result.issues.join("\n");
+  assert.equal(result.valid, false, "an unverifiable quote is still not an accepted one");
+  assert.match(text, /supportQuote could not be checked/);
+  assert.match(text, /rewriting it cannot help/);
+  assert.ok(
+    !/claims\[0\]\.supportQuote was not found in its preserved source artifact/.test(text),
+    "withholding the text must not read as the source contradicting the quote",
+  );
+
+  // An artifact preserved as an empty file says nothing either way, and saying
+  // "not found" about it is the same false verdict in a narrower form.
+  const empty = validPackage();
+  empty.sourceArtifacts[empty.matrix.claims[0].artifactPath] = "";
+  assert.match(
+    validateClinicalEvidencePackage(empty).issues.join("\n"),
+    /supportQuote could not be checked/,
+  );
+
+  // Negative control: with the text present, a quote the source does not carry
+  // is still reported as exactly that.
+  const wrong = validPackage();
+  wrong.matrix.claims[0].supportQuote = "This passage was invented after retrieval and is absent from the preserved source.";
+  assert.match(
+    validateClinicalEvidencePackage(wrong).issues.join("\n"),
+    /was not found in its preserved source artifact/,
+  );
+});
+
 test("matches source quotes across typographic quote styles and accepts a complete short official field", () => {
   const input = validPackage();
   input.matrix.claims[0].supportQuote =

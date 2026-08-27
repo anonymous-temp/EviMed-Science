@@ -1707,6 +1707,33 @@ function quoteIsPresent(artifact, quote) {
   return false;
 }
 
+// A verdict about a quote needs the text the quote is supposed to be in.
+//
+// With no entry for a path, `quoteIsPresent` compares against "" and returns
+// false, and the caller then reports `was not found in its preserved source
+// artifact` — the same words as a genuinely misquoted passage, for a cause no
+// rewrite can reach. RQ-03 spent its last two repair rounds retyping ten quotes
+// that were already verbatim correct, and ran out of attempts: its evidence rows
+// were stamped with a session id, so the join that fills this map matched no
+// rows and handed over nothing at all.
+//
+// Both readings of an absent entry — never preserved on disk, or preserved and
+// not carried here — are beyond editing the quote, and both are answered by
+// citing a source whose file exists. Say that. Never report a document we did
+// not read as one the passage is missing from.
+/**
+ * @param {Map<string, string>} artifactText @param {string} label
+ * @param {string} artifactPath @param {unknown} quote @returns {string | null}
+ */
+function supportQuoteIssue(artifactText, label, artifactPath, quote) {
+  const artifact = artifactText.get(artifactPath);
+  if (!artifact) {
+    return `${label}.supportQuote could not be checked: no preserved text for ${JSON.stringify(artifactPath)} reached this check, so the quote was neither confirmed nor refuted — rewriting it cannot help. Either the source was never written under .evimed-sources, or this run's evidence ledger did not carry it here. Cite a source whose preserved file exists, or preserve this one first.`;
+  }
+  if (!quoteIsPresent(artifact, quote)) return `${label}.supportQuote ${quoteFailure(artifact, quote)}.`;
+  return null;
+}
+
 // The text a claim's numeric and quotational support is drawn from. Direct
 // claims draw on their own single source; synthesized claims draw on every
 // supporting source plus the claim statement itself.
@@ -2637,9 +2664,8 @@ function validateSynthesizedClaim(
       if (!successfulArtifacts.has(source.artifactPath)) {
         issues.push(`${sourceLabel}.artifactPath is not listed as a successful source artifact for this run.`);
       } else {
-        if (!quoteIsPresent(artifactText.get(source.artifactPath), source.supportQuote)) {
-          issues.push(`${sourceLabel}.supportQuote ${quoteFailure(artifactText.get(source.artifactPath), source.supportQuote)}.`);
-        }
+        const quoteProblem = supportQuoteIssue(artifactText, sourceLabel, source.artifactPath, source.supportQuote);
+        if (quoteProblem) issues.push(quoteProblem);
       }
     }
     const domain = sourceDomain(source.sourceUrl);
@@ -3920,9 +3946,8 @@ export function validateClinicalEvidencePackage({
     } else if (!successfulArtifacts.has(value.artifactPath)) {
       issues.push(`${label}.artifactPath is not listed as a successful source artifact for this run.`);
     } else {
-      if (!quoteIsPresent(artifactText.get(value.artifactPath), value.supportQuote)) {
-        issues.push(`${label}.supportQuote ${quoteFailure(artifactText.get(value.artifactPath), value.supportQuote)}.`);
-      }
+      const quoteProblem = supportQuoteIssue(artifactText, label, value.artifactPath, value.supportQuote);
+      if (quoteProblem) issues.push(quoteProblem);
     }
     const domain = sourceDomain(value.sourceUrl);
     if (!domain) issues.push(`${label}.sourceUrl must be a valid credential-free HTTPS URL.`);
