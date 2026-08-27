@@ -3336,3 +3336,55 @@ test("a matrix that exists and lacks a cited claim still names that claim", () =
     `${dropped} was dropped from a non-empty matrix and must still be reported`,
   );
 });
+
+test("an empty matrix is one problem in the coverage ledger too, not one per claim id it names", () => {
+  // Third location of the absent-matrix cascade. The report side was fixed
+  // earlier today; this one then cost a real run (rq03b) its last repair
+  // attempt: the matrix was momentarily empty at the third gate, the coverage
+  // ledger still named its claims, and the verdict came back with 114 issues
+  // of which ~78 were this one sentence with a different id in it. Three real
+  // problems were in there somewhere and the run never saw them.
+  const input = deepResearchPackage();
+  const cited = [...String(input.reportText).matchAll(/claim:(CLM-\d+)/g)].map((m) => m[1]);
+  assert.ok(cited.length >= 2, "the fixture must cite claims for this to mean anything");
+  input.matrix = { ...input.matrix, claims: [] };
+  input.keepCoverage = true;
+  input.questionCoverageText = JSON.stringify({
+    schemaVersion: 1,
+    entries: cited.map((id, index) => ({
+      id: `1.${index + 1}`,
+      question: `这是第 ${index + 1} 个需要回答的原子子问，长度足够通过形状检查。`,
+      status: "answered",
+      reportLines: [10 + index],
+      claimIds: [id],
+    })),
+  });
+
+  const dangling = validateClinicalEvidencePackage(input).issues.filter((issue) => /claimIds 提到/.test(issue));
+
+  assert.deepEqual(dangling, [], "an absent matrix must not be restated once per id the ledger names");
+});
+
+test("a matrix that exists and lacks an id the ledger names still reports that id", () => {
+  // The control. Suppressing the cascade for an empty matrix must not retire
+  // the rule for a populated one, or a ledger could name anything it liked.
+  const input = deepResearchPackage();
+  const real = input.matrix.claims[0]?.claimId;
+  assert.ok(real, "fixture must have at least one claim");
+  input.keepCoverage = true;
+  input.questionCoverageText = JSON.stringify({
+    schemaVersion: 1,
+    entries: [{
+      id: "1.1",
+      question: "这是一个长度足够通过形状检查的原子子问原文转录。",
+      status: "answered",
+      reportLines: [10],
+      claimIds: [real, "CLM-999"],
+    }],
+  });
+
+  const issues = validateClinicalEvidencePackage(input).issues;
+
+  assert.ok(issues.some((issue) => /claimIds 提到 "CLM-999"/.test(issue)), "a dangling id against a real matrix must still be named");
+  assert.ok(!issues.some((issue) => new RegExp(`claimIds 提到 "${real}"`).test(issue)), "and a resolvable id must not be");
+});
