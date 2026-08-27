@@ -3231,7 +3231,20 @@ function questionCoverageFindings(questionCoverageText, reportText, searchLogTex
       findings.push({ kind: "shape", detail: `${id}.status 必须是 "answered" 或 "gap"，当前为 ${JSON.stringify(entry.status)}。` });
       continue;
     }
-    if (Array.isArray(entry.claimIds)) {
+    // With no matrix at all, every id the ledger names is unresolvable, and
+    // saying so once per id buries the one fact that explains all of them.
+    //
+    // Third location of this defect. The report-side version was fixed on
+    // 2026-08-26 (23 blocking issues, 14 of them one absent file); this one
+    // then cost a real run its last repair attempt: the matrix was momentarily
+    // empty at the third gate, the coverage ledger still named its claims, and
+    // the verdict came back with 114 issues of which ~78 were this sentence
+    // with a different id in it. The run had three real problems and no way to
+    // see them.
+    //
+    // A matrix that HAS claims and is missing a named one is still reported per
+    // id -- that is a genuine per-claim finding, and its control pins it.
+    if (Array.isArray(entry.claimIds) && claimIds.size) {
       for (const claimId of entry.claimIds) {
         if (!claimIds.has(claimId)) {
           findings.push({ kind: "shape", detail: `${id}.claimIds 提到 ${JSON.stringify(claimId)}，证据矩阵里没有这个 claim。` });
