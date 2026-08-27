@@ -1348,3 +1348,61 @@ test("the skill's list of artifact-preserving tools matches the tools that actua
     `the skill says ${claimed[1]} tools preserve, but ${preserving.length} modules do: ${preserving.join(", ")}`,
   );
 });
+
+test("a capability's two skill copies never drift apart by more than their known kernel differences", async () => {
+  // Eleven capabilities ship their SKILL.md twice: `runtime/skills/evimed/<id>/`
+  // for the OpenCode rollback kernel and `capability-skills/<id>/` for DSH,
+  // which prefixes every MCP tool name with `mcp__evimed__`. The vocabulary
+  // rewriter keeps the NAMES in step and edits each tree in place — it never
+  // copies one to the other — so prose can diverge silently while
+  // `check:skill-vocabulary` still reports "up to date".
+  //
+  // It did. A correction written into the runtime copy today never reached the
+  // DSH copy, which is the one a delegated run actually reads: that file kept
+  // telling every run only two tools preserve an artifact, hours after a third
+  // one started to.
+  //
+  // Some divergence is legitimate — skill-resource paths differ because the
+  // kernels mount them differently, and one line has a preflight the other does
+  // not. So this pins the SIZE of the divergence per capability rather than
+  // demanding none: an edit made to one copy and not the other moves the count,
+  // and moving it is what has to be noticed.
+  const { readdir } = await import("node:fs/promises");
+  const strip = (text) => text.replaceAll("mcp__evimed__", "");
+  // Measured 2026-08-27 after syncing the artifact-preservation correction.
+  // Raising an entry means a deliberate kernel-specific edit; a capability
+  // absent here must have identical copies.
+  const knownDivergence = {
+    "clinical-evidence-synthesis": 13,
+    "dataset-research-scoping": 10,
+    "research-topic-selection": 10,
+  };
+
+  const dshRoot = path.join(repoRoot, "capability-skills");
+  let checked = 0;
+  const wrong = [];
+  for (const entry of await readdir(dshRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const dshFile = path.join(dshRoot, entry.name, "SKILL.md");
+    const openCodeFile = path.join(repoRoot, "runtime/skills/evimed", entry.name, "SKILL.md");
+    if (!existsSync(dshFile) || !existsSync(openCodeFile)) continue;
+    checked += 1;
+    const [dsh, openCode] = await Promise.all([readFile(dshFile, "utf8"), readFile(openCodeFile, "utf8")]);
+    // Compared as sets, not line by line: the copies differ in length, and a
+    // positional diff then reports every line after the first insertion as
+    // changed — 143 false differences where there were 15.
+    const dshLines = strip(dsh).split("\n");
+    const openCodeLines = new Set(strip(openCode).split("\n"));
+    const onlyDsh = dshLines.filter((line) => line.trim() && !openCodeLines.has(line)).length;
+    const allowed = knownDivergence[entry.name] ?? 0;
+    if (onlyDsh !== allowed) wrong.push(`${entry.name}: ${onlyDsh} DSH-only lines, expected ${allowed}`);
+  }
+
+  assert.ok(checked >= 11, `expected both copies of every capability, compared ${checked}`);
+  assert.deepEqual(
+    wrong,
+    [],
+    `the two copies drifted: ${wrong.join("; ")} — an edit to one has to be made in both,`
+    + " and a deliberate kernel difference has to be recorded in knownDivergence",
+  );
+});
