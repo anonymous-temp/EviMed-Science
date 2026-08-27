@@ -3213,10 +3213,34 @@ function questionCoverageFindings(questionCoverageText, reportText, searchLogTex
   const lines = String(reportText ?? "").split("\n");
   const sectionOfLine = coverageSectionOfLine(reportText);
   const searchLog = parseJsonObject(searchLogText);
-  const loggedQueries = (Array.isArray(searchLog?.queries) ? searchLog.queries : []).map((entry) => ({
+  const rawLoggedQueries = Array.isArray(searchLog?.queries) ? searchLog.queries : [];
+  const loggedQueries = rawLoggedQueries.map((entry) => ({
     query: normalizedSearchQuery(entry?.query),
     database: String(entry?.database ?? "").trim().toLowerCase(),
   }));
+  // A log written to another schema is one problem, not one per citation.
+  //
+  // The contract's `queries[]` holds objects — `{database, query, …}`. A run
+  // wrote plain strings and put the objects under `searches` instead, so
+  // `entry?.query` was undefined for every one of them and every logged query
+  // normalized to "". Each gap entry citing a search it really had run then
+  // came back as `其检索式「…」…没有对应记录`: twelve findings, all of them
+  // the same single fact about the file's shape, and none of them naming it.
+  // This is the matrix-schema collapse one file over.
+  const loggedShapeMismatch = rawLoggedQueries.length > 0 && loggedQueries.every((entry) => !entry.query);
+  if (loggedShapeMismatch) {
+    const found = [...new Set(rawLoggedQueries.map((entry) => (
+      entry && typeof entry === "object" && !Array.isArray(entry)
+        ? `object with keys ${Object.keys(entry).slice(0, 6).join("/") || "(none)"}`
+        : Array.isArray(entry) ? "array" : typeof entry
+    )))].slice(0, 3).join("、");
+    findings.push({
+      kind: "shape",
+      detail: `clinical-evidence-search.json 的 queries 用了与契约不同的形状：${rawLoggedQueries.length} 条里没有一条带 query 字段（读到的是 ${found}）。`
+        + "契约要的是对象数组，每条至少 {database, query}；这个文件由你写，不是工具写的。"
+        + "把每次真正跑过的检索按这个形状写进 queries[]，gap 条目引用的检索式才对得上。",
+    });
+  }
   const loggedDate = String(searchLog?.searchedAt ?? "").slice(0, 10);
   const seenIds = new Set();
   const groups = new Set();
@@ -3334,13 +3358,16 @@ function questionCoverageFindings(questionCoverageText, reportText, searchLogTex
       const normalized = normalizedSearchQuery(query);
       const matches = loggedQueries.filter((logged) => logged.query === normalized);
       if (!matches.length) {
+        // Already reported once, as the shape it is: repeating it per citation
+        // buries the one repair that fixes all of them.
+        if (loggedShapeMismatch) continue;
         findings.push({
           kind: "gap-search",
           id,
           question,
           detail: `其检索式「${query}」在 clinical-evidence-search.json 的 queries 中没有对应记录。`
-            + "检索日志由取数工具写入，「查过但没查到」必须能在日志里找到那一次检索——"
-            + "把真正跑过的检索式抄进来，或者去跑这一次检索。",
+            + "「查过但没查到」必须能在日志里找到那一次检索——"
+            + "把真正跑过的检索式抄进 queries[]，或者去跑这一次检索。",
         });
         continue;
       }
@@ -3700,17 +3727,32 @@ export function validateClinicalEvidencePackage({
   const claims = matrix && typeof matrix === "object" && !Array.isArray(matrix) && Array.isArray(matrix.claims)
     ? matrix.claims
     : [];
-  const successfulArtifacts = new Set(
-    Array.isArray(runReceipt?.successfulSourceArtifacts)
-      ? runReceipt.successfulSourceArtifacts.filter((/** @type {unknown} */ value) => typeof value === "string")
-      : [],
-  );
-  const distinctSuccessfulSources = new Set(
-    [...successfulArtifacts].map(sourceArtifactIdentity).filter(Boolean),
-  );
   const artifactText = sourceArtifacts instanceof Map
     ? sourceArtifacts
     : new Map(Object.entries(sourceArtifacts && typeof sourceArtifacts === "object" ? sourceArtifacts : {}));
+  // What preserved, from both the run's account of it and ours.
+  //
+  // `successfulSourceArtifacts` is written by the run. `artifactText` is joined
+  // from the evidence ledger by the platform, and an entry there means the file
+  // was preserved and read — a stronger fact than the run's own list, not a
+  // weaker one. Trusting only the list rejected five claims that each cited a
+  // genuinely preserved source, with `is not listed as a successful source
+  // artifact for this run`, because the run had not yet copied those paths into
+  // its receipt. It copied them two minutes later, out of attempts.
+  //
+  // So the union, and it is not a loosening: a path present only in the receipt
+  // still has no text, and every quote drawn from it is reported unverifiable.
+  // This only stops the package being failed over a bookkeeping disagreement
+  // about a source we ourselves read.
+  const successfulArtifacts = new Set([
+    ...(Array.isArray(runReceipt?.successfulSourceArtifacts)
+      ? runReceipt.successfulSourceArtifacts.filter((/** @type {unknown} */ value) => typeof value === "string")
+      : []),
+    ...[...artifactText.keys()].filter((path) => typeof path === "string" && path),
+  ]);
+  const distinctSuccessfulSources = new Set(
+    [...successfulArtifacts].map(sourceArtifactIdentity).filter(Boolean),
+  );
   const deepResearch = runReceipt?.reportProfile === deepResearchProfile;
   const reportReferenceCount = numberedReferenceCount(reportText);
   const reportReferenceNumbers = numberedReferenceNumbers(reportText);
