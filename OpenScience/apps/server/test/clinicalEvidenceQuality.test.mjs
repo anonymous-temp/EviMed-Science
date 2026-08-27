@@ -178,6 +178,89 @@ test("rejects a support quote that is not present in the claimed source artifact
   assert.match(result.issues.join("\n"), /not found in its preserved source artifact/);
 });
 
+test("a search log written to another schema is one problem, not one per gap entry", () => {
+  // The contract's `queries[]` holds objects. A run wrote plain strings and put
+  // the objects under `searches` instead, so `entry?.query` was undefined for
+  // all twelve and every logged query normalized to "". Each gap entry that
+  // cited a search it had genuinely run came back as "no corresponding record"
+  // — twelve blocking findings, every one of them the same fact about the
+  // file's shape, and not one of them naming it. Fourteen blocking issues on
+  // the real package collapse to three once it is said once.
+  //
+  // The old wording also told the run the retrieval tool writes this file. It
+  // does not — the run does, which is why the shape can be wrong at all, and a
+  // run that believes otherwise cannot find the repair.
+  //
+  // `keepCoverage`, because the ledger is the subject: it has to keep citing
+  // the searches that really ran while the log beneath it changes shape.
+  const input = deepResearchPackage();
+  const coverage = questionCoverageLedger(input.reportText, input.searchLogText);
+  assert.match(coverage, /"status": ?"gap"/, "the fixture ledger must declare a gap for this case to bite");
+  const search = JSON.parse(input.searchLogText);
+  search.searches = search.queries;
+  search.queries = search.queries.map((entry) => entry.query);
+  const text = validateClinicalEvidencePackage({
+    ...input,
+    keepCoverage: true,
+    questionCoverageText: coverage,
+    searchLogText: JSON.stringify(search),
+  }).issues.join("\n");
+  assert.match(text, /queries 用了与契约不同的形状/);
+  assert.match(text, /这个文件由你写，不是工具写的/);
+  assert.equal(
+    (text.match(/没有对应记录/g) ?? []).length,
+    0,
+    "the per-citation findings must give way to the one that names the cause",
+  );
+
+  // Negative control: with the shape intact, a query the log does not carry is
+  // still reported against the entry that cites it.
+  const drifted = JSON.parse(input.searchLogText);
+  drifted.queries = drifted.queries.map((entry) => ({ ...entry, query: `${entry.query} 改过了` }));
+  const driftedText = validateClinicalEvidencePackage({
+    ...input,
+    keepCoverage: true,
+    questionCoverageText: coverage,
+    searchLogText: JSON.stringify(drifted),
+  }).issues.join("\n");
+  assert.match(driftedText, /没有对应记录/);
+  assert.ok(!/queries 用了与契约不同的形状/.test(driftedText), "a well-shaped log must not be reported as misshapen");
+});
+
+test("a source the platform itself preserved counts, even if the run's receipt forgot to list it", () => {
+  // The checks on a claim's artifactPath are a chain, and each link is only
+  // reached once the one before it passes: valid path, then listed as
+  // successful, then the quote. A run therefore learns about one layer per
+  // submission, and the attempt budget is five. RQ-03's rerun spent them on
+  // "report missing", "four files missing", "matrix schema wrong",
+  // "artifactPath is your own notes file", and finally "not listed as a
+  // successful source artifact" — for five paths that were preserved on disk,
+  // read by the platform, and cited correctly. It wrote them into its receipt
+  // two and a half minutes after the last attempt was gone.
+  //
+  // The receipt is the run's account of what preserved. `sourceArtifacts` is
+  // ours, joined from the evidence ledger. Where ours has the text, the source
+  // preserved — there is nothing the run's list can add to that, and nothing it
+  // should be able to take away.
+  const input = validPackage();
+  const path = input.matrix.claims[0].artifactPath;
+  input.runReceipt.successfulSourceArtifacts = input.runReceipt.successfulSourceArtifacts.filter((item) => item !== path);
+  const text = validateClinicalEvidencePackage(input).issues.join("\n");
+  assert.ok(
+    !/claims\[0\]\.artifactPath is not listed as a successful source artifact/.test(text),
+    "a source we read and hold the text of must not be rejected as unpreserved",
+  );
+
+  // Negative control: a path in neither the receipt nor the artifact map is
+  // still refused, and refused for that reason.
+  const absent = validPackage();
+  absent.matrix.claims[0].artifactPath = ".evimed-sources/never-fetched/fulltext.md";
+  assert.match(
+    validateClinicalEvidencePackage(absent).issues.join("\n"),
+    /claims\[0\]\.artifactPath is not listed as a successful source artifact/,
+  );
+});
+
 test("a quote we had no text to check is not reported as a quote that is wrong", () => {
   // The map of preserved text is built by joining the run's evidence ledger,
   // and for months that join returned nothing: rows were stamped with the
