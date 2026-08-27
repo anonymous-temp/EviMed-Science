@@ -420,6 +420,11 @@ services:
         APP_VERSION: ${EVIMED_META_AGENT_VERSION:-0.9.0}
         PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
     environment:
+      # Read by this agent's own code; unwired until 2026-08-27, the same
+      # shape as the OpenGWAS split. One host variable per credential.
+      PUBMED_API_KEY: ${OPEN_SCIENCE_NCBI_API_KEY:-}
+      PUBMED_EMAIL: ${OPEN_SCIENCE_UNPAYWALL_EMAIL:-}
+      EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       EVIMED_DATA_ROOT: /data
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -430,6 +435,10 @@ services:
       LLM_TRUST_ENV: "false"
       LLM_STREAM: "false"
     volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
+        target: /run/secrets/evimed-api-key
+        read_only: true
       - open-science-data:/data
       - type: bind
         source: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}
@@ -478,6 +487,10 @@ services:
         GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
         CRAN_MIRROR: ${OPEN_SCIENCE_CRAN_MIRROR:-https://cloud.r-project.org}
     environment:
+      # Read by this agent's own code; unwired until 2026-08-27, the same
+      # shape as the OpenGWAS split. One host variable per credential.
+      UMLS_API_KEY: ${OPEN_SCIENCE_UMLS_API_KEY:-}
+      PUBMED_EMAIL: ${OPEN_SCIENCE_UNPAYWALL_EMAIL:-}
       EVIMED_SPECIALIST_KIND: mendelian-randomization
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -585,6 +598,10 @@ services:
         GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
         CRAN_MIRROR: ${OPEN_SCIENCE_CRAN_MIRROR:-https://cloud.r-project.org}
     environment:
+      # Read by this agent's own code; unwired until 2026-08-27, the same
+      # shape as the OpenGWAS split. One host variable per credential.
+      NCBI_API_KEY: ${OPEN_SCIENCE_NCBI_API_KEY:-}
+      NCBI_EMAIL: ${OPEN_SCIENCE_UNPAYWALL_EMAIL:-}
       EVIMED_SPECIALIST_KIND: bibliometric-analysis
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
