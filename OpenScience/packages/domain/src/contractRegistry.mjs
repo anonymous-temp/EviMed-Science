@@ -214,15 +214,24 @@ function validateClinicalEvidenceReport(input) {
   // the exact drift this change was made to close.
   const blockedOn = new Set(result.blockingIssues ?? []);
   const namedByValidator = (relative) => [...blockedOn].some((message) => String(message).includes(relative));
-  // The validator early-returns on an absent report, because with no report
-  // nothing below it can be read. Listing the other absences beside that one
-  // turns "write the report" into a wall — and every one of them is downstream
-  // of the same missing file. One absence, one problem, and this is the
-  // absence that explains the rest.
-  const reportAbsent = !String(input.files.get("clinical-evidence-report.md") ?? "").trim();
-  const manifestIssues = reportAbsent
-    ? []
-    : requiredOutputIssues(input).filter((entry) => !namedByValidator(String(entry.path ?? "")));
+  // Every required file the validator is not already blocking on, including
+  // when the report itself is one of them.
+  //
+  // This withheld the whole list while the report was absent, reasoning that
+  // the other absences were downstream of it. They are not: citation-ledger.csv,
+  // references.bib and citation-audit.md are independent files, and a run told
+  // about all of them writes all of them in one round. A run told only about
+  // the report writes the report and spends another attempt discovering the
+  // rest — which is the exact condition the manifest check was added to end,
+  // reintroduced for the first submission of every run. RQ-03's rerun spent
+  // gate 1 on the report and gate 2 on four more files, two of five attempts,
+  // and never reached the quote checks at all.
+  //
+  // The nine complaints an absent report used to draw are handled where they
+  // arise, in the validator's own early return. `namedByValidator` keeps the
+  // report from being reported twice here.
+  const manifestIssues = requiredOutputIssues(input)
+    .filter((entry) => !namedByValidator(String(entry.path ?? "")));
   const issues = [
     ...manifestIssues,
     ...(result.issues ?? []).map((message) => issue(

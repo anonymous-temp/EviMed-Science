@@ -1619,12 +1619,25 @@ test("both entries resolve to one implementation, and no second copy survives", 
     expectedOutputs: CLINICAL_EVIDENCE_OUTPUTS,
   });
   assert.equal(registryVerdict.ok, false);
-  // The clinical validator has its own message for every file it needs; the
-  // registry does not add a second, stricter list on top.
-  assert.deepEqual(
-    registryVerdict.issues.filter((issue) => issue.severity === "required").map((issue) => issue.message),
-    validateClinicalEvidencePackage({}).blockingIssues,
-  );
+  // The registry adds no SECOND message for a file the validator already names,
+  // and it does name the ones the validator says nothing about.
+  //
+  // This used to assert the two lists were identical, on the stated grounds
+  // that "the clinical validator has its own message for every file it needs".
+  // That claim was false for three of the eight — citation-ledger.csv,
+  // references.bib and citation-audit.md — and the gate returned ok=true with
+  // them absent while the server failed the run for them. The assertion to make
+  // is complementarity, not equality: no file spoken for twice, and none left
+  // unspoken until a later attempt.
+  const required = registryVerdict.issues.filter((issue) => issue.severity === "required").map((issue) => issue.message);
+  const blocking = validateClinicalEvidencePackage({}).blockingIssues;
+  for (const message of blocking) assert.ok(required.includes(message), `the validator's own message was dropped: ${message}`);
+  for (const output of CLINICAL_EVIDENCE_OUTPUTS.filter((entry) => entry.required)) {
+    const named = required.filter((message) => message.includes(output.path));
+    assert.equal(named.length, 1, `${output.path} is named ${named.length} times, not once: ${named.join(" | ")}`);
+  }
+  assert.equal(required.length, CLINICAL_EVIDENCE_OUTPUTS.filter((entry) => entry.required).length,
+    "an empty package is exactly one problem per required file, no more and no fewer");
 
   // The clinical run-side copy is deleted, not merely unused: a copy left on disk
   // is a copy a skill can be pointed back at, and it is the one that mirrored
