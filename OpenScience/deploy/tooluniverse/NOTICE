@@ -1,0 +1,8 @@
+ToolUniverse
+Copyright (c) Marinka Zitnik Lab, Harvard Medical School (mims-harvard)
+Licensed under the Apache License, Version 2.0
+Source: https://github.com/mims-harvard/ToolUniverse
+Pinned version: 1.4.1 (see Dockerfile ARG TOOLUNIVERSE_VERSION)
+
+This deployment installs ToolUniverse from PyPI into a sidecar container and
+consumes it over MCP. It is not vendored, modified, or redistributed as source.

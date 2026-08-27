@@ -240,6 +240,9 @@ services:
       # Rate-ceiling keys: both upstreams serve without them, just slower.
       OPEN_SCIENCE_NCBI_API_KEY: ${OPEN_SCIENCE_NCBI_API_KEY:-}
       OPEN_SCIENCE_OPENFDA_API_KEY: ${OPEN_SCIENCE_OPENFDA_API_KEY:-}
+      # Empty disables the sidecar's MCP row entirely; the runtime then
+      # behaves exactly as it did before the sidecar existed.
+      OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ${OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL:-http://tooluniverse:8080/mcp}
       OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_FILE: /run/secrets/materials-project-api-key
       OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT: ${OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT:-true}
       OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/model/v1}
@@ -504,6 +507,59 @@ services:
     cpus: 1.5
     mem_limit: 2g
     pids_limit: 256
+    networks: [default, runtime-internal]
+    restart: unless-stopped
+
+  # ToolUniverse (Apache-2.0, mims-harvard) as a sidecar MCP server.
+  #
+  # Deliberately not installed into the runtime image: its ~2,700 tools call
+  # their upstreams directly and read credentials from the environment, and the
+  # runtime container is built to do neither. Here it keeps its own egress and
+  # its own keys while the runtime keeps holding none, reaching it over the
+  # internal network by MCP streamable-http.
+  tooluniverse:
+    image: ${TOOLUNIVERSE_IMAGE:-evimed-tooluniverse:1.4.1}
+    build:
+      context: ../..
+      dockerfile: deploy/tooluniverse/Dockerfile
+      args:
+        TOOLUNIVERSE_VERSION: ${TOOLUNIVERSE_VERSION:-1.4.1}
+        APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
+    environment:
+      # ToolUniverse reads its credentials under its own names. Every one is
+      # optional to the server's start: an absent key disables the tools that
+      # need it rather than failing the sidecar, which is why none of these is
+      # a `:?required` binding.
+      NCBI_API_KEY: ${OPEN_SCIENCE_NCBI_API_KEY:-}
+      SEMANTIC_SCHOLAR_API_KEY: ${OPEN_SCIENCE_SEMANTIC_SCHOLAR_API_KEY:-}
+      FDA_API_KEY: ${OPEN_SCIENCE_OPENFDA_API_KEY:-}
+      UMLS_API_KEY: ${OPEN_SCIENCE_UMLS_API_KEY:-}
+      OMIM_API_KEY: ${OPEN_SCIENCE_OMIM_API_KEY:-}
+      BIOGRID_API_KEY: ${OPEN_SCIENCE_BIOGRID_API_KEY:-}
+      DISGENET_API_KEY: ${OPEN_SCIENCE_DISGENET_API_KEY:-}
+      NVIDIA_API_KEY: ${OPEN_SCIENCE_NVIDIA_API_KEY:-}
+      USPTO_API_KEY: ${OPEN_SCIENCE_USPTO_API_KEY:-}
+      HF_TOKEN: ${OPEN_SCIENCE_HF_TOKEN:-}
+      # Not passed on purpose: OPENAI_API_KEY, AZURE_OPENAI_API_KEY and
+      # GEMINI_API_KEY would let this sidecar call a model of its own. Every
+      # model call in this deployment goes through our gateway, on the
+      # certified model, against the run's budget.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/mcp', timeout=3)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Loading 2,700 tool definitions takes longer than a web app's boot.
+      start_period: 120s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=512m"]
+    cpus: 1.5
+    mem_limit: 3g
+    pids_limit: 512
     networks: [default, runtime-internal]
     restart: unless-stopped
 

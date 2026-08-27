@@ -288,3 +288,71 @@ test("no skill root is relative, because a relative one resolves into the user's
     assert.ok(!/['"]\.\//.test(entry), `skill root ${entry} is relative and would resolve under /workspace`);
   }
 });
+
+test("the ToolUniverse row appears only when a sidecar URL is configured", () => {
+  // Absent by default: a deployment that runs no sidecar must emit no row and
+  // behave exactly as it did before the sidecar existed.
+  const without = renderProfilePatch({ ...input, toolUniverseUrl: "" });
+  assert.doesNotMatch(without, /mcp-tooluniverse/);
+  assert.doesNotMatch(without, /streamable-http/);
+
+  const with_ = renderProfilePatch({ ...input, toolUniverseUrl: "http://tooluniverse:8080/mcp" });
+  assert.match(with_, /id: mcp-tooluniverse/);
+  assert.match(with_, /transport: streamable-http/);
+  assert.match(with_, /url: 'http:\/\/tooluniverse:8080\/mcp'/);
+  assert.match(with_, /serverName: 'tooluniverse'/);
+
+  // The severities differ on purpose: a run cannot do its work without the
+  // research tools and can without these, so a sidecar that is down degrades
+  // the run rather than refusing it.
+  const evimedRow = with_.slice(with_.indexOf("id: mcp-evimed"), with_.indexOf("id: mcp-tooluniverse"));
+  const sidecarRow = with_.slice(with_.indexOf("id: mcp-tooluniverse"));
+  assert.match(evimedRow, /failOnStartupError: true/);
+  assert.match(sidecarRow, /failOnStartupError: false/);
+
+  // Two live servers must not share a namespace, or the later plugin instance
+  // fails at load.
+  const names = [...with_.matchAll(/serverName: '([^']+)'/g)].map((m) => m[1]);
+  assert.equal(names.length, 2, "both servers must name a namespace");
+  assert.equal(new Set(names).size, names.length, `server names must be distinct: ${names.join(", ")}`);
+});
+
+test("the ToolUniverse row carries no credential, because the sidecar holds them", () => {
+  // The whole reason this is a sidecar rather than an install into the runtime
+  // image: ToolUniverse's tools read keys from their own environment, and this
+  // container is built to hold none. A header or env carrying one here would
+  // put a key back inside the sandbox and undo the arrangement.
+  const patch = renderProfilePatch({ ...input, toolUniverseUrl: "http://tooluniverse:8080/mcp" });
+  const sidecarRow = patch.slice(patch.indexOf("id: mcp-tooluniverse"), patch.indexOf("id: evimed-seam-probe"));
+
+  assert.doesNotMatch(sidecarRow, /headers:/);
+  assert.doesNotMatch(sidecarRow, /env:/);
+  for (const secretish of ["API_KEY", "TOKEN", "SECRET", "JWT", "Bearer"]) {
+    assert.ok(!sidecarRow.includes(secretish), `${secretish} must not appear in the sidecar row`);
+  }
+});
+
+test("a hostile ToolUniverse URL becomes a quoted scalar, never YAML structure", () => {
+  // `assertLiteral` refuses only control characters -- a newline would reshape
+  // the document -- and everything else is neutralised by quoting. Both halves
+  // are the property; asserting only the throw would have missed that the
+  // quoting is what stops `!!js` from being evaluated by the kernel.
+  for (const hostile of ["http://x/\n- id: approval", "http://x/\r\nfoo"]) {
+    assert.throws(
+      () => renderProfilePatch({ ...input, toolUniverseUrl: hostile }),
+      /toolUniverseUrl/,
+      `a control character must be refused: ${JSON.stringify(hostile)}`,
+    );
+  }
+
+  for (const hostile of ["!!js process.env.SECRET", "http://x/' \n- id: approval #"]) {
+    const patch = renderProfilePatch({ ...input, toolUniverseUrl: hostile.replace(/[\r\n]/g, "") });
+    const row = patch.slice(patch.indexOf("id: mcp-tooluniverse"), patch.indexOf("id: evimed-seam-probe"));
+    const urlLine = row.split("\n").find((line) => line.trim().startsWith("url:"));
+    assert.ok(urlLine, "the row must still carry a url");
+    // One line, and its value is a quoted scalar: no `!!js` tag survives as a
+    // tag, and no injected key becomes a sibling row.
+    assert.match(urlLine, /^\s+url: ['"]/, `must be quoted: ${urlLine}`);
+    assert.ok(!/^\s+url: !!js/.test(urlLine), `must not emit an expression tag: ${urlLine}`);
+  }
+});

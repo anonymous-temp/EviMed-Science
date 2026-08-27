@@ -38,6 +38,11 @@ export const EVIMED_PRESET = "evimed-universal";
  *  against the loader's directory, and that is the one tree they reach. */
 export const MCP_CLIENT_PLUGIN = "@deepseek-ai/dsh-mcp-client";
 
+/** Namespace for the sidecar's model-facing tool names: the model sees
+ *  `mcp__tooluniverse__execute_tool`. Distinct from `MCP_SERVER_NAME` because
+ *  a duplicate server name fails the later plugin instance at load. */
+export const TOOL_UNIVERSE_SERVER_NAME = "tooluniverse";
+
 /** The permission preset a hosted deployment runs under: confined *and*
  *  unattended, which is a pair the kernel does not ship. */
 export const HOSTED_PERMISSION_PRESET = "evimed-hosted";
@@ -50,6 +55,8 @@ export const HOSTED_PERMISSION_PRESET = "evimed-hosted";
  * @property {string} sessionsDir            absolute path inside the container
  * @property {string} mcpServerPath          absolute path to the MCP server entrypoint
  * @property {Record<string, string>} mcpEnvironment
+ * @property {string} [toolUniverseUrl]   MCP endpoint of the ToolUniverse sidecar; omitted
+ *   when the deployment does not run one, and then no row is emitted at all
  * @property {string} presetRoot             absolute path to the read-only preset root (kept for the
  *   record and the literal check; the kernel reads its own root, see below)
  * @property {string} presetSkillsDir        absolute path to the preset's shipped skill roots
@@ -163,9 +170,52 @@ export function renderProfilePatch(input) {
     "        env:",
     ...environmentRows(input.mcpEnvironment, input.workloadTokenFile),
     "",
+    ...toolUniverseRows(input),
     ...presetRows(input),
   ];
   return `${rows.join("\n")}\n`;
+}
+
+/**
+ * The ToolUniverse sidecar, when the deployment runs one.
+ *
+ * Reached over HTTP rather than spawned, and that is the whole point: its 2,700
+ * tools call their upstreams directly from their own process, which is exactly
+ * what this runtime container is built not to do. Run as a sidecar it holds its
+ * own credentials and its own egress, and the container keeps holding neither.
+ *
+ * `failOnStartupError` is false here and true for `mcp-evimed`, because the
+ * severities differ: a run cannot do its work without the research tools, and
+ * can without these. A sidecar that is down must degrade the run, not refuse it.
+ *
+ * Compact mode is the sidecar's own flag, not ours -- it exposes five discovery
+ * tools instead of 2,700 and reaches the rest through `execute_tool`. Without
+ * it a tool list larger than most context windows arrives before the question
+ * does.
+ *
+ * @param {ProfilePatchInput} input
+ * @returns {string[]}
+ */
+function toolUniverseRows(input) {
+  const url = String(input.toolUniverseUrl ?? "").trim();
+  if (!url) return [];
+  assertLiteral(url, "toolUniverseUrl");
+  return [
+    "# The ToolUniverse sidecar: an HTTP MCP server that holds its own keys and",
+    "# its own egress, so this container continues to hold neither.",
+    "- insert:",
+    "    - id: mcp-tooluniverse",
+    `      name: ${yamlScalar(MCP_CLIENT_PLUGIN)}`,
+    "      config:",
+    "        transport: streamable-http",
+    `        serverName: ${yamlScalar(TOOL_UNIVERSE_SERVER_NAME)}`,
+    // A sidecar that is down degrades the run; it must not refuse it.
+    "        failOnStartupError: false",
+    "        toolCallTimeoutMs: 180000",
+    `        url: ${yamlScalar(url)}`,
+    "",
+    "",
+  ];
 }
 
 /**
