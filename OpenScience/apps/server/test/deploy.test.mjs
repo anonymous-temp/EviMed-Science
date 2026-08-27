@@ -1309,3 +1309,42 @@ test("every agent whose completion requires a loaded skill can actually reach th
   }
   assert.ok(checked >= 4, `expected to check several agents, checked ${checked} — the walk found nothing`);
 });
+
+test("the skill's list of artifact-preserving tools matches the tools that actually preserve", async () => {
+  // The skill told runs that "only two tools preserve an artifact you may
+  // cite". That was true when it was written and false the moment the EviMed
+  // guideline connector started writing one: the file landed on disk and
+  // nothing told the model it could be cited, so a run following its
+  // instructions would still refuse to bind a claim to a guideline it had
+  // preserved.
+  //
+  // Derived from the connectors, not from a list here, so the next tool that
+  // starts preserving fails this instead of silently going unused.
+  const { readdir } = await import("node:fs/promises");
+  const mcpDir = path.join(repoRoot, "runtime/mcp/evimed-research");
+  const preserving = [];
+  for (const entry of await readdir(mcpDir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".py")) continue;
+    const source = await readFile(path.join(mcpDir, entry.name), "utf8");
+    // A module preserves when it builds a path under .evimed-sources AND
+    // writes to it. Naming the directory in a comment is not preserving.
+    if (/["']\.evimed-sources["']/.test(source) && /_atomic_write\s*\(/.test(source)) {
+      preserving.push(entry.name);
+    }
+  }
+  assert.ok(preserving.length >= 2, `expected the preserving modules, found ${preserving.join(", ") || "none"}`);
+
+  const skill = await readFile(
+    path.join(repoRoot, "runtime/skills/evimed/clinical-evidence-synthesis/SKILL.md"),
+    "utf8",
+  );
+  const claimed = /\b(?:Only\s+)?(two|three|four|five)\s+tools preserve an artifact/i.exec(skill);
+  assert.ok(claimed, "the skill must state how many tools preserve an artifact");
+  const words = { two: 2, three: 3, four: 4, five: 5 };
+
+  assert.equal(
+    words[claimed[1].toLowerCase()],
+    preserving.length,
+    `the skill says ${claimed[1]} tools preserve, but ${preserving.length} modules do: ${preserving.join(", ")}`,
+  );
+});
