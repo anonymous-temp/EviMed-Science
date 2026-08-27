@@ -195,9 +195,11 @@ Give every entry exactly one status:
   `searchedAt` (`YYYY-MM-DD`). Every query must match an entry in
   `clinical-evidence-search.json`'s `queries[]` (whitespace, quoting and case may
   differ; the terms may not), under the same database, on the log's own
-  `searchedAt` date. The search log is written by the retrieval tools, not by
-  you, so 「我查了但没查到」 is a falsifiable sentence — and one you have not run
-  the search for will be caught at once.
+  `searchedAt` date. You write that log yourself, one entry per search as you
+  run it, so 「我查了但没查到」 is falsifiable against it — and a search you never
+  ran will be caught at once. Its `queries[]` holds objects, never bare strings:
+  a log of strings loses the database each search was run against, which is half
+  of what makes a declared gap checkable.
 
 **A `gap` is a result, not a failure.** A sub-question you searched for and did
 not find is registered as `gap`, written into the body in those same words, and
