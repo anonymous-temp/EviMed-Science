@@ -558,6 +558,17 @@ services:
       OMIM_API_KEY: ${OPEN_SCIENCE_OMIM_API_KEY:-}
       BIOGRID_API_KEY: ${OPEN_SCIENCE_BIOGRID_API_KEY:-}
       DISGENET_API_KEY: ${OPEN_SCIENCE_DISGENET_API_KEY:-}
+      # Academic-tier sources. Free for research in a not-for-profit
+      # setting; COSMIC additionally requires registration with an
+      # organisational address. Absent keys simply leave their tools
+      # unregistered, which is the licensing control: a source we hold no
+      # entitlement for is not reachable rather than reachable-and-unlicensed.
+      ALPHA_GENOME_API_KEY: ${OPEN_SCIENCE_ALPHA_GENOME_API_KEY:-}
+      COSMIC_API_KEY: ${OPEN_SCIENCE_COSMIC_API_KEY:-}
+      BRENDA_EMAIL: ${OPEN_SCIENCE_BRENDA_EMAIL:-}
+      BRENDA_PASSWORD: ${OPEN_SCIENCE_BRENDA_PASSWORD:-}
+      PHARMVAR_API_KEY: ${OPEN_SCIENCE_PHARMVAR_API_KEY:-}
+      ADDGENE_API_KEY: ${OPEN_SCIENCE_ADDGENE_API_KEY:-}
       OPENGWAS_JWT: ${OPEN_SCIENCE_OPENGWAS_JWT:-}
       NVIDIA_API_KEY: ${OPEN_SCIENCE_NVIDIA_API_KEY:-}
       USPTO_API_KEY: ${OPEN_SCIENCE_USPTO_API_KEY:-}
