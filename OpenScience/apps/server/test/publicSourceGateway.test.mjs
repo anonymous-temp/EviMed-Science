@@ -532,3 +532,100 @@ test("public-source gateway stops reading an unbounded chunked response at the c
   assert.equal((await response.json()).error.code, "public_source_gateway_response_too_large");
   assert.equal(cancelled, true);
 });
+
+test("a rate-ceiling key is added when configured, and its absence is not an error", async (t) => {
+  // NCBI answers without a key at 3 req/s and with one at 10; openFDA gives
+  // 1,000 requests/day without and 120,000 with. Both are optional upstream,
+  // so they are injected by host rather than through a credential profile —
+  // a profiled host is *required* to carry one, and adding these two there
+  // would have turned every PubMed and openFDA call the runtime already makes
+  // into a 403.
+  const seen = [];
+  const make = (credentials) => createPublicSourceGatewayHandler(
+    { publicSourceCredentials: credentials },
+    runtimeManager(),
+    {
+      fetchImpl: async (url) => {
+        seen.push(String(url));
+        return Response.json({ ok: true });
+      },
+    },
+  );
+
+  const withKey = createServer(make({ ncbi: "ncbi-secret", openFda: "fda-secret" }));
+  const base = await listen(withKey);
+  t.after(() => close(withKey));
+
+  const ncbi = await gatewayRequest(base, {
+    url: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=aspirin",
+    accept: ["application/json"],
+  });
+  assert.equal(ncbi.status, 200);
+  const fda = await gatewayRequest(base, {
+    url: "https://api.fda.gov/drug/event.json?limit=1",
+    accept: ["application/json"],
+  });
+  assert.equal(fda.status, 200);
+
+  assert.ok(seen[0].includes("api_key=ncbi-secret"), `NCBI key must be added: ${seen[0]}`);
+  assert.ok(seen[1].includes("api_key=fda-secret"), `openFDA key must be added: ${seen[1]}`);
+
+  // The control that matters: with nothing configured the same calls must
+  // still succeed, un-keyed. Making these mandatory would break working calls.
+  const unconfigured = [];
+  const withoutKey = createServer(createPublicSourceGatewayHandler(
+    { publicSourceCredentials: {} },
+    runtimeManager(),
+    { fetchImpl: async (url) => { unconfigured.push(String(url)); return Response.json({ ok: true }); } },
+  ));
+  const bare = await listen(withoutKey);
+  t.after(() => close(withoutKey));
+
+  const noKey = await gatewayRequest(bare, {
+    url: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=aspirin",
+    accept: ["application/json"],
+  });
+  assert.equal(noKey.status, 200, "an absent rate key must not fail the request");
+  assert.ok(!unconfigured[0].includes("api_key="), "and must not append an empty key");
+});
+
+test("the runtime cannot supply, override, or read back a rate-ceiling key", async (t) => {
+  // Same rule as the authorizing credentials: the container never holds one
+  // and never gets to choose one. A runtime-supplied api_key would otherwise
+  // ride through untouched and bill someone else's quota.
+  const seen = [];
+  const server = createServer(createPublicSourceGatewayHandler(
+    { publicSourceCredentials: { ncbi: "server-key" } },
+    runtimeManager(),
+    { fetchImpl: async (url) => { seen.push(String(url)); return Response.json({ ok: true }); } },
+  ));
+  const base = await listen(server);
+  t.after(() => close(server));
+
+  const response = await gatewayRequest(base, {
+    url: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=x&api_key=runtime-forged",
+    accept: ["application/json"],
+  });
+  const body = await response.text();
+
+  assert.equal(response.status, 400, "a runtime-supplied api_key must be refused, not quietly ignored");
+  assert.match(body, /credential_parameter_forbidden/);
+  assert.deepEqual(seen, [], "and nothing must reach the upstream");
+  assert.ok(!body.includes("server-key"), "the server key must never appear in a response to the runtime");
+});
+
+test("every host a shipped specialist agent calls is on the gateway allowlist", async () => {
+  // These four were missing while the agents that call them shipped and ran:
+  // the MR agent dials gwas.mrcieu.ac.uk, meta and the bibliometric agent dial
+  // api.ror.org, drug-safety dials pmc.ncbi.nlm.nih.gov. They survived only
+  // because those agents reach the network directly today; the moment their
+  // egress is routed through this gateway, a delivered capability breaks.
+  for (const host of [
+    "gwas.mrcieu.ac.uk",
+    "api.ror.org",
+    "pmc.ncbi.nlm.nih.gov",
+    "pubmed.ncbi.nlm.nih.gov",
+  ]) {
+    assert.ok(PUBLIC_SOURCE_ALLOWED_HOSTS.has(host), `${host} is called by a shipped agent and must be allowed`);
+  }
+});

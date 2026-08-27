@@ -360,6 +360,11 @@ export function loadConfig(overrides = {}) {
     addgene: ["addgeneApiKey", "OPEN_SCIENCE_ADDGENE_API_KEY", "addgene.api-key"],
     biogrid: ["biogridApiKey", "OPEN_SCIENCE_BIOGRID_API_KEY", "biogrid.api-key"],
     opengwas: ["opengwasJwt", "OPEN_SCIENCE_OPENGWAS_JWT", "opengwas.jwt"],
+    // Rate-ceiling keys, not authorizing ones: both upstreams serve without
+    // them, just slower. Injected by host in the gateway rather than through a
+    // credential profile, because a profiled host is *required* to carry one.
+    ncbi: ["ncbiApiKey", "OPEN_SCIENCE_NCBI_API_KEY", "ncbi.api-key"],
+    openFda: ["openFdaApiKey", "OPEN_SCIENCE_OPENFDA_API_KEY", "openfda.api-key"],
   };
   const publicSourceCredentialSecrets = Object.fromEntries(
     Object.entries(publicSourceCredentialSpecs).map(([profile, [overrideValue, valueEnv, localFile]]) => [
