@@ -383,6 +383,56 @@ test("the sources a quote is checked against come from the ledger, not from the 
   assert.equal(sourceArtifactPaths(rows, "").length, 3, "no runId accepts all rows, deduplicated");
 });
 
+test("the run may read the rules and not the marking scheme", () => {
+  // The delivery gate executes inside the container that runs the work — the
+  // plugins have to be there — and its source sat on a readable bind mount at
+  // /runtime. RQ-03's passing run read `clinicalEvidence.mjs` seven times, then
+  // `contractRegistry.mjs`, then `runPolicy.mjs`, grepped for
+  // `collectSourceArtifacts`, `sourceArtifactPaths` and
+  // `successfulSourceArtifacts`, reasoned in its own transcript about which
+  // claims the quote check could resolve, and shaped the package to match. It
+  // passed with zero issues. That verdict says nothing about the package.
+  //
+  // The write guard did not object once, and correctly so: `grep -n` mutates
+  // nothing. It was built against a run rewriting its own brief; nobody had
+  // written down that reading the checker is the same problem wearing gloves.
+  //
+  // The paths below are the real ones from that transcript.
+  const prefix = "/runtime/dsh-home/profiles/evimed-runtime/node_modules/.pnpm/"
+    + "@evimed+dsh-socket@file+..+..+..+socket_@deepseek-ai+cordis@4.0.1/node_modules/@evimed/dsh-socket";
+  const state = {
+    budget: { steps: 1, tokens: 1, children: 0 },
+    limits: { maxSteps: 0, maxTokens: 0, maxChildren: 30 },
+    submitAttempts: 0,
+    deliveryAttemptLimit: 5,
+  };
+  for (const call of [
+    { name: "read", args: { file_path: `${prefix}/node_modules/@evimed/domain/src/clinicalEvidence.mjs` } },
+    { name: "read", args: { file_path: `${prefix}/node_modules/@evimed/domain/src/contractRegistry.mjs` } },
+    { name: "read", args: { file_path: `${prefix}/src/runPolicy.mjs` } },
+    { name: "bash", args: { command: `grep -n "function sourceArtifactPaths" ${prefix}/src/runPolicy.mjs` } },
+    { name: "bash", args: { command: `grep -rn "artifactPath" ${prefix}/plugins/run-policy.mjs` } },
+  ]) {
+    const verdict = toolPolicy(call, state);
+    assert.equal(verdict.allow, false, `${call.name} reached the gate's implementation: ${JSON.stringify(call.args)}`);
+    assert.equal(verdict.code, "gate_source_denied");
+    assert.match(verdict.reason, /不在你的阅读范围内/);
+  }
+
+  // Negative controls: the instructions are not the implementation. A run is
+  // meant to read its own skill, its own workspace and its own preserved
+  // sources, and refusing those would break the work to protect the exam.
+  for (const call of [
+    { name: "read", args: { file_path: `${prefix}/presets/evimed-universal/skills/clinical-evidence-synthesis/SKILL.md` } },
+    { name: "read", args: { file_path: ".evimed-sources/PMC11451125/fulltext.md" } },
+    { name: "read", args: { file_path: "deliverables/x/clinical-evidence-report.md" } },
+    { name: "bash", args: { command: "ls -la /workspace/.evimed-sources/" } },
+    { name: "write", args: { file_path: "deliverables/x/clinical-evidence-matrix.json" } },
+  ]) {
+    assert.equal(toolPolicy(call, state).allow, true, `wrongly refused: ${JSON.stringify(call.args)}`);
+  }
+});
+
 test("a file that is not there is one problem, not nine", () => {
   // Run 9 submitted `临床证据综述.md` where the contract asks for
   // `clinical-evidence-report.md`. The gate answered with ten issues: one
@@ -406,9 +456,24 @@ test("a file that is not there is one problem, not nine", () => {
   const wrongName = gate(new Map([["临床证据综述.md", "# 综述\n\n## 摘要\n\n实质内容。\n"]]));
   assert.equal(wrongName.ok, false);
   const blocking = wrongName.issues.filter((entry) => (entry.severity ?? "required") === "required");
-  assert.equal(blocking.length, 1, `one absence is one problem, got ${blocking.length}: ${blocking.map((e) => e.message).join(" | ")}`);
-  assert.match(String(blocking[0].message), /clinical-evidence-report\.md is not in the deliverable/);
-  assert.match(String(blocking[0].message), /exactly that name/, "the run must be told what to rename to, and where");
+  // One problem per absent file, and no more. Both declared outputs are absent
+  // here, so two is the honest count: this asserted one, which also suppressed
+  // the OTHER file's absence until a later submission — two of five delivery
+  // attempts spent on a list the first answer could have carried.
+  assert.equal(blocking.length, 2, `one problem per absent file, got ${blocking.length}: ${blocking.map((e) => e.message).join(" | ")}`);
+  const reportIssue = blocking.find((entry) => /clinical-evidence-report\.md/.test(String(entry.message)));
+  assert.ok(reportIssue, "the misnamed report must still be named");
+  assert.match(String(reportIssue.message), /is not in the deliverable/);
+  assert.match(String(reportIssue.message), /exactly that name/, "the run must be told what to rename to, and where");
+  assert.equal(
+    blocking.filter((entry) => /clinical-evidence-report\.md/.test(String(entry.message))).length,
+    1,
+    "one absent file is still one problem, not nine",
+  );
+  assert.ok(
+    blocking.some((entry) => /clinical-evidence-matrix\.json is missing/.test(String(entry.message))),
+    "the other absent file must be named in the same answer, not the next one",
+  );
   // And none of the nine symptoms survive.
   assert.equal(
     wrongName.issues.some((entry) => /missing a required section|must contain academic analysis/.test(String(entry.message))),

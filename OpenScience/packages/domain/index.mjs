@@ -72,6 +72,7 @@ export {
   deliverableDir,
   deliverableIdOfPath,
   deliverablePath,
+  isGateImplementationPath,
   isProtectedWritePath,
   normalizeWorkspacePath,
   workspaceLayout,
