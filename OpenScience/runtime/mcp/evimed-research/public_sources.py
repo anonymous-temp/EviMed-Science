@@ -1,12 +1,14 @@
 """Traceable public research connectors used when no private EviMed adapter is configured."""
 
 import gzip
+import hashlib
 import io
 import json
 import math
 import os
 import re
 import sqlite3
+from pathlib import Path
 import stat
 import threading
 import time
@@ -847,6 +849,58 @@ def _evimed_literature_records(arguments):
     }
 
 
+
+# Reused rather than re-implemented: the same symlink refusal, the same 0o700
+# directories, the same atomic write. A second copy of "write into the managed
+# workspace safely" is a second place for that rule to drift.
+from official_pages import (
+    _atomic_write as _official_atomic_write,
+    _safe_directory as _official_safe_directory,
+    _workspace as _official_workspace,
+)
+
+
+def _preserve_guideline_text(identifier, title, record):
+    """Write a guideline's own prose into the workspace, so a claim can quote it.
+
+    The gate binds a claim to a *preserved artifact* and checks the quote is in
+    it verbatim. Until now nothing in the EviMed connectors wrote one: only
+    `official_pages` and `open_access_fulltext` did. So every guideline this
+    deployment retrieved -- including its full text, which the upstream returns
+    -- could be cited by number and never carry a verified claim.
+
+    That is the measured ceiling on three real runs: the number of references
+    able to carry a claim equalled the number of preserved full texts exactly
+    (3, 3 and 1), and 12 of 15, 6 of 9 and 29 of 30 references could not.
+
+    Returns the workspace-relative path, or None when the record carries no
+    prose worth preserving. Failure to write is never fatal: a retrieval that
+    still returned records must not be turned into an error by a disk problem.
+    """
+    body = str(record.get("fullText") or "").strip()
+    if not body:
+        blocks = [str(_dict(block).get("text") or "").strip() for block in _list(record.get("blocks"))]
+        body = "\n\n".join(text for text in blocks if text)
+    if len(body) < 200:
+        return None
+    try:
+        workspace = _official_workspace()
+        digest = hashlib.sha256(("evimed-guide:%s" % identifier).encode("utf-8")).hexdigest()[:16]
+        root = _official_safe_directory(workspace, Path(".evimed-sources") / "evimed-guidelines" / digest)
+        header = "# %s\n\n" % (title or identifier)
+        meta = "".join(
+            "- %s: %s\n" % (label, record.get(key))
+            for label, key in (("Publisher", "publisher"), ("Year", "year"), ("Published", "publicationDate"))
+            if record.get(key)
+        )
+        payload = ("%s%s\n%s\n" % (header, meta, body)).encode("utf-8")
+        target = root / "guideline.md"
+        _official_atomic_write(target, payload)
+        return target.relative_to(workspace).as_posix()
+    except Exception:
+        # isolated: evimed_guideline_preservation_failures_total
+        return None
+
 def _evimed_guidelines(arguments):
     mode = arguments.get("mode", "records")
     body = {"query": arguments["query"][:512]}
@@ -888,11 +942,18 @@ def _evimed_guidelines(arguments):
             "rerankScore": record.get("rerankScore"),
             "rerankRank": record.get("rerankRank"),
         }
+        artifact = _preserve_guideline_text(identifier, title, record)
+        if artifact:
+            item["artifactPath"] = artifact
         items.append({key: value for key, value in item.items() if value not in (None, "", [])})
-        sources.append(_source(item["id"], title, record_url, "evimed-guideline"))
+        source = _source(item["id"], title, record_url, "evimed-guideline")
+        if artifact:
+            source["artifactPath"] = artifact
+        sources.append(source)
+    preserved = [item["artifactPath"] for item in items if item.get("artifactPath")]
     return {
         "status": "warning",
-        "summary": "Retrieved %d traceable EviMed guideline candidates." % len(items),
+        "summary": "Retrieved %d traceable EviMed guideline candidates (%d with preserved text)." % (len(items), len(preserved)),
         "data": {
             "items": items,
             "total": data.get("total"),
@@ -900,6 +961,7 @@ def _evimed_guidelines(arguments):
             "enrichedQuery": data.get("enrichedQuery") if mode == "blocks" else None,
             "requestedJurisdiction": arguments.get("jurisdiction"),
         },
+        "artifacts": preserved,
         "sources": sources,
         "warnings": [
             "Verify the guideline version, issuing body, jurisdiction, and original recommendation context before use.",

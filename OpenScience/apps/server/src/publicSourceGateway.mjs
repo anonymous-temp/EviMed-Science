@@ -187,6 +187,36 @@ const evimedPostEndpoints = new Map([
     fields: new Set(["query", "count"]),
     maxCount: 100,
   }],
+  // v2. Verified live against the deployment's own key on 2026-08-27, all five
+  // shapes returning real records. v1 still answers and is kept: nothing is
+  // gained by breaking a working path, and the two coexist upstream.
+  //
+  // What v2 adds is not convenience. `literature-guide` returns a guide's
+  // `fullText` and, with `searchBlock`, its text blocks -- the first source of
+  // guideline prose this deployment can quote verbatim instead of citing as an
+  // index record. `instruction` returns NMPA label text directly, where the
+  // public site answers 412 behind a WAF. `clinical-trial` reaches ChiCTR
+  // (registry 0), which refuses direct scraping with 405, and Cochrane CENTRAL
+  // (registry 2), which is otherwise a paid subscription answering 403.
+  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide", {
+    fields: new Set([
+      "query", "type", "useLlm", "searchBlock", "count", "startYear", "endYear",
+      "articleTypes", "hasPdf", "language", "minImpactFactor", "maxImpactFactor",
+      "journalTiers", "publishers",
+    ]),
+    maxCount: 100,
+  }],
+  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/instruction", {
+    fields: new Set(["query", "useLlm", "count", "source"]),
+    maxCount: 200,
+  }],
+  ["www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/clinical-trial", {
+    fields: new Set([
+      "query", "count", "registry", "startYear", "endYear", "status", "phase",
+      "studyType", "hasArticles", "source", "minSampleSize", "maxSampleSize",
+    ]),
+    maxCount: 100,
+  }],
   ["www.evimed.com/api-evimed/medicine-api/ai-api/search/api/evidence", {
     fields: new Set(["query"]),
   }],
