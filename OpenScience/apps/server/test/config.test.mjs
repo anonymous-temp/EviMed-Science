@@ -87,7 +87,22 @@ test("credentialed public-source adapters load server-only credentials from priv
     assert.equal(config.publicSourceCredentials.umls, "test-umls-key");
     assert.equal(config.publicSourceCredentialSources.umls, "file");
     assert.equal(config.publicSourceCredentialErrors.umls, null);
-    assert.equal(Object.keys(config.publicSourceCredentials).length, 9);
+    // Named, not counted. A bare count told you a number had changed and
+    // nothing about which credential appeared or vanished -- and a rename
+    // would have kept it passing.
+    assert.deepEqual(Object.keys(config.publicSourceCredentials).sort(), [
+      "addgene",
+      "core",
+      "evimedEvidence",
+      "ncbi",      // rate ceiling, not authorization: injected by host
+      "omim",
+      "openFda",   // same
+      "opengwas",
+      "semanticScholar",
+      "umls",
+      "unpaywall",
+      "biogrid",
+    ].sort());
   } finally {
     await rm(root, { recursive: true, force: true });
   }

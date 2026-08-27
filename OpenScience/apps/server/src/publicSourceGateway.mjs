@@ -1,70 +1,86 @@
 const gatewayPath = "/internal/sources/v1/fetch";
 
 const allowedHosts = new Set([
-  "api.crossref.org",
+  "alliancemine.alliancegenome.org",
+  "alphafold.ebi.ac.uk",
   "api.biorxiv.org",
+  "api.cellxgene.cziscience.com",
+  "api.clinpgx.org",
   "api.core.ac.uk",
+  "api.cpicpgx.org",
+  "api.crossref.org",
   "api.developers.addgene.org",
+  "api.epistemonikos.org",
   "api.fda.gov",
-  "api.genome.ucsc.edu",
   "api.gdc.cancer.gov",
-  "api.monarchinitiative.org",
+  "api.genome.ucsc.edu",
+  "api.labs.crossref.org",
   "api.materialsproject.org",
+  "api.monarchinitiative.org",
+  "api.omim.org",
   "api.open-meteo.com",
   "api.openalex.org",
-  "api.omim.org",
   "api.opengwas.io",
   "api.platform.opentargets.org",
-  "api.clinpgx.org",
+  "api.ror.org",
   "api.semanticscholar.org",
   "api.unpaywall.org",
-  "alphafold.ebi.ac.uk",
   "bindingdb.org",
-  "clinicaltrials.gov",
   "civicdb.org",
+  "clinicaltrials.gov",
+  "cpr.heart.org",
+  "dailymed.nlm.nih.gov",
   "data.rcsb.org",
   "dgidb.org",
-  "dailymed.nlm.nih.gov",
   "eutils.ncbi.nlm.nih.gov",
   "export.arxiv.org",
+  "fred.stlouisfed.org",
   "ghoapi.azureedge.net",
-  "gtexportal.org",
   "gnomad.broadinstitute.org",
+  "gtexportal.org",
+  "gwas.mrcieu.ac.uk",
   "jaspar.elixir.no",
+  "maayanlab.cloud",
+  "mpa.hunan.gov.cn",
   "mygene.info",
   "myvariant.info",
   "openneuro.org",
+  "pmc.ncbi.nlm.nih.gov",
+  "professional.heart.org",
   "pubchem.ncbi.nlm.nih.gov",
+  "pubmed.ncbi.nlm.nih.gov",
+  "r12.finngen.fi",
   "reactome.org",
   "rest.ensembl.org",
   "rest.uniprot.org",
   "rummageo.com",
-  "fred.stlouisfed.org",
-  "services.swpc.noaa.gov",
-  "service.azul.data.humancellatlas.org",
-  "maayanlab.cloud",
   "rxnav.nlm.nih.gov",
+  "seer.cancer.gov",
+  "service.azul.data.humancellatlas.org",
+  "services.swpc.noaa.gov",
+  "singlecell.broadinstitute.org",
+  "sparql.wikipathways.org",
   "string-db.org",
   "uts-ws.nlm.nih.gov",
+  "waterservices.usgs.gov",
   "webservice.thebiogrid.org",
-  "www.evimed.com",
-  "sparql.wikipathways.org",
+  "www.acc.org",
+  "www.cbioportal.org",
+  "www.ccfdie.org",
+  "www.cochrane.org",
+  "www.deciphergenomics.org",
+  "www.ebi.ac.uk",
+  "www.ema.europa.eu",
   "www.encodeproject.org",
+  "www.eqtlgen.org",
+  "www.escardio.org",
+  "www.evimed.com",
   "www.guidetopharmacology.org",
   "www.isrctn.com",
   "www.metabolomicsworkbench.org",
-  "alliancemine.alliancegenome.org",
-  "www.proteinatlas.org",
-  "www.cbioportal.org",
-  "www.ebi.ac.uk",
-  "www.cochrane.org",
-  "www.acc.org",
-  "professional.heart.org",
-  "cpr.heart.org",
   "www.nhs.uk",
-  "www.ccfdie.org",
-  "mpa.hunan.gov.cn",
-  "waterservices.usgs.gov",
+  "www.proteinatlas.org",
+  "wwwn.cdc.gov",
 ]);
 
 const officialDocumentPaths = new Map([
@@ -89,6 +105,27 @@ const credentialProfiles = new Map([
   ["opengwas", { configKey: "opengwas", host: "api.opengwas.io", path: "/api/", header: "authorization", scheme: "Bearer" }],
 ]);
 const credentialHosts = new Set([...credentialProfiles.values()].map((profile) => profile.host));
+
+/**
+ * Credentials that raise a rate ceiling rather than grant access.
+ *
+ * NCBI E-utilities answers without a key at 3 requests/second and with one at
+ * 10; openFDA gives 1,000 requests/day per IP without a key and 120,000 with.
+ * Both are optional by the upstream's own design, so they must NOT go in
+ * `credentialProfiles`: a host listed there is *required* to carry a profile
+ * (see `credentialHosts` below), and adding these two would have turned every
+ * PubMed and openFDA call the runtime already makes into a 403.
+ *
+ * Injected by host, only when configured, and never announced to the runtime —
+ * which is what keeps a rate-limit key out of the container the same way an
+ * authorizing one is.
+ * @type {Map<string, { configKey: string, query: string }>}
+ */
+const optionalRateCredentials = new Map([
+  ["eutils.ncbi.nlm.nih.gov", { configKey: "ncbi", query: "api_key" }],
+  ["api.fda.gov", { configKey: "openFda", query: "api_key" }],
+]);
+
 
 const allowedAcceptTypes = new Set([
   "application/atom+xml",
@@ -349,6 +386,14 @@ function validatedRequest(value) {
     throw gatewayError(403, "public_source_gateway_credential_profile_required", "This official endpoint requires a server-managed credential profile.");
   }
   if (profile?.query && [...url.searchParams.keys()].some((key) => key.toLowerCase() === profile.query.toLowerCase())) {
+    throw gatewayError(400, "public_source_gateway_credential_parameter_forbidden", "Credentials cannot be supplied by the runtime.");
+  }
+  // The same rule for the rate-ceiling keys. Skipping injection when the
+  // runtime already supplied one would have let a forged `api_key` ride
+  // through untouched and bill someone else's quota -- the runtime does not
+  // choose a credential here any more than it does above.
+  const rateCredentialSpec = optionalRateCredentials.get(hostname);
+  if (rateCredentialSpec && [...url.searchParams.keys()].some((key) => key.toLowerCase() === rateCredentialSpec.query.toLowerCase())) {
     throw gatewayError(400, "public_source_gateway_credential_parameter_forbidden", "Credentials cannot be supplied by the runtime.");
   }
   if (method === "GET") {
@@ -690,6 +735,16 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
             upstreamHeaders[profile.header] = profile.scheme ? `${profile.scheme} ${credential}` : credential;
           } else {
             request.url.searchParams.set(profile.query, credential);
+          }
+        }
+        const rateCredential = optionalRateCredentials.get(request.url.hostname.toLowerCase());
+        if (rateCredential) {
+          const value = String(config.publicSourceCredentials?.[rateCredential.configKey] ?? "").trim();
+          // Absent is normal: these upstreams serve without a key, just slower.
+          // A malformed one is not passed on -- a header-splitting value here
+          // would travel to the upstream, and "we had no key" is the safe read.
+          if (value && value.length <= 8 * 1024 && !/[\r\n\0]/.test(value)) {
+            request.url.searchParams.set(rateCredential.query, value);
           }
         }
         if (request.url.hostname.toLowerCase() === "api.materialsproject.org") {
