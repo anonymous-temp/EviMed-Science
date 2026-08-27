@@ -719,3 +719,106 @@ test("a mirror write produces the workspace projection the control plane reads",
   const projection = JSON.parse(written.get(target));
   assert.equal(projection.runId ?? projection.run?.runId, "run_test");
 });
+
+test("an evidence row is stamped with the run, so the join that resolves quotes can find it", async () => {
+  // The join is `sourceArtifactPaths(rows, runId)`, and its unit test is green:
+  // given rows stamped `run_a` it returns their paths, and given `run_zzz` it
+  // returns none. Production only ever produced the second case. Ingest stamped
+  // each row with `ctx.get('evimedRunId')?.(call.sessionId) ?? call.sessionId`,
+  // and no plugin provides `evimedRunId` — so the left side was always undefined
+  // and the fallback was the only branch there was. Every row of every run
+  // carried a session id in a field named runId; the join matched none of them
+  // and returned an empty map; the validator reported an empty map as every
+  // quote being "not found in its preserved source artifact".
+  //
+  // So this pins the round trip, not either half: whatever ingest writes, the
+  // join must find for the same run. Two green unit tests either side of a seam
+  // is exactly how this survived.
+  const { apply: applyEvidenceStore } = await import("../plugins/evidence-store.mjs");
+  const { apply: applyEvidence } = await import("../plugins/evidence.mjs");
+  const { sourceArtifactPaths } = await import("../src/runPolicy.mjs");
+
+  const build = async () => {
+    /** @type {Map<string, Function[]>} */
+    const listeners = new Map();
+    /** @type {Map<string, Map<string, any>>} */
+    const tables = new Map();
+    const table = (name) => {
+      if (!tables.has(name)) tables.set(name, new Map());
+      const rows = tables.get(name);
+      return {
+        put: async (key, value) => { rows.set(key, value); },
+        entries: () => [...rows.entries()],
+        values: () => [...rows.values()],
+      };
+    };
+    const services = new Map([
+      ["storageDomain", { open: async () => ({ table, close: async () => {} }) }],
+      ["fs", { resolve: async (relative, options) => `${options?.cwd ?? ""}/${relative}`, writeText: async () => {} }],
+    ]);
+    const ctx = {
+      get: (key) => services.get(key),
+      on(event, handler) {
+        listeners.set(event, [...(listeners.get(event) ?? []), handler]);
+        return () => listeners.set(event, (listeners.get(event) ?? []).filter((item) => item !== handler));
+      },
+      emit: (event, ...args) => (listeners.get(event) ?? []).map((handler) => handler(...args)),
+      effect(fn) { fn(); },
+      provide(name, value) { services.set(name, value); },
+    };
+    for (const key of ["storageDomain", "fs"]) {
+      Object.defineProperty(ctx, key, { get: () => services.get(key), configurable: true });
+    }
+    await applyEvidenceStore(ctx, { projectionDebounceMs: 1 });
+    await applyEvidence(ctx, { evidenceStaleMinutes: 10 });
+    return { ctx, store: ctx.get("evimedRun") };
+  };
+
+  // Retrieval runs in a subagent session, which is why keying rows by session
+  // could not have worked even if the ids had been comparable: one run's ledger
+  // would be split across every session that fetched anything.
+  const observe = (ctx) => ctx.emit(
+    SEAMS.events.toolObserved,
+    {
+      name: "mcp__evimed__open_access_full_text",
+      arguments: { identifier: "PMC4548722" },
+      agent: { id: "agent_child", session: { id: "sess_child", header: { cwd: "/workspace" } } },
+    },
+    {
+      value: {
+        status: "success",
+        summary: "Retrieved the complete open-access article into the managed workspace.",
+        data: { route: "europe-pmc-xml", markdownPath: ".evimed-sources/PMC4548722/fulltext.md" },
+        sources: [{ id: "PMC4548722", title: "A trial", url: "https://europepmc.org/articles/PMC4548722", source: "europe-pmc-fulltext", retrievedAt: "2026-08-26T15:00:00Z" }],
+        artifacts: [".evimed-sources/PMC4548722/fulltext.md"],
+      },
+      content: [],
+    },
+  );
+
+  const stamped = await build();
+  await stamped.store.runMirror.put("run_real", { runId: "run_real", cwd: "/workspace" });
+  observe(stamped.ctx);
+  const rows = stamped.store.evidence.entries().map(([, value]) => value);
+  assert.equal(rows.length, 1, "the observation produced no evidence row at all");
+  assert.equal(rows[0].runId, "run_real", "the row must name the run, not the session that fetched it");
+  assert.deepEqual(
+    sourceArtifactPaths(rows, "run_real"),
+    [".evimed-sources/PMC4548722/fulltext.md"],
+    "the join must find what ingest just wrote — this is the step that returned nothing",
+  );
+
+  // With no mirror row yet, an unknown run is '' and never a session id: the
+  // join has a deliberate rule for an unstamped row and none that can rescue an
+  // id which looks valid and belongs to nothing.
+  const early = await build();
+  observe(early.ctx);
+  const earlyRows = early.store.evidence.entries().map(([, value]) => value);
+  assert.equal(earlyRows[0].runId, "", "an unknown run must be blank, not the session id");
+  assert.notEqual(earlyRows[0].runId, "sess_child");
+  assert.deepEqual(
+    sourceArtifactPaths(earlyRows, "run_real"),
+    [".evimed-sources/PMC4548722/fulltext.md"],
+    "a row written before the mirror latched still belongs to the table it is in",
+  );
+});

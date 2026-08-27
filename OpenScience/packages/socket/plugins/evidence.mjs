@@ -60,11 +60,43 @@ export async function apply(ctx, config) {
     return (hash >>> 0).toString(16).padStart(8, '0')
   }
 
+  /**
+   * The run these rows belong to, read from the table that is keyed by it.
+   *
+   * This was `ctx.get('evimedRunId')?.(call.sessionId) ?? call.sessionId`, and
+   * no plugin anywhere provides `evimedRunId` — so the left side was always
+   * undefined and the "fallback" was the only branch that ever ran. Every row
+   * of every run was stamped with the session that made the call, while
+   * `sourceArtifactPaths` filters rows by run id: it matched none of them and
+   * returned no paths, so the map a quote is resolved through was empty on
+   * every submission of every run since the join was introduced.
+   *
+   * The validator reports an empty map as `supportQuote was not found in its
+   * preserved source artifact` — it blames the model for text it was never
+   * handed. RQ-03 spent its last two repair rounds rewriting ten quotes that
+   * were already verbatim correct, then ran out of attempts.
+   *
+   * An unknown run is '' and never a session id: `sourceArtifactPaths` has a
+   * deliberate rule for an unstamped row — it belongs to the table it is in —
+   * and no rule that can rescue an id that looks valid and matches nothing.
+   * Retrieval also happens in subagent sessions, so keying rows by session
+   * split one run's ledger across several keys even where it did match.
+   *
+   * @param {any} store @returns {string}
+   */
+  const runIdOf = (store) => {
+    try {
+      return String([...(store?.runMirror?.entries?.() ?? [])][0]?.[0] ?? '')
+    } catch {
+      return ''
+    }
+  }
+
   ctx.effect(() => onToolObserved(ctx, (call, outcome) => {
     // isolated: evimed_evidence_ingest_failures_total
     try {
       const store = ctx.get('evimedRun')
-      const runId = String(ctx.get('evimedRunId')?.(call.sessionId) ?? call.sessionId)
+      const runId = runIdOf(store)
       const records = evidenceFromOutcome(call, outcome, { runId, now: new Date().toISOString(), digest })
       if (!records.length) {
         // A retrieval tool that produced no evidence row is the one case worth

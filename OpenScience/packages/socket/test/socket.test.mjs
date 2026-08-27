@@ -97,6 +97,53 @@ test("plugin inject sets stay inside the manifest's services", async () => {
   }
 });
 
+test("every service a plugin reads is one somebody provides", async () => {
+  // `inject` is checked above, but `ctx.get` is not `inject`. A name read only
+  // through `ctx.get` and provided by nobody yields `undefined`, and the idiom
+  // that surrounds it — `ctx.get(x)?.method?.(…) ?? fallback` — turns that into
+  // a value rather than an error.
+  //
+  // `evimedRunId` was read exactly once, provided nowhere, and sat behind
+  // `?? call.sessionId`. So the fallback was not a fallback: it was the only
+  // branch that ever ran, and every evidence row of every run was stamped with
+  // a session id in a field named runId. The join that resolves quotes filters
+  // those rows by run id, matched none, and handed the validator an empty map —
+  // which the validator reported as "supportQuote was not found in its preserved
+  // source artifact". A missing service name surfaced, six links later, as the
+  // model having misquoted its sources.
+  const kernel = new Set([...SEAMS.services.required, ...SEAMS.services.optional, "workspaceCwd"]);
+  const files = (await readdir(new URL("../plugins/", import.meta.url))).filter((name) => name.endsWith(".mjs"));
+  const provided = new Set();
+  /** @type {Map<string, string[]>} */
+  const read = new Map();
+  // Comments first, and not as tidiness: the note explaining this very defect
+  // quotes the call it removed, and a scan that reads prose reported the fixed
+  // file as still broken. A check that cannot tell code from a comment about
+  // code keeps finding the bug it was written to retire.
+  const code = (source) => source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  for (const file of files) {
+    const source = code(await readFile(new URL(`../plugins/${file}`, import.meta.url), "utf8"));
+    for (const [, key] of source.matchAll(/ctx\.provide\('([^']+)'/g)) provided.add(key);
+    for (const [, key] of source.matchAll(/ctx\.get\('([^']+)'/g)) {
+      read.set(key, [...(read.get(key) ?? []), file]);
+    }
+  }
+  // The walk has to prove it walked: a glob that matched nothing, or a regex
+  // that matched nothing, would otherwise pass this test forever.
+  assert.equal(files.length, 8, "plugin sweep did not see every plugin");
+  assert.ok(read.size >= 5, `only ${read.size} distinct ctx.get names found — the scan did not read the sources`);
+  assert.ok(read.has("evimedRun") && read.has("evimedDiagnostics"), "the scan missed services known to be read");
+  assert.ok(provided.has("evimedRun") && provided.has("evimedEvidence"), "the scan missed services known to be provided");
+
+  for (const [key, sites] of read) {
+    assert.ok(
+      provided.has(key) || kernel.has(key),
+      `${sites.join(", ")} reads ctx.get('${key}'), which no plugin provides and the seam manifest does not name. ` +
+        "An unprovided service is undefined, not an error, and the ?.() idiom hides it.",
+    );
+  }
+});
+
 test("the seam manifest names only the kernel's own services, so a third-party one cannot be injected", async () => {
   // The test above proves every `inject` stays inside the manifest. It does not
   // prove the manifest stays inside the KERNEL — adding a community plugin's
