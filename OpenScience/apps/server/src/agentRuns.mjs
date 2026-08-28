@@ -2459,6 +2459,31 @@ export class AgentRunStore {
         ];
       }
     }
+    // What we ship has to be what was graded, on this path too.
+    //
+    // The receipt names each accepted file by sha256, and `finishFromDurableRecord`
+    // refuses a mismatch — but that function is only reached when the container
+    // is already gone. With the container still alive this path finished from
+    // the transcript and never opened the receipt, so a run that kept editing
+    // after acceptance shipped as `succeeded`: six of eight files differing from
+    // the digests they were accepted under, none of them seen by any gate. The
+    // verification was written for the rare case and skipped on the ordinary
+    // one.
+    const finalReceipt = await readDeliveryReceipt(project);
+    if (finalReceipt) {
+      const verified = await verifiedReceiptArtifacts(project, finalReceipt);
+      if (verified.mismatched.length) {
+        return this.finishInternal(project, run.id, {
+          status: "failed",
+          errorCode: "specialist_receipt_digest_mismatch",
+          artifacts: [],
+          qualityNotices: [
+            ...(terminal.qualityNotices ?? []),
+            ...verified.mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches`),
+          ].slice(0, 20),
+        });
+      }
+    }
     return this.finishInternal(project, run.id, { ...terminal, artifacts });
   }
 
