@@ -1687,6 +1687,57 @@ function quoteJoinsUnmarkedPassages(artifact, quote) {
   return haystack.indexOf(rest, resumesAfter) >= 0;
 }
 
+// One empty field is one problem, and one omission across forty claims is one
+// behaviour.
+//
+// A matrix built before its sources were preserved drew two required issues per
+// claim — `claims[3].artifactPath must be a non-empty string.` and
+// `claims[3].artifactPath is "", which is not a preserved artifact. Preserve the
+// source first …` — the same fact said twice, the second saying everything the
+// first does and what to do about it. Forty claims came back as eighty issues,
+// and the run has seven submissions to spend.
+//
+// So: where a field already has a specific finding, the generic shape complaint
+// about it goes; and where the same empty field recurs across three or more
+// claims, the per-claim lines give way to one that names the count and the
+// claims, because they are one omission and one repair.
+/** @param {string[]} issues @returns {string[]} */
+function collapseClaimFieldIssues(issues) {
+  const shape = /^(claims\[\d+\])\.([A-Za-z]+) must be a non-empty string\.$/;
+  const specific = new Set();
+  for (const issue of issues) {
+    const found = /^(claims\[\d+\])\.([A-Za-z]+) /.exec(String(issue));
+    if (found && !shape.test(String(issue))) specific.add(`${found[1]}.${found[2]}`);
+  }
+  const deduped = issues.filter((issue) => {
+    const found = shape.exec(String(issue));
+    return !found || !specific.has(`${found[1]}.${found[2]}`);
+  });
+
+  // Which fields are empty on which claims, read from the specific findings
+  // that survived rather than from the matrix — the message is the evidence
+  // that the check fired.
+  const empty = /^(claims\[(\d+)\])\.([A-Za-z]+) is "", which is not a preserved artifact\./;
+  /** @type {Map<string, string[]>} */
+  const byField = new Map();
+  for (const issue of deduped) {
+    const found = empty.exec(String(issue));
+    if (found) byField.set(found[3], [...(byField.get(found[3]) ?? []), found[1]]);
+  }
+  let collapsed = deduped;
+  for (const [field, labels] of byField) {
+    if (labels.length < 3) continue;
+    const listed = labels.length > 6 ? `${labels.slice(0, 6).join("、")} 等 ${labels.length} 条` : labels.join("、");
+    collapsed = [
+      ...collapsed.filter((issue) => !(empty.exec(String(issue))?.[3] === field)),
+      `${labels.length} 条主张的 ${field} 是空的（${listed}）——这些主张是在保全原文之前写下的。`
+        + "先用 evimed_open_access_full_text（按 DOI/PMCID）或 evimed_official_page_fetch（按 URL）把每一篇取到 .evimed-sources 下，"
+        + "再把它返回的路径填进对应主张；取不到的那几篇，改引你确实保全了的来源，或把该条改写为如实的证据空白。",
+    ];
+  }
+  return collapsed;
+}
+
 /** @param {unknown} artifact @param {unknown} quote @returns {string} */
 function quoteFailure(artifact, quote) {
   return quoteJoinsUnmarkedPassages(artifact, quote)
@@ -4554,10 +4605,12 @@ export function validateClinicalEvidencePackage({
     }
   }
 
+  const reported = collapseClaimFieldIssues(issues);
+
   return Object.freeze({
-    valid: issues.length === 0,
-    issues: Object.freeze(issues),
-    blockingIssues: Object.freeze(issues.filter((issue) => !degradableIssue(issue))),
+    valid: reported.length === 0,
+    issues: Object.freeze(reported),
+    blockingIssues: Object.freeze(reported.filter((issue) => !degradableIssue(issue))),
     claimIds: Object.freeze(claimIds),
     sourceDomains: Object.freeze([...sourceDomains].sort()),
     // Not an issue: nothing here is the run's fault and nothing here is

@@ -178,6 +178,65 @@ test("rejects a support quote that is not present in the claimed source artifact
   assert.match(result.issues.join("\n"), /not found in its preserved source artifact/);
 });
 
+test("a matrix written before its sources were preserved is one behaviour, not two issues per claim", () => {
+  // RQ-03's first submission drew 80 required issues from 40-odd claims: for
+  // every empty artifactPath, both `must be a non-empty string.` and `is "",
+  // which is not a preserved artifact. Preserve the source first …`. The second
+  // says everything the first does and what to do about it, and forty of each
+  // is one behaviour — the matrix was written before anything was fetched.
+  const bare = (index) => ({
+    claimType: "direct",
+    claimId: `CLM-${String(index + 1).padStart(3, "0")}`,
+    claim: `命题 ${index + 1}`,
+    sourceTitle: "T",
+    identifier: `PMID${index}`,
+    accessLevel: "full_text",
+    supportQuote: "some supporting passage of adequate length for the checker",
+    sourceUrl: "https://europepmc.org/x",
+    artifactPath: "",
+  });
+  const report = "# T\n\n## 摘要\n\n## 证据\n\n## 局限\n\n## 结论\n";
+  const many = validateClinicalEvidencePackage({
+    keepCoverage: true,
+    matrix: { claims: Array.from({ length: 12 }, (_, i) => bare(i)) },
+    reportText: report,
+  }).issues.filter((issue) => /artifactPath/.test(issue));
+  assert.equal(many.length, 1, `twelve claims, one omission, got ${many.length}: ${many.slice(0, 3).join(" | ")}`);
+  assert.match(many[0], /12 条主张的 artifactPath 是空的/);
+  assert.match(many[0], /evimed_open_access_full_text/, "the collapsed message must still say how to repair it");
+
+  // Negative control 1: below the threshold the per-claim finding stands, so a
+  // single missing path is not buried in a summary about the matrix.
+  const few = validateClinicalEvidencePackage({
+    keepCoverage: true,
+    matrix: { claims: [bare(0), { ...bare(1), artifactPath: ".evimed-sources/a/fulltext.md" }] },
+    reportText: report,
+  }).issues.filter((issue) => /artifactPath/.test(issue));
+  assert.ok(few.some((issue) => /claims\[0\]\.artifactPath is ""/.test(issue)), `expected the per-claim finding, got: ${few.join(" | ")}`);
+  assert.ok(!few.some((issue) => /条主张的 artifactPath 是空的/.test(issue)), "one claim is not a pattern");
+
+  // Negative control 2: the generic shape complaint survives for a field that
+  // has no more specific finding of its own.
+  const thin = validateClinicalEvidencePackage({
+    keepCoverage: true,
+    matrix: { claims: [{ ...bare(0), claim: "", artifactPath: ".evimed-sources/a/fulltext.md" }] },
+    reportText: report,
+  }).issues;
+  assert.ok(
+    thin.some((issue) => /claims\[0\]\.claim must be a non-empty string\./.test(issue)),
+    "a field with only the shape rule must still be reported",
+  );
+
+  // Negative control 3: a non-empty path that is not a preserved artifact is a
+  // different problem and keeps its own message.
+  const wrong = validateClinicalEvidencePackage({
+    keepCoverage: true,
+    matrix: { claims: [{ ...bare(0), artifactPath: "notes/source-records.md" }] },
+    reportText: report,
+  }).issues;
+  assert.ok(wrong.some((issue) => /"notes\/source-records\.md", which is not a preserved artifact/.test(issue)));
+});
+
 test("a search log written to another schema is one problem, not one per gap entry", () => {
   // The contract's `queries[]` holds objects. A run wrote plain strings and put
   // the objects under `searches` instead, so `entry?.query` was undefined for
