@@ -28,6 +28,7 @@
 import {
   MAX_DELEGATION_DEPTH,
   errorCodeMessage,
+  deliverableIdOfPath,
   isGateImplementationPath,
   isProtectedWritePath,
   layeredIssues,
@@ -70,12 +71,14 @@ const GATE_SOURCE_REFUSAL = '交付门禁的实现不在你的阅读范围内。
  *   limits: { maxSteps: number, maxTokens: number, maxChildren: number },
  *   submitAttempts: number,
  *   deliveryAttemptLimit: number,
+ *   acceptedDeliverables?: readonly string[],
  * }} state
  * @returns {{ allow: true } | { allow: false, code: string, reason: string }}
  */
 export function toolPolicy(call, state) {
   const name = String(call?.name ?? '')
   const args = /** @type {Record<string, any>} */ (call?.args ?? {})
+  const accepted = new Set(state.acceptedDeliverables ?? [])
 
   const readFields = READ_ARG_TOOLS[/** @type {keyof typeof READ_ARG_TOOLS} */ (name)]
   if (readFields) {
@@ -92,6 +95,25 @@ export function toolPolicy(call, state) {
     for (const field of fields) {
       const value = args[field]
       if (typeof value !== 'string' || !value) continue
+      // An accepted deliverable is finished, and its files are the ones the
+      // receipt names by sha256 — the only thing the control plane can verify
+      // once the container is gone.
+      //
+      // A run that keeps polishing after acceptance edits those files, and the
+      // digests stop matching: the accepted package no longer exists anywhere.
+      // On a seven-attempt budget one run passed at attempt 4, passed again at 5
+      // and 6 while trimming advisory notes, broke something on 7, and finished
+      // 部分交付 holding a receipt for a package it had overwritten. Advisory
+      // polish is worth having; it is not worth a delivered package.
+      if (accepted.has(String(deliverableIdOfPath(value) ?? ''))) {
+        return {
+          allow: false,
+          code: 'accepted_deliverable_frozen',
+          reason: `交付物 ${deliverableIdOfPath(value)} 已通过校验并写入回执，其文件按 sha256 记录在案，不能再改动。`
+            + '回执认的就是这一版；改了文件，控制面核对散列时这一版就不存在了。'
+            + '余下的尝试次数请用在其他交付物上，剩余的都是 advisory，不影响交付。',
+        }
+      }
       if (isProtectedWritePath(value)) {
         return {
           allow: false,
@@ -108,6 +130,14 @@ export function toolPolicy(call, state) {
     // changes nothing and that the write guard therefore waved through.
     if (isGateImplementationPath(command)) {
       return { allow: false, code: 'gate_source_denied', reason: GATE_SOURCE_REFUSAL }
+    }
+    const frozen = [...accepted].find((id) => new RegExp(`deliverables/${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`).test(command))
+    if (frozen && /(?:^|[|;&]\s*)(?:rm|mv|cp|sed\s+-i|tee|truncate|install|dd|ln)\b/.test(command)) {
+      return {
+        allow: false,
+        code: 'accepted_deliverable_frozen',
+        reason: `交付物 ${frozen} 已通过校验并写入回执，其文件按 sha256 记录在案，不能再改动。`,
+      }
     }
     const guarded = guardedBashTarget(command)
     if (guarded) {
