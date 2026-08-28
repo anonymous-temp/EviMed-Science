@@ -101,7 +101,19 @@ const clinicalSubject = /(?:胸痛|胸口|心绞痛|急性冠脉|冠心病|胃�
 // carries it, and a named report ("分析报告", "研究报告") is one outright.
 // Questions that merely contain 分析 or 研究 without asking for a document are
 // unaffected, which the routing tests hold.
-const explicitReportIntent = /(?:证据报告|证据综合|循证.{0,6}报告|综合.{0,6}证据.{0,4}报告|出一份|写一份|撰写|(?:生成|整理|写出|给我|出具|提供|输出|形成|产出|完成).{0,16}(?:报告|综述)|(?:分析|研究|评估|可行性|调研|论证|总结)报告|深度(?:研究|调研|报告)|systematic review|evidence report|evidence synthesis|clinical evidence report)/i;
+// 一篇…论文 is a commission too, and the most academic way to write one.
+//
+// This pattern knew 报告 and 综述 and not 论文, so a brief whose 交付 section
+// read 「一篇面向临床医师与药师的中文学术论文」 — under a title asking for
+// 有效性与安全性证据评价 of a named medicine — matched nothing. The clinical
+// subject matched; the report intent did not; the net returned null. When the
+// classifier then timed out, that request became an open-domain chat answer
+// with no report and no gate, which is exactly what this net exists to prevent
+// ("a high-risk medicine asked about in a report request always reaches the
+// clinical gate"). A quantifier is required — 「一篇/一份…论文」 commissions one,
+// while 「这篇论文说……」 cites one — so a discussion of published papers is
+// still not a request to write one.
+const explicitReportIntent = /(?:证据报告|证据综合|循证.{0,6}报告|综合.{0,6}证据.{0,4}报告|出一份|写一份|撰写|(?:生成|整理|写出|给我|出具|提供|输出|形成|产出|完成).{0,16}(?:报告|综述|论文|文稿)|(?:一篇|一份|一本)[^。；;\n]{0,30}(?:论文|报告|综述|文稿)|(?:分析|研究|评估|可行性|调研|论证|总结)报告|深度(?:研究|调研|报告)|systematic review|evidence report|evidence synthesis|clinical evidence report)/i;
 // Commissioning one, not citing one. The trailing half used to match any
 // mention followed by 分析 or 研究 within 24 characters, which is how
 // "优先采用大样本前瞻队列、注册登记及其 meta 分析" and "现有网络 meta 分析……

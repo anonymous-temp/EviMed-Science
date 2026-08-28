@@ -31,6 +31,40 @@ test("open-domain research questions deterministically route to every registered
   }
 });
 
+test("a commissioned paper is a commissioned document, and the net catches it", async () => {
+  // The regex net exists so that a high-risk medicine asked about in a report
+  // request always reaches the clinical gate when the classifier declines or is
+  // unavailable. RQ-03's brief is titled
+  // 《速效救心丸连续用药三个月及以上的有效性与安全性证据评价》 and its 交付
+  // section asks for 「一篇面向临床医师与药师的中文学术论文」. The clinical
+  // subject matched; the report intent did not, because the pattern knew 报告
+  // and 综述 and not 论文. The net returned null, the classifier then timed out
+  // on a slow link, and the request became an open-domain chat answer with no
+  // report and no gate — `effectiveRouteReason: "unrouted:open-domain"`.
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+  for (const query of [
+    "速效救心丸连续用药三个月及以上的有效性与安全性证据评价。交付：一篇面向临床医师与药师的中文学术论文。",
+    "胸口突然发闷发紧，请就速效救心丸的证据写一篇学术论文",
+    "速效救心丸的证据评价，输出一份论文",
+  ]) {
+    assert.equal(routeOpenDomainSpecialist(query, agents)?.agentId, "clinical-evidence-synthesis", query);
+  }
+
+  // Negative controls. A quantifier is what separates commissioning a paper
+  // from talking about one, and the subject requirement still holds.
+  for (const query of [
+    "这篇论文说速效救心丸能长期服用，是真的吗？",
+    "速效救心丸长期吃安全吗",
+    "学术论文一般怎么组织结构？",
+  ]) {
+    assert.notEqual(
+      routeOpenDomainSpecialist(query, agents)?.agentId,
+      "clinical-evidence-synthesis",
+      `must not commission a report: ${query}`,
+    );
+  }
+});
+
 test("the heavy clinical report pipeline only engages on explicit report intent", async () => {
   const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
   // Explicit report / deep-synthesis requests route to the clinical gate —
