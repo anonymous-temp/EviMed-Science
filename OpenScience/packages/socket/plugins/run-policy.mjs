@@ -218,6 +218,7 @@ export async function apply(ctx, config) {
       limits: entry.limits,
       submitAttempts: entry.attempts.get(String(call.args?.deliverableId ?? '')) ?? 0,
       deliveryAttemptLimit: config.deliveryAttemptLimit,
+      acceptedDeliverables: entry.items.filter((item) => item.status === 'accepted').map((item) => item.id),
     })
   }))
 
@@ -498,6 +499,17 @@ export async function apply(ctx, config) {
         await putRunMirror(ctx, entry, config.bundleVersion)
 
         if (!verdict.ok) {
+          // Acceptance is not revocable by a later attempt. This forced the item
+          // to `submitted` and then applied `reject` whatever it had been, so a
+          // seventh submission took a package that had passed at attempt 4 back
+          // to rejected — and the run finished 部分交付 holding a receipt for an
+          // accepted delivery. The files are frozen at acceptance now, so this
+          // is the second lock rather than the first.
+          if (item.status === 'accepted') {
+            Object.assign(item, { lastIssues: verdict.issues })
+            await putPlanIndex(store(), entry)
+            return rejectionEnvelope(verdict)
+          }
           Object.assign(item, { status: item.status === 'delegated' ? 'submitted' : item.status, lastIssues: verdict.issues })
           Object.assign(item, advancePlanItem({ ...item, status: 'submitted' }, 'reject', { lastIssues: verdict.issues }))
           await putPlanIndex(store(), entry)

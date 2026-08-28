@@ -383,6 +383,55 @@ test("the sources a quote is checked against come from the ledger, not from the 
   assert.equal(sourceArtifactPaths(rows, "").length, 3, "no runId accepts all rows, deduplicated");
 });
 
+test("an accepted deliverable is finished, and polishing it cannot cost the delivery", () => {
+  // On a seven-attempt budget RQ-03 passed at attempt 4 (ok=true, 0 required),
+  // passed again at 5 and 6 while trimming advisory notes from 29 to 25, broke
+  // something on 7, and finished 部分交付 — holding a receipt for a package it
+  // had since overwritten. Two locks were missing and both are here.
+  //
+  // The receipt names its files by sha256, and that digest is the only thing
+  // the control plane can verify once the container is gone. So the files of an
+  // accepted deliverable are frozen: editing them does not improve the accepted
+  // package, it destroys it.
+  const state = {
+    budget: { steps: 1, tokens: 1, children: 0 },
+    limits: { maxSteps: 0, maxTokens: 0, maxChildren: 30 },
+    submitAttempts: 1,
+    deliveryAttemptLimit: 7,
+    acceptedDeliverables: ["sxjw-longterm-evidence-review"],
+  };
+  for (const call of [
+    { name: "write", args: { file_path: "deliverables/sxjw-longterm-evidence-review/clinical-evidence-report.md" } },
+    { name: "edit", args: { file_path: "deliverables/sxjw-longterm-evidence-review/clinical-evidence-matrix.json" } },
+    { name: "bash", args: { command: "rm -f deliverables/sxjw-longterm-evidence-review/citation-audit.md" } },
+  ]) {
+    const verdict = toolPolicy(call, state);
+    assert.equal(verdict.allow, false, `accepted deliverable was editable: ${JSON.stringify(call.args)}`);
+    assert.equal(verdict.code, "accepted_deliverable_frozen");
+    assert.match(verdict.reason, /sha256/);
+  }
+
+  // Negative controls: another deliverable is still being worked on, an
+  // unaccepted one is fully editable, and reading the accepted one is fine —
+  // the run has to be able to quote its own report in the final reply.
+  for (const call of [
+    { name: "write", args: { file_path: "deliverables/second-package/clinical-evidence-report.md" } },
+    { name: "read", args: { file_path: "deliverables/sxjw-longterm-evidence-review/clinical-evidence-report.md" } },
+    { name: "bash", args: { command: "cat deliverables/sxjw-longterm-evidence-review/citation-audit.md" } },
+  ]) {
+    assert.equal(toolPolicy(call, state).allow, true, `wrongly refused: ${JSON.stringify(call.args)}`);
+  }
+
+  // And with nothing accepted yet, the deliverable is ordinary.
+  assert.equal(
+    toolPolicy(
+      { name: "write", args: { file_path: "deliverables/sxjw-longterm-evidence-review/clinical-evidence-report.md" } },
+      { ...state, acceptedDeliverables: [] },
+    ).allow,
+    true,
+  );
+});
+
 test("the run may read the rules and not the marking scheme", () => {
   // The delivery gate executes inside the container that runs the work — the
   // plugins have to be there — and its source sat on a readable bind mount at
