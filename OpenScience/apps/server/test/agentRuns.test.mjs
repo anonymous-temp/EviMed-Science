@@ -661,6 +661,82 @@ async function withAnswerModeRun(fn) {
   }
 }
 
+test("a run whose files drifted from its receipt does not ship, container alive or not", async () => {
+  // The digest check was written for the container-gone path and only reached
+  // there. With the container alive, reconciliation finished from the transcript
+  // and never opened the receipt — so a run that kept editing after its package
+  // was accepted was recorded `succeeded` with 16 artifacts while six of its
+  // eight files differed from the digests they were accepted under. Nothing had
+  // graded the bytes that shipped.
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    const deliverableDir = path.join(project.workspaceDir, "deliverables", "d1");
+    await mkdir(deliverableDir, { recursive: true });
+    await writeFile(path.join(deliverableDir, "clinical-evidence-report.md"), "# edited after grading\n", "utf8");
+    await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_live",
+      bundleVersion: "0.1.0",
+      domainVersion: "0.1.0",
+      entries: [{
+        deliverableId: "d1",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        files: [{ path: "deliverables/d1/clinical-evidence-report.md", sha256: "0".repeat(64), bytes: 1 }],
+        acceptedAt: "2026-01-01T00:00:00.000Z",
+        attempt: 6,
+        notices: [],
+      }],
+    }, null, 2), "utf8");
+
+    await dispatch("turn_receipt_drift");
+    appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "failed", "a package no gate has seen must not ship");
+    assert.equal(run.errorCode, "specialist_receipt_digest_mismatch");
+    assert.deepEqual(run.artifacts, []);
+    assert.ok(
+      (run.qualityNotices ?? []).some((line) => /digest the file no longer matches/.test(String(line))),
+      "the verdict must say which file drifted",
+    );
+  });
+});
+
+test("a receipt whose digests still match does not block an ordinary success", async () => {
+  // Negative control: the check must bite only on drift. Without it this pair
+  // would pass with the verification stubbed out entirely.
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    const deliverableDir = path.join(project.workspaceDir, "deliverables", "d1");
+    await mkdir(deliverableDir, { recursive: true });
+    const body = "# graded and unchanged\n";
+    await writeFile(path.join(deliverableDir, "clinical-evidence-report.md"), body, "utf8");
+    await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_live_ok",
+      bundleVersion: "0.1.0",
+      domainVersion: "0.1.0",
+      entries: [{
+        deliverableId: "d1",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        files: [{
+          path: "deliverables/d1/clinical-evidence-report.md",
+          sha256: createHash("sha256").update(body).digest("hex"),
+          bytes: Buffer.byteLength(body),
+        }],
+        acceptedAt: "2026-01-01T00:00:00.000Z",
+        attempt: 6,
+        notices: [],
+      }],
+    }, null, 2), "utf8");
+
+    await dispatch("turn_receipt_intact");
+    appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded", (run.qualityNotices ?? []).join(" | "));
+    assert.equal(run.errorCode, null);
+  });
+});
+
 test("an answer-mode turn succeeds with zero citations once its skill is loaded", async () => {
   await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
     await dispatch("turn_answer_zero_citation");
