@@ -45,4 +45,29 @@ if find "$target" -type l -print -quit | grep -q .; then
   exit 1
 fi
 
-echo "restore drill ok: $ARCHIVE"
+# A present directory is not a restored one.
+#
+# The drill asserted that `data/` existed and held no symlinks, and stopped
+# there — so an archive that unpacked to an empty directory passed, every day,
+# and the state file recorded a successful drill. "Restored nothing" and
+# "restored everything" looked alike, which is the failure this whole backup
+# exists to prevent.
+#
+# The shape is what a data directory is: per-user project trees. Checked by
+# structure and by count, both cheap, and both things an empty or truncated
+# unpack fails.
+if [ ! -d "$target/users" ]; then
+  echo "Restore drill produced no users/ tree: the archive unpacked to something that is not a data directory." >&2
+  exit 1
+fi
+
+# No `| head`: under `set -o pipefail` the early close sends SIGPIPE to `find`
+# and the drill exits 141 having restored the archive perfectly. Counting all of
+# them costs milliseconds on twenty thousand files and cannot fail that way.
+files="$(find "$target" -type f -printf '.' 2>/dev/null | wc -c)"
+if [ "$files" -lt 20 ]; then
+  echo "Restore drill recovered only ${files} file(s); an archive of this deployment carries thousands." >&2
+  exit 1
+fi
+
+echo "restore drill ok: $ARCHIVE (users/ present, ${files} files)"
