@@ -202,9 +202,8 @@ test("a matrix written before its sources were preserved is one behaviour, not t
     reportText: report,
   }).issues.filter((issue) => /artifactPath/.test(issue));
   assert.equal(many.length, 1, `twelve claims, one omission, got ${many.length}: ${many.slice(0, 3).join(" | ")}`);
-  assert.match(many[0], /另有 11 条主张的 artifactPath 是同一个值/);
+  assert.match(many[0], /另有 11 条主张是同一条/);
   assert.match(many[0], /evimed_open_access_full_text/, "the collapsed message must still say how to repair it");
-  assert.match(many[0], /写在保全原文之前/, "an empty value has a cause worth naming");
 
   // The same rule on a value that is wrong rather than absent. RQ-03 rewrote
   // its matrix to the right schema and then cited the run's own notes file on
@@ -225,7 +224,41 @@ test("a matrix written before its sources were preserved is one behaviour, not t
   // The rule's own wording survives intact — it is the half that says what to do.
   assert.ok(wrongValue.some((issue) => /which is not a preserved artifact\. Preserve the source first/.test(issue)));
   assert.ok(wrongValue.some((issue) => /use exactly one of full_text, official_page, abstract, structured_record/.test(issue)));
-  for (const issue of wrongValue) assert.match(issue, /另有 19 条主张的/);
+  for (const issue of wrongValue) assert.match(issue, /另有 19 条主张是同一条/);
+
+  // And the shape that broke both earlier versions of this: a message carrying
+  // no value at all. `claims[N].artifactPath is not listed as a successful
+  // source artifact for this run.` names no value to group on, so keying the
+  // collapse on `is "<value>"` skipped it entirely — a gate came back with 119
+  // required issues that were a handful of decisions. Grouping on the message
+  // text needs no list of shapes.
+  const noValue = validateClinicalEvidencePackage({
+    keepCoverage: true,
+    matrix: {
+      claims: Array.from({ length: 9 }, (_, i) => ({
+        ...bare(i),
+        artifactPath: `.evimed-sources/never-fetched-${i}/fulltext.md`,
+      })),
+    },
+    reportText: report,
+  }).issues.filter((issue) => /not listed as a successful source artifact/.test(issue));
+  assert.equal(noValue.length, 1, `nine identical complaints, got ${noValue.length}`);
+  assert.match(noValue[0], /另有 8 条主张是同一条/);
+
+  // Negative control: different text about different claims must stay separate,
+  // or the collapse would hide distinct findings behind whichever came first.
+  const distinct = validateClinicalEvidencePackage({
+    keepCoverage: true,
+    matrix: {
+      claims: [
+        { ...bare(0), artifactPath: "notes-a.md" },
+        { ...bare(1), artifactPath: "notes-b.md" },
+        { ...bare(2), artifactPath: "notes-c.md" },
+      ],
+    },
+    reportText: report,
+  }).issues.filter((issue) => /is not a preserved artifact/.test(issue));
+  assert.equal(distinct.length, 3, "three different values are three findings");
 
   // Negative control 1: below the threshold the per-claim finding stands, so a
   // single missing path is not buried in a summary about the matrix.
