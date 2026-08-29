@@ -1,0 +1,72 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "体检心电图所见窦性心律不齐与心绞痛的实体边界、临床意义分层，及速效救心丸的适应证范围",
+  "title": "窦性心律不齐与心绞痛的实体边界：体检心电图所见的意义分层与速效救心丸的适应证边界",
+  "startedAt": "2026-08-14T04:47:00Z",
+  "completedAt": "2026-08-14T05:59:39Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC10836241/fulltext.md",
+    ".evimed-sources/PMC7955328/fulltext.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "PMID:30586772",
+      "note": "2018 ACC/AHA/HRS bradycardia guideline full text not open-access via Europe PMC"
+    },
+    {
+      "identifier": "PMID:39210710",
+      "note": "2024 ESC chronic coronary syndromes guideline exceeded gateway response limit"
+    },
+    {
+      "identifier": "PMID:39139890 / PMC11317726",
+      "note": "JCS/JHRS 2022 guideline full text retrieval failed (Wiley 403 / Europe PMC upstream unavailable)"
+    },
+    {
+      "identifier": "PMID:34383451",
+      "note": "AFP Sinus Node Dysfunction full text not open-access"
+    },
+    {
+      "identifier": "PMID:20673812 / PMC3332538",
+      "note": "Heart Rhythm sinus arrhythmia study full text not open-access (Elsevier); PMC full-text retrieval unavailable this run, so specific numeric values reported qualitatively"
+    },
+    {
+      "identifier": "PMID:18254051 / PMC7137214",
+      "note": "Cochrane suxiao jiuxin wan review not open-access (cochranelibrary 403); PMC full-text retrieval unavailable this run, so specific numeric values reported qualitatively"
+    },
+    {
+      "identifier": "NMPA official label",
+      "note": "no allowlisted official-page route for the current NMPA label; indexed copy used"
+    },
+    {
+      "identifier": "CNKI / Wanfang",
+      "note": "Chinese full-text databases not accessible; Chinese-language studies not directly retrieved"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionOrArithmeticChecks": true
+  },
+  "stats": {
+    "totalSearches": 28,
+    "recordsIdentified": 190,
+    "recordsAfterDeduplication": 140,
+    "sourcesIncluded": 7,
+    "distinctPreservedSources": 4
+  },
+  "status": "succeeded"
+}

@@ -1,0 +1,39 @@
+{
+ "id": "run_e7bb03c42cef83d1b4ba08c65fc6287d",
+ "dispatchId": "rq-02-n7ayUs",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00526e28affek4jW3vmun7ayUs",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.93",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-02 研究任务 ## 选题 **《舌下含服硝酸甘油或速效救心丸后胸痛不缓解的时间阈值与院外升级路径：指南推荐的证据基础与一致性评价》** ## 研究背景 急性胸痛发作时，患者与家属最需要的是一个可执行的时间界限：含服药物后等多久仍不缓解就必须呼叫急救。各国指南与国内共识都给出过数字，但数字并不一致，也很少交代…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T11:19:31.813Z",
+ "startedAt": "2026-08-13T11:19:31.813Z",
+ "finishedAt": "2026-08-13T12:05:05.471Z",
+ "durationMs": 2733658,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The search log must exactly match successful evidence-search calls from the same run — missing from the log: \"nitroglycerin sublingual tablet 0.4 mg\", \"henrikson chest pain relief nitroglycerin does not predict a\", \"nitroglycerin relief chest pain does not predict coronary ar\"; logged but",
+  "Report line 86 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+ ],
+ "observedMessages": 99,
+ "observedToolCalls": 138,
+ "lastProgressAt": "2026-08-13T12:04:35.577Z"
+}

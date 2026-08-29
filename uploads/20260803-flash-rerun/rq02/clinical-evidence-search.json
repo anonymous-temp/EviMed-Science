@@ -1,0 +1,383 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-03T04:20:00+08:00",
+  "databases": [
+    "EviMed literature (internal/PubMed)",
+    "EviMed guideline source",
+    "PubMed",
+    "Europe PMC",
+    "PMC",
+    "OpenAlex",
+    "NMPA label index"
+  ],
+  "queries": [
+    {
+      "database": "EviMed literature (internal/PubMed)",
+      "query": "sublingual nitroglycerin chest pain 5 minutes emergency 911",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed literature (internal/PubMed)",
+      "query": "nitroglycerin relief chest pain diagnosis coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed guideline source",
+      "query": "acute coronary syndrome nitroglycerin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin does not predict coronary artery disease Henrikson",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "time delay to treatment mortality primary angioplasty myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "EviMed guideline source",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed guideline source",
+      "query": "急性ST段抬高型心肌梗死诊断和治疗指南 硝酸甘油",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed guideline source",
+      "query": "稳定性冠心病 心绞痛 硝酸甘油 舌下含服",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "Chest pain relief by nitroglycerin does not predict active coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "wavefront phenomenon ischemic cell death myocardial infarct size coronary occlusion duration",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "time delay treatment mortality ST-elevation myocardial infarction primary angioplasty",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Europe PMC",
+      "query": "nitroglycerin response chest pain diagnosis acute coronary syndrome emergency department",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Europe PMC",
+      "query": "2023 ESC Guidelines management acute coronary syndromes European Heart Journal",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PMC",
+      "query": "prehospital delay symptom onset myocardial infarction mortality association",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "OpenAlex",
+      "query": "2023 ESC Guidelines management of acute coronary syndromes",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "OpenAlex",
+      "query": "2021 AHA ACC chest pain guideline evaluation and diagnosis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "Europe PMC",
+      "query": "nitroglycerin patient education angina five minutes emergency services seeking care",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "sublingual nitroglycerin 5 minutes persistent chest pain call emergency services action plan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PMC",
+      "query": "nitroglycerin relief chest pain does not predict coronary artery disease diagnostic",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "nitroglycerin chest pain relief predictive value coronary disease prospective emergency",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "EviMed literature (internal/PubMed)",
+      "query": "速效救心丸 硝酸甘油 胸痛 时间 急救 共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed literature (internal/PubMed)",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin Wan angina pectoris randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "NMPA label index",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 294,
+    "recordsAfterDeduplication": 24,
+    "sourcesIncluded": 24,
+    "notes": "294 条记录来自 24 次证据检索（含 1 次零结果的中文长查询，随后按短查询拆分重新检索并命中）；按相关性筛选后 24 条候选进入去重；evimed_evidence_deduplicate 将 24 条文献记录去重为 23 条（两条中国指南因占位 URL 相同被合并，报告仍按两个独立文件分别引用），另加 1 条官方页面（NHS 胸痛页）共 24 个来源纳入。"
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "患者层面急救行动边界"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Feng2019ChinaDelay",
+      "identifier": "PMC6858215",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "中国院前/院内延迟"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Bugiardini2017ISACS",
+      "identifier": "PMC5586439",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "延迟与死亡定量关系"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Lawani2021DelayedContact",
+      "identifier": "PMC8457972",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "自我用药与延迟就医"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Boden2015NTGReview",
+      "identifier": "PMC4548722",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "硝酸甘油用法阈值（转述 ESC/ACC-AHA 指南）"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Ren2018SuxiaoMeta",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸疗效荟萃"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Byrne2023ESCACS",
+      "identifier": "10.1093/eurheartj/ehad191",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ESC 2023 ACS 指南（记录级）"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Amsterdam2014NSTEACS",
+      "identifier": "10.1016/j.jacc.2014.09.017",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "AHA/ACC 2014 NSTE-ACS 指南（记录级）"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Gulati2021ChestPain",
+      "identifier": "10.1016/j.jacc.2021.07.053",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "AHA/ACC 2021 胸痛指南（记录级，含更正勘误核查）"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "CSCC2019STEMI",
+      "identifier": "中华心血管病杂志2019;47(10):766-783",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "中国 STEMI 指南 2019（记录级）"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "CSEM2019ChestPain",
+      "identifier": "中华急诊医学杂志2019;28(4):413-420",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "急性胸痛急诊诊疗专家共识 2019（记录级）"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "CCEP2019ACSEmergency",
+      "identifier": "中国急救医学2019;39(4):301-308",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ACS 急诊快速诊治指南 2019（记录级）"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "CAIM2019Suxiao",
+      "identifier": "速效救心丸治疗冠心病中国专家共识 2019",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "速效救心丸共识 2019（记录级）"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "NMPASuxiaoLabel",
+      "identifier": "NMPA 速效救心丸说明书索引记录",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "速效救心丸说明书（NMPA 索引）"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "DeLuca2004Delay",
+      "identifier": "PMID:15007008",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "每 30 分钟延迟与 1 年死亡"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Reimer1977Wavefront",
+      "identifier": "PMID:912839",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "波前现象（缺血时间与坏死范围）"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "Foo2018D2BMeta",
+      "identifier": "PMID:29437704",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "急诊-球囊时间荟萃"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "Duan2008CochraneSuxiao",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "速效救心丸 Cochrane 系统评价（摘要级，全文不可及）"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "Henrikson2003NTGResponse",
+      "identifier": "PMID:14678916",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "硝酸甘油缓解反应的诊断价值（题录级）"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "Ibanez2017ESCSTEMI",
+      "identifier": "10.1093/eurheartj/ehx393",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ESC 2017 STEMI 指南时间目标（经保存记录转述）"
+    },
+    {
+      "referenceNumber": 21,
+      "citationKey": "Montalescot2013ESCSCAD",
+      "identifier": "10.1093/eurheartj/eht296",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ESC 2013 SCAD 指南（经保存综述转述）"
+    },
+    {
+      "referenceNumber": 22,
+      "citationKey": "Fihn2012SIHD",
+      "identifier": "10.1161/CIR.0b013e318277d6a0",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ACCF/AHA 2012 SIHD 指南（经保存综述转述）"
+    },
+    {
+      "referenceNumber": 23,
+      "citationKey": "Antman2008TimeIsMuscle",
+      "identifier": "10.1016/j.jacc.2008.07.011",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "Time is muscle（题录级，经保存记录引用）"
+    },
+    {
+      "referenceNumber": 24,
+      "citationKey": "NHFA2025ACS",
+      "identifier": "Australian ACS guideline 2025",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "澳大利亚 ACS 指南 2025（记录级，当代背景）"
+    }
+  ]
+}

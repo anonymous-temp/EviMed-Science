@@ -1,0 +1,45 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "急性胸痛在院外自救时，该含服硝酸甘油还是速效救心丸？",
+  "title": "急性胸痛院外自救——含服硝酸甘油与速效救心丸的证据分析",
+  "startedAt": "2026-08-01T08:25:00Z",
+  "completedAt": "2026-08-01T08:35:00Z",
+  "tools": [
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC12447523/fulltext.md",
+    ".evimed-sources/PMC3191425/fulltext.md",
+    ".evimed-sources/official-pages/0ebeb1d3c48cb619/page.md"
+  ],
+  "failedSources": [
+    "PMID:21511974 (not open access)",
+    "PMID:15940087 (not open access)",
+    "PMID:16440063 (not open access)",
+    "PMID:37487965 (not open access)",
+    "PMID:32716206 (not open access)",
+    "Henrikson et al. 2003 primary study (not found in independent full text)"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "status": "succeeded",
+  "stats": {
+    "totalSearches": 13,
+    "recordsIdentified": 149,
+    "recordsAfterDeduplication": 11,
+    "sourcesIncluded": 11,
+    "distinctPreservedSources": 4
+  }
+}

@@ -1,0 +1,38 @@
+{
+ "id": "run_4e6189ed4c557a84e974ca7fa4982a96",
+ "dispatchId": "rq-07-ze5nqz",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00ca095d4ffex1CyYF4oze5nqz",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.1.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "matched:clinical-evidence-synthesis",
+ "model": "deepseek/deepseek-v4-flash",
+ "question": "# RQ-07 研究任务（派发给 EviMedScience 产品管线的原始题面） 题库中的语义问题 ⑦ 支架术后用药（涉及 P4），转化为的学术研究命题。 --- ## 派发题面 请撰写一篇学术研究报告： **《经皮冠状动脉介入治疗后残余心绞痛是否落在速效救心丸说明书适应症边界之内：术后人群直接证据与指南立场的评价》…",
+ "status": "succeeded",
+ "createdAt": "2026-08-12T00:29:05.097Z",
+ "startedAt": "2026-08-12T00:29:05.097Z",
+ "finishedAt": "2026-08-12T01:07:24.036Z",
+ "durationMs": 2298939,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": null,
+ "qualityNotices": [
+  "The academic report contains runtime or retrieval-process prose instead of scientific analysis."
+ ],
+ "observedMessages": 144,
+ "observedToolCalls": 251,
+ "lastProgressAt": "2026-08-12T01:07:10.861Z"
+}

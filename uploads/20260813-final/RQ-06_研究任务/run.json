@@ -1,0 +1,33 @@
+{
+ "id": "run_f6fef1f4accf24820087148b84053bb7",
+ "dispatchId": "rq-06-vRj3l8",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00450ad11ffelDHYhoWavRj3l8",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "comprehensive-drug-evaluation",
+ "effectiveAgentVersion": "2.2.1",
+ "effectiveRuntimeAgent": "evimed-comprehensive-drug-evaluation",
+ "effectiveRouteReason": "llm:0.85",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-06 研究任务 ## 选题 **《速效救心丸与复方丹参滴丸的对比评价：适应症、起效特征与临床证据强度的可核验差异及疗程表述的来源追溯》** ## 研究背景 速效救心丸与复方丹参滴丸同属活血化瘀类中成药，适应症表述相近、使用人群高度重叠，在药店柜台与患者认知中却常被赋予截然不同的角色定位——一方被视作发作时的舌…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T15:14:38.767Z",
+ "startedAt": "2026-08-13T15:14:38.767Z",
+ "finishedAt": "2026-08-13T15:27:24.449Z",
+ "durationMs": 765682,
+ "errorCode": null,
+ "artifacts": [
+  "comprehensive-evaluation-report.md",
+  "evaluation-summary.json",
+  "evidence-snapshot.json",
+  "evidence-table.csv"
+ ],
+ "verification": null,
+ "qualityNotices": [],
+ "observedMessages": 30,
+ "observedToolCalls": 55,
+ "lastProgressAt": "2026-08-13T15:27:10.240Z"
+}

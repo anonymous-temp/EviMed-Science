@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-14T10:33:00Z",
+  "databases": [
+    "PubMed (EviMed 文献检索)",
+    "Europe PMC",
+    "Crossref",
+    "指南索引"
+  ],
+  "queries": [
+    {"database": "PubMed (EviMed 文献检索)", "query": "preprocedural anxiety before coronary angiography", "dateFrom": null, "dateTo": null, "resultsRetrieved": 17},
+    {"database": "PubMed (EviMed 文献检索)", "query": "Suxiao Jiuxin Wan coronary heart disease", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "PubMed (EviMed 文献检索)", "query": "Suxiao Jiuxin Wan", "dateFrom": null, "dateTo": null, "resultsRetrieved": 2},
+    {"database": "Europe PMC", "query": "Suxiao Jiuxin Wan", "dateFrom": null, "dateTo": null, "resultsRetrieved": 20},
+    {"database": "PubMed (EviMed 文献检索)", "query": "anxiety cardiac computed tomography angiography", "dateFrom": null, "dateTo": null, "resultsRetrieved": 15},
+    {"database": "PubMed (EviMed 文献检索)", "query": "coronary computed tomography angiography complications registry incidence", "dateFrom": null, "dateTo": null, "resultsRetrieved": 15},
+    {"database": "PubMed (EviMed 文献检索)", "query": "diagnostic coronary angiography major complications contemporary cohort", "dateFrom": null, "dateTo": null, "resultsRetrieved": 15},
+    {"database": "PubMed (EviMed 文献检索)", "query": "exercise treadmill testing safety adverse events mortality registry", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1},
+    {"database": "指南索引", "query": "超说明书用药 管理 规范", "dateFrom": null, "dateTo": null, "resultsRetrieved": 10},
+    {"database": "指南索引", "query": "pre-procedural anxiety cardiac imaging management", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "PubMed (EviMed 文献检索)", "query": "acute adverse reactions iodinated contrast media incidence", "dateFrom": null, "dateTo": null, "resultsRetrieved": 15},
+    {"database": "Europe PMC", "query": "off-label drug use China regulation policy hospitals", "dateFrom": null, "dateTo": null, "resultsRetrieved": 15},
+    {"database": "PubMed (EviMed 文献检索)", "query": "risks complications coronary angiography comprehensive review", "dateFrom": null, "dateTo": null, "resultsRetrieved": 12},
+    {"database": "PubMed (EviMed 文献检索)", "query": "exercise stress testing complications mortality national survey", "dateFrom": null, "dateTo": null, "resultsRetrieved": 12},
+    {"database": "PubMed (EviMed 文献检索)", "query": "exercise stress testing risk death myocardial infarction rate per 10000", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "PubMed (EviMed 文献检索)", "query": "DISCHARGE trial procedure-related complications CT invasive angiography", "dateFrom": null, "dateTo": null, "resultsRetrieved": 7},
+    {"database": "Europe PMC", "query": "off-label drug use China legal framework informed consent physicians", "dateFrom": null, "dateTo": null, "resultsRetrieved": 12},
+    {"database": "Crossref", "query": "10.1155/2018/9745804", "dateFrom": null, "dateTo": null, "resultsRetrieved": 3},
+    {"database": "Crossref", "query": "10.3389/fphar.2025.1547418", "dateFrom": null, "dateTo": null, "resultsRetrieved": 3},
+    {"database": "PubMed (EviMed 文献检索)", "query": "safety exercise stress testing complications", "dateFrom": null, "dateTo": null, "resultsRetrieved": 10},
+    {"database": "PubMed (EviMed 文献检索)", "query": "complications dobutamine stress echocardiography safety registry", "dateFrom": null, "dateTo": null, "resultsRetrieved": 10}
+  ],
+  "screening": {
+    "recordsIdentified": 194,
+    "recordsAfterDeduplication": 148,
+    "sourcesIncluded": 15
+  },
+  "sourceRecords": [
+    {"referenceNumber": 1, "citationKey": "NMPA2026SuxiaoJiuxinWan", "identifier": "国药准字Z12020025", "accessLevel": "structured_record", "included": true, "role": "regulatory indication scope"},
+    {"referenceNumber": 2, "citationKey": "Duan2008Cochrane", "identifier": "PMID:18254051", "accessLevel": "abstract", "included": true, "role": "drug efficacy systematic review (historical)"},
+    {"referenceNumber": 3, "citationKey": "Ren2018MetaAnalysis", "identifier": "PMID:29770157", "accessLevel": "full_text", "included": true, "role": "drug efficacy meta-analysis"},
+    {"referenceNumber": 4, "citationKey": "Bai2014HumanArtery", "identifier": "PMID:24808920", "accessLevel": "full_text", "included": true, "role": "mechanism"},
+    {"referenceNumber": 5, "citationKey": "Vlastra2018Premedication", "identifier": "PMID:30275956", "accessLevel": "full_text", "included": true, "role": "pre-procedural anxiety treatment"},
+    {"referenceNumber": 6, "citationKey": "Tavakol2012AngiographyRisk", "identifier": "PMID:22980117", "accessLevel": "full_text", "included": true, "role": "angiography complication rates"},
+    {"referenceNumber": 7, "citationKey": "Liu2025ContrastReaction", "identifier": "PMID:41048329", "accessLevel": "full_text", "included": true, "role": "contrast reaction rates"},
+    {"referenceNumber": 8, "citationKey": "Breunissen2024VRInCard", "identifier": "PMID:38569670", "accessLevel": "full_text", "included": true, "role": "anxiety prevalence and non-pharmacologic intervention"},
+    {"referenceNumber": 9, "citationKey": "Delewi2017AnxietyLevels", "identifier": "PMID:27912201", "accessLevel": "abstract", "included": true, "role": "anxiety prevalence (abstract only)"},
+    {"referenceNumber": 10, "citationKey": "Lieber2019MusicMeta", "identifier": "PMID:30415224", "accessLevel": "abstract", "included": true, "role": "music intervention meta-analysis (abstract only)"},
+    {"referenceNumber": 11, "citationKey": "DISCHARGE2022", "identifier": "PMID:35240010", "accessLevel": "abstract", "included": true, "role": "CT vs invasive angiography trial (abstract only)"},
+    {"referenceNumber": 12, "citationKey": "Li2016CTASAS", "identifier": "PMID:26681235", "accessLevel": "abstract", "included": true, "role": "anxiety and CCTA success rate (abstract only)"},
+    {"referenceNumber": 13, "citationKey": "Liang2025OffLabel", "identifier": "PMID:40297142", "accessLevel": "full_text", "included": true, "role": "off-label drug use legal framework"},
+    {"referenceNumber": 14, "citationKey": "Lee2023StressEchoComplications", "identifier": "PMID:37600036", "accessLevel": "full_text", "included": true, "role": "stress echocardiography complication rates"},
+    {"referenceNumber": 15, "citationKey": "NHS2023ChestPain", "identifier": "NHS: chest-pain", "accessLevel": "official_page", "included": true, "role": "chest pain emergency action"}
+  ]
+}

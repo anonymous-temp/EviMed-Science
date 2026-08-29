@@ -1,0 +1,58 @@
+{
+  "formatVersion": 1,
+  "runId": "run_70accf23ff9ae3bda24aaa7235bb5ada",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "entries": [
+    {
+      "deliverableId": "sxjxw-longterm-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "capability": "clinical-evidence-synthesis",
+      "files": [
+        {
+          "path": "clinical-evidence-report.md",
+          "sha256": "fd8cf03c57e4830b83f74aca73e442c648d3a7af8bab8dddcf590bedcf233bba",
+          "bytes": 12473
+        },
+        {
+          "path": "clinical-evidence-matrix.json",
+          "sha256": "f7c822b4d6fa2b9d264047c86cce11323d10454fa2e4d071d4920c9b97764235",
+          "bytes": 11195
+        },
+        {
+          "path": "clinical-evidence-search.json",
+          "sha256": "9d26dbd3f6b0f15b781a430705b87580a9c16c3d193ad0c92ef50316d10fe5d7",
+          "bytes": 3148
+        },
+        {
+          "path": "citation-ledger.csv",
+          "sha256": "6177281ab2d02dff1ca7014f41701680cccb63675c9c3b571bf92a9741994d6d",
+          "bytes": 1891
+        },
+        {
+          "path": "references.bib",
+          "sha256": "448f6eabbc5d7c9bb772062a2060d9f934ea6508f63d953f23b278a7e88eb6c9",
+          "bytes": 1789
+        },
+        {
+          "path": "citation-audit.md",
+          "sha256": "4b3d1655457a5e6970d8573b89bb75d8e03850d7227ecb05574ed27876096512",
+          "bytes": 1389
+        },
+        {
+          "path": "clinical-evidence-run.json",
+          "sha256": "c55272f4103a447e9c4a34daae5ff2c61d2bf5ded08c2d77a9aac59d9a4f8d57",
+          "bytes": 721
+        },
+        {
+          "path": "question-coverage.json",
+          "sha256": "96c9e4a05ea7e206c1b466b0a6b17e104a269c23bef5029d7eb3842b7e3878f9",
+          "bytes": 1394
+        }
+      ],
+      "acceptedAt": "2026-08-27T10:20:24.193Z",
+      "attempt": 5,
+      "notices": []
+    }
+  ]
+}

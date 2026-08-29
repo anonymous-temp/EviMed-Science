@@ -1,0 +1,11 @@
+claimId,citationKey,referenceNumber,sourceUrl,accessLevel,status,notes
+CLM-001,Hara2022-prehospital-activation,1,https://europepmc.org/articles/PMC9437475,full_text,verified,PMC全文已验证;支持引文与原文一致
+CLM-002,Hara2022-prehospital-activation,1,https://europepmc.org/articles/PMC9437475,full_text,verified,PMC全文已验证;支持引文与原文一致
+CLM-003,Hara2022-prehospital-activation,1,https://europepmc.org/articles/PMC9437475,full_text,verified,PMC全文已验证;支持引文与原文一致
+CLM-004,FDA-nitroglycerin-2024,2,https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=041f127e-5166-4484-bc1a-0a373d1187ae,structured_record,verified,FDA DailyMed结构化记录;药监标签
+CLM-005,Hara2022-prehospital-activation,1,https://europepmc.org/articles/PMC9437475,full_text,verified,合成声明;双源支持均来自同一全文
+CLM-PRACTICAL-01,Hara2022-prehospital-activation,1,https://europepmc.org/articles/PMC9437475,full_text,verified,支持引文含院前延迟危害+院前激活获益
+CLM-PRACTICAL-02,FDA-nitroglycerin-2024,2,https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=041f127e-5166-4484-bc1a-0a373d1187ae,structured_record,verified,FDA说明书原文支持给药间隔与就医建议
+CLM-PRACTICAL-03,Hara2022-prehospital-activation,1,https://europepmc.org/articles/PMC9437475,full_text,verified,院前延迟危害证据支持;速效救心丸院前RCT缺失为证据空白
+CLM-PRACTICAL-04,Hara2022-prehospital-activation,1,https://europepmc.org/articles/PMC9437475,full_text,verified,早期诊断+再灌注治疗为改善预后最重要步骤(原文)
+CLM-PRACTICAL-05,Hara2022-prehospital-activation,1,https://europepmc.org/articles/PMC9437475,full_text,verified,院前心电图+导管室激活改善STEMI结局(原文)

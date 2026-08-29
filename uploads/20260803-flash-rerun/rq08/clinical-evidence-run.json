@@ -1,0 +1,69 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "冰片挥发性对速效救心丸开封后效价的影响：稳定性证据评价与'开封后 3–6 个月'说法的依据核查",
+  "title": "冰片挥发性对速效救心丸开封后效价的影响：稳定性证据评价与'开封后 3–6 个月'说法的依据核查",
+  "startedAt": "2026-08-03T04:57:00Z",
+  "completedAt": "2026-08-03T05:15:00Z",
+  "tools": [
+    "evimed_health",
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC12804185/fulltext.md",
+    ".evimed-sources/PMC12572270/fulltext.xml",
+    ".evimed-sources/PMC12844603/fulltext.md",
+    ".evimed-sources/PMC12400554/fulltext.md",
+    ".evimed-sources/official-pages/f60ccb4779eccff7/page.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "PMID:11498920",
+      "reason": "Europe PMC 无该记录全文，未保留开放获取全文（摘要层级）"
+    },
+    {
+      "identifier": "PMID:22583066 (DOI:10.1111/j.1750-3841.2012.02713.x)",
+      "reason": "非开放获取，未保留全文（摘要层级）"
+    },
+    {
+      "identifier": "PMID:37487965 (DOI:10.1016/j.jep.2023.116959)",
+      "reason": "非开放获取，未保留全文（摘要层级）"
+    },
+    {
+      "identifier": "DOI:10.1016/j.matpr.2023.03.768",
+      "reason": "无开放获取全文，仅元数据"
+    },
+    {
+      "identifier": "DOI:10.4268/cjcmm20161510",
+      "reason": "无开放获取全文，仅元数据"
+    },
+    {
+      "identifier": "NMPA 说明书原文",
+      "reason": "NMPA 官方药品数据库不在本环境官方页面抓取白名单内，说明书仅以索引记录形式获取，需人工核验现行官方文本"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true,
+    "abstractQuantitativeMarkers": true
+  },
+  "stats": {
+    "totalSearches": 34,
+    "recordsIdentified": 417,
+    "recordsAfterDeduplication": 12,
+    "sourcesIncluded": 12,
+    "distinctPreservedSources": 5
+  },
+  "status": "succeeded"
+}

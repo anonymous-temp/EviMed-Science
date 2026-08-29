@@ -1,0 +1,55 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "急性胸痛院外自救场景中，舌下含服硝酸甘油与速效救心丸的疗效与安全证据比较，及 ALDH2 rs671 变异的人群学意义（含含服后缓解的诊断效能与院前延迟的影响）。",
+  "title": "急性胸痛院外自救用药的证据评价：舌下含服硝酸甘油与速效救心丸的比较及 ALDH2 rs671 变异的人群学意义",
+  "startedAt": "2026-08-13T03:01:00Z",
+  "completedAt": "2026-08-13T03:52:20Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+    "evimed_drug_label_search",
+    "evimed_drug_term_normalize",
+    "evimed_clinical_trial_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+    ".evimed-sources/PMC5903313/fulltext.md",
+    ".evimed-sources/PMC8478937/fulltext.md",
+    ".evimed-sources/PMC8587134/fulltext.md",
+    ".evimed-sources/PMC9437475/fulltext.md",
+    ".evimed-sources/PMC6512115/fulltext.md"
+  ],
+  "failedSources": [
+    "Li 2006 J Clin Invest (PMID:16440063) - no open-access full text retrievable",
+    "Henrikson 2003 Ann Intern Med (PMID:14678917) - no open-access full text retrievable",
+    "Duan 2008 Cochrane (PMID:18254051) - cochranelibrary.com unreachable",
+    "Mizuno 2020 Circ J (PMID:32009064) - open-access PDF encrypted",
+    "2024 ESC CCS guideline (doi:10.1093/eurheartj/ehae177) - gateway response too large",
+    "Foo 2018 Heart (PMID:29437704) - no open-access full text retrievable",
+    "PharmGKB nitroglycerin ALDH2 - HTTP 404",
+    "ClinicalTrials.gov suxiao jiuxin wan angina - HTTP 502",
+    "De Luca 2004 full abstract via Europe PMC - only conference-abstract metadata returned"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 27,
+    "recordsIdentified": 225,
+    "recordsAfterDeduplication": 225,
+    "sourcesIncluded": 20,
+    "distinctPreservedSources": 7
+  },
+  "status": "succeeded"
+}

@@ -1,0 +1,61 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "咖啡因相关心悸的病因构成、与心绞痛的鉴别路径及速效救心丸适应症边界的证据评价",
+  "title": "咖啡因相关心悸的病因构成、与心绞痛的鉴别路径及速效救心丸适应症边界的证据评价",
+  "startedAt": "2026-08-13T23:16:00Z",
+  "completedAt": "2026-08-13T23:42:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_clinical_trial_search",
+    "evimed_web_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC11648991/fulltext.md",
+    ".evimed-sources/PMC11239532/fulltext.md",
+    ".evimed-sources/PMC11284693/fulltext.md",
+    ".evimed-sources/PMC10508080/fulltext.md",
+    ".evimed-sources/PMC5986491/fulltext.md",
+    ".evimed-sources/PMC3038953/fulltext.md",
+    ".evimed-sources/PMC12740010/fulltext.md",
+    ".evimed-sources/PMC11321539/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC12997235/fulltext.md"
+  ],
+  "failedSources": [
+    "PMID:18254051 (Cochrane Suxiao Jiuxin Wan) — cochranelibrary.com HTTP 403 / Europe PMC PMC7137214 full-text upstream unavailable",
+    "PMID:34279564 (Kim 2021, JAMA Intern Med) — jamanetwork.com HTTP 403; PMC8290332 full-text upstream unavailable",
+    "PMID:36947466 (CRAVE, NEJM) — nejm.org / pmc / escholarship HTTP 403",
+    "PMID:26443445 (Zuchinali meta, Europace) — academic.oup.com HTTP 403",
+    "DOI:10.1001/jamainternmed.2021.3616 — jamanetwork.com HTTP 403",
+    "NMPA 官方现行说明书 — 数据查询端点不在官方页面抓取白名单内，仅获标签索引件（official-current verification required）",
+    "clinical_trial_search 'caffeine palpitations' — public source HTTP 502",
+    "web_search NMPA 说明书中文 — 返回 0 条（baidu 未响应）"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 22,
+    "recordsIdentified": 209,
+    "recordsAfterDeduplication": 121,
+    "sourcesIncluded": 17,
+    "distinctPreservedSources": 13
+  },
+  "status": "succeeded"
+}

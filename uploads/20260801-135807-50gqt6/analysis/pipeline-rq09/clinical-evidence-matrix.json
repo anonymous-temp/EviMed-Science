@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "A meta-analysis of 41 RCTs involving 6276 patients found that SJP-associated adverse reactions were limited to mild headache, dizziness, and facial flushing, without documentation of tongue numbness; the NMPA drug label similarly does not list tongue numbness among recognized adverse reactions",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "The 41 studies consisted of 6276 patients with coronary heart disease. … The most common symptoms were mild headache, dizziness, and facial flushing. … Evidence suggests that suxiao jiuxin pills are safe with no adverse effects.",
+      "applicability": "direct",
+      "uncertainty": "Passive adverse-event reporting in underlying trials may miss mild, self-limited local reactions; the absence of tongue numbness from published reports does not establish its non-occurrence"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "冰片在体外实验中以浓度依赖和温度依赖方式激活TRPM8冷觉受体通道",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC4957794",
+      "sourceTitle": "Borneol Is a TRPM8 Agonist that Increases Ocular Surface Wetness",
+      "artifactPath": ".evimed-sources/PMC4957794/fulltext.md",
+      "identifier": "PMID:27448228, PMCID:PMC4957794",
+      "accessLevel": "full_text",
+      "supportQuote": "Ca2+ measurement and electrophysiological recordings revealed that borneol activated TRPM8 channel in a temperature- and dose-dependent manner, which was similar to but less effective than the action of menthol, an established TRPM8 agonist. Borneol at micromolar concentrations did not affect the viability of human corneal epithelial cells.",
+      "applicability": "indirect",
+      "uncertainty": "实验在异源表达HEK293细胞和角膜组织进行，未在口腔黏膜环境中验证"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "Borneol has been reported to inhibit TRPA1, a proinflammatory and noxious pain-sensing cation channel",
+      "referenceNumber": 3,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/26142526/",
+      "sourceTitle": "Borneol inhibits TRPA1, a proinflammatory and noxious pain-sensing cation channel",
+      "artifactPath": ".evimed-sources/PMC4957794/fulltext.md",
+      "identifier": "PMID:26142526",
+      "accessLevel": "abstract",
+      "supportQuote": "Borneol … found to produce anti-inflammatory, anti-bacterial and analgesic effects.",
+      "applicability": "indirect",
+      "uncertainty": "The TRPA1 inhibition finding specifically is from PMID:26142526 (abstract only, full text unavailable); the preserved artifact (PMC4957794) confirms borneol's TRPM8 agonism and analgesic effects but does not address TRPA1. TRPA1 claim rests on unpreserved source."
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "SJP通过冰片等多种活性成分引起浓度依赖性冠状动脉舒张，冰片通过开放Kv、KCa2+和Kir钾通道实现内皮非依赖性舒张",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC10206061",
+      "sourceTitle": "Suxiao Jiuxin Pill attenuates acute myocardial ischemia via regulation of coronary artery tone",
+      "artifactPath": ".evimed-sources/PMC10206061/fulltext.md",
+      "identifier": "PMCID:PMC10206061",
+      "accessLevel": "full_text",
+      "supportQuote": "The vasorelaxation effect of borneol was blocked in the presence of potassium channel inhibitors like BaCl2, TEA, or 4-AP … indicating that borneol likely stimulates the opening of Kir, KCa2+, and Kv channels in vascular smooth muscle cells to induce vasorelaxation.",
+      "applicability": "direct",
+      "uncertainty": "动物和离体组织实验；临床扩冠效应需结合人体试验数据解释"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "Multiple SJP clinical trials reviewed in meta-analyses have not documented tongue numbness as an adverse event or clinical observation endpoint",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Fourteen studies reported the incidence of adverse reactions. The most common symptoms were mild headache, dizziness, and facial flushing.",
+      "applicability": "direct",
+      "uncertainty": "A 2024 RCT of 324 patients (PMID:37487965, full text inaccessible) also reported no significant adverse drug reactions; the specific AE tabulation could not be verified"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "冰片可剂量依赖性地促进川芎活性成分的血药吸收",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC12400554",
+      "sourceTitle": "Integrated metabolomics and the microbiome reveal the compatibility mechanism of the Suxiao Jiuxin pill in the treatment of stable coronary artery disease",
+      "artifactPath": ".evimed-sources/PMC12400554/fulltext.md",
+      "identifier": "PMCID:PMC12400554",
+      "accessLevel": "full_text",
+      "supportQuote": "borneol increases the absorption of the active components of Chuanxiong Rhizoma into the blood in a dose-dependent manner.",
+      "applicability": "indirect",
+      "uncertainty": "冰片促吸收效应在动物模型中验证；与舌部主观感受无直接研究关联"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "未检索到任何直接研究舌下含服SJP后舌部感受与药物吸收程度或临床疗效相关性的文献",
+      "referenceNumber": 5,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/37487965/",
+      "sourceTitle": null,
+      "artifactPath": null,
+      "identifier": null,
+      "accessLevel": "abstract",
+      "supportQuote": null,
+      "applicability": "direct",
+      "uncertainty": "检索阴性结果；不能排除未发表的观察存在，但已发表文献中不存在该证据",
+      "claimType": "synthesized",
+      "confidence": "high",
+      "referenceNumbers": [
+        5,
+        4,
+        6,
+        16
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/37487965/",
+          "sourceTitle": "SJP RCT (PMID:37487965)",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Fourteen studies reported the incidence of adverse reactions. The most common symptoms were mild headache, dizziness, and facial flushing."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC10206061",
+          "sourceTitle": "SJP vasorelaxation (PMC10206061)",
+          "artifactPath": ".evimed-sources/PMC10206061/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "This study reveals that Suxiao Jiuxin Pill alleviates acute myocardial infarction. Senkynolide A, scopoletin, and borneol are Suxiao Jiuxin Pill's bioactive compounds responsible for coronary artery relaxing actions."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC12400554",
+          "sourceTitle": "SJP metabolomics (PMC12400554)",
+          "artifactPath": ".evimed-sources/PMC12400554/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "borneol increases the absorption of the active components of Chuanxiong Rhizoma into the blood in a dose-dependent manner."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "Authoritative clinical guidance directs that acute chest pain assessment should be based on objective investigation rather than on symptomatic response to medication",
+      "referenceNumber": 9,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+      "identifier": "official-page:f60ccb4779eccff7",
+      "accessLevel": "official_page",
+      "supportQuote": "Do not self-diagnose – see a GP if you're worried.",
+      "applicability": "direct",
+      "uncertainty": "The preserved NHS source advises calling 999 (UK); the equivalent Chinese emergency number is 120. The 2019 Chinese chest pain consensus (not preserved as full text) was indexed but not retrieved for verification."
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "NHS指南要求出现突发性不缓解的胸部压迫感、放射痛或伴出汗/恶心/呼吸困难时应立即拨打999（中国120）",
+      "referenceNumber": 9,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+      "identifier": "official-page:f60ccb4779eccff7",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if: you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion; you get pain that spreads to your left or right arm, or your neck, jaw, stomach or back; you have chest pain and you feel sweaty, sick, light headed or short of breath.",
+      "applicability": "direct",
+      "uncertainty": "NHS source uses 999 (UK emergency number); the Chinese equivalent is 120. The NHS guidance's chest-pain call criteria apply to both systems."
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "The NMPA drug label states that patients with a history of allergy or allergic constitution should use SJP with caution; the drug label also lists allergic and anaphylactoid reactions as monitored adverse reactions",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "The most common symptoms were mild headache, dizziness, and facial flushing. … Evidence suggests that suxiao jiuxin pills are safe with no adverse effects.",
+      "applicability": "indirect",
+      "uncertainty": "The specific allergy precaution wording is from the NMPA label (structured record, not preserved as full-text artifact); the meta-analysis confirms overall safety but does not report specific allergic events"
+    }
+  ]
+}

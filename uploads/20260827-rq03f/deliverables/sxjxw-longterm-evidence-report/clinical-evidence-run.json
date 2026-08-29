@@ -1,0 +1,23 @@
+{
+  "status": "succeeded",
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸连续用药三个月及以上的有效性与安全性证据评价：证据确定性分级与适用人群边界",
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md"
+  ],
+  "stats": {
+    "totalSearches": 18,
+    "recordsIdentified": 156,
+    "recordsAfterDeduplication": 24,
+    "sourcesIncluded": 5,
+    "distinctPreservedSources": 3
+  },
+  "qualityChecks": {
+    "requiredOutputsExist": true,
+    "citationsResolvable": true,
+    "evidenceClaimsTraceable": true,
+    "skillsLoaded": true
+  }
+}

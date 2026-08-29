@@ -1,0 +1,79 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "晨起头晕胸闷的病因归属与心血管事件晨峰现象的证据强度：未确诊人群家庭常备速效救心丸的获益-风险边界评价",
+  "title": "晨起头晕胸闷的病因归属与心血管事件晨峰现象的证据强度：未确诊人群家庭常备速效救心丸的获益-风险边界评价",
+  "startedAt": "2026-08-13T13:26:00Z",
+  "completedAt": "2026-08-13T13:44:36Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_clinical_trial_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC12450527/fulltext.md",
+    ".evimed-sources/PMC11487843/fulltext.md",
+    ".evimed-sources/PMC5819275/fulltext.md",
+    ".evimed-sources/10.1370-afm.1116/fulltext.md",
+    ".evimed-sources/10.1136-heartjnl-2016-310905/fulltext.md",
+    ".evimed-sources/PMC8432253/fulltext.md",
+    ".evimed-sources/PMC7066622/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC3997901/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "PMID:9185643",
+      "title": "Meta-analysis of the morning excess of acute myocardial infarction and sudden cardiac death",
+      "reason": "no open-access PDF"
+    },
+    {
+      "identifier": "PMID:18254051",
+      "title": "Chinese herbal medicine suxiao jiuxin wan for angina pectoris (Cochrane)",
+      "reason": "Cochrane Library HTTP 403; abstract only"
+    },
+    {
+      "identifier": "PMID:21346074",
+      "title": "Association of diurnal patterns in salivary cortisol with all-cause and cardiovascular mortality (Whitehall II)",
+      "reason": "academic.oup.com HTTP 403"
+    },
+    {
+      "identifier": "PMID:35395560",
+      "title": "Dysregulated diurnal cortisol patterns are associated with cardiovascular mortality (KORA-F3)",
+      "reason": "no open-access PDF"
+    },
+    {
+      "identifier": "10.1161/CIR.0000000000001029",
+      "title": "2021 AHA/ACC Chest Pain Guideline",
+      "reason": "no open-access PDF; official page not in allowed routes"
+    },
+    {
+      "identifier": "ChiCTR-search-zh",
+      "title": "速效救心丸 ChiCTR 中文检索（registry 2 / default）",
+      "reason": "public source HTTP 502"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 18,
+    "recordsIdentified": 209,
+    "recordsAfterDeduplication": 159,
+    "sourcesIncluded": 13,
+    "distinctPreservedSources": 10
+  },
+  "status": "succeeded"
+}

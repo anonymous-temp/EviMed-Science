@@ -1,0 +1,48 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "急性胸痛在院外自救时，该含服硝酸甘油还是速效救心丸？需要覆盖：症状对药物的反应是否具有病因判别价值；ALDH2 rs671 变异在中国人群的分布及其对硝酸甘油疗效的影响；速效救心丸现有随机对照证据的人群、疗程与角色；院外延迟与结局的关系；到院后的评估路径。",
+  "title": "急性胸痛院外自救：硝酸甘油与速效救心丸的证据分析",
+  "startedAt": "2026-08-01T06:53:00Z",
+  "completedAt": "2026-08-01T07:30:00Z",
+  "tools": [
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC9437475/fulltext.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "PMID:36781974",
+      "reason": "unpaywall_credential_unavailable"
+    },
+    {
+      "identifier": "PMID:18772068",
+      "reason": "unpaywall_credential_unavailable"
+    },
+    {
+      "identifier": "PMID:31162244",
+      "reason": "unpaywall_credential_unavailable"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true
+  },
+  "stats": {
+    "totalSearches": 15,
+    "recordsIdentified": 175,
+    "recordsAfterDeduplication": 16,
+    "sourcesIncluded": 9,
+    "distinctPreservedSources": 1
+  },
+  "status": "succeeded"
+}

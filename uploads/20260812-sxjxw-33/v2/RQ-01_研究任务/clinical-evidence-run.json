@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "reportProfile": "academic_deep_research_v1",
+  "question": "急性胸痛院外自救场景中，舌下含服硝酸甘油与速效救心丸的疗效与安全性证据层级如何、是否存在头对头比较；ALDH2 rs671 变异在中国人群中的频率与酶学表型及其对硝酸甘油反应的影响有哪些可核验的定量数据；含药后症状缓解作为心源性与非心源性胸痛鉴别手段的诊断效能如何；院前延迟对再灌注时间与病死率的影响及指南对自救用药与呼救次序的表述；慢性心绞痛管理证据能否外推至急性院外自救。",
+  "title": "急性胸痛院外自救用药的证据评价：舌下含服硝酸甘油与速效救心丸的比较及 ALDH2 rs671 变异的人群学意义",
+  "startedAt": "2026-08-12T06:55:30Z",
+  "completedAt": "2026-08-12T07:17:00Z",
+  "tools": [
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+    "evimed_drug_label_search",
+    "evimed_evidence_deduplicate",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+    ".evimed-sources/PMC4837835/fulltext.md",
+    ".evimed-sources/PMC9278720/fulltext.md",
+    ".evimed-sources/PMC8108686/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC12733498/fulltext.md",
+    ".evimed-sources/PMC8587134/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "PMID:16440063 / doi:10.1172/JCI26564 / PMCID:PMC1351000（Li 2006, J Clin Invest）：Europe PMC 全文上游暂不可用，两次尝试均失败，仅摘要层面引用",
+    "doi:10.1093/eurheartj/ehad191（2023 ESC ACS 指南）：academic.oup.com 返回 HTTP 403，全文无法获取，仅记录层面引用",
+    "PMID:18254051 / doi:10.1002/14651858.CD004473.pub2（Cochrane 系统评价）：cochranelibrary.com 返回 HTTP 403，全文无法获取，仅摘要层面引用",
+    "PMID:28342890 / doi:10.1016/j.cbi.2017.03.012（Miura 2017）：无开放获取全文，仅摘要层面引用",
+    "gnomAD 连接器查询 rs671：GraphQL 返回 Gene not found，未能获取人群等位基因频率，改用文献数据（Xia 2015 队列、Li H 2009、Molecules 2021 综述）",
+    "PubMed 查询 ALDH2 deficiency prevalence East Asian population million：HTTP 502，未重试该长查询，改用短语化查询（ALDH2 Glu504Lys allele frequency Han Chinese population、refined geographic distribution ALDH2 504Lys variant 等）完成该主题检索"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true
+  },
+  "stats": {
+    "totalSearches": 34,
+    "recordsIdentified": 258,
+    "recordsAfterDeduplication": 81,
+    "sourcesIncluded": 30,
+    "distinctPreservedSources": 8
+  },
+  "status": "succeeded"
+}

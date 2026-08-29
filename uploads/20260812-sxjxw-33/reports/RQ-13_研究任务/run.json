@@ -1,0 +1,31 @@
+{
+ "id": "run_5ad077247056f045cff13df3f3c44f92",
+ "dispatchId": "rq-13-0n164O",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00c437440ffeF3WTsHuo0n164O",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "adr-analysis",
+ "effectiveAgentVersion": "1.2.2",
+ "effectiveRuntimeAgent": "evimed-adr-analysis",
+ "effectiveRouteReason": "matched:adr-analysis",
+ "model": "deepseek/deepseek-v4-flash",
+ "question": "# RQ-13 研究任务（派发给 EviMedScience 产品管线的原始题面） 题库中的语义问题 ③ 长期使用是否会产生依赖或耐药（涉及 P9），转化为的学术研究命题。 --- ## 派发题面 请撰写一篇学术研究报告： **《\"不含硝酸酯故无耐药性\"能否成立：速效救心丸长期用药的效应衰减、剂量递增与停药反应的证据评…",
+ "status": "failed",
+ "createdAt": "2026-08-12T02:10:48.189Z",
+ "startedAt": "2026-08-12T02:10:48.189Z",
+ "finishedAt": "2026-08-12T02:21:48.140Z",
+ "durationMs": 659951,
+ "errorCode": "runtime_tool_error",
+ "artifacts": [
+  "safety-report.md",
+  "signals.csv"
+ ],
+ "verification": null,
+ "qualityNotices": [],
+ "observedMessages": 44,
+ "observedToolCalls": 80,
+ "lastProgressAt": "2026-08-12T02:21:35.322Z"
+}

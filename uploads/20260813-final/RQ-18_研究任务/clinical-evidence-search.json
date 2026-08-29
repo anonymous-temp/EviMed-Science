@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-14T00:20:00Z",
+  "databases": ["PubMed", "Europe PMC", "Guideline index", "Clinical trial registries", "NMPA label index"],
+  "queries": [
+    {"database": "PubMed", "query": "exercise-induced chest pain etiology differential diagnosis", "dateFrom": null, "dateTo": null, "resultsRetrieved": 20},
+    {"database": "PubMed", "query": "sudden cardiac death young athletes causes incidence registry", "dateFrom": null, "dateTo": null, "resultsRetrieved": 20},
+    {"database": "PubMed", "query": "chest pain symptoms signs diagnostic accuracy acute coronary syndrome likelihood ratio", "dateFrom": null, "dateTo": null, "resultsRetrieved": 20},
+    {"database": "Guideline index", "query": "chest pain evaluation diagnosis", "dateFrom": null, "dateTo": null, "resultsRetrieved": 10},
+    {"database": "PubMed", "query": "Suxiao Jiuxin Wan angina", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1},
+    {"database": "PubMed", "query": "chest pain in athletes evaluation etiology musculoskeletal", "dateFrom": null, "dateTo": null, "resultsRetrieved": 9},
+    {"database": "Europe PMC", "query": "2021 AHA/ACC/ASE/CHEST/SAEM/SCCT/SCMR Guideline Evaluation Diagnosis Chest Pain", "dateFrom": null, "dateTo": null, "resultsRetrieved": 10},
+    {"database": "PubMed", "query": "chest pain diagnoses primary care prevalence prospective study", "dateFrom": null, "dateTo": null, "resultsRetrieved": 20},
+    {"database": "Europe PMC", "query": "2021 AHA ACC chest pain guideline terminology cardiac possible cardiac noncardiac atypical", "dateFrom": null, "dateTo": null, "resultsRetrieved": 12},
+    {"database": "PubMed", "query": "chest pain guideline 2021 evaluation diagnosis key recommendations", "dateFrom": null, "dateTo": null, "resultsRetrieved": 2},
+    {"database": "PubMed", "query": "Suxiao Jiuxin Wan clinical", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1},
+    {"database": "PubMed", "query": "atypical chest pain definition guideline classification", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "PubMed", "query": "exertional chest pain young athletes red flags syncope family history", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "PubMed", "query": "chest pain final diagnosis prospective cohort emergency department noncardiac musculoskeletal", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1},
+    {"database": "PubMed", "query": "chest pain typical atypical terminology guideline cardiac possible cardiac noncardiac", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0}
+  ],
+  "screening": {
+    "recordsIdentified": 126,
+    "recordsAfterDeduplication": 125,
+    "sourcesIncluded": 8
+  },
+  "sourceRecords": [
+    {"referenceNumber": 1, "citationKey": "NHS2023ChestPain", "identifier": "NHS chest pain page (last reviewed 2023-08-08)", "accessLevel": "official_page", "included": true, "role": "emergency triage / practical safety"},
+    {"referenceNumber": 2, "citationKey": "Haasenritter2012ChestPainMeta", "identifier": "PMID:23100205; DOI:10.3325/cmj.2012.53.432", "accessLevel": "full_text", "included": true, "role": "diagnostic accuracy of history and examination"},
+    {"referenceNumber": 3, "citationKey": "AsifHarmon2017SCD", "identifier": "PMID:28452637; DOI:10.1177/1941738117694153", "accessLevel": "full_text", "included": true, "role": "sudden cardiac death incidence and etiology"},
+    {"referenceNumber": 4, "citationKey": "Verdon2007CWS", "identifier": "PMID:17850647; DOI:10.1186/1471-2296-8-51", "accessLevel": "full_text", "included": true, "role": "etiology composition (chest wall syndrome cohort)"},
+    {"referenceNumber": 5, "citationKey": "Hoorweg2017ChestPain", "identifier": "PMID:28634285; DOI:10.1136/heartjnl-2016-310905", "accessLevel": "full_text", "included": true, "role": "etiology composition (primary care registry)"},
+    {"referenceNumber": 6, "citationKey": "NMPASuxiaoJiuxinWanLabel", "identifier": "NMPA label index (indexed copy, official text unverified)", "accessLevel": "structured_record", "included": true, "role": "drug label indication boundary"},
+    {"referenceNumber": 7, "citationKey": "Gulati2021ChestPainGuideline", "identifier": "PMID:34709928; DOI:10.1161/CIR.0000000000001029", "accessLevel": "abstract", "included": true, "role": "guideline pathway (abstract level)"},
+    {"referenceNumber": 8, "citationKey": "Li2011SuxiaoJiuxinRat", "identifier": "SinoMed record ui=2011624031", "accessLevel": "abstract", "included": true, "role": "preclinical study of Suxiao Jiuxin Pill (bibliographic)"}
+  ]
+}

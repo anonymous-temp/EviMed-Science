@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "1.1",
+      "question": "现有文献与现行说明书如何描述舌下含服本品后的舌部麻木、清凉、灼热或刺痛感——出现比例、起始时间、持续时长、强度与伴随表现",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "速效救心丸 不良反应",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        },
+        {
+          "query": "速效救心丸 不良反应",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        },
+        {
+          "query": "suxiao jiuxin adverse reaction tongue numbness",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "id": "1.2",
+      "question": "是否存在以明确观察人群为分母的临床研究或试验安全性记录，可用于估计这一现象的发生频度",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "速效救心丸 不良反应",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        },
+        {
+          "query": "suxiao jiuxin adverse reaction tongue numbness",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "id": "1.3",
+      "question": "若相关资料仅见于说明书条目或个案描述，现有证据能支撑到何种程度的定量陈述",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "速效救心丸 不良反应",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        },
+        {
+          "query": "速效救心丸 不良反应",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "id": "2.1",
+      "question": "这一局部感受有哪些候选药理机制，各自获得何种层级的实验支持",
+      "status": "answered",
+      "reportLines": [
+        39,
+        41
+      ],
+      "claimIds": [
+        "CLM-001",
+        "CLM-002",
+        "CLM-100"
+      ]
+    },
+    {
+      "id": "2.2",
+      "question": "冰片（龙脑）对 TRPM8、TRPA1 等感觉受体的激动作用有哪些受体药理学、离体组织、动物或人体证据",
+      "status": "answered",
+      "reportLines": [
+        39
+      ],
+      "claimIds": [
+        "CLM-001",
+        "CLM-004"
+      ]
+    },
+    {
+      "id": "2.3",
+      "question": "川芎类成分、制剂辅料与非特异性黏膜刺激分别可能贡献多少",
+      "status": "answered",
+      "reportLines": [
+        41
+      ],
+      "claimIds": [
+        "CLM-003"
+      ]
+    },
+    {
+      "id": "2.4",
+      "question": "现有数据能否将“感觉受体介导”与“非特异性局部刺激”这两类机制区分开",
+      "status": "answered",
+      "reportLines": [
+        41
+      ],
+      "claimIds": [
+        "CLM-100",
+        "CLM-003"
+      ]
+    },
+    {
+      "id": "3.1",
+      "question": "舌部麻木感与本品经舌下黏膜的实际吸收之间，是否存在被直接测量过的关联",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "borneol sublingual",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        },
+        {
+          "query": "borneol sublingual absorption pharmacokinetics bioavailability",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "id": "3.2",
+      "question": "有无药代动力学研究（吸收速率、Cmax、Tmax、相对生物利用度）同步记录受试者的主观局部感受",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "borneol sublingual",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        },
+        {
+          "query": "tetramethylpyrazine borneol human plasma GC-MSD suxiao jiuxin",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "id": "3.3",
+      "question": "现有证据能否说明感受的有无或强度随剂量、含服方式、制剂形式或个体因素而变化",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "borneol sublingual",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        },
+        {
+          "query": "速效救心丸 不良反应",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "id": "4.1",
+      "question": "将舌部麻木用作药效指示，其预测效能是否被研究检验过——以心绞痛缓解时间、缓解程度或发作频次为参照，该感受的敏感度、特异度或似然比为何",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "suxiao jiuxin adverse reaction tongue numbness",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        },
+        {
+          "query": "Suxiao Jiuxin Wan",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "id": "4.2",
+      "question": "有无研究考察使用者依据这一感受调整剂量或决定是否就医的实际行为及其结局",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "Suxiao Jiuxin Wan",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        },
+        {
+          "query": "速效救心丸 不良反应",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "id": "4.3",
+      "question": "现行急性胸痛处置指南对症状自觉缓解与启动急救医疗服务之间的先后次序如何表述",
+      "status": "answered",
+      "reportLines": [
+        55,
+        89
+      ],
+      "claimIds": [
+        "CLM-005"
+      ]
+    },
+    {
+      "id": "5.1",
+      "question": "舌部麻木在何种情形下应被识别为不良反应、局部黏膜刺激损伤或超敏征兆，而非可预期的局部感受",
+      "status": "answered",
+      "reportLines": [
+        59
+      ],
+      "claimIds": [
+        "CLM-003"
+      ]
+    },
+    {
+      "id": "5.2",
+      "question": "现行 NMPA 说明书在不良反应、注意事项与禁忌项下对口腔黏膜相关反应的原文表述为何",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "速效救心丸 不良反应",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "id": "5.3",
+      "question": "药物警戒记录与公开文献中，有无与本品或含冰片制剂相关的口腔黏膜损害、超敏或过敏反应报告",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "borneol allergic contact dermatitis hypersensitivity",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        },
+        {
+          "query": "suxiao jiuxin adverse reaction tongue numbness",
+          "database": "PubMed",
+          "searchedAt": "2026-08-26"
+        }
+      ]
+    },
+    {
+      "id": "5.4",
+      "question": "其鉴别要点与处置建议各有哪些可核验依据",
+      "status": "answered",
+      "reportLines": [
+        59
+      ],
+      "claimIds": [
+        "CLM-003"
+      ]
+    }
+  ]
+}

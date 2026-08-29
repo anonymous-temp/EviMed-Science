@@ -1,0 +1,47 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "舌下含服硝酸甘油或速效救心丸后胸痛不缓解的时间阈值与院外升级路径的指南推荐、证据基础与一致性评价",
+  "title": "舌下含服硝酸甘油或速效救心丸后胸痛不缓解的升级时间阈值与院外路径：证据基础与一致性评价",
+  "startedAt": "2026-08-13T11:19:00Z",
+  "completedAt": "2026-08-13T11:42:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_guideline_search",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_drug_label_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC6960059/fulltext.md",
+    ".evimed-sources/PMC9677036/fulltext.md",
+    ".evimed-sources/PMC4548722/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md"
+  ],
+  "failedSources": [
+    "Diercks DB 2005 Ann Emerg Med (PMID:15940087): 无开放获取 PDF",
+    "Henrikson CA 2003 Ann Intern Med (PMID:14678917): 无开放获取 PDF",
+    "Duan X 2008 Cochrane CD004473 (PMID:18254051): cochranelibrary.com HTTP 403",
+    "2023 ESC ACS 指南 (DOI 10.1093/eurheartj/ehad191): academic.oup.com HTTP 403",
+    "2023 台湾心脏学会 CCS 指南 (PMID:36685161): Unpaywall HTTP 404",
+    "DailyMed 硝酸甘油标签页面: 官方页面网关未批准该 URL"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 21,
+    "recordsIdentified": 183,
+    "recordsAfterDeduplication": 130,
+    "sourcesIncluded": 13,
+    "distinctPreservedSources": 5
+  },
+  "status": "succeeded"
+}

@@ -1,0 +1,372 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-13T17:20:00Z",
+  "databases": [
+    "Crossref",
+    "EviMed literature index",
+    "NHS official pages",
+    "NMPA drug label index",
+    "PMC",
+    "PubMed",
+    "data source catalog",
+    "guideline index",
+    "pharmacy reference index"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "borneol TRPM8 TRPA1 transient receptor potential",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed literature index",
+      "query": "速效救心丸 舌下 麻木 不良反应",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "NMPA drug label index",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol TRPA1 transient receptor potential ankyrin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol TRPM8 menthol cold receptor activation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol pharmacokinetics human absorption",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol penetration enhancer oral mucosa drug delivery",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "guideline index",
+      "query": "急性胸痛 急救 120 指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "EviMed literature index",
+      "query": "冰片 舌下 清凉 麻木 局部",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "EviMed literature index",
+      "query": "速效救心丸 组成 冰片 川芎",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol analgesia antinociceptive mechanism",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "EviMed literature index",
+      "query": "速效救心丸 专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol TRPA1 activation HEK293 calcium",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol pharmacokinetics plasma concentration human volunteers",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "Crossref",
+      "query": "Borneol exerts antipruritic effects inhibiting TRPA1 activating TRPM8",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol review pharmacology traditional Chinese medicine mechanism",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "PubMed",
+      "query": "menthol TRPM8 oral trigeminal cooling sensation tongue",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol toxicity safety oral administration adverse",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PMC",
+      "query": "borneol drug delivery absorption enhancer blood brain barrier",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PMC",
+      "query": "borneol pharmacology analgesic anti-inflammatory review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "EviMed literature index",
+      "query": "borneol sublingual buccal mucosal absorption pharmacokinetics",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "ligustrazine tetramethylpyrazine transient receptor potential sensory neuron",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol local anesthetic analgesia mechanism sodium channel",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "pharmacy reference index",
+      "query": "速效救心丸 舌下含服 麻木 清凉 起效",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "data source catalog",
+      "query": "NMPA drug label 说明书 China regulatory",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Borneol Is a TRPM8 Agonist that Increases Ocular Surface Wetness",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "clinical and mechanistic study of topical borneol-induced analgesia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Inhibitory effects of monoterpenes on human TRPA1 structural basis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Evaluation analgesic potential safety Cinnamomum camphora Borneol essential oil",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol anesthetic effect nerve block pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "sublingual nitroglycerin sensation tingling indicator tablet potency",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Crossref",
+      "query": "10.1371/journal.pone.0158868",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Crossref",
+      "query": "10.15252/emmm.201607300",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Crossref",
+      "query": "10.1007/s12576-013-0289-0",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Crossref",
+      "query": "10.1016/j.chmed.2024.04.003",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Crossref",
+      "query": "SPT-07A borneol pharmacokinetics healthy volunteers acute ischemic stroke",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 158,
+    "recordsAfterDeduplication": 150,
+    "sourcesIncluded": 12
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NMPA-SuxiaoJiuxinWan-Label",
+      "identifier": "NMPA 药品注册信息 (速效救心丸说明书)",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "说明书/监管文本"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Wang2017BorneolAnalgesia",
+      "identifier": "PMID:28396565",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "临床与机制研究"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Chen2016BorneolTRPM8",
+      "identifier": "PMID:27448228",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "受体药理学"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Takaishi2014TRPA1",
+      "identifier": "PMID:24122170",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "受体药理学"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Tang2024BorneolEnhancer",
+      "identifier": "DOI:10.1016/j.chmed.2024.04.003",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "吸收/促渗综述"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Xiao2021BorneolSafety",
+      "identifier": "PMID:34699310",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "安全性"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "NHSChestPain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "急性胸痛急救指引"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Yuan2022Meta",
+      "identifier": "北京中医药 2022 (摘要)",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "速效救心丸疗效背景"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "ChestPainConsensus2019",
+      "identifier": "中华医学会急诊医学分会 2019",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "急性胸痛急救指引(中国)"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Li2006ChuanxiongBingpian",
+      "identifier": "北京中医 2006 (摘要)",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "组方考证"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "BorneolSublingualPK",
+      "identifier": "PMID:7900539 (摘要)",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "人体药代动力学(题录)"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "SPT07APK",
+      "identifier": "PMID:32147750 (摘要)",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "人体药代动力学(题录)"
+    }
+  ]
+}

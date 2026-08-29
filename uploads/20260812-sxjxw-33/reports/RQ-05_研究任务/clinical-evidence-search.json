@@ -1,0 +1,412 @@
+{
+ "schemaVersion": 1,
+ "searchedAt": "2026-08-11T18:14:00Z",
+ "databases": [
+  "PubMed",
+  "Europe PMC",
+  "PMC",
+  "Crossref 通道",
+  "EviMed 指南索引",
+  "NMPA 说明书索引",
+  "临床试验注册库"
+ ],
+ "queries": [
+  {
+   "database": "PubMed",
+   "query": "defecation trigger acute myocardial infarction case-crossover",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 0
+  },
+  {
+   "database": "PubMed",
+   "query": "straining acute coronary syndrome defecation",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 1
+  },
+  {
+   "database": "PubMed",
+   "query": "Valsalva maneuver hemodynamic effects coronary artery disease",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 13
+  },
+  {
+   "database": "PubMed",
+   "query": "constipation cardiovascular disease risk cohort",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 30
+  },
+  {
+   "database": "PubMed",
+   "query": "defecation myocardial infarction onset trigger",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 0
+  },
+  {
+   "database": "PubMed",
+   "query": "sudden death during defecation toilet",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 2
+  },
+  {
+   "database": "PubMed",
+   "query": "physical exertion trigger acute myocardial infarction case-crossover relative risk",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 12
+  },
+  {
+   "database": "PubMed",
+   "query": "sexual activity acute myocardial infarction trigger case-crossover",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 6
+  },
+  {
+   "database": "PubMed (中文)",
+   "query": "用力排便 心肌梗死",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 30
+  },
+  {
+   "database": "PubMed/中文库",
+   "query": "速效救心丸 冠心病 心绞痛",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 30
+  },
+  {
+   "database": "中文库",
+   "query": "急性胸痛 急诊 专家共识 2024",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 15
+  },
+  {
+   "database": "中文库",
+   "query": "便秘 心血管事件 风险 队列",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 15
+  },
+  {
+   "database": "PubMed",
+   "query": "straining defecation blood pressure",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 12
+  },
+  {
+   "database": "PubMed",
+   "query": "defecation posture squatting straining comparison",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 1
+  },
+  {
+   "database": "PubMed",
+   "query": "Suxiao Jiuxin Wan angina pectoris randomized",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 1
+  },
+  {
+   "database": "Europe PMC",
+   "query": "defecation acute myocardial infarction case crossover",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 25
+  },
+  {
+   "database": "Europe PMC",
+   "query": "Trigger Factors for Spontaneous Intracerebral Hemorrhage Case-Crossover",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "Europe PMC",
+   "query": "Constipation and Incident Cardiovascular Disease Nationwide Real-World Cohort JACC Asia",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "Europe PMC",
+   "query": "Straining During Defecation or Gut Environment Which Drives Cardiovascular Risk After Acute Coronary Syndrome",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "PubMed",
+   "query": "bowel movement acute myocardial infarction onset",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 1
+  },
+  {
+   "database": "PubMed",
+   "query": "defecation sudden cardiac death",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 4
+  },
+  {
+   "database": "PubMed",
+   "query": "Suxiao Jiuxin Pill systematic review meta-analysis coronary heart disease",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 0
+  },
+  {
+   "database": "Europe PMC",
+   "query": "Effects of Defecation Strain at Various Bed Reclining Angles Intrarectal Pressure Cardiovascular Responses",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 1
+  },
+  {
+   "database": "Europe PMC",
+   "query": "Gulati 2021 chest pain guideline evaluation diagnosis PMC",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "Europe PMC",
+   "query": "Byrne 2023 acute coronary syndromes ESC guidelines management",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "Europe PMC",
+   "query": "suxiao jiuxin wan meta-analysis",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 9
+  },
+  {
+   "database": "Europe PMC",
+   "query": "2021 AHA ACC guideline evaluation diagnosis chest pain Circulation",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "Europe PMC",
+   "query": "2023 ESC guidelines management acute coronary syndromes European Heart Journal",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "PMC",
+   "query": "chest pain guideline evaluation diagnosis 2021 acute coronary syndrome emergency",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 15
+  },
+  {
+   "database": "PMC",
+   "query": "2020 American Heart Association guidelines cardiopulmonary resuscitation emergency cardiovascular care acute coronary syndromes",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "PMC",
+   "query": "Valsalva maneuver physiology cardiovascular phases",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "PMC",
+   "query": "defecation posture squatting footstool straining",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 6
+  },
+  {
+   "database": "PMC",
+   "query": "high-sensitivity cardiac troponin acute coronary syndrome emergency department evaluation diagnosis",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "PMC",
+   "query": "acute coronary syndromes 2020 AHA guidelines part EMS activation chest pain symptoms",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "PubMed",
+   "query": "prehospital delay acute myocardial infarction self-medication nitroglycerin",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 0
+  },
+  {
+   "database": "Europe PMC",
+   "query": "Valsalva maneuver myocardial ischemia coronary artery disease patients",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 12
+  },
+  {
+   "database": "PubMed",
+   "query": "medication accessibility drug availability acute myocardial infarction treatment outcome",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 12
+  },
+  {
+   "database": "Europe PMC",
+   "query": "2021 AHA/ACC/ASE/CHEST/SAEM/SCCT/SCMR guideline evaluation diagnosis chest pain full text",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 5
+  },
+  {
+   "database": "EviMed 指南索引",
+   "query": "急性胸痛急诊诊疗专家共识",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "EviMed 指南索引",
+   "query": "2021 AHA/ACC chest pain evaluation diagnosis guideline",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 10
+  },
+  {
+   "database": "NMPA 说明书索引",
+   "query": "速效救心丸",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 2
+  },
+  {
+   "database": "临床试验注册库",
+   "query": "medication access placement availability acute coronary syndrome",
+   "dateFrom": null,
+   "dateTo": null,
+   "resultsRetrieved": 9
+  }
+ ],
+ "screening": {
+  "recordsIdentified": 399,
+  "recordsAfterDeduplication": 180,
+  "sourcesIncluded": 12
+ },
+ "sourceRecords": [
+  {
+   "referenceNumber": 1,
+   "citationKey": "Sundboll2020BMJOpen",
+   "identifier": "PMID:32873621",
+   "accessLevel": "full_text",
+   "included": true,
+   "role": "便秘-冠脉事件人群队列关联（命题A）"
+  },
+  {
+   "referenceNumber": 2,
+   "citationKey": "Tang2025FrontCVMed",
+   "identifier": "PMID:41425977",
+   "accessLevel": "full_text",
+   "included": true,
+   "role": "便秘-冠心病 meta 分析（命题A）"
+  },
+  {
+   "referenceNumber": 3,
+   "citationKey": "Pu2025HealthSciRep",
+   "identifier": "PMID:41030662",
+   "accessLevel": "full_text",
+   "included": true,
+   "role": "Valsalva/用力发作触发 ICH 病例交叉（命题A）"
+  },
+  {
+   "referenceNumber": 4,
+   "citationKey": "Rahgoshay2025BMC",
+   "identifier": "PMID:40604598",
+   "accessLevel": "full_text",
+   "included": true,
+   "role": "排便姿势范围综述（命题B）"
+  },
+  {
+   "referenceNumber": 5,
+   "citationKey": "Fujisue2024CircRep",
+   "identifier": "PMID:38464992",
+   "accessLevel": "full_text",
+   "included": true,
+   "role": "通便干预中间终点（命题B）"
+  },
+  {
+   "referenceNumber": 6,
+   "citationKey": "Ren2018eCAM",
+   "identifier": "PMID:29770157",
+   "accessLevel": "full_text",
+   "included": true,
+   "role": "速效救心丸人群边界/疗效（命题C）"
+  },
+  {
+   "referenceNumber": 7,
+   "citationKey": "Ruan2021Trials",
+   "identifier": "PMID:34281600",
+   "accessLevel": "full_text",
+   "included": true,
+   "role": "速效救心丸注册研究人群（命题C）"
+  },
+  {
+   "referenceNumber": 8,
+   "citationKey": "NHS2023ChestPain",
+   "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+   "accessLevel": "official_page",
+   "included": true,
+   "role": "患者层面急救呼叫边界（命题5/安全底线）"
+  },
+  {
+   "referenceNumber": 9,
+   "citationKey": "Wenger2024ClinCardiol",
+   "identifier": "PMID:39129714",
+   "accessLevel": "full_text",
+   "included": true,
+   "role": "ESC 2023 ACS 指南解读（命题5）"
+  },
+  {
+   "referenceNumber": 10,
+   "citationKey": "Lohsoonthorn2019PLoSONE",
+   "identifier": "PMID:30653616",
+   "accessLevel": "full_text",
+   "included": true,
+   "role": "体力活动触发心肌梗死参照（类比）"
+  },
+  {
+   "referenceNumber": 11,
+   "citationKey": "Wang2013PLoSONE",
+   "identifier": "PMID:23342040",
+   "accessLevel": "full_text",
+   "included": true,
+   "role": "Valsalva 血流动力学实测（机制）"
+  },
+  {
+   "referenceNumber": 12,
+   "citationKey": "Brieger2026MJA",
+   "identifier": "PMID:41693087",
+   "accessLevel": "full_text",
+   "included": true,
+   "role": "ACS 评估与再灌注时间目标（命题5）"
+  }
+ ]
+}

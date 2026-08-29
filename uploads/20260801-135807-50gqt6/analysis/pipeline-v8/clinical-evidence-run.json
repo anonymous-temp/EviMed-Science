@@ -1,0 +1,58 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "在急性胸痛/疑似心绞痛的院外自救场景下，速效救心丸是否具备替代或优先于舌下含服硝酸甘油的证据？ALDH2 rs671变异在中国人群中的频率、对硝酸甘油生物活化与临床疗效的影响如何？含服自救药物后症状是否缓解能否用于区分心源性与非心源性胸痛？院前延迟对AMI结局的影响及自救用药与呼叫急救之间的先后关系？",
+  "title": "急性胸痛院外自救的药物选择证据评价：硝酸甘油与速效救心丸的比较，以及ALDH2 rs671变异对硝酸甘油疗效的人群学影响",
+  "startedAt": "2026-08-02T07:10:00Z",
+  "completedAt": "2026-08-02T08:00:00Z",
+  "tools": {
+    "evimed_literature_search": true,
+    "evimed_guideline_search": true,
+    "evimed_biomedical_source_search": true,
+    "evimed_open_access_full_text": true,
+    "evimed_drug_label_search": true
+  },
+  "successfulSourceArtifacts": [
+    ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC8478937/fulltext.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "DOI:10.1007/s00228-020-02999-6",
+      "reason": "closed_access"
+    },
+    {
+      "identifier": "PMID:18254051",
+      "reason": "closed_access"
+    },
+    {
+      "identifier": "PMID:31253694",
+      "reason": "closed_access"
+    },
+    {
+      "identifier": "PMID:14623806",
+      "reason": "closed_access"
+    },
+    {
+      "identifier": "PMID:24512889",
+      "reason": "closed_access"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecking": true,
+    "arithmeticChecking": true,
+    "preflightPassed": true
+  },
+  "stats": {
+    "totalSearches": 29,
+    "recordsIdentified": 153,
+    "recordsAfterDeduplication": 83,
+    "sourcesIncluded": 14,
+    "distinctPreservedSources": 3
+  },
+  "status": "succeeded"
+}

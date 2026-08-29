@@ -1,0 +1,262 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "1.1",
+      "question": "疗程达到或超过三个月的有效性研究有哪些",
+      "status": "answered",
+      "reportLines": [
+        37
+      ],
+      "claimIds": [
+        "CLM-008"
+      ]
+    },
+    {
+      "id": "1.2",
+      "question": "各研究的设计、样本量、给药方案、随访时长",
+      "status": "answered",
+      "reportLines": [
+        37
+      ],
+      "claimIds": [
+        "CLM-008",
+        "CLM-009"
+      ]
+    },
+    {
+      "id": "1.3",
+      "question": "主要与次要终点（心绞痛发作频次、硝酸甘油消耗量、运动耐量、心血管事件、生活质量等）",
+      "status": "answered",
+      "reportLines": [
+        37,
+        41
+      ],
+      "claimIds": [
+        "CLM-010",
+        "CLM-011"
+      ]
+    },
+    {
+      "id": "1.4",
+      "question": "及失访情况如何？偏倚风险如何",
+      "status": "answered",
+      "reportLines": [
+        39
+      ],
+      "claimIds": [
+        "CLM-006"
+      ]
+    },
+    {
+      "id": "1.5",
+      "question": "按 GRADE，长期用药有效性证据体的确定性处于何种等级",
+      "status": "answered",
+      "reportLines": [
+        41,
+        83
+      ],
+      "claimIds": [
+        "CLM-010"
+      ]
+    },
+    {
+      "id": "2.1",
+      "question": "长期用药的安全性证据来自哪些研究",
+      "status": "answered",
+      "reportLines": [
+        47,
+        49
+      ],
+      "claimIds": [
+        "CLM-004",
+        "CLM-005",
+        "CLM-013"
+      ]
+    },
+    {
+      "id": "2.2",
+      "question": "已报告的不良反应谱",
+      "status": "answered",
+      "reportLines": [
+        47
+      ],
+      "claimIds": [
+        "CLM-004"
+      ]
+    },
+    {
+      "id": "2.3",
+      "question": "严重不良事件与因不良事件停药的比例分别如何",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "Suxiao Jiuxin Pill safety adverse drug reaction interaction",
+          "database": "PubMed",
+          "searchedAt": "2026-08-28"
+        },
+        {
+          "query": "Suxiao Jiuxin Wan angina",
+          "database": "PubMed",
+          "searchedAt": "2026-08-28"
+        }
+      ]
+    },
+    {
+      "id": "2.4",
+      "question": "所报告的发生率各自基于何种分母与观察时长",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "Suxiao Jiuxin Pill safety adverse drug reaction interaction",
+          "database": "PubMed",
+          "searchedAt": "2026-08-28"
+        }
+      ]
+    },
+    {
+      "id": "2.5",
+      "question": "是否存在上市后主动监测、注册登记或医院集中监测数据",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "Suxiao Jiuxin Pill safety adverse drug reaction interaction",
+          "database": "PubMed",
+          "searchedAt": "2026-08-28"
+        },
+        {
+          "query": "Clinical characteristics combined medication Suxiao Jiuxin Pills 16856 elderly real world",
+          "database": "PubMed",
+          "searchedAt": "2026-08-28"
+        }
+      ]
+    },
+    {
+      "id": "2.6",
+      "question": "现有安全性信息是来自以安全性为目的的研究，还是仅为有效性试验的附带记录",
+      "status": "answered",
+      "reportLines": [
+        49
+      ],
+      "claimIds": [
+        "CLM-004"
+      ]
+    },
+    {
+      "id": "3.1",
+      "question": "冰片（龙脑）与川芎的长期暴露，在药理毒理研究与临床文献中是否存在可核验的安全性关注点",
+      "status": "answered",
+      "reportLines": [
+        53,
+        55
+      ],
+      "claimIds": [
+        "CLM-013",
+        "CLM-014"
+      ]
+    },
+    {
+      "id": "3.2",
+      "question": "现有证据在多大程度上能够支持或排除这些关注",
+      "status": "answered",
+      "reportLines": [
+        59
+      ],
+      "claimIds": [
+        "CLM-013"
+      ]
+    },
+    {
+      "id": "4.1",
+      "question": "国家药监局核准说明书如何界定长期服用的适用人群、禁忌与慎用人群、疗程上限以及停药或再评估的要求",
+      "status": "answered",
+      "reportLines": [
+        63
+      ],
+      "claimIds": [
+        "CLM-008"
+      ]
+    },
+    {
+      "id": "4.2",
+      "question": "中医药与中西医结合相关指南共识如何界定长期服用的适用人群、禁忌与慎用人群、疗程上限以及停药或再评估的要求",
+      "status": "answered",
+      "reportLines": [
+        65
+      ],
+      "claimIds": [
+        "CLM-009"
+      ]
+    },
+    {
+      "id": "4.3",
+      "question": "各来源之间是否一致",
+      "status": "answered",
+      "reportLines": [
+        67
+      ],
+      "claimIds": [
+        "CLM-009"
+      ]
+    },
+    {
+      "id": "4.4",
+      "question": "流传较广的“可连续服用三个月”一类疗程表述，能否追溯到具体的研究、说明书条款或指南文本",
+      "status": "gap",
+      "searches": [
+        {
+          "query": "速效救心丸 长期 疗程 三个月",
+          "database": "PubMed",
+          "searchedAt": "2026-08-28"
+        },
+        {
+          "query": "速效救心丸 连续 三个月 疗程 专家共识 说明书",
+          "database": "PubMed",
+          "searchedAt": "2026-08-28"
+        },
+        {
+          "query": "速效救心丸",
+          "database": "PubMed",
+          "searchedAt": "2026-08-28"
+        }
+      ]
+    },
+    {
+      "id": "5.1",
+      "question": "长期有效性线索，“存在相关表述或推荐”与“该表述有前瞻性研究支持”能否在现有文献中分别确认",
+      "status": "answered",
+      "reportLines": [
+        41,
+        83
+      ],
+      "claimIds": [
+        "CLM-010"
+      ]
+    },
+    {
+      "id": "5.2",
+      "question": "长期安全性线索，“存在相关表述或推荐”与“该表述有前瞻性研究支持”能否在现有文献中分别确认",
+      "status": "answered",
+      "reportLines": [
+        49,
+        85
+      ],
+      "claimIds": [
+        "CLM-005"
+      ]
+    },
+    {
+      "id": "5.3",
+      "question": "缺口具体落在哪一环——缺长期随访、缺主动监测、缺特定人群数据，还是缺以长期用药本身为研究变量的设计",
+      "status": "answered",
+      "reportLines": [
+        41,
+        85
+      ],
+      "claimIds": [
+        "CLM-010",
+        "CLM-005"
+      ]
+    }
+  ]
+}

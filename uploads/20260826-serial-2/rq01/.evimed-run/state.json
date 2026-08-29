@@ -1,0 +1,185 @@
+{
+  "formatVersion": 1,
+  "runId": "run_93dcb339074908c481cf04aea4ec08e0",
+  "sessionId": "session-4cfc1f1a-04ea-497f-861a-99f0f14634de",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "updatedAt": "2026-08-26T08:00:45.534Z",
+  "plan": {
+    "revision": 1,
+    "items": [
+      {
+        "id": "rq01-clinical-evidence-report",
+        "title": "急性胸痛院外自救用药的证据评价：舌下含服硝酸甘油与速效救心丸的比较及 ALDH2 rs671 变异的人群学意义",
+        "contractKind": "clinical-evidence-report",
+        "capability": "clinical-evidence-synthesis",
+        "dependsOn": [],
+        "status": "rejected",
+        "attempts": 1,
+        "issues": [
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "clinical-evidence-report.md must contain academic analysis.",
+            "severity": "required"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "The academic title must be present.",
+            "severity": "required"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "The academic report is missing a required section matching /(?:^|\\n)##\\s+(?:摘要|Abstract)/i.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:临床|证据|Evidence|Clinical)/i.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:局限|Limitations?)/i.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:结论|Conclusion)/i.",
+            "severity": "advisory"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "The academic report is missing the safety-first practical-answer section. Head it with one of: 安全优先的实际处置 / 实际处置 / 实用回答 / 临床实践要点 / 临床要点 / 实用 / 怎么办 / Practical — every safety check on practical advice locates that section by its heading, so a heading outside this set means the section is never audited.",
+            "severity": "required"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "The evidence matrix must contain the report's material claims.",
+            "severity": "required"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "question-coverage.json 台账格式无效：文件缺失或为空。它必须是一个 JSON 对象，逐条列出题面「需要回答的问题」拆出的原子子问。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+            "severity": "required"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "clinical-evidence-run.json must be an object.",
+            "severity": "required"
+          }
+        ]
+      }
+    ]
+  },
+  "budget": {
+    "steps": 37,
+    "tokens": 222101,
+    "children": 1,
+    "limits": {
+      "maxSteps": 0,
+      "maxTokens": 0,
+      "maxChildren": 30
+    }
+  },
+  "evidence": {
+    "total": 165,
+    "byStatus": {
+      "stale": 165
+    }
+  },
+  "gateRuns": [
+    {
+      "runId": "run_93dcb339074908c481cf04aea4ec08e0",
+      "attempt": 1,
+      "deliverableId": "rq01-clinical-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "clinical-evidence-report.md must contain academic analysis.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "The academic title must be present.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "The academic report is missing a required section matching /(?:^|\\n)##\\s+(?:摘要|Abstract)/i.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:临床|证据|Evidence|Clinical)/i.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:局限|Limitations?)/i.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:结论|Conclusion)/i.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "The academic report is missing the safety-first practical-answer section. Head it with one of: 安全优先的实际处置 / 实际处置 / 实用回答 / 临床实践要点 / 临床要点 / 实用 / 怎么办 / Practical — every safety check on practical advice locates that section by its heading, so a heading outside this set means the section is never audited.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "The evidence matrix must contain the report's material claims.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：文件缺失或为空。它必须是一个 JSON 对象，逐条列出题面「需要回答的问题」拆出的原子子问。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "clinical-evidence-run.json must be an object.",
+          "severity": "required"
+        }
+      ],
+      "metrics": {
+        "citationCoverage": 0,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {}
+      },
+      "ok": false,
+      "at": "2026-08-26T07:25:08.364Z"
+    }
+  ],
+  "subagents": [
+    {
+      "deliverableId": "rq01-clinical-evidence-report",
+      "capability": "clinical-evidence-synthesis",
+      "skills": [
+        "clinical-evidence-synthesis",
+        "deep-research",
+        "biomedical-database-search",
+        "citation-integrity",
+        "manuscript-humanize"
+      ],
+      "status": "running"
+    }
+  ],
+  "qualityNotices": [
+    "literature_search searched and returned no source",
+    "biomedical_source_search searched and returned no source"
+  ],
+  "degraded": [
+    "capsule recall disabled: no endpoint configured"
+  ]
+}

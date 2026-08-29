@@ -1,0 +1,65 @@
+{
+  "assessmentType": "comprehensive_drug_evaluation",
+  "drug": "速效救心丸",
+  "indication": "冠心病心绞痛（气滞血瘀型胸痹）；与复方丹参滴丸对比评价",
+  "comparator": "复方丹参滴丸",
+  "jurisdiction": "中国 (NMPA)",
+  "decisionDate": "2026-08-13",
+  "compiler": {
+    "name": "evimed-drug-assessment",
+    "version": "1.4.0",
+    "auditHash": "c09c29b325b7df15ebb653280ee3d0ac4c8b65b02add3606e1aac2b79235a172"
+  },
+  "coreDomainCoverage": {
+    "required": ["applicability", "effectiveness", "safety"],
+    "missing": [],
+    "complete": true
+  },
+  "evaluationDomains": ["effectiveness", "safety", "applicability", "evidence_certainty", "economics"],
+  "compositeScore": null,
+  "scoreStatus": "not_requested",
+  "scoreWithheldReasons": [],
+  "recommendationStrength": "not_automatically_determined",
+  "humanReviewRequired": true,
+  "domainFindings": {
+    "effectiveness": {
+      "status": "mixed",
+      "certainty": "very_low",
+      "summary": "复方丹参滴丸自身证据较多（FDA II 期 + 16 项 meta 分析），但终点未证实；速效救心丸证据薄弱；两药头对头证据仅 5 项小样本研究且结论相互矛盾，不能得出何者更优或起效更快的比较性结论。"
+    },
+    "safety": {
+      "status": "mixed",
+      "certainty": "not_rated",
+      "summary": "复方丹参滴丸有上市后 ADR 监测（发生率 0.0018%）与 FDA II 期安全性数据，主要不良反应为可自行缓解的胃肠道不适；速效救心丸缺乏系统安全评估。两药确定性不同，不做单一评级。"
+    },
+    "applicability": {
+      "status": "mixed",
+      "certainty": "not_rated",
+      "summary": "疗程条款存在差异（复方丹参滴丸 4 周/28 天一疗程、糖尿病视网膜病变 24 周；速效救心丸共识 4 周一疗程、至少 1～2 疗程）；两药说明书均无『连续服用三个月』条款；人群边界不完全一致。"
+    },
+    "evidence_certainty": {
+      "status": "mixed",
+      "certainty": "not_rated",
+      "summary": "复方丹参滴丸 very low～moderate（GRADE）；速效救心丸 very low；直接比较 very low。"
+    },
+    "economics": {
+      "status": "unclear",
+      "certainty": "not_rated",
+      "summary": "仅 1 项小样本研究报告两药直接成本差异无统计学意义；无正式 HTA。"
+    }
+  },
+  "keyConclusion": "两药核准说明书的适应症证型相近但疗程与用法条款不同；起效特征仅有描述性药动学证据（复方丹参滴丸主要成分 Tmax<1 h，速效救心丸一室模型吸收迅速）；两药各自有效性与安全性证据强度不等（复方丹参滴丸较充分、确定性 very low～moderate，速效救心丸 very low）；两药直接比较证据极少、质量极低且结论相互矛盾，不足以支持任何『起效更快/更优/更适合长期服用』的比较性结论；『可连续服用三个月』无法追溯到两药说明书或现行专家共识。",
+  "actionOrSafetyImplication": "急性胸痛/心绞痛发作时，两药均不得作为推迟呼叫急救（120）的理由，应遵循现行急救指南；超出核准适应症的无诊断预防性或保健性长期服用缺乏适应症内证据。",
+  "materialUncertainties": [
+    "NMPA 官方说明书原文未直接获得（drug_label_search HTTP 400）；复方丹参滴丸仅有索引件、速效救心丸仅经二手站点，均需官方核实。",
+    "CNKI/万方/维普中文全文不可访问，中文研究仅经国际数据库收录部分与开放获取渠道间接覆盖。",
+    "ClinicalTrials.gov 与中国临床试验注册中心经适配器检索命中 0 条，注册试验覆盖可能不完整。",
+    "速效救心丸专家共识（2019）正文未能经全文核实，其疗程表述仅经厂商回应与媒体转述。"
+  ],
+  "filesWritten": [
+    "comprehensive-evaluation-report.md",
+    "evidence-table.csv",
+    "evaluation-summary.json",
+    "evidence-snapshot.json"
+  ]
+}

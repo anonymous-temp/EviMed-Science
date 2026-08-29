@@ -1,0 +1,310 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-13T23:44:00Z",
+  "databases": [
+    "PubMed",
+    "guideline index",
+    "Europe PMC",
+    "PMC",
+    "ClinicalTrials.gov"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "caffeine arrhythmia palpitations cardiovascular effects randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed",
+      "query": "caffeine coffee atrial fibrillation ventricular arrhythmia cohort",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "caffeine arrhythmia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "caffeine palpitations",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "caffeine sudden cardiac death ventricular arrhythmia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "guideline index",
+      "query": "palpitations evaluation management",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PubMed",
+      "query": "palpitations etiology evaluation primary care prevalence",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 14
+    },
+    {
+      "database": "PubMed",
+      "query": "caffeine premature atrial contractions premature ventricular contractions randomized crossover",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "caffeine QT interval heart rate variability catecholamines blood pressure dose",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina pectoris",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "caffeine restriction atrial fibrillation supraventricular tachycardia intervention",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "guideline index",
+      "query": "chest pain evaluation guideline acute coronary syndrome",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Europe PMC",
+      "query": "coffee consumption incident tachyarrhythmias Kim",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PMC",
+      "query": "caffeine arrhythmia review open access",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PMC",
+      "query": "palpitations evaluation differential diagnosis review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PMC",
+      "query": "palpitations etiology anxiety hyperthyroidism anemia prevalence",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol ligusticum chuanxiong caffeine interaction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "ClinicalTrials.gov",
+      "query": "caffeine arrhythmia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "suxiao jiuxin wan coronary heart disease randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "caffeine cessation withdrawal premature ventricular contraction trial",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PMC",
+      "query": "suxiao jiuxin wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PMC",
+      "query": "caffeinated coffee abstinence atrial fibrillation DECAF randomized cardioversion",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 209,
+    "recordsAfterDeduplication": 121,
+    "sourcesIncluded": 17
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NHSChestPain2023",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "emergency triage"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Surma2023",
+      "identifier": "PMC10508080",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "caffeine arrhythmia review"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Abdolmaleki2024",
+      "identifier": "PMC11239532",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "caffeine PAC/PVC review"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Chua2024",
+      "identifier": "PMC11321539",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "palpitation etiology primary care"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "RiberoVargas2025",
+      "identifier": "PMC12740010",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "palpitation differential evaluation"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Hamad2024",
+      "identifier": "PMC11648991",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "caffeine mechanism dose"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Cappelletti2018",
+      "identifier": "PMC5986491",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "caffeine fatality toxicology"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Almeida2024",
+      "identifier": "PMC11284693",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "caffeine HRV meta"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "DiRocco2011",
+      "identifier": "PMC3038953",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "caffeine AF case reports"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "NMPASuxiaoJiuxinWan",
+      "identifier": "国药准字Z12020025",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "regulatory label"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Ren2018",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan meta-analysis"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Hu2024",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan RCT"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Duan2008",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan Cochrane review"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "DECAF2025",
+      "identifier": "PMID:41206802",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "caffeine restriction AF RCT"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Shirlow1985",
+      "identifier": "PMID:3874838",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "caffeine palpitation prevalence"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Ruan2021",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan indication protocol"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "DECAFCommentary2025",
+      "identifier": "PMC12997235",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "DECAF trial result commentary"
+    }
+  ]
+}

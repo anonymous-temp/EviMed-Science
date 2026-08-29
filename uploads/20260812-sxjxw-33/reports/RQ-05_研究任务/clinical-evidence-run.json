@@ -1,0 +1,67 @@
+{
+ "reportProfile": "academic_deep_research_v1",
+ "question": "用力排便作为急性冠脉事件触发因素的关联强度，及\"卫生间常备速效救心丸\"能否降低该风险的证据评价",
+ "title": "用力排便作为急性冠脉事件触发因素的关联强度，及\"卫生间常备速效救心丸\"能否降低该风险的证据评价",
+ "startedAt": "2026-08-11T18:14:00Z",
+ "completedAt": "2026-08-11T18:35:00Z",
+ "tools": [
+  "evimed_data_source_catalog",
+  "evimed_health",
+  "evimed_literature_search",
+  "evimed_biomedical_source_search",
+  "evimed_guideline_search",
+  "evimed_drug_label_search",
+  "evimed_clinical_trial_search",
+  "evimed_evidence_deduplicate",
+  "evimed_open_access_full_text",
+  "evimed_official_page_fetch",
+  "evimed_web_search"
+ ],
+ "successfulSourceArtifacts": [
+  ".evimed-sources/PMC7473662/fulltext.md",
+  ".evimed-sources/PMC12711805/fulltext.md",
+  ".evimed-sources/PMC12477487/fulltext.md",
+  ".evimed-sources/PMC12219158/fulltext.md",
+  ".evimed-sources/PMC10920016/fulltext.md",
+  ".evimed-sources/PMC5892298/fulltext.md",
+  ".evimed-sources/PMC8287819/fulltext.md",
+  ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+  ".evimed-sources/PMC11317809/fulltext.md",
+  ".evimed-sources/PMC6336317/fulltext.md",
+  ".evimed-sources/PMC3544743/fulltext.md",
+  ".evimed-sources/PMC12907536/fulltext.md"
+ ],
+ "failedSources": [
+  "PMID:34641779: Europe PMC 解析至无关文献（心脏外科 AKI 研究），弃用；2021 AHA/ACC 胸痛指南正确记录无法经该 ID 保全",
+  "DOI:10.1161/CIR.0000000000001029 2021 AHA/ACC 胸痛指南: full text not open access via gateway",
+  "DOI:10.1016/j.jacc.2021.07.053 2021 AHA/ACC 胸痛指南 (JACC 版): full text not open access via gateway",
+  "DOI:10.1093/eurheartj/ehad191 2023 ESC ACS 指南: 首次超时、重试 gateway response too large (OUP 403)",
+  "PMID:18254051 Cochrane CD004473 速效救心丸综述: cochranelibrary HTTP 403",
+  "PMID:40153815 便秘-MI meta: jgld.ro unreachable",
+  "PMID:34911344 Stroke 2022 ICH 触发病例交叉: ahajournals HTTP 403 (仅摘要)",
+  "PMID:41003451 JACC Asia 便秘-CVD 队列: full text not open access via gateway (仅摘要)",
+  "PMID:42412703 JACC Asia 述评: full text not open access via gateway (仅题录)",
+  "PMID:27716918 Commode Cardia 案例系列: wiley HTTP 403",
+  "PMID:36790838 体力活动触发 MI meta: academic.oup.com HTTP 403",
+  "DOI:10.1111/jch.13489 Ishiyama 2019 便秘升压效应: full text not open access",
+  "PMC9115663 GRACE 胸痛指南: Europe PMC full-text upstream unavailable",
+  "https://www.acc.org/Latest-in-Cardiology/ten-points-to-remember/2021/10/28/14/44/2021-AHA-ACC-Chest-Pain-Guideline: fetch timed out (URL 未经搜索返回，属试探)",
+  "《急性胸痛急诊诊疗专家共识》(中华急诊医学杂志 2019;28(4)): 仅指南索引层级，全文不可经网关保全"
+ ],
+ "qualityChecks": {
+  "claimTraceability": true,
+  "sourceQuoteMatching": true,
+  "citationIntegrity": true,
+  "searchReproducibility": true,
+  "contradictionChecks": true,
+  "arithmeticChecks": true
+ },
+ "stats": {
+  "totalSearches": 42,
+  "recordsIdentified": 399,
+  "recordsAfterDeduplication": 180,
+  "sourcesIncluded": 12,
+  "distinctPreservedSources": 12
+ },
+ "status": "succeeded"
+}

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "queries": [
+    {"query": "Suxiao Jiuxin Wan", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "Suxiao Jiuxin Pill", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "速效救心丸", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "速效救心丸 长期服用 安全性", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "速效救心丸 不良反应 安全性", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "速效救心丸 疗程 三个月", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "速效救心丸 三个月 连续", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "冰片 龙脑 毒性 肝 肾 安全性", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "川芎 长期 毒性 肝损伤 安全性", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "速效救心丸 专家共识 长期 疗程 推荐 气滞血瘀", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "速效救心丸 治疗冠心病 专家共识 2019", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "borneol Bingpian hepatotoxicity nephrotoxicity safety", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "Ligusticum chuanxiong Chuanxiong long-term safety toxicity", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "chest pain relief by nitroglycerin does not predict coronary artery disease", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "Suxiao Jiuxin Pill stable angina randomized double-blind placebo-controlled multicenter", "database": "Europe PMC", "searchedAt": "2026-08-27"},
+    {"query": "suxiao jiuxin wan angina pectoris", "database": "PubMed", "searchedAt": "2026-08-27"},
+    {"query": "Suxiao Jiuxin Wan angina", "database": "Crossref", "searchedAt": "2026-08-27"},
+    {"query": "Suxiao Jiuxin", "database": "ClinicalTrials.gov", "searchedAt": "2026-08-27"},
+    {"query": "速效救心丸", "database": "NMPA 说明书索引", "searchedAt": "2026-08-27"},
+    {"query": "速效救心丸", "database": "指南/共识索引", "searchedAt": "2026-08-27"},
+    {"query": "速效救心丸 冠心病 专家共识 疗程", "database": "指南/共识索引", "searchedAt": "2026-08-27"},
+    {"query": "速效救心丸 治疗冠心病 专家共识 疗程", "database": "指南/共识索引", "searchedAt": "2026-08-27"}
+  ]
+}

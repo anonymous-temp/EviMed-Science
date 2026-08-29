@@ -1,0 +1,44 @@
+{
+ "packages": 29,
+ "missingArmPackages": 29,
+ "missingArmCodes": [
+  "specialist_screening_ledger_mismatch",
+  "practical_emergency_trigger_conditioned_on_medication_response",
+  "specialist_question_coverage_invalid",
+  "regulatory_article_without_official_source",
+  "declared-appraisal-must-execute"
+ ],
+ "added": 3,
+ "blockedPackages": 3,
+ "cleanToBlocked": [
+  "RQ-15_研究任务",
+  "RQ-17_研究任务"
+ ],
+ "removed": 0,
+ "detail": [
+  {
+   "name": "RQ-15_研究任务",
+   "wasClean": true,
+   "errorCode": "specialist_question_coverage_understated",
+   "added": [
+    "摘要重述研究范围时把问题数从 5 改小到 3：引言一节声明本文回答 3 个问题，question-coverage.json 却登记了 5 个题面编号。题面有几问，重述时就是几问——不得合并、不得重新编号、不得少列。若某一问全篇未答，它仍然是一问，在台账里登记为 gap 并在正文中如实写出这处空白。"
+   ]
+  },
+  {
+   "name": "RQ-16_研究任务",
+   "wasClean": false,
+   "errorCode": "specialist_question_coverage_understated",
+   "added": [
+    "摘要重述研究范围时把问题数从 5 改小到 3：摘要一节声明本文回答 3 个问题，question-coverage.json 却登记了 5 个题面编号。题面有几问，重述时就是几问——不得合并、不得重新编号、不得少列。若某一问全篇未答，它仍然是一问，在台账里登记为 gap 并在正文中如实写出这处空白。"
+   ]
+  },
+  {
+   "name": "RQ-17_研究任务",
+   "wasClean": true,
+   "errorCode": "specialist_question_coverage_gap_overstated",
+   "added": [
+    "question-coverage.json 条目 5.3（「（b）无心血管诊断的青年人为预防猝死而常备或自行含服本品」）登记为 gap，摘要第 27 行却就同一主题「青年人为预防猝死而常备」把这一次检索的空手写成了文献世界的事实：「无心血管诊断青年人为预防猝死而常备自服本品缺乏临床结局证据，减少咖啡因对心悸发作的干预证据为弱或阴性。」。摘要、结论与临床实践要点是读者取走答案的地方，缺口不能在那里变成结论。要么把这一句改写成如实的缺口陈述（「未检索到该终点的直接证据，这是一处证据空白」是允许的，也是应当写的），要么这条子问其实有答案，把台账改成 answered 并给出正文行号。"
+   ]
+  }
+ ]
+}

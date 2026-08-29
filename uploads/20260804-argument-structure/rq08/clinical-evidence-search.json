@@ -1,0 +1,455 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-04T07:19:00Z",
+  "databases": [
+    "PubMed (EviMed literature adapter)",
+    "EviMed 内部文献库",
+    "Europe PMC",
+    "Crossref",
+    "PubChem",
+    "DailyMed",
+    "OpenFDA (NMPA 说明书索引)",
+    "NMPA 药品说明书索引",
+    "临床指南索引"
+  ],
+  "queries": [
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "冰片 挥发 升华 稳定性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "速效救心丸 稳定性 冰片含量",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "borneol sublimation volatility stability",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "冰片 龙脑 挥发 升华",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "速效救心丸 冰片 含量测定",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "borneol evaporation vapor pressure kinetics",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "冰片 升华 损失",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "速效救心丸 开封 使用期",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "Suxiao Jiuxin pill quality control GC borneol",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "冰片 中成药 含量下降 贮藏期",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "in-use stability opened container pharmaceutical volatile active ingredient",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "速效救心丸 质量标准",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "开封后 滴丸 使用 期限",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 29
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "borneol content loss solid formulation storage",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "冰片 滴丸 挥发损失",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "速效救心丸 稳定性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "冰片 含量 降低 贮藏 中成药",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "含冰片中成药 冰片 损失 含量变化",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "EviMed 内部文献库",
+      "query": "速效救心丸 冰片 含量 稳定性 贮藏",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubChem",
+      "query": "borneol",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin pill stability borneol content storage",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin stability borneol content",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 12
+    },
+    {
+      "database": "Europe PMC",
+      "query": "borneol content storage dripping pill traditional Chinese medicine",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "DailyMed",
+      "query": "nitroglycerin sublingual tablets storage replacement after opening",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "OpenFDA (NMPA 说明书索引)",
+      "query": "nitroglycerin sublingual tablet storage",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Europe PMC",
+      "query": "borneol melting point sublimation physicochemical",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "DailyMed",
+      "query": "nitrostat",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 9
+    },
+    {
+      "database": "Europe PMC",
+      "query": "borneolum syntheticum quality standard pharmacopoeia borneol content pills",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin tablets replace months after opening potency",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Bingpian borneol tablets content decrease storage volatile loss",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC",
+      "query": "nitroglycerin storage original container potency loss",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin sublingual tablet stability potency",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 9
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin shelf life",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Crossref",
+      "query": "Open-Label Study of the Stability of Sublingual Nitroglycerin Tablets in Simulated Real-Life Conditions",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC",
+      "query": "30314813",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC",
+      "query": "3145487",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Crossref",
+      "query": "10.1016/j.amjcard.2018.08.048",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "NMPA 药品说明书索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "临床指南索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "中成药 开封 使用期限 挥发性成分",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 476,
+    "recordsAfterDeduplication": 70,
+    "sourcesIncluded": 18
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Zhao2026VolatileDrugs",
+      "identifier": "PMC12845388",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "龙脑挥发实测与保留率数据"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Liu2025AiFen",
+      "identifier": "PMC12844603",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "固体含龙脑制剂升华与加工挥发损失"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Li2023SJP_AMI",
+      "identifier": "PMC10206061",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸组成与冰片药理"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Lu2015SJP_Dogs",
+      "identifier": "PMC4617746",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸组成与成分含量"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "NTGRealLife2018",
+      "identifier": "PMID30314813",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "3–6 个月更换惯例与真实使用稳定性"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "NTGStabilityI1988",
+      "identifier": "PMID3145487",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "硝酸甘油片密闭容器稳定性类比"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Cheng2013Bingpian",
+      "identifier": "PMID23974515",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "冰片/合成冰片定义与挥发性分析"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "NMPA_SJP_Label",
+      "identifier": "NMPA 速效救心丸说明书索引",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "说明书贮藏项（密封，≤20 ℃）"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "NMPA_SXBX_Label",
+      "identifier": "NMPA 麝香保心丸说明书索引",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "同类含挥发性组分制剂说明书贮藏项"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "NMPA_FFDSCD_Label",
+      "identifier": "NMPA 复方丹参滴丸说明书索引",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "同类含冰片滴丸说明书贮藏项"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "NMPA_NTG_Label",
+      "identifier": "NMPA 硝酸甘油片说明书索引",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "硝酸甘油片中国说明书贮藏项"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "SJPConsensus2019",
+      "identifier": "速效救心丸治疗冠心病中国专家共识2019",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "速效救心丸制剂定位与药典收录背景"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Shang2024SJP_21comp",
+      "identifier": "PMID39255555",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "速效救心丸龙脑/异龙脑定量方法"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Sun2023SJP_RCT",
+      "identifier": "PMID37487965",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "速效救心丸稳定型心绞痛 RCT（研究人群边界）"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Xie2024DecoctionPieces",
+      "identifier": "PMID38751210",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "含挥发油中药饮片贮存期限邻近证据"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "PubChemBorneol",
+      "identifier": "PubChem CID 64685",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "龙脑基本化学标识"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "DailyMedNitrostat",
+      "identifier": "DailyMed NITROSTAT SPL",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "硝酸甘油舌下片美国说明书元数据锚点"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "NHS_ChestPain",
+      "identifier": "official-page:f60ccb4779eccff7",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "急性胸痛急救呼叫官方指导（呼叫动作+限定症状）"
+    }
+  ]
+}

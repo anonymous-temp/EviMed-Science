@@ -1,0 +1,446 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-14T02:15:00Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "guideline index",
+    "ClinicalTrials.gov",
+    "NMPA label index",
+    "pharmacy reference"
+  ],
+  "queries": [
+    {
+      "database": "NMPA label index",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "pharmacy reference",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina pectoris randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "high altitude acute coronary syndrome myocardial infarction incidence",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "guideline index",
+      "query": "high altitude illness prevention treatment acetazolamide dexamethasone",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed",
+      "query": "acute mountain sickness high altitude pulmonary edema cerebral edema diagnosis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "coronary artery disease high altitude exposure myocardial oxygen demand ischemia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "high altitude sympathetic nervous system activation heart rate blood pressure hypoxia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "high altitude pulmonary embolism venous thromboembolism risk",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "high altitude erythrocytosis blood viscosity coagulation thrombosis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "hypoxic pulmonary vasoconstriction right ventricular load high altitude",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 高原 缺氧",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:18254051 AND SRC:MED",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "guideline index",
+      "query": "coronary artery disease air travel altitude cardiac patients recommendations",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 12
+    },
+    {
+      "database": "PubMed",
+      "query": "myocardial blood flow coronary flow reserve high altitude hypoxemia ischemia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "high altitude heart disease right ventricular hypertrophy chronic hypoxic pulmonary hypertension",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:20919884 AND SRC:MED",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:16339809 AND SRC:MED",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "guideline index",
+      "query": "高原病 急性高原病 高原肺水肿 高原脑水肿 诊治 共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "PubMed",
+      "query": "hypobaric versus normobaric hypoxia cardiovascular physiological differences",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "high altitude blood viscosity coagulation factors hemorheology acclimatization",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "sudden cardiac death mountaineers tourists high altitude incidence",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:17339571 AND SRC:MED",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "high altitude travelers chest pain dyspnea palpitations emergency department evaluation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:20417344 AND SRC:MED",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:28291666 AND SRC:MED",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "coronary blood flow reserve hypoxemia coronary stenosis oxygen delivery myocardial",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "electrocardiogram changes healthy subjects high altitude ST segment ischemia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan meta-analysis coronary heart disease angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "ClinicalTrials.gov",
+      "query": "acute mountain sickness traditional Chinese medicine prevention",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina systematic review meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "high altitude exposure coronary artery disease cardiac patients safety review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin Wan AND (OPEN_ACCESS:Y)",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "high altitude cardiovascular heart review (OPEN_ACCESS:Y) AND (REVIEW:Y)",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "altitude heart cardiovascular risk acclimatization review travelers",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 14
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:20417345 AND SRC:MED",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:24675141 AND SRC:MED",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "chronic mountain sickness Monge disease high altitude heart disease erythrocytosis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 205,
+    "recordsAfterDeduplication": 179,
+    "sourcesIncluded": 19
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NMPASuxiaoJiuxinWanLabel",
+      "identifier": "NMPA drug label (indexed candidate, official verification required)",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "regulatory indication"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Duan2008Cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "systematic review of Suxiao Jiuxin Wan"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Luo2018Meta",
+      "identifier": "PMID:29770157 / PMC5892298",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan meta-analysis"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Bai2014Artery",
+      "identifier": "PMID:24808920 / PMC3997901",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "human artery pharmacology"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Luks2016AltitudeSickness",
+      "identifier": "PMID:28143879 / PMC9488514",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "acute altitude illness review"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Luks2024WMS",
+      "identifier": "PMID:37833187",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "guideline (altitude illness 2024)"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Luks2019WMS",
+      "identifier": "PMID:31248818",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "guideline (altitude illness 2019)"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Dehnert2010CHD",
+      "identifier": "PMID:20919884",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "CHD at high altitude review"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Rimoldi2010CVD",
+      "identifier": "PMID:20417345",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "CVD at high altitude risk assessment"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "UIAA2014Consensus",
+      "identifier": "PMID:24675141",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "UIAA consensus on pre-existing CVD"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Schmid2006CAD",
+      "identifier": "PMID:16339809",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "CAD exercise tolerance at 3454 m"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Burtscher2010SCD",
+      "identifier": "PMID:20417344",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "cardiovascular events at altitude"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Burtscher2017SCD",
+      "identifier": "PMID:28291666",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "sudden cardiac death update"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Penaloza2007CMS",
+      "identifier": "PMID:17339571",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "chronic mountain sickness and heart"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Ullauri2025ACS",
+      "identifier": "PMID:40943990 / PMC12429522",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "high-altitude ACS cohort"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Wu2025PE",
+      "identifier": "PMID:40213421 / PMC11983428",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "pulmonary embolism at extreme altitude"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "NCT06531161",
+      "identifier": "NCT06531161",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "registered trial (Suxiao Jiuxin Pill for AMS prevention)"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "Tymko2023Sympathetic",
+      "identifier": "PMID:37642283",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "sympathetic meta-analysis"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "Tymko2020Endothelial",
+      "identifier": "PMID:32268833",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "endothelial function under hypobaric hypoxia"
+    }
+  ]
+}

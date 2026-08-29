@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸与抗高血压药物联用的降压叠加效应与症状性低血压风险：说明书适应症边界内的证据强度评价（命题A/B/C：可用于高血压合并冠心病者的心绞痛发作、协同降压风险、高血压患者普遍常备本品）",
+  "title": "速效救心丸与抗高血压药物联用的降压叠加效应与症状性低血压风险：说明书适应症边界内的证据强度评价",
+  "startedAt": "2026-08-12T01:05:00Z",
+  "completedAt": "2026-08-12T01:28:00Z",
+  "tools": [
+    "evimed_health",
+    "evimed_drug_label_search",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_clinical_trial_search",
+    "evimed_web_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC3997901/fulltext.md",
+    ".evimed-sources/PMC10206061/fulltext.md",
+    ".evimed-sources/PMC11496844/fulltext.md",
+    ".evimed-sources/PMC4671452/fulltext.md",
+    ".evimed-sources/10.26599-1671-5411.2024.06.001/fulltext.md",
+    ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+    ".evimed-sources/PMC9278720/fulltext.md",
+    ".evimed-sources/PMC11308083/fulltext.md",
+    ".evimed-sources/PMC12981354/fulltext.md",
+    ".evimed-sources/PMC11317809/fulltext.md",
+    ".evimed-sources/PMC8103948/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "10.1016/j.jep.2023.116959",
+      "reason": "open_access_full_text 返回非开放获取（no open-access PDF）；该文献以摘要层记录纳入（[2]）"
+    },
+    {
+      "identifier": "10.1161/CIR.0000000000001029",
+      "reason": "open_access_full_text 返回非开放获取；2021 AHA/ACC 胸痛指南以题录级记录纳入（[19]），内容经解读件核验"
+    },
+    {
+      "identifier": "PMID:35194168",
+      "reason": "open_access_full_text 返回非开放获取；冰片大鼠研究以摘要层记录纳入（[14]）"
+    },
+    {
+      "identifier": "PMID:34252529",
+      "reason": "open_access_full_text 返回非开放获取；CYP/转运体研究以摘要层记录纳入（[7]）"
+    },
+    {
+      "identifier": "NMPA 官方说明书数据库",
+      "reason": "本环境可用官方通道无法取得现行说明书原件；说明书以索引副本＋公开转载页表述（[16]），官方现行版本待人工核验"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true,
+    "practicalAnswerSourceSupport": true,
+    "noVisibleInternalMarkers": true
+  },
+  "stats": {
+    "totalSearches": 25,
+    "recordsIdentified": 310,
+    "recordsAfterDeduplication": 186,
+    "sourcesIncluded": 28,
+    "distinctPreservedSources": 15
+  },
+  "status": "succeeded"
+}

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "runId": "rq03-sxjw-longterm-evidence",
+  "drug": "速效救心丸",
+  "manufacturer": "津药达仁堂集团股份有限公司第六中药厂",
+  "indication": "气滞血瘀型冠心病、心绞痛（说明书适应症）",
+  "question": "速效救心丸连续用药三个月及以上的有效性与安全性证据评价：证据确定性分级与适用人群边界",
+  "runDate": "2026-08-27",
+  "status": "succeeded",
+  "longTermDefinition": "连续给药疗程≥3个月（≥12周）或随访≥3个月的观察期",
+  "clarifications": [
+    "研究对象为 NMPA 核准的速效救心丸，适应证按说明书为气滞血瘀型胸痹心痛的对症用药。",
+    "本部署不接受运行中追问，直接采用假设：'长期用药'操作化定义为连续服药疗程≥3个月，短于此疗程的研究仅作背景、不进入长期证据体。",
+    "中文全文数据库无法访问，中文文献仅通过国际数据库收录部分获得，此缺口在局限性中申明。",
+    "不开展新临床试验、不使用个体患者数据；自发报告数据仅作信号提示、不计算发生率。",
+    "有效性与安全性作为两个独立证据体分别检索、分别评价、分别陈述确定性。"
+  ],
+  "evidenceBodies": ["efficacy", "safety"],
+  "biasTools": {"rct": "RoB 2", "nonRct": "ROBINS-I", "guideline": "AGREE II"},
+  "biasToolApplicationNote": "RoB 2 由网络 Meta 分析对纳入 RCT 作出（全部 some concerns）；ROBINS-I 因无进入证据体的非随机干预性研究而未应用；AGREE II 因 2019 专家共识正文未获取而未评分，已在正文说明。",
+  "causalityTools": ["Naranjo", "WHO-UMC"],
+  "causalityToolApplicationNote": "说明书不良反应为汇总描述、缺逐例信息，未套用 Naranjo / WHO-UMC 逐例评分，已在正文说明。",
+  "searchScope": ["PubMed", "Europe PMC", "Crossref", "NMPA 说明书索引", "临床试验注册平台"],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC9428755/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "artifacts": [
+    {"id": "PMC8287819", "path": ".evimed-sources/PMC8287819/fulltext.md", "title": "速效救心丸治疗稳定型心绞痛24周试验方案 (Trials 2021)", "url": "https://europepmc.org/articles/PMC8287819", "sha256": "183578152beb12c2b9d99c12b6410726a595f9f2cc765ecaf093cd87de3cbfb6"},
+    {"id": "PMC11451125", "path": ".evimed-sources/PMC11451125/fulltext.md", "title": "速效救心丸治疗慢性冠脉综合征4周试验 (BMC Complement Med Ther 2024)", "url": "https://europepmc.org/articles/PMC11451125", "sha256": "13eb55b2fc64eee82d3279b72a1fc361e9b76e49974d695d5cf7d9ec3867d42f"},
+    {"id": "PMC5892298", "path": ".evimed-sources/PMC5892298/fulltext.md", "title": "速效救心丸冠心病 Meta 分析 (Evid Based Complement Alternat Med 2018)", "url": "https://europepmc.org/articles/PMC5892298", "sha256": "f17ac856820cfea13d4d9e5b08b7504751d6aa15313d4b57ed3f367a34b99d0c"},
+    {"id": "PMC9428755", "path": ".evimed-sources/PMC9428755/fulltext.md", "title": "179项口服中成药网络 Meta 分析 (Front Pharmacol 2022)", "url": "https://europepmc.org/articles/PMC9428755", "sha256": "000e1342fa8d4e16eb8abd40db2e8205d2040770bfb35eb90481f3c81efc8fdb"},
+    {"id": "official-page-nhs-chest-pain", "path": ".evimed-sources/official-pages/e6143b76645a9461/page.md", "title": "Chest pain - NHS", "url": "https://www.nhs.uk/symptoms/chest-pain/", "sha256": "e6143b76645a946186618ad68d9bcbab8c82e5afd1d9673050b7c54fc83264a0"}
+  ],
+  "qualityChecks": [
+    {"check": "evidence-matrix-claims-traced-to-preserved-artifacts", "status": "pass"},
+    {"check": "verbatim-quotes-match-artifacts", "status": "pass"},
+    {"check": "report-cites-all-matrix-claims", "status": "pass"}
+  ],
+  "outcome": {
+    "efficacyGrade": {"shortTermSymptoms": "low", "longTermSymptoms": "low", "hardEndpoints": "very_low"},
+    "safetyGrade": "very_low",
+    "courseClaimTraceability": "未能在说明书/指南溯源，仅见于科普意见，无前瞻性研究支持"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸与麝香保心丸的疗效孰优：直接头对头随机对照证据的有无，及网络 meta 分析中相对位次的可信度界限",
+  "title": "速效救心丸与麝香保心丸的疗效孰优：直接头对头随机对照证据的有无，及网络 meta 分析中相对位次的可信度界限",
+  "startedAt": "2026-08-12T01:31:30Z",
+  "completedAt": "2026-08-12T02:05:00Z",
+  "tools": [
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_clinical_trial_search",
+    "evimed_drug_label_search",
+    "evimed_data_source_catalog",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_web_search",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC9428755/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC6246622/fulltext.md",
+    ".evimed-sources/PMC8479593/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "10.1016/j.jep.2024.117925 — open_access_full_text 未开放获取（DOI 与 PMID 两次尝试均失败）",
+    "PMID:42452987 — open_access_full_text 未开放获取",
+    "unpaywall 查询 10.1016/j.jep.2024.117925 — HTTP 502",
+    "crossref 查询 \"Shexiang Baoxin Suxiao Jiuxin cost-effectiveness angina\" — HTTP 429",
+    "ChiCTR 注册库 — 本环境无可用连接器（数据源目录查询零命中）"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true,
+    "practicalSafetyBoundary": true
+  },
+  "stats": {
+    "totalSearches": 21,
+    "recordsIdentified": 290,
+    "recordsAfterDeduplication": 232,
+    "sourcesIncluded": 23,
+    "distinctPreservedSources": 7
+  },
+  "status": "succeeded"
+}

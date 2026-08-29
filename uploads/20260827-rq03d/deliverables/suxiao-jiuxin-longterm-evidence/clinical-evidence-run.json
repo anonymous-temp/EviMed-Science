@@ -1,0 +1,16 @@
+{
+  "deliverableId": "suxiao-jiuxin-longterm-evidence",
+  "contractKind": "clinical-evidence-report",
+  "status": "succeeded",
+  "reportProfile": "clinical-evidence-synthesis",
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md"
+  ],
+  "qualityChecks": {
+    "requiredOutputsExist": true,
+    "citationsResolvable": true,
+    "evidenceClaimsTraceable": true,
+    "skillsLoaded": true
+  }
+}

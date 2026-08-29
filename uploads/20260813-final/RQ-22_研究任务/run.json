@@ -1,0 +1,39 @@
+{
+ "id": "run_bbe79126a47a6f2fd5cf2367e38dc727",
+ "dispatchId": "rq-22-C2GyPz",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_001b845b1ffeUdKJZVOiC2GyPz",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.96",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-22 研究任务 ## 选题 **《青年非特异性胸闷的病因构成、心源性猝死预警效能与首诊处置路径：速效救心丸适应症边界的证据评价》** ## 研究背景 青年人猝死的社会新闻常在短期内推高公众对自身胸闷症状的关注与购药意向，而 18–45 岁人群的非特异性胸闷或胸部不适本就是急诊、全科与初级保健中最常见的主诉之一…",
+ "status": "succeeded",
+ "createdAt": "2026-08-14T03:19:25.503Z",
+ "startedAt": "2026-08-14T03:19:25.503Z",
+ "finishedAt": "2026-08-14T04:04:53.711Z",
+ "durationMs": 2728208,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+  "citation-audit.md must reference at least one real audited source identifier from the evidence matrix."
+ ],
+ "observedMessages": 82,
+ "observedToolCalls": 156,
+ "lastProgressAt": "2026-08-14T04:04:40.090Z"
+}

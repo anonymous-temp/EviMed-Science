@@ -1,0 +1,48 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "舌下含服速效救心丸后出现舌部麻木、灼热或刺激感的药理机制是什么？该主观感受与药物的吸收程度或临床疗效之间是否存在已被研究验证的相关性？'舌麻说明药起效了'这一说法在临床上是否成立？舌部麻木在何种情况下应被视为不良反应或过敏征兆？",
+  "title": "舌下含服速效救心丸引起的舌部麻木感：药理机制、临床意义，及其能否作为药效指标的证据评价",
+  "startedAt": "2026-08-02T07:50:00Z",
+  "completedAt": "2026-08-02T08:15:00Z",
+  "tools": [
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_drug_label_search",
+    "evimed_guideline_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_clinical_trial_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC4957794/fulltext.md",
+    ".evimed-sources/PMC10206061/fulltext.md",
+    ".evimed-sources/PMC12400554/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/official-pages/f60ccb4779eccff7/page.md"
+  ],
+  "failedSources": [
+    "PMID:37487965 (no open-access PDF)",
+    "PMID:39255555 (no open-access PDF)",
+    "PMID:26142526 (no PMC record)",
+    "PubChem borneol (HTTP 502)",
+    "Clinical trials 速效救心丸 舌下 (HTTP 502)"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "status": "succeeded",
+  "stats": {
+    "totalSearches": 24,
+    "recordsIdentified": 79,
+    "recordsAfterDeduplication": 47,
+    "sourcesIncluded": 17,
+    "distinctPreservedSources": 5
+  }
+}

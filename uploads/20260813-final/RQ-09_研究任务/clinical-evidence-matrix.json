@@ -1,0 +1,185 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "冰片以温度与浓度依赖方式激活冷敏通道 TRPM8，效力低于薄荷醇。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://doi.org/10.1371/journal.pone.0158868",
+      "sourceTitle": "Borneol Is a TRPM8 Agonist that Increases Ocular Surface Wetness",
+      "artifactPath": ".evimed-sources/PMC4957794/fulltext.md",
+      "identifier": "PMID:27448228",
+      "accessLevel": "full_text",
+      "supportQuote": "borneol activated TRPM8 channel in a temperature- and dose-dependent manner, which was similar to but less effective than the action of menthol, an established TRPM8 agonist",
+      "applicability": "离体 HEK293 细胞表达人 TRPM8 的受体药理学证据；直接支持冰片为 TRPM8 激动剂，但为离体/角膜水平，不涉及人舌下黏膜感受。",
+      "uncertainty": "效力弱于薄荷醇且温度依赖（35℃ 时效应减弱）；离体证据向人舌下黏膜感受外推存在浓度与组织环境的不确定性。"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "冰片抑制（拮抗）人 TRPA1，IC50 为 0.20 mM，且不激活 hTRPA1。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://doi.org/10.1007/s12576-013-0289-0",
+      "sourceTitle": "Inhibitory effects of monoterpenes on human TRPA1 and the structural basis of their activity",
+      "artifactPath": ".evimed-sources/PMC3889502/fulltext.md",
+      "identifier": "PMID:24122170",
+      "accessLevel": "full_text",
+      "supportQuote": "the hTRPA1 current induced by AITC (20 μM) was inhibited by borneol, 2-methylisoborneol, and fenchyl alcohol in a dose-dependent manner, with half-maximal inhibitory concentrations (IC 50 ) of 0.20 ± 0.06, 0.12 ± 0.03, and 0.32 ± 0.06 mM, respectively, which are much lower than the IC 50 of 1,8-cineole (3.43 ± 0.58 mM) and camphor (1.26 ± 0.32 mM)",
+      "applicability": "离体 HEK293T 细胞表达人 TRPA1；直接支持冰片为 TRPA1 拮抗剂，反驳\"冰片激动 TRPA1 致灼热/刺痛\"的推测。",
+      "uncertainty": "所用浓度为毫摩尔级，可能高于舌下黏膜可达到的局部浓度；离体证据，且人 TRPA1 与小鼠 TRPA1 对单萜的反应存在种属差异。"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "冰片对人 TRPM8 的 EC50 为 65 μM，薄荷醇为 13 μM，冰片效力较低而效能相近。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://doi.org/10.15252/emmm.201607300",
+      "sourceTitle": "A clinical and mechanistic study of topical borneol-induced analgesia",
+      "artifactPath": ".evimed-sources/PMC5452010/fulltext.md",
+      "identifier": "PMID:28396565",
+      "accessLevel": "full_text",
+      "supportQuote": "Compared to menthol (EC 50 = 13 μM) … borneol exhibited a reduced potency (EC 50 = 65 μM) but similar efficacy in activating TRPM8",
+      "applicability": "离体人 TRPM8 表达的 HEK293 细胞；给出冰片激动 TRPM8 的定量效力，用于判断舌下黏膜局部浓度是否达到激活阈值。",
+      "uncertainty": "离体效力值向人舌下黏膜局部浓度的转译受限；速效救心丸每丸冰片含量未在可及来源中载明。"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "TRPM8 由支配皮肤、舌、结肠与角膜的周围感觉神经元亚群广泛表达。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://doi.org/10.15252/emmm.201607300",
+      "sourceTitle": "A clinical and mechanistic study of topical borneol-induced analgesia",
+      "artifactPath": ".evimed-sources/PMC5452010/fulltext.md",
+      "identifier": "PMID:28396565",
+      "accessLevel": "full_text",
+      "supportQuote": "TRPM8 is a cold‐activated channel and is extensively expressed by a subset of peripheral sensory neurons that diffusely innervate the skin, tongue, colon, and cornea",
+      "applicability": "一般性神经解剖学描述，说明 TRPM8 阳性感觉神经元支配舌，为\"冰片在舌部产生清凉感\"提供部位基础；并非针对舌下含服速效救心丸的测量。",
+      "uncertainty": "引用自讨论中的一般性陈述，未给出舌部 TRPM8 阳性神经元的具体数量或比例。"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "纳入 122 例术后痛患者的随机、双盲、安慰剂对照研究显示局部冰片镇痛优于安慰剂，冰片组 66% 与安慰剂组 35% 的患者疼痛强度下降 ≥50%，相对获益 1.89（95%CI 1.28–2.79）。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://doi.org/10.15252/emmm.201607300",
+      "sourceTitle": "A clinical and mechanistic study of topical borneol-induced analgesia",
+      "artifactPath": ".evimed-sources/PMC5452010/fulltext.md",
+      "identifier": "PMID:28396565",
+      "accessLevel": "full_text",
+      "supportQuote": "a randomized, double‐blind, placebo‐controlled clinical study involving 122 patients with postoperative pain … 66% of patients in the borneol group experienced a ≥ 50% reduction in pain intensity compared with 35% of patients in the placebo group … The relative benefit value of topical borneol was calculated to be 1.89 (95% CI 1.28–2.79) compared with placebo for the ≥ 50% reduction in pain.",
+      "applicability": "人群为术后痛、途径为局部皮肤、结局为疼痛评分下降；不直接适用于冠心病心绞痛的舌下含服与舌部感受，外推存在三重间接性。",
+      "uncertainty": "单剂量、单一疼痛状态；未测量舌部感受，也未以心绞痛为对象。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "冰片已被证实增强血脑、透皮、角膜与肠黏膜等生物屏障的通透性。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://doi.org/10.1016/j.chmed.2024.04.003",
+      "sourceTitle": "Role of borneol as enhancer in drug formulation: A review",
+      "artifactPath": ".evimed-sources/PMC12301920/fulltext.md",
+      "identifier": "DOI:10.1016/j.chmed.2024.04.003",
+      "accessLevel": "full_text",
+      "supportQuote": "Borneol has been proven to enhance the permeability of biological barriers such as the blood–brain, transdermal, corneal, and intestinal barriers.",
+      "applicability": "综述性证据，说明冰片具有黏膜/屏障促渗作用，为\"冰片可经黏膜吸收\"提供机制方向；不建立\"局部感受反映吸收\"的关系。",
+      "uncertainty": "综述转述，未针对舌下黏膜；促渗作用不等于局部感受与吸收之间的数量关系。"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "冰片精油（含冰片 18.2%）小鼠急性经口 LD50 雌性 2749 mg/kg、雄性 5081 mg/kg，属低毒至基本无毒；浓度低于 50% 时局部应用无皮肤与眼刺激。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://doi.org/10.1080/21655979.2021.1996149",
+      "sourceTitle": "Evaluation of the analgesic potential and safety of Cinnamomum camphora chvar. Borneol essential oil",
+      "artifactPath": ".evimed-sources/PMC8810075/fulltext.md",
+      "identifier": "PMID:34699310",
+      "accessLevel": "full_text",
+      "supportQuote": "Cinnamomum camphora chvar. Borneol essential oil (BEO, 18.2% v/v borneol) … Horn’s method and the Draize test revealed a gender difference in mice regarding acute oral LD 50 , i.e., low-toxicity to female mice (2749 mg/kg), but practically nontoxic to male mice (5081 mg/kg). … There was no acute and skin or eye irritation when BEO was applied directly, if the BEO concentration was less than 50%.",
+      "applicability": "对象为冰片精油（含冰片 18.2%），经口急性毒性与皮肤/眼刺激；间接提示冰片常规浓度低刺激，不直接适用于速效救心丸舌下黏膜暴露。",
+      "uncertainty": "精油不等于冰片晶体；经口与眼/皮肤数据外推到舌下黏膜存在间接性。"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "突发、持续不缓解的胸痛应立即呼叫急救（英国 999，中国对应 120），不得自行判断病因。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "you get sudden pain or discomfort in your chest that does not go away … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "官方公共健康症状页；为急性胸痛院前急救次序提供直接依据，急救号码按中国场景本地化为 120。",
+      "uncertainty": "英国来源，急救号码与中国（120）不同；仅支撑急救次序，不涉及具体药物处置。"
+    },
+    {
+      "claimId": "CLM-009",
+      "claimType": "synthesized",
+      "claim": "冰片有激活 TRPM8、经 TRPM8 介导镇痛与增强屏障通透的证据，但没有任何证据把舌部感受与黏膜吸收或疗效联系起来测量，故\"舌部感受＝药效指示\"缺乏证据支持。",
+      "confidence": "low",
+      "referenceNumber": 2,
+      "referenceNumbers": [
+        2,
+        3,
+        5
+      ],
+      "applicability": "横跨受体药理学、临床镇痛与促渗三类证据的综合判断；结论限于\"缺乏直接证据\"，不构成对本品疗效的否定。",
+      "uncertainty": "三类证据各自成立但互不衔接；\"未检索到联系性测量\"是检索结果的陈述，不等于证明该关联不存在。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://doi.org/10.15252/emmm.201607300",
+          "sourceTitle": "A clinical and mechanistic study of topical borneol-induced analgesia",
+          "artifactPath": ".evimed-sources/PMC5452010/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "identified the TRPM 8 channel as a molecular target of borneol and showed that topical borneol‐induced analgesia was almost exclusively mediated by TRPM 8"
+        },
+        {
+          "sourceUrl": "https://doi.org/10.1371/journal.pone.0158868",
+          "sourceTitle": "Borneol Is a TRPM8 Agonist that Increases Ocular Surface Wetness",
+          "artifactPath": ".evimed-sources/PMC4957794/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "borneol activated TRPM8 channel in a temperature- and dose-dependent manner, which was similar to but less effective than the action of menthol, an established TRPM8 agonist"
+        },
+        {
+          "sourceUrl": "https://doi.org/10.1016/j.chmed.2024.04.003",
+          "sourceTitle": "Role of borneol as enhancer in drug formulation: A review",
+          "artifactPath": ".evimed-sources/PMC12301920/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Borneol has been proven to enhance the permeability of biological barriers such as the blood–brain, transdermal, corneal, and intestinal barriers."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-010",
+      "claimType": "derived",
+      "claim": "麻木这一感觉缺失表型不能由冰片对 TRPM8 的激动机制直接解释：TRPM8 激动介导的是冷觉（清凉）而非感觉缺失。",
+      "derivedFrom": [
+        "CLM-001",
+        "CLM-004"
+      ],
+      "method": "TRPM8 的生理功能是冷感受，激活后产生冷觉而非感觉缺失（CLM-001 显示冰片激动 TRPM8；CLM-004 显示 TRPM8 由支配舌的冷敏感觉神经元表达）。麻木（hypoesthesia）是感觉减退/缺失的表型，与冷觉属不同感觉模态；若麻木由 TRPM8 激动引起，应表现为清凉而非感觉缺失。因此从\"冰片激动 TRPM8\"不能推出\"麻木\"。",
+      "assumptions": "舌部\"麻木\"符合通常的感觉减退表型；冰片在舌下黏膜局部达到激动 TRPM8 的微摩尔量级（EC50 65 μM）。",
+      "sensitivity": "若冰片局部浓度远高于 EC50 65 μM，或冰片另作用于未检验的靶点（如电压门控钠通道导致神经传导阻滞），则可出现感觉缺失；该替代解释既不能由现有数据排除，也无法证实，因未检索到冰片对钠通道或神经传导阻滞的定量证据。",
+      "applicability": "限定于对\"麻木\"这一感觉缺失表型的机制解释，不涉及清凉感的受体来源。",
+      "uncertainty": "基于受体生理功能的推理而非直接测量；替代机制（钠通道阻滞、非特异性黏膜刺激）未被检验。"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "冰片在化学品安全数据表中被列为眼部刺激物，但兔角膜每天 4 次、连续 1 个月应用浓度最高 1 g/L（6.48 mM）未损伤眼组织。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://doi.org/10.1371/journal.pone.0158868",
+      "sourceTitle": "Borneol Is a TRPM8 Agonist that Increases Ocular Surface Wetness",
+      "artifactPath": ".evimed-sources/PMC4957794/fulltext.md",
+      "identifier": "PMID:27448228",
+      "accessLevel": "full_text",
+      "supportQuote": "Borneol is categorized as an ocular irritant in the Material Safety Data from chemical providers such as Fisher Scientific and Sigma-Aldrich … frequent corneal application (4 times/day for 1 month) of borneol at concentrations up to 1 g/L (6.48 mM) did not harm the eyes",
+      "applicability": "区分\"说明书/安全数据表列为刺激物\"与\"动物数据提示常规浓度低损害\"；为舌部麻木属预期反应还是刺激损伤的鉴别提供参考，但为角膜而非舌下黏膜。",
+      "uncertainty": "安全数据表的刺激分类与兔角膜毒性数据之间存在张力；两者均非舌下黏膜的直接证据。"
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "冰片与川芎嗪（川芎活性成分）等成分配伍，可使其脑内浓度-时间曲线下面积增加 1.3 倍以上。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://doi.org/10.1016/j.chmed.2024.04.003",
+      "sourceTitle": "Role of borneol as enhancer in drug formulation: A review",
+      "artifactPath": ".evimed-sources/PMC12301920/fulltext.md",
+      "identifier": "DOI:10.1016/j.chmed.2024.04.003",
+      "accessLevel": "full_text",
+      "supportQuote": "With the combined use of borneol, the distribution of these two compounds showed significant improvement in intracerebral area under the concentration–time curve (AUC 0–12 ) by more than 1.3-fold",
+      "applicability": "综述转述的动物/脑内分布证据，说明冰片促进川芎嗪等成分配伍的吸收与分布；属脑内分布（血脑屏障）而非舌下黏膜的直接证据。",
+      "uncertainty": "转述自综述（Yin 2017）；对象为脑内分布而非黏膜吸收，且为动物/离体层面的分布数据。"
+    }
+  ]
+}

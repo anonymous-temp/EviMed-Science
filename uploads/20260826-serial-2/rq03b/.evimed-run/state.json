@@ -1,0 +1,1058 @@
+{
+  "formatVersion": 1,
+  "runId": "run_93e9cdfd1ceddbc21392d9183e98b8d7",
+  "sessionId": "session-f0ab5156-f496-42c6-953e-de1e75261f72",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "updatedAt": "2026-08-27T02:05:26.965Z",
+  "plan": {
+    "revision": 1,
+    "items": [
+      {
+        "id": "rq03-longterm-evidence-report",
+        "title": "速效救心丸连续用药三个月及以上的有效性与安全性证据评价：证据确定性分级与适用人群边界",
+        "contractKind": "clinical-evidence-report",
+        "capability": "clinical-evidence-synthesis",
+        "dependsOn": [],
+        "status": "rejected",
+        "attempts": 3,
+        "issues": [
+          {
+            "code": "clinical_evidence_notice",
+            "message": "The academic report contains runtime or retrieval-process prose instead of scientific analysis: line 33 reads **检索缺口（申明）**：CNKI、万方等中文全文数据库在本环境无法直接访问，中文文献仅通过上述国际/索引渠道的收录部分获得；部分中文 RCT 的随机化隐藏、盲法、失访与终点数值只能到摘要层级…. Write what the evidence shows, not how it was obtained — the run's tools, gateways, preserved artifacts (工件), access levels (访问层级), environment (本环境), and retrieval passes (本轮检索) belong in the run receipt. A source you could not obtain is stated as a limitation of the evidence base inside 局限性, in the reader's terms.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 11 行写「随机对照试验（RCT）用 RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 46 行写「故不作 AGREE II 评级」。AGREE II 只在局限性或结论里出现。确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 11 行写「个案因果归因采用 Naranjo/WHO-UMC 思路评定。指南/共识因全文未能获取」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 11 行写「个案因果归因采用 Naranjo/WHO-UMC 思路评定。指南/共识因全文未能获取」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 11 行写「两个证据体分别按 GRADE 陈述确定性等级」。GRADE 只在局限性或结论里出现。确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+            "severity": "advisory"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "The evidence matrix must contain the report's material claims.",
+            "severity": "required"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 13 numeric facts 1, 324, 5, 3, 24, 4, 52, 3831, 300, 2-8 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 21 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 23 numeric facts 1, 2001-2015, 856, 65 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 56 numeric facts 24 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 58 numeric facts 1, 324, 5, 3, 24, 36, 4, 0.05 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 62 numeric facts 52 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 64 numeric facts 3831, 667, 596, 52, 83.66, 74.53, 76.87, 0.05 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 68 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 70 numeric facts 300, 150, 1, 3, 0.05 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 72 numeric facts 1, 80, 22 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 76 numeric facts 15, 1776, 4 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 77 numeric facts 2, 4, 30, 8, 6 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 80 numeric facts 8, 24, 52, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          }
+        ]
+      }
+    ]
+  },
+  "budget": {
+    "steps": 64,
+    "tokens": 365500,
+    "children": 1,
+    "limits": {
+      "maxSteps": 0,
+      "maxTokens": 0,
+      "maxChildren": 30
+    }
+  },
+  "evidence": {
+    "total": 227,
+    "byStatus": {
+      "stale": 226,
+      "ready": 1
+    }
+  },
+  "gateRuns": [
+    {
+      "runId": "run_93e9cdfd1ceddbc21392d9183e98b8d7",
+      "attempt": 1,
+      "deliverableId": "rq03-longterm-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [
+        {
+          "code": "specialist_evidence_traceability_failed",
+          "message": "clinical-evidence-report.md is not in the deliverable, or is empty. Write it at exactly that name inside this deliverable's directory before submitting; the checks below cannot read a file that is not there.",
+          "severity": "required"
+        }
+      ],
+      "metrics": {
+        "citationCoverage": 0,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {}
+      },
+      "ok": false,
+      "at": "2026-08-27T01:38:32.872Z"
+    },
+    {
+      "runId": "run_93e9cdfd1ceddbc21392d9183e98b8d7",
+      "attempt": 2,
+      "deliverableId": "rq03-longterm-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [
+        {
+          "code": "clinical_evidence_notice",
+          "message": "The academic report contains runtime or retrieval-process prose instead of scientific analysis: line 13 reads **结果**（1）**有效性**：现有最长疗程的高质量研究为 1 项随机、双盲、安慰剂对照、多中心 RCT（24 周，324 例稳定型心绞痛，注册号 ChiCTR1900021876，结果发表…. Write what the evidence shows, not how it was obtained — the run's tools, gateways, preserved artifacts (工件), access levels (访问层级), environment (本环境), and retrieval passes (本轮检索) belong in the run receipt. A source you could not obtain is stated as a limitation of the evidence base inside 局限性, in the reader's terms.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 11 行写「随机对照试验（RCT）用 RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 11 行写「指南/共识方法学质量参照 AGREE II 思路说明」。该行以「思路/精神/理念/参照…要点」提及 AGREE II，等同于未使用。删除工具名并直接写你实际做了什么，或在结果或讨论里对具体一篇文献用它评一次。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 11 行写「药物—不良事件因果归因采用 Naranjo/WHO-UMC 思路并写明依据。」。该行以「思路/精神/理念/参照…要点」提及 Naranjo，等同于未使用。删除工具名并直接写你实际做了什么，或在结果或讨论里对具体一篇文献用它评一次。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 11 行写「药物—不良事件因果归因采用 Naranjo/WHO-UMC 思路并写明依据。」。该行以「思路/精神/理念/参照…要点」提及 WHO-UMC，等同于未使用。删除工具名并直接写你实际做了什么，或在结果或讨论里对具体一篇文献用它评一次。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 11 行写「两个证据体分别按 GRADE 陈述确定性等级」。GRADE 只在局限性或结论里出现。确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+          "severity": "advisory"
+        },
+        {
+          "code": "practical_emergency_trigger_conditioned_on_medication_response",
+          "message": "The academic report line 62 carries 23 consecutive words of untranslated source prose: Evaluation of the efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina: A…. The body states each finding in Chinese with its numbered citation; a reader who wants the original wording follows the citation and an auditor reads the matrix. Restate the passage in Chinese with its citation, and keep any genuinely necessary quotation to a short phrase inside quotation marks — names, identifiers, units and statistics (ALDH2、rs671、GRADE、Naranjo、P < 0.01、RR 0.82) are unaffected.",
+          "severity": "required"
+        },
+        {
+          "code": "practical_emergency_trigger_conditioned_on_medication_response",
+          "message": "The evidence matrix must contain the report's material claims.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 13 numeric facts 1, 24, 324, 4, 52, 3831, 300, 2-8 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 15 numeric facts 24 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 21 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 23 numeric facts 1, 2001-2015, 856, 65 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 60 numeric facts 24 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 62 numeric facts 324, 5, 3, 24, 36, 4, 0.05 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 64 numeric facts 52 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 66 numeric facts 3831, 667, 596, 52, 83.66, 74.53, 76.87, 0.05 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 68 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 70 numeric facts 300, 150, 1, 0.05 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 72 numeric facts 1, 80, 22 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 76 numeric facts 15, 1776, 4 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 77 numeric facts 2, 4, 30, 8, 6 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 80 numeric facts 24, 52, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 84 numeric facts 4, 24, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 96 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 102 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 103 numeric facts 2001-2015, 856, 65, 61.15, 50.77, 36.88, 8, 80.37 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 107 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 111 numeric facts 1.71-2, 40, 4-6 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 113 numeric facts 4, 50.77, 36.88, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 124 numeric facts 6, 3, 15 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 130 numeric facts 8, 0 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 134 numeric facts 2, 4, 30, 24 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 140 numeric facts 24, 4, 52, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 145 numeric facts 24 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 153 numeric facts 24, 4, 52, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 164 numeric facts 40 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 173 numeric facts 24, 1, 52 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 185 numeric facts 4-6, 10-15 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "practical_emergency_trigger_conditioned_on_medication_response",
+          "message": "Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms. State instead that relief after a sublingual dose does not distinguish cardiac from non-cardiac pain, cite the evidence for that, and say that persisting symptoms call for emergency assessment regardless of the response.",
+          "severity": "required"
+        },
+        {
+          "code": "practical_emergency_trigger_conditioned_on_medication_response",
+          "message": "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+          "severity": "required"
+        },
+        {
+          "code": "practical_emergency_trigger_conditioned_on_medication_response",
+          "message": "Every numbered practical-action item must cite at least one evidence-matrix claim.",
+          "severity": "required"
+        },
+        {
+          "code": "practical_emergency_trigger_conditioned_on_medication_response",
+          "message": "Every practical-action step or bullet must cite at least one evidence-matrix claim.",
+          "severity": "required"
+        },
+        {
+          "code": "practical_emergency_trigger_conditioned_on_medication_response",
+          "message": "临床实践要点第 188 行把「含服本品/硝酸酯后数分钟仍不缓解」写成了呼叫急救的触发条件：「5. 何时立即就医：胸痛持续不缓解、呈压榨样、伴大汗/气促/濒死感、或含服本品/硝酸酯后数分钟仍不缓解，应立即呼叫急救或急诊就诊——这一判断不依赖于任何药物是否起效」。急救的触发条件不得以自救用药的疗效为条件（含药不缓解、服药后无效、观察 N 分钟无效均不可）——本节唯一允许的口径是「无论服药与否、无论是否缓解，出现上述征象即刻呼叫 120」。同一节里已经写着「服药不是等待的理由，应在服药的同时呼叫急救」，这一条与它互斥，读者无法同时执行。若来源（指南原文）确实给出了这一条件，把它留在「结果」一节按原文复述并保留出处，实践要点只写无条件的那一句。",
+          "severity": "required"
+        },
+        {
+          "code": "practical_emergency_trigger_conditioned_on_medication_response",
+          "message": "临床实践要点第 188 行把「仍不缓解」写成了呼叫急救的触发条件：「5. 何时立即就医：胸痛持续不缓解、呈压榨样、伴大汗/气促/濒死感、或含服本品/硝酸酯后数分钟仍不缓解，应立即呼叫急救或急诊就诊——这一判断不依赖于任何药物是否起效」。急救的触发条件不得以自救用药的疗效为条件（含药不缓解、服药后无效、观察 N 分钟无效均不可）——本节唯一允许的口径是「无论服药与否、无论是否缓解，出现上述征象即刻呼叫 120」。同一节里已经写着「服药不是等待的理由，应在服药的同时呼叫急救」，这一条与它互斥，读者无法同时执行。若来源（指南原文）确实给出了这一条件，把它留在「结果」一节按原文复述并保留出处，实践要点只写无条件的那一句。",
+          "severity": "required"
+        },
+        {
+          "code": "practical_emergency_trigger_conditioned_on_medication_response",
+          "message": "question-coverage.json 台账格式无效：文件缺失或为空。它必须是一个 JSON 对象，逐条列出题面「需要回答的问题」拆出的原子子问。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "practical_emergency_trigger_conditioned_on_medication_response",
+          "message": "clinical-evidence-run.json must be an object.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "clinical-evidence-report.md line 76: one arm is concluded to take the other's place or to beat it (结论为弱证据支持本品在改善心电图、缓解症状、减少心绞痛发作与硝酸甘油用量方面优于硝酸甘油/复方丹参等，**\"无严重不良反应被识别，但因纳入研究方法学质量差，证据仍然弱\"**。), and the report never says whether a direct comparison between them exists. Fill the 是否存在直接比较研究 axis either way — head-to-head evidence with its citation, or 未检索到 with what was searched — and if there is none, list the links the chain needs one per line in 讨论 marked 已建立 or 未建立, and stop the conclusion at the last established link. 可能 does not close an open link: a speculative recommendation still reads to the reader as a substitution conclusion.",
+          "severity": "advisory"
+        }
+      ],
+      "metrics": {
+        "citationCoverage": 0,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {
+          "摘要": 12,
+          "一、引言": 6,
+          "二、资料与方法": 11,
+          "三、结果": 50,
+          "四、讨论": 8,
+          "五、局限性": 3,
+          "六、结论": 6,
+          "七、临床实践要点（供医师/药师参考，非个体诊疗建议）": 4
+        }
+      },
+      "ok": false,
+      "at": "2026-08-27T01:38:40.201Z"
+    },
+    {
+      "runId": "run_93e9cdfd1ceddbc21392d9183e98b8d7",
+      "attempt": 3,
+      "deliverableId": "rq03-longterm-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [
+        {
+          "code": "clinical_evidence_notice",
+          "message": "The academic report contains runtime or retrieval-process prose instead of scientific analysis: line 33 reads **检索缺口（申明）**：CNKI、万方等中文全文数据库在本环境无法直接访问，中文文献仅通过上述国际/索引渠道的收录部分获得；部分中文 RCT 的随机化隐藏、盲法、失访与终点数值只能到摘要层级…. Write what the evidence shows, not how it was obtained — the run's tools, gateways, preserved artifacts (工件), access levels (访问层级), environment (本环境), and retrieval passes (本轮检索) belong in the run receipt. A source you could not obtain is stated as a limitation of the evidence base inside 局限性, in the reader's terms.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 11 行写「随机对照试验（RCT）用 RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 46 行写「故不作 AGREE II 评级」。AGREE II 只在局限性或结论里出现。确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 11 行写「个案因果归因采用 Naranjo/WHO-UMC 思路评定。指南/共识因全文未能获取」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 11 行写「个案因果归因采用 Naranjo/WHO-UMC 思路评定。指南/共识因全文未能获取」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 11 行写「两个证据体分别按 GRADE 陈述确定性等级」。GRADE 只在局限性或结论里出现。确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "The evidence matrix must contain the report's material claims.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 13 numeric facts 1, 324, 5, 3, 24, 4, 52, 3831, 300, 2-8 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 21 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 23 numeric facts 1, 2001-2015, 856, 65 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 56 numeric facts 24 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 58 numeric facts 1, 324, 5, 3, 24, 36, 4, 0.05 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 62 numeric facts 52 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 64 numeric facts 3831, 667, 596, 52, 83.66, 74.53, 76.87, 0.05 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 68 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 70 numeric facts 300, 150, 1, 3, 0.05 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 72 numeric facts 1, 80, 22 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 76 numeric facts 15, 1776, 4 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 77 numeric facts 2, 4, 30, 8, 6 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 80 numeric facts 8, 24, 52, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 86 numeric facts 4 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 102 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 103 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 104 numeric facts 2001-2015, 856, 65, 61.15, 50.77, 36.88, 8, 80.37 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 108 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 112 numeric facts 1.71-2, 40, 4-6 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 114 numeric facts 4, 50.77, 36.88, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 125 numeric facts 6, 3, 15 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 131 numeric facts 8, 0 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 135 numeric facts 2, 4, 30, 24 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 141 numeric facts 24, 4, 52, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 146 numeric facts 24 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 154 numeric facts 24, 4, 52, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 165 numeric facts 40 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 175 numeric facts 24, 1, 52 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 187 numeric facts 4-6, 10-15 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 191 numeric facts 1, 664 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "Every numbered practical-action item must cite at least one evidence-matrix claim.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "Every practical-action step or bullet must cite at least one evidence-matrix claim.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.1.claimIds 提到 \"CLM-001\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.1.claimIds 提到 \"CLM-004\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.1.claimIds 提到 \"CLM-005\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.1 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.2.claimIds 提到 \"CLM-001\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.2.claimIds 提到 \"CLM-002\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.2.claimIds 提到 \"CLM-003\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.2.claimIds 提到 \"CLM-004\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.2.claimIds 提到 \"CLM-005\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.2 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 1.3（「各研究的失访情况如何？」）声明 gap，其检索式「Suxiao Jiuxin Pill stable angina randomized double-blind placebo-controlled multicenter」在 clinical-evidence-search.json 的 queries 中没有对应记录。检索日志由取数工具写入，「查过但没查到」必须能在日志里找到那一次检索——把真正跑过的检索式抄进来，或者去跑这一次检索。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 1.3（「各研究的失访情况如何？」）声明 gap，其检索式「速效救心丸 长期服用 安全性」在 clinical-evidence-search.json 的 queries 中没有对应记录。检索日志由取数工具写入，「查过但没查到」必须能在日志里找到那一次检索——把真正跑过的检索式抄进来，或者去跑这一次检索。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.4.claimIds 提到 \"CLM-001\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.4.claimIds 提到 \"CLM-004\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.4.claimIds 提到 \"CLM-005\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.4 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.5.claimIds 提到 \"CLM-008\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.5.claimIds 提到 \"CLM-009\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：1.5 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.1.claimIds 提到 \"CLM-010\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.1.claimIds 提到 \"CLM-011\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.1.claimIds 提到 \"CLM-012\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.1.claimIds 提到 \"CLM-005\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.1 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.2.claimIds 提到 \"CLM-011\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.2.claimIds 提到 \"CLM-005\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.2.claimIds 提到 \"CLM-012\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.2 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 2.3（「所报告发生率各自基于何种分母与观察时长？」）声明 gap，其检索式「速效救心丸 不良反应 安全性」在 clinical-evidence-search.json 的 queries 中没有对应记录。检索日志由取数工具写入，「查过但没查到」必须能在日志里找到那一次检索——把真正跑过的检索式抄进来，或者去跑这一次检索。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 2.3（「所报告发生率各自基于何种分母与观察时长？」）声明 gap，其检索式「速效救心丸 长期服用 安全性」在 clinical-evidence-search.json 的 queries 中没有对应记录。检索日志由取数工具写入，「查过但没查到」必须能在日志里找到那一次检索——把真正跑过的检索式抄进来，或者去跑这一次检索。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.4.claimIds 提到 \"CLM-010\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.4 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.5.claimIds 提到 \"CLM-010\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.5.claimIds 提到 \"CLM-011\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：2.5 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：3.1.claimIds 提到 \"CLM-015\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：3.1.claimIds 提到 \"CLM-016\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：3.1.claimIds 提到 \"CLM-017\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：3.1 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：3.2.claimIds 提到 \"CLM-018\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：3.2.claimIds 提到 \"CLM-019\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：3.2 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 3.3（「针对本品的长期肝肾功能、消化道与药物相互作用临床结局证据能否支持或排除上述关注？」）声明 gap，其检索式「冰片 龙脑 毒性 肝 肾 安全性」在 clinical-evidence-search.json 的 queries 中没有对应记录。检索日志由取数工具写入，「查过但没查到」必须能在日志里找到那一次检索——把真正跑过的检索式抄进来，或者去跑这一次检索。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 3.3（「针对本品的长期肝肾功能、消化道与药物相互作用临床结局证据能否支持或排除上述关注？」）声明 gap，其检索式「川芎 长期 毒性 肝损伤 安全性」在 clinical-evidence-search.json 的 queries 中没有对应记录。检索日志由取数工具写入，「查过但没查到」必须能在日志里找到那一次检索——把真正跑过的检索式抄进来，或者去跑这一次检索。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 3.3（「针对本品的长期肝肾功能、消化道与药物相互作用临床结局证据能否支持或排除上述关注？」）声明 gap，其检索式「Ligusticum chuanxiong long-term safety toxicity」在 clinical-evidence-search.json 的 queries 中没有对应记录。检索日志由取数工具写入，「查过但没查到」必须能在日志里找到那一次检索——把真正跑过的检索式抄进来，或者去跑这一次检索。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：4.1.claimIds 提到 \"CLM-020\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：4.1.claimIds 提到 \"CLM-021\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：4.1 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 4.2（「中医药与中西医结合指南共识如何界定长期服用的疗程与人群？」）声明 gap，其检索式「速效救心丸 治疗冠心病 专家共识 疗程」在 clinical-evidence-search.json 的 queries 中没有对应记录。检索日志由取数工具写入，「查过但没查到」必须能在日志里找到那一次检索——把真正跑过的检索式抄进来，或者去跑这一次检索。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 4.2（「中医药与中西医结合指南共识如何界定长期服用的疗程与人群？」）声明 gap，其检索式「速效救心丸 专家共识 长期 疗程 推荐 气滞血瘀」在 clinical-evidence-search.json 的 queries 中没有对应记录。检索日志由取数工具写入，「查过但没查到」必须能在日志里找到那一次检索——把真正跑过的检索式抄进来，或者去跑这一次检索。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：4.3.claimIds 提到 \"CLM-021\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：4.3.claimIds 提到 \"CLM-023\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：4.3 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：4.4.claimIds 提到 \"CLM-022\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：4.4 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：5.1.claimIds 提到 \"CLM-008\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：5.1.claimIds 提到 \"CLM-009\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：5.1 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：5.2.claimIds 提到 \"CLM-014\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：5.2 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：5.3.claimIds 提到 \"CLM-010\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：5.3.claimIds 提到 \"CLM-014\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：5.3.claimIds 提到 \"CLM-003\"，证据矩阵里没有这个 claim。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：5.3 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 1.3 的 question 不是题面第 1 问的原文：题面第 1 问是「疗程达到或超过三个月的有效性研究有哪些？各研究的设计、样本量、给药方案、随访时长、主要与次要终点（心绞痛发作频次、硝酸甘」。台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 1.4 的 question 不是题面第 1 问的原文：题面第 1 问是「疗程达到或超过三个月的有效性研究有哪些？各研究的设计、样本量、给药方案、随访时长、主要与次要终点（心绞痛发作频次、硝酸甘」。台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 1.1、1.2、1.3、1.4、1.5 把题面第 1 问登记为 answered，但这一问点名的「给药方案」「随访时长」「运动耐量」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 3.3 的 question 不是题面第 3 问的原文：题面第 3 问是「冰片（龙脑）与川芎的长期暴露，在药理毒理研究与临床文献中是否存在可核验的安全性关注点——例如肝肾功能指标变化、消化道刺激」。台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 4.1 的 question 不是题面第 4 问的原文：题面第 4 问是「国家药监局核准说明书、中医药与中西医结合相关指南共识，各自如何界定长期服用的适用人群、禁忌与慎用人群、疗程上限以及停药或」。台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 4.2 的 question 不是题面第 4 问的原文：题面第 4 问是「国家药监局核准说明书、中医药与中西医结合相关指南共识，各自如何界定长期服用的适用人群、禁忌与慎用人群、疗程上限以及停药或」。台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 4.3 的 question 不是题面第 4 问的原文：题面第 4 问是「国家药监局核准说明书、中医药与中西医结合相关指南共识，各自如何界定长期服用的适用人群、禁忌与慎用人群、疗程上限以及停药或」。台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "The clinical evidence run receipt is not succeeded.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "The run receipt must name the distinct successful source artifacts.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "All declared run-receipt quality checks must pass.",
+          "severity": "required"
+        }
+      ],
+      "metrics": {
+        "citationCoverage": 0,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {
+          "摘要": 11,
+          "一、引言": 4,
+          "二、资料与方法": 9,
+          "三、结果": 52,
+          "四、讨论": 8,
+          "五、局限性": 4,
+          "六、结论": 6,
+          "七、临床实践要点（供医师/药师参考，非个体诊疗建议）": 6
+        }
+      },
+      "ok": false,
+      "at": "2026-08-27T01:46:24.196Z"
+    }
+  ],
+  "subagents": [
+    {
+      "deliverableId": "rq03-longterm-evidence-report",
+      "capability": "clinical-evidence-synthesis",
+      "skills": [
+        "clinical-evidence-synthesis",
+        "deep-research",
+        "biomedical-database-search",
+        "citation-integrity",
+        "manuscript-humanize"
+      ],
+      "status": "running"
+    }
+  ],
+  "qualityNotices": [
+    "literature_search searched and returned no source"
+  ],
+  "degraded": [
+    "capsule recall disabled: no endpoint configured",
+    "final reply unavailable: nothing to scan"
+  ]
+}

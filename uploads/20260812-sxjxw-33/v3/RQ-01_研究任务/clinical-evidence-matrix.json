@@ -1,0 +1,386 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "纳入41项随机对照试验、6276例冠心病患者（均在中国开展）的荟萃分析显示，与对照治疗相比，速效救心丸改善心电图结果 RR 1.32（95%CI 1.26 至 1.38，P<0.001），异质性显著（I²=62.3%）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001)…However, there was significant heterogeneity between studies with respect to ECG results ( I 2 = 62.3%).",
+      "applicability": "冠心病心绞痛人群的长期用药结局（心电图改善为替代终点），非未分化急性胸痛院外自救场景",
+      "uncertainty": "全部试验在中国进行，多数方法学质量低（Jadad评分低），心电图改善为替代终点"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "该荟萃分析中7项研究以硝酸甘油（多种剂型）为对照，速效救心丸改善心电图结果的 RR 1.35（95%CI 1.16 至 1.56，P<0.001），该亚组异质性降至 I²=39.1%。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "7 studies involving nitroglycerin (using various formulations)…nitroglycerin (RR 1.35, 95% CI 1.16 to 1.56, P < 0.001)…The I 2 decreased to 39.1% in the nitroglycerin subgroup.",
+      "applicability": "冠心病心绞痛患者中长期用药，以心电图改善为终点；不涉及急性发作期的即刻缓解比较",
+      "uncertainty": "对照试验均为小样本、单中心，多数未设盲；心电图替代终点；原始研究未获全文核验"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "该荟萃分析明确报告：多数纳入研究因缺乏双盲设计而Jadad评分低，且未分析心血管死亡或药物相关并发症。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "The majority of the included studies received low Jadad scores due to the lack of a double-blind design…In this study, we did not analyze cardiovascular death or drug-related complications.",
+      "applicability": "证据质量评价，适用于对速效救心丸疗效结论的解释边界",
+      "uncertainty": "偏倚风险高，临床硬终点缺失"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "该荟萃分析中14项研究报告不良反应，最常见为轻度头痛、头晕与面部潮红，治疗组与对照组不良反应率差异无统计学意义（RR 1.12，95%CI 0.50 至 2.51，P=0.785）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "Fourteen studies reported the incidence of adverse reactions. The most common symptoms were mild headache, dizziness, and facial flushing. Most of these symptoms resolved spontaneously. There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)",
+      "applicability": "冠心病心绞痛人群长期用药安全性，观察期短，未覆盖急性院外使用",
+      "uncertainty": "置信区间宽，多数试验不良事件报告不系统"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "多中心、随机、双盲、安慰剂对照试验方案拟纳入324例气滞血瘀证慢性稳定型心绞痛患者，随机接受速效救心丸或安慰剂24周，主要结局为入组后4周心绞痛症状改善率与主要不良心血管事件。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "supportQuote": "The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome). All participants will have received the conventional therapy of chronic stable angina…Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks…The primary outcomes are the symptom improvement rate of angina from baseline to 4 weeks after inclusion and major adverse cardiovascular events (MACE).",
+      "applicability": "稳定型心绞痛（气滞血瘀证）研究设计本身即限定在说明书适应症人群",
+      "uncertainty": "为试验方案（ChiCTR1900021876），结果报告未纳入本文核验范围"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "该方案背景部分将速效救心丸描述为可增加冠脉血流量、改善心肌缺氧、类似硝酸甘油缓解心绞痛，同时明确指出既往证据因纳入研究方法学质量差而薄弱。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "supportQuote": "SJP can increase coronary blood flow, improve myocardial cell hypoxia, and relieve angina pectoris similar to nitroglycerin…However, the evidence remains weak due to the poor methodological quality of included studies",
+      "applicability": "对速效救心丸证据基础现状的陈述",
+      "uncertainty": "“类似硝酸甘油”为叙述性表述，非头对头比较结果"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "多中心随机双盲安慰剂对照试验（174例意向治疗人群）显示，速效救心丸组4周后西雅图心绞痛问卷总分改善≥20分的患者比例60.9%，高于安慰剂组39.1%（OR 2.43，95%CI 1.32 至 4.47，P=0.004）。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "This was a multicenter, randomized, double-blind, placebo-controlled trial. A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses. Participants with CCS and intolerance to the adverse effects of long-acting nitrates were recruited and randomized to either the SJPs or the placebo group for a duration of 4 weeks…Specifically, 60.9% of patients treated with SJPs achieved a 20-point or greater improvement in SAQ-SS, while only 39.1% (OR = 2.43, 95% confidence interval [CI] = 1.32 to 4.47, P = 0.004) of patients in the placebo group achieved the same level of improvement",
+      "applicability": "慢性冠脉综合征且不耐受长效硝酸酯不良反应的患者，4周辅助治疗；非急性发作自救",
+      "uncertainty": "患者自报问卷终点，4周观察期，样本量中等（mITT 174例）"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "该试验为多中心随机双盲安慰剂对照设计，8个中国中心纳入174例分析人群，速效救心丸用法为餐后舌下含服每次5粒、每日3次，研究期间无参与者报告不良事件。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "This was a multicenter, randomized, double-blind, placebo-controlled trial. A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses…During the 4-week treatment period, all participants were instructed to orally administer the study medication sublingually after meals, three times a day, taking 5 capsules each time (total of 15 capsules per day), continuously for 4 weeks…No participants reported experiencing adverse effects.",
+      "applicability": "慢性冠脉综合征，不耐受长效硝酸酯患者；舌下含服为慢性用药方案",
+      "uncertainty": "原文以英文单词“three times a day”表述每日三次（正文无阿拉伯数字 3）；每次 5 粒以数字“5 capsules”给出；“8 个中心”在原文为单词形式“eight clinical study centers”。"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "在中国北方汉族冠心病患者中（203例，其中GG基因型103例、GA/AA基因型100例），舌下含服硝酸甘油的症状缓解率野生型（GG）为79.4%，突变型（GA/AA）为50.6%，差异有统计学意义（P<0.01）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC4837835",
+      "sourceTitle": "Effect of Aldehyde Dehydrogenase 2 Gene Polymorphism on Hemodynamics After Nitroglycerin Intervention in Northern Chinese Han Population",
+      "artifactPath": ".evimed-sources/PMC4837835/fulltext.md",
+      "identifier": "10.4103/0366-6999.149192",
+      "accessLevel": "full_text",
+      "supportQuote": "Among 203 patients with CHD, 103 were GG cases and 100 were GA/AA cases…Accordingly, 103 cases of GG and 100 cases GA/AA were recorded in the CHD group. The NTG efficacies of the GG and the GA/AA subgroups were 79.4% and 50.6%, respectively. The difference in rapid NTG efficiency was statistically significant ( P < 0.01)",
+      "applicability": "已确诊冠心病心绞痛发作时的缓解率；本研究人群为山东胶东半岛汉族",
+      "uncertainty": "缓解率以患者自报疼痛判断，主观性强；单中心"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "该研究报道北方汉族ALDH2 rs671基因型分布：非冠心病组356例中GG 196例（55.1%）、GA 130例（36.5%）、AA 30例（8.4%）；冠心病组203例中GG 103例（50.7%）、GA 86例（42.4%）、AA 14例（6.9%），即突变等位基因携带者（GA+AA）占比接近半数。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC4837835",
+      "sourceTitle": "Effect of Aldehyde Dehydrogenase 2 Gene Polymorphism on Hemodynamics After Nitroglycerin Intervention in Northern Chinese Han Population",
+      "artifactPath": ".evimed-sources/PMC4837835/fulltext.md",
+      "identifier": "10.4103/0366-6999.149192",
+      "accessLevel": "full_text",
+      "supportQuote": "Of the 356 cases in the NCHD group, 196 (55.1%) were of the GG genotype and 130 (36.5%) were of the GA genotype. Of the 130 cases, 30 (8.4%) accounted for the AA genotype…Of the 203 cases in the CHD group, 103 (50.7%) were of the GG genotype and 86 (42.4%) were of the GA genotypes. Of the 86, 14 cases (6.9%) accounted for the AA genotype",
+      "applicability": "中国北方汉族人群；南方汉族及少数民族的携带率可能不同",
+      "uncertainty": "单一地区医院样本，与全国家族性大样本调查存在地域差异"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "含服0.5 mg硝酸甘油后，野生型（GG）患者在冠心病组与非冠心病组心输出量均升高，而突变型（GA/AA）患者心输出量均下降，两组心输出量与体循环血管阻力的变化差异有统计学意义。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC4837835",
+      "sourceTitle": "Effect of Aldehyde Dehydrogenase 2 Gene Polymorphism on Hemodynamics After Nitroglycerin Intervention in Northern Chinese Han Population",
+      "artifactPath": ".evimed-sources/PMC4837835/fulltext.md",
+      "identifier": "10.4103/0366-6999.149192",
+      "accessLevel": "full_text",
+      "supportQuote": "A noninvasive hemodynamic detector was used to monitor the CO and the SVR at the 0, 5, and 15 minute time points after medication with 0.5 mg sublingual NTG…All CO values in the wild-type case of both NCHD and CHD groups increased, whereas those in the mutant type decreased.",
+      "applicability": "已确诊与未确诊冠心病的中国北方汉族成人；无创血流动力学监测",
+      "uncertainty": "阻抗法血流动力学指标与症状缓解的直接关系未经临床终点验证"
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "按该研究引用的机制学证据，ALDH2基因GA杂合型（Glu504Lys杂合）酶活性约为正常的6%，AA纯合型活性几乎完全缺失。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC4837835",
+      "sourceTitle": "Effect of Aldehyde Dehydrogenase 2 Gene Polymorphism on Hemodynamics After Nitroglycerin Intervention in Northern Chinese Han Population",
+      "artifactPath": ".evimed-sources/PMC4837835/fulltext.md",
+      "identifier": "10.4103/0366-6999.149192",
+      "accessLevel": "full_text",
+      "supportQuote": "The GA genotype (i.e., mutant) only has 6% activity, whereas the AA genotype (i.e., mutant) loses all its activities.",
+      "applicability": "酶学表型描述（体外/文献转述），支撑机制学推断",
+      "uncertainty": "为论文引述的既往研究结果，非本研究直接测定"
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "该研究明确将“以疼痛缓解程度衡量硝酸甘油疗效”视为主观性指标，并以无创血流动力学参数作为替代评估手段。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC4837835",
+      "sourceTitle": "Effect of Aldehyde Dehydrogenase 2 Gene Polymorphism on Hemodynamics After Nitroglycerin Intervention in Northern Chinese Han Population",
+      "artifactPath": ".evimed-sources/PMC4837835/fulltext.md",
+      "identifier": "10.4103/0366-6999.149192",
+      "accessLevel": "full_text",
+      "supportQuote": "However, data on NTG measurement by pain relief are highly subjective.",
+      "applicability": "对以含服后缓解评价疗效或病因的方法学批评",
+      "uncertainty": "主观性本身不等于无效性，需与诊断效能研究互补"
+    },
+    {
+      "claimId": "CLM-014",
+      "claim": "随机交叉试验（117例健康日本青年，*1/*1 47例、*1/*2 48例、*2/*2 22例）显示，舌下硝酸甘油（0.3 mg）的最大动脉扩张幅度在不同ALDH2基因型间无差异，但*2/*2 型达最大扩张时间显著延长（299.7 s 对 254.7 s，P=0.0190），*1/*2 与 *2/*2 型达90%最大扩张时间均显著长于*1/*1（206.1 s 与 231.4 s 对 174.9 s）。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC3191425",
+      "sourceTitle": "Differential effects of organic nitrates on arterial diameter among healthy Japanese participants with different mitochondrial aldehyde dehydrogenase 2 genotypes: randomised crossover trial",
+      "artifactPath": ".evimed-sources/PMC3191425/fulltext.md",
+      "identifier": "10.1136/bmjopen-2011-000133",
+      "accessLevel": "full_text",
+      "supportQuote": "A randomised, open-label, crossover trial with 117 healthy Japanese (20–39 years) whose genotypes were determined (*1/*1, n=47; *1/*2, n=48; *2/*2, n=22) was performed at Kyushu University Hospital, Fukuoka, Japan. Participants were randomly assigned to treatment: sublingual spray of GTN (0.3 mg) or ISDN (1.25 mg)…the time required to attain 90% maximal dilation (T 0.9 )…The maximal artery diameter increase in response to GTN or ISDN did not differ among genotypes. However, GTN T max was significantly longer for *2/*2 (299.7 s, 269.0–330.4) than *1/*1 (254.7 s, 238.6–273.4; p=0.0190)…GTN T 0.9 was significantly longer in the *1/*2 (206.1 s, 191.7–219.3) and *2/*2 (231.4 s, 211.8–251.0) genotypes than *1/*1 (174.9 s, 161.5–188.3; p=0.0068, p<0.0001, respectively)",
+      "applicability": "健康青年志愿者肱动脉扩张（替代冠脉），非心绞痛患者临床缓解",
+      "uncertainty": "效应为延迟而非缺失；不同血管床与临床结局的外推受限"
+    },
+    {
+      "claimId": "CLM-015",
+      "claim": "该研究报告日本人群中ALDH2*2等位基因频率约20%，*1/*1 占60%至70%，*1/*2 占30%至40%，*2/*2 占3%至5%。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC3191425",
+      "sourceTitle": "Differential effects of organic nitrates on arterial diameter among healthy Japanese participants with different mitochondrial aldehyde dehydrogenase 2 genotypes: randomised crossover trial",
+      "artifactPath": ".evimed-sources/PMC3191425/fulltext.md",
+      "identifier": "10.1136/bmjopen-2011-000133",
+      "accessLevel": "full_text",
+      "supportQuote": "The frequency of the ALDH2 *2 allele is approximately 20% in the Japanese population, although regional differences may exist…The frequencies of each genotype are: *1/*1, 60% to 70%; *1/*2, 30% to 40%; and *2/*2, 3% to 5%.",
+      "applicability": "东亚邻国人群频率，作为中国人群数据的对照",
+      "uncertainty": "日本数据不能直接外推至中国汉族"
+    },
+    {
+      "claimId": "CLM-016",
+      "claim": "综述转述的2007年研究（142例冠心病患者）显示，饮酒后无面部潮红者5分钟内硝酸甘油缓解心绞痛的比例为67.1%，潮红者为20.4%；按基因型分，Glu504型5分钟有效反应率为57.5%，Lys504型为11.1%。",
+      "referenceNumber": 23,
+      "sourceUrl": "https://europepmc.org/articles/PMC8587134",
+      "sourceTitle": "Glyceryl Trinitrate: History, Mystery, and Alcohol Intolerance",
+      "artifactPath": ".evimed-sources/PMC8587134/fulltext.md",
+      "identifier": "10.3390/molecules26216581",
+      "accessLevel": "full_text",
+      "supportQuote": "Zhang and co-workers (2007) who recruited 142 coronary heart disease patients and showed that the amelioration of angina pectoris attacks within 5 min of GTN treatment was seen in 67.1% of patients who did not show flushing after drinking wine, compared to just 20.4% in flushing patients. This was consistent with genotype work, which showed that an efficacious response to GTN in 5 min was seen in 57.5% of Glu504 patients compared to 11.1% in the alcohol intolerant, Lys504 patients",
+      "applicability": "已确诊冠心病心绞痛发作的5分钟内缓解；原研究为中文文献，经综述转述",
+      "uncertainty": "数据为综述转述，原始全文未核验；5分钟缓解阈值与院外场景接近但人群为确诊患者"
+    },
+    {
+      "claimId": "CLM-017",
+      "claim": "同一综述记载证据间的冲突：2017年日本研究未发现Lys504突变携带者舌下含服硝酸甘油的血管扩张效应与野生型有差异，而2015年中国研究（559例）显示心输出量仅在野生型中升高、在突变型中下降。",
+      "referenceNumber": 23,
+      "sourceUrl": "https://europepmc.org/articles/PMC8587134",
+      "sourceTitle": "Glyceryl Trinitrate: History, Mystery, and Alcohol Intolerance",
+      "artifactPath": ".evimed-sources/PMC8587134/fulltext.md",
+      "identifier": "10.3390/molecules26216581",
+      "accessLevel": "full_text",
+      "supportQuote": "one of the more recent investigations conducted in Japan, in 2017, which concluded that Lys504 mutant subjects, when administered with GTN sublingually, showed no difference in terms of vasodilatory effects when compared to Glu504 wild type subjects…In contrast, a Chinese study in 2015, also using sublingual GTN, involving 559 subjects, showed that cardiac output increased only in wild type subjects, regardless of whether they had coronary heart disease or not, but these values dropped in mutant subjects both with and without coronary heart disease",
+      "applicability": "证据冲突的记载，用于界定结论的不确定性",
+      "uncertainty": "不同人群、剂量、结局指标与测量方法之间的差异可能是冲突来源"
+    },
+    {
+      "claimId": "CLM-018",
+      "claim": "该综述估计东亚人群因ALDH2常见突变出现酒精耐受性下降（饮酒后潮红）者约占40%。",
+      "referenceNumber": 23,
+      "sourceUrl": "https://europepmc.org/articles/PMC8587134",
+      "sourceTitle": "Glyceryl Trinitrate: History, Mystery, and Alcohol Intolerance",
+      "artifactPath": ".evimed-sources/PMC8587134/fulltext.md",
+      "identifier": "10.3390/molecules26216581",
+      "accessLevel": "full_text",
+      "supportQuote": "Lowered alcohol tolerance due to the accumulation of acetaldehyde is seen in around 40% of the East Asian population.",
+      "applicability": "东亚人群总体估计，与汉族亚群频率相互印证",
+      "uncertainty": "综述性估计，非系统综述定量汇总"
+    },
+    {
+      "claimId": "CLM-019",
+      "claim": "英国国家医疗服务体系（NHS）胸痛指导明确：突发且不缓解的胸部疼痛或不适（可为挤压或压迫感、烧灼感或消化不良样感觉），或疼痛向一侧或双侧手臂、颈部、下颌、胃部或背部放射，或胸痛伴出汗、恶心、头晕或气短者，可能为心肌梗死，应立即呼叫急救（原文为999），需要立即住院治疗。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if:…you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion…You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "英国公共卫生指导；急救电话号码在中国对应120",
+      "uncertainty": "非中国指南；症状清单用于触发呼叫，不用于排除诊断"
+    },
+    {
+      "claimId": "CLM-020",
+      "claim": "NHS胸痛指导同时说明：胸痛原因多样，多数并非心脏问题，症状只能提供可能的线索，公众不应自行诊断。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "Chest pain has many different causes. In most cases, chest pain is not caused by a heart problem…Your symptoms might give you an idea of the cause. Do not self-diagnose – see a GP if you're worried.",
+      "applicability": "对公众自我诊断行为的直接约束",
+      "uncertainty": "非针对含服药物反应的专门研究证据"
+    },
+    {
+      "claimId": "CLM-021",
+      "claim": "速效救心丸稳定型心绞痛试验方案允许受试者在心绞痛不可耐受时舌下含服硝酸甘油0.5 mg。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "supportQuote": "nitroglycerin 0.5 mg can be taken sublingually when angina pectoris is intolerable",
+      "applicability": "确诊冠心病稳定型心绞痛患者的发作期用药剂量依据",
+      "uncertainty": "试验方案中的应急用药条款，非独立疗效试验"
+    },
+    {
+      "claimId": "CLM-022",
+      "claimType": "derived",
+      "claim": "以北方汉族携带率45%至49%与两组缓解率79.4%、50.6%计算，中国汉族人群舌下含服硝酸甘油的平均缓解率约为65%至66%，即约每3名含药者中1名属低反应基因型。",
+      "derivedFrom": [
+        "CLM-009",
+        "CLM-010"
+      ],
+      "method": "按基因型分布加权：以非冠心病组携带率44.9%（36.5%+8.4%）计算，人群平均缓解率 = 0.551×79.4% + 0.449×50.6% = 43.75% + 22.72% = 66.5%；以冠心病组携带率49.3%（42.4%+6.9%）计算，= 0.507×79.4% + 0.493×50.6% = 40.26% + 24.95% = 65.2%；即约65%至66%。",
+      "assumptions": "两组基因型频率可近似代表汉族一般人群；各基因型缓解率跨人群稳定；缓解定义为含服后疼痛明显减轻",
+      "sensitivity": "若携带率取40%（综述估计下限），平均缓解率升至约67.8%；若取55%，降至约63.6%；缓解率本身为自报指标，误差±5个百分点可使平均缓解率变动约±2.5个百分点",
+      "applicability": "用于人群层面的风险沟通与对“约半数无效”说法的定量校准",
+      "uncertainty": "基于单一中国北方汉族研究数据推导，未经独立大样本验证"
+    },
+    {
+      "claimId": "CLM-023",
+      "claimType": "derived",
+      "claim": "“硝酸甘油对约半数中国人无效”的说法不准确：突变携带者中仍有约50.6%可获得症状缓解，且随机交叉试验显示变异型仅起效延迟、最大扩张幅度保留，故准确表述应为“约四成至五成汉族人群对舌下硝酸甘油呈低反应或延迟反应，而非完全无效”。",
+      "derivedFrom": [
+        "CLM-009",
+        "CLM-011",
+        "CLM-014",
+        "CLM-017"
+      ],
+      "method": "对照三项测量：(1) 突变型（GA/AA）缓解率50.6%，若为“无效”则该比例应趋近于0或与安慰剂无差别，与实测不符；(2) 日本交叉试验中最大动脉扩张幅度在基因型间无差异，仅达峰时间延迟；(3) 2017年日本研究未观察到基因型间扩张差异，说明存在人群与测量层面的不一致。综合判断“完全无效”与数据矛盾，低反应（缓解率下降约29个百分点）与起效延迟（90%最大扩张时间延长31至57秒）是数据支持的表述。",
+      "assumptions": "自报缓解率对真实血流动力学效应的反映在两组间无系统差异；缓解率差异主要由ALDH2基因型而非混杂因素解释",
+      "sensitivity": "若将来以大样本、盲法、客观终点（如缺血心电图改变）重复测量，缓解率差值可能缩小或扩大，本推导的方向性结论不随±10个百分点的测量误差改变",
+      "applicability": "公众传播的表述校准；不改变任何用药建议",
+      "uncertainty": "机制与人群证据来自不同国家、不同结局指标，跨研究外推存在局限"
+    },
+    {
+      "claimId": "CLM-024",
+      "claimType": "synthesized",
+      "claim": "以含服后症状是否缓解作为硝酸甘油疗效（进而推及病因）的评估指标，被中国临床研究明确视为主观性指标；公共健康指导同时告诫胸痛患者不应自行凭症状作出诊断。两条独立证据线一致指向：含服后缓解与否不宜作为院外自我鉴别心源性与非心源性胸痛的依据。",
+      "confidence": "moderate",
+      "referenceNumber": 3,
+      "referenceNumbers": [
+        3,
+        7
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC4837835",
+          "sourceTitle": "Effect of Aldehyde Dehydrogenase 2 Gene Polymorphism on Hemodynamics After Nitroglycerin Intervention in Northern Chinese Han Population",
+          "artifactPath": ".evimed-sources/PMC4837835/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "However, data on NTG measurement by pain relief are highly subjective."
+        },
+        {
+          "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+          "sourceTitle": "Chest pain - NHS",
+          "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+          "accessLevel": "official_page",
+          "supportQuote": "Your symptoms might give you an idea of the cause. Do not self-diagnose – see a GP if you're worried."
+        }
+      ],
+      "applicability": "院外自救场景的方法学结论；不替代对确诊心绞痛患者的临床判断",
+      "uncertainty": "诊断效能方向的直接证据（敏感度/特异度/似然比）来自摘要级研究，见正文标注"
+    },
+    {
+      "claimId": "CLM-025",
+      "claimType": "synthesized",
+      "claim": "综合中国北方汉族研究（缓解率显著降低：79.4% 对 50.6%；血流动力学反应减弱）、日本随机交叉试验（起效延迟但最大幅度保留）与综述记载的 2017 年日本阴性研究，ALDH2 rs671 对舌下硝酸甘油反应的影响表现为“效应减弱与延迟为主、证据方向存在部分冲突”，其人群学意义应表述为低反应人群占比接近半数，而非反应缺失。",
+      "confidence": "moderate",
+      "referenceNumber": 3,
+      "referenceNumbers": [
+        3,
+        4,
+        23
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC4837835",
+          "sourceTitle": "Effect of Aldehyde Dehydrogenase 2 Gene Polymorphism on Hemodynamics After Nitroglycerin Intervention in Northern Chinese Han Population",
+          "artifactPath": ".evimed-sources/PMC4837835/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The NTG efficacies of the GG and the GA/AA subgroups were 79.4% and 50.6%, respectively."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC3191425",
+          "sourceTitle": "Differential effects of organic nitrates on arterial diameter among healthy Japanese participants with different mitochondrial aldehyde dehydrogenase 2 genotypes: randomised crossover trial",
+          "artifactPath": ".evimed-sources/PMC3191425/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The maximal artery diameter increase in response to GTN or ISDN did not differ among genotypes."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC8587134",
+          "sourceTitle": "Glyceryl Trinitrate: History, Mystery, and Alcohol Intolerance",
+          "artifactPath": ".evimed-sources/PMC8587134/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "one of the more recent investigations conducted in Japan, in 2017, which concluded that Lys504 mutant subjects, when administered with GTN sublingually, showed no difference in terms of vasodilatory effects when compared to Glu504 wild type subjects"
+        }
+      ],
+      "applicability": "对Q2结论的证据体综合，用于准确定量表述",
+      "uncertainty": "跨人群、跨结局指标的合成；阴性研究的存在使“效应减弱”的把握度受限"
+    },
+    {
+      "claimId": "CLM-026",
+      "claimType": "derived",
+      "claim": "中国北方汉族 ALDH2 rs671 突变等位基因携带者（GA+AA）占比约 45% 至 49%（非冠心病组约 44.9%，冠心病组约 49.3%）。",
+      "derivedFrom": [
+        "CLM-010"
+      ],
+      "method": "将 CLM-010 报告的两组基因型频率相加：非冠心病组携带率 = GA 36.5% + AA 8.4% = 44.9%；冠心病组携带率 = GA 42.4% + AA 6.9% = 49.3%；两组合计约 45% 至 49%。",
+      "assumptions": "基因型频率可近似代表中国北方汉族一般人群；组内分布符合 Hardy–Weinberg 平衡（原研究 χ²=1.59、0.49，P>0.05）。",
+      "sensitivity": "携带率对地区与人群构成敏感：两组频率相差约 4.4 个百分点；若采用综述估计的东亚携带率下限（约 40%），区间约为 40% 至 49%。",
+      "applicability": "用于报告正文与结论中“携带率约 45% 至 49%”表述的引文支撑",
+      "uncertainty": "45% 至 49% 为两组频率之和（44.9% 与 49.3%）的取整表述；原文献仅直接给出各基因型频率，未直接给出携带率合计值。"
+    }
+  ]
+}

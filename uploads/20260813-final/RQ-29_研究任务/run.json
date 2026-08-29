@@ -1,0 +1,38 @@
+{
+ "id": "run_41fe47fd73e561e1374a8d99edc3ccef",
+ "dispatchId": "rq-29-0lIY1i",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00070926bffeac0LFeGP0lIY1i",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.95",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-29 研究任务 ## 选题 **《消费级可穿戴设备提示心房颤动后的评估与处置路径：设备诊断准确性、指南推荐、卒中预防决策及速效救心丸在该场景的证据边界》** ## 研究背景 消费级智能手表与手环通过光电容积描记法或单导联心电记录发出\"疑似心房颤动\"提示，已成为相当一部分人首次接触心律异常信息的入口，其中不少人…",
+ "status": "succeeded",
+ "createdAt": "2026-08-14T09:17:20.384Z",
+ "startedAt": "2026-08-14T09:17:20.384Z",
+ "finishedAt": "2026-08-14T10:14:51.132Z",
+ "durationMs": 3450748,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after."
+ ],
+ "observedMessages": 108,
+ "observedToolCalls": 168,
+ "lastProgressAt": "2026-08-14T10:14:35.265Z"
+}

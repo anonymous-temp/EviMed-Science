@@ -1,0 +1,345 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-11T21:58:10Z",
+  "databases": [
+    "PubMed",
+    "EuropePMC",
+    "PMC",
+    "guideline source"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "chest pain history diagnostic accuracy acute coronary syndrome sensitivity specificity likelihood ratio",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 9
+    },
+    {
+      "database": "PubMed",
+      "query": "Marburg Heart Score chest pain diagnosis primary care validation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "PubMed",
+      "query": "chest pain emergency department final diagnosis causes proportion noncardiac",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0,
+      "note": "零命中；改用变体查询 causes of chest pain emergency department prevalence 后重跑"
+    },
+    {
+      "database": "PubMed",
+      "query": "causes of chest pain emergency department prevalence",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin chest pain relief coronary artery disease diagnosis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "normal ECG acute coronary syndrome missed diagnosis sensitivity",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "guideline source",
+      "query": "chest pain evaluation diagnosis acute coronary syndrome",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "PubMed",
+      "query": "symptom checkers triage accuracy evaluation audit",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "PubMed",
+      "query": "missed diagnoses acute cardiac ischemia emergency department",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "guideline source",
+      "query": "急性胸痛急诊诊疗专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EuropePMC",
+      "query": "2023 ESC Guidelines acute coronary syndromes ehad191",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "EuropePMC",
+      "query": "Marburg Heart Score coronary artery disease primary care diagnosis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "EuropePMC",
+      "query": "proton pump inhibitor test meta-analysis diagnostic",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "EuropePMC",
+      "query": "HEART score emergency department chest pain validation MACE 30 days",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "EuropePMC",
+      "query": "\"PPI test\" diagnostic gastroesophageal reflux sensitivity specificity",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PMC",
+      "query": "2021 AHA ACC chest pain guideline evaluation diagnosis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "quality of online health information accuracy DISCERN evaluation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "HEART score validation emergency department chest pain major adverse cardiac events",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "proton pump inhibitor test diagnostic accuracy gastroesophageal reflux disease meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PubMed",
+      "query": "0/1 hour algorithm high-sensitivity cardiac troponin rule-out acute coronary syndrome",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "EuropePMC",
+      "query": "2021 AHA/ACC/ASE/CHEST/SAEM/SCCT/SCMR Guideline Evaluation Diagnosis Chest Pain Circulation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "EuropePMC",
+      "query": "Fanaroff Does This Patient With Chest Pain Have Acute Coronary Syndrome Rational Clinical Examination",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "EuropePMC",
+      "query": "Diercks sublingual nitroglycerin numeric descriptive scale chest pain cardiac etiology",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "EuropePMC",
+      "query": "Shry nitroglycerin response chest pain coronary artery disease diagnosis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EuropePMC",
+      "query": "electrocardiogram diagnostic accuracy acute coronary syndrome systematic review emergency department isOpenAccess:y",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EuropePMC",
+      "query": "proton pump inhibitor test diagnostic accuracy gastroesophageal reflux systematic review isOpenAccess:y",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EuropePMC",
+      "query": "chest pain history physical examination likelihood ratio acute coronary syndrome diagnosis primary care emergency",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 242,
+    "recordsAfterDeduplication": 200,
+    "sourcesIncluded": 17
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 2,
+      "citationKey": "Riley2022JSCAI",
+      "identifier": "doi:10.1016/j.jscai.2022.100305",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "2021 AHA/ACC guideline pathway (viewpoint)"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "VanDenBulk2024AnnFamMed",
+      "identifier": "doi:10.1370/afm.3141",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "primary care rule-out tools SR"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Harskamp2019BMJOpen",
+      "identifier": "doi:10.1136/bmjopen-2018-027081",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "primary care prediction rules SR"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Gencer2010BMCMed",
+      "identifier": "doi:10.1186/1741-7015-8-9",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "primary care CHD score derivation/validation"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Druilhe2025EmergMedInt",
+      "identifier": "doi:10.1155/emmi/6085679",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Marburg Heart Score ED triage validation"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Manten2026BMJOpen",
+      "identifier": "doi:10.1136/bmjopen-2025-111113",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "MHS/INTERCHEST telephone triage"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "McDevittPetrovic2017BMCHealthServRes",
+      "identifier": "doi:10.1186/s12913-017-2493-8",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "NCCP prevalence ED"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Zhelev2015BMJ",
+      "identifier": "doi:10.1136/bmj.h15",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "single baseline hs-cTnT accuracy meta-analysis"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Nomura2022CircRep",
+      "identifier": "doi:10.1253/circrep.CR-22-0001",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ESC 0/1h algorithm meta-analysis"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Wang2023ClinCardiol",
+      "identifier": "doi:10.1002/clc.24126",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "EDACS-ADP SR/meta-analysis"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "NasrIsfahani2025BMCEM",
+      "identifier": "doi:10.1186/s12873-025-01327-4",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "HEART/TIMI/GRACE/EDACS-ADP/HET external validation"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Brandberg2026JMIR",
+      "identifier": "doi:10.2196/76087",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "CLEOS-CPDS risk score miss rates"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Dong2025BMCGastro",
+      "identifier": "doi:10.1186/s12876-025-03981-1",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "P-CAB diagnostic trial GERD"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Yan2025BMJOpen",
+      "identifier": "doi:10.1136/bmjopen-2024-093108",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "China GERD diagnostic strategies modelling"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Semigran2015BMJ",
+      "identifier": "doi:10.1136/bmj.h3480",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "symptom checkers audit"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "ElOsta2022BMJOpen",
+      "identifier": "doi:10.1136/bmjopen-2021-053566",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "symptom checker vignette benchmarking methodology"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "official-page:https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "patient-facing emergency care boundary"
+    }
+  ]
+}

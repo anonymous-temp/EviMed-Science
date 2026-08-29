@@ -1,0 +1,57 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "胸痛心源性与非心源性病因的鉴别要素判别效能与指南分诊路径一致性：症状学特征能否在院外替代客观检查完成风险分层",
+  "title": "症状学特征能否在缺少心电图与肌钙蛋白时完成胸痛风险分层：鉴别要素判别效能与指南分诊路径一致性的证据评价",
+  "startedAt": "2026-08-13T18:34:00Z",
+  "completedAt": "2026-08-13T18:56:42Z",
+  "tools": [
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC3490454/fulltext.md",
+    ".evimed-sources/PMC5468083/fulltext.md",
+    ".evimed-sources/PMC9168511/fulltext.md",
+    ".evimed-sources/PMC10642332/fulltext.md",
+    ".evimed-sources/PMC10276326/fulltext.md",
+    ".evimed-sources/PMC12374469/fulltext.md"
+  ],
+  "failedSources": [
+    "Fanaroff 2015 JAMA (PMID:26547467) — Europe PMC full text unavailable, no open-access PDF",
+    "Bruyninckx 2008 BJGP (PMID:18307844) — publisher bjgp.org HTTP 403",
+    "Chiang 2020 Heart (PMID:32245882) — publisher heart.bmj.com HTTP 403",
+    "Bösner 2010 CMAJ (PMID:20603345) — publisher cmaj.ca HTTP 403",
+    "2021 AHA/ACC chest pain guideline (PMID:34709928) — no open-access PDF retrievable",
+    "2023 ESC ACS guideline (PMID:37622654) — publisher academic.oup.com HTTP 403",
+    "Riboli-Sasco 2023 (PMID retrieval) — transient Europe PMC error, succeeded via DOI",
+    "Singer 1997 (PMID:9140239) — abstract only, no open-access full text",
+    "Fruergaard 1996 (PMID:8809520) — abstract only, no open-access full text",
+    "Diercks 2005 (PMID:15940087) — abstract only, no open-access full text",
+    "Fanaroff 2015 (PMID:26547467) — title-only, no full text inspected",
+    "Laureano-Phillips 2019 (PMID:30718010) — title-only, no full text inspected",
+    "Boyle & Body 2021 (PMID:33461885) — title-only, no full text inspected",
+    "Bösner 2010 (PMID:20603345) — title-only, no full text inspected",
+    "Grailey 2012 (PMID:21511974) — title-only, no full text inspected",
+    "Semigran 2015 (PMID:26157077) — title-only, no full text inspected"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 21,
+    "recordsIdentified": 212,
+    "recordsAfterDeduplication": 170,
+    "sourcesIncluded": 19,
+    "distinctPreservedSources": 7
+  },
+  "status": "succeeded"
+}

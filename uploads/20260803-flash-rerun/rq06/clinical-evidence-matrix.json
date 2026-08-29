@@ -1,0 +1,527 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-03T04:20:00Z",
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "速效救心丸由川芎嗪（四甲基吡嗪）与冰片组成，批准文号为Z12020025（原SFDA），每丸重40mg，由天津中新药业集团生产。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMCID:PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "During the treatment period, eligible patients will be given SJP or placebo pills and they will have to take 5 pills of the study medication three times daily. SJP is composed of tetramethylpyrazine and borneol approval number Z12020025 of the China State Food and Drug Administration [SFDA]). The SJP and placebo pills are provided by Tianjin Zhongxin Pharmaceutical Group Co., Ltd. (Tianjin, China). … Each pill weighs 40 mg.",
+      "applicability": "中国批准的中成药注册信息；用于说明书组成与规格表述。",
+      "uncertainty": "试验方案文档中的描述，非药品说明书原文；批准文号与生产商以现行注册信息为准。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "速效救心丸稳定型心绞痛随机双盲安慰剂对照试验（ChiCTR1900021876，计划纳入324例）方案为每次五粒、每日三次、共24周，联合常规治疗。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Suxiao Jiuxin Pill stable angina trial protocol (Trials 2021)",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMCID:PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome).…Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks.…The registration number is ChiCTR1900021876 on the Chinese Clinical Trial Registry.…During the treatment period, eligible patients will be given SJP or placebo pills and they will have to take 5 pills of the study medication three times daily.",
+      "applicability": "慢性稳定型心绞痛（气滞血瘀证）人群；速效救心丸在随机试验中的用法。",
+      "uncertainty": "为试验方案剂量，不等于说明书【用法用量】原文。剂量5在原文中以数字形式出现在扩展引文中（\"take 5 pills of the study medication three times daily\"）；频次3在原文中为单词\"three\"，本主张以汉字数字\"三次\"表述；324例、24周与注册号ChiCTR1900021876以数字形式出现在引文中。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "速效救心丸的作用表述包括增加冠脉血流、改善心肌细胞缺氧、缓解心绞痛（与硝酸甘油类似）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Suxiao Jiuxin Pill stable angina trial protocol (Trials 2021)",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMCID:PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "SJP can increase coronary blood flow, improve myocardial cell hypoxia, and relieve angina pectoris similar to nitroglycerin",
+      "applicability": "机制与临床定位描述，基于试验方案中的文献综述性表述。",
+      "uncertainty": "为方案作者对已有证据的转述，非直接疗效证据。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "在离体人乳内动脉（n=78，取自冠脉搭桥手术患者）上，速效救心丸对KCl与U46619预收缩的血管产生近乎完全舒张（99.4%±10.5%与99.9%±5.6%）。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC3997901",
+      "sourceTitle": "Suxiao Jiuxin Pill Induces Potent Relaxation and Inhibition on Contraction in Human Artery and the Mechanism (eCAM 2014)",
+      "artifactPath": ".evimed-sources/PMC3997901/fulltext.md",
+      "identifier": "PMCID:PMC3997901",
+      "accessLevel": "full_text",
+      "supportQuote": "We investigated the effect and possible mechanism of SJP in the human internal mammary artery (IMA, n = 78) taken from patients undergoing coronary surgery. SJP caused full relaxation in KCl- (99.4 ± 10.5%, n = 6) and U46619- (99.9 ± 5.6%, n = 6) contracted IMA.",
+      "applicability": "血管生物学机制研究；不能直接等同于临床起效时间。",
+      "uncertainty": "离体器官浴实验，证据层级低于人体临床试验。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "速效救心丸的血管舒张作用以内皮非依赖成分为主，同时含少量内皮依赖成分（涉及eNOS通路）。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC3997901",
+      "sourceTitle": "Suxiao Jiuxin Pill human artery relaxation study (eCAM 2014)",
+      "artifactPath": ".evimed-sources/PMC3997901/fulltext.md",
+      "identifier": "PMCID:PMC3997901",
+      "accessLevel": "full_text",
+      "supportQuote": "These results show that Suxiao Jiuxin Pill-induced relaxation is mainly endothelium-independent although it also has a small endothelium-dependent component.",
+      "applicability": "作用机制解释。",
+      "uncertainty": "基于离体实验推断，eNOS机制细节（翻译后修饰等）作者注明仍需进一步研究。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "速效救心丸联合常规治疗4周在慢性冠脉综合征伴长效硝酸酯不耐受患者（174例、8个中心）中，疗效率显著优于安慰剂（OR 2.43，95%CI 1.32至4.47）。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in CCS with intolerance to long-acting nitrates (BMC Complement Med Ther 2024)",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMCID:PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses.…Compared to the placebo group, the SJPs group showed a significant improvement in the efficacy rate after 4 weeks (OR = 2.43, 95% CI = 1.32 to 4.47, P = 0.004).…A total of 176 patients from 8 clinical study centers in China were included in this study.",
+      "applicability": "已确诊CCS且不耐受长效硝酸酯的人群，为短期（4周）辅助用药证据。",
+      "uncertainty": "单中心注册（ChiCTR2100050066）；样本量有限；非头对头证据。中心数8在结果部分以单词\"eight\"表述、在方法部分以数字\"8\"表述（\"176 patients from 8 clinical study centers\"），引文已含数字形式；174例为改良意向治疗分析人群（原文另报告176例入组）；95%CI在原文中写作\"1.32 to 4.47\"，本主张以\"1.32至4.47\"表述。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "速效救心丸随机试验的给药方式为舌下含服（餐后含服），每次5粒、每日三次、共4周。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Suxiao Jiuxin Pills CCS trial (BMC Complement Med Ther 2024)",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMCID:PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "During the 4-week treatment period, all participants were instructed to orally administer the study medication sublingually after meals, three times a day, taking 5 capsules each time (total of 15 capsules per day), continuously for 4 weeks.",
+      "applicability": "速效救心丸给药途径（舌下含服）的试验级证据。",
+      "uncertainty": "为试验方案描述，非说明书原文。频次3在原文中为单词\"three\"（\"three times a day\"），本主张以汉字数字表述；剂量5粒以数字形式出现在引文中（\"taking 5 capsules each time\"）。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "速效救心丸于1982年获得批准（CFDA/原国家食品药品监督管理局）。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Suxiao Jiuxin Pills CCS trial (BMC Complement Med Ther 2024)",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMCID:PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "Suxiao Jiuxin Pill (SJPs) emerges as a prominent traditional Chinese patent medicine utilized for the treatment of acute ischemic heart disease, which was approved by China Food and Drug Administration (CFDA) in 1982",
+      "applicability": "注册时间背景。",
+      "uncertainty": "以研究论文中的描述为准，注册年份与监管机构名称按当时称谓。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "速效救心丸治疗冠心病的meta分析（41项RCT、6276例）显示心电图改善优于对照治疗（RR 1.32，95%CI 1.26至1.38）。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of RCTs (eCAM 2018)",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001).…The 41 studies consisted of 6276 patients with coronary heart disease.",
+      "applicability": "冠心病患者的心电图改善指标（替代终点）。",
+      "uncertainty": "纳入试验整体质量偏低（Jadad低分），ECG为替代终点。试验数41在摘要中为单词\"Forty-one\"、在结果部分以数字\"41\"出现（\"The 41 studies consisted of 6276 patients with coronary heart disease.\"），引文已含数字形式；95%CI在原文中写作\"1.26 to 1.38\"，本主张以\"1.26至1.38\"表述。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "该meta分析报告速效救心丸最常见不良反应为轻度头痛、头晕与面部潮红，多数自行缓解。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Suxiao Jiuxin Pill CHD meta-analysis (eCAM 2018)",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "The most common symptoms were mild headache, dizziness, and facial flushing. Most of these symptoms resolved spontaneously.",
+      "applicability": "安全性描述。",
+      "uncertainty": "基于纳入试验报告，证据质量受限于原始研究质量。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "复方丹参滴丸由丹参、三七、冰片三种药材组成（比例450:141:8）。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC9088738",
+      "sourceTitle": "INCODER study protocol (Front Cardiovasc Med 2022)",
+      "artifactPath": ".evimed-sources/PMC9088738/fulltext.md",
+      "identifier": "PMCID:PMC9088738",
+      "accessLevel": "full_text",
+      "supportQuote": "CDDP contains three medicinal herbs, Salvia miltiorrhiza , notoginseng, and borneol at a ratio of 450:141:8 ( 15 ).",
+      "applicability": "复方丹参滴丸配方组成与比例。",
+      "uncertainty": "配方比例来自研究论文引用，实际制剂以药监核准工艺为准。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "复方丹参滴丸美国FDA监督下的II期临床试验（125例慢性稳定型心绞痛）显示总运动时间改善呈剂量-反应趋势（低剂量组20秒，p=0.18；高剂量组43秒，p=0.005）。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC9088738",
+      "sourceTitle": "INCODER study protocol (Front Cardiovasc Med 2022)",
+      "artifactPath": ".evimed-sources/PMC9088738/fulltext.md",
+      "identifier": "PMCID:PMC9088738",
+      "accessLevel": "full_text",
+      "supportQuote": "In the Phase II clinical trial of CDDP conducted under the supervision of Food and Drug Administration (FDA) in the United States, 125 patients with moderate chronic stable angina pectoris were randomly divided into three groups: placebo, low-, or high-dose group (0, 20, or 30 pills, twice per day, respectively). … After 4 weeks of treatment, the mean improvement of TED compared to placebo was 20 s in the low-dose group ( p = 0.18) and 43 s in high-dose group ( p = 0.005).",
+      "applicability": "复方丹参滴丸国际临床证据；作为其剂量-反应关系的间接证据。",
+      "uncertainty": "为II期试验（由INCODER方案转述），样本量小；III期状态未能在FDA官方渠道独立核验。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "INCODER试验（ChiCTR2000032384）方案：复方丹参滴丸标准剂量为每次10粒、每日三次口服（强化组20粒每日三次），疗程6周。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC9088738",
+      "sourceTitle": "INCODER study protocol (Front Cardiovasc Med 2022)",
+      "artifactPath": ".evimed-sources/PMC9088738/fulltext.md",
+      "identifier": "PMCID:PMC9088738",
+      "accessLevel": "full_text",
+      "supportQuote": "Patients will be randomized (1:1) to intensive treatment group (CDDP 20 pills three times per day) or standard treatment group (10 pills CDDP and 10 pills placebo three times per day). Patients will have a 6-week medication period and be followed up every 2 weeks. … Trial Registration Number www.chictr.org.cn (ChiCTR2000032384). Registered on 27 April 2020.",
+      "applicability": "复方丹参滴丸口服给药与标准剂量的试验级证据。",
+      "uncertainty": "为试验方案剂量，非说明书原文；III期/上市后方案以药监核准为准。频次3在原文中为单词\"three\"（\"three times per day\"），本主张以汉字数字表述；10粒、20粒与6周以数字形式出现在引文中。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-014",
+      "claim": "复方丹参滴丸联用PCI的meta分析（二十项RCT、2574例）中，所有研究均为每次10粒、每日三次口服给药，多数研究疗程约3个月。",
+      "referenceNumber": 11,
+      "sourceUrl": "https://europepmc.org/articles/PMC7685822",
+      "sourceTitle": "The Efficacy and Safety of Compound Danshen Dripping Pill Combined with PCI for Coronary Heart Disease (eCAM 2020)",
+      "artifactPath": ".evimed-sources/PMC7685822/fulltext.md",
+      "identifier": "PMCID:PMC7685822",
+      "accessLevel": "full_text",
+      "supportQuote": "Twenty eligible researches including 2574 sufferers were all published in Chinese databases from 2003 to 2019.…In all studies, the dose of CDDP was 10 pills each time, three times a day by oral administration. And most studies reported that the duration of treatment lasted for 3 months or so.",
+      "applicability": "复方丹参滴丸口服给药与常用疗程（约3个月）的试验级证据。",
+      "uncertainty": "为纳入试验的用药方案汇总，非说明书原文；疗程因研究而异。试验数20在原文中为单词\"Twenty\"（\"Twenty eligible researches including 2574 sufferers\"），本主张以汉字数字表述；频次3为单词\"three\"；样本量2574与疗程3个月以数字形式出现在引文中。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-015",
+      "claim": "复方丹参滴丸联合PCI较单用PCI显著降低冠心病患者主要不良心血管事件（MACE）（RR 0.53，95%CI 0.44至0.65）。",
+      "referenceNumber": 11,
+      "sourceUrl": "https://europepmc.org/articles/PMC7685822",
+      "sourceTitle": "CDDP combined with PCI meta-analysis (eCAM 2020)",
+      "artifactPath": ".evimed-sources/PMC7685822/fulltext.md",
+      "identifier": "PMCID:PMC7685822",
+      "accessLevel": "full_text",
+      "supportQuote": "the combination therapy of CDDP and PCI treatment markedly reduced the incidence of MACE compared to single PCI treatment in treating CHD (RR = 0.53, 95% CI (0.44, 0.65), P < 0.00001)",
+      "applicability": "PCI术后/冠心病人群的联合用药证据。",
+      "uncertainty": "纳入试验均未报告分配隐藏与盲法，方法学质量普遍偏低；MACE为8项研究合并结果。95%CI区间在原文中写作\"(0.44, 0.65)\"（括号加逗号），本主张以\"0.44至0.65\"表述。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-016",
+      "claim": "复方丹参滴丸治疗早期糖尿病视网膜病变的双盲试验采用口服每次15粒、每日三次（每粒含生药27mg），疗程3个月。",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC4592726",
+      "sourceTitle": "Compound Danshen Dripping Pill for Treating Early Diabetic Retinopathy (eCAM 2015)",
+      "artifactPath": ".evimed-sources/PMC4592726/fulltext.md",
+      "identifier": "PMCID:PMC4592726",
+      "accessLevel": "full_text",
+      "supportQuote": "Patients in CDDP group were orally administered 15 CDDP pills at a time, thrice a day, whereas patients in the calcium dobesilate group were orally administered 500 mg calcium dobesilate (Xi'an Lijunsha Pharmaceutical Co., Ltd., China) at a time, thrice a day. One CDDP pill contains 27 mg of herbal medicine. The treatment period was 3 months.",
+      "applicability": "复方丹参滴丸用于非增殖性糖尿病视网膜病变的试验证据（与说明书该适应证对应）。",
+      "uncertainty": "单中心、57例小样本；剂量高于冠心病常用量（10粒tid）。频次3在原文中为单词\"thrice\"（\"thrice a day\"），本主张以汉字数字表述；15粒、27mg与3个月以数字形式出现在引文中。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-017",
+      "claim": "该试验显示复方丹参滴丸对非增殖性糖尿病视网膜病变的改善与安全性类似于钙多贝磺酸盐。",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC4592726",
+      "sourceTitle": "CDDP early diabetic retinopathy trial (eCAM 2015)",
+      "artifactPath": ".evimed-sources/PMC4592726/fulltext.md",
+      "identifier": "PMCID:PMC4592726",
+      "accessLevel": "full_text",
+      "supportQuote": "Our present study showed that CDDP has a similar improvement and safety to calcium dobesilate for NPDR.",
+      "applicability": "糖尿病视网膜病变人群；与对照药（钙多贝磺酸盐）比较。",
+      "uncertainty": "小样本、单中心；组间多数指标无统计学差异。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-018",
+      "claim": "在冠心病合并房颤患者（六十四例）中，加用复方丹参滴丸（10粒、每日三次口服、至少4周）未显著改变华法林血药浓度与INR。",
+      "referenceNumber": 13,
+      "sourceUrl": "https://europepmc.org/articles/PMC5702344",
+      "sourceTitle": "The Clinical Pharmacokinetics and Pharmacodynamics of Warfarin When Combined with Compound Danshen (Front Pharmacol 2017)",
+      "artifactPath": ".evimed-sources/PMC5702344/fulltext.md",
+      "identifier": "PMCID:PMC5702344",
+      "accessLevel": "full_text",
+      "supportQuote": "10 dripping pills of CDDP (Tianjin Tasly Group Co., Ltd, China) were added orally to patients three times per day for at least 4 weeks. … The INR value, fixed warfarin doses and trough concentration of plasma warfarin had not significantly difference ( P > 0.05) with or without CDDP.",
+      "applicability": "华法林联用安全性信息。",
+      "uncertainty": "样本量有限（64例，59例完成）；作者注明部分基因亚型（EPHX1）结论难以得出；非随机设计。样本量64在原文中为单词\"Sixty-four\"（\"Sixty-four patients were enrolled from four hospitals\"），本主张以汉字数字表述；频次3为单词\"three\"；10粒与4周以数字形式出现在引文中。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-019",
+      "claim": "网络meta分析（78项RCT、7955例、8种中成药，含复方丹参滴丸）显示纳入RCT的整体证据质量为低。",
+      "referenceNumber": 14,
+      "sourceUrl": "https://europepmc.org/articles/PMC10717272",
+      "sourceTitle": "Efficacy and safety of oral Chinese patent medicines for CHD combined with hyperlipidemia: NMA of 78 trials (Chin Med 2023)",
+      "artifactPath": ".evimed-sources/PMC10717272/fulltext.md",
+      "identifier": "PMCID:PMC10717272",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 78 RCTs were included, involving 7,955 cases and 8 types of Chinese patent medicines, which were Tongxinluo Capsule, Naoxintong Capsule, Compound Danshen Dripping Pill, Shexiangbaoxin Pill, Songling Xuemaikang Capsule, Xuezhikang Capsule, Yindan Xinnaotong Capsule, and Zhibitai Capsule.…There was no obvious publication bias in all studies, but the overall quality of evidence in the included RCTs was low.…A total of 7955 cases were included in all studies",
+      "applicability": "复方丹参滴丸在冠心病合并高脂血症人群中的间接比较证据背景。",
+      "uncertainty": "纳入RCT整体证据质量为低；原文摘要以\"7,955\"、结果部分以\"7955\"两种格式出现，引文已含两种数字形式。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-020",
+      "claim": "两药现有临床证据整体以中低质量为特征：速效救心丸相关meta分析纳入研究Jadad评分低，复方丹参滴丸相关网络meta分析纳入RCT的GRADE证据质量为低/极低。",
+      "referenceNumber": 6,
+      "referenceNumbers": [
+        6,
+        14
+      ],
+      "confidence": "moderate",
+      "applicability": "两药各自证据强度的总体判断。",
+      "uncertainty": "为跨研究综合判断，各来源自身亦注明其局限。",
+      "claimType": "synthesized",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+          "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease meta-analysis (eCAM 2018)",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The majority of the included studies received low Jadad scores due to the lack of a double-blind design"
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC10717272",
+          "sourceTitle": "Network meta-analysis of 78 RCTs of oral Chinese patent medicines (Chin Med 2023)",
+          "artifactPath": ".evimed-sources/PMC10717272/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The overall quality of evidence was rated low because of the high risk of bias due to the fact that most studies did not mention whether blinding or allocation concealment was implemented."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-021",
+      "claim": "两药比较缺乏直接头对头随机对照试验证据；现有网络meta分析等间接比较的可信度受纳入试验方法学质量低与GRADE证据强度低限制。",
+      "referenceNumber": 14,
+      "referenceNumbers": [
+        14,
+        11
+      ],
+      "confidence": "moderate",
+      "applicability": "对间接比较证据可信度的总体判断。",
+      "uncertainty": "基于对纳入试验质量与GRADE评估的跨研究综合；不构成两药疗效优劣结论。",
+      "claimType": "synthesized",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC10717272",
+          "sourceTitle": "Network meta-analysis of 78 RCTs (Chin Med 2023)",
+          "artifactPath": ".evimed-sources/PMC10717272/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The overall quality of evidence was rated low because of the high risk of bias due to the fact that most studies did not mention whether blinding or allocation concealment was implemented."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC7685822",
+          "sourceTitle": "CDDP combined with PCI meta-analysis (eCAM 2020)",
+          "artifactPath": ".evimed-sources/PMC7685822/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "All the included researches did not describe allocation concealment, blinding of participants, and outcome assessment."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-022",
+      "claim": "检索所见'3个月'仅作为部分复方丹参滴丸临床试验的疗程长度出现（联用PCI研究多数疗程约3个月；糖尿病视网膜病变研究疗程3个月），未检索到'本品可连续服用3个月'的说明书、指南、共识或临床试验出处。",
+      "referenceNumber": 11,
+      "referenceNumbers": [
+        11,
+        12
+      ],
+      "confidence": "moderate",
+      "applicability": "对'可连续服用3个月'说法出处的追溯结论。",
+      "uncertainty": "负面检索结论限于本次可检索范围（PubMed/Crossref、指南索引、NMPA索引记录、注册库）；不排除中文全文库与官方现行说明书存在该表述。",
+      "claimType": "synthesized",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC7685822",
+          "sourceTitle": "CDDP combined with PCI meta-analysis (eCAM 2020)",
+          "artifactPath": ".evimed-sources/PMC7685822/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "In all studies, the dose of CDDP was 10 pills each time, three times a day by oral administration. And most studies reported that the duration of treatment lasted for 3 months or so."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC4592726",
+          "sourceTitle": "CDDP early diabetic retinopathy trial (eCAM 2015)",
+          "artifactPath": ".evimed-sources/PMC4592726/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The treatment period was 3 months."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-023",
+      "claim": "在可核验的随机试验证据中，速效救心丸经舌下含服给药（每次五粒、每日三次），复方丹参滴丸经口服给药（每次10粒、每日三次），两药给药途径存在可核验差异。",
+      "referenceNumber": 8,
+      "referenceNumbers": [
+        8,
+        11
+      ],
+      "confidence": "high",
+      "applicability": "两药给药途径（舌下含服 vs 口服）的差异结论。",
+      "uncertainty": "结论基于试验方案；两药说明书【用法用量】原文未能在本次检索中核验。频次3与剂量5在支撑来源中分别以单词\"three\"/\"five\"表述（剂量5粒在速效救心丸试验方案中以数字\"5 capsules\"出现），复方丹参滴丸剂量10粒以数字形式出现；本主张以汉字数字表述3。",
+      "claimType": "synthesized",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+          "sourceTitle": "Suxiao Jiuxin Pills CCS trial (BMC Complement Med Ther 2024)",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "all participants were instructed to orally administer the study medication sublingually after meals, three times a day, taking 5 capsules each time (total of 15 capsules per day), continuously for 4 weeks."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC7685822",
+          "sourceTitle": "CDDP combined with PCI meta-analysis (eCAM 2020)",
+          "artifactPath": ".evimed-sources/PMC7685822/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "In all studies, the dose of CDDP was 10 pills each time, three times a day by oral administration."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-024",
+      "claim": "突发胸痛应即刻呼救并接受医院评估；不得以服用速效救心丸等药物的反应作为诊断试验或延误就医；速效救心丸的疗效证据基于已接受常规治疗的慢性稳定型心绞痛人群的联合用药研究。",
+      "referenceNumber": 27,
+      "referenceNumbers": [
+        27,
+        3
+      ],
+      "confidence": "high",
+      "applicability": "急性胸痛的安全处置边界；速效救心丸的适用人群边界。",
+      "uncertainty": "为跨来源综合结论；中国急救电话120对应英国NHS指导中的999。",
+      "claimType": "synthesized",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+          "sourceTitle": "Chest pain - NHS (official page)",
+          "artifactPath": ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+          "accessLevel": "official_page",
+          "supportQuote": "You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+          "sourceTitle": "Suxiao Jiuxin Pill stable angina trial protocol (Trials 2021)",
+          "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Participants will be randomized into two groups, conventional therapy plus SJP group and conventional therapy plus placebo group."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-025",
+      "claim": "对于新发的、不缓解的胸痛（可为压榨样或压迫感），应立即呼叫急救（英国为999；中国读者请拨打本地急救电话）并接受医院即刻治疗；不要自我诊断。",
+      "referenceNumber": 27,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS (official page, last reviewed 2023-08-08)",
+      "artifactPath": ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+      "identifier": "official-page:f60ccb4779eccff7",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if:…you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion…You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.…Do not self-diagnose – see a GP if you're worried.",
+      "applicability": "急性胸痛公众处置；中国急救电话为120。",
+      "uncertainty": "英国NHS面向公众的指导，本地化急救电话对应中国120（原文仅出现\"999\"，120不在引文中，故不写入本主张正文）；不能替代个体化医疗评估。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-028",
+      "claim": "复方丹参滴丸联用PCI的meta分析（eCAM 2020）共纳入2574例冠心病患者。",
+      "referenceNumber": 11,
+      "sourceUrl": "https://europepmc.org/articles/PMC7685822",
+      "sourceTitle": "The Efficacy and Safety of Compound Danshen Dripping Pill Combined with PCI for Coronary Heart Disease (eCAM 2020)",
+      "artifactPath": ".evimed-sources/PMC7685822/fulltext.md",
+      "identifier": "PMCID:PMC7685822",
+      "accessLevel": "full_text",
+      "supportQuote": "Twenty eligible researches including 2574 sufferers were all published in Chinese databases from 2003 to 2019.",
+      "applicability": "复方丹参滴丸联用PCI人群的样本量证据。",
+      "uncertainty": "试验数20在原文中以单词'Twenty'表述；样本量2574以数字形式出现。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-030",
+      "claim": "复方丹参滴丸治疗早期糖尿病视网膜病变的双盲试验纳入57例2型糖尿病非增殖性视网膜病变患者（28例复方丹参滴丸组、29例钙多贝磺酸盐对照组）。",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC4592726",
+      "sourceTitle": "Compound Danshen Dripping Pill for Treating Early Diabetic Retinopathy (eCAM 2015)",
+      "artifactPath": ".evimed-sources/PMC4592726/fulltext.md",
+      "identifier": "PMCID:PMC4592726",
+      "accessLevel": "full_text",
+      "supportQuote": "All the 57 type 2 diabetes cases in nonproliferative diabetic retinopathy (NPDR) stage were divided into two groups randomly: 28 cases treated with CDDP as the treated group and 29 cases treated with calcium dobesilate as the control group.",
+      "applicability": "复方丹参滴丸用于非增殖性糖尿病视网膜病变的试验人群。",
+      "uncertainty": "单中心小样本；结局为眼部功能与形态学指标。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-031",
+      "claim": "稳定型心绞痛网络meta分析（179项RCT、16,789例，2022）同时纳入复方丹参滴丸（30项RCT）与速效救心丸（6项RCT）；按临床疗效率SUCRA排序，芪参益气滴丸居首（98.12%）、速效救心丸居第二（71.04%）、通心络居第三（68.40%），复方丹参滴丸不在前三之列。",
+      "referenceNumber": 18,
+      "sourceUrl": "https://europepmc.org/articles/PMC9428755",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: NMA of 179 trials (Front Pharmacol 2022)",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMCID:PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 179 randomized controlled trials with 16,789 patients were included.…Finally, 179 published RCTs with 16,789 patients (9,620 reported male patients; 57.30%) were included in the current analysis…involving Fufang Danshen dripping pill (FFDS, 30 RCTs),…Suxiao Jiuxin pill (SXJX, 6 RCTs),…Based on the ranking probability of each level and SUCRA, QSYQ + WM had the highest effective rate (98.12%), followed by SXJX + WM (71.04%) and TXL + WM (68.40%), whereas WM alone obtained the worst effect (3.09%).",
+      "applicability": "两药在稳定型心绞痛人群中的间接比较证据（同一网络内）。",
+      "uncertainty": "纳入试验整体偏倚风险评级为'some concerns'（ROB2）；结局为症状性替代指标；网络含直接与间接比较，排名为概率性结论。",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-041",
+      "claimType": "direct",
+      "referenceNumber": 10,
+      "claim": "一项系统评价分析纳入34,071例冠心病患者（含心绞痛与急性心肌梗死）并确认复方丹参滴丸对这类患者的获益。",
+      "supportQuote": "Another systematic review analysis including 34,071 patients with CAD (including patients with angina pectoris and acute myocardial infarction) confirmed the benefits of CDDP in these patients ( 19 ).",
+      "identifier": "PMCID:PMC9088738",
+      "accessLevel": "full_text",
+      "sourceTitle": "Efficacy of INtensive Treatment vs. Standard Treatment of COmpound Danshen Dripping Pill (INCODER) trial (protocol)",
+      "sourceUrl": "https://europepmc.org/articles/PMC9088738",
+      "artifactPath": ".evimed-sources/PMC9088738/fulltext.md",
+      "uncertainty": "该数字引自INCODER试验方案对另一项系统评价分析的转述（原文以\"34,071\"表述，本主张保持同一格式）；该分析的具体文献未单独保存。",
+      "applicability": "对复方丹参滴丸系统评价层面证据体量的定量支撑（34,071例），用于证据强度论述。"
+    },
+    {
+      "claimId": "CLM-042",
+      "claimType": "synthesized",
+      "referenceNumber": 6,
+      "supportingSources": [
+        {
+          "claimId": "CLM-020",
+          "sourceTitle": "Huang X, Jiang J, Zhang J. Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease (meta-analysis)",
+          "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001).",
+          "accessLevel": "full_text",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "sourceUrl": "https://europepmc.org/articles/PMC5892298"
+        },
+        {
+          "claimId": "CLM-028",
+          "sourceTitle": "Li C, et al. Compound Danshen Dripping Pill Combined with PCI (meta-analysis)",
+          "supportQuote": "the combination therapy of CDDP and PCI treatment markedly reduced the incidence of MACE compared to single PCI treatment in treating CHD (RR = 0.53, 95% CI (0.44, 0.65), P < 0.00001)",
+          "accessLevel": "full_text",
+          "artifactPath": ".evimed-sources/PMC7685822/fulltext.md",
+          "sourceUrl": "https://europepmc.org/articles/PMC7685822"
+        },
+        {
+          "claimId": "CLM-031",
+          "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine for stable angina (network meta-analysis)",
+          "supportQuote": "A total of 179 randomized controlled trials with 16,789 patients were included.…Based on the ranking probability of each level and SUCRA, QSYQ + WM had the highest effective rate (98.12%), followed by SXJX + WM (71.04%) and TXL + WM (68.40%), whereas WM alone obtained the worst effect (3.09%).",
+          "accessLevel": "full_text",
+          "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+          "sourceUrl": "https://europepmc.org/articles/PMC9428755"
+        }
+      ],
+      "claim": "综合现有证据，两药均缺乏证实心血管终点获益的高质量证据：速效救心丸的证据集中于症状与心电图等替代指标且其meta分析纳入研究方法学质量低，复方丹参滴丸的MACE降低来自方法学质量普遍偏低的联用PCImeta分析，而同时纳入两药的稳定型心绞痛网络meta分析全部纳入试验偏倚风险均评为\"some concerns\"。因此两药的\"有效\"表述应限定于症状与生活质量的辅助治疗场景，不得表述为终点获益或替代急救。",
+      "uncertainty": "跨来源综合判断，分别基于速效救心丸meta分析（替代指标、纳入研究质量低）、复方丹参滴丸联用PCImeta分析（方法学质量低）与179项试验网络meta分析（偏倚风险\"some concerns\"）。",
+      "applicability": "对两药证据强度的跨来源综合判断，支撑结论与安全优先处置部分的证据强度表述。",
+      "confidence": "moderate",
+      "referenceNumbers": [
+        6,
+        11,
+        18
+      ]
+    }
+  ]
+}

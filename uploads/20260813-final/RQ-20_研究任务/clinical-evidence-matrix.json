@@ -1,0 +1,359 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "胸痛持续不缓解、放射至手臂或颈颌部、伴出汗或气短等警示特征时，应立即呼叫急救（英国为 999，中国为 120）。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "Immediate action required: Call 999 if: … you get sudden pain or discomfort in your chest that does not go away … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "英国 NHS 面向公众的胸痛处置指引，其'立即呼叫急救'与'持续不缓解胸痛为心脏病发作警示'的判读可直接用于中国公众（急救号码本地化为 120）。",
+      "uncertainty": "该页面为公众科普指引而非系统证据，未给出效应量或证据等级；警示特征与急性冠脉综合征的对应关系为一般性陈述。"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "NHS 建议出现胸痛时不要自行诊断，担心时应就医评估。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "Your symptoms might give you an idea of the cause. Do not self-diagnose – see a GP if you're worried.",
+      "applicability": "直接针对'非专业人员据症状自行判断病因'的行为，适用于中国家庭自我处置场景的评估。",
+      "uncertainty": "该建议为权威卫生机构的一般性忠告，未提供自我诊断准确性的定量数据。"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "心绞痛与心脏病发作症状相似但心脏病发作危及生命，胸痛病因多样、多数并非心脏问题，故不能凭症状区分病因。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "angina or a heart attack – which have similar symptoms but a heart attack is life-threatening",
+      "applicability": "英国 NHS 公众指引明确指出心绞痛与心脏病发作症状相似、后者危及生命，支持'非专业人员不能凭症状区分病因、须就医'的判断，适用于中国家庭自我处置场景。",
+      "uncertainty": "为权威卫生机构面向公众的科普指引，未给出诊断性检验的性能数据或证据等级。"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "中国-PAR 队列纳入 34,757 名成人，平均随访 14.1 年共观察到 1922 例动脉粥样硬化性心血管病事件。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC5643596",
+      "sourceTitle": "Risk stratification of atherosclerotic cardiovascular disease in Chinese adults",
+      "artifactPath": ".evimed-sources/PMC5643596/fulltext.md",
+      "identifier": "PMC5643596",
+      "accessLevel": "full_text",
+      "supportQuote": "The study populations included cohorts in the China-PAR project, with 34,757 participants eligible for the current analysis. … A total of 1922 ASCVD events were identified during an average follow-up of 14.1 years.",
+      "applicability": "中国当代多队列前瞻性数据，直接回答无诊断但有危险因素者 10 年绝对风险的量级。",
+      "uncertainty": "传统危险分层按中国指南简化，器官损害等指标未纳入。"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "按传统分层，中国成人中危组观察到的 10 年 ASCVD 风险为 4.61%（95%CI 4.11–5.10%），高危组为 8.74%（95%CI 7.82–9.66%）。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC5643596",
+      "sourceTitle": "Risk stratification of atherosclerotic cardiovascular disease in Chinese adults",
+      "artifactPath": ".evimed-sources/PMC5643596/fulltext.md",
+      "identifier": "PMC5643596",
+      "accessLevel": "full_text",
+      "supportQuote": "the observed 10-year risks for ASCVD among all subjects were 4.61% (95% CI : 4.11–5.10%) in the moderate-risk group and 8.74% (95% CI : 7.82–9.66%) in the high-risk group",
+      "applicability": "给出'具有危险因素而无诊断者'10 年绝对风险的分层估计，为备药获益量级判断提供分母。",
+      "uncertainty": "为 Kaplan–Meier 调整的观察值，含 1990 年代至 2000 年代队列，可能高估当代经治疗人群的风险。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "中国-PAR 将 ASCVD 定义为非致死性急性心肌梗死、冠心病死亡或致死/非致死性脑卒中。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC5643596",
+      "sourceTitle": "Risk stratification of atherosclerotic cardiovascular disease in Chinese adults",
+      "artifactPath": ".evimed-sources/PMC5643596/fulltext.md",
+      "identifier": "PMC5643596",
+      "accessLevel": "full_text",
+      "supportQuote": "ASCVD was defined as nonfatal acute myocardial infarction (MI), or CHD death, or fatal or nonfatal stroke.",
+      "applicability": "界定绝对风险结局的口径，其中包含卒中，故不能直接等同于'急性冠脉事件'风险。",
+      "uncertainty": "结局混合了冠脉与脑血管事件，用于冠脉事件外推时需向下修正。"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "对非创伤性胸痛成人，早期（中位 1.6 小时或院前）给予阿司匹林相比晚期（中位 3.5 小时或院内）与 7 天、30 天、1 年生存获益相关（RR 1.04/1.05/1.06），但证据确定性为极低。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC7053675",
+      "sourceTitle": "Early or First Aid Administration Versus Late or In-hospital Administration of Aspirin for Non-traumatic Adult Chest Pain: A Systematic Review",
+      "artifactPath": ".evimed-sources/PMC7053675/fulltext.md",
+      "identifier": "PMC7053675",
+      "accessLevel": "full_text",
+      "supportQuote": "Early administration (median 1.6 hours or pre-hospital) was associated with increased survival as compared with late administration (median 3.5 hours or in-hospital) at seven days; risk ratio (RR) 1.04 (95% CI 1.03-1.06), 30 days RR 1.05 (95% 1.02-1.07), and one-year RR 1.06 (95% CI1.03-1.10). The evidence is of very low certainty due to limitations in study design and the imprecision of the evidence.",
+      "applicability": "阿司匹林是被证明能降低心梗死亡率的药物，其'院外早给药'的证据尚且为极低确定性，用作外推至速效救心丸的类比上限。",
+      "uncertainty": "GRADE 极低确定性：研究设计局限与不精确；人群为确诊/疑似心梗，非未分化胸痛。"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "ISIS-2 试验在 8587 例急性心梗患者中未观察到早期阿司匹林相比晚期的 35 天生存获益（91.2% vs 90.5%，RR 1.01，95%CI 0.99–1.03）。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC7053675",
+      "sourceTitle": "Early or First Aid Administration Versus Late or In-hospital Administration of Aspirin for Non-traumatic Adult Chest Pain: A Systematic Review",
+      "artifactPath": ".evimed-sources/PMC7053675/fulltext.md",
+      "identifier": "PMC7053675",
+      "accessLevel": "full_text",
+      "supportQuote": "the Second International Study of Infarct Survival (ISIS-2) study enrolling 8587 subjects with acute MI found no benefit from aspirin administration (162.5 mg, enteric-coated) within two hours of the onset of symptoms compared with late administration (91.2% versus 90.5% (RR, 1.01; 95% CI, 0.99-1.03))",
+      "applicability": "唯一一项以临床结局为终点的早期阿司匹林随机对照试验未显示'早给药'的额外生存获益，提示'早几分钟服药'在随机证据中未必转化为生存获益。",
+      "uncertainty": "1988 年试验，时代久远；且比较的是'2 小时内 vs 更晚'，非'家中备药 vs 不备药'。"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "该阿司匹林系统评价仅纳入 3 项研究（1 项随机对照试验与 2 项非随机研究），且均无未分化胸痛人群为对象的研究。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC7053675",
+      "sourceTitle": "Early or First Aid Administration Versus Late or In-hospital Administration of Aspirin for Non-traumatic Adult Chest Pain: A Systematic Review",
+      "artifactPath": ".evimed-sources/PMC7053675/fulltext.md",
+      "identifier": "PMC7053675",
+      "accessLevel": "full_text",
+      "supportQuote": "From 1470 references, we included three studies (one randomized controlled trial (RCT) and two non-RCTs). … there were no studies using undifferentiated chest pain as the target population",
+      "applicability": "直接说明'按症状自行给药'（未分化胸痛）场景缺乏以临床结局为终点的研究，速效救心丸同理。",
+      "uncertainty": "系统评价本身证据量极少，作者亦声明为极低确定性。"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "公共除颤（PAD）试验（整群随机）显示 CPR+AED 组出院存活多于 CPR 组（30/128 vs 15/107，RR 2.0，95%CI 1.07–3.77，p=0.03），但其中住宅区仅有 2 例存活者。",
+      "referenceNumber": 11,
+      "sourceUrl": "https://europepmc.org/articles/PMC13027161",
+      "sourceTitle": "Out-of-Hospital Cardiac Arrest: Public-Access Defibrillation and System Approaches to Minimize Avoidable Delay",
+      "artifactPath": ".evimed-sources/PMC13027161/fulltext.md",
+      "identifier": "PMC13027161",
+      "accessLevel": "full_text",
+      "supportQuote": "units assigned to CPR plus AED training had more survivors to hospital discharge (30/128 arrests) than units assigned to CPR-only training (15/107 arrests; relative risk 2.0, 95% CI 1.07–3.77; p = 0.03), although only two survivors occurred in residential complexes",
+      "applicability": "公共场合 AED 获益明确，但住宅（家庭）场景获益极小，直接类比'家庭备置急救装备'的获益上限。",
+      "uncertainty": "该结果为综述对 PAD 试验的转述，未单独报告住宅场景的置信区间。"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "丹麦–瑞典双国队列（1271 例）中 81% 的院外心脏骤停发生在家中。",
+      "referenceNumber": 11,
+      "sourceUrl": "https://europepmc.org/articles/PMC13027161",
+      "sourceTitle": "Out-of-Hospital Cardiac Arrest: Public-Access Defibrillation and System Approaches to Minimize Avoidable Delay",
+      "artifactPath": ".evimed-sources/PMC13027161/fulltext.md",
+      "identifier": "PMC13027161",
+      "accessLevel": "full_text",
+      "supportQuote": "In a binational Denmark–Sweden cohort ( n = 1271; 81% occurring at home)",
+      "applicability": "说明院外心脏骤停绝大多数发生在家中，家庭场景是评估备置急救物项获益的关键场景。",
+      "uncertainty": "欧洲双国数据，事件率与年龄结构与中国存在差异。"
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "一项多中心随机双盲安慰剂对照试验在 174 例不耐受长效硝酸酯类不良反应的慢性冠脉综合征患者中，速效救心丸组 4 周疗效优于安慰剂（OR=2.43，95%CI 1.32–4.47，P=0.004）。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses. … Compared to the placebo group, the SJPs group showed a significant improvement in the efficacy rate after 4 weeks (OR = 2.43, 95% CI = 1.32 to 4.47, P = 0.004).",
+      "applicability": "速效救心丸质量最高的安慰剂对照证据，但其人群为已确诊慢性冠脉综合征，且结局为 4 周疗效率而非急性发作或临床事件。",
+      "uncertainty": "结局为替代性的疗效率，未报告死亡或主要心血管事件；样本量 174 例。"
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "速效救心丸于 1982 年经中国食品药品监督管理部门批准；《中国药典》规定每丸含阿魏酸计川芎不少于 15.0 μg、含冰片（按龙脑计）2.9 至 4.4 mg。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "approved by China Food and Drug Administration (CFDA) in 1982 … According to the Chinese Pharmacopoeia, each pill of SJPs is required to contain a minimum of 15.0 μg of Ligusticum chuanxiong, expressed in terms of ferulic acid (C 10 H 10 O 4 ), and 2.9 to 4.4 mg of Borneolum syntheticum, expressed in terms of Borneol (C 10 H 18 O).",
+      "applicability": "记录国家药品标准（药典）对本品含量限度的规定，为'国家药品标准'问题的可溯源出处。",
+      "uncertainty": "转述自研究论文对药典的引用，非药典正文原页；批准年份为论文所述。"
+    },
+    {
+      "claimId": "CLM-014",
+      "claim": "一项随机双盲安慰剂对照多中心试验方案计划纳入 324 例慢性稳定型心绞痛（气滞血瘀证）患者。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome).",
+      "applicability": "说明本品大型安慰剂对照试验的纳入人群为已确诊稳定型心绞痛且具气滞血瘀证者，未包含无诊断者。",
+      "uncertainty": "为试验方案而非结果，注册号 ChiCTR1900021876。"
+    },
+    {
+      "claimId": "CLM-015",
+      "claim": "速效救心丸具有理气活血功效，临床用于心绞痛，且相关研究纳入的参与者均经气滞血瘀证诊断。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "SJP has been commonly used in the treatment of angina pectoris with integrated Chinese and Western medicine, and these participants have also been diagnosed with Qi stagnation and blood stasis syndrome",
+      "applicability": "支持'本品临床证据人群为已确诊气滞血瘀证心绞痛患者'，外推至无诊断者受人群间接性限制。",
+      "uncertainty": "为论文背景陈述，非对说明书原文的逐字引用。"
+    },
+    {
+      "claimId": "CLM-016",
+      "claim": "一项多中心随机双盲安慰剂对照试验纳入 ACS 行早期 PCI 的患者，综述报道速效救心丸 6 个月治疗与 1 年主要不良心血管事件减少相关（P<0.05，但所引 OR 1.916 与'减少'方向表述不一致）。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://europepmc.org/articles/PMC12260233",
+      "sourceTitle": "Exploring the Complementary Role of Traditional Chinese Medicine in Enhancing Percutaneous Coronary Intervention Outcomes: Mechanisms, Benefits, and Future Research Directions",
+      "artifactPath": ".evimed-sources/PMC12260233/fulltext.md",
+      "identifier": "PMC12260233",
+      "accessLevel": "full_text",
+      "supportQuote": "a 6-month treatment with Suxiao Jiuxin Pills (comprising Chuanxiong Rhizoma and borneol) in ACS patients post-PCI was associated with a significant reduction in 1-year MACEs (p < 0.05, odds ratio 1.916), alongside improvements in left ventricular ejection fraction (LVEF) and symptoms",
+      "applicability": "证实本品确有在已确诊 ACS 患者（院内、PCI 术后）的随机试验，人群为确诊者、场景为院内连续用药，非家庭备置或自行含服。",
+      "uncertainty": "二级转述且效应方向与数值矛盾，未采信其效应量，仅用于确认人群与试验存在性。"
+    },
+    {
+      "claimId": "CLM-017",
+      "claim": "阿司匹林等急救药过期后仍可保留活性成分（阿司匹林最长约 40 年），但家庭急救药存在过期与效期管理问题。",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC12546671",
+      "sourceTitle": "The use of expired resuscitation medications for life-threatening first aid conditions: a systematic search and narrative review",
+      "artifactPath": ".evimed-sources/PMC12546671/fulltext.md",
+      "identifier": "PMC12546671",
+      "accessLevel": "full_text",
+      "supportQuote": "Aspirin (acetylsalicylic acid) could retain active drug for up to 40 years after expiration.",
+      "applicability": "说明家庭急救药过期问题真实存在，但过期不等于失效，且该证据针对西药而非本品。",
+      "uncertainty": "综述结论不保证药品在个体条件下的效价与安全，未涉及速效救心丸。"
+    },
+    {
+      "claimId": "CLM-018",
+      "claimType": "synthesized",
+      "claim": "速效救心丸已发表的随机对照试验与 Meta 分析均以已确诊冠心病（稳定型心绞痛、慢性冠脉综合征或 ACS）患者为对象，未检索到以无冠心病诊断者或仅有危险因素者为对象、以本品为干预的研究。",
+      "confidence": "low",
+      "referenceNumber": 5,
+      "referenceNumbers": [
+        5,
+        6,
+        7
+      ],
+      "applicability": "回答'以无诊断者为对象的研究是否存在'：纳入的 3 项证据（方案与试验）人群均为确诊者。",
+      "uncertainty": "该结论基于已检索并核验的 3 份证据；中文数据库未能全文覆盖，可能遗漏仅以中文发表的相关研究。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+          "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+          "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome)."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC12260233",
+          "sourceTitle": "Exploring the Complementary Role of Traditional Chinese Medicine in Enhancing Percutaneous Coronary Intervention Outcomes",
+          "artifactPath": ".evimed-sources/PMC12260233/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "a 6-month treatment with Suxiao Jiuxin Pills (comprising Chuanxiong Rhizoma and borneol) in ACS patients post-PCI was associated with a significant reduction in 1-year MACEs (p < 0.05, odds ratio 1.916)"
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-019",
+      "claimType": "synthesized",
+      "claim": "高龄、吸烟、肥胖、高血压、糖尿病、高胆固醇与家族史被公众指引列为冠心病风险因素，风险分层工具对高危者的建议是强化危险因素管理而非备置缓解性药物；未检索到任何指南或监管文本就向无冠心病诊断者预先备置缓解性药物作出推荐。",
+      "confidence": "moderate",
+      "referenceNumber": 9,
+      "referenceNumbers": [
+        9,
+        8
+      ],
+      "applicability": "回答'现行指南对向无诊断者备置缓解性药物是否有明确推荐或反对'：未检索到相关表述，指南仅给出结构化评估与急救路径。",
+      "uncertainty": "结论为'未检索到推荐'这一空缺，非指南明示反对；指南检索未覆盖全部中文基层共识。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+          "sourceTitle": "Chest pain - NHS",
+          "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+          "accessLevel": "official_page",
+          "supportQuote": "You're more likely to have heart problems if you're older or are at risk of coronary heart disease"
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC5643596",
+          "sourceTitle": "Risk stratification of atherosclerotic cardiovascular disease in Chinese adults",
+          "artifactPath": ".evimed-sources/PMC5643596/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "More aggressive risk factor modification should be required among individuals with predicted high risk"
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-020",
+      "claimType": "derived",
+      "claim": "以中国-PAR 观察到的 10 年风险按年线性折算，无冠心病诊断但属中危/高危者的年化急性冠脉事件绝对风险约为 0.5%/年（中危）至 0.9%/年（高危）。",
+      "derivedFrom": [
+        "CLM-005"
+      ],
+      "method": "取 CLM-005 的 10 年风险 4.61% 与 8.74%，除以 10 年：4.61%÷10≈0.46%/年，8.74%÷10≈0.87%/年，四舍五入为约 0.5%/年与 0.9%/年。",
+      "assumptions": "假设事件风险在 10 年内近似均匀分布，且 ASCVD 事件近似于急性冠脉事件。",
+      "sensitivity": "若事件随年龄呈指数上升并集中于后半程，早期年风险可低于此值的 1/2；若 ASCVD 中扣除脑卒中成分（约占一定比例），纯冠脉事件年风险应进一步下调；两者均使本估计偏保守（偏高）。",
+      "applicability": "用于估算'备药在给定时间窗内可覆盖的绝对获益上限'的量级，不用于个体化风险预测。",
+      "uncertainty": "线性折算为近似，非个体风险；未考虑风险因子组合与事件集中于高危个体。"
+    },
+    {
+      "claimId": "CLM-021",
+      "claim": "气滞血瘀证的诊断需结合主症、次症并符合舌象与脉象（舌紫、脉弦或涩），需由医师判断，非专业人员难以自行辨识。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "A patient must have the main symptom and one of the secondary symptoms, in accordance with the tongue and pulse conditions, to be diagnosed with Qi stagnation and blood stasis syndrome",
+      "applicability": "说明书适应症以'气滞血瘀'证型为前提，该证型诊断依赖舌脉，说明'无医师辨证者自行判断证型并用药'缺少操作可行性。",
+      "uncertainty": "为临床试验的诊断标准转述，未提供非专业人员自我辨识证型的灵敏度/特异度数据。"
+    },
+    {
+      "claimId": "CLM-022",
+      "claim": "对急性心肌梗死，现行急救建议为嚼服阿司匹林 160–325 mg。",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC12546671",
+      "sourceTitle": "The use of expired resuscitation medications for life-threatening first aid conditions: a systematic search and narrative review",
+      "artifactPath": ".evimed-sources/PMC12546671/fulltext.md",
+      "identifier": "PMC12546671",
+      "accessLevel": "full_text",
+      "supportQuote": "Given the recommendation to chew 160–325 mg of ASA during an acute myocardial infarction",
+      "applicability": "记录对疑似急性心梗的公众急救用药（嚼服阿司匹林）的既有剂量建议，用于与'无诊断者备置本品'作对比。",
+      "uncertainty": "该建议本身依托指南/共识，本文仅转述剂量区间，未重述其推荐等级。"
+    },
+    {
+      "claimId": "CLM-023",
+      "claimType": "synthesized",
+      "claim": "速效救心丸的核准用途为缺血性心脏病（冠心病心绞痛、气滞血瘀证），说明书适应症表述为'用于气滞血瘀型冠心病，心绞痛'；说明书与国家药品标准未载明'家庭常备''急救药箱''预防性备用'或以高龄、高血压、高血糖、血脂异常、家族史等危险因素作为备置理由的任何条目。",
+      "confidence": "moderate",
+      "referenceNumber": 6,
+      "referenceNumbers": [
+        5,
+        6
+      ],
+      "applicability": "回答说明书与国家标准对适用人群、使用前提的界定：仅限已确诊的气滞血瘀型冠心病心绞痛，无'按危险因素备药'的条目。",
+      "uncertainty": "'未载明相关条目'为对已获取的说明书与药典记录的核查结论；说明书现行官方版本未能在本研究期间直接复核。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Suxiao Jiuxin Pill (SJPs) emerges as a prominent traditional Chinese patent medicine utilized for the treatment of acute ischemic heart disease, which was approved by China Food and Drug Administration (CFDA) in 1982"
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+          "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+          "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "SJP has been commonly used in the treatment of angina pectoris with integrated Chinese and Western medicine, and these participants have also been diagnosed with Qi stagnation and blood stasis syndrome"
+        }
+      ]
+    }
+  ]
+}

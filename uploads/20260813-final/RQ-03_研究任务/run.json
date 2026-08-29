@@ -1,0 +1,38 @@
+{
+ "id": "run_215ef395a6efe08dd1daa0d0bd14103e",
+ "dispatchId": "rq-03-yRkpPK",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_004fcea54ffeySGNsEQ3yRkpPK",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.90",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-03 研究任务 ## 选题 **《速效救心丸连续用药三个月及以上的有效性与安全性证据评价：证据确定性分级与适用人群边界》** ## 研究背景 速效救心丸在临床上既被用于胸痹心痛发作时的舌下含服，也被大量患者当作长期口服的\"心脏保养药\"连续服用数月乃至数年。前一种用法有说明书与既往研究可循，后一种用法的证据基础…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T12:05:59.125Z",
+ "startedAt": "2026-08-13T12:05:59.125Z",
+ "finishedAt": "2026-08-13T13:25:05.318Z",
+ "durationMs": 4746193,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": null,
+ "qualityNotices": [
+  "Report line 101 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them."
+ ],
+ "observedMessages": 178,
+ "observedToolCalls": 206,
+ "lastProgressAt": "2026-08-13T13:24:47.424Z"
+}

@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "runId": "rq01-evidence-rq02-0804-061638",
+  "ranAt": "2026-08-04T07:20:00Z",
+  "revisionRound": 2,
+  "status": "succeeded",
+  "stats": {
+    "totalSearches": 55,
+    "recordsIdentified": 468,
+    "recordsAfterDeduplication": 420,
+    "sourcesIncluded": 5
+  },
+  "distinctPreservedSources": 5,
+  "claimsCount": {
+    "direct": 16,
+    "synthesized": 2,
+    "derived": 2,
+    "total": 20
+  },
+  "artifacts": [
+    ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC4548722/fulltext.md",
+    ".evimed-sources/PMC12733498/fulltext.md",
+    ".evimed-sources/PMC13094172/fulltext.md"
+  ],
+  "toolCalls": {
+    "evimed_literature_search": 7,
+    "evimed_guideline_search": 16,
+    "evimed_biomedical_source_search": 32,
+    "evimed_open_access_full_text": 8,
+    "evimed_official_page_fetch": 6,
+    "evimed_evidence_deduplicate": 1
+  },
+  "failedSources": [
+    {
+      "identifier": "DOI:10.1093/eurheartj/ehad191",
+      "source": "europe-pmc fulltext route",
+      "attemptedAt": "2026-08-04",
+      "error": "publisher access refused (non-open-access)",
+      "consequence": "2023 ESC ACS指南全文未保留；其D2B目标经开放获取审计文献转述承载（CLM-010）"
+    },
+    {
+      "identifier": "DOI:10.1016/j.jacc.2021.07.053",
+      "source": "europe-pmc fulltext route",
+      "attemptedAt": "2026-08-04",
+      "error": "no open-access full text available",
+      "consequence": "2021 AHA/ACC胸痛指南全文未保留；未从该指南提取主张"
+    },
+    {
+      "identifier": "PMID:14678917 (Henrikson 2003)",
+      "source": "europe-pmc fulltext route",
+      "attemptedAt": "2026-08-04",
+      "error": "no open-access full text available",
+      "consequence": "原“缓解不能预测冠心病”主张删除；证据缺口记入报告与审计"
+    },
+    {
+      "identifier": "PMID:15007008 (De Luca 2004)",
+      "source": "europe-pmc fulltext route",
+      "attemptedAt": "2026-08-04",
+      "error": "no open-access full text available",
+      "consequence": "其定量结论经JCDD综述转述承载（CLM-007）"
+    },
+    {
+      "identifier": "PMID:32744020 (SJP ACS meta-analysis)",
+      "source": "europe-pmc fulltext route",
+      "attemptedAt": "2026-08-04",
+      "error": "Unpaywall HTTP 404",
+      "consequence": "未保留；速效救心丸内容由试验方案承载（CLM-013、CLM-014）"
+    },
+    {
+      "identifier": "PMID:29437704 / 31253694 (Heart meta-analyses)",
+      "source": "europe-pmc fulltext route",
+      "attemptedAt": "2026-08-04",
+      "error": "no open-access full text available",
+      "consequence": "未保留；时间-心肌定量由JCDD综述承载（CLM-006~009）"
+    },
+    {
+      "identifier": "https://mpa.hunan.gov.cn/mpa/",
+      "source": "official-page gateway",
+      "attemptedAt": "2026-08-04",
+      "error": "upstream unavailable",
+      "consequence": "未保留；速效救心丸说明书未作为主张来源"
+    },
+    {
+      "identifier": "PMC 连接器（2021 AHA/ACC胸痛指南检索）",
+      "source": "pmc connector",
+      "attemptedAt": "2026-08-04",
+      "error": "HTTP 502",
+      "consequence": "单次检索失败未计入检索日志；以其余来源确认该指南全文不可及"
+    }
+  ],
+  "gateStatus": {
+    "preflight": "passed",
+    "serverGate": "pending"
+  }
+}

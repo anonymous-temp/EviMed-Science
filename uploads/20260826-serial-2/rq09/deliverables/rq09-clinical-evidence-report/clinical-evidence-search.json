@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-26T15:27:40Z",
+  "databases": ["PubMed", "Europe PMC", "NMPA label index", "guideline index", "ClinicalTrials.gov", "ChiCTR"],
+  "queries": [
+    {"database": "PubMed", "query": "borneol TRPM8 TRPA1 menthol cooling receptor", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "PubMed", "query": "Suxiao Jiuxin Wan angina randomized controlled trial", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1},
+    {"database": "PubMed", "query": "borneol sublingual absorption pharmacokinetics bioavailability", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1},
+    {"database": "PubMed", "query": "sublingual nitroglycerin symptom relief diagnostic acute coronary syndrome", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "PubMed", "query": "borneol TRPM8", "dateFrom": null, "dateTo": null, "resultsRetrieved": 4},
+    {"database": "PubMed", "query": "borneol TRPA1", "dateFrom": null, "dateTo": null, "resultsRetrieved": 3},
+    {"database": "PubMed", "query": "Suxiao Jiuxin Wan", "dateFrom": null, "dateTo": null, "resultsRetrieved": 2},
+    {"database": "PubMed", "query": "nitroglycerin chest pain diagnostic accuracy emergency", "dateFrom": null, "dateTo": null, "resultsRetrieved": 4},
+    {"database": "PubMed", "query": "borneol absorption enhancer permeation oral mucosa", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "PubMed", "query": "borneol sublingual", "dateFrom": null, "dateTo": null, "resultsRetrieved": 4},
+    {"database": "PubMed", "query": "nitroglycerin chest pain relief diagnostic test", "dateFrom": null, "dateTo": null, "resultsRetrieved": 2},
+    {"database": "PubMed", "query": "borneol oral mucosa irritation burning sensation", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "PubMed", "query": "速效救心丸 不良反应", "dateFrom": null, "dateTo": null, "resultsRetrieved": 20},
+    {"database": "PubMed", "query": "suxiao jiuxin adverse reaction tongue numbness", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "PubMed", "query": "borneol allergic contact dermatitis hypersensitivity", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "guideline index", "query": "急性胸痛 急性冠脉综合征 肌钙蛋白 急救", "dateFrom": null, "dateTo": null, "resultsRetrieved": 20},
+    {"database": "PubMed", "query": "tetramethylpyrazine borneol human plasma GC-MSD suxiao jiuxin", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1},
+    {"database": "PubMed", "query": "Changes in the numeric descriptive scale for pain after sublingual nitroglycerin do not predict cardiac etiology of chest pain", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0},
+    {"database": "PubMed", "query": "Chinese herbal medicine suxiao jiuxin wan angina pectoris Cochrane", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1},
+    {"database": "Europe PMC", "query": "Changes in the numeric descriptive scale for pain after sublingual nitroglycerin do not predict cardiac etiology", "dateFrom": null, "dateTo": null, "resultsRetrieved": 5},
+    {"database": "Europe PMC", "query": "Gas chromatography mass spectrometry high performance liquid chromatography drug absorption buccal mucosa circulating device", "dateFrom": null, "dateTo": null, "resultsRetrieved": 5},
+    {"database": "Europe PMC", "query": "Development and validation LC-MS/MS method quantify borneol rat plasma pharmacokinetic", "dateFrom": null, "dateTo": null, "resultsRetrieved": 3}
+  ],
+  "screening": {
+    "recordsIdentified": 76,
+    "recordsAfterDeduplication": 54,
+    "sourcesIncluded": 15
+  },
+  "sourceRecords": [
+    {"referenceNumber": 1, "citationKey": "Chen2016BorneolTRPM8", "identifier": "PMID:27448228", "accessLevel": "full_text", "included": true, "role": "mechanism (TRPM8 agonist)"},
+    {"referenceNumber": 2, "citationKey": "Sherkheli2015BorneolTRPA1", "identifier": "PMID:26142526", "accessLevel": "abstract", "included": true, "role": "mechanism (TRPA1 inhibitor)"},
+    {"referenceNumber": 3, "citationKey": "Luo2023BorneolAntipruritic", "identifier": "PMID:38103845", "accessLevel": "abstract", "included": true, "role": "mechanism + human RCT"},
+    {"referenceNumber": 4, "citationKey": "Tian2023TopicalBorneol", "identifier": "PMID:37290679", "accessLevel": "abstract", "included": true, "role": "mechanism (animal)"},
+    {"referenceNumber": 5, "citationKey": "Lai2020TRPM8Chemosens", "identifier": "PMID:32929340", "accessLevel": "full_text", "included": true, "role": "mechanism (TRPM8 target)"},
+    {"referenceNumber": 6, "citationKey": "Duan2008CochraneSXJW", "identifier": "PMID:18254051", "accessLevel": "abstract", "included": true, "role": "efficacy systematic review"},
+    {"referenceNumber": 7, "citationKey": "Yang1994HumanPK", "identifier": "PMID:7900539", "accessLevel": "abstract", "included": true, "role": "human pharmacokinetics"},
+    {"referenceNumber": 8, "citationKey": "Wu2015BuccalAbsorption", "identifier": "PMID:25469246", "accessLevel": "abstract", "included": true, "role": "human buccal absorption"},
+    {"referenceNumber": 9, "citationKey": "Diercks2005NTGDiagnostic", "identifier": "PMID:15940087", "accessLevel": "abstract", "included": true, "role": "diagnostic analogy (nitroglycerin)"},
+    {"referenceNumber": 10, "citationKey": "Ren2019BorneolRatPK", "identifier": "PMID:30743141", "accessLevel": "abstract", "included": true, "role": "animal sublingual pharmacokinetics"},
+    {"referenceNumber": 11, "citationKey": "NMPASuxiaoJiuxinLabel", "identifier": "NMPA 速效救心丸说明书（索引副本）", "accessLevel": "structured_record", "included": true, "role": "regulatory label"},
+    {"referenceNumber": 12, "citationKey": "Xing2014SXJWvsNTG", "identifier": "邢仪霞 2014（中文摘要）", "accessLevel": "abstract", "included": true, "role": "small RCT (Chinese)"},
+    {"referenceNumber": 13, "citationKey": "ESC2015NSTEACS", "identifier": "2015 ESC NSTE-ACS 指南（要点翻译索引副本）", "accessLevel": "structured_record", "included": true, "role": "guideline (ECG/troponin)"},
+    {"referenceNumber": 14, "citationKey": "CEM2019ChestPain", "identifier": "急性胸痛急诊诊疗专家共识 2019", "accessLevel": "structured_record", "included": true, "role": "guideline (China consensus)"},
+    {"referenceNumber": 15, "citationKey": "NHSChestPain", "identifier": "official-page:e6143b76645a9461", "accessLevel": "official_page", "included": true, "role": "official patient guidance (acute chest pain / EMS)"}
+  ]
+}

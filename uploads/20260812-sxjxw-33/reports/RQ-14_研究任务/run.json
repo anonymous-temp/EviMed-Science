@@ -1,0 +1,36 @@
+{
+ "id": "run_e36474460f8b73e886f108b4e0741fbc",
+ "dispatchId": "rq-14-QjHoho",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00c395398ffeCcR9cmrAQjHoho",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "adr-analysis",
+ "effectiveAgentVersion": "1.2.2",
+ "effectiveRuntimeAgent": "evimed-adr-analysis",
+ "effectiveRouteReason": "matched:adr-analysis",
+ "model": "deepseek/deepseek-v4-flash",
+ "question": "# RQ-14 研究任务（派发给 EviMedScience 产品管线的原始题面） 题库中的语义问题 ④ 过期药品的判断与安全处理（涉及 P9），转化为的学术研究命题。 --- ## 派发题面 请撰写一篇学术研究报告： **《超效期口服中成药的风险层级与合规处置路径：以含冰片滴丸为例，检验\"过期禁止服用\"与\"投入回收箱…",
+ "status": "succeeded",
+ "createdAt": "2026-08-12T02:21:51.940Z",
+ "startedAt": "2026-08-12T02:21:51.940Z",
+ "finishedAt": "2026-08-12T02:30:48.423Z",
+ "durationMs": 536483,
+ "errorCode": null,
+ "artifacts": [
+  "safety-report.md",
+  "signals.csv"
+ ],
+ "verification": null,
+ "qualityNotices": [
+  "The citation http://app.www.gov.cn/govdata/gov/202102/01/467730/article.html is served over plain HTTP. The source is reachable and the claim stands; prefer the HTTPS address where the publisher offers one.",
+  "The citation http://www.guanyang.gov.cn/zfxxgk/fdzdgknr/zdlyxxgk/spypaq/cfxx/t26513706.shtml is served over plain HTTP. The source is reachable and the claim stands; prefer the HTTPS address where the publisher offers one.",
+  "The citation http://scjgj.jcgov.gov.cn/gzdt/zwyw/202605/t20260529_2355017.html is served over plain HTTP. The source is reachable and the claim stands; prefer the HTTPS address where the publisher offers one.",
+  "The citation http://www.puning.gov.cn/xwzx/pnxw/content/post_928613.html is served over plain HTTP. The source is reachable and the claim stands; prefer the HTTPS address where the publisher offers one."
+ ],
+ "observedMessages": 31,
+ "observedToolCalls": 75,
+ "lastProgressAt": "2026-08-12T02:30:37.711Z"
+}

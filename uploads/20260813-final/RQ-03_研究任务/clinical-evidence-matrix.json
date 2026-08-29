@@ -1,0 +1,262 @@
+{
+  "schemaVersion": 1,
+  "title": "速效救心丸连续用药三个月及以上的有效性与安全性证据评价：证据确定性分级与适用人群边界",
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claimType": "direct",
+      "claim": "在174例对长效硝酸酯不良反应不耐受的慢性冠脉综合征患者中，加用速效救心丸4周后，西雅图心绞痛量表（SAQ）总分改善≥20分者占60.9%，安慰剂组为39.1%（OR 2.43，95% CI 1.32～4.47，P=0.004）。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMID:39367481; PMCID:PMC11451125; DOI:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses. … randomized to either the SJPs or the placebo group for a duration of 4 weeks. … 60.9% of patients treated with SJPs achieved a 20-point or greater improvement in SAQ-SS, while only 39.1% (OR = 2.43, 95% confidence interval [CI] = 1.32 to 4.47, P = 0.004) of patients in the placebo group achieved the same level of improvement",
+      "applicability": "对长效硝酸酯不良反应不耐受的慢性冠脉综合征患者，常规治疗基础上加用，疗程4周",
+      "uncertainty": "单项试验；4周短疗程，不能外推至三个月以上持续用药"
+    },
+    {
+      "claimId": "CLM-002",
+      "claimType": "direct",
+      "claim": "同试验中速效救心丸组SAQ总分改善较安慰剂组高5.68分（95% CI 2.37～8.99，P<0.001；组间15.46对9.78）。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMID:39367481; PMCID:PMC11451125; DOI:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "the SJPs intervention resulted in an improvement of 5.68 (95% CI = 2.37 to 8.99, P < 0.001, SJPs vs. placebo: 15.46 vs. 9.78 ) for the summary score in SAQ (SAQ-SS)",
+      "applicability": "慢性冠脉综合征、硝酸酯不耐受人群，4周疗程",
+      "uncertainty": "单项试验；SAQ为症状/生活质量量表，非硬终点"
+    },
+    {
+      "claimId": "CLM-003",
+      "claimType": "direct",
+      "claim": "该项试验无受试者报告不良事件，AST、ALT、BUN、肌酐、尿酸在速效救心丸组与安慰剂组间差异无统计学意义。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMID:39367481; PMCID:PMC11451125; DOI:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "No participants reported experiencing adverse effects. Next, serum levels of AST, ALT, BUN, CR, and UA were measured to assess the presence of abnormalities associated with SJPs in liver and kidney function. Although the laboratory indicators in the SJPs group were higher than those in the placebo group, the differences did not reach statistical significance",
+      "applicability": "4周短疗程的附带安全记录，非以安全性为终点的长期研究",
+      "uncertainty": "疗程仅4周，样本量174例，不足以评估长期肝肾功能影响"
+    },
+    {
+      "claimId": "CLM-004",
+      "claimType": "direct",
+      "claim": "速效救心丸由川芎与合成冰片组成，每丸含川芎（以阿魏酸计）不低于15.0 μg、合成冰片（以冰片计）2.9～4.4 mg。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMID:39367481; PMCID:PMC11451125; DOI:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "each pill of SJPs is required to contain a minimum of 15.0 μg of Ligusticum chuanxiong, expressed in terms of ferulic acid (C 10 H 10 O 4 ), and 2.9 to 4.4 mg of Borneolum syntheticum, expressed in terms of Borneol",
+      "applicability": "方中冰片为合成冰片（Borneolum syntheticum），与该药说明书及药典标准一致",
+      "uncertainty": "合成冰片与天然冰片的毒理学差异尚未在人体长期暴露中验证"
+    },
+    {
+      "claimId": "CLM-005",
+      "claimType": "direct",
+      "claim": "荟萃分析（纳入6276例冠心病患者）报告速效救心丸改善心电图结果，RR 1.32（95% CI 1.26～1.38）。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157; PMCID:PMC5892298; DOI:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001).",
+      "applicability": "中国冠心病人群，短疗程；心电图改善为替代终点",
+      "uncertainty": "纳入试验方法学质量低，异质性高（I2=62.3%），疗程以周计"
+    },
+    {
+      "claimId": "CLM-006",
+      "claimType": "direct",
+      "claim": "荟萃分析中报告不良反应的试验最常见为轻度头痛、头晕与面部潮红，不良反应率与对照组差异无统计学意义（RR 1.12，95% CI 0.50～2.51，P=0.785）。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157; PMCID:PMC5892298; DOI:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "Fourteen studies reported the incidence of adverse reactions. The most common symptoms were mild headache, dizziness, and facial flushing. … There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)",
+      "applicability": "短疗程试验的附带安全性记录，多数不良反应自行缓解",
+      "uncertainty": "非以安全性为目的的长期研究，未提供长期暴露下的发生率"
+    },
+    {
+      "claimId": "CLM-007",
+      "claimType": "direct",
+      "claim": "该荟萃分析将Jadad评分低于3分的研究判定为低质量研究，并指多数纳入试验因缺乏双盲设计而Jadad评分偏低。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157; PMCID:PMC5892298; DOI:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "Studies with a score less than 3 were considered as low quality studies with high bias risk. … The majority of the included studies received low Jadad scores due to the lack of a double-blind design",
+      "applicability": "对短疗程随机对照证据体方法学质量的评价",
+      "uncertainty": "Jadad评分低于3分仅反映报告质量，不等于无效"
+    },
+    {
+      "claimId": "CLM-008",
+      "claimType": "direct",
+      "claim": "该试验方案的主要结局为第4周心绞痛症状改善率与主要不良心血管事件（MACE）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:34281600; PMCID:PMC8287819; DOI:10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "supportQuote": "The primary outcomes are the symptom improvement rate of angina from baseline to 4 weeks after inclusion and major adverse cardiovascular events (MACE).",
+      "applicability": "气滞血瘀型稳定型心绞痛，常规治疗基础上加用，疗程24周",
+      "uncertainty": "主要疗效终点设在第4周，第12、24周为次要分析"
+    },
+    {
+      "claimId": "CLM-009",
+      "claimType": "direct",
+      "claim": "川芎小鼠灌胃LD50为7.26 g/kg（约为最大临床剂量的1460倍），川芎挥发油单次灌胃LD50为1594.92 mg/kg。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC8841966",
+      "sourceTitle": "Research Advances in Cardio-Cerebrovascular Diseases of Ligusticum chuanxiong Hort.",
+      "artifactPath": ".evimed-sources/PMC8841966/fulltext.md",
+      "identifier": "PMID:35173614; PMCID:PMC8841966; DOI:10.3389/fphar.2021.832673",
+      "accessLevel": "full_text",
+      "supportQuote": "In the CX gavage experiment, mice's LD 50 is 7.26 g/kg, or 1460 times the maximum clinical dose of CX. … Zhang (2014) measured that the LD50 of mice was 1594.92 mg/kg after a single intragastric administration of CX volatile oil.",
+      "applicability": "动物急性毒性数据，用于提示川芎的安全窗口",
+      "uncertainty": "急性LD50不能直接回答长期重复给药的安全性"
+    },
+    {
+      "claimId": "CLM-010",
+      "claimType": "direct",
+      "claim": "在16倍临床剂量下，川芎煎剂可能增加小鼠胎死胎与吸收胎，引起胸骨与四肢骨畸形，具有弱胚胎毒性。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC8841966",
+      "sourceTitle": "Research Advances in Cardio-Cerebrovascular Diseases of Ligusticum chuanxiong Hort.",
+      "artifactPath": ".evimed-sources/PMC8841966/fulltext.md",
+      "identifier": "PMID:35173614; PMCID:PMC8841966; DOI:10.3389/fphar.2021.832673",
+      "accessLevel": "full_text",
+      "supportQuote": "Xia et al. (2018) found that under the 16-fold clinical dose, the decoction of CX may increase mouse fetal stillbirth and absorption fetus, cause sternum and limb bone deformities, and have weak embryotoxicity.",
+      "applicability": "动物胚胎毒性研究，与说明书妊娠禁忌方向一致",
+      "uncertainty": "为16倍临床剂量的动物研究，非人体妊娠期数据；系该综述对他人研究的转述"
+    },
+    {
+      "claimId": "CLM-011",
+      "claimType": "direct",
+      "claim": "川芎临床应用不良反应较少，主要为面部潮红与情绪激动。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC8841966",
+      "sourceTitle": "Research Advances in Cardio-Cerebrovascular Diseases of Ligusticum chuanxiong Hort.",
+      "artifactPath": ".evimed-sources/PMC8841966/fulltext.md",
+      "identifier": "PMID:35173614; PMCID:PMC8841966; DOI:10.3389/fphar.2021.832673",
+      "accessLevel": "full_text",
+      "supportQuote": "CX has few adverse reactions in clinical application, mainly facial flushing and emotional agitation",
+      "applicability": "川芎单味药临床应用的汇总描述",
+      "uncertainty": "无发生率与分母，属综述转述，非系统不良反应监测"
+    },
+    {
+      "claimId": "CLM-012",
+      "claimType": "direct",
+      "claim": "川芎苯酞类与生物碱成分具有抗血小板聚集与抗血栓活性。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC8841966",
+      "sourceTitle": "Research Advances in Cardio-Cerebrovascular Diseases of Ligusticum chuanxiong Hort.",
+      "artifactPath": ".evimed-sources/PMC8841966/fulltext.md",
+      "identifier": "PMID:35173614; PMCID:PMC8841966; DOI:10.3389/fphar.2021.832673",
+      "accessLevel": "full_text",
+      "supportQuote": "The potential mechanisms of cardio-cerebrovascular protection are related to antiplatelet aggregation, antithrombotic, antioxidant, anti-inflammatory, inhibition of abnormal proliferation of VSMCs, and neuroprotection",
+      "applicability": "川芎成分的药理活性，提示与抗血小板/抗凝药物潜在相加的出血风险方向",
+      "uncertainty": "为体外/药理机制证据，未检索到人体临床相互作用研究"
+    },
+    {
+      "claimId": "CLM-013",
+      "claimType": "synthesized",
+      "claim": "疗程达到三个月的随机对照证据目前来自单个随机、双盲、安慰剂对照、多中心试验（疗程24周、每次5粒、计划入组324例）。",
+      "confidence": "low",
+      "referenceNumber": 3,
+      "referenceNumbers": [3, 4],
+      "applicability": "气滞血瘀型稳定型心绞痛，常规治疗基础上加用",
+      "uncertainty": "该试验结果论文仅到摘要层级；检索未发现其他疗程≥3个月的前瞻性研究",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+          "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+          "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "During the treatment period, eligible patients will be given SJP or placebo pills and they will have to take 5 pills of the study medication three times daily. … A total of 324 participants will be included."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "a recent randomized clinical trial demonstrated that SJPs also effectively improved stable angina on physical limitations, angina stability, and treatment satisfaction, after 24 weeks of intervention [ 9 ]."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-014",
+      "claimType": "synthesized",
+      "claim": "速效救心丸的随机对照证据以短疗程、方法学质量偏低为主，不能据此判断三个月以上持续获益。",
+      "confidence": "moderate",
+      "referenceNumber": 5,
+      "referenceNumbers": [5, 3],
+      "applicability": "对现有随机对照证据体整体方法学与疗程的评价",
+      "uncertainty": "疗程长短未在荟萃分析中逐项提取，短疗程为主系由纳入研究特征推断",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+          "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The majority of the included studies received low Jadad scores due to the lack of a double-blind design"
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+          "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+          "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Based on the Jadad score, most of the clinical studies included in the meta-analysis were of poor quality. Only a few studies reported a detailed research methodology"
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-017",
+      "claimType": "direct",
+      "claim": "荟萃分析报告速效救心丸降低总胆固醇（WMD −0.62 mmol/L）与低密度脂蛋白（WMD −1.12 mmol/L），并升高高密度脂蛋白（WMD 0.32 mmol/L）。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157; PMCID:PMC5892298; DOI:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "Significant lower total cholesterol levels were reported in the suxiao jiuxin pill group compared with the control group (WMD −0.62 mmol/L, 95% CI −1.06 to –0.18 mmol/L, and P = 0.005). … There were significantly lower LDL levels in the treatment group compared with the control group (WMD −1.12 mmol/L, 95% CI −1.42 to −0.82 mmol/L, and P < 0.001) … significantly higher HDL levels in the treatment group compared with the control group (WMD 0.32 mmol/L, 95% CI 0.07 to 0.58 mmol/L, and P = 0.014)",
+      "applicability": "中国冠心病人群、短疗程；血脂为次要结局",
+      "uncertainty": "纳入试验异质性高（总胆固醇I2=77.1%），血脂亚组样本量小"
+    },
+    {
+      "claimId": "CLM-015",
+      "claimType": "derived",
+      "claim": "连续用药三个月以上的有效性证据体按GRADE为低确定性。",
+      "applicability": "气滞血瘀型稳定型心绞痛在常规治疗基础上加用速效救心丸的三个月以上疗效",
+      "uncertainty": "若结果全文报告第12、24周效应量及其置信区间并报告MACE结果，确定性可上调至中等",
+      "derivedFrom": ["CLM-013", "CLM-008"],
+      "method": "GRADE评估：以单项随机、双盲、安慰剂对照、多中心试验为起点（高确定性），因偏倚风险降1级（单项试验、结果仅为摘要层级、RoB 2无法完整评估），因不精确降1级（单项试验、第12与24周无合并效应量及置信区间），得低确定性。",
+      "assumptions": "该24周试验是检索到的唯一疗程≥3个月的前瞻性研究；摘要层级无法评估RoB 2各域。",
+      "sensitivity": "若结果全文显示第12、24周效应量方向一致且置信区间窄，并报告MACE结果，可上调至中等；若全文暴露盲法或分配隐藏缺陷，则维持低或进一步下调。"
+    },
+    {
+      "claimId": "CLM-016",
+      "claimType": "derived",
+      "claim": "连续用药三个月以上的安全性证据体按GRADE为极低确定性；长期安全性数据缺失本身是一项结论。",
+      "applicability": "速效救心丸三个月以上连续用药的安全性",
+      "uncertainty": "若中文数据库存在分母明确的上市后监测或注册登记研究，安全性确定性可上调",
+      "derivedFrom": ["CLM-003", "CLM-006"],
+      "method": "GRADE评估：以短疗程随机对照试验的安全性附带记录为起点，因间接性降1级（疗程4周、非以安全性为终点），因不精确降1级（无分母明确的≥3个月不良事件数据），且未检索到任何分母明确、以安全性为目的的≥3个月主动监测或注册登记研究，得极低确定性。",
+      "assumptions": "检索到的安全性信息仅来自短疗程附带记录（CLM-003、CLM-006）与无分母的说明书监测数据清单；检索有界于PubMed、Europe PMC、Crossref及指南/说明书索引，未覆盖中文全文数据库。",
+      "sensitivity": "若出现以长期服药人群为对象、分母明确、主动系统采集不良事件的上市后研究，安全性确定性可显著上调；当前结论受限于检索范围。"
+    }
+  ]
+}

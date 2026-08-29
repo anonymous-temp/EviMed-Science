@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-01T09:20:00Z",
+  "databases": ["PubMed", "EviMed Literature Adapter", "EviMed Guideline Search", "NMPA Drug Labels", "Cochrane Database", "NHS Official Pages"],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin relief chest pain diagnostic test",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "EviMed Literature",
+      "query": "nitroglycerin relief chest pain diagnostic accuracy coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 rs671 frequency Chinese Han population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "EviMed Literature",
+      "query": "ALDH2 rs671 polymorphism Chinese population nitroglycerin efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed Literature",
+      "query": "Suxiao Jiuxin Wan randomized clinical trial angina pectoris",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "EviMed Guideline",
+      "query": "acute chest pain emergency department evaluation guideline",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed Guideline",
+      "query": "急性胸痛 急诊 评估 指南 中国",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed Literature",
+      "query": "prehospital delay time myocardial infarction mortality systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina Cochrane review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "EviMed Literature",
+      "query": "nitroglycerin contraindication right ventricular infarction hypotension",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "EviMed Guideline",
+      "query": "prehospital nitroglycerin chest pain emergency medical services guideline",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "NHS Official Pages",
+      "query": "https://www.nhs.uk/symptoms/chest-pain/",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 145,
+    "recordsAfterDeduplication": 129,
+    "sourcesIncluded": 9
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Steele2006",
+      "identifier": "PMID:17320010",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "NTG diagnostic value"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Zhu2020Taizhou",
+      "identifier": "PMC7154495",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2 population frequency"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Huang2018CAD",
+      "identifier": "PMC6026513",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2 CAD risk"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "NHS2023",
+      "identifier": "official-page:f60ccb4779eccff7",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "emergency call guidance"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Duan2008Cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "SJXW Cochrane review"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "ChineseConsensus2019",
+      "identifier": "EVIMED-GUIDE:2",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "acute chest pain guideline"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Henrikson2003",
+      "identifier": "PMID:14678917",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "NTG diagnostic confirmation"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "NMPA-SJXW",
+      "identifier": "EVIMED-LABEL:nmpa-0",
+      "accessLevel": "regulatory_record",
+      "included": true,
+      "role": "SJXW drug label"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "NMPA-NTG",
+      "identifier": "EVIMED-LABEL:nmpa-0",
+      "accessLevel": "regulatory_record",
+      "included": true,
+      "role": "NTG drug label"
+    }
+  ]
+}

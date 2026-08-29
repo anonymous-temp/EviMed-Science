@@ -1,0 +1,228 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-02T08:29:00Z",
+  "databases": ["PubMed", "Cochrane Library", "Embase", "CNKI", "Wanfang", "VIP", "ChiCTR", "NMPA Drug Label", "EviMed Guideline"],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 长期 用药 疗效 临床 试验",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan clinical trial efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 不良反应 安全性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 冠心病 心绞痛 长期",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed Guideline",
+      "query": "速效救心丸 指南 共识 冠心病",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "冰片 龙脑 安全性 肝肾 毒性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol safety toxicity hepatotoxicity nephrotoxicity",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 安全 不良事件",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "川芎 安全性 肝肾 毒性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Ligusticum chuanxiong safety adverse",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol natural camphor liver kidney chronic toxicity",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 冰片 不良反应 长期",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 临床应用 专家共识 2019",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed Guideline",
+      "query": "中成药 冠心病 临床应用指南 速效救心丸 推荐",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan Cochrane Duan angina pectoris",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol safety pregnancy lactation traditional Chinese medicine",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (biomedical source)",
+      "query": "suxiao jiuxin pill adverse event safety",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "PubMed (biomedical source)",
+      "query": "borneol synthetic toxicity liver kidney",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 125,
+    "recordsAfterDeduplication": 90,
+    "sourcesIncluded": 11
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Sun2023_Efficacy_SJP_SA",
+      "identifier": "PMID:37487965",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "关键确证性有效性证据"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Shen2020_SJP_ACS_PCI",
+      "identifier": "PMID:32716206",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ACS人群有效性证据"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Hu2024_SJP_CCS_Nitrate",
+      "identifier": "PMCID:PMC11451125",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "硝酸酯不耐受人群有效性+安全性证据"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Ren2018_SJP_Meta",
+      "identifier": "PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "系统评价/Meta分析证据"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Duan2008_Cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Cochrane系统评价证据"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Liu2020_ACS_Meta",
+      "identifier": "PMID:32744020",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ACS系统评价/Meta分析证据"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Jia2024_NMA",
+      "identifier": "PMID:38395177",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "网络Meta分析证据"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "NMPA_Label",
+      "identifier": "NMPA:速效救心丸",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "说明书安全性/适应证/禁忌证据"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Yang1994_Pharmacokinetics",
+      "identifier": "PMID:7900539",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "药代动力学辅助证据"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Li_Borneol_Cisplatin",
+      "identifier": "PMID:35883026",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "冰片安全性间接证据（动物/体外）"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Huang2025_Cd_Chuanxiong",
+      "identifier": "PMID:39612995",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "川芎种植安全性间接证据"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+ "id": "run_d8e953522fad6eaced233fe9f6d4fe52",
+ "dispatchId": "rq-16-OLynnN",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_002c58ce5ffeVsbwDv9DOLynnN",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.93",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-16 研究任务 ## 选题 **《睡眠剥夺相关心悸：心血管病理生理、鉴别诊断路径与速效救心丸适应症边界的证据评价》** ## 研究背景 熬夜之后出现心慌，是门诊与药店咨询中极常见的主诉，而其病因高度异质：既可能是睡眠剥夺引起的窦性心动过速或良性期前收缩，也可能是焦虑躯体化、甲状腺功能异常、咖啡因摄入或贫血的表…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T22:25:11.982Z",
+ "startedAt": "2026-08-13T22:25:11.982Z",
+ "finishedAt": "2026-08-13T23:16:52.493Z",
+ "durationMs": 3100511,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+  "MUST FIX — The search log must exactly match successful evidence-search calls from the same run — logged but never executed: \"速效救心丸\".",
+  "Report line 84 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+  "citation-audit.md must reference at least one real audited source identifier from the evidence matrix.",
+  "The report was replaced with the write tool 1 time(s) while repairing, instead of being patched with edit; a rewrite regenerates the report from context rather than from the evidence on disk."
+ ],
+ "observedMessages": 99,
+ "observedToolCalls": 181,
+ "lastProgressAt": "2026-08-13T23:16:32.898Z"
+}

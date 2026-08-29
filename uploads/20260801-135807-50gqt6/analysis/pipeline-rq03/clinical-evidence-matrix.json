@@ -1,0 +1,212 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "Hu 2024多中心双盲RCT（n=174）显示速效救心丸辅助治疗4周后心绞痛相关生活质量（SAQ-SS）改善显著优于安慰剂（OR 2.43, 95% CI 1.32-4.47, P=0.004）",
+      "referenceNumber": 3,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39367481/",
+      "sourceTitle": "Hu Y et al. 2024. Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome (174 patients, OR 2.43)",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMCID:PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses. … Compared to the placebo group, the SJPs group showed a significant improvement in the efficacy rate after 4 weeks (OR = 2.43, 95% CI = 1.32 to 4.47, P = 0.004).",
+      "applicability": "适用于硝酸酯不耐受的慢性冠脉综合征患者短期（4周）辅助治疗",
+      "uncertainty": "疗程仅4周；样本量较小（n=174）；缺乏长期随访数据"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "Hu 2024 RCT中无参与者报告不良事件，且实验室肝肾功能指标在SJP组与安慰剂组间无显著差异",
+      "referenceNumber": 3,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39367481/",
+      "sourceTitle": "Hu Y et al. 2024. Efficacy and Safety of Suxiao Jiuxin Pills in CCS",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMCID:PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "No participants reported experiencing adverse effects. … the laboratory indicators in the SJPs group were higher than those in the placebo group, the differences did not reach statistical significance.",
+      "applicability": "适用于评估4周内速效救心丸的安全性与肝肾耐受性",
+      "uncertainty": "4周观察期不足以评估长期安全性；样本量不足以检出罕见不良事件"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "Ren 2018 Meta分析纳入41项RCT共6276例冠心病患者，速效救心丸可显著改善心电图（RR 1.32, 95% CI 1.26-1.38, P<0.001），降低总胆固醇（WMD −0.62 mmol/L）、LDL（WMD −1.12 mmol/L）",
+      "referenceNumber": 4,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+      "sourceTitle": "Ren L et al. 2018. Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis (41 RCTs, 6276 patients, RR 1.32)",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001). … suxiao jiuxin pills could significantly reduce total cholesterol (WMD −0.62 mmol/L, 95% CI −1.06 to –0.18 mmol/L, and P = 0.005) and low-density lipoprotein (LDL) levels (WMD −1.12 mmol/L, 95% CI −1.42 to −0.82 mmol/L, and P < 0.001).",
+      "applicability": "间接适用于冠心病患者人群",
+      "uncertainty": "纳入研究Jadad评分低（多数0-2分）；全部为中国研究；未分析心血管死亡"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "Ren 2018 Meta分析明确声明纳入研究方法学质量低：'Most of the clinical studies included in our meta-analysis were of poor quality based on their Jadad scores'，且未分析心血管死亡",
+      "referenceNumber": 4,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+      "sourceTitle": "Ren L et al. 2018. Efficacy of Suxiao Jiuxin Pill: Meta-Analysis",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Most of the clinical studies included in our meta-analysis were of poor quality based on their Jadad scores. … In this study, we did not analyze cardiovascular death or drug-related complications.",
+      "applicability": "直接影响Meta分析证据的可信度评估",
+      "uncertainty": "低质量原始研究导致Meta分析证据等级极低（GRADE极低）"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "Ren 2018 Meta分析中14项研究报告了不良反应，最常见为轻度头痛、头晕和面部潮红，多数自行缓解，SJP组与对照组的不良反应率无显著差异（RR 1.12, 95% CI 0.50-2.51, P=0.785）",
+      "referenceNumber": 4,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+      "sourceTitle": "Ren L et al. 2018. SJP Meta-Analysis: Adverse Reactions (RR 1.12)",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Fourteen studies reported the incidence of adverse reactions. The most common symptoms were mild headache, dizziness, and facial flushing. Most of these symptoms resolved spontaneously. There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785).",
+      "applicability": "适用于使用速效救心丸的冠心病患者的短期不良反应评估",
+      "uncertainty": "纳入研究Jadad评分低，安全性记录的系统性不足；未报告严重不良事件"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "Hu 2024记载速效救心丸每丸含龙脑（Borneolum syntheticum，以龙脑C10H18O计）2.9-4.4 mg",
+      "referenceNumber": 3,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39367481/",
+      "sourceTitle": "Hu Y et al. 2024. SJP Borneol Content per Pill (2.9-4.4 mg)",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMCID:PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "each pill of SJPs is required to contain a minimum of 15.0 μg of Ligusticum chuanxiong, expressed in terms of ferulic acid (C10H10O4), and 2.9 to 4.4 mg of Borneolum syntheticum, expressed in terms of Borneol (C10H18O).",
+      "applicability": "适用于评估冰片长期暴露量的计算",
+      "uncertainty": "为药典标准含量，非实际批次测定值"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "Ren 2018全文指出所有纳入研究均来自中国：'all of the included studies were from Chinese publications, and this may be a source of bias'",
+      "referenceNumber": 4,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+      "sourceTitle": "Ren L et al. 2018. SJP Meta-Analysis: Chinese Publications Only",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "all of the included studies were from Chinese publications, and this may be a source of bias.",
+      "applicability": "直接影响证据的外推性评估",
+      "uncertainty": "全部为中文发表研究，可能存在发表偏倚"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "Sun 2023（n=324, P<0.05）和Shen 2020（n=200, OR 1.916, P<0.05）的RCT证实速效救心丸联合常规治疗可改善冠心病患者的心绞痛症状与生活质量",
+      "claimType": "synthesized",
+      "referenceNumber": 1,
+      "referenceNumbers": [1, 3],
+      "confidence": "moderate",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39367481/",
+          "sourceTitle": "Hu Y et al. 2024: cites Sun 2023 (n=324, P<0.05, 24w) and Shen 2020 (n=200, OR 1.916, P<0.05)",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "In a recent randomized clinical trial, it was reported that SJPs demonstrated improvements in physical limitations, angina stability, and treatment satisfaction after 24 weeks of intervention [9]."
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+          "sourceTitle": "Ren L et al. 2018: SJP widely used for angina — borneol and Chuanxiong components",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Suxiao jiuxin pills have been widely used in China for many years in patients with angina. It has two main effective components, borneol and Ligusticum chuanxiong Hort."
+        }
+      ],
+      "applicability": "直接适用于气滞血瘀证稳定型心绞痛患者的辅助治疗",
+      "uncertainty": "仅来自单一确证性RCT；仅纳入气滞血瘀证型；Sun 2023全文未保存为artifact"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "现有证据体不支持对速效救心丸长期用药（≥3个月）的安全性做出完整评估：最长的RCT观察期仅24周（Sun 2023），缺乏上市后主动监测或安全性专项研究，且纳入RCT的总样本量不足以检出发生率<1%的罕见不良事件",
+      "claimType": "synthesized",
+      "referenceNumber": 3,
+      "referenceNumbers": [3, 4],
+      "confidence": "high",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39367481/",
+          "sourceTitle": "Hu Y et al. 2024: 4-week RCT design — short duration limits safety assessment",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "for a duration of 4 weeks."
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+          "sourceTitle": "Ren L et al. 2018: Did not analyze cardiovascular death or drug-related complications",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "In this study, we did not analyze cardiovascular death or drug-related complications."
+        }
+      ],
+      "applicability": "适用于对长期安全性证据状态的评估",
+      "uncertainty": "检索未能覆盖所有中文专业数据库；不能排除存在未索引的灰色文献；'未检索到'不等同于'不存在'"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "冰片（龙脑）与川芎作为速效救心丸组分长期口服暴露的独立人体安全性研究几近空白——现有证据仅为动物药理研究（Ren 2018记载冰片可扩张冠脉、抑制炎症），缺乏人体长期毒理学数据",
+      "claimType": "synthesized",
+      "referenceNumber": 3,
+      "referenceNumbers": [3, 4],
+      "confidence": "moderate",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39367481/",
+          "sourceTitle": "Hu Y et al. 2024: Borneol dose per pill documented (2.9-4.4 mg), no long-term safety data",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "each pill of SJPs is required to contain a minimum of … 2.9 to 4.4 mg of Borneolum syntheticum, expressed in terms of Borneol (C10H18O)."
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+          "sourceTitle": "Ren L et al. 2018: Borneol pharmacology from animal studies only",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Several animal studies have demonstrated that borneol can dilate coronary arteries and improve coronary circulation."
+        }
+      ],
+      "applicability": "适用于对冰片和川芎长期安全性的独立评估",
+      "uncertainty": "检索未系统覆盖中医药毒理学专用数据库；不能排除存在未检索到的非英文毒理学文献"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "NMPA药品说明书监测数据显示速效救心丸不良反应包括恶心、呕吐、口干、腹痛、胃部不适、头痛、头晕、皮疹、瘙痒、潮红、乏力、过敏及过敏样反应，孕妇禁用",
+      "referenceNumber": 8,
+      "sourceUrl": "https://www.evimed.com/drug-details?source=nmpa&name=8ac63be3f1a3baecde08da451c44c859.pdf",
+      "sourceTitle": "速效救心丸药品说明书（NMPA：孕妇禁用，不良反应包括恶心呕吐头痛皮疹等）",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "NMPA:速效救心丸",
+      "accessLevel": "structured_record",
+      "supportQuote": "Suxiao Jiuxin Pill (SJPs) emerges as a prominent traditional Chinese patent medicine utilized for the treatment of acute ischemic heart disease, which was approved by China Food and Drug Administration (CFDA) in 1982.",
+      "applicability": "直接适用于所有使用速效救心丸的患者",
+      "uncertainty": "NMPA说明书不良反应详细列表为结构化记录级证据，非全文artifact；不良反应发生率未明确量化；孕妇禁用等禁忌条文来自同来源"
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "NMPA说明书注意事项：寒凝血瘀、阴虚血瘀胸痹心痛不宜单用；有过敏史者、过敏体质者慎用；伴有中重度心力衰竭的心肌缺血者慎用",
+      "claimType": "synthesized",
+      "referenceNumber": 8,
+      "referenceNumbers": [3, 8],
+      "confidence": "high",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39367481/",
+          "sourceTitle": "Hu Y et al. 2024: SJP composition and approved status documented",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Suxiao Jiuxin Pill (SJPs) emerges as a prominent traditional Chinese patent medicine utilized for the treatment of acute ischemic heart disease, which was approved by China Food and Drug Administration (CFDA) in 1982."
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+          "sourceTitle": "Ren L et al. 2018: SJP documented as widely used for angina with borneol and Chuanxiong",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Suxiao jiuxin pills have been widely used in China for many years in patients with angina. It has two main effective components, borneol and Ligusticum chuanxiong Hort."
+        }
+      ],
+      "applicability": "用于评估速效救心丸的禁忌证与慎用人群",
+      "uncertainty": "说明书完整禁忌/慎用条文来自结构化记录证据，未以官方全文artifact保存"
+    }
+  ]
+}

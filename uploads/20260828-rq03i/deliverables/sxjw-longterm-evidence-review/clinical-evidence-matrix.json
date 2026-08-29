@@ -1,0 +1,469 @@
+{
+  "schemaVersion": 1,
+  "questionPico": {
+    "population": "连续用药三个月（≥12周）的气滞血瘀型冠心病/心绞痛患者",
+    "intervention": "速效救心丸（含川芎、冰片）口服",
+    "outcome": "长期有效性与长期安全性"
+  },
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "2018年Meta分析纳入41项随机对照试验、6276例冠心病患者",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157 / PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis.",
+      "applicability": "冠心病患者（中国试验）",
+      "uncertainty": "纳入试验多低Jadad分、未报告疗程与随访时长",
+      "pico": {
+        "population": "冠心病",
+        "intervention": "速效救心丸",
+        "outcome": "心电图、血脂、血液流变学"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "low_quality",
+          "forms": [
+            "低Jadad分",
+            "缺乏双盲"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "速效救心丸组心电图改善优于对照（RR 1.32，95% CI 1.26 to 1.38）",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157 / PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Pooled analysis indicated significant benefits of suxiao jiuxin pill on ECG outcomes (RR 1.32; 95% CI 1.26 to 1.38, P < 0.001).",
+      "applicability": "冠心病患者",
+      "uncertainty": "异质性I2=62.3%；替代指标",
+      "pico": {
+        "population": "冠心病",
+        "intervention": "速效救心丸",
+        "outcome": "心电图改善"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "surrogate",
+          "forms": [
+            "心电图",
+            "替代指标"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "速效救心丸组总胆固醇（WMD -0.62 mmol/L）、低密度脂蛋白（WMD -1.12 mmol/L）下降，高密度脂蛋白（WMD 0.32 mmol/L）升高",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157 / PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Significant lower total cholesterol levels were reported in the suxiao jiuxin pill group compared with the control group (WMD −0.62 mmol/L, 95% CI −1.06 to –0.18 mmol/L, and P = 0.005). … There were significantly lower LDL levels in the treatment group compared with the control group (WMD −1.12 mmol/L, 95% CI −1.42 to −0.82 mmol/L, and P < 0.001) … There were significantly higher HDL levels in the treatment group compared with the control group (WMD 0.32 mmol/L, 95% CI 0.07 to 0.58 mmol/L, and P = 0.014).",
+      "applicability": "冠心病患者",
+      "uncertainty": "仅4项试验报告血脂；异质性高",
+      "pico": {
+        "population": "冠心病",
+        "intervention": "速效救心丸",
+        "outcome": "血脂"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "surrogate",
+          "forms": [
+            "血脂",
+            "替代指标"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "2018年Meta分析中14项试验报告不良反应，最常见的为轻度头痛、头晕与面部潮红，多自行缓解",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157 / PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Fourteen studies reported the incidence of adverse reactions. The most common symptoms were mild headache, dizziness, and facial flushing. Most of these symptoms resolved spontaneously.",
+      "applicability": "冠心病患者（多数短期疗程）",
+      "uncertainty": "附带记录，多数疗程短；未报告停药比例",
+      "pico": {
+        "population": "冠心病",
+        "intervention": "速效救心丸",
+        "outcome": "不良反应"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "incidental",
+          "forms": [
+            "附带记录",
+            "多数短期疗程"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "不良反应发生率与对照组无显著差异（RR 1.12，95% CI 0.50 to 2.51）",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157 / PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)",
+      "applicability": "冠心病患者",
+      "uncertainty": "附带记录，非以安全性为目的的研究",
+      "pico": {
+        "population": "冠心病",
+        "intervention": "速效救心丸",
+        "outcome": "不良反应发生率"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "incidental",
+          "forms": [
+            "附带记录"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "纳入试验多因缺乏双盲而Jadad评分偏低",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157 / PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "The majority of the included studies received low Jadad scores due to the lack of a double-blind design",
+      "applicability": "Meta分析纳入的原始试验",
+      "uncertainty": "RoB 2 层面属高偏倚风险",
+      "pico": {
+        "population": "冠心病",
+        "intervention": "速效救心丸",
+        "outcome": "偏倚风险"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "not_applicable"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        {
+          "id": "low_quality",
+          "forms": [
+            "低Jadad分",
+            "缺乏双盲"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "2018年Meta分析未分析心血管死亡与药物相关并发症",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157 / PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "In this study, we did not analyze cardiovascular death or drug-related complications.",
+      "applicability": "硬终点证据",
+      "uncertainty": "硬终点未被分析",
+      "pico": {
+        "population": "冠心病",
+        "intervention": "速效救心丸",
+        "outcome": "心血管死亡"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        {
+          "id": "gap",
+          "forms": [
+            "未分析心血管死亡"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "试验方案纳入324例慢性稳定型心绞痛（气滞血瘀证）患者，疗程24周",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:34281600 / PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome). … Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks.",
+      "applicability": "气滞血瘀型慢性稳定型心绞痛",
+      "uncertainty": "方案层级，已发表结果摘要未核对",
+      "pico": {
+        "population": "慢性稳定型心绞痛（气滞血瘀证）",
+        "intervention": "速效救心丸",
+        "outcome": "疗效与安全性"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "protocol",
+          "forms": [
+            "方案",
+            "试验方案"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "给药方案为每次五粒、每日三次，在常规治疗基础上加用 24 周",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:34281600 / PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks.",
+      "applicability": "气滞血瘀型慢性稳定型心绞痛",
+      "uncertainty": "方案层级",
+      "pico": {
+        "population": "慢性稳定型心绞痛",
+        "intervention": "速效救心丸5粒tid",
+        "outcome": "疗程24周"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "not_applicable"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        {
+          "id": "protocol",
+          "forms": [
+            "方案",
+            "试验方案"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "方案摘要将症状改善率与主要不良心血管事件并列为主要终点",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:34281600 / PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "The primary outcomes are the symptom improvement rate of angina from baseline to 4 weeks after inclusion and major adverse cardiovascular events (MACE).",
+      "applicability": "稳定型心绞痛",
+      "uncertainty": "方案正文将主要终点定义为心血管事件复合终点，与摘要表述不一致",
+      "pico": {
+        "population": "稳定型心绞痛",
+        "intervention": "速效救心丸",
+        "outcome": "症状改善率与MACE"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "trial_enrollment_share",
+      "requiredCaveats": [
+        {
+          "id": "protocol_inconsistency",
+          "forms": [
+            "摘要与正文不一致"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "次要终点包括心绞痛分级（CCS）、中医证候改善、西雅图心绞痛量表评分、急救药物用量与停药率、心电图疗效",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:34281600 / PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "The secondary outcomes are angina classification (CCS), improvement of traditional Chinese medicine (TCM) syndromes, Seattle Angina Scale score, the dosage of emergency drugs and the stopping rate, and electrocardiogram (EKG) efficacy.",
+      "applicability": "稳定型心绞痛",
+      "uncertainty": "方案层级；运动耐量未列为主要或次要终点",
+      "pico": {
+        "population": "稳定型心绞痛",
+        "intervention": "速效救心丸",
+        "outcome": "CCS、TCMSS、SAQ、急救药物用量、心电图"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        {
+          "id": "protocol",
+          "forms": [
+            "方案",
+            "试验方案"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "试验为前瞻性、随机、双盲、安慰剂对照、多中心设计",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:34281600 / PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "This is a prospective, randomized, double-blind, placebo-controlled, and multicenter trial.",
+      "applicability": "稳定型心绞痛",
+      "uncertainty": "方案层级",
+      "pico": {
+        "population": "稳定型心绞痛",
+        "intervention": "速效救心丸",
+        "outcome": "疗效与安全性"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        {
+          "id": "protocol",
+          "forms": [
+            "方案",
+            "试验方案"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "实验室监测包括血尿常规、肝肾功能评估与心电图",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:34281600 / PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "Laboratory measurements will include a routine blood and urine test, hepatorenal assessment, and electrocardiogram",
+      "applicability": "安全性监测设计",
+      "uncertainty": "方案层级；已发表结果是否报告肝肾功能变化未核对",
+      "pico": {
+        "population": "稳定型心绞痛",
+        "intervention": "速效救心丸",
+        "outcome": "肝肾功能监测"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        {
+          "id": "protocol",
+          "forms": [
+            "方案",
+            "试验方案"
+          ]
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-014",
+      "claim": "川芎（川芎嗪）具有抑制血小板聚集的药理作用",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157 / PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Recent evidence has suggested that L. chuanxiong may exert antiplatelet effects by inhibiting the vWF-mediated process of platelet thrombus formation.",
+      "applicability": "机制层面",
+      "uncertainty": "机制推断，非临床出血结局证据",
+      "pico": {
+        "population": "机制",
+        "intervention": "川芎/川芎嗪",
+        "outcome": "血小板聚集"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "different",
+        "outcome": "different"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        {
+          "id": "preclinical",
+          "forms": [
+            "机制",
+            "药理作用"
+          ]
+        }
+      ]
+    }
+  ]
+}

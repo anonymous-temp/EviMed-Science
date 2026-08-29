@@ -1,0 +1,46 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸长期用药（≥3个月）的有效性与安全性证据评价：证据强度分级与适用人群边界",
+  "title": "速效救心丸长期用药（≥3个月）的有效性与安全性证据评价：证据强度分级与适用人群边界",
+  "startedAt": "2026-08-02T08:29:00Z",
+  "completedAt": "2026-08-02T09:00:00Z",
+  "tools": {
+    "evimed_literature_search": true,
+    "evimed_guideline_search": true,
+    "evimed_drug_label_search": true,
+    "evimed_biomedical_source_search": true,
+    "evimed_open_access_full_text": true,
+    "evimed_evidence_deduplicate": true
+  },
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md"
+  ],
+  "failedSources": [
+    "PMID:37487965 (Sun 2023) — no open-access PDF; abstract-only",
+    "PMID:32716206 (Shen 2020) — no open-access PDF; abstract-only",
+    "PMID:18254051 (Duan 2008 Cochrane) — no open-access PDF; abstract-only",
+    "PMID:32744020 (Liu 2020) — no open-access PDF; abstract-only",
+    "PMID:38395177 (Jia 2024 NMA) — no open-access PDF; abstract-only",
+    "PMID:7900539 (Yang 1994) — no open-access PDF; abstract-only",
+    "PMID:35883026 (Li 2022) — no open-access PDF; abstract-only",
+    "PMID:39612995 (Huang 2025) — no open-access PDF; abstract-only",
+    "冰片/龙脑长期毒性文献 — 多次检索（中文/英文）未获得人体安全性研究或系统毒理学评价",
+    "速效救心丸上市后安全性研究 — 多次检索未发现主动监测或PASS研究"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true
+  },
+  "stats": {
+    "totalSearches": 18,
+    "recordsIdentified": 125,
+    "recordsAfterDeduplication": 90,
+    "sourcesIncluded": 11,
+    "distinctPreservedSources": 2
+  },
+  "status": "succeeded"
+}

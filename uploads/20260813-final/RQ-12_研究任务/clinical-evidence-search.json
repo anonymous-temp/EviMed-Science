@@ -1,0 +1,266 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-13T19:26:00Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "Crossref",
+    "EviMed 中文文献索引",
+    "国家药监局说明书索引",
+    "指南共识索引"
+  ],
+  "queries": [
+    {
+      "database": "EviMed 中文文献索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "EviMed 中文文献索引",
+      "query": "麝香保心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina pectoris",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Shexiang Baoxin Wan angina pectoris",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "国家药监局说明书索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "国家药监局说明书索引",
+      "query": "麝香保心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "EviMed 中文文献索引",
+      "query": "速效救心丸 麝香保心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Shexiang Baoxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "EviMed 中文文献索引",
+      "query": "麝香保心丸 网络meta分析 心绞痛",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "指南共识索引",
+      "query": "速效救心丸 麝香保心丸 冠心病 心绞痛 中成药",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed 中文文献索引",
+      "query": "速效救心丸 麝香保心丸 疗效比较 随机",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "Shexiang Baoxin Wan angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "EviMed 中文文献索引",
+      "query": "速效救心丸 麝香保心丸 网络Meta分析",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "Shexiang Baoxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "Jia Leung network meta-analysis angina Chinese herbal drugs 331 randomized controlled trials",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Crossref",
+      "query": "麝香保心丸 速效救心丸 疗效比较",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "shexiang baoxin suxiao jiuxin randomized comparison angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Shexiang Baoxin Pill Suxiao Jiuxin Pill head-to-head",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 252,
+    "recordsAfterDeduplication": 130,
+    "sourcesIncluded": 14
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NMPA2026SuxiaoLabel",
+      "identifier": "速效救心丸说明书（索引件）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "说明书条目（组方、功能主治、禁忌、注意事项、不良反应）"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "NMPA2026ShexiangLabel",
+      "identifier": "麝香保心丸说明书（索引件）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "说明书条目（组方、功能主治、禁忌、注意事项、不良反应）"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Wang1996HeadToHead",
+      "identifier": "上海医药 1996;(12):25-26",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "头对头随机对照试验（速效 vs 麝香）"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Wang2008HeadToHead",
+      "identifier": "医学综述 2008;14(19):3022-3024",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "头对头随机对照试验（速效 vs 麝香）"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Li2012HeadToHead",
+      "identifier": "中国煤炭工业医学杂志 2012",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "头对头随机对照试验（速效 vs 麝香，心脏X综合征）"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Ge2021MUSKARDIA",
+      "identifier": "doi:10.1097/CM9.0000000000001257",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "麝香保心丸稳定型冠心病IV期安慰剂对照试验"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Ren2018SuxiaoMeta",
+      "identifier": "doi:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸冠心病 meta 分析（41 项 RCT）"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Hu2024SuxiaoNitrate",
+      "identifier": "doi:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸硝酸酯不耐受 CCS 安慰剂对照试验"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Wei2022ShexiangMeta",
+      "identifier": "doi:10.3389/fphar.2022.1002713",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "麝香保心丸稳定型冠心病 meta 分析（42 项 RCT）"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Guo2021ShexiangAMI",
+      "identifier": "doi:10.1155/2021/7644648",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "麝香保心丸急性心肌梗死 meta 分析"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Ji2019NMA",
+      "identifier": "PMID:31342723",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "益气活血中成药冠心病心绞痛网络 meta 分析"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "CAIM2019SuxiaoConsensus",
+      "identifier": "速效救心丸治疗冠心病中国专家共识 2019",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "专家共识索引件"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "CAIM2017ShexiangConsensus",
+      "identifier": "麝香保心丸治疗冠心病心绞痛中国专家共识 2017",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "专家共识索引件"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "急性胸痛急救边界"
+    }
+  ]
+}

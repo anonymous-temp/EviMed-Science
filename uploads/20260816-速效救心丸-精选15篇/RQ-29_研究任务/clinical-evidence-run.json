@@ -1,0 +1,58 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "消费级可穿戴设备提示心房颤动后的评估与处置路径：设备诊断准确性、指南推荐、卒中预防决策及速效救心丸在该场景的证据边界",
+  "title": "消费级可穿戴设备提示心房颤动后的评估与处置：诊断准确性、指南路径与速效救心丸的证据边界",
+  "startedAt": "2026-08-14T09:14:30Z",
+  "completedAt": "2026-08-14T10:09:30Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_biomedical_source_search",
+    "evimed_evidence_deduplicate",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_web_search"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC7892205/fulltext.md",
+    ".evimed-sources/PMC9019128/fulltext.md",
+    ".evimed-sources/PMC11737281/fulltext.md",
+    ".evimed-sources/PMC8488290/fulltext.md",
+    ".evimed-sources/PMC12599996/fulltext.md",
+    ".evimed-sources/PMC6760766/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC12572810/fulltext.md",
+    ".evimed-sources/PMC12836068/fulltext.md"
+  ],
+  "failedSources": [
+    "Apple Heart Study (NEJM, PMID 31722151/PMC8112605): full text not open access / upstream unavailable",
+    "NOAH-AFNET 6 main results (NEJM, PMID 37622677): not open access",
+    "ARTESiA main results (NEJM, PMID 37622679): not open access",
+    "McIntyre meta-analysis (Circulation, PMID 37952187): not open access",
+    "2023 ACC/AHA/ACCP/HRS AF guideline (PMID 38033089): not retrievable via gateway",
+    "ESC 2024 AF guideline (PMID 39210723): academic.oup.com 403",
+    "ESC 2020 AF guideline (PMID 32860505): gateway response too large",
+    "Huawei Heart Study (JACC, PMID 31487545): gateway response too large",
+    "ARTESiA CHA2DS2-VASc secondary analysis (PMID 39019530): request timed out",
+    "Time-to-benefit pooled analysis (PMID 38925332): request timed out",
+    "Suxiao Jiuxin Wan official NMPA label: national NMPA page not in allowlisted routes; indexed label used instead"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "status": "succeeded",
+  "stats": {
+    "totalSearches": 15,
+    "recordsIdentified": 106,
+    "recordsAfterDeduplication": 86,
+    "sourcesIncluded": 10,
+    "distinctPreservedSources": 9
+  }
+}

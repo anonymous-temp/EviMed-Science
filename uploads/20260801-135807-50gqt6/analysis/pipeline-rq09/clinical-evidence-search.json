@@ -1,0 +1,324 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-02T08:00:00Z",
+  "databases": [
+    "PubMed",
+    "Crossref",
+    "NMPA drug labels",
+    "Chinese clinical guidelines",
+    "NHS official pages"
+  ],
+  "queries": [
+    {
+      "database": "PubMed/Crossref",
+      "query": "速效救心丸 舌麻 麻木 舌部",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "Suxiao Jiuxin tongue numbness sublingual",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (biomedical)",
+      "query": "borneol TRPM8 TRPA1 tongue numbness",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Chinese clinical guidelines",
+      "query": "速效救心丸 冠心病 心绞痛 舌下含服",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "速效救心丸 冰片 舌下 黏膜 吸收",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "borneol TRPM8 TRPA1 cooling menthol receptor",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "冰片 龙脑 TRPM8 瞬时受体电位 冷觉",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed (biomedical)",
+      "query": "bornyl acetate borneol oral mucosa sensation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (biomedical)",
+      "query": "Suxiao Jiuxin pill borneol",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "borneol TRP channel cold sensation natural",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "natural borneol synthetic borneol TRPM8 agonist",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (biomedical)",
+      "query": "borneol drug absorption enhancer blood brain barrier permeation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "borneol TRPA1 inhibitor sensory neuron",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "sublingual drug sensation absorption correlation efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "速效救心丸 不良反应 荟萃 荟萃分析 安全性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (biomedical)",
+      "query": "borneol TRPM8 cold menthol channel activation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Chinese clinical guidelines",
+      "query": "急性胸痛 急诊 处置 指南 中国 120",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed (biomedical)",
+      "query": "oral transmucosal drug delivery sensation tingling burning",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "nitroglycerin sublingual burning sensation absorption correlation clinical",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "Suxiao Jiuxin pill safety adverse event meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "速效救心丸 说明书 舌 麻 口唇 口舌 刺激",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (biomedical)",
+      "query": "borneol oral mucosal absorption penetration enhancer mechanism",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "舌下含服 局部麻 药物 黏膜透过 吸收指标",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "速效救心丸 meta 分析 系统评价 冠心病",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 79,
+    "recordsAfterDeduplication": 47,
+    "sourcesIncluded": 17
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NMPALabel2024",
+      "identifier": "EVIMED-LABEL:nmpa-0",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "drug safety and labelling"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Chen2016BorneolTRPM8",
+      "identifier": "PMID:27448228",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "pharmacological mechanism"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Sherkheli2015BorneolTRPA1",
+      "identifier": "PMID:26142526",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "pharmacological mechanism"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Li2023SJPVasorelax",
+      "identifier": "PMCID:PMC10206061",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "pharmacodynamics"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Sun2024SJPRCT",
+      "identifier": "PMID:37487965",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "clinical efficacy and safety"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Liao2025SJPMetabolomics",
+      "identifier": "PMCID:PMC12400554",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "drug absorption mechanism"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Liu2020SJPMetaACS",
+      "identifier": "PMID:32744020",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "systematic review of safety"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "CMA2019ChestPain",
+      "identifier": "EVIMED-GUIDE:0",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "clinical guideline"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "official-page:f60ccb4779eccff7",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "patient triage guidance"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Duan2008CochraneSJP",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Cochrane systematic review"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Liu2021BorneolReview",
+      "identifier": "PMID:33892091",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "borneol pharmacology review"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Ren2018SJPMeta",
+      "identifier": "PMID:29770157",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "meta-analysis"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Wang2024SJPMIRI",
+      "identifier": "PMID:38301300",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "pharmacological mechanism"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "AHAACC2021ChestPain",
+      "identifier": "EVIMED-GUIDE:4",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "clinical guideline interpretation"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "CACM2020TCMCHDGuide",
+      "identifier": "EVIMED-GUIDE:9",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "clinical guideline"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "CAIM2019SJPExpertConsensus",
+      "identifier": "EVIMED-GUIDE:0",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "expert consensus on SJP"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "Li2023SJPMIRI2",
+      "identifier": "PMID:36959603",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "pharmacological mechanism"
+    }
+  ]
+}

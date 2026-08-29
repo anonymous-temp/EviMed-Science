@@ -1,0 +1,272 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-13T10:56:54.298812Z",
+  "databases": [
+    "DailyMed",
+    "Europe PMC",
+    "PubMed",
+    "PubMed Central",
+    "dbSNP",
+    "gnomAD",
+    "guideline source"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "sublingual nitroglycerin angina pectoris relief",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina pectoris",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 Glu504Lys polymorphism nitroglycerin efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "relief of chest pain after sublingual nitroglycerin diagnostic coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 rs671 genotype distribution Chinese Han population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay acute myocardial infarction reperfusion mortality",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay symptom onset door-to-balloon time STEMI",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "2023 ESC Guidelines management of acute coronary syndromes",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "guideline source",
+      "query": "acute coronary syndrome nitroglycerin chest pain self medication emergency medical services",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "guideline source",
+      "query": "chest pain emergency medical services nitroglycerin call 911 prehospital",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "Europe PMC",
+      "query": "mitochondrial aldehyde dehydrogenase Glu504Lys nitroglycerin efficacy sublingual",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "PubMed Central",
+      "query": "ALDH2 Glu504Lys nitroglycerin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Chest pain relief by nitroglycerin does not predict active coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "suxiao jiuxin wan angina pectoris Chinese herbal medicine",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "nitroglycerin relief chest pain diagnostic accuracy meta-analysis systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "dbSNP",
+      "query": "rs671",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "gnomAD",
+      "query": "ALDH2",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "PMID:16440063",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC",
+      "query": "PMID:14678917",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC",
+      "query": "PMID:18254051",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "DailyMed",
+      "query": "nitroglycerin sublingual tablet indications contraindications phosphodiesterase",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin response diagnostic test chest pain guideline",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 161,
+    "recordsAfterDeduplication": 118,
+    "sourcesIncluded": 12
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Steele2006CJEM",
+      "identifier": "PMID:17320010",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "diagnostic value of NTG relief"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Henrikson2003AnnInternMed",
+      "identifier": "PMID:14678917",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "diagnostic value of NTG relief"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "public triage / emergency call"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Chowdhury2021PLoSOne",
+      "identifier": "PMID:34818360",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "prehospital delay and outcomes"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Pearson2021Molecules",
+      "identifier": "PMID:34770988",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2 mechanism and population frequency"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Sakata2011BMJOpen",
+      "identifier": "PMID:21540305",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2 genotype and NTG hemodynamics"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Li2006JCI",
+      "identifier": "PMID:16440063",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2 and NTG efficacy"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Duan2008Cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "head-to-head Suxiao vs NTG"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Ren2018ECAM",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin efficacy and head-to-head"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "NMPA_NTG_Label",
+      "identifier": "NMPA 硝酸甘油片说明书",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "approved indication and contraindications"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "NMPA_SJXW_Label",
+      "identifier": "NMPA 速效救心丸说明书",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "approved indication and precautions"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Byrne2023ESC",
+      "identifier": "PMID:37622654",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "current ACS guideline"
+    }
+  ]
+}

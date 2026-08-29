@@ -1,0 +1,349 @@
+{
+  "formatVersion": 1,
+  "runId": "run_70accf23ff9ae3bda24aaa7235bb5ada",
+  "sessionId": "session-bdedf524-28a9-4515-876c-14bfc30fb9ae",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "updatedAt": "2026-08-27T10:23:38.364Z",
+  "plan": {
+    "revision": 1,
+    "items": [
+      {
+        "id": "sxjxw-longterm-evidence-report",
+        "title": "速效救心丸连续用药三个月及以上的有效性与安全性证据评价：证据确定性分级与适用人群边界",
+        "contractKind": "clinical-evidence-report",
+        "capability": "clinical-evidence-synthesis",
+        "dependsOn": [],
+        "status": "accepted",
+        "attempts": 5,
+        "issues": []
+      }
+    ]
+  },
+  "budget": {
+    "steps": 66,
+    "tokens": 460463,
+    "children": 1,
+    "limits": {
+      "maxSteps": 0,
+      "maxTokens": 0,
+      "maxChildren": 30
+    }
+  },
+  "evidence": {
+    "total": 163,
+    "byStatus": {
+      "stale": 160,
+      "ready": 3
+    }
+  },
+  "gateRuns": [
+    {
+      "runId": "run_70accf23ff9ae3bda24aaa7235bb5ada",
+      "attempt": 1,
+      "deliverableId": "sxjxw-longterm-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [
+        {
+          "code": "required_output_missing",
+          "message": "clinical-evidence-matrix.json is missing.",
+          "severity": "required",
+          "path": "clinical-evidence-matrix.json"
+        },
+        {
+          "code": "required_output_missing",
+          "message": "clinical-evidence-search.json is missing.",
+          "severity": "required",
+          "path": "clinical-evidence-search.json"
+        },
+        {
+          "code": "required_output_missing",
+          "message": "citation-ledger.csv is missing.",
+          "severity": "required",
+          "path": "citation-ledger.csv"
+        },
+        {
+          "code": "required_output_missing",
+          "message": "references.bib is missing.",
+          "severity": "required",
+          "path": "references.bib"
+        },
+        {
+          "code": "required_output_missing",
+          "message": "citation-audit.md is missing.",
+          "severity": "required",
+          "path": "citation-audit.md"
+        },
+        {
+          "code": "required_output_missing",
+          "message": "clinical-evidence-run.json is missing.",
+          "severity": "required",
+          "path": "clinical-evidence-run.json"
+        },
+        {
+          "code": "required_output_missing",
+          "message": "question-coverage.json is missing.",
+          "severity": "required",
+          "path": "question-coverage.json"
+        },
+        {
+          "code": "specialist_evidence_traceability_failed",
+          "message": "clinical-evidence-report.md is not in the deliverable, or is empty. Write it at exactly that name inside this deliverable's directory before submitting; the checks below cannot read a file that is not there.",
+          "severity": "required"
+        }
+      ],
+      "metrics": {
+        "citationCoverage": 0,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {}
+      },
+      "ok": false,
+      "at": "2026-08-27T09:52:10.698Z"
+    },
+    {
+      "runId": "run_70accf23ff9ae3bda24aaa7235bb5ada",
+      "attempt": 2,
+      "deliverableId": "sxjxw-longterm-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 7 行写「随机对照试验用 RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 19 行写「非随机干预性研究按 ROBINS-I」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 7 行写「指南共识参考 AGREE II 评估。」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 19 行写「同一问题下按 GRADE 陈述确定性并写明降级理由。药物与不良事件的因果归因拟采用 Naranjo 或 WHO-UMC。检索来源包括 PubMed」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 19 行写「同一问题下按 GRADE 陈述确定性并写明降级理由。药物与不良事件的因果归因拟采用 Naranjo 或 WHO-UMC。检索来源包括 PubMed」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[3].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[4].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[7].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_unsupported",
+          "message": "claims[10].supportQuote could not be checked: no preserved text for \".evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md\" reached this check, so the quote was neither confirmed nor refuted — rewriting it cannot help. Either the source was never written under .evimed-sources, or this run's evidence ledger did not carry it here. Cite a source whose preserved file exists, or preserve this one first.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_unsupported",
+          "message": "claims[11].supportQuote could not be checked: no preserved text for \".evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md\" reached this check, so the quote was neither confirmed nor refuted — rewriting it cannot help. Either the source was never written under .evimed-sources, or this run's evidence ledger did not carry it here. Cite a source whose preserved file exists, or preserve this one first.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_unsupported",
+          "message": "claims[13].supportQuote could not be checked: no preserved text for \".evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md\" reached this check, so the quote was neither confirmed nor refuted — rewriting it cannot help. Either the source was never written under .evimed-sources, or this run's evidence ledger did not carry it here. Cite a source whose preserved file exists, or preserve this one first.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 9 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 31 numeric facts 12 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 35 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 39 numeric facts 4 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 43 numeric facts 4, 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 63 numeric facts 4 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_unsupported",
+          "message": "question-coverage.json 条目 1 把题面第 1 问登记为 answered，但这一问点名的「给药方案」「随访时长」「次要终点」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+          "severity": "required"
+        }
+      ],
+      "metrics": {
+        "citationCoverage": 1,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {
+          "摘要": 11,
+          "引言": 5,
+          "资料与方法": 11,
+          "结果": 49,
+          "讨论": 6,
+          "局限性": 4,
+          "结论": 6,
+          "临床实践要点": 7
+        }
+      },
+      "ok": false,
+      "at": "2026-08-27T10:13:55.128Z"
+    },
+    {
+      "runId": "run_70accf23ff9ae3bda24aaa7235bb5ada",
+      "attempt": 3,
+      "deliverableId": "sxjxw-longterm-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [
+        {
+          "code": "clinical_evidence_notice",
+          "message": "The academic report contains runtime or retrieval-process prose instead of scientific analysis: line 61 reads 按 RoB 2，上述随机双盲安慰剂对照试验在随机化与盲法条目偏倚风险低 [2]；未检索到可用 ROBINS-I 评定的非随机干预性研究；未检索到可获取全文的指南以完成 AGREE II 评定；…. Write what the evidence shows, not how it was obtained — the run's tools, gateways, preserved artifacts (工件), access levels (访问层级), environment (本环境), and retrieval passes (本轮检索) belong in the run receipt. A source you could not obtain is stated as a limitation of the evidence base inside 局限性, in the reader's terms.",
+          "severity": "advisory"
+        }
+      ],
+      "metrics": {
+        "citationCoverage": 1,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {
+          "摘要": 11,
+          "引言": 5,
+          "资料与方法": 11,
+          "结果": 50,
+          "讨论": 6,
+          "局限性": 4,
+          "结论": 6,
+          "临床实践要点": 7
+        }
+      },
+      "ok": true,
+      "at": "2026-08-27T10:18:38.344Z"
+    },
+    {
+      "runId": "run_70accf23ff9ae3bda24aaa7235bb5ada",
+      "attempt": 4,
+      "deliverableId": "sxjxw-longterm-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [],
+      "metrics": {
+        "citationCoverage": 1,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {
+          "摘要": 11,
+          "引言": 5,
+          "资料与方法": 11,
+          "结果": 50,
+          "讨论": 6,
+          "局限性": 4,
+          "结论": 6,
+          "临床实践要点": 7
+        }
+      },
+      "ok": true,
+      "at": "2026-08-27T10:19:03.585Z"
+    },
+    {
+      "runId": "run_70accf23ff9ae3bda24aaa7235bb5ada",
+      "attempt": 5,
+      "deliverableId": "sxjxw-longterm-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [],
+      "metrics": {
+        "citationCoverage": 1,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {
+          "摘要": 11,
+          "引言": 5,
+          "资料与方法": 11,
+          "结果": 50,
+          "讨论": 6,
+          "局限性": 4,
+          "结论": 6,
+          "临床实践要点": 7
+        }
+      },
+      "ok": true,
+      "at": "2026-08-27T10:20:24.169Z"
+    }
+  ],
+  "subagents": [
+    {
+      "deliverableId": "sxjxw-longterm-evidence-report",
+      "capability": "clinical-evidence-synthesis",
+      "skills": [
+        "clinical-evidence-synthesis",
+        "deep-research",
+        "biomedical-database-search",
+        "citation-integrity",
+        "manuscript-humanize"
+      ],
+      "status": "running"
+    }
+  ],
+  "qualityNotices": [
+    "literature_search searched and returned no source",
+    "clinical_trial_search searched and returned no source"
+  ],
+  "degraded": [
+    "capsule recall disabled: no endpoint configured"
+  ]
+}

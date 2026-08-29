@@ -1,0 +1,202 @@
+{
+  "claims": [
+    {
+      "claimType": "direct",
+      "claimId": "CLM-001",
+      "claim": "急诊以胸痛为主诉的就诊者中，58.7% 最终为非心源性诊断（焦虑、惊恐或原因不明胸痛）。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC5550987",
+      "sourceTitle": "The prevalence of non-cardiac chest pain (NCCP) using emergency department (ED) data: a Northern Ireland based study",
+      "artifactPath": ".evimed-sources/PMC5550987/fulltext.md",
+      "identifier": "PMC5550987 PMID:28793910",
+      "accessLevel": "full_text",
+      "supportQuote": "In total, 58.7% of all chest presentations across 3 years resulted in a non-cardiac diagnosis of either ‘anxiety’, ‘panic’ or ‘chest pain of unknown cause’.",
+      "applicability": "单中心、北爱尔兰城市综合医院急诊的行政登记数据，直接涉及急诊胸痛的非心源性占比；对中国职场应激场景为间接证据，登记对心理性病因的编码偏低。",
+      "uncertainty": "单中心、行政编码、未跟踪重复就诊者；按 GRADE 为低确定性。"
+    },
+    {
+      "claimType": "direct",
+      "claimId": "CLM-002",
+      "claim": "急诊胸痛的非心源性诊断构成中，原因不明胸痛 38%、焦虑 1.6%、惊恐 0.6%。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC5550987",
+      "sourceTitle": "The prevalence of non-cardiac chest pain (NCCP) using emergency department (ED) data: a Northern Ireland based study",
+      "artifactPath": ".evimed-sources/PMC5550987/fulltext.md",
+      "identifier": "PMC5550987 PMID:28793910",
+      "accessLevel": "full_text",
+      "supportQuote": "a large proportion of patients presenting at ED with ‘chest pains’ were subsequently given a non-cardiac diagnosis: anxiety (1.6%), panic (0.6%), or NCCP (38%).",
+      "applicability": "急诊队列、按焦虑/惊恐/原因不明三类编码的非心源性细分；与初级保健队列的分类口径不同，不可直接合并。",
+      "uncertainty": "行政编码对焦虑与惊恐的登记偏低（同文献引用的前瞻性评估为 44% 惊恐样焦虑），故 1.6% 与 0.6% 为下限；按 GRADE 为低确定性。"
+    },
+    {
+      "claimType": "direct",
+      "claimId": "CLM-003",
+      "claim": "原因未明的胸痛患者中，惊恐发作是最常见的精神障碍，44% 的患者在就诊前一个月内出现过惊恐发作，且 92% 以上在急诊出院时未被诊断。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC3808760",
+      "sourceTitle": "A prospective cohort study to refine and validate the Panic Screening Score for identifying panic attacks associated with unexplained chest pain in the emergency department",
+      "artifactPath": ".evimed-sources/PMC3808760/fulltext.md",
+      "identifier": "PMC3808760 PMID:24163208",
+      "accessLevel": "full_text",
+      "supportQuote": "As many as 44% of patients with UCP experience panic attacks in the month prior to ED consultation. … more than 92% of cases of PLA remain undiagnosed at the time of discharge from ED.",
+      "applicability": "直接涉及原因未明胸痛人群中的惊恐样焦虑患病率，是判断'情绪诱因常见于非心源性胸痛'的关键证据。",
+      "uncertainty": "该研究为筛查工具验证的研究方案，其 44% 与 92% 引自既往研究；用于病因构成估计按 GRADE 为低确定性。"
+    },
+    {
+      "claimType": "direct",
+      "claimId": "CLM-004",
+      "claim": "冠心病患者在实验室精神应激下诱导出心肌缺血的比例为 32%（95% CI 0.26, 0.38），来自 20 项研究、3164 例冠心病患者。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC7257246",
+      "sourceTitle": "A meta-analysis on the prevalence, associated factors and diagnostic methods of mental stress induced myocardial ischemia",
+      "artifactPath": ".evimed-sources/PMC7257246/fulltext.md",
+      "identifier": "PMC7257246 PMID:32471451",
+      "accessLevel": "full_text",
+      "supportQuote": "20 eligible articles were finally selected … This meta-analysis enrolled 3164 patients with CAD, including 902 patients with MSIMI, and 2262 patients without MSIMI. … the pooled estimate for the prevalence of MSIMI in CAD patients is 32% (95% CI 0.26, 0.38)",
+      "applicability": "直接回答'情绪/精神应激能否诱导心肌缺血'；人群为已确诊冠心病患者，外推至无冠心病的职场人群受人群间接性限制。",
+      "uncertainty": "诊断方法异质性大（心电图检出率 16%、超声心动图 41%）；按 GRADE 为低确定性。"
+    },
+    {
+      "claimType": "direct",
+      "claimId": "CLM-005",
+      "claim": "初级保健中胸痛占全部接诊的 1.26%，最终诊断为肌肉骨骼 33.1%、心理性（含过度换气综合征）17.1%、胃肠道 13.2%、威胁生命的心源性疾病 8.4%。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://doi.org/10.1136/heartjnl-2016-310905",
+      "sourceTitle": "Frequency of chest pain in primary care, diagnostic tests performed and final diagnoses.",
+      "artifactPath": ".evimed-sources/10.1136-heartjnl-2016-310905/fulltext.md",
+      "identifier": "DOI:10.1136/heartjnl-2016-310905",
+      "accessLevel": "full_text",
+      "supportQuote": "In 281 (1.26%), chest pain was a reason for consulting the GP … most final diagnoses were of musculoskeletal origin (33.1% of cases), followed by psychological complaints including hyperventilation syndrome (17.1%) and gastro-intestinal disease (13.2%) … Final diagnoses were considered life-threatening in 22/263 cases where final diagnoses were registered (8.4%).",
+      "applicability": "荷兰与比利时初级保健前瞻登记，直接给出胸痛的初级保健病因构成；与急诊队列口径不同，不可合并。",
+      "uncertainty": "18 例（6.4%）最终诊断缺失，非整年登记；威胁生命者为 8.4%、急性冠脉综合征 6.5%；按 GRADE 为低确定性。"
+    },
+    {
+      "claimType": "direct",
+      "claimId": "CLM-006",
+      "claim": "纳入 270 例急诊胸痛患者的前瞻性队列显示，含服硝酸甘油后胸痛缓解发生于 66% 的患者，其判断心源性病因的敏感度为 72%（64%–80%）、特异度为 37%（34%–41%）、阳性似然比 1.1（0.96–1.34）。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://doi.org/10.1017/s1481803500013671",
+      "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain?",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "DOI:10.1017/s1481803500013671",
+      "accessLevel": "full_text",
+      "supportQuote": "270 patients were enrolled. Nitroglycerin relieved chest pain in 66% of the subjects. The diagnostic sensitivity of nitroglycerin to determine cardiac chest pain was 72% (64%–80%), and the specificity was 37% (34%–41%). The positive likelihood ratio … was 1.1 (0.96–1.34).",
+      "applicability": "以客观心电或缺血检查为参照标准的诊断准确性研究，直接评价'服药后缓解'这一症状线索对病因的鉴别价值；按 QUADAS-2 有选择偏倚风险（排除初始心电图确诊心肌梗死与急诊导管检查者）。",
+      "uncertainty": "参照标准部分依赖检查阴性定义，随访仅 4 周；方向与既往两项研究一致；按 GRADE 为低确定性。"
+    },
+    {
+      "claimType": "direct",
+      "claimId": "CLM-007",
+      "claim": "含服硝酸甘油后胸痛缓解不能作为可靠诊断试验，不能区分心源性与非心源性胸痛。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://doi.org/10.1017/s1481803500013671",
+      "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain?",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "DOI:10.1017/s1481803500013671",
+      "accessLevel": "full_text",
+      "supportQuote": "Relief of chest pain with nitroglycerin is not a reliable diagnostic test and does not distinguish between cardiac and non-cardiac chest pain.",
+      "applicability": "直接支持'症状缓解现象不能作为病因鉴别依据'，构成对速效救心丸同类做法的类比前提。",
+      "uncertainty": "单一研究，但结论方向与 Shry、Henrikson、Diercks 等研究一致。"
+    },
+    {
+      "claimType": "direct",
+      "claimId": "CLM-008",
+      "claim": "纳入 278 例急诊心悸并确诊室上性心动过速的队列显示，女性以焦虑（校正 OR 2.9，95% CI 1.1–8.1）、心悸、恶心为表现者更多，症状常被误释为焦虑或惊恐障碍，应行心电图以排除心律失常。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://doi.org/10.3389/fpsyt.2026.1858764",
+      "sourceTitle": "Recognizing supraventricular tachyarrhythmias in female patients: beyond palpitations to symptoms like anxiety, panic, and nausea.",
+      "artifactPath": ".evimed-sources/10.3389-fpsyt.2026.1858764/fulltext.md",
+      "identifier": "DOI:10.3389/fpsyt.2026.1858764",
+      "accessLevel": "full_text",
+      "supportQuote": "278 were included … anxiety (OR 2.9 (95% CI 1.1 –8.1, p=0.031)) were more frequent in women when presenting in the ED.",
+      "applicability": "直接证据：以心悸为主诉并确诊室上速的人群中，焦虑样表现与真实心律失常并存，支持'先排除心律失常再归因于情绪'的次序。",
+      "uncertainty": "单中心回顾性队列、无随访；人群为已确诊室上速者，故焦虑占比不能外推为一般心悸人群的焦虑占比；按 GRADE 为低确定性。"
+    },
+    {
+      "claimType": "direct",
+      "claimId": "CLM-009",
+      "claim": "应激性心肌病（Takotsubo 综合征）939 例登记病例中情绪诱因占 36.2%，情绪诱因者预后优于躯体诱因者。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC6951081",
+      "sourceTitle": "Short‐ and Long‐Term Prognosis of Patients With Takotsubo Syndrome Based on Different Triggers: Importance of the Physical Nature",
+      "artifactPath": ".evimed-sources/PMC6951081/fulltext.md",
+      "identifier": "PMC6951081 PMID:31830875",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 939 patients were included. An emotional trigger was detected in 340 patients (36.2%), a physical trigger in 293 patients (31.2%), and none could be identified in 306 patients (32.6%).",
+      "applicability": "直接证据：情绪应激可触发以胸痛、心衰为表现的心源性事件（应激性心肌病），反驳'情绪诱因即非心源性'的二分。",
+      "uncertainty": "观察性登记、存在未测混杂；躯体诱因者预后更差（情绪诱因者相对较好）；按 GRADE 为低确定性。"
+    },
+    {
+      "claimType": "direct",
+      "claimId": "CLM-010",
+      "claim": "2021 年 AHA 胸痛评估指南要求对急性和稳定性胸痛均采用结构化风险评估，胸、肩、臂、颈、背、上腹或下颌的疼痛或不适伴气短、乏力均应视为心绞痛等同表现。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://professional.heart.org/en/science-news/2021-guideline-for-the-evaluation-and-diagnosis-of-chest-pain",
+      "sourceTitle": "2021 Guideline for the Evaluation and Diagnosis of Chest Pain - Professional Heart Daily | American Heart Association",
+      "artifactPath": ".evimed-sources/official-pages/d7f13b48a8ccf3c4/page.md",
+      "identifier": "AHA 2021 Chest Pain Guideline",
+      "accessLevel": "official_page",
+      "supportQuote": "Pain, pressure, tightness, or discomfort in the chest, shoulders, arms, neck, back, upper abdomen, or jaw, as well as shortness of breath and fatigue should all be considered anginal equivalents.",
+      "applicability": "官方指南顶层原则，直接支持'情绪表现不能自动排除心绞痛等同表现'与结构化风险评估。",
+      "uncertainty": "该页面为指南要点摘录，分级原文与完整检查次序未在可取得文本中呈现。"
+    },
+    {
+      "claimType": "direct",
+      "claimId": "CLM-011",
+      "claim": "突然出现且不缓解的胸痛或不适，放射至臂、颈、下颌或背，或伴出汗、恶心、头晕、气短，应立即呼叫急救（中国为 120）并即刻就诊。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "NHS Chest pain page",
+      "accessLevel": "official_page",
+      "supportQuote": "Immediate action required: Call 999 if: … you get sudden pain or discomfort in your chest that does not go away … you have chest pain and you feel sweaty, sick, light headed or short of breath",
+      "applicability": "公众胸痛警示特征的官方来源；急救电话按中国辖区由 999 对应为 120，警示特征原样保留。",
+      "uncertainty": "英国公众指引，条目为公共卫生分诊内容而非分级推荐；用于中国场景需保留 120 的本地化。"
+    },
+    {
+      "claimType": "synthesized",
+      "claimId": "CLM-012",
+      "claim": "情绪诱因同时见于心源性与非心源性胸痛：惊恐样焦虑见于 44% 的原因未明胸痛患者，精神应激诱导心肌缺血见于 32% 的冠心病患者，情绪应激触发应激性心肌病占 36.2%；以情绪诱因本身推断非心源性病因缺乏依据。",
+      "confidence": "moderate",
+      "referenceNumber": 4,
+      "referenceNumbers": [3, 4, 8],
+      "applicability": "三项独立证据（患病率研究、meta 分析、登记队列）在'情绪诱因不能划分病因'上汇聚，覆盖非心源性端与心源性端。",
+      "uncertainty": "三项证据各自的确定性均为低，且来自不同人群与测量方式；汇聚方向一致但每条都受自身偏倚限制。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC3808760",
+          "sourceTitle": "A prospective cohort study to refine and validate the Panic Screening Score for identifying panic attacks associated with unexplained chest pain in the emergency department",
+          "artifactPath": ".evimed-sources/PMC3808760/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "As many as 44% of patients with UCP experience panic attacks in the month prior to ED consultation."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC7257246",
+          "sourceTitle": "A meta-analysis on the prevalence, associated factors and diagnostic methods of mental stress induced myocardial ischemia",
+          "artifactPath": ".evimed-sources/PMC7257246/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "the pooled estimate for the prevalence of MSIMI in CAD patients is 32% (95% CI 0.26, 0.38)"
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC6951081",
+          "sourceTitle": "Short‐ and Long‐Term Prognosis of Patients With Takotsubo Syndrome Based on Different Triggers: Importance of the Physical Nature",
+          "artifactPath": ".evimed-sources/PMC6951081/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "An emotional trigger was detected in 340 patients (36.2%), a physical trigger in 293 patients (31.2%), and none could be identified in 306 patients (32.6%)."
+        }
+      ]
+    },
+    {
+      "claimType": "derived",
+      "claimId": "CLM-013",
+      "claim": "以症状缓解作为速效救心丸病因诊断依据不成立：缓解现象本身不承载病因信息，缓解与不缓解都不应改变就医或呼叫急救的决定。",
+      "derivedFrom": ["CLM-006", "CLM-007"],
+      "method": "由 CLM-006 与 CLM-007：硝酸甘油这一确实能缓解心绞痛的药物，其缓解现象判断心源性病因的阳性似然比为 1.1（0.96–1.34），即服药缓解后的验后概率约等于验前概率，缓解现象对病因无鉴别力。速效救心丸未检索到以缓解现象为指标的诊断准确性研究，故其缓解现象同样不能承载病因信息；对任何药物，单凭'服药后缓解'都不足以作为判断病因为心绞痛的依据。",
+      "assumptions": "该推理依赖类比：药物缓解症状与病因之间的关联，在速效救心丸与硝酸甘油之间结构相似（均为'以缓解现象推断心源性病因'这一诊断逻辑）。若本品缓解机制与冠脉缺血的特异关联强于硝酸甘油，则该类比可能低估其诊断价值，但此假设本身无任何研究支持。",
+      "sensitivity": "结论对'缓解现象是否特异于冠脉病因'敏感：硝酸甘油阳性似然比上限 1.34 仍近于 1，即便本品特异性略高，单凭缓解现象仍不足以构成诊断依据；结论稳健性高。",
+      "applicability": "限定于'以服药后缓解作为病因诊断依据'这一用法，不涉及本品在已确诊气滞血瘀型冠心病心绞痛中的疗效证据。",
+      "uncertainty": "为类比推理而非直接测量；本品无诊断准确性研究，方向性结论不能补足其作为诊断试验的缺失。"
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "服用速效救心丸后的头晕与乏力能否归因于药物本身：发生率、因果关系评定与分层处置阈值的证据评价（题库语义问题⑤：服药后非典型反应的归因与应对，涉及P9）",
+  "title": "服用速效救心丸后的头晕与乏力能否归因于药物本身：发生率、因果关系评定与分层处置阈值的证据评价",
+  "startedAt": "2026-08-11T23:35:00Z",
+  "completedAt": "2026-08-11T23:58:00Z",
+  "tools": [
+    "evimed_health",
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_clinical_trial_search",
+    "evimed_drug_label_search",
+    "evimed_guideline_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_web_search",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/10.26599-1671-5411.2024.06.001/fulltext.md",
+    ".evimed-sources/PMC3997901/fulltext.md",
+    ".evimed-sources/PMC10206061/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/10.7759-cureus.59975/fulltext.md",
+    ".evimed-sources/PMC4496786/fulltext.md",
+    ".evimed-sources/PMC9047920/fulltext.md",
+    ".evimed-sources/PMC12422942/fulltext.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "PMID:37487965",
+      "reason": "Sun 2023 J Ethnopharmacol 非开放获取，open_access_full_text 无法取得全文"
+    },
+    {
+      "identifier": "PMID:32744020",
+      "reason": "2020 JTCM ACS 系统评价，Unpaywall 返回 HTTP 404"
+    },
+    {
+      "identifier": "10.1002/14651858.cd004473.pub2",
+      "reason": "Cochrane 全文：cochranelibrary.com HTTP 403；Europe PMC 上游不可用"
+    },
+    {
+      "identifier": "10.1016/j.eujim.2025.102524",
+      "reason": "2025 EUJIM ACS 系统评价非开放获取"
+    },
+    {
+      "identifier": "ChiCTR/ICTRP 注册库检索（registry=2）",
+      "reason": "公共源 HTTP 502 连续两次，适配器熔断；注册信息以论文内载注册号交叉核验"
+    },
+    {
+      "identifier": "速效救心丸治疗冠心病中国专家共识(2019)全文",
+      "reason": "开放网络检索未返回可定位全文；仅指南索引记录"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 25,
+    "recordsIdentified": 193,
+    "recordsAfterDeduplication": 64,
+    "sourcesIncluded": 25,
+    "distinctPreservedSources": 11
+  },
+  "status": "succeeded"
+}

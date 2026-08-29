@@ -1,0 +1,499 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-12T06:55:58Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "Crossref",
+    "guideline source",
+    "dbSNP",
+    "ClinicalTrials.gov"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "sublingual nitroglycerin acute chest pain emergency",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 23
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 rs671 nitroglycerin efficacy variant",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "aldehyde dehydrogenase 2 nitroglycerin biotransformation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin pill acute coronary syndrome myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay myocardial infarction mortality reperfusion time",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "response to nitroglycerin predictor ischemic chest pain emergency department",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 Glu504Lys allele frequency Han Chinese population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan nitroglycerin comparison angina attack",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "Shry nitroglycerin response ischemic chest pain predictor",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "refined geographic distribution ALDH2 504Lys variant",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "guideline source",
+      "query": "acute coronary syndrome chest pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "guideline source",
+      "query": "胸痛 急性冠脉综合征 院前",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "guideline source",
+      "query": "chest pain guideline nitroglycerin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "dbSNP",
+      "query": "rs671",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "ClinicalTrials.gov",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Europe PMC",
+      "query": "ALDH2 Glu504Lys sublingual nitroglycerin efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "response to sublingual nitroglycerin predictor of ischemic chest pain Shry",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "prehospital sublingual nitroglycerin suspected acute coronary syndrome target trial",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "vasodilatory effect nitroglycerin Japanese subjects aldehyde dehydrogenase 2 genotypes",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Chinese herbal medicine suxiao jiuxin wan angina pectoris Cochrane",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "10.1161/CIR.0000000000001029 chest pain guideline",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "usefulness response sublingual nitroglycerin predictor ischemic chest pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "Europe PMC",
+      "query": "delayed first medical contact to reperfusion time mortality rural emergency medical services STEMI",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "Europe PMC",
+      "query": "coronary intervention door-to-balloon time outcomes ST-elevation myocardial infarction meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "Europe PMC",
+      "query": "impact of prehospital delay on mortality patients acute myocardial infarction primary angioplasty intravenous thrombolysis Zahn",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Stopyra delayed first medical contact reperfusion mortality rural STEMI",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "Europe PMC",
+      "query": "calcitonin gene-related peptide nitroglycerin response ALDH2 Glu504Lys polymorphism",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed",
+      "query": "Glyceryl Trinitrate: History, Mystery, and Alcohol Intolerance",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease Meta-Analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Evidence for involvement of calcitonin gene-related peptide in nitroglycerin response ALDH2",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Crossref",
+      "query": "10.3390/molecules26216581 Glyceryl Trinitrate History Mystery Alcohol Intolerance",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Crossref",
+      "query": "10.1016/j.jacc.2008.05.049 calcitonin gene-related peptide nitroglycerin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 258,
+    "recordsAfterDeduplication": 81,
+    "sourcesIncluded": 30
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Steele2006CJEM",
+      "identifier": "PMID:17320010",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "诊断效能（前瞻队列）"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Twiner2022OAEM",
+      "identifier": "PMID:35847764",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "硝酸甘油急诊使用综述"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Gulati2021ChestPainGuideline",
+      "identifier": "PMID:34709879",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "AHA/ACC 胸痛指南"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Shry2002AmJCardiol",
+      "identifier": "PMID:12450614",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "硝酸甘油反应诊断价值（既往研究）"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Collet2020ESCNSTEACS",
+      "identifier": "doi:10.1093/eurheartj/ehaa575",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ESC NSTE-ACS 指南"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Byrne2023ESCACS",
+      "identifier": "doi:10.1093/eurheartj/ehad191",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ESC ACS 指南"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Duan2008Cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "速效救心丸系统评价"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Suxiao2018Meta",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸 Meta 分析"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Lin2021SuxiaoACS",
+      "identifier": "CNKI:TJZY202105018",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "速效救心丸 ACS 系统评价（中文）"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "NMPASuxiaoLabel",
+      "identifier": "NMPA label 速效救心丸",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "药品说明书（监管文本）"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "NMPANTGLabel",
+      "identifier": "NMPA label 硝酸甘油片",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "药品说明书（监管文本）"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Li2006JCI",
+      "identifier": "PMID:16440063",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2 与硝酸甘油疗效（机制-临床）"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Xia2015CMJ",
+      "identifier": "PMID:25591559",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2 与硝酸甘油（中国汉族队列）"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Molecules2021GTN",
+      "identifier": "PMID:34770988",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "硝酸甘油机制综述"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Miura2017CBI",
+      "identifier": "PMID:28342890",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2 与硝酸甘油（日本，阴性）"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Li2009AnnHumGenet",
+      "identifier": "PMID:19456322",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2*504Lys 人群地理分布"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "JACC2008CGRP",
+      "identifier": "PMID:18772068",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "CGRP 与 ALDH2 介导的硝酸甘油反应"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "Zhang2007Zhonghua",
+      "identifier": "PMID:17967228",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ALDH2 基因多态与硝酸甘油疗效（中文）"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "Smida2026Prehosp",
+      "identifier": "PMID:41849739",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "院前舌下硝酸甘油目标试验模拟"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "Alrawashdeh2021OpenHeart",
+      "identifier": "PMID:33963080",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "EMS 延误与 STEMI 结局"
+    },
+    {
+      "referenceNumber": 21,
+      "citationKey": "Dziewierz2025JCDD",
+      "identifier": "PMID:41440853",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "缺血时间与 STEMI 结局综述"
+    },
+    {
+      "referenceNumber": 22,
+      "citationKey": "Zahn2001AHJ",
+      "identifier": "PMID:11431665",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "院前延迟与再灌注策略（注册研究）"
+    },
+    {
+      "referenceNumber": 23,
+      "citationKey": "Mackenzie2005ATVB",
+      "identifier": "PMID:16051882",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2 与硝酸甘油生物活化（人体研究）"
+    },
+    {
+      "referenceNumber": 24,
+      "citationKey": "NHSChestPain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "公众急救指导（官方页面）"
+    },
+    {
+      "referenceNumber": 25,
+      "citationKey": "CSCEM2019ChestPainConsensus",
+      "identifier": "中华急诊医学杂志 2019;28(4)",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "急性胸痛急诊诊疗专家共识（中国）"
+    },
+    {
+      "referenceNumber": 26,
+      "citationKey": "CCEP2015ACSGuideline",
+      "identifier": "中国医师协会急诊医师分会 2015",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "急性冠脉综合征临床实践指南（中国）"
+    },
+    {
+      "referenceNumber": 27,
+      "citationKey": "Liu2010Liaoning",
+      "identifier": "SinoMed 2011330665",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "中国农村心梗救治现状（横断面）"
+    },
+    {
+      "referenceNumber": 28,
+      "citationKey": "NCT05466968",
+      "identifier": "NCT05466968",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "速效救心丸注册试验（AMI）"
+    },
+    {
+      "referenceNumber": 29,
+      "citationKey": "NCT04814121",
+      "identifier": "NCT04814121",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "速效救心丸注册试验（ACS）"
+    },
+    {
+      "referenceNumber": 30,
+      "citationKey": "PrehospitalACS2022ExpertOpinion",
+      "identifier": "急诊专家意见 2022",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ACS 院前治疗专家意见"
+    }
+  ]
+}

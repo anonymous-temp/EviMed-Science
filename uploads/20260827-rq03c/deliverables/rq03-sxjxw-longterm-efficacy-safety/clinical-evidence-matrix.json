@@ -1,0 +1,112 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "持续不缓解的胸痛、或胸痛伴大汗/恶心/头晕/气短可能是心肌梗死，应立即呼叫急救（999）并尽快入院，任何自救用药都不构成延迟呼叫急救的理由。",
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "NHS chest pain page",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if: … you get sudden pain or discomfort in your chest that does not go away … you have chest pain and you feel sweaty, sick, light headed or short of breath … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "适用于所有胸痛患者的一般安全底线，不依赖任何药物的效果。",
+      "uncertainty": "英国NHS公共健康建议，用于支撑「自救不延迟急救」的通用原则。"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "一项多中心随机双盲安慰剂对照试验纳入174例不能耐受长效硝酸酯不良反应的慢性冠脉综合征患者，速效救心丸组4周疗效率优于安慰剂组（OR=2.43，95%CI 1.32–4.47，P=0.004），且应用期间未见显著不良事件。",
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses. … Compared to the placebo group, the SJPs group showed a significant improvement in the efficacy rate after 4 weeks (OR = 2.43, 95% CI = 1.32 to 4.47, P = 0.004). … without significant adverse effects during application.",
+      "applicability": "疗程4周，属短期；其人群为硝酸酯不耐受的慢性冠脉综合征患者。",
+      "uncertainty": "本研究为4周短期试验，不能直接外推至≥3个月连续用药。"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "2024年一篇多中心随机双盲安慰剂对照试验在讨论中引用一项近期随机试验：速效救心丸在24周干预后改善稳定型心绞痛的身体受限、心绞痛稳定性与治疗满意度，但在4周时并不优于安慰剂。",
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "a recent randomized clinical trial demonstrated that SJPs also effectively improved stable angina on physical limitations, angina stability, and treatment satisfaction, after 24 weeks of intervention … the aforementioned trial found that after 4 weeks of intervention, the SJPs did not demonstrate superior anti-angina efficacy compared to the placebo",
+      "applicability": "表明存在一项24周（6个月）疗程的随机试验，达到≥3个月门槛。",
+      "uncertainty": "该24周试验结果引自本文讨论，原文未展开其安全性细节。"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "2018年Meta分析纳入41项随机对照试验、6276例冠心病患者，显示速效救心丸改善心电图与血脂，且报告未观察到不良反应发生；但多数纳入研究Jadad评分低、方法学质量差，未分析心血管死亡或药物相关并发症。",
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. … No incidences of adverse reactions were observed after administration of suxiao jiuxin pill. … Most of the clinical studies included in our meta-analysis were of poor quality based on their Jadad scores.",
+      "applicability": "纳入试验以短期疗程为主，安全性为附带记录。",
+      "uncertainty": "本Meta未报告纳入试验的疗程上限；未分析心血管死亡或药物相关并发症。"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "一项前瞻性、多中心、随机、双盲、安慰剂对照试验方案计划纳入324例慢性稳定型心绞痛（气滞血瘀证）患者，在常规治疗基础上加用速效救心丸或安慰剂，5丸口服、每日3次，共24周。",
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome). … Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks.",
+      "applicability": "该方案的24周疗程达到≥3个月门槛。",
+      "uncertainty": "方案原文为研究设计；其已完成结果以正式发表全文为准。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "川芎（Ligusticum chuanxiong）的现代药理综述将其治疗机制归纳为抗血小板活性、内皮保护、抗炎、抗氧化与抗凋亡，并列出川芎嗪（四甲基吡嗪，TMP）为其代表生物碱。",
+      "sourceUrl": "https://europepmc.org/articles/PMC11996930",
+      "sourceTitle": "Ligusticum chuanxiong: a chemical, pharmacological and clinical review",
+      "artifactPath": ".evimed-sources/PMC11996930/fulltext.md",
+      "identifier": "PMC11996930",
+      "accessLevel": "full_text",
+      "supportQuote": "Key bioactive compounds include senkyunolide A, ligustilide, tetramethylpyrazine (TMP), and ligusticum CX polysaccharides (LCP). … Its therapeutic mechanisms include antiplatelet activity, endothelial cell protection, anti-inflammatory, antioxidant, and anti-apoptotic properties.",
+      "applicability": "属药理学机制层面的抗血小板活性，非速效救心丸复方制剂的临床相互作用证据。",
+      "uncertainty": "机制提示不能替代临床相互作用研究。"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "一项覆盖我国37家三甲医院16856例患者的研究显示，速效救心丸与阿司匹林联合使用的比例高达50.77%；而活血化瘀中药与抗血小板药联合的临床研究大多样本量小、设计不当，以心血管事件为终点的大规模多中心随机对照研究仍待开展。",
+      "sourceUrl": "https://europepmc.org/articles/PMC8566037",
+      "sourceTitle": "Combined Therapy with Traditional Chinese Medicine and Antiplatelet Drugs for Ischemic Heart Disease: Mechanism, Efficacy, and Safety",
+      "artifactPath": ".evimed-sources/PMC8566037/fulltext.md",
+      "identifier": "PMC8566037",
+      "accessLevel": "full_text",
+      "supportQuote": "most clinical studies had problems, such as limited sample size and inappropriate research design … A large-scale, multicenter, randomized controlled study with cardiovascular events as the endpoint is still to be conducted … A study comprising 16,856 patients in 37 first-class tertiary hospitals in China showed that the frequency of combined use of Suxiao Jiuxin Pill and aspirin was as high as 50.77%.",
+      "applicability": "提示临床中速效救心丸与阿司匹林合用常见，但缺乏对应的大型安全性研究。",
+      "uncertainty": "该50.77%来自医院信息系统横断面描述，非不良反应发生率。"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "含左旋龙脑（l-borneol）的挥发油短期外用对肝脏总体安全，但高浓度（100% w/v）可导致轻度肝损伤（肝细胞空泡变等轻微改变），提示冰片类成分高剂量暴露存在轻度肝毒性信号。",
+      "sourceUrl": "https://europepmc.org/articles/PMC6271708",
+      "sourceTitle": "External Application of the Volatile Oil from Blumea balsamifera May Be Safe for Liver — A Study on Its Chemical Composition and Hepatotoxicity",
+      "artifactPath": ".evimed-sources/PMC6271708/fulltext.md",
+      "identifier": "PMC6271708",
+      "accessLevel": "full_text",
+      "supportQuote": "high BB oil doses may lead to mild liver injury … high concentrations (100% w/v) of BB oil can lead to mild liver injury",
+      "applicability": "为经皮外用、动物实验，且为含龙脑挥发油（Blumea balsamifera），非速效救心丸口服复方；仅作信号提示。",
+      "uncertainty": "外用、动物、非速效救心丸本身，不可外推至速效救心丸长期口服的肝毒性。"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "速效救心丸由川芎（Chuanxiong Rhizoma）与冰片（Borneolum syntheticum，合成龙脑）组成，1982年经原中国国家药品监管部门批准上市。",
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "approved by China Food and Drug Administration (CFDA) in 1982 … The pill is composed of Ligusticum striatum DC. … Chuanxiong Rhizoma … Borneolum syntheticum",
+      "applicability": "药物组成与上市年份的出处。",
+      "uncertainty": "以2024年文献表述为准，非监管原始批件。"
+    }
+  ]
+}

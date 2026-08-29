@@ -1,0 +1,341 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-13T18:30:00Z",
+  "databases": [
+    "PubMed",
+    "EviMed Chinese literature",
+    "EviMed literature",
+    "Europe PMC",
+    "PubMed Central",
+    "ClinicalTrials.gov",
+    "Guideline index",
+    "NMPA label index"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "tetramethylpyrazine ligustrazine vasodilation blood pressure",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "ligustrazine antihypertensive effect mechanism",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan blood pressure hypotension",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina clinical trial",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "EviMed Chinese literature",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "EviMed Chinese literature",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol vasodilation blood pressure cardiovascular",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "ClinicalTrials.gov",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Guideline index",
+      "query": "chest pain evaluation diagnosis guideline acute coronary syndrome",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Guideline index",
+      "query": "急性胸痛急诊诊疗专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Guideline index",
+      "query": "中国高血压防治指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "EviMed literature",
+      "query": "2021 AHA ACC Guideline Evaluation Diagnosis Chest Pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "2021 AHA ACC ASE CHEST SAEM SCCT SCMR Guideline Evaluation Diagnosis Chest Pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Coronary systemic hemodynamic effects tetramethylpyrazine dog",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed Central",
+      "query": "Suxiao Jiuxin Pill pharmacology review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "NMPA label index",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay acute myocardial infarction self-medication chest pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "hypertensive emergency acute coronary syndrome differential diagnosis blood pressure",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease meta-analysis randomized controlled trials 9745804",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "comparative effects oral Chinese patent medicines western medicine stable angina network meta-analysis 179 trials",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "comparative effects of oral Chinese patent medicines combined with western medicine in stable angina network meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "8923809",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC",
+      "query": "12944204",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC",
+      "query": "17452019",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "18254051",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 160,
+    "recordsAfterDeduplication": 50,
+    "sourcesIncluded": 17
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "nmpa_sxjxw_label",
+      "identifier": "NMPA 说明书索引件（国药准字 Z12020025）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "说明书与监管文本"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "bai2014suxiao",
+      "identifier": "PMID:24808920 / PMC3997901",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "离体人血管舒张证据"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "dai1985coronary",
+      "identifier": "PMID:2413290",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "整体动物降压证据"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "pang1996tetramethylpyrazine",
+      "identifier": "PMID:8923809",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "川芎嗪钙拮抗剂定性"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "liu2020ligustrazine",
+      "identifier": "PMID:33355495 / PMC7759250",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ARB 药动学相互作用"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "zhang2024salvia",
+      "identifier": "PMID:38394516 / PMC11309681",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ACEI/ARB 联用间接证据"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "ruan2021suxiao",
+      "identifier": "DOI:10.1186/s13063-021-05448-6 / PMC8287819",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "多中心 RCT 方案"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "ren2018suxiao",
+      "identifier": "PMID:29770157 / PMC5892298",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "41 项 RCT meta 分析"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "huang2022comparative",
+      "identifier": "PMID:36059992 / PMC9428755",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "179 项试验网络 meta 分析"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "duan2008suxiao",
+      "identifier": "PMID:18254051 / CD004473",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Cochrane 系统评价"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "nhs2023chestpain",
+      "identifier": "nhs.uk/symptoms/chest-pain",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "院外胸痛即时求助指征"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "gulati2021chestpain",
+      "identifier": "PMID:34709879",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "胸痛评估与诊断指南"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "chin2019acutchestpain",
+      "identifier": "急性胸痛急诊诊疗专家共识 2019",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "中国急性胸痛共识"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "chin2024hypertension",
+      "identifier": "PMID:40151633",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "中国高血压防治指南 2024"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "clinicaltrials_sxjxw",
+      "identifier": "NCT06531161; NCT05466968; NCT04814121",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "临床试验注册记录"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "rasmussen2003delay",
+      "identifier": "PMID:12944204",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "院前就医延迟观察证据"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "lovlien2007prehospital",
+      "identifier": "PMID:17452019",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "院前就医延迟观察证据"
+    }
+  ]
+}

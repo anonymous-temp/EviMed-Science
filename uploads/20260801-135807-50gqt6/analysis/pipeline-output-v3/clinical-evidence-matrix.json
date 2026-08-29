@@ -1,0 +1,154 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "胸痛对硝酸甘油的缓解反应不具有区分心源性与非心源性胸痛的诊断准确性。系统评价汇总灵敏度为0.52、特异度为0.49、诊断比值比为1.2（95% CI 0.97–1.5），与1无显著差异。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/21511974/",
+      "sourceTitle": "Diagnostic accuracy of nitroglycerine as a 'test of treatment' for cardiac chest pain: a systematic review.",
+      "artifactPath": "N/A (abstract-only, PubMed record PMID:21511974)",
+      "identifier": "PMID:21511974",
+      "accessLevel": "abstract",
+      "supportQuote": "The combined sensitivity was 0.52 (95% CI 0.48 to 0.56) and combined specificity was 0.49 (95% CI 0.46 to 0.52). The diagnostic OR from the combined studies was 1.2 (95% CI 0.97 to 1.5), which is not significantly different from 1. In the acute setting, nitroglycerine is not a reliable test of treatment for use in the diagnosis of coronary artery disease.",
+      "applicability": "direct",
+      "uncertainty": "系统评价纳入5项研究，设计异质性存在，且全文未能通过开放获取通道审读。但汇总效应稳健且与其他独立研究结论一致。"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "前瞻性研究中664例急诊胸痛患者的疼痛评分变化在任何亚组均不能区分心源性与非心源性胸痛。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/15940087/",
+      "sourceTitle": "Changes in the numeric descriptive scale for pain after sublingual nitroglycerin do not predict cardiac etiology of chest pain.",
+      "artifactPath": "N/A (abstract-only, PubMed record PMID:15940087)",
+      "identifier": "PMID:15940087",
+      "accessLevel": "abstract",
+      "supportQuote": "There was no significant difference in any subgroup of numeric descriptive scale response to sublingual nitroglycerin administration in patients with and without a diagnosis of cardiac chest pain.",
+      "applicability": "direct",
+      "uncertainty": "便利样本可能存在选择偏倚，但该设计缺陷不足以否定方向性明确的结论。全文未能通过开放获取通道审读。"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "北方洛阳心绞痛患者ALDH2 A等位基因频率为14.75%，东部嘉兴为22.01%，南方桂林为21.91%，呈现北低南高梯度。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC12447523",
+      "sourceTitle": "Geographical distribution of ALDH2 rs671 polymorphism in Chinese angina pectoris patients.",
+      "artifactPath": ".evimed-sources/PMC12447523/fulltext.md",
+      "identifier": "PMCID:PMC12447523",
+      "accessLevel": "full_text",
+      "supportQuote": "In northern China (Luoyang), the G and A allele frequencies were 85.25% and 14.75%, respectively... In eastern China (Jiaxing), the G and A allele frequencies were 77.99% and 22.01%, respectively... In southern China (Guilin), the G and A allele frequencies were 78.09% and 21.91%, respectively.",
+      "applicability": "direct",
+      "uncertainty": "限于三家医院1,084例患者，不能完全代表全国所有地区和族群。各地区间GG/GA/AA分布差异有统计学意义。"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "ALDH2*2变异使硝酸甘油血管扩张效应显著延迟。纯合突变(*2/*2)达最大扩张时间(Tmax)299.7秒 vs 野生型(*1/*1)254.7秒(p=0.019)。达90%最大扩张时间(T0.9)在*1/*2和*2/*2携带者均显著延长。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC3191425",
+      "sourceTitle": "Differential effects of organic nitrates on arterial diameter among healthy Japanese participants with different mitochondrial aldehyde dehydrogenase 2 genotypes: randomised crossover trial.",
+      "artifactPath": ".evimed-sources/PMC3191425/fulltext.md",
+      "identifier": "PMCID:PMC3191425",
+      "accessLevel": "full_text",
+      "supportQuote": "the GTN Tmax was significantly longer in the *2/*2 genotype group than in the *1/*1 group (crude data, p=0.0190; adjusted data, p=0.0234)... GTN T0.9 was significantly longer in participants with *2/*2 (crude, p<0.0001; adjusted, p=0.0002) and *1/*2 (crude, p=0.0068; adjusted, p=0.0157) genotypes than those with *1/*1.",
+      "applicability": "indirect",
+      "uncertainty": "在健康日本志愿者中进行，非心绞痛患者。但肱动脉直径的超声测量是客观指标，且使用了随机交叉设计。"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "速效救心丸对稳定型心绞痛辅助治疗有效(OR 2.43, 95% CI 1.32-4.47)，在硝酸酯不耐受的CCS患者中4周短期治疗主要结局指标显著改善。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study.",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMCID:PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "Specifically, 60.9% of patients treated with SJPs achieved a 20-point or greater improvement in SAQ-SS, while only 39.1% (OR = 2.43, 95% confidence interval [CI] = 1.32 to 4.47, P = 0.004) of patients in the placebo group achieved the same level of improvement.",
+      "applicability": "indirect",
+      "uncertainty": "该RCT的证据对象为已确诊CCS且对长效硝酸酯不耐受的患者，为期4周的持续治疗，非院外单次含服的应急使用。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "速效救心丸Cochrane系统评价(15项试验，1776例)指出现有证据方法学质量薄弱。该检索截止于2005年。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/18254051/",
+      "sourceTitle": "Chinese herbal medicine suxiao jiuxin wan for angina pectoris.",
+      "artifactPath": "N/A (abstract-only, Cochrane review PMID:18254051)",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "supportQuote": "Suxiao jiuxin wan appears to be effective in the treatment of angina pectoris and no serious side effects were identified. However, the evidence remains weak due to poor methodological quality of including studies.",
+      "applicability": "indirect",
+      "uncertainty": "纳入试验的方法学质量差，结论需谨慎解读。检索截止于2005年11月距今已逾20年。"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "未检索到速效救心丸用于院外未确诊急性胸痛自救的随机对照试验、队列研究或指南推荐。",
+      "claimType": "synthesized",
+      "referenceNumber": 7,
+      "referenceNumbers": [7, 8, 9, 10],
+      "confidence": "high",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/18254051/",
+          "sourceTitle": "Chinese herbal medicine suxiao jiuxin wan for angina pectoris.",
+          "artifactPath": "N/A (abstract-only, Cochrane review PMID:18254051)",
+          "accessLevel": "abstract",
+          "supportQuote": "Randomised controlled trials of suxiao jiuxin wan compared to standard treatment in people with angina. Studies with a treatment duration > 4 weeks were included."
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/37487965/",
+          "sourceTitle": "Evaluation of the efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina.",
+          "artifactPath": "N/A (abstract-only, PubMed record PMID:37487965)",
+          "accessLevel": "abstract",
+          "supportQuote": "Participants with SA were recruited and randomized 1:1 to either the SJP group or the control group for 24 weeks."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates.",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "A total of 176 patients from 8 clinical study centers in China were included in this study. Patients aged 30 to 70 years with a diagnosis of chronic coronary syndrome were enrolled who were intolerant to side effects of long-acting nitrates."
+        }
+      ],
+      "applicability": "direct",
+      "uncertainty": "所有已检索到的速效救心丸RCT均为已确诊冠心病患者的辅助持续治疗，无院外单次含服用于未确诊急性胸痛的证据。此为检索范围的'未检索到'，不等于该领域完全不存在证据，但当前检索策略合理且覆盖了主要数据库。"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "ALDH2*2等位基因在30%-50%的亚洲人中存在，杂合子酶活性仅为野生型的约10%。应尤其在亚洲人中使用硝酸甘油时考虑此遗传因素。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/16440063/",
+      "sourceTitle": "Mitochondrial aldehyde dehydrogenase-2 (ALDH2) Glu504Lys polymorphism contributes to the variation in efficacy of sublingual nitroglycerin.",
+      "artifactPath": "N/A (abstract-only, PubMed record PMID:16440063)",
+      "identifier": "PMID:16440063",
+      "accessLevel": "abstract",
+      "supportQuote": "we recommend that this genetic factor be considered when administering nitroglycerin to patients, especially Asians, 30-50% of whom possess the inactive ALDH2*2 mutant allele.",
+      "applicability": "direct",
+      "uncertainty": "该文献未通过开放获取通道获取全文。但数据发表于高影响力期刊(J Clin Invest, IF 13.6)，且被后续多项研究独立验证。"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "硝酸异山梨酯(ISDN)的血管扩张时间在各ALDH2基因型间无差异，提示其代谢不依赖ALDH2。ISDN可能是*2/*2纯合突变携带者的替代选择。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC3191425",
+      "sourceTitle": "Differential effects of organic nitrates on arterial diameter among healthy Japanese participants with different mitochondrial aldehyde dehydrogenase 2 genotypes: randomised crossover trial.",
+      "artifactPath": ".evimed-sources/PMC3191425/fulltext.md",
+      "identifier": "PMCID:PMC3191425",
+      "accessLevel": "full_text",
+      "supportQuote": "In contrast, the time-course of ISDN-induced vasodilation did not differ among genotypes... ISDN may be a better choice for *2/*2 patients, because it dilated the artery as fast as GTN.",
+      "applicability": "indirect",
+      "uncertainty": "在健康志愿者中进行，临床意义需在心绞痛患者中验证。该建议来自研究作者讨论部分，非监管批准适应症。"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "中国2019年急性胸痛急诊诊疗专家共识强调\"早期诊断，危险分层，正确分流，科学救治\"的核心方针和\"战线前移\"理念。",
+      "referenceNumber": 12,
+      "sourceUrl": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide",
+      "sourceTitle": "急性胸痛急诊诊疗专家共识",
+      "artifactPath": "N/A (structured guideline record, EviMed guideline adapter)",
+      "identifier": "EVIMED-GUIDE:急性胸痛急诊诊疗专家共识-2019",
+      "accessLevel": "structured_record",
+      "supportQuote": "按照急性胸痛救治流程\"早期诊断，危险分层，正确分流，科学救治\"的指导方针...本共识强调\"战线前移\"，着眼整合区域救治网络，突出社区医疗、院前急救到急诊科、专科治疗的体系建设。",
+      "applicability": "direct",
+      "uncertainty": "为结构化指南记录而非全文，具体推荐级别未能独立验证。但该共识是中国急诊胸痛管理领域公认的权威文件。"
+    }
+  ]
+}

@@ -1,0 +1,228 @@
+{
+  "schemaVersion": 1,
+  "title": "舌下含服速效救心丸引起舌部麻木感：药理机制、临床意义及其作为药效指标的证据评价",
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "龙脑（borneol）以温度依赖、浓度依赖方式激活冷觉通道 TRPM8，效力弱于薄荷醇；TRPM8 是外周感觉神经元的冷感受器。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC4957794",
+      "sourceTitle": "Borneol Is a TRPM8 Agonist that Increases Ocular Surface Wetness",
+      "artifactPath": ".evimed-sources/PMC4957794/fulltext.md",
+      "identifier": "doi:10.1371/journal.pone.0158868; PMID:27448228",
+      "accessLevel": "full_text",
+      "supportQuote": "Ca 2+ measurement and electrophysiological recordings revealed that borneol activated TRPM8 channel in a temperature- and dose-dependent manner, which was similar to but less effective than the action of menthol, an established TRPM8 agonist.",
+      "applicability": "细胞电生理与豚鼠实验（机制证据），支持舌部清凉/凉麻感的通道机制解释",
+      "uncertainty": "细胞与动物实验，未直接测量人体舌部感觉；龙脑效力低于薄荷醇，EC50 未计算"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "TRPM8 除冷温度外还可被薄荷醇、icilin 等产生清凉感的化合物激活，激活导致神经元去极化并触发动作电位。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC4957794",
+      "sourceTitle": "Borneol Is a TRPM8 Agonist that Increases Ocular Surface Wetness",
+      "artifactPath": ".evimed-sources/PMC4957794/fulltext.md",
+      "identifier": "doi:10.1371/journal.pone.0158868; PMID:27448228",
+      "accessLevel": "full_text",
+      "supportQuote": "In addition to cold temperatures, TRPM8 can also be activated by cool sensation-producing compounds such as menthol and icilin",
+      "applicability": "通道药理学（机制证据），说明 TRPM8 激动与“清凉感”感受的直接关联",
+      "uncertainty": "一般通道药理学知识；具体到人舌部触觉-温度觉整合需进一步直接证据"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "龙脑以浓度依赖方式抑制人 TRPA1 通道，半数抑制浓度 IC50 = 0.20 ± 0.06 mmol/L，效力高于樟脑（1.26 mmol/L）与 1,8-桉叶油素（3.43 mmol/L），且不激活人 TRPA1。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC3889502",
+      "sourceTitle": "Inhibitory effects of monoterpenes on human TRPA1 and the structural basis of their activity",
+      "artifactPath": ".evimed-sources/PMC3889502/fulltext.md",
+      "identifier": "doi:10.1007/s12576-013-0289-0; PMID:24122170",
+      "accessLevel": "full_text",
+      "supportQuote": "the hTRPA1 current induced by AITC (20 μM) was inhibited by borneol, 2-methylisoborneol, and fenchyl alcohol in a dose-dependent manner, with half-maximal inhibitory concentrations (IC 50 ) of 0.20 ± 0.06, 0.12 ± 0.03, and 0.32 ± 0.06 mM, respectively, which are much lower than the IC 50 of 1,8-cineole (3.43 ± 0.58 mM) and camphor (1.26 ± 0.32 mM)",
+      "applicability": "人源通道细胞实验（机制证据），支持龙脑减弱刺激性/伤害性化学感受的解释",
+      "uncertainty": "体外人 TRPA1 过表达体系；龙脑对小鼠 TRPA1 的双相作用（低浓度激活/高浓度阻断）在人体通道上的意义未在此研究范围"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "(+)-龙脑与(−)-龙脑以浓度依赖方式抑制蛙坐骨神经复合动作电位（IC50 分别约 1.5 与 2.3 mmol/L），且该作用不依赖 TRP 通道，提示龙脑具有类局麻药样的神经传导阻断作用。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC4448976",
+      "sourceTitle": "Inhibition of the compound action potentials of frog sciatic nerves by aroma oil compounds having various chemical structures",
+      "artifactPath": ".evimed-sources/PMC4448976/fulltext.md",
+      "identifier": "doi:10.1002/prp2.127; PMID:26038703",
+      "accessLevel": "full_text",
+      "supportQuote": "alcohol (citronellol, geraniol, (±)-linalool, (−)-linalool, (+)-borneol, (−)-borneol, α -terpineol), ester (geranyl acetate, linalyl acetate, bornyl acetate), and oxide (rose oxide) compounds also reduced CAP peak amplitudes (IC 50 : 0.50, 0.35, 0.53, 1.7, 2.0, 1.5, 2.3, 2.7, 0.51, 0.71, 0.44, and 2.6 mmol/L, respectively)",
+      "applicability": "蛙坐骨神经体外实验（机制证据），支持舌部麻木（感觉减退）的类局麻机制",
+      "uncertainty": "蛙神经与人体舌部感觉神经的物种差异；需达到 1.5–2.3 mmol/L 级局部浓度方显著（见 CLM-014 推导的敏感性分析）"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "速效救心丸由川芎（Ligusticum striatum DC.）与冰片（Borneolum syntheticum，合成龙脑）组成；按《中国药典》，每粒须含冰片（以龙脑计）2.9 mg 至 4.4 mg。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "doi:10.1186/s12906-024-04661-5; PMID:39367481",
+      "accessLevel": "full_text",
+      "supportQuote": "According to the Chinese Pharmacopoeia, each pill of SJPs is required to contain a minimum of 15.0 μg of Ligusticum chuanxiong, expressed in terms of ferulic acid (C 10 H 10 O 4 ), and 2.9 to 4.4 mg of Borneolum syntheticum, expressed in terms of Borneol (C 10 H 18 O).",
+      "applicability": "药品组成与质量标准（对速效救心丸直接适用）",
+      "uncertainty": "药典含量要求为限度范围；实际批间含量可能波动；该 RCT 为中国人群制剂"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "多中心随机双盲安慰剂对照试验（174 例慢性冠脉综合征患者，舌下含服、每次 5 粒、每日三次、持续 4 周）每周电话随访主动询问不良事件，未报告任何不良事件（含舌部感觉异常）。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "doi:10.1186/s12906-024-04661-5; PMID:39367481",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses. … During the 4-week treatment period, all participants were instructed to orally administer the study medication sublingually after meals, three times a day, taking 5 capsules each time (total of 15 capsules per day), continuously for 4 weeks. … Participants in this study were asked about any adverse events during the weekly telephone surveys. No participants reported experiencing adverse effects.",
+      "applicability": "对速效救心丸舌下给药人群直接适用（中国人群）",
+      "uncertainty": "不良事件依赖主动询问与患者报告；未报告不等于不发生；4 周短期随访、样本量有限"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "该试验以西雅图心绞痛问卷（SAQ）汇总评分变化定义疗效，4 周有效率相比安慰剂显著改善（OR = 2.43，95% CI 1.32 to 4.47，P = 0.004）；疗效终点为心绞痛相关临床终点，未使用含服感觉作为指标。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "doi:10.1186/s12906-024-04661-5; PMID:39367481",
+      "accessLevel": "full_text",
+      "supportQuote": "Compared to the placebo group, the SJPs group showed a significant improvement in the efficacy rate after 4 weeks (OR = 2.43, 95% CI = 1.32 to 4.47, P = 0.004).",
+      "applicability": "慢性冠脉综合征且不耐受长效硝酸酯不良事件的患者（中国人群）",
+      "uncertainty": "短期（4 周）疗效；该人群为硝酸酯不耐受者，向一般心绞痛人群外推需谨慎；试验方案禁行血运重建"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "2018 年系统评价/Meta 分析（41 项 RCT、6276 例冠心病患者）中 14 项研究报告了不良反应，最常见为轻度头痛、头晕、面部潮红，多自行缓解；试验组与对照组不良反应率无显著差异（RR 1.12，95% CI 0.50 to 2.51，P = 0.785），未报告舌麻等局部感觉症状。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "doi:10.1155/2018/9745804; PMID:29770157",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. … Fourteen studies reported the incidence of adverse reactions. The most common symptoms were mild headache, dizziness, and facial flushing. Most of these symptoms resolved spontaneously. There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)",
+      "applicability": "冠心病心绞痛人群（中国为主）",
+      "uncertainty": "纳入研究质量参差；不良反应收集方式不一，漏报可能；检索截至 2016 年 6 月；未报告不等于不发生。原文以英文拼写 Forty-one 与 Fourteen 分别表述 41 项与 14 项，与同句数字形式 6276 同源，未另以数字形式出现"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "现行胸痛相关指南建议不将硝酸甘油含服后胸痛缓解作为诊断因素（其他病因如食管痉挛亦可被硝酸甘油缓解），即含服反应不作为诊断依据。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC9278720",
+      "sourceTitle": "Nitroglycerin Use in the Emergency Department: Current Perspectives",
+      "artifactPath": ".evimed-sources/PMC9278720/fulltext.md",
+      "identifier": "doi:10.2147/OAEM.S340513; PMID:35847764",
+      "accessLevel": "full_text",
+      "supportQuote": "Although recent chest pain guidelines suggest that the relief of chest pain by NTG should not be used as a diagnostic factor (as other etiologies of chest pain such as esophageal spasm may be relieved by NTG)",
+      "applicability": "胸痛鉴别与含服反应诊断价值的指南立场（对含服反应的一般性适用）",
+      "uncertainty": "该句系对指南立场的转述；未提供原始指南引文全文工件；同样立场适用于任何含服反应（含舌麻）"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "药物相关口舌麻木可为严重超敏反应的组成症状：个案中哌拉西林/他唑巴坦静脉给药约 4 分钟后出现口舌麻木、呼吸困难与瘙痒，被判定为 I 型超敏反应并按过敏反应紧急处理。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://europepmc.org/articles/PMC13102034",
+      "sourceTitle": "Severe numbness of the mouth and tongue induced by piperacillin/tazobactam: a rare case report",
+      "artifactPath": ".evimed-sources/PMC13102034/fulltext.md",
+      "identifier": "doi:10.1080/20565623.2026.2653792; PMID:42012452",
+      "accessLevel": "full_text",
+      "supportQuote": "A 58-year-old man with bacterial pneumonia developed oral and tongue numbness, dyspnea, and pruritus approximately 4 minutes after intravenous infusion of piperacillin/tazobactam. … The reaction was clinically suggestive of a type I hypersensitivity.",
+      "applicability": "不良反应分类学类比（不同药物）；支持“口舌麻木伴呼吸系统/皮肤征象时应按过敏处理”",
+      "uncertainty": "单例个案；药物与给药途径不同（静脉 vs 舌下）；不能据此外推速效救心丸的过敏发生率"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "突发胸部疼痛或不适且不缓解时须立即呼叫急救服务；这可能是心肌梗死，需要立即住院治疗（NHS 源文为 Call 999，中国为 120）。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "NHS official page (reviewed 2023-08-08)",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if: … you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "患者可及的急救触发条件（英国 NHS 官方指南；中国辖区拨 120）",
+      "uncertainty": "紧急电话号码按辖区本地化（中国 120）；该页面向公众，非临床路径文件"
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "疑似急性冠脉综合征患者应接受基于证据的临床决策路径（CDP）指导，该路径纳入测定法特异的高敏肌钙蛋白结果，将患者划分为高危、中危或低危。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://europepmc.org/articles/PMC12907536",
+      "sourceTitle": "National Heart Foundation of Australia and Cardiac Society of Australia and New Zealand: Australian Clinical Guideline for Diagnosing and Managing Acute Coronary Syndromes 2025",
+      "artifactPath": ".evimed-sources/PMC12907536/fulltext.md",
+      "identifier": "doi:10.5694/mja2.70127; PMID:41693087",
+      "accessLevel": "full_text",
+      "supportQuote": "People with suspected ACS should receive care guided by an evidence‐based CDP that includes assay‐specific troponin results to categorise people as high, intermediate or low risk",
+      "applicability": "急性冠脉综合征诊断路径（澳大利亚 2025 指南）；说明急性胸痛评估依赖结构化流程而非症状/药物反应",
+      "uncertainty": "该指南为澳大利亚辖区；与本报告引用的英国 NHS 页面互补"
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "三条独立机制证据线一致支持：龙脑在舌下含服可达到的局部浓度下可引起清凉/麻木样感觉，故舌部麻木在机制上可解释。",
+      "claimType": "synthesized",
+      "confidence": "moderate",
+      "referenceNumber": 1,
+      "referenceNumbers": [1, 2, 3],
+      "applicability": "机制解释层级（非临床证据）；对速效救心丸舌下含服直接适用",
+      "uncertainty": "三线证据均为细胞/动物水平；人体舌部直接感觉测量缺失；机制可解释不等于已证实人体发生",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC4957794",
+          "sourceTitle": "Borneol Is a TRPM8 Agonist that Increases Ocular Surface Wetness",
+          "artifactPath": ".evimed-sources/PMC4957794/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "borneol activated TRPM8 channel in a temperature- and dose-dependent manner, which was similar to but less effective than the action of menthol, an established TRPM8 agonist."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC3889502",
+          "sourceTitle": "Inhibitory effects of monoterpenes on human TRPA1 and the structural basis of their activity",
+          "artifactPath": ".evimed-sources/PMC3889502/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Borneol, 2-methylisoborneol, and fenchyl alcohol exhibited higher inhibitory effects on hTRPA1 activity than either camphor or 1,8-cineole."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC4448976",
+          "sourceTitle": "Inhibition of the compound action potentials of frog sciatic nerves by aroma oil compounds having various chemical structures",
+          "artifactPath": ".evimed-sources/PMC4448976/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "It is suggested that aroma oil compounds inhibit nerve conduction in a manner specific to their chemical structures without TRP activation."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-014",
+      "claim": "舌下含服速效救心丸时，冰片（龙脑）在舌下局部的估算浓度约 47–140 mmol/L，超过其激活 TRPM8（10 μmol/L–2 mmol/L）、抑制 TRPA1（IC50≈0.20 mmol/L）及阻断神经传导（IC50≈1.5–2.3 mmol/L）的有效浓度约 1–3 个数量级，故舌麻是龙脑局部药理效应的机制上可预期结果。",
+      "claimType": "derived",
+      "derivedFrom": ["CLM-001", "CLM-003", "CLM-004", "CLM-005", "CLM-006"],
+      "method": "单次含服 5 粒（CLM-006 引用的试验方案：每次 5 粒舌下含服），每粒冰片 2.9 mg 至 4.4 mg（CLM-005，中国药典限度），得单次冰片量 14.5–22 mg；按龙脑摩尔质量 154.25 g/mol 换算：22 mg 溶于 1 mL 唾液得 22/154.25 ≈ 0.1426 mmol/mL ≈ 0.14 mol/L（≈140 mmol/L）；14.5 mg 溶于 2 mL 得 7.25/154.25 ≈ 0.0470 mmol/mL ≈ 47 mmol/L（≈7.3 mg/mL）。与有效浓度比较：TRPM8 激活范围 10 μmol/L–2 mmol/L（CLM-001）、TRPA1 抑制 IC50 0.20 mmol/L（CLM-003）、神经传导阻断 IC50 1.5–2.3 mmol/L（CLM-004）；估算浓度高出约 14 倍（47/2.3）至约 1.4×10⁴ 倍（143/0.010），即 1–3 个数量级。",
+      "assumptions": "静息舌下唾液池体积按 1–2 mL 计；冰片在含服时间窗内基本溶出；溶出液在感觉出现前未被大量吞咽稀释；每粒含量按药典下限 2.9 mg 至上限 4.4 mg 计。",
+      "sensitivity": "若仅 10% 溶出且唾液池增至 5 mL：22×0.1/5 = 0.44 mg/mL ≈ 2.9 mmol/L（约 3 mmol/L），仍高于 TRPA1 IC50 约 14 倍、处于 TRPM8 激活上限附近、低于神经传导 IC50（此时预期清凉/刺激感为主、麻木较弱）；若 100% 溶出且唾液 1 mL 为 143 mmol/L（约 140 mmol/L）上界。结论对 TRPM8/TRPA1 路径稳健，对完全性神经阻断仅在中度稀释假设下稳健。",
+      "applicability": "机制解释的定量界定（推导，非临床测量）",
+      "uncertainty": "未考虑唾液流速、黏膜吸收速率、吞咽动力学与个体唾液分泌差异；无人体直接测量；为数量级估算"
+    },
+    {
+      "claimId": "CLM-015",
+      "claim": "将舌麻用作速效救心丸药效指标在现有证据下不成立：舌麻由龙脑的局部 TRP/神经效应决定，疗效以心绞痛临床终点（SAQ、心绞痛发作、心电图）衡量且属全身性血管效应，二者之间不存在任何已发表研究建立的相关性桥梁；'舌麻说明药起效了'是以局部代理感受替代系统疗效指标的推理谬误。",
+      "claimType": "derived",
+      "derivedFrom": ["CLM-001", "CLM-003", "CLM-004", "CLM-006", "CLM-007", "CLM-008", "CLM-009"],
+      "method": "命题拆解为三个环节：(i) 机制环节——舌麻由龙脑局部 TRPM8 激活、TRPA1 抑制、神经传导阻断决定（CLM-001/003/004），且 CLM-014 显示局部浓度可达有效水平；(ii) 疗效环节——该药临床疗效以 SAQ 汇总评分等心绞痛相关终点评价（CLM-007），其机制为全身性血管/内皮效应，与舌部 TRP 通道无已知关联；(iii) 相关性环节——将 (i) 与 (ii) 连接需要'感觉强度↔吸收程度或疗效'的定量研究，本报告检索范围（PubMed、Crossref、中文生物医学索引、Europe PMC 全文库）内无任何此类研究（检索日志所见）。由于 (iii) 缺失，(i) 与 (ii) 的分立意味着舌麻只能指示龙脑的局部效应，不能外推为疗效指标；临床试验未报告舌麻（CLM-006/008）亦与'舌麻可发生'不矛盾。",
+      "assumptions": "疗效终点（SAQ 等）是该药临床获益的合理代理（有 RCT 支持）；检索覆盖英文与中文主要文献库；'未检索到'按字面理解为检索范围内的空缺。",
+      "sensitivity": "若未来研究证明舌麻强度与血浆龙脑浓度或心绞痛缓解时间存在强相关且时序一致，本结论需修订；现有证据下相关性桥梁不存在，结论对检索深度基本稳健。",
+      "applicability": "药效指标判定（推导）",
+      "uncertainty": "以检索空缺作为推理前提之一；不能排除未来出现相关性研究的可能；指标使用与否的临床决策责任在医师与药师"
+    },
+    {
+      "claimId": "CLM-016",
+      "claim": "以'舌麻说明起效'作为就医决策规则存在延误急性冠脉综合征评估的实际风险：含服反应不被指南认可为诊断因素，而突发胸痛不缓解即呼叫急救的触发条件与'药已起效、无需就医'的判断直接相反。",
+      "claimType": "derived",
+      "derivedFrom": ["CLM-009", "CLM-011"],
+      "method": "若患者采用'舌麻=起效'的决策规则，则在胸痛持续但出现舌麻时，会得出'药物已起效'的中间结论，从而可能不触发 CLM-011 规定的急救行为（突发胸痛或不适且不缓解→立即呼叫急救）；CLM-009 表明含服反应与诊断/预后无关，因此该规则不改变病情的实际风险状态，只改变患者行为，净效应为延误评估。",
+      "assumptions": "存在以含服反应判断病情的民间做法（题面所载流传说法）；以'延误评估'为最坏情形作保守分析；未计入其他就医触发因素（如家属督促、症状加重）。",
+      "sensitivity": "若存在独立就医触发因素（症状加重、家属督促、既往心梗史），延误风险下降；若患者单独决策且症状轻微，延误风险为该患者延迟评估的全部增量风险。",
+      "applicability": "就医行为风险结构分析（推导）；实际处置条目全部基于实测证据（见安全优先的实际处置）",
+      "uncertainty": "行为学假设未经实证测量；风险为条件性（取决于患者是否实际采用该决策规则）"
+    }
+  ]
+}

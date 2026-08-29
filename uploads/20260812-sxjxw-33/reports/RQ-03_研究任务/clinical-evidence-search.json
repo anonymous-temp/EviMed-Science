@@ -1,0 +1,290 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-11T17:23:00Z",
+  "databases": [
+    "PubMed",
+    "Crossref",
+    "internal literature index",
+    "Europe PMC",
+    "PMC",
+    "guideline source"
+  ],
+  "queries": [
+    {
+      "database": "literature (internal/pubmed)",
+      "query": "速效救心丸 冠心病 疗效 长期",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "literature (pubmed/crossref)",
+      "query": "Suxiao Jiuxin Pill coronary heart disease randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "PubMed (biomedical source)",
+      "query": "Suxiao Jiuxin pill",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PMC (biomedical source)",
+      "query": "\"Suxiao Jiuxin\" adverse OR safety",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "literature (internal/pubmed)",
+      "query": "速效救心丸 不良反应 安全性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "literature (pubmed/crossref)",
+      "query": "borneol toxicity liver kidney",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "Europe PMC (biomedical source)",
+      "query": "Evaluation of the efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina placebo-controlled",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 9
+    },
+    {
+      "database": "Europe PMC (biomedical source)",
+      "query": "Effectiveness and safety of Suxiao Jiuxin pill in treating acute coronary syndrome systematic review meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "literature (internal/pubmed)",
+      "query": "川芎 妊娠 禁忌 川芎嗪 安全性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "literature (internal/pubmed)",
+      "query": "冰片 长期 毒性 肝 肾 消化道",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed (biomedical source)",
+      "query": "Suxiao Jiuxin contraindication pregnancy adverse reactions review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "literature (internal)",
+      "query": "急性ST段抬高型心肌梗死 PCI 出院后 速效救心丸 疗效 安全性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "literature (internal/pubmed)",
+      "query": "速效救心丸治疗冠心病中国专家共识 2019",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Europe PMC (biomedical source)",
+      "query": "Suxiao Jiuxin review pharmacology clinical application",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Europe PMC (biomedical source)",
+      "query": "Suxiao Jiuxin expert consensus guideline coronary heart disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC (biomedical source)",
+      "query": "速效救心丸 专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC (biomedical source)",
+      "query": "Suxiao Jiuxin pregnant pregnancy contraindication",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "literature (internal)",
+      "query": "速效救心丸 专家共识 临床应用",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "literature (internal/pubmed)",
+      "query": "中成药治疗冠心病临床应用指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "guideline source",
+      "query": "速效救心丸 冠心病 心绞痛 中成药 指南 共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 260,
+    "recordsAfterDeduplication": 27,
+    "sourcesIncluded": 16,
+    "note": "recordsIdentified 为各次成功检索返回记录之和（含跨库重复与无关记录；含指南来源检索的 30 条兜底返回记录——该来源超时，兜底记录均与他病种无关，在相关性筛除阶段排除）；recordsAfterDeduplication 为经 DOI/PMID/标题去重并按相关性筛除无关记录后的唯一候选集（evimed_evidence_deduplicate 输出 27 条唯一）；sourcesIncluded 为纳入本报告的证据源数。"
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Ren2018SXJXMA",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "有效性/安全性系统评价"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Huang2022NMA",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "稳定性心绞痛网状荟萃（含 ADR 汇总）"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Hu2024CCSRCT",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "4 周安慰剂对照 RCT"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Ruan2021Protocol",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "24 周 RCT 方案"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "NMPALabel",
+      "identifier": "NMPA 说明书（备案）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "说明书边界（禁忌/不良反应/注意事项）"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Sun2024JEP",
+      "identifier": "PMID:37487965",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "24 周 RCT 完成结果（摘要）"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Liu2020ACS",
+      "identifier": "PMID:32744020",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ACS 系统评价（摘要）"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Shao2024STEMI",
+      "identifier": "中西医结合心脑血管病杂志 2024",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "STEMI 术后 12 个月回顾性队列（摘要）"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "DoseMA2021",
+      "identifier": "中国中医急症 2021",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "剂量 Meta（安全性证据不稳定结论，摘要）"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Wu2019Consensus",
+      "identifier": "中西医结合心脑血管病杂志 2019",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "速效救心丸治疗冠心病中国专家共识（摘要）"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Mao2021Guideline",
+      "identifier": "中西医结合心脑血管病杂志 2021;19(9):1409-1435",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "中成药治疗冠心病临床应用指南（2020 版）"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Yang2021Questions",
+      "identifier": "中医杂志 2021",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "指南临床问题构建（中成药遴选）"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "胸痛急救边界（官方页）"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Yang2008Borneol",
+      "identifier": "国际眼科杂志 2008;8(11)",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "冰片长期毒性（兔眼局部，摘要）"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Li2025Zebrafish",
+      "identifier": "PMID:39986037",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "冰片多器官毒性（斑马鱼，题录）"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Qingdao1998Series",
+      "identifier": "青岛医药卫生 1998",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "3 个月疗程病例系列（摘要）"
+    }
+  ]
+}

@@ -1,0 +1,828 @@
+{
+ "RQ-01_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_screening_ledger_mismatch",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 7 行写「偏倚风险（RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 7 行写「ROBINS-I」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 QUADAS-2，但结果与讨论中没有一处用它给出评级：第 7 行写「QUADAS-2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 QUADAS-2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 7 行写「AMSTAR 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 47 行写「并以 QUADAS-2 评价偏倚风险。药物与不良事件的因果关系按 Naranjo 量表或 WHO-UMC 标准评定」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 47 行写「并以 QUADAS-2 评价偏倚风险。药物与不良事件的因果关系按 Naranjo 量表或 WHO-UMC 标准评定」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "Report line 115 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「检索时间为 2026-08-13，共完成 19 次检索、命中 166 条记录，去重后 118 条，最终纳入 12 条来源，其中 6 份以全文或官方页面直接核验」中的检索式条数 19，检索记录 totalSearches = 22。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「检索时间为 2026-08-13，共完成 19 次检索、命中 166 条记录，去重后 118 条，最终纳入 12 条来源，其中 6 份以全文或官方页面直接核验」中的命中记录数 166，检索记录 recordsIdentified = 161。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。"
+  ],
+  "blockingIssues": [
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「检索时间为 2026-08-13，共完成 19 次检索、命中 166 条记录，去重后 118 条，最终纳入 12 条来源，其中 6 份以全文或官方页面直接核验」中的检索式条数 19，检索记录 totalSearches = 22。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「检索时间为 2026-08-13，共完成 19 次检索、命中 166 条记录，去重后 118 条，最终纳入 12 条来源，其中 6 份以全文或官方页面直接核验」中的命中记录数 166，检索记录 recordsIdentified = 161。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-02_研究任务": {
+  "valid": false,
+  "errorCode": "practical_emergency_trigger_conditioned_on_medication_response",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 7 行写「去重后对纳入来源按研究设计分层评价偏倚风险（随机对照试验用 RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 7 行写「非随机干预性研究用 ROBINS-I）」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 7 行写「指南方法学质量参照 AGREE II 要点说明」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 35 行写「清晰性要点说明。因果归因（药物与不良事件）按 Naranjo 或 WHO-UMC 系统」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 35 行写「清晰性要点说明。因果归因（药物与不良事件）按 Naranjo 或 WHO-UMC 系统」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 7 行写「证据体确定性按 GRADE 分级。」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 GRADE 从方法里删掉。",
+   "Report line 86 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "临床实践要点第 110 行把「含服 1 次后 5 分钟不缓解」写成了呼叫急救的触发条件：「3. 已确诊冠心病、按既往医嘱使用者：若本次胸痛性质、程度或持续时间与既往不同，或含服 1 次后 5 分钟不缓解、加重，应立即呼叫 120，之后再决定是否追加」。急救的触发条件不得以自救用药的疗效为条件（含药不缓解、服药后无效、观察 N 分钟无效均不可）——本节唯一允许的口径是「无论服药与否、无论是否缓解，出现上述征象即刻呼叫 120」。同一节里已经写着「服药不是等待的理由，应在服药的同时呼叫急救」，这一条与它互斥，读者无法同时执行。若来源（指南原文）确实给出了这一条件，把它留在「结果」一节按原文复述并保留出处，实践要点只写无条件的那一句。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「共执行 18 条检索式，命中 183 条记录，去重后 130 条，最终纳入 13 个来源」中的检索式条数 18，检索记录 totalSearches = 21。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+   "参考文献 [10] 在正文中从未被引用：「Duan X, Zhou L, Wu T, et al. Chinese herbal medicine suxiao jiuxin wan for angina pectoris. Coch…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [11] 在正文中从未被引用：「中华医学会急诊医学分会, 中国医疗保健国际交流促进会胸痛分会. 急性胸痛急诊诊疗专家共识. 2019.」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [13] 在正文中从未被引用：「中华医学会, 中华医学会杂志社, 中华医学会全科医学分会, 等. 胸痛基层合理用药指南. 2021.」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。"
+  ],
+  "blockingIssues": [
+   "临床实践要点第 110 行把「含服 1 次后 5 分钟不缓解」写成了呼叫急救的触发条件：「3. 已确诊冠心病、按既往医嘱使用者：若本次胸痛性质、程度或持续时间与既往不同，或含服 1 次后 5 分钟不缓解、加重，应立即呼叫 120，之后再决定是否追加」。急救的触发条件不得以自救用药的疗效为条件（含药不缓解、服药后无效、观察 N 分钟无效均不可）——本节唯一允许的口径是「无论服药与否、无论是否缓解，出现上述征象即刻呼叫 120」。同一节里已经写着「服药不是等待的理由，应在服药的同时呼叫急救」，这一条与它互斥，读者无法同时执行。若来源（指南原文）确实给出了这一条件，把它留在「结果」一节按原文复述并保留出处，实践要点只写无条件的那一句。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「共执行 18 条检索式，命中 183 条记录，去重后 130 条，最终纳入 13 个来源」中的检索式条数 18，检索记录 totalSearches = 21。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+   "参考文献 [10] 在正文中从未被引用：「Duan X, Zhou L, Wu T, et al. Chinese herbal medicine suxiao jiuxin wan for angina pectoris. Coch…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [11] 在正文中从未被引用：「中华医学会急诊医学分会, 中国医疗保健国际交流促进会胸痛分会. 急性胸痛急诊诊疗专家共识. 2019.」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [13] 在正文中从未被引用：「中华医学会, 中华医学会杂志社, 中华医学会全科医学分会, 等. 胸痛基层合理用药指南. 2021.」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-03_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 7 行写「非随机研究按 ROBINS-I 评估偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 7 行写「指南共识以 AGREE II 说明方法学质量」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 39 行写「指南与共识的方法学质量以 AGREE II 说明。药物与不良事件的因果关系归因采用 Naranjo 量表与 WHO-UMC 系统」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 39 行写「指南与共识的方法学质量以 AGREE II 说明。药物与不良事件的因果关系归因采用 Naranjo 量表与 WHO-UMC 系统」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "Report line 101 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「样本量」「给药方案」「随访时长」「次要终点」「硝酸甘油消耗量」「运动耐量」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 5.1、5.2、5.3 把题面第 5 问登记为 answered，但这一问点名的「合并用药者」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "blockingIssues": [
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「样本量」「给药方案」「随访时长」「次要终点」「硝酸甘油消耗量」「运动耐量」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 5.1、5.2、5.3 把题面第 5 问登记为 answered，但这一问点名的「合并用药者」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-04_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_evidence_traceability_failed",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 7 行写「干预类研究以 Cochrane RoB 2 或 Jadad 评估偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 30 行写「药物与不良事件关联按 WHO-UMC 或 Naranjo 思路核查去激发」。该行以「思路/精神/理念/参照…要点」提及 Naranjo，等同于未使用。删除工具名并直接写你实际做了什么，或在结果或讨论里对具体一篇文献用它评一次。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 30 行写「药物与不良事件关联按 WHO-UMC 或 Naranjo 思路核查去激发」。该行以「思路/精神/理念/参照…要点」提及 WHO-UMC，等同于未使用。删除工具名并直接写你实际做了什么，或在结果或讨论里对具体一篇文献用它评一次。",
+   "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 7 行写「证据体按 GRADE 陈述确定性等级及升降级理由。」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 GRADE 从方法里删掉。",
+   "claims[10].claim numeric fact 42 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "claims[10].claim numeric fact 56 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "claims[10].claim numeric fact 21 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "claims[10].claim numeric fact 80 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after."
+  ],
+  "blockingIssues": [
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after."
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-05_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_screening_ledger_mismatch",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 43 行写「干预性研究以 RoB 2 或 ROBINS-I 评估」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 43 行写「干预性研究以 RoB 2 或 ROBINS-I 评估」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 ROBINS-E，但结果与讨论中没有一处用它给出评级：第 43 行写「观察性研究以 ROBINS-E 或 Newcastle-Ottawa 量表评估偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-E 从方法里删掉。",
+   "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 43 行写「指南自身的方法学质量以 AGREE II 说明。发生率估计仅采纳分母明确」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+   "资料与方法声明了 Newcastle-Ottawa，但结果与讨论中没有一处用它给出评级：第 43 行写「观察性研究以 ROBINS-E 或 Newcastle-Ottawa 量表评估偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Newcastle-Ottawa 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 43 行写「说明书的不良反应罗列与无分母病例系列不用于估计发生率。药物与不良事件的因果归因按 Naranjo 量表或 WHO-UMC 标准评定。同一问题形成证据体时」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 43 行写「说明书的不良反应罗列与无分母病例系列不用于估计发生率。药物与不良事件的因果归因按 Naranjo 量表或 WHO-UMC 标准评定。同一问题形成证据体时」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 2.1、2.2、2.3 把题面第 2 问登记为 answered，但这一问点名的「自主神经功能」「合并用药」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [1]、[2]、[8]、[9]、[10]、[12]、[21]、[22]、[23] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 23 条编号条目，screening.sourcesIncluded = 14。编号表必须恰好是 included=true 的来源集合：同数量、同编号。"
+  ],
+  "blockingIssues": [
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 2.1、2.2、2.3 把题面第 2 问登记为 answered，但这一问点名的「自主神经功能」「合并用药」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [1]、[2]、[8]、[9]、[10]、[12]、[21]、[22]、[23] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 23 条编号条目，screening.sourcesIncluded = 14。编号表必须恰好是 included=true 的来源集合：同数量、同编号。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-06_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_invalid",
+  "issues": [
+   "clinical-evidence-report.md must contain academic analysis.",
+   "The academic title must be present.",
+   "The academic report is missing a required section matching /(?:^|\\n)##\\s+(?:摘要|Abstract)/i.",
+   "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:临床|证据|Evidence|Clinical)/i.",
+   "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:局限|Limitations?)/i.",
+   "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:结论|Conclusion)/i.",
+   "The academic report is missing the safety-first practical-answer section. Head it with one of: 安全优先的实际处置 / 实际处置 / 实用回答 / 临床实践要点 / 临床要点 / 实用 / 怎么办 / Practical — every safety check on practical advice locates that section by its heading, so a heading outside this set means the section is never audited.",
+   "The evidence matrix must contain the report's material claims.",
+   "question-coverage.json 台账格式无效：文件缺失或为空。它必须是一个 JSON 对象，逐条列出题面「需要回答的问题」拆出的原子子问。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+   "clinical-evidence-run.json must be an object."
+  ],
+  "blockingIssues": [
+   "clinical-evidence-report.md must contain academic analysis.",
+   "The academic title must be present.",
+   "The academic report is missing the safety-first practical-answer section. Head it with one of: 安全优先的实际处置 / 实际处置 / 实用回答 / 临床实践要点 / 临床要点 / 实用 / 怎么办 / Practical — every safety check on practical advice locates that section by its heading, so a heading outside this set means the section is never audited.",
+   "The evidence matrix must contain the report's material claims.",
+   "question-coverage.json 台账格式无效：文件缺失或为空。它必须是一个 JSON 对象，逐条列出题面「需要回答的问题」拆出的原子子问。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+   "clinical-evidence-run.json must be an object."
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-07_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_screening_ledger_mismatch",
+  "issues": [
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 7 行写「AMSTAR 2（系统评价）评定偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 35 行写「个体不良事件因果关系用 Naranjo 量表或 WHO-UMC 标准评定」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 35 行写「个体不良事件因果关系用 Naranjo 量表或 WHO-UMC 标准评定」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4 把题面第 2 问登记为 answered，但这一问点名的「急诊 PCI」「术后时间窗」「复发心绞痛发作频次」「SAQ 评分」「无复流」「慢血流」「支架内再狭窄」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4 把题面第 3 问登记为 answered，但这一问点名的「稳定性冠心病指南」「ACC 相关指南」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2 把题面第 4 问登记为 answered，但这一问点名的「急诊就诊时间」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「以 PMID、DOI、稳定 URL 及规范化题名去重后，共获得 191 条记录，去重并剔除无关记录后余 116 条，最终纳入 25 个来源」中的命中记录数 191，检索记录 recordsIdentified = 203。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「以 PMID、DOI、稳定 URL 及规范化题名去重后，共获得 191 条记录，去重并剔除无关记录后余 116 条，最终纳入 25 个来源」中的去重后记录数 116，检索记录 recordsAfterDeduplication = 125。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「以 PMID、DOI、稳定 URL 及规范化题名去重后，共获得 191 条记录，去重并剔除无关记录后余 116 条，最终纳入 25 个来源」中的纳入来源数 25，检索记录 sourcesIncluded = 24。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。"
+  ],
+  "blockingIssues": [
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4 把题面第 2 问登记为 answered，但这一问点名的「急诊 PCI」「术后时间窗」「复发心绞痛发作频次」「SAQ 评分」「无复流」「慢血流」「支架内再狭窄」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4 把题面第 3 问登记为 answered，但这一问点名的「稳定性冠心病指南」「ACC 相关指南」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2 把题面第 4 问登记为 answered，但这一问点名的「急诊就诊时间」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「以 PMID、DOI、稳定 URL 及规范化题名去重后，共获得 191 条记录，去重并剔除无关记录后余 116 条，最终纳入 25 个来源」中的命中记录数 191，检索记录 recordsIdentified = 203。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「以 PMID、DOI、稳定 URL 及规范化题名去重后，共获得 191 条记录，去重并剔除无关记录后余 116 条，最终纳入 25 个来源」中的去重后记录数 116，检索记录 recordsAfterDeduplication = 125。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「以 PMID、DOI、稳定 URL 及规范化题名去重后，共获得 191 条记录，去重并剔除无关记录后余 116 条，最终纳入 25 个来源」中的纳入来源数 25，检索记录 sourcesIncluded = 24。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-08_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 49 行写「采用 Naranjo 量表或 WHO-UMC 系统并写明评定依据。每条证据均交代直接性（受试样品的剂型」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 49 行写「采用 Naranjo 量表或 WHO-UMC 系统并写明评定依据。每条证据均交代直接性（受试样品的剂型」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 7 行写「证据体按 GRADE 陈述确定性。」。GRADE 只在局限性或结论里出现。确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+   "报告第 67 行以「该研究同时提示」把立场归属给来源，但该行引用的 CLM-005，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4 把题面第 2 问登记为 answered，但这一问点名的「方法学验证」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "blockingIssues": [
+   "报告第 67 行以「该研究同时提示」把立场归属给来源，但该行引用的 CLM-005，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4 把题面第 2 问登记为 answered，但这一问点名的「方法学验证」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-09_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_evidence_traceability_failed",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 40 行写「其次为前瞻性队列与试验内嵌安全性观察。干预研究以 Cochrane RoB 2 评估偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 QUADAS-2，但结果与讨论中没有一处用它给出评级：第 40 行写「把局部感受当作指示或预测标志的研究以 QUADAS-2 评估。受体药理学」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 QUADAS-2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 40 行写「系统评价以 AMSTAR 2 评估」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 42 行写「舌部反应与药物之间的因果关系按 Naranjo 量表或 WHO-UMC 标准评定」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。"
+  ],
+  "blockingIssues": [],
+  "coverageDegradedNotice": null
+ },
+ "RQ-10_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 41 行写「非随机干预研究按 ROBINS-I」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 41 行写「系统评价与 meta 分析按 AMSTAR 2 或所引用的既有工具（如 Jadad）」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 41 行写「观察性发生率类研究按相应队列评价清单。单一或系列不良事件与药物的因果关系按 Naranjo 量表或 WHO-UMC 标准评定」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 41 行写「观察性发生率类研究按相应队列评价清单。单一或系列不良事件与药物的因果关系按 Naranjo 量表或 WHO-UMC 标准评定」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "资料与方法声明了 Jadad，但结果与讨论中没有一处用它给出评级：第 41 行写「系统评价与 meta 分析按 AMSTAR 2 或所引用的既有工具（如 Jadad）」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Jadad 从方法里删掉。",
+   "question-coverage.json 条目 3.1、3.2、3.3 把题面第 3 问登记为 answered，但这一问点名的「心绞痛终点」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4 把题面第 4 问登记为 answered，但这一问点名的「ESC 慢性」「推荐的识别」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "blockingIssues": [
+   "question-coverage.json 条目 3.1、3.2、3.3 把题面第 3 问登记为 answered，但这一问点名的「心绞痛终点」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4 把题面第 4 问登记为 answered，但这一问点名的「ESC 慢性」「推荐的识别」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-11_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_screening_ledger_mismatch",
+  "issues": [
+   "资料与方法声明了 QUADAS-2，但结果与讨论中没有一处用它给出评级：第 7 行写「用 QUADAS-2 评价诊断准确性研究偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 QUADAS-2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 7 行写「用 AMSTAR 2 评价系统评价」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 7 行写「指南方法学质量以 AGREE II 说明。」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 47 行写「涉及药物与不良事件因果关系的归因采用 Naranjo 量表或 WHO-UMC 系统」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 47 行写「涉及药物与不良事件因果关系的归因采用 Naranjo 量表或 WHO-UMC 系统」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 47 行写「同一问题下形成的证据体按 GRADE 陈述确定性等级并给出升降级理由。一条证据的直接性」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 GRADE 从方法里删掉。",
+   "Report line 31 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+   "A medicine-free question must not introduce Suxiao Jiuxin Wan into the report. Answer the question that was asked; if the medicine is genuinely relevant, the reader has to raise it.",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「稳定型心绞痛」「心脏神经症」「肺源性病因」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5 把题面第 2 问登记为 answered，但这一问点名的「体位的关系」「休息缓解」「持续时间」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4 把题面第 4 问登记为 answered，但这一问点名的「ACC 胸痛评估」「慢性冠脉综合征指南」「胃食管反流病相关指南」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [12]、[14]、[15]、[16]、[22]、[24] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 25 条编号条目，screening.sourcesIncluded = 19。编号表必须恰好是 included=true 的来源集合：同数量、同编号。",
+   "clinical-evidence-search.json 的 sourceRecords[11] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[11] 标记为 \"included\": false，却仍以编号 [12] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[13] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[13] 标记为 \"included\": false，却仍以编号 [14] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[14] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[14] 标记为 \"included\": false，却仍以编号 [15] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[15] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[15] 标记为 \"included\": false，却仍以编号 [16] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[21] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[21] 标记为 \"included\": false，却仍以编号 [22] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[23] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[23] 标记为 \"included\": false，却仍以编号 [24] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "references.bib must contain a bibliography entry for every cited source URL.",
+   "citation-audit.md must reference at least one real audited source identifier from the evidence matrix."
+  ],
+  "blockingIssues": [
+   "A medicine-free question must not introduce Suxiao Jiuxin Wan into the report. Answer the question that was asked; if the medicine is genuinely relevant, the reader has to raise it.",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「稳定型心绞痛」「心脏神经症」「肺源性病因」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5 把题面第 2 问登记为 answered，但这一问点名的「体位的关系」「休息缓解」「持续时间」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4 把题面第 4 问登记为 answered，但这一问点名的「ACC 胸痛评估」「慢性冠脉综合征指南」「胃食管反流病相关指南」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [12]、[14]、[15]、[16]、[22]、[24] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 25 条编号条目，screening.sourcesIncluded = 19。编号表必须恰好是 included=true 的来源集合：同数量、同编号。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-12_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 7 行写「AMSTAR 2 与 GRADE 评价证据质量。」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "claims[5].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "claims[11].claim numeric fact 19 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "Report line 78 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+   "Report line 92 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4、1.5 把题面第 1 问登记为 answered，但这一问点名的「中医证型限定」「用法用量」「含服方式」「停药要求」「不良反应记载」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4 把题面第 2 问登记为 answered，但这一问点名的「随机化」「盲法的实施」「心绞痛发作频率」「硝酸甘油消耗量」「症状缓解时间」「运动耐量」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4 把题面第 3 问登记为 answered，但这一问点名的「硝酸酯类」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [12] 在正文中从未被引用：「中国中西医结合学会心血管病专业委员会. 速效救心丸治疗冠心病中国专家共识. 2019.（共识索引件，官方现行文本待核验）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [13] 在正文中从未被引用：「中国中西医结合学会心血管病专业委员会. 麝香保心丸治疗冠心病心绞痛中国专家共识. 2017.（共识索引件，官方现行文本待核验）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "citation-audit.md must reference at least one real audited source identifier from the evidence matrix."
+  ],
+  "blockingIssues": [
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4、1.5 把题面第 1 问登记为 answered，但这一问点名的「中医证型限定」「用法用量」「含服方式」「停药要求」「不良反应记载」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4 把题面第 2 问登记为 answered，但这一问点名的「随机化」「盲法的实施」「心绞痛发作频率」「硝酸甘油消耗量」「症状缓解时间」「运动耐量」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4 把题面第 3 问登记为 answered，但这一问点名的「硝酸酯类」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [12] 在正文中从未被引用：「中国中西医结合学会心血管病专业委员会. 速效救心丸治疗冠心病中国专家共识. 2019.（共识索引件，官方现行文本待核验）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [13] 在正文中从未被引用：「中国中西医结合学会心血管病专业委员会. 麝香保心丸治疗冠心病心绞痛中国专家共识. 2017.（共识索引件，官方现行文本待核验）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-13_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 7 行写「以 Cochrane RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 7 行写「AMSTAR 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 7 行写「AGREE II 与 GRADE 为评价工具」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 40 行写「指南与共识的推荐按原文的推荐强度与证据等级引用。不良事件与药物的因果关系采用 WHO-UMC 系统评定并写明评定依据。同一问题下的证据体按 GRADE 陈述确定性等级及其升降级理由。提示效应衰…」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 7 行写「AGREE II 与 GRADE 为评价工具」。GRADE 只在局限性或结论里出现。确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5 把题面第 2 问登记为 answered，但这一问点名的「川芎提取物」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4、4.5 把题面第 4 问登记为 answered，但这一问点名的「已发表个案报告」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "The practical section's report line 109 anchors claim CLM-021，但该行只引用了 [6]，而 CLM-021 的 referenceNumber 是 22。把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。"
+  ],
+  "blockingIssues": [
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5 把题面第 2 问登记为 answered，但这一问点名的「川芎提取物」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4、4.5 把题面第 4 问登记为 answered，但这一问点名的「已发表个案报告」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "The practical section's report line 109 anchors claim CLM-021，但该行只引用了 [6]，而 CLM-021 的 referenceNumber 是 22。把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-14_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 34 行写「贮存条件与样本量是否明确。干预性研究按 Cochrane RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 34 行写「非随机干预性研究按 ROBINS-I」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 34 行写「系统评价按 AMSTAR 2。失效识别类研究按诊断准确性研究标准（QUADAS-2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 34 行写「无分母的病例系列不用于估计发生率。服药后不良事件与药物的关系判读采用 Naranjo 量表或 WHO-UMC 系统并写明评定依据。同一问题下形成证据体时按 GRADE 陈述确定性等级与升降级理…」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 34 行写「无分母的病例系列不用于估计发生率。服药后不良事件与药物的关系判读采用 Naranjo 量表或 WHO-UMC 系统并写明评定依据。同一问题下形成证据体时按 GRADE 陈述确定性等级与升降级理…」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "claims[26].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms. State instead that relief after a sublingual dose does not distinguish cardiac from non-cardiac pain, cite the evidence for that, and say that persisting symptoms call for emergency assessment regardless of the response.",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5、2.6、2.7、2.8、2.9 把题面第 2 问登记为 answered，但这一问点名的「降解产物生成」「微生物负载变化」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [8] 在正文中从未被引用：「Lyon RC, Taylor JS, Porter DA, et al. Stability profiles of drug products extended beyond labele…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [9] 在正文中从未被引用：「Cantrell L, Suchard JR, Wu A, Gerona RR. Stability of active ingredients in long-expired prescri…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [10] 在正文中从未被引用：「Zilker M, Sörgel F, Holzgrabe U. A systematic review of the stability of finished pharmaceutical…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [11] 在正文中从未被引用：「Benitz KF, Diermeier HF. Renal toxicity of tetracycline degradation products. Proc Soc Exp Biol …」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [14] 在正文中从未被引用：「国家食品药品监督管理局. 药品说明书和标签管理规定（局令第24号）. 2006年6月1日起施行.」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [15] 在正文中从未被引用：「生态环境部等. 国家危险废物名录.（现行版本与豁免条款以生态环境部公布文本为准）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [16] 在正文中从未被引用：「袁慧婵, 商洪才, 张晶芳, 等. 不同疗程速效救心丸对冠心病心绞痛临床疗效及安全性的Meta分析. 北京中医药. 2022.（摘要级）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [17] 在正文中从未被引用：「贾文浩, 毛天诗, 谢龙, 等. 速效救心丸治疗慢性稳定型心绞痛多中心前瞻性队列研究. 中国中西医结合杂志. 2025.（摘要级）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [20] 在正文中从未被引用：「柏荷花, 杨世民. 西安市家庭过期药品回收工作现状及对策研究. 西北药学杂志. 2018.（摘要级）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [22] 在正文中从未被引用：「高君, 侯毅, 魏璐嫚, 等. 郑州市居民家庭过期药品回收现状及对策研究. 中国医药导刊. 2023.（摘要级）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [24] 在正文中从未被引用：「袁聪敏, 赵亚娟, 李贝贝, 等. 河南郑州新乡农村家庭过期药品处置的现状调查. 中国药事. 2014.（摘要级）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "references.bib must contain a bibliography entry for every cited source URL.",
+   "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number."
+  ],
+  "blockingIssues": [
+   "Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms. State instead that relief after a sublingual dose does not distinguish cardiac from non-cardiac pain, cite the evidence for that, and say that persisting symptoms call for emergency assessment regardless of the response.",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5、2.6、2.7、2.8、2.9 把题面第 2 问登记为 answered，但这一问点名的「降解产物生成」「微生物负载变化」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [8] 在正文中从未被引用：「Lyon RC, Taylor JS, Porter DA, et al. Stability profiles of drug products extended beyond labele…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [9] 在正文中从未被引用：「Cantrell L, Suchard JR, Wu A, Gerona RR. Stability of active ingredients in long-expired prescri…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [10] 在正文中从未被引用：「Zilker M, Sörgel F, Holzgrabe U. A systematic review of the stability of finished pharmaceutical…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [11] 在正文中从未被引用：「Benitz KF, Diermeier HF. Renal toxicity of tetracycline degradation products. Proc Soc Exp Biol …」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [14] 在正文中从未被引用：「国家食品药品监督管理局. 药品说明书和标签管理规定（局令第24号）. 2006年6月1日起施行.」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [15] 在正文中从未被引用：「生态环境部等. 国家危险废物名录.（现行版本与豁免条款以生态环境部公布文本为准）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [16] 在正文中从未被引用：「袁慧婵, 商洪才, 张晶芳, 等. 不同疗程速效救心丸对冠心病心绞痛临床疗效及安全性的Meta分析. 北京中医药. 2022.（摘要级）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [17] 在正文中从未被引用：「贾文浩, 毛天诗, 谢龙, 等. 速效救心丸治疗慢性稳定型心绞痛多中心前瞻性队列研究. 中国中西医结合杂志. 2025.（摘要级）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [20] 在正文中从未被引用：「柏荷花, 杨世民. 西安市家庭过期药品回收工作现状及对策研究. 西北药学杂志. 2018.（摘要级）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [22] 在正文中从未被引用：「高君, 侯毅, 魏璐嫚, 等. 郑州市居民家庭过期药品回收现状及对策研究. 中国医药导刊. 2023.（摘要级）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [24] 在正文中从未被引用：「袁聪敏, 赵亚娟, 李贝贝, 等. 河南郑州新乡农村家庭过期药品处置的现状调查. 中国药事. 2014.（摘要级）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-15_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 41 行写「系统评价以 AMSTAR 2 评价」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 41 行写「则如实转引其分数而不自拟等级。指南与共识的方法学质量以 AGREE II 说明」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+   "Report line 55 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4 把题面第 1 问登记为 answered，但这一问点名的「暴露例数」「症状日记」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "blockingIssues": [
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4 把题面第 1 问登记为 answered，但这一问点名的「暴露例数」「症状日记」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-16_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 40 行写「随机对照试验以 Cochrane RoB 2 工具评价偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 40 行写「非随机干预研究以 ROBINS-I 评价」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 40 行写「系统评价与 meta 分析以 AMSTAR 2 评价」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 40 行写「病因构成与发生率类研究按有无分母明确的前瞻性主动确认来判定其发生率估计是否成立。药物相关不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定。同一问题下形成证据体时按 GRA…」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 40 行写「病因构成与发生率类研究按有无分母明确的前瞻性主动确认来判定其发生率估计是否成立。药物相关不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定。同一问题下形成证据体时按 GRA…」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 7 行写「按 GRADE 框架评定证据体确定性。」。GRADE 只在局限性或结论里出现。确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+   "Report line 84 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "报告第 58 行以「该 meta 分析同时指出」把立场归属给来源，但该行引用的 CLM-005、CLM-006，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5 把题面第 3 问登记为 answered，但这一问点名的「阵发性室上性心动过速」「能量饮料摄入」「12 导联心电图」「事件记录仪」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3 把题面第 4 问登记为 answered，但这一问点名的「终点」「动态心电图早搏负荷」「症状评分」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "citation-audit.md must reference at least one real audited source identifier from the evidence matrix."
+  ],
+  "blockingIssues": [
+   "报告第 58 行以「该 meta 分析同时指出」把立场归属给来源，但该行引用的 CLM-005、CLM-006，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5 把题面第 3 问登记为 answered，但这一问点名的「阵发性室上性心动过速」「能量饮料摄入」「12 导联心电图」「事件记录仪」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3 把题面第 4 问登记为 answered，但这一问点名的「终点」「动态心电图早搏负荷」「症状评分」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-17_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_gap_overstated",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 7 行写「交叉/对照试验以 Cochrane RoB 2 思路」。该行以「思路/精神/理念/参照…要点」提及 RoB 2，等同于未使用。删除工具名并直接写你实际做了什么，或在结果或讨论里对具体一篇文献用它评一次。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 7 行写「系统评价以 AMSTAR 2 思路评述偏倚风险」。该行以「思路/精神/理念/参照…要点」提及 AMSTAR 2，等同于未使用。删除工具名并直接写你实际做了什么，或在结果或讨论里对具体一篇文献用它评一次。",
+   "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 7 行写「证据体按 GRADE 表述确定性。」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 GRADE 从方法里删掉。",
+   "question-coverage.json 条目 5.3（「（b）无心血管诊断的青年人为预防猝死而常备或自行含服本品」）登记为 gap，摘要第 27 行却就同一主题「青年人为预防猝死而常备」把这一次检索的空手写成了文献世界的事实：「无心血管诊断青年人为预防猝死而常备自服本品缺乏临床结局证据，减少咖啡因对心悸发作的干预证据为弱或阴性。」。摘要、结论与临床实践要点是读者取走答案的地方，缺口不能在那里变成结论。要么把这一句改写成如实的缺口陈述（「未检索到该终点的直接证据，这是一处证据空白」是允许的，也是应当写的），要么这条子问其实有答案，把台账改成 answered 并给出正文行号。",
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「含咖啡因饮料」「心悸」「适应证」「药物相互作用」「禁忌出现在适应症」「功能主治」「用法用量」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5、2.6、2.7、2.8、2.9 把题面第 2 问登记为 answered，但这一问点名的「室性期前收缩负荷」「心房颤动发作」「大型前瞻队列」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5、3.6 把题面第 3 问登记为 answered，但这一问点名的「焦虑障碍躯体化」「甲状腺功能亢进」「心律相关主诉」「心肌缺血相关主诉」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4、4.5 把题面第 4 问登记为 answered，但这一问点名的「动态心电图早搏负荷」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "blockingIssues": [
+   "question-coverage.json 条目 5.3（「（b）无心血管诊断的青年人为预防猝死而常备或自行含服本品」）登记为 gap，摘要第 27 行却就同一主题「青年人为预防猝死而常备」把这一次检索的空手写成了文献世界的事实：「无心血管诊断青年人为预防猝死而常备自服本品缺乏临床结局证据，减少咖啡因对心悸发作的干预证据为弱或阴性。」。摘要、结论与临床实践要点是读者取走答案的地方，缺口不能在那里变成结论。要么把这一句改写成如实的缺口陈述（「未检索到该终点的直接证据，这是一处证据空白」是允许的，也是应当写的），要么这条子问其实有答案，把台账改成 answered 并给出正文行号。",
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「含咖啡因饮料」「心悸」「适应证」「药物相互作用」「禁忌出现在适应症」「功能主治」「用法用量」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5、2.6、2.7、2.8、2.9 把题面第 2 问登记为 answered，但这一问点名的「室性期前收缩负荷」「心房颤动发作」「大型前瞻队列」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5、3.6 把题面第 3 问登记为 answered，但这一问点名的「焦虑障碍躯体化」「甲状腺功能亢进」「心律相关主诉」「心肌缺血相关主诉」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4、4.5 把题面第 4 问登记为 answered，但这一问点名的「动态心电图早搏负荷」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-18_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 47 行写「随机对照试验以 Cochrane RoB 2 评价」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 QUADAS-2，但结果与讨论中没有一处用它给出评级：第 7 行写「并对说明书条目作逐条核对。诊断性研究以 QUADAS-2 评价偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 QUADAS-2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 47 行写「系统评价以 AMSTAR 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 47 行写「指南的方法学质量以 AGREE II 说明」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 47 行写「药物与不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定并写明依据。每条纳入证据均记录其直接性」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 47 行写「药物与不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定并写明依据。每条纳入证据均记录其直接性」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "claims[13].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "Report line 15 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "Report line 53 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "Report line 67 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "The practical answer must not add unsupported advice about antacids or waiting for symptom changes. Give only steps carried by a cited claim; if a step seems clinically sensible but has no source in this package, leave it out and say the evidence was not retrieved.",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「场景出现在适应症」「注册记录」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5 把题面第 2 问登记为 answered，但这一问点名的「致心律失常性心肌病」「离子通道病」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5、3.6、3.7 把题面第 3 问登记为 answered，但这一问点名的「ACC 胸痛评估」「运动前筛查相关文件」「国内急性胸痛」「运动相关共识」「超声心动图」「冠脉 CTA」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 5.1、5.2、5.3、5.4、5.5、5.6、5.7 把题面第 5 问登记为 answered，但这一问点名的「劳力性心肌缺血」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "citation-audit.md must reference at least one real audited source identifier from the evidence matrix."
+  ],
+  "blockingIssues": [
+   "The practical answer must not add unsupported advice about antacids or waiting for symptom changes. Give only steps carried by a cited claim; if a step seems clinically sensible but has no source in this package, leave it out and say the evidence was not retrieved.",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「场景出现在适应症」「注册记录」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5 把题面第 2 问登记为 answered，但这一问点名的「致心律失常性心肌病」「离子通道病」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5、3.6、3.7 把题面第 3 问登记为 answered，但这一问点名的「ACC 胸痛评估」「运动前筛查相关文件」「国内急性胸痛」「运动相关共识」「超声心动图」「冠脉 CTA」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 5.1、5.2、5.3、5.4、5.5、5.6、5.7 把题面第 5 问登记为 answered，但这一问点名的「劳力性心肌缺血」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-19_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 7 行写「随机对照试验按 Cochrane RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 7 行写「系统评价按 AMSTAR 2 评偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 25 行写「药物与不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定并写明依据」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 25 行写「药物与不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定并写明依据」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「气滞血瘀型胸痹心痛」「乙类」「适应证」「用法」「用法用量」「不同规格」「包装之间的差异」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5、3.6 把题面第 3 问登记为 answered，但这一问点名的「具心血管危险因素」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [14] 在正文中从未被引用：「中国中西医结合学会. 速效救心丸治疗冠心病中国专家共识. 2019.（题录）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [17] 在正文中从未被引用：「中国中药杂志. 真实世界研究中 16856 例应用速效救心丸的老年患者临床特征及联合用药规律. 2020.（题录）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。"
+  ],
+  "blockingIssues": [
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「气滞血瘀型胸痹心痛」「乙类」「适应证」「用法」「用法用量」「不同规格」「包装之间的差异」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5、3.6 把题面第 3 问登记为 answered，但这一问点名的「具心血管危险因素」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [14] 在正文中从未被引用：「中国中西医结合学会. 速效救心丸治疗冠心病中国专家共识. 2019.（题录）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [17] 在正文中从未被引用：「中国中药杂志. 真实世界研究中 16856 例应用速效救心丸的老年患者临床特征及联合用药规律. 2020.（题录）」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-20_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_screening_ledger_mismatch",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 7 行写「并获取开放获取全文与官方公众指引作为逐字核验底稿。干预研究按 Cochrane RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 QUADAS-2，但结果与讨论中没有一处用它给出评级：第 43 行写「现场自我识别准确性一类研究用 QUADAS-2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 QUADAS-2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 7 行写「系统评价按 AMSTAR 2 评价」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 43 行写「指南方法学质量用 AGREE II 说明。同一问题下形成的证据体按 GRADE 给出确定性等级」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 43 行写「药物与不良事件的因果关系按 WHO-UMC 或 Naranjo 标准评定并写明依据。结论强度与证据强度相称」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 43 行写「药物与不良事件的因果关系按 WHO-UMC 或 Naranjo 标准评定并写明依据。结论强度与证据强度相称」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "claims[6].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "claims[7].claim numeric fact 35 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "claims[8].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "claims[8].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "claims[11].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "claims[11].claim numeric fact 1.32-4.47 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "claims[13].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "Report line 7 numeric facts 8, 14 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+   "Report line 17 numeric facts 3 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "Report line 49 numeric facts 40 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "Report line 55 numeric facts 24, 3006, 13 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "Report line 71 numeric facts 1, 664, 18 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "Report line 87 numeric facts 30, 0.5, 0.9, 0 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4 把题面第 1 问登记为 answered，但这一问点名的「使用前提」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5、3.6、3.7、3.8、3.9、3.10 把题面第 3 问登记为 answered，但这一问点名的「Framingham」「人群事件登记」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「通过 DOI、PMID、稳定网址与规范标题去重，最终纳入 14 条来源，其中 9 条为可逐字核验的全文或官方页面，其余为题录/摘要层级的说明书记录、中文 Meta 分析与专家共识」中的纳入来源数 14，检索记录 sourcesIncluded = 13。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+   "Report line 51 anchors claim CLM-023，但该行只引用了 [1, 2]，而 CLM-023 的 referenceNumber 是 5, 6。把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。",
+   "The practical section's report line 101 anchors claim CLM-023，但该行只引用了 [1]，而 CLM-023 的 referenceNumber 是 5, 6。把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。",
+   "The practical section's report line 102 anchors claim CLM-023，但该行只引用了 [1]，而 CLM-023 的 referenceNumber 是 5, 6。把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。",
+   "claims[22] is not paired with its standard numbered in-text citation."
+  ],
+  "blockingIssues": [
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4 把题面第 1 问登记为 answered，但这一问点名的「使用前提」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5、3.6、3.7、3.8、3.9、3.10 把题面第 3 问登记为 answered，但这一问点名的「Framingham」「人群事件登记」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「通过 DOI、PMID、稳定网址与规范标题去重，最终纳入 14 条来源，其中 9 条为可逐字核验的全文或官方页面，其余为题录/摘要层级的说明书记录、中文 Meta 分析与专家共识」中的纳入来源数 14，检索记录 sourcesIncluded = 13。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+   "The practical section's report line 101 anchors claim CLM-023，但该行只引用了 [1]，而 CLM-023 的 referenceNumber 是 5, 6。把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。",
+   "The practical section's report line 102 anchors claim CLM-023，但该行只引用了 [1]，而 CLM-023 的 referenceNumber 是 5, 6。把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-21_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 7 行写「其余来源按摘要或题录层级标注。偏倚风险按 Cochrane RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 7 行写「ROBINS-I」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 QUADAS-2，但结果与讨论中没有一处用它给出评级：第 7 行写「QUADAS-2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 QUADAS-2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 7 行写「AMSTAR 2 评价」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 43 行写「指南方法学质量用 AGREE II 说明。生理机制类证据注明研究为现场暴露」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 43 行写「动物模型单列并说明外推限度。药物与不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定。同一问题下的证据体按 GRADE 给出确定性等级」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 43 行写「动物模型单列并说明外推限度。药物与不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定。同一问题下的证据体按 GRADE 给出确定性等级」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4 把题面第 1 问登记为 answered，但这一问点名的「场景出现在适应症」「注册信息」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4 把题面第 2 问登记为 answered，但这一问点名的「冠状动脉血流储备」「心肌灌注变化」「现场高原暴露研究」「常压低氧模拟研究」「居留人群队列」「随海拔高度」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5 把题面第 3 问登记为 answered，但这一问点名的「心律失常」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3 把题面第 4 问登记为 answered，但这一问点名的「心电图缺血指标」「急性高山病评分」「高原相关不良事件」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 5.1、5.2、5.3、5.4、5.5、5.6、5.7 把题面第 5 问登记为 answered，但这一问点名的「就诊延迟」「成分相关不良反应」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "blockingIssues": [
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4 把题面第 1 问登记为 answered，但这一问点名的「场景出现在适应症」「注册信息」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4 把题面第 2 问登记为 answered，但这一问点名的「冠状动脉血流储备」「心肌灌注变化」「现场高原暴露研究」「常压低氧模拟研究」「居留人群队列」「随海拔高度」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5 把题面第 3 问登记为 answered，但这一问点名的「心律失常」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3 把题面第 4 问登记为 answered，但这一问点名的「心电图缺血指标」「急性高山病评分」「高原相关不良事件」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 5.1、5.2、5.3、5.4、5.5、5.6、5.7 把题面第 5 问登记为 answered，但这一问点名的「就诊延迟」「成分相关不良反应」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-22_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 35 行写「地区与是否含中国人群。干预性研究用 Cochrane RoB 2 或 ROBINS-I 评估偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 35 行写「地区与是否含中国人群。干预性研究用 Cochrane RoB 2 或 ROBINS-I 评估偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 QUADAS-2，但结果与讨论中没有一处用它给出评级：第 35 行写「用 QUADAS-2 评估偏倚风险与适用性」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 QUADAS-2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 35 行写「系统评价用 AMSTAR 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 35 行写「指南方法学质量以 AGREE II 说明」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 35 行写「不以本文措辞替换。药物与不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定并写明依据。同一问题形成证据体时按 GRADE 给出确定性等级及升降级理由。机制的合理性」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 35 行写「不以本文措辞替换。药物与不良事件的因果关系以 Naranjo 量表或 WHO-UMC 标准评定并写明依据。同一问题形成证据体时按 GRADE 给出确定性等级及升降级理由。机制的合理性」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「注册记录」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4 把题面第 2 问登记为 answered，但这一问点名的「遗传性心律失常」「气胸」「哮喘」「食管动力障碍」「肋软骨炎」「胸壁痛」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4、4.5 把题面第 4 问登记为 answered，但这一问点名的「ACC 胸痛评估」「诊断指南」「ESC 相关指南」「初级保健胸痛评估指南」「躯体症状障碍诊疗指南」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [11] 在正文中从未被引用：「Walker NJ, Sites FD, Shofer FS, Hollander JE. Characteristics and outcomes of young adults who p…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "citation-audit.md must reference at least one real audited source identifier from the evidence matrix."
+  ],
+  "blockingIssues": [
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3 把题面第 1 问登记为 answered，但这一问点名的「注册记录」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4 把题面第 2 问登记为 answered，但这一问点名的「遗传性心律失常」「气胸」「哮喘」「食管动力障碍」「肋软骨炎」「胸壁痛」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4、4.5 把题面第 4 问登记为 answered，但这一问点名的「ACC 胸痛评估」「诊断指南」「ESC 相关指南」「初级保健胸痛评估指南」「躯体症状障碍诊疗指南」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [11] 在正文中从未被引用：「Walker NJ, Sites FD, Shofer FS, Hollander JE. Characteristics and outcomes of young adults who p…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-23_研究任务": {
+  "valid": false,
+  "errorCode": "regulatory_article_without_official_source",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 7 行写「对随机对照试验（RCT）按 RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 7 行写「系统评价按 AMSTAR 2 评价偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "claims[12].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "报告正文第 55 行以条款级方式引用「《药品管理法》第五十四条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第54条 / Article 54）；该行现有引用为 [1, 2, 14]，指向 无可解析来源。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "报告正文第 55 行以条款级方式引用「《处方药与非处方药分类管理办法（试行）》第四条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第4条 / Article 4）；该行现有引用为 [1, 2, 14]，指向 无可解析来源。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "报告正文第 57 行以条款级方式引用「《药品网络销售监督管理办法》（总局令第 58 号）第九条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第9条 / Article 9）；该行现有引用为 [3, 4]，指向 无可解析来源。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "报告正文第 57 行以条款级方式引用「《处方管理办法》第十九条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第19条 / Article 19）；该行现有引用为 [3, 4]，指向 无可解析来源。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "Report line 51 numeric facts 3 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+   "Report line 57 numeric facts 7, 3 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+   "Report line 67 numeric facts 4 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "Report line 73 numeric facts 4 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "Report line 89 numeric facts 7 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+   "Report line 101 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 2.1、2.2 把题面第 2 问登记为 answered，但这一问点名的「单次含服粒数」「每日次数」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "blockingIssues": [
+   "报告正文第 55 行以条款级方式引用「《药品管理法》第五十四条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第54条 / Article 54）；该行现有引用为 [1, 2, 14]，指向 无可解析来源。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "报告正文第 55 行以条款级方式引用「《处方药与非处方药分类管理办法（试行）》第四条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第4条 / Article 4）；该行现有引用为 [1, 2, 14]，指向 无可解析来源。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "报告正文第 57 行以条款级方式引用「《药品网络销售监督管理办法》（总局令第 58 号）第九条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第9条 / Article 9）；该行现有引用为 [3, 4]，指向 无可解析来源。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "报告正文第 57 行以条款级方式引用「《处方管理办法》第十九条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第19条 / Article 19）；该行现有引用为 [3, 4]，指向 无可解析来源。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 2.1、2.2 把题面第 2 问登记为 answered，但这一问点名的「单次含服粒数」「每日次数」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-24_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_screening_ledger_mismatch",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 39 行写「随机试验按 Cochrane RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 39 行写「非随机干预按 ROBINS-I」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 39 行写「系统评价按 AMSTAR 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 Newcastle-Ottawa，但结果与讨论中没有一处用它给出评级：第 39 行写「前瞻性队列按 Newcastle-Ottawa 思路」。该行以「思路/精神/理念/参照…要点」提及 Newcastle-Ottawa，等同于未使用。删除工具名并直接写你实际做了什么，或在结果或讨论里对具体一篇文献用它评一次。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 39 行写「个案不良反应的因果归因按 WHO-UMC 标准」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4 把题面第 1 问登记为 answered，但这一问点名的「房性」「室性早搏」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [5]、[6]、[7]、[8]、[12] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 12 条编号条目，screening.sourcesIncluded = 7。编号表必须恰好是 included=true 的来源集合：同数量、同编号。",
+   "clinical-evidence-search.json 的 sourceRecords[4] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[4] 标记为 \"included\": false，却仍以编号 [5] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[5] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[5] 标记为 \"included\": false，却仍以编号 [6] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[6] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[6] 标记为 \"included\": false，却仍以编号 [7] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[7] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[7] 标记为 \"included\": false，却仍以编号 [8] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[11] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[11] 标记为 \"included\": false，却仍以编号 [12] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。"
+  ],
+  "blockingIssues": [
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4 把题面第 1 问登记为 answered，但这一问点名的「房性」「室性早搏」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [5]、[6]、[7]、[8]、[12] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 12 条编号条目，screening.sourcesIncluded = 7。编号表必须恰好是 included=true 的来源集合：同数量、同编号。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-25_研究任务": {
+  "valid": false,
+  "errorCode": "declared-appraisal-must-execute",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 45 行写「干预性研究按 Cochrane RoB 2 评价偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 45 行写「系统评价按 AMSTAR 2 评价方法学质量」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 45 行写「不良反应的因果归因按 WHO-UMC 或 Naranjo 量表」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 45 行写「不良反应的因果归因按 WHO-UMC 或 Naranjo 量表」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "GRADE 等级与降级理由不自洽——第 83 行「本研究最实质的局限在于监管来源的不可及。国家药品监督管理局的药品登记信息、非处方药目录与处方药－非处方药转换公告均无法访问，中文全文数据库（CNKI、万方、维普）不可访问，导致分类属性与沿革的…」同句断言了证据缺陷（如方法学质量偏低、偏倚风险高、存在不一致或间接性），却给出含「高」的确定性等级。任何一项降级都排除「高」，请改等级或删除该缺陷断言。（只写出五个降级领域的名称并说明未因其降级——如「偏倚风险低、结果一致、估计精确、无发表偏倚证据」——不触发本条。）",
+   "Report line 59 numeric facts 6 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "报告第 63 行把书目标识符放进了引用位：「[题录，PMID 22897413，全文未获]」。行内 PMID/DOI 不能代替编号引用——为该来源分配参考文献编号与 claim，或按未纳入来源记入检索日志。",
+   "报告第 63 行把书目标识符放进了引用位：「[题录，PMID 29721788，全文未获]」。行内 PMID/DOI 不能代替编号引用——为该来源分配参考文献编号与 claim，或按未纳入来源记入检索日志。"
+  ],
+  "blockingIssues": [
+   "GRADE 等级与降级理由不自洽——第 83 行「本研究最实质的局限在于监管来源的不可及。国家药品监督管理局的药品登记信息、非处方药目录与处方药－非处方药转换公告均无法访问，中文全文数据库（CNKI、万方、维普）不可访问，导致分类属性与沿革的…」同句断言了证据缺陷（如方法学质量偏低、偏倚风险高、存在不一致或间接性），却给出含「高」的确定性等级。任何一项降级都排除「高」，请改等级或删除该缺陷断言。（只写出五个降级领域的名称并说明未因其降级——如「偏倚风险低、结果一致、估计精确、无发表偏倚证据」——不触发本条。）",
+   "报告第 63 行把书目标识符放进了引用位：「[题录，PMID 22897413，全文未获]」。行内 PMID/DOI 不能代替编号引用——为该来源分配参考文献编号与 claim，或按未纳入来源记入检索日志。",
+   "报告第 63 行把书目标识符放进了引用位：「[题录，PMID 29721788，全文未获]」。行内 PMID/DOI 不能代替编号引用——为该来源分配参考文献编号与 claim，或按未纳入来源记入检索日志。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-26_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_screening_ledger_mismatch",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 43 行写「随机试验用 Cochrane RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 43 行写「非随机研究用 ROBINS-I 评估。个案不良反应的因果归因用 WHO-UMC 标准说明归因强度。证据体的确定性用 GRADE 表述」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 Newcastle-Ottawa，但结果与讨论中没有一处用它给出评级：第 7 行写「Newcastle-Ottawa 量表评估。」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Newcastle-Ottawa 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 43 行写「非随机研究用 ROBINS-I 评估。个案不良反应的因果归因用 WHO-UMC 标准说明归因强度。证据体的确定性用 GRADE 表述」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "Report line 71 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "Report line 77 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "报告第 65 行以「作者指出」把立场归属给来源，但该行引用的 CLM-008，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。",
+   "Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms. State instead that relief after a sublingual dose does not distinguish cardiac from non-cardiac pain, cite the evidence for that, and say that persisting symptoms call for emergency assessment regardless of the response.",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5、2.6 把题面第 2 问登记为 answered，但这一问点名的「广泛性焦虑障碍」「低碳酸血症」「持续时间」「缓解方式」「伴随表现」「肢端麻木」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3 把题面第 3 问登记为 answered，但这一问点名的「12 导联心电图」「动态心电图」「电解质」「必要时负荷试验」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 5.1、5.2、5.3、5.4、5.5、5.6 把题面第 5 问登记为 answered，但这一问点名的「焦虑量表评分」「心悸发作频次」「症状评分」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [1]、[11]、[12]、[13] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 13 条编号条目，screening.sourcesIncluded = 9。编号表必须恰好是 included=true 的来源集合：同数量、同编号。",
+   "clinical-evidence-search.json 的 sourceRecords[9] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[9] 标记为 \"included\": false，却仍以编号 [1] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[10] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[10] 标记为 \"included\": false，却仍以编号 [11] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[11] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[11] 标记为 \"included\": false，却仍以编号 [12] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[12] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[12] 标记为 \"included\": false，却仍以编号 [13] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。"
+  ],
+  "blockingIssues": [
+   "报告第 65 行以「作者指出」把立场归属给来源，但该行引用的 CLM-008，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。",
+   "Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms. State instead that relief after a sublingual dose does not distinguish cardiac from non-cardiac pain, cite the evidence for that, and say that persisting symptoms call for emergency assessment regardless of the response.",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5、2.6 把题面第 2 问登记为 answered，但这一问点名的「广泛性焦虑障碍」「低碳酸血症」「持续时间」「缓解方式」「伴随表现」「肢端麻木」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3 把题面第 3 问登记为 answered，但这一问点名的「12 导联心电图」「动态心电图」「电解质」「必要时负荷试验」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 5.1、5.2、5.3、5.4、5.5、5.6 把题面第 5 问登记为 answered，但这一问点名的「焦虑量表评分」「心悸发作频次」「症状评分」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [1]、[11]、[12]、[13] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 13 条编号条目，screening.sourcesIncluded = 9。编号表必须恰好是 included=true 的来源集合：同数量、同编号。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-27_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_screening_ledger_mismatch",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 33 行写「随机试验以 Cochrane RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 33 行写「非随机研究以 ROBINS-I 评估」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 ROBINS-E，但结果与讨论中没有一处用它给出评级：第 33 行写「以 Newcastle-Ottawa 量表或 ROBINS-E 评估」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-E 从方法里删掉。",
+   "资料与方法声明了 QUADAS-2，但结果与讨论中没有一处用它给出评级：第 33 行写「偏倚风险以 QUADAS-2 评估」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 QUADAS-2 从方法里删掉。",
+   "资料与方法声明了 Newcastle-Ottawa，但结果与讨论中没有一处用它给出评级：第 33 行写「以 Newcastle-Ottawa 量表或 ROBINS-E 评估」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Newcastle-Ottawa 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 33 行写「个案不良反应归因以 Naranjo 量表或 WHO-UMC 标准说明强度。同一比较中所有被评价项使用同一评价工具」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 33 行写「个案不良反应归因以 Naranjo 量表或 WHO-UMC 标准说明强度。同一比较中所有被评价项使用同一评价工具」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 7 行写「确定性以 GRADE 表述」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 GRADE 从方法里删掉。",
+   "claims[20].claim numeric fact 976 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "claims[20].claim numeric fact 37 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+   "报告第 57 行以「作者将血管舒缩症状视为」把立场归属给来源，但该行引用的 CLM-021、CLM-008、CLM-007，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4、1.5 把题面第 1 问登记为 answered，但这一问点名的「用法用量」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5 把题面第 3 问登记为 answered，但这一问点名的「抑郁躯体化」「甲状腺功能异常」「贫血」「房性」「室性期前收缩」「阵发性室上性心动过速」「阻塞性冠心病」「非阻塞性冠状动脉缺血」等 9 项在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4 把题面第 4 问登记为 answered，但这一问点名的「对照设置」「SAQ 评分」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [1]、[4]、[12]、[13]、[14]、[15]、[16]、[17] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 17 条编号条目，screening.sourcesIncluded = 9。编号表必须恰好是 included=true 的来源集合：同数量、同编号。",
+   "参考文献 [12] 在正文中从未被引用：「Zhu D, Chung HF, Dobson AJ, et al. Vasomotor menopausal symptoms and risk of cardiovascular dise…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [13] 在正文中从未被引用：「Thurston RC, Christie IC, Matthews KA. Hot flashes and cardiac vagal control during women's dail…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [14] 在正文中从未被引用：「Stokes WH, Tahsin CT, Anselmo M, et al. Vasomotor symptoms of menopause, sympathetic activity, a…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [17] 在正文中从未被引用：「中华医学会妇产科学分会绝经学组. 绝经管理与绝经激素治疗中国指南（2018）. 中华妇产科杂志. 2018;53(11):729-739.」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "citation-audit.md must reference at least one real audited source identifier from the evidence matrix."
+  ],
+  "blockingIssues": [
+   "报告第 57 行以「作者将血管舒缩症状视为」把立场归属给来源，但该行引用的 CLM-021、CLM-008、CLM-007，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4、1.5 把题面第 1 问登记为 answered，但这一问点名的「用法用量」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5 把题面第 3 问登记为 answered，但这一问点名的「抑郁躯体化」「甲状腺功能异常」「贫血」「房性」「室性期前收缩」「阵发性室上性心动过速」「阻塞性冠心病」「非阻塞性冠状动脉缺血」等 9 项在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4 把题面第 4 问登记为 answered，但这一问点名的「对照设置」「SAQ 评分」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [1]、[4]、[12]、[13]、[14]、[15]、[16]、[17] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 17 条编号条目，screening.sourcesIncluded = 9。编号表必须恰好是 included=true 的来源集合：同数量、同编号。",
+   "参考文献 [12] 在正文中从未被引用：「Zhu D, Chung HF, Dobson AJ, et al. Vasomotor menopausal symptoms and risk of cardiovascular dise…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [13] 在正文中从未被引用：「Thurston RC, Christie IC, Matthews KA. Hot flashes and cardiac vagal control during women's dail…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [14] 在正文中从未被引用：「Stokes WH, Tahsin CT, Anselmo M, et al. Vasomotor symptoms of menopause, sympathetic activity, a…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "参考文献 [17] 在正文中从未被引用：「中华医学会妇产科学分会绝经学组. 绝经管理与绝经激素治疗中国指南（2018）. 中华妇产科杂志. 2018;53(11):729-739.」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-28_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_screening_ledger_mismatch",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 35 行写「说明书的不良反应罗列与无分母病例系列不用于估计发生率。干预性研究以 Cochrane RoB 2 评价偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 35 行写「系统评价以 AMSTAR 2 说明其方法学质量」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 35 行写「指南推荐按原文的推荐类别与证据等级引用。个案不良反应的因果归因以 Naranjo 量表或 WHO-UMC 标准说明归因强度。同一问题下形成证据体时按 GRADE 给出确定性等级」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 35 行写「指南推荐按原文的推荐类别与证据等级引用。个案不良反应的因果归因以 Naranjo 量表或 WHO-UMC 标准说明归因强度。同一问题下形成证据体时按 GRADE 给出确定性等级」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 7 行写「以 GRADE 评定证据体确定性」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 GRADE 从方法里删掉。",
+   "Report line 57 numeric facts 2014-2019 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "Report line 63 numeric facts 2012-2020, 76 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4、1.5 把题面第 1 问登记为 answered，但这一问点名的「用法用量」「有效期」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4 把题面第 4 问登记为 answered，但这一问点名的「早发冠心病家族史」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [5]、[6]、[7]、[8]、[12]、[14]、[16] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 20 条编号条目，screening.sourcesIncluded = 13。编号表必须恰好是 included=true 的来源集合：同数量、同编号。",
+   "clinical-evidence-search.json 的 sourceRecords[4] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[4] 标记为 \"included\": false，却仍以编号 [5] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[5] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[5] 标记为 \"included\": false，却仍以编号 [6] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[6] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[6] 标记为 \"included\": false，却仍以编号 [7] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[7] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[7] 标记为 \"included\": false，却仍以编号 [8] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[11] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[11] 标记为 \"included\": false，却仍以编号 [12] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[13] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[13] 标记为 \"included\": false，却仍以编号 [14] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。",
+   "clinical-evidence-search.json 的 sourceRecords[15] 标记为 \"included\": false 却没有 exclusionReason：未纳入的来源必须写明排除理由。",
+   "clinical-evidence-search.json 的 sourceRecords[15] 标记为 \"included\": false，却仍以编号 [16] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。"
+  ],
+  "blockingIssues": [
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4、1.5 把题面第 1 问登记为 answered，但这一问点名的「用法用量」「有效期」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4 把题面第 4 问登记为 answered，但这一问点名的「早发冠心病家族史」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [5]、[6]、[7]、[8]、[12]、[14]、[16] 在正文中被引用或列入参考文献表，但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。要么读到可核验层级并置 included=true、同步更新 screening 计数，要么删除这条引用——题录层级的记录支撑不了任何陈述。",
+   "参考文献表共 20 条编号条目，screening.sourcesIncluded = 13。编号表必须恰好是 included=true 的来源集合：同数量、同编号。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-29_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_unsupported",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 7 行写「RoB 2 与 GRADE 分层评估证据确定性。」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 QUADAS-2，但结果与讨论中没有一处用它给出评级：第 7 行写「按 QUADAS-2」。QUADAS-2 只在局限性或结论里出现。确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 53 行写「设备或植入装置检出的亚临床房颤人群与常规确诊房颤人群的抗凝证据分列陈述。个案不良反应的因果归因按 Naranjo 量表或 WHO-UMC 标准说明归因强度。中文全文数据库（CNKI」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 53 行写「设备或植入装置检出的亚临床房颤人群与常规确诊房颤人群的抗凝证据分列陈述。个案不良反应的因果归因按 Naranjo 量表或 WHO-UMC 标准说明归因强度。中文全文数据库（CNKI」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 7 行写「RoB 2 与 GRADE 分层评估证据确定性。」。GRADE 只在局限性或结论里出现。确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4、1.5 把题面第 1 问登记为 answered，但这一问点名的「活动状态」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5 把题面第 2 问登记为 answered，但这一问点名的「ACCP」「国内心律失常」「延长心电监测」「急性呼吸困难」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "blockingIssues": [
+   "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+   "question-coverage.json 条目 1.1、1.2、1.3、1.4、1.5 把题面第 1 问登记为 answered，但这一问点名的「活动状态」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5 把题面第 2 问登记为 answered，但这一问点名的「ACCP」「国内心律失常」「延长心电监测」「急性呼吸困难」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-30_研究任务": {
+  "valid": false,
+  "errorCode": "regulatory_article_without_official_source",
+  "issues": [
+   "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 37 行写「说明书的不良反应罗列与无分母病例系列不用于估计发生率。干预性研究按 Cochrane 偏倚风险评估（RoB 2／ROBINS-I）判断偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+   "资料与方法声明了 ROBINS-I，但结果与讨论中没有一处用它给出评级：第 37 行写「说明书的不良反应罗列与无分母病例系列不用于估计发生率。干预性研究按 Cochrane 偏倚风险评估（RoB 2／ROBINS-I）判断偏倚风险」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 ROBINS-I 从方法里删掉。",
+   "资料与方法声明了 AMSTAR 2，但结果与讨论中没有一处用它给出评级：第 37 行写「系统评价按 AMSTAR 2 说明方法学质量」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AMSTAR 2 从方法里删掉。",
+   "资料与方法声明了 AGREE II，但结果与讨论中没有一处用它给出评级：第 37 行写「指南按 AGREE II 说明方法学质量。证据体的确定性按 GRADE 判定」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 AGREE II 从方法里删掉。",
+   "资料与方法声明了 Naranjo，但结果与讨论中没有一处用它给出评级：第 37 行写「并注明升降级理由。不良反应的因果归因按 Naranjo 量表或 WHO-UMC 标准说明归因强度」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 Naranjo 从方法里删掉。",
+   "资料与方法声明了 WHO-UMC，但结果与讨论中没有一处用它给出评级：第 37 行写「并注明升降级理由。不良反应的因果归因按 Naranjo 量表或 WHO-UMC 标准说明归因强度」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 WHO-UMC 从方法里删掉。",
+   "报告正文第 71 行以条款级方式引用「《医师法》第 29 条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第29条 / Article 29）；该行现有引用为 [13]，指向 europepmc.org。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "报告正文第 99 行以条款级方式引用「《医师法》第 29 条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第29条 / Article 29）；该行现有引用为 [13]，指向 europepmc.org。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "报告正文第 110 行以条款级方式引用「《医师法》第 29 条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第29条 / Article 29）；该行现有引用为 [13]，指向 europepmc.org。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5、2.6 把题面第 2 问登记为 answered，但这一问点名的「HADS」「检查中心率」「共识」「信息提供」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5 把题面第 3 问登记为 answered，但这一问点名的「运动负荷试验」「无创影像」「静息」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4 把题面第 4 问登记为 answered，但这一问点名的「对照设置」「心血管事件」「碘造影剂」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [9] 在正文中从未被引用：「Delewi R, Vlastra W, Rohling WJ, et al. Anxiety levels of patients undergoing coronary procedure…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "The practical section's report line 105 anchors claim CLM-001，但该行只引用了 [1]，而 CLM-001 的 referenceNumber 是 3。把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。"
+  ],
+  "blockingIssues": [
+   "报告正文第 71 行以条款级方式引用「《医师法》第 29 条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第29条 / Article 29）；该行现有引用为 [13]，指向 europepmc.org。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "报告正文第 99 行以条款级方式引用「《医师法》第 29 条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第29条 / Article 29）；该行现有引用为 [13]，指向 europepmc.org。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "报告正文第 110 行以条款级方式引用「《医师法》第 29 条」，但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第29条 / Article 29）；该行现有引用为 [13]，指向 europepmc.org。条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」改写为「一篇法学综述归纳《医师法》为超说明书用药设定四项前提」。",
+   "question-coverage.json 条目 2.1、2.2、2.3、2.4、2.5、2.6 把题面第 2 问登记为 answered，但这一问点名的「HADS」「检查中心率」「共识」「信息提供」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 3.1、3.2、3.3、3.4、3.5 把题面第 3 问登记为 answered，但这一问点名的「运动负荷试验」「无创影像」「静息」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "question-coverage.json 条目 4.1、4.2、4.3、4.4 把题面第 4 问登记为 answered，但这一问点名的「对照设置」「心血管事件」「碘造影剂」在报告全篇一次未出现，同一列举中的其余项则都在正文里。题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
+   "参考文献 [9] 在正文中从未被引用：「Delewi R, Vlastra W, Rohling WJ, et al. Anxiety levels of patients undergoing coronary procedure…」。已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
+   "The practical section's report line 105 anchors claim CLM-001，但该行只引用了 [1]，而 CLM-001 的 referenceNumber 是 3。把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。"
+  ],
+  "coverageDegradedNotice": null
+ },
+ "RQ-31_研究任务": {
+  "valid": false,
+  "errorCode": "specialist_question_coverage_invalid",
+  "issues": [
+   "clinical-evidence-report.md must contain academic analysis.",
+   "The academic title must be present.",
+   "The academic report is missing a required section matching /(?:^|\\n)##\\s+(?:摘要|Abstract)/i.",
+   "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:临床|证据|Evidence|Clinical)/i.",
+   "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:局限|Limitations?)/i.",
+   "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:结论|Conclusion)/i.",
+   "The academic report is missing the safety-first practical-answer section. Head it with one of: 安全优先的实际处置 / 实际处置 / 实用回答 / 临床实践要点 / 临床要点 / 实用 / 怎么办 / Practical — every safety check on practical advice locates that section by its heading, so a heading outside this set means the section is never audited.",
+   "The evidence matrix must contain the report's material claims.",
+   "question-coverage.json 台账格式无效：文件缺失或为空。它必须是一个 JSON 对象，逐条列出题面「需要回答的问题」拆出的原子子问。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+   "clinical-evidence-run.json must be an object."
+  ],
+  "blockingIssues": [
+   "clinical-evidence-report.md must contain academic analysis.",
+   "The academic title must be present.",
+   "The academic report is missing the safety-first practical-answer section. Head it with one of: 安全优先的实际处置 / 实际处置 / 实用回答 / 临床实践要点 / 临床要点 / 实用 / 怎么办 / Practical — every safety check on practical advice locates that section by its heading, so a heading outside this set means the section is never audited.",
+   "The evidence matrix must contain the report's material claims.",
+   "question-coverage.json 台账格式无效：文件缺失或为空。它必须是一个 JSON 对象，逐条列出题面「需要回答的问题」拆出的原子子问。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+   "clinical-evidence-run.json must be an object."
+  ],
+  "coverageDegradedNotice": null
+ }
+}

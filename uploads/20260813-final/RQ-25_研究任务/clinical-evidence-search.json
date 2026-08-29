@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-14T06:04:00Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "Crossref",
+    "ClinicalTrials.gov",
+    "guideline index"
+  ],
+  "queries": [
+    {
+      "database": "literature (zh)",
+      "query": "速效救心丸 非处方药 转换",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "literature (zh)",
+      "query": "速效救心丸 甲类非处方药 OTC",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "literature (zh)",
+      "query": "速效救心丸 批准文号 国药准字 处方药",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "self-medication chest pain treatment delay help-seeking",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "patient delay acute coronary syndrome self-treatment factors",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "traditional Chinese medicine syndrome differentiation inter-rater agreement kappa reliability",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "self-medication myocardial infarction delay",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay acute myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin pill stable angina randomized double-blind placebo",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "guideline index",
+      "query": "胸痹心痛 心绞痛 速效救心丸 中成药",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "suxiao jiuxin wan angina pectoris Cochrane",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 9
+    },
+    {
+      "database": "PubMed",
+      "query": "syndrome differentiation angina pectoris Chinese medicine reliability",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "self-medication chest pain over-the-counter",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed",
+      "query": "symptom attribution acute myocardial infarction delay",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Crossref",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "ClinicalTrials.gov",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "literature (zh)",
+      "query": "速效救心丸 说明书 修订 非处方药目录",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease Meta-Analysis of Randomized Controlled Trials",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 100,
+    "recordsAfterDeduplication": 98,
+    "sourcesIncluded": 6,
+    "deduplicationNote": "evimed_evidence_deduplicate applied to 14 candidate records -> 12 unique (2 exact DOI duplicates removed)."
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "nhs2023chestpain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "emergency boundary"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "hu2024suxiaoCCS",
+      "identifier": "PMID:39367481",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "efficacy/safety RCT"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "ruan2021suxiaoProtocol",
+      "identifier": "PMID:34281600",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "indication/syndrome definition"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "ren2018suxiaoMeta",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "efficacy meta-analysis"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "farshidi2013prehospital",
+      "identifier": "PMID:24083004",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "self-medication/delay"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "lee2020prehospital",
+      "identifier": "PMID:31766823",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "prehospital delay/EMS"
+    }
+  ]
+}

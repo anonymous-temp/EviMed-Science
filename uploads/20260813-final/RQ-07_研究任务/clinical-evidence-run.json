@@ -1,0 +1,55 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸用于经皮冠状动脉介入治疗（PCI）后患者的适应症边界、术后人群直接证据与指南立场评价",
+  "title": "速效救心丸用于经皮冠状动脉介入治疗后患者：适应症边界、术后人群直接证据与指南立场的评价",
+  "startedAt": "2026-08-13T15:28:00Z",
+  "completedAt": "2026-08-13T15:51:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_clinical_trial_search",
+    "evimed_drug_label_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate",
+    "evimed_web_search"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC10206061/fulltext.md",
+    ".evimed-sources/PMC10037824/fulltext.md",
+    ".evimed-sources/PMC12260233/fulltext.md",
+    ".evimed-sources/PMC11649660/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "PMID:32716206 / DOI:10.1089/acm.2020.0014 (Shen 2020 ACS early PCI RCT) — no open-access full text",
+    "PMID:18254051 / DOI:10.1002/14651858.CD004473.pub2 (Cochrane 2008) — Cochrane Library unreachable",
+    "PMID:37487965 / DOI:10.1016/j.jep.2023.116959 (stable angina RCT) — no open-access full text",
+    "PMID:38301300 (MIRI miR-193a-3p) — no open-access full text",
+    "PMID:32744020 (ACS systematic review) — Unpaywall HTTP 404",
+    "PMID:31504439 / DOI:10.1093/eurheartj/ehz425 (ESC 2019 CCS guideline) — abstract and full text not obtainable",
+    "PMID:37480922 / DOI:10.1016/j.jacc.2023.04.003 (AHA/ACC 2023 guideline) — full text not obtainable, abstract only",
+    "NMPA 国家药监局官方说明书数据查询原文 — 不在可抓取路由白名单内，仅获索引记录",
+    "CNKI/万方/维普中文全文 — 不可访问，中文研究仅摘要级"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 26,
+    "recordsIdentified": 203,
+    "recordsAfterDeduplication": 125,
+    "sourcesIncluded": 24,
+    "distinctPreservedSources": 7
+  },
+  "status": "succeeded"
+}

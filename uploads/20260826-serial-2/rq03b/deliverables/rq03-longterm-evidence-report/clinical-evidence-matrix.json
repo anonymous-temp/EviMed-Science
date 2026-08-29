@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "一项前瞻性、随机、双盲、安慰剂对照、多中心试验将纳入 324 例慢性稳定型心绞痛（气滞血瘀证）受试者。",
+      "claimType": "direct",
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "This is a prospective, randomized, double-blind, placebo-controlled, and multicenter trial. The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome).",
+      "applicability": "气滞血瘀证稳定型心绞痛的成人长期联用设计（方案级）",
+      "uncertainty": "方案级证据，非最终结果；摘要未报告失访与 MACE 结果"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "本品或安慰剂 5 粒口服、每日 3 次，在常规治疗基础上连用 24 周；主要结局为 4 周时心绞痛症状改善率与主要不良心血管事件（MACE）。",
+      "claimType": "direct",
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks. The primary outcomes are the symptom improvement rate of angina from baseline to 4 weeks after inclusion and major adverse cardiovascular events (MACE).",
+      "applicability": "气滞血瘀证稳定型心绞痛的成人长期联用设计（方案级）",
+      "uncertainty": "方案级证据；摘要未报告 MACE 组间差异"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "本品由四甲基吡嗪与冰片组成（批准文号 Z12020025）。",
+      "claimType": "direct",
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "SJP is composed of tetramethylpyrazine and borneol approval number Z12020025 of the China State Food and Drug Administration [SFDA]).",
+      "applicability": "本品组方与批准文号信息",
+      "uncertainty": "方案转录信息，与说明书一致性待官方核对"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "该试验在 24 周疗程内监测生命体征、血/尿常规、肝肾功能与心电图并记录不良事件。",
+      "claimType": "direct",
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "Safety assessment will be based on vital signs, laboratory examinations, and adverse events. Vital signs will include the respiratory rate, blood pressure, and heart rate. Laboratory measurements will include a routine blood and urine test, hepatorenal assessment, and electrocardiogram",
+      "applicability": "该试验的安全性监测设计（24 周疗程内）",
+      "uncertainty": "监测设计而非长期发生率数据；不构成长期安全性结论"
+    }
+  ]
+}

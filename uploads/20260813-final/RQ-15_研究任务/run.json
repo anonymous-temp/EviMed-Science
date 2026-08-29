@@ -1,0 +1,38 @@
+{
+ "id": "run_110b09f85cc6e7aef47265461f60bcc3",
+ "dispatchId": "rq-15-3hdFN1",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_002e93027ffe0nEj4WE93hdFN1",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.93",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-15 研究任务 ## 选题 **《速效救心丸含服后的头晕、乏力与心悸：发生率估计的分母基础、因果归因所需的证据层级与分层处置阈值的溯源——从\"服药后出现\"到\"由药物引起\"需要何种证据》** ## 研究背景 服用速效救心丸后出现头晕、乏力、头痛、心悸或口干，是患者与药师之间最常发生的对话之一，而回答它需要同时解…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T21:46:11.855Z",
+ "startedAt": "2026-08-13T21:46:11.855Z",
+ "finishedAt": "2026-08-13T22:24:43.948Z",
+ "durationMs": 2312093,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": null,
+ "qualityNotices": [
+  "Report line 55 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+ ],
+ "observedMessages": 105,
+ "observedToolCalls": 143,
+ "lastProgressAt": "2026-08-13T22:24:27.886Z"
+}

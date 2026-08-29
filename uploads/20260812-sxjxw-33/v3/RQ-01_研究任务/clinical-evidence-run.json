@@ -1,0 +1,106 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "急性胸痛院外自救用药的证据评价：舌下含服硝酸甘油与速效救心丸的比较及 ALDH2 rs671 变异的人群学意义",
+  "title": "急性胸痛院外自救用药的证据评价：舌下含服硝酸甘油与速效救心丸的比较及 ALDH2 rs671 变异的人群学意义",
+  "startedAt": "2026-08-12T09:40:00Z",
+  "completedAt": "2026-08-12T10:45:00Z",
+  "tools": [
+    "evimed_health",
+    "evimed_data_source_catalog",
+    "evimed_drug_term_normalize",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_clinical_trial_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_web_search",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC3191425/fulltext.md",
+    ".evimed-sources/PMC4837835/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC8587134/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "PMID:16440063 / 10.1172/JCI26564",
+      "reason": "Li 2006 JCI 全文经 Europe PMC 上游不可用，两次尝试均失败；仅获摘要级记录"
+    },
+    {
+      "identifier": "PMC1351000",
+      "reason": "Li 2006 的 PMC 全文检索上游不可用（两次尝试失败）"
+    },
+    {
+      "identifier": "10.1093/eurheartj/ehad191 / PMID:37622654",
+      "reason": "2023 ESC ACS 指南全文源站点返回 HTTP 403，未获得全文"
+    },
+    {
+      "identifier": "10.1161/CIR.0000000000001029 / 10.1016/j.jacc.2021.07.053 / PMID:34756653 / PMID:34709928",
+      "reason": "2021 AHA/ACC 胸痛指南（Circulation 与 JACC 版本及执行摘要）未获得开放获取全文"
+    },
+    {
+      "identifier": "10.1002/14651858.CD004473.pub2 / PMID:18254051",
+      "reason": "Cochrane 综述全文源站点返回 HTTP 403，仅获题录级记录"
+    },
+    {
+      "identifier": "10.19852/j.cnki.jtcm.2020.04.002",
+      "reason": "JTCM 2020 系统评价 DOI 经 Unpaywall 返回 404，未获得全文"
+    },
+    {
+      "identifier": "PMID:14678936",
+      "reason": "Ann Intern Med 患者摘要非开放获取，未获得"
+    },
+    {
+      "identifier": "https://www.acc.org/latest-in-cardiology/ten-points-to-remember/2021/10/28/14/43/2021-aha-acc-ase-chest-saem-scct-scmr-guideline-for-the-evaluation-and-diagnosis-of-chest-pain",
+      "reason": "ACC 官方摘要页上游不可用"
+    },
+    {
+      "identifier": "gnomad rs671",
+      "reason": "gnomAD GraphQL 返回 Gene not found"
+    },
+    {
+      "identifier": "semantic-scholar (3 次查询)",
+      "reason": "HTTP 503，适配器熔断"
+    },
+    {
+      "identifier": "PMID:12450614 (Shry 2002)",
+      "reason": "仅获题录级记录，摘要未能获取"
+    },
+    {
+      "identifier": "PMID:15007008 / 20716739 / 29437704",
+      "reason": "De Luca 2004、Terkelsen 2010、Foo 2018 仅获题录级记录，未用于定量结论"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true,
+    "derivedMarking": true,
+    "practicalSectionSafety": true
+  },
+  "stats": {
+    "totalSearches": 51,
+    "recordsIdentified": 310,
+    "recordsAfterDeduplication": 185,
+    "sourcesIncluded": 31,
+    "claims": 26,
+    "references": 31
+  },
+  "status": "succeeded",
+  "notes": [
+    "服务器端门禁修复（2026-08-12 10:45）：检索日志删除 4 条'已记录但未执行'的检索（ClinicalTrials.gov nitroglycerin sublingual chest pain self-administration；NMPA 说明书索引两条含 '(China)' 后缀的检索词；EviMed pharmacy reference），命中数相应修正为 310/185/51。",
+    "主张数字可追溯修复：CLM-001/002/004/007 的范围表述改为'至'格式并与引文原文一致；CLM-005/007/008/009/011/014 扩展 supportQuote 以覆盖主张中的数字（24 周、174 例、4 周、5 粒、203 例、0.5 mg、117/47/48/22/0.3/90）；CLM-025 扩展综述引文覆盖 2017 年，删除无来源支持的 29/45/49 表述；新增推导主张 CLM-026（携带率 45% 至 49%），CLM-010 改为定性表述。",
+    "报告正文按门禁逐行修复：摘要目的/方法去除日期与'两项'等无关数字；摘要 Henrikson/Boersma 行改为定性表述（数值保留在结果与讨论）；引言第 4 问去除指南剂量与 70.8%（剂量细节保留在结果与临床实践要点）；结论(1)-(5)与讨论同步补齐主张标记；全部范围数字统一为'至'格式。",
+    "二次修复（10:26）：PMC5892298、PMC11451125 与 NHS 页面再次被同工作区并行进程以重新抓取覆盖，已再次通过保全工具重新获取并以工具返回哈希核验（bbf42a57…、f5b21871…、2719f2fd…）；全部 supportQuote 在重新获取后的工件上复核通过。"
+  ]
+}

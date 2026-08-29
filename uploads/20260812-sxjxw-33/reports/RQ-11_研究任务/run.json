@@ -1,0 +1,42 @@
+{
+ "id": "run_17a7b3046666737da7daddeaa2aa5049",
+ "dispatchId": "rq-11-2QTtxh",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00d2b3578ffeZyrIKOeK2QTtxh",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.1.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "matched:clinical-evidence-synthesis",
+ "model": "deepseek/deepseek-v4-flash",
+ "question": "# RQ-11 研究任务（派发给 EviMedScience 产品管线的原始题面） 题库中的语义问题 ① 胸口疼（心口疼）的病因鉴别（心源性 vs. 胃源性等，涉及 P9），转化为的学术研究命题。 --- ## 派发题面 请撰写一篇学术研究报告： **《心源性与非心源性胸痛鉴别要素的判别效能及指南分诊路径的一致性：症状…",
+ "status": "succeeded",
+ "createdAt": "2026-08-11T21:57:39.790Z",
+ "startedAt": "2026-08-11T21:57:39.790Z",
+ "finishedAt": "2026-08-11T22:48:32.475Z",
+ "durationMs": 3052685,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The report must not turn a bounded recommendation into an unsupported exclusive safety claim.",
+  "The academic report contains runtime or retrieval-process prose instead of scientific analysis.",
+  "Report line 142 numeric facts 2.8 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+  "Report line 151 numeric facts 2.8 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+  "Report line 169 numeric facts 6 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+ ],
+ "observedMessages": 168,
+ "observedToolCalls": 278,
+ "lastProgressAt": "2026-08-11T22:48:20.220Z"
+}

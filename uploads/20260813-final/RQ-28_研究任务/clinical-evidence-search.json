@@ -1,0 +1,327 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-14T08:39:48Z",
+  "databases": [
+    "PubMed",
+    "NMPA药品说明书索引",
+    "EviMed文献索引（中文）",
+    "指南索引",
+    "ClinicalTrials.gov"
+  ],
+  "queries": [
+    {
+      "database": "NMPA药品说明书索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "EviMed文献索引（中文）",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "指南索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin pill angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "PubMed",
+      "query": "home medicine cabinet expired medications prevalence household",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "pediatric unintentional poisoning household medications China emergency",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay acute myocardial infarction self-medication symptom attribution",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "ClinicalTrials.gov",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "expired unused medicines households",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "sudden cardiac death first manifestation coronary disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay myocardial infarction China",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "child poisoning medication China",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "China-PAR 10-year atherosclerotic cardiovascular disease risk prediction model",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 12
+    },
+    {
+      "database": "EviMed文献索引（中文）",
+      "query": "速效救心丸 稳定性 有效期",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "指南索引",
+      "query": "急性胸痛 评估 心电图 肌钙蛋白 指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "sudden cardiac death first manifestation coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "suxiao jiuxin wan angina pectoris Cochrane",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "expired medicines household storage prevalence survey developing countries",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "out-of-hospital cardiac arrest as first manifestation coronary artery disease population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "acute poisoning children medication ingestion household China",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol volatility sublimation stability pharmaceutical",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 136,
+    "recordsAfterDeduplication": 122,
+    "sourcesIncluded": 13
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NMPASuxiaoJiuxinWanLabel",
+      "identifier": "国药准字Z12020025",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "适应症与贮藏的监管文本（索引件）"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Ruan2021SJPProtocol",
+      "identifier": "PMID:34281600",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "成分/批准文号/试验人群/证据质量"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Cochrane2008SJPAngina",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "系统评价结论（证据薄弱）"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "CAIM2019Consensus",
+      "identifier": "速效救心丸治疗冠心病中国专家共识(2019)",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "本品专家共识（冠心病用药范围）"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Sun2024SJPStableAngina",
+      "identifier": "PMID:37487965",
+      "accessLevel": "structured_record",
+      "included": false,
+      "role": "稳定型心绞痛RCT（题录，未获全文）"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Liu2020SJPACS",
+      "identifier": "PMID:32744020",
+      "accessLevel": "structured_record",
+      "included": false,
+      "role": "ACS系统评价（题录，未获全文）"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Shen2020SJPPCI",
+      "identifier": "PMID:32716206",
+      "accessLevel": "structured_record",
+      "included": false,
+      "role": "ACS早期PCI联合用药RCT（题录，未获全文）"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Qiang2021SJPCYP450",
+      "identifier": "PMID:34252529",
+      "accessLevel": "structured_record",
+      "included": false,
+      "role": "CYP450相互作用评价（题录，未获全文）"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "NCT06531161",
+      "identifier": "NCT06531161",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "试验注册：急性高原反应预防，无诊断人群不适用"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "NCT05466968",
+      "identifier": "NCT05466968",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "试验注册：AMI斑块，非家庭备药"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Hu2022CCCACSDelay",
+      "identifier": "PMID:35572222",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "院前延迟/症状归因/延迟与死亡关联"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Cao2010ACSDelay",
+      "identifier": "PMID:20938251",
+      "accessLevel": "structured_record",
+      "included": false,
+      "role": "中国ACS院前延迟专题（题录）"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Li2021ChildPoisoning",
+      "identifier": "PMID:34956970",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "儿童中毒场所/药物占比/误服原因"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Tang2017PoisoningGBD",
+      "identifier": "PMID:28640688",
+      "accessLevel": "structured_record",
+      "included": false,
+      "role": "中国非故意中毒负担（题录）"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Yimer2024HouseholdStorage",
+      "identifier": "PMID:39512718",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "家庭存药比例/理由/风险"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Yang2016ChinaPAR",
+      "identifier": "PMID:27682885",
+      "accessLevel": "structured_record",
+      "included": false,
+      "role": "China-PAR 10年风险模型（题录）"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "Tabbah2026SCDReview",
+      "identifier": "PMID:41399777",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "冠心病以心脏性猝死为首发表现的综述"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "NHS chest pain page (2023)",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "胸痛急救行动边界"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "CSEP2019ChestPain",
+      "identifier": "急性胸痛急诊诊疗专家共识(2019)",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "指南未就无诊断者家庭备置抗心绞痛药作出表述"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "ACC2022ChestPainCDP",
+      "identifier": "2022 ACC Expert Consensus (chest pain, ED)",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "指南未就无诊断者家庭备置抗心绞痛药作出表述"
+    }
+  ]
+}

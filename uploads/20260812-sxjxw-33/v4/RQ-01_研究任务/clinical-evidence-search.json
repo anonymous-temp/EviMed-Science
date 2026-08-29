@@ -1,0 +1,371 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-13T03:18:30Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "Crossref",
+    "gnomAD",
+    "OpenAlex",
+    "EviMed 指南索引",
+    "ClinicalTrials.gov/ChiCTR 注册库"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "sublingual nitroglycerin angina pectoris relief efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 13
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin chest pain relief diagnostic coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 Glu504Lys polymorphism nitroglycerin efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 rs671 allele frequency East Asian population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 12
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay acute myocardial infarction mortality reperfusion",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina pectoris",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "aldehyde dehydrogenase 2 genotype nitroglycerin coronary artery disease vasodilation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "time to treatment delay mortality primary angioplasty ST elevation myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 nitroglycerin Chinese patients angina symptom relief genotype",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 心绞痛",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin Chinese patent medicine angina head-to-head comparison",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "acute chest pain acute coronary syndrome evaluation nitroglycerin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "stable angina chronic coronary syndrome nitrates sublingual",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 16
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "胸痛 急性心肌梗死 早期识别 拨打急救电话 120 心电图 肌钙蛋白",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "short-acting nitrates sublingual immediate relief angina pectoris recommendation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC",
+      "query": "ALDH2 Glu504Lys polymorphism nitroglycerin efficacy sublingual",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Chest pain relief by nitroglycerin does not predict active coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "suxiao jiuxin wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Impact of prehospital delay on mortality acute myocardial infarction primary angioplasty Zahn",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Crossref",
+      "query": "ALDH2 Glu504Lys nitroglycerin efficacy Chinese coronary artery disease relief",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "nitroglycerin response relief diagnostic value acute coronary syndrome chest pain sensitivity specificity",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Time delay to treatment mortality primary angioplasty every minute of delay counts De Luca",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "gnomAD",
+      "query": "ALDH2",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Crossref",
+      "query": "Glyceryl Trinitrate History Mystery Alcohol Intolerance Molecules 2021",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Crossref",
+      "query": "Refined geographic distribution of the oriental ALDH2 504Lys variant Annals of Human Genetics 2009",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "34770988",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "OpenAlex",
+      "query": "Glyceryl Trinitrate History Mystery Alcohol Intolerance",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 225,
+    "recordsAfterDeduplication": 225,
+    "sourcesIncluded": 20
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NHSChestPain2023",
+      "identifier": "NHS symptoms chest pain page",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "emergency triage action boundary"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Steele2006",
+      "identifier": "PMID:17320010",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "diagnostic performance (nitroglycerin relief)"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Henrikson2003",
+      "identifier": "PMID:14678917",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "diagnostic performance (nitroglycerin relief)"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Li2006",
+      "identifier": "PMID:16440063",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2 nitroglycerin bioactivation mechanism"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Zhong2018",
+      "identifier": "PMID:29623947",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2 rs671 frequency in Chinese population"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "PearsonButler2021",
+      "identifier": "PMID:34770988",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "GTN-ALDH2 mechanism and genotype-stratified clinical data"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Duan2008",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "suxiao jiuxin wan efficacy and head-to-head RCTs"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Hashiba2022",
+      "identifier": "PMID:36120483",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "prehospital activation and reperfusion delay"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Park2019",
+      "identifier": "PMID:31041869",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "onset-to-door and door-to-balloon time vs mortality"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "NMPANitroglycerinLabel",
+      "identifier": "NMPA 硝酸甘油片说明书",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "regulatory indication/contraindication"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "NMPASuxiaoLabel",
+      "identifier": "NMPA 速效救心丸说明书",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "regulatory indication/contraindication"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Qi2021",
+      "identifier": "PMID:34584183",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2 rs671 Chinese pharmacogene frequency"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Luo2009",
+      "identifier": "PMID:19456322",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2*504Lys geographic distribution"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Guo2008",
+      "identifier": "PMID:18772068",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2 hemodynamic response (CGRP)"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Mizuno2020",
+      "identifier": "PMID:32009064",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2 nitrate tolerance in vasospastic angina"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Zahn2001",
+      "identifier": "PMID:11431665",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "prehospital delay and mortality (MITRA/MIR)"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "DeLuca2004",
+      "identifier": "PMID:15007008",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "time delay to treatment and mortality"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "ESC2024CCS",
+      "identifier": "2024 ESC Guidelines chronic coronary syndromes",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "stable angina management guideline"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "ACC2022ChestPain",
+      "identifier": "2022 ACC Expert Consensus chest pain ED",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "acute chest pain evaluation pathway"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "CSC2024Biomarker",
+      "identifier": "胸痛中心规范化应用主要心血管生物标志物专家共识（2024）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "Chinese acute chest pain evaluation consensus"
+    }
+  ]
+}

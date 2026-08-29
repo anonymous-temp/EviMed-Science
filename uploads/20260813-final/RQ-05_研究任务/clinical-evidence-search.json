@@ -1,0 +1,256 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-13T14:19:00Z",
+  "databases": [
+    "PubMed",
+    "EviMed guideline index",
+    "Europe PMC"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "triggering of acute myocardial infarction case-crossover physical exertion",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 12
+    },
+    {
+      "database": "PubMed",
+      "query": "Valsalva maneuver hemodynamic effects coronary blood flow",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "defecation syncope cardiovascular",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 18
+    },
+    {
+      "database": "PubMed",
+      "query": "constipation risk of cardiovascular disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "sudden death during defecation toilet",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "body position defecation squatting sitting",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "straining during defecation three positions",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "chest pain evaluation diagnosis emergency",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "急性胸痛 急诊 诊疗 专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC",
+      "query": "2021 AHA ACC ASE CHEST SAEM SCCT SCMR guideline evaluation diagnosis chest pain Gulati",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "16112759",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "trigger myocardial infarction defecation straining case-crossover hazard period",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PubMed",
+      "query": "defecation straining myocardial infarction trigger Valsalva",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "defecation posture squatting intra-abdominal pressure straining",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "triggering myocardial infarction onset daily activities micturition",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "micturition defecation trigger acute coronary syndrome Culić",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "chest pain emergency call 911 immediate evaluation high sensitivity troponin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 123,
+    "recordsAfterDeduplication": 115,
+    "sourcesIncluded": 14
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 3,
+      "citationKey": "Kelters2025",
+      "identifier": "DOI:10.1093/eurheartj/ehaf367",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "morning MI circadian"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Yao2024",
+      "identifier": "DOI:10.1136/openhrt-2024-002904",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "SCA circadian"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Sundboll2020",
+      "identifier": "DOI:10.1136/bmjopen-2020-037080",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "constipation-CVD cohort"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Liu2025",
+      "identifier": "DOI:10.1080/07853890.2025.2561803",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "constipation meta-analysis"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Judkins2023",
+      "identifier": "DOI:10.1038/s41598-023-38068-y",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "constipation elderly cohort"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "SJXWLabel",
+      "identifier": "NMPA label (indexed record)",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "drug indication"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Hu2024",
+      "identifier": "DOI:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan RCT"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Ruan2021",
+      "identifier": "DOI:10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan protocol"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Ren2018",
+      "identifier": "DOI:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan meta-analysis"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Bai2014",
+      "identifier": "DOI:10.1155/2014/956924",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan mechanism"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "Lee2020",
+      "identifier": "DOI:10.3904/kjim.2019.123",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "prehospital delay"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "Hoschar2020",
+      "identifier": "DOI:10.1136/openhrt-2019-001175",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "educational interventions"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "AHA2021ChestPain",
+      "identifier": "official-page:3f9e2ebb850bd07f",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "chest pain guideline"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "NHSChestPain",
+      "identifier": "official-page:e6143b76645a9461",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "public triage"
+    }
+  ]
+}

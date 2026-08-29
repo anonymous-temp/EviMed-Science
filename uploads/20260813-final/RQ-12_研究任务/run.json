@@ -1,0 +1,43 @@
+{
+ "id": "run_4e7e73a599792dab1224acfe10cb7abf",
+ "dispatchId": "rq-12-0JqE9D",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_0036a61bbffezlZmimo10JqE9D",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.88",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-12 研究任务 ## 选题 **《速效救心丸与麝香保心丸的比较证据评价：直接头对头随机对照试验的检索结果、网络 meta 分析相对位次的可解释边界与互换使用的证据状态》** ## 研究背景 速效救心丸与麝香保心丸同为治疗胸痹心痛、冠心病心绞痛的常用中成药，在门诊咨询与药店柜台被反复并列比较，患者与家属最常提出…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T19:25:16.377Z",
+ "startedAt": "2026-08-13T19:25:16.377Z",
+ "finishedAt": "2026-08-13T20:15:16.209Z",
+ "durationMs": 2999832,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+  "claims[5].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+  "claims[11].claim numeric fact 19 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+  "Report line 78 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+  "Report line 92 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+  "citation-audit.md must reference at least one real audited source identifier from the evidence matrix."
+ ],
+ "observedMessages": 91,
+ "observedToolCalls": 124,
+ "lastProgressAt": "2026-08-13T20:14:56.761Z"
+}

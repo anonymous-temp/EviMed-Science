@@ -1,0 +1,51 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸连续用药三个月及以上的有效性与安全性证据评价：证据确定性分级与适用人群边界",
+  "title": "速效救心丸连续用药三个月及以上的有效性与安全性证据评价：证据确定性分级与适用人群边界",
+  "startedAt": "2026-08-13T12:05:00Z",
+  "completedAt": "2026-08-13T12:20:00Z",
+  "tools": [
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_clinical_trial_search",
+    "evimed_data_source_catalog",
+    "evimed_web_search",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC8841966/fulltext.md"
+  ],
+  "failedSources": [
+    {"identifier": "10.1016/j.jep.2023.116959", "title": "Evaluation of the efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (24-week trial results)", "reason": "非开放获取，全文未写入工作区；仅摘要"},
+    {"identifier": "18254051", "title": "Chinese herbal medicine suxiao jiuxin wan for angina pectoris (Cochrane)", "reason": "Cochrane Library HTTP 403，全文未取得"},
+    {"identifier": "10.1016/j.jep.2021.114408", "title": "Suxiao Jiuxin Pill CYP450/transporters interaction study", "reason": "非开放获取，全文未写入工作区；仅摘要"},
+    {"identifier": "10.19852/j.cnki.jtcm.2020.04.002", "title": "Suxiao Jiuxin pill for acute coronary syndrome (systematic review)", "reason": "Unpaywall 404，全文未取得；仅摘要"},
+    {"identifier": "PMID:33892091", "title": "Borneol in cardio-cerebrovascular diseases (review)", "reason": "非开放获取；仅摘要"},
+    {"identifier": "PMID:37321057", "title": "Borneol stereochemical configurations safety comparison", "reason": "非开放获取；仅摘要"},
+    {"identifier": "PMID:36594174", "title": "Borneol hepatotoxicity zebrafish", "reason": "非开放获取；仅题录"},
+    {"identifier": "PMID:36062847", "title": "Borneol/isoborneol cardiotoxicity zebrafish embryos", "reason": "非开放获取；仅题录"},
+    {"identifier": "NMPA label (速效救心丸)", "title": "国家药监局速效救心丸说明书", "reason": "官方现行文本页不在可获取路由白名单内；仅说明书索引副本"}
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 26,
+    "recordsIdentified": 246,
+    "recordsAfterDeduplication": 19,
+    "sourcesIncluded": 19,
+    "distinctPreservedSources": 4
+  },
+  "status": "succeeded"
+}

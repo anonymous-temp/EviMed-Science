@@ -1,0 +1,42 @@
+{
+ "id": "run_e1c0477c9e418ba0676e7a13846dcd6c",
+ "dispatchId": "rq-14-6MLhhx",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_0031a7229ffeq22UHbHZ6MLhhx",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.86",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-14 研究任务 ## 选题 **《超过有效期的口服中成药：质量与安全风险的分层证据、失效识别的方法学状态及家庭处置路径的法规溯源——以速效救心丸为例》** ## 研究背景 家庭药箱中长期存放的急救备用药，其超过有效期后应当如何看待、如何处理，是药师与临床医师被反复问及、却少有系统证据梳理的问题。围绕这一问题流…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T20:52:27.189Z",
+ "startedAt": "2026-08-13T20:52:27.189Z",
+ "finishedAt": "2026-08-13T21:45:47.855Z",
+ "durationMs": 3200666,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms. State instead that relief after a sublingual dose does not distinguish cardiac from non-cardiac pain, cite the evidence for that, and say that persisting symptoms call for emergency asse",
+  "MUST FIX — The search log must exactly match successful evidence-search calls from the same run — logged but never executed: \"过期药品 回收 处置 有效期 速效救心丸\", \"速效救心丸\".",
+  "claims[26].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+  "references.bib must contain a bibliography entry for every cited source URL.",
+  "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number."
+ ],
+ "observedMessages": 175,
+ "observedToolCalls": 219,
+ "lastProgressAt": "2026-08-13T21:45:30.485Z"
+}

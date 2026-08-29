@@ -1,0 +1,40 @@
+{
+ "id": "run_c91e7919e7f8686744980fe9be556f6c",
+ "dispatchId": "rq-28-Tl66JY",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_0009d7bceffezbRj5aYrTl66JY",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.94",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-28 研究任务 ## 选题 **《养生消费情境下无冠心病诊断者囤置速效救心丸：说明书适应症边界、家庭囤药的风险与获益，及备药门槛的证据评价》** ## 研究背景 以养生保健为由购置并在家中长期存放急救类药品的做法近年趋于普遍，速效救心丸常被当作一份「健康保险」备在家里，购置者往往并无冠心病诊断，购置量也超出单…",
+ "status": "succeeded",
+ "createdAt": "2026-08-14T08:28:18.736Z",
+ "startedAt": "2026-08-14T08:28:18.736Z",
+ "finishedAt": "2026-08-14T09:16:48.759Z",
+ "durationMs": 2910023,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+  "Report line 57 numeric facts 2014-2019 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+  "Report line 63 numeric facts 2012-2020, 76 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+ ],
+ "observedMessages": 70,
+ "observedToolCalls": 126,
+ "lastProgressAt": "2026-08-14T09:16:38.468Z"
+}

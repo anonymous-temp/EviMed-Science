@@ -1,0 +1,715 @@
+{
+  "formatVersion": 1,
+  "runId": "run_1722cd121ef9d88ad706a73256a10250",
+  "sessionId": "session-c4f2774b-8e1a-4e85-bde1-fd065897f5f4",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "updatedAt": "2026-08-26T13:07:21.914Z",
+  "plan": {
+    "revision": 1,
+    "items": [
+      {
+        "id": "rq02-clinical-evidence-report",
+        "title": "舌下含服硝酸甘油或速效救心丸后胸痛不缓解的时间阈值与院外升级路径：指南推荐的证据基础与一致性评价",
+        "contractKind": "clinical-evidence-report",
+        "capability": "clinical-evidence-synthesis",
+        "dependsOn": [],
+        "status": "rejected",
+        "attempts": 3,
+        "issues": [
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "claims[0].artifactPath is \"/workspace/.evimed-sources/official-pages/e6143b76645a9461/page.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+            "severity": "required"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "claims[1].artifactPath is \"/workspace/.evimed-sources/PMC4548722/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+            "severity": "required"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "claims[2].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+            "severity": "advisory"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "claims[2].artifactPath is \"/workspace/.evimed-sources/PMC4548722/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+            "severity": "required"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "claims[3].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+            "severity": "advisory"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "claims[3].artifactPath is \"/workspace/.evimed-sources/PMC4548722/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+            "severity": "required"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "claims[4].claim numeric fact 0.3-0.6 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "claims[4].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+            "severity": "advisory"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "claims[4].artifactPath is \"/workspace/.evimed-sources/PMC4548722/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+            "severity": "required"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "claims[5].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+            "severity": "advisory"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "claims[5].artifactPath is \"/workspace/.evimed-sources/PMC12733498/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+            "severity": "required"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "claims[6].artifactPath is \"/workspace/.evimed-sources/PMC12733498/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+            "severity": "required"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "claims[7].artifactPath is \"/workspace/.evimed-sources/PMC12733498/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+            "severity": "required"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "claims[8].artifactPath is \"/workspace/.evimed-sources/PMC12733498/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+            "severity": "required"
+          },
+          {
+            "code": "specialist_question_coverage_invalid",
+            "message": "claims[9].artifactPath is \"/workspace/.evimed-sources/PMC4548722/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+            "severity": "required"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 18 numeric facts 1.2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 24 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 56 numeric facts 1.2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 62 numeric facts 40 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+            "severity": "advisory"
+          },
+          {
+            "code": "clinical_evidence_notice",
+            "message": "Report line 74 numeric facts 95, 1.008-1.15 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+            "severity": "advisory"
+          }
+        ]
+      }
+    ]
+  },
+  "budget": {
+    "steps": 74,
+    "tokens": 344951,
+    "children": 0,
+    "limits": {
+      "maxSteps": 0,
+      "maxTokens": 0,
+      "maxChildren": 30
+    }
+  },
+  "evidence": {
+    "total": 126,
+    "byStatus": {
+      "stale": 126
+    }
+  },
+  "gateRuns": [
+    {
+      "runId": "run_1722cd121ef9d88ad706a73256a10250",
+      "attempt": 1,
+      "deliverableId": "rq02-clinical-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [
+        {
+          "code": "specialist_evidence_traceability_failed",
+          "message": "clinical-evidence-report.md is not in the deliverable, or is empty. Write it at exactly that name inside this deliverable's directory before submitting; the checks below cannot read a file that is not there.",
+          "severity": "required"
+        }
+      ],
+      "metrics": {
+        "citationCoverage": 0,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {}
+      },
+      "ok": false,
+      "at": "2026-08-26T12:49:25.318Z"
+    },
+    {
+      "runId": "run_1722cd121ef9d88ad706a73256a10250",
+      "attempt": 2,
+      "deliverableId": "rq02-clinical-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [
+        {
+          "code": "clinical_evidence_notice",
+          "message": "The academic report contains runtime or retrieval-process prose instead of scientific analysis: line 34 reads 检索 PubMed、Europe PMC、Crossref 三个文献索引，配合指南索引、国家药监局说明书索引，以及临床试验注册库；检索日期为 2026 年 8 月 26 日。检索词覆盖英文与中…. Write what the evidence shows, not how it was obtained — the run's tools, gateways, preserved artifacts (工件), access levels (访问层级), environment (本环境), and retrieval passes (本轮检索) belong in the run receipt. A source you could not obtain is stated as a limitation of the evidence base inside 局限性, in the reader's terms.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 RoB 2，但结果与讨论中没有一处用它给出评级：第 42 行写「说明书的不良反应罗列与无分母病例系列不用于估计发生率。干预性研究以 Cochrane RoB 2」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 RoB 2 从方法里删掉。",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "资料与方法声明了 QUADAS-2，但结果与讨论中没有一处用它给出评级：第 42 行写「诊断准确性研究以 QUADAS-2 评价」。工具名是承诺，不是资格声明——要么在结果或讨论里对具体一篇文献用它评一次（与该文献的编号同段，例如「按 QUADAS-2，该研究排除了…存在选择偏倚风险 [6]」），要么在结果里写明「未检索到可用该工具评定的研究」，要么把 QUADAS-2 从方法里删掉。",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[0].identifier must be a non-empty string.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[0].supportQuote was not found in its preserved source artifact.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[1].supportQuote was not found in its preserved source artifact.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[2].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[2].supportQuote was not found in its preserved source artifact.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[3].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[3].supportQuote was not found in its preserved source artifact.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[4].claim numeric fact 0.3-0.6 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[4].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[4].supportQuote was not found in its preserved source artifact.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[5].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[5].supportQuote was not found in its preserved source artifact.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[6].supportQuote was not found in its preserved source artifact.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[7].supportQuote was not found in its preserved source artifact.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[8].supportQuote was not found in its preserved source artifact.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[9].supportQuote was not found in its preserved source artifact.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 11 numeric facts 1, 1.2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 13 numeric facts 1, 7.5, 3, 7 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 14 numeric facts 60, 100 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 18 numeric facts 1.2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 24 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 56 numeric facts 1.2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 62 numeric facts 40 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 74 numeric facts 95, 1.008-1.15 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 76 numeric facts 1000, 65, 37, 26, 29, 44, 20 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 78 numeric facts 55, 11 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 90 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 92 numeric facts 1.2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 94 numeric facts 30, 1000 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 100 numeric facts 1.2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 104 numeric facts 1, 664 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 108 numeric facts 1, 30 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 116 numeric facts 1.2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 120 numeric facts 1, 7.5, 60, 100 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 122 numeric facts 55, 11 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 131 numeric facts 0.3-0.6 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "Every practical-action step or bullet must cite at least one evidence-matrix claim.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 1.3（「中国相关指南与专家共识对舌下含服硝酸甘油后症状不缓解应升级处置的时间界限如何表述」）声明 answered，但声明的行 58、92 所在段落都没有 claim 锚点（<!-- claim:CLM-… -->）。被当作已回答的子问，其答案必须挂在证据上；没有锚点的一段散文不是答案。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 2.1（「速效救心丸的国家药监局核准说明书是否给出对应的时间界限或再次给药间隔」）声明 answered，但声明的行 62 所在段落都没有 claim 锚点（<!-- claim:CLM-… -->）。被当作已回答的子问，其答案必须挂在证据上；没有锚点的一段散文不是答案。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 2.3（「若速效救心丸说明书或共识给出了时间界限，其依据能否追溯到具体研究或指南文本」）声明 answered，但声明的行 62 所在段落都没有 claim 锚点（<!-- claim:CLM-… -->）。被当作已回答的子问，其答案必须挂在证据上；没有锚点的一段散文不是答案。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 4.1（「院外升级路径由哪些步骤组成」）声明 answered，但声明的行 82 所在段落都没有 claim 锚点（<!-- claim:CLM-… -->）。被当作已回答的子问，其答案必须挂在证据上；没有锚点的一段散文不是答案。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 4.3（「各来源对三者先后次序的推荐彼此是否一致」）声明 answered，但声明的行 86 所在段落都没有 claim 锚点（<!-- claim:CLM-… -->）。被当作已回答的子问，其答案必须挂在证据上；没有锚点的一段散文不是答案。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 5.3（「若不能确认前瞻性研究支持，缺口具体落在哪一环」）声明 answered，但声明的行 94、108 所在段落都没有 claim 锚点（<!-- claim:CLM-… -->）。被当作已回答的子问，其答案必须挂在证据上；没有锚点的一段散文不是答案。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 5.2（「就每一条时间界限而言，\"该推荐有前瞻性研究支持\"能否在现有文献中被确认」）登记为 gap，摘要第 5 行却就同一主题「有前瞻性研究支持」给出了推荐或处置祈使：「其五，每条时间界限的\"存在推荐\"与\"有前瞻性研究支持\"能否分别确认，缺口落在哪一环。」。摘要、结论与临床实践要点是读者取走答案的地方，缺口不能在那里变成结论。要么把这一句改写成如实的缺口陈述（「未检索到该终点的直接证据，这是一处证据空白」是允许的，也是应当写的），要么这条子问其实有答案，把台账改成 answered 并给出正文行号。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 5.2（「就每一条时间界限而言，\"该推荐有前瞻性研究支持\"能否在现有文献中被确认」）登记为 gap，摘要第 18 行却就同一主题「有前瞻性研究支持」给出了推荐或处置祈使：「就每条界限而言，\"存在推荐\"可以确认，\"有前瞻性研究支持\"均不能确认，缺口落在从\"用药边界\"到\"升级时刻\"之间缺少以阈值本身为干预变量的对照研究。」。摘要、结论与临床实践要点是读者取走答案的地方，缺口不能在那里变成结论。要么把这一句改写成如实的缺口陈述（「未检索到该终点的直接证据，这是一处证据空白」是允许的，也是应当写的），要么这条子问其实有答案，把台账改成 answered 并给出正文行号。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 5.2（「就每一条时间界限而言，\"该推荐有前瞻性研究支持\"能否在现有文献中被确认」）登记为 gap，结论第 124 行却就同一主题「有前瞻性研究支持」给出了推荐或处置祈使：「（五）就每条时间界限而言，\"存在推荐\"可以确认，\"有前瞻性研究支持\"不能确认；」。摘要、结论与临床实践要点是读者取走答案的地方，缺口不能在那里变成结论。要么把这一句改写成如实的缺口陈述（「未检索到该终点的直接证据，这是一处证据空白」是允许的，也是应当写的），要么这条子问其实有答案，把台账改成 answered 并给出正文行号。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 3.3 的 question 不是题面第 3 问的原文：题面第 3 问是「支撑上述时间界限的证据属于何种类型——病理生理学推断、观察性研究，还是以时间阈值本身为变量的临床试验？现有文献中，院前延」。台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 3.4 的 question 不是题面第 3 问的原文：题面第 3 问是「支撑上述时间界限的证据属于何种类型——病理生理学推断、观察性研究，还是以时间阈值本身为变量的临床试验？现有文献中，院前延」。台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 4.3 的 question 不是题面第 4 问的原文：题面第 4 问是「院外升级路径由哪些步骤组成？在我国急救体系下，各来源对自我用药、呼叫 120、自行前往医院三者的先后次序如何推荐，彼此是」。台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 5.3 的 question 不是题面第 5 问的原文：题面第 5 问是「就每一条时间界限而言，\"存在推荐\"与\"该推荐有前瞻性研究支持\"能否在现有文献中被分别确认？若不能，缺口具体落在哪一环？」。台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "references.bib must contain a bibliography entry for every cited source URL.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "citation-audit.md must reference at least one real audited source identifier from the evidence matrix.",
+          "severity": "advisory"
+        }
+      ],
+      "metrics": {
+        "citationCoverage": 1,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {
+          "摘要": 13,
+          "引言": 6,
+          "资料与方法": 10,
+          "结果": 35,
+          "讨论": 15,
+          "局限性": 5,
+          "结论": 8,
+          "临床实践要点": 6
+        }
+      },
+      "ok": false,
+      "at": "2026-08-26T12:49:37.452Z"
+    },
+    {
+      "runId": "run_1722cd121ef9d88ad706a73256a10250",
+      "attempt": 3,
+      "deliverableId": "rq02-clinical-evidence-report",
+      "contractKind": "clinical-evidence-report",
+      "issues": [
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[0].artifactPath is \"/workspace/.evimed-sources/official-pages/e6143b76645a9461/page.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[1].artifactPath is \"/workspace/.evimed-sources/PMC4548722/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[2].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[2].artifactPath is \"/workspace/.evimed-sources/PMC4548722/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[3].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[3].artifactPath is \"/workspace/.evimed-sources/PMC4548722/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[4].claim numeric fact 0.3-0.6 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[4].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[4].artifactPath is \"/workspace/.evimed-sources/PMC4548722/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "claims[5].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[5].artifactPath is \"/workspace/.evimed-sources/PMC12733498/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[6].artifactPath is \"/workspace/.evimed-sources/PMC12733498/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[7].artifactPath is \"/workspace/.evimed-sources/PMC12733498/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[8].artifactPath is \"/workspace/.evimed-sources/PMC12733498/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "claims[9].artifactPath is \"/workspace/.evimed-sources/PMC4548722/fulltext.md\", which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 18 numeric facts 1.2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 24 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 56 numeric facts 1.2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 62 numeric facts 40 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 74 numeric facts 95, 1.008-1.15 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 76 numeric facts 1000, 65, 37, 26, 29, 44, 20 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 78 numeric facts 55, 11 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 90 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 94 numeric facts 30, 1000 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 100 numeric facts 1.2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 104 numeric facts 1, 664 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 108 numeric facts 1, 30 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 116 numeric facts 1.2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 120 numeric facts 1, 7.5, 60, 100 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 122 numeric facts 55, 11 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "Report line 131 numeric facts 0.3-0.6 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+          "severity": "advisory"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 台账格式无效：4.3.question 必须转录子问原文（至少 8 个字符），当前为 \"彼此是否一致\"。 台账把题面「需要回答的问题」拆成原子子问，一条一个条目：{\"schemaVersion\":1,\"entries\":[{\"id\":\"2.3\",\"question\":\"<子问原文>\",\"status\":\"answered\",\"reportLines\":[64],\"claimIds\":[\"CLM-005\"]}]}；status 为 \"gap\" 的条目改为给出 searches:[{\"query\":\"<实际执行过的检索式>\",\"database\":\"PubMed\",\"searchedAt\":\"YYYY-MM-DD\"}]。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 5.2（「就每一条时间界限而言，\"该推荐有前瞻性研究支持\"能否在现有文献中被确认」）登记为 gap，摘要第 5 行却就同一主题「有前瞻性研究支持」给出了推荐或处置祈使：「其五，每条时间界限的\"存在推荐\"与\"有前瞻性研究支持\"能否分别确认，缺口落在哪一环。」。摘要、结论与临床实践要点是读者取走答案的地方，缺口不能在那里变成结论。要么把这一句改写成如实的缺口陈述（「未检索到该终点的直接证据，这是一处证据空白」是允许的，也是应当写的），要么这条子问其实有答案，把台账改成 answered 并给出正文行号。",
+          "severity": "required"
+        },
+        {
+          "code": "specialist_question_coverage_invalid",
+          "message": "question-coverage.json 条目 3.3 的 question 不是题面第 3 问的原文：题面第 3 问是「支撑上述时间界限的证据属于何种类型——病理生理学推断、观察性研究，还是以时间阈值本身为变量的临床试验？现有文献中，院前延」。台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。",
+          "severity": "required"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "references.bib must contain a bibliography entry for every cited source URL.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.",
+          "severity": "advisory"
+        },
+        {
+          "code": "clinical_evidence_notice",
+          "message": "citation-audit.md must reference at least one real audited source identifier from the evidence matrix.",
+          "severity": "advisory"
+        }
+      ],
+      "metrics": {
+        "citationCoverage": 1,
+        "confidenceMix": {
+          "high": 0,
+          "moderate": 0,
+          "low": 0,
+          "unlabelled": 0
+        },
+        "disputedShare": 0,
+        "unresolved": 0,
+        "sectionShares": {
+          "摘要": 14,
+          "引言": 6,
+          "资料与方法": 10,
+          "结果": 35,
+          "讨论": 15,
+          "局限性": 5,
+          "结论": 8,
+          "临床实践要点": 7
+        }
+      },
+      "ok": false,
+      "at": "2026-08-26T12:58:09.302Z"
+    }
+  ],
+  "subagents": [],
+  "qualityNotices": [
+    "biomedical_source_search searched and returned no source",
+    "clinical_trial_search searched and returned no source",
+    "clinical_content_in_reply: 最终回复提到 速效救心丸，服务端会对它再跑一次安全扫描。"
+  ],
+  "degraded": [
+    "capsule recall disabled: no endpoint configured"
+  ]
+}

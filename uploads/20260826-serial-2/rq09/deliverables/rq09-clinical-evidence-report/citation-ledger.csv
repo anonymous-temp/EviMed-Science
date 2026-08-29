@@ -1,0 +1,7 @@
+claimId,referenceNumber,claim,supportQuote
+CLM-001,1,冰片是 TRPM8 的激动剂，以温度与浓度依赖方式激活 TRPM8，效力弱于薄荷醇,"borneol activated TRPM8 channel in a temperature- and dose-dependent manner, which was similar to but less effective than the action of menthol, an established TRPM8 agonist"
+CLM-002,1,冰片在豚鼠 25°C 下诱发泪液分泌、不伴伤害性反应，但在 35°C 下不能诱发,"Borneol significantly increased tear production in guinea pigs without evoking nociceptive responses at 25°C, but failed to induce tear secretion at 35°C."
+CLM-003,1,冰片在化学品安全数据表中被列为眼部刺激物，提示高浓度冰片具局部刺激性,"Borneol is categorized as an ocular irritant in the Material Safety Data from chemical providers such as Fisher Scientific and Sigma-Aldrich."
+CLM-004,5,体外表面等离子体共振与液相色谱-质谱联用分析确认 TRPM8 为冰片的候选分子靶点,"MS-SPRi analysis revealed that transient receptor potential melastatin-8 (TRPM8) is the candidate target of NB in potentiating DOX killing potency."
+CLM-005,15,疑似心肌梗死是危及生命的情形，应立即拨打急救电话并立即入院治疗，不要自行诊断,"You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital."
+CLM-100,1,冰片激活 TRPM8 可支持舌部清凉感的机制方向，但外推至人体舌下感受属低确定性（GRADE，间接性降级）,"borneol activated TRPM8 channel in a temperature- and dose-dependent manner, which was similar to but less effective than the action of menthol, an established TRPM8 agonist"

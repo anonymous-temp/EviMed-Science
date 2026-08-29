@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "status": "succeeded",
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC4548722/fulltext.md",
+    ".evimed-sources/PMC4703143/fulltext.md",
+    ".evimed-sources/PMC13317124/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md"
+  ],
+  "qualityChecks": {
+    "claimsGroundedInPreservedSources": true,
+    "supportQuotesVerbatim": true,
+    "evidenceAccessLevelsRecorded": true,
+    "safetyRulesApplied": true,
+    "evidenceGapsDeclared": true
+  }
+}

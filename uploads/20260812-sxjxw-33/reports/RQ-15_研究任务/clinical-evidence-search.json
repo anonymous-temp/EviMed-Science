@@ -1,0 +1,398 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-11T23:58:00+00:00",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "Crossref",
+    "ClinicalTrials.gov",
+    "NMPA 说明书索引",
+    "指南索引",
+    "EviMed 中文文献索引",
+    "开放网络检索"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan adverse events safety randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed 中文文献索引",
+      "query": "速效救心丸 不良反应 头晕 发生率",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "ClinicalTrials.gov",
+      "query": "suxiao jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "suxiao jiuxin wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC",
+      "query": "suxiao jiuxin pill",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "Crossref",
+      "query": "suxiao jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "NMPA 说明书索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "指南索引",
+      "query": "速效救心丸 冠心病 专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "指南索引",
+      "query": "中成药治疗冠心病临床应用指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "causality assessment adverse drug reaction Naranjo WHO-UMC standardized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "Europe PMC",
+      "query": "suxiao jiuxin acute coronary syndrome systematic review meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "Europe PMC",
+      "query": "suxiao jiuxin rechallenge dechallenge adverse",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "指南索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "指南索引",
+      "query": "急性胸痛 急诊 分诊 危险分层",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "指南索引",
+      "query": "老年高血压 速效救心丸 心绞痛",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "EviMed 中文文献索引/Crossref",
+      "query": "速效救心丸 专家共识 心绞痛 含服 剂量",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "Europe PMC",
+      "query": "suxiao jiuxin 331 RCT network meta angina adverse",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "suxiao jiuxin stable angina J Ethnopharmacol 2023",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Pill 24 weeks stable angina randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "health information quality internet accuracy evaluation content correctness",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "suxiao jiuxin blood pressure heart rate healthy volunteers",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Crossref",
+      "query": "12517364 Quality markers drug information Internet St John wort",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Crossref",
+      "query": "26668147 Chinese Internet Searches Inaccurate Misleading Epilepsy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC",
+      "query": "doi 10.4103/0366-6999.171425",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC",
+      "query": "doi 10.1016/s0002-9343(02)01256-1",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 193,
+    "recordsAfterDeduplication": 64,
+    "sourcesIncluded": 25
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Hu2024CCS-RCT",
+      "identifier": "10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "安全性/发生率（命题A、B）"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Ren2018MetaSJP",
+      "identifier": "10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "系统评价安全性"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "official-page:e6143b76645a9461",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "急诊分诊路径/安全底线"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Ruan2021Protocol",
+      "identifier": "10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "研究方案（命题D、E）"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "JGeriatrCardiol2024HTN2023",
+      "identifier": "10.26599/1671-5411.2024.06.001",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "指南条款（含服选项、体位性低血压）"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Bai2014HumanIMA",
+      "identifier": "10.1155/2014/956924",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "机制（命题C，离体人动脉）"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Li2023CoronaryTone",
+      "identifier": "10.3389/fphar.2023.1104243",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "机制（命题C，大鼠冠脉）"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Manjhi2024Cureus",
+      "identifier": "10.7759/cureus.59975",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "因果评定方法学（命题B）"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Duan2008Cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "系统评价（血压组间数据，摘要层）"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Sun2023StableAngina",
+      "identifier": "PMID:37487965",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "24周RCT安全性（摘要层）"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Liu2020ACSSRMA",
+      "identifier": "PMID:32744020",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ACS系统评价（摘要层）"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Semigran2015SymptomCheckers",
+      "identifier": "10.1136/bmj.h3480",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "内容正确性KPI方法学"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "ElOsta2022Vignettes",
+      "identifier": "10.1136/bmjopen-2021-053566",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "内容正确性KPI方法学"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "TikTok2025Hyperthyroid",
+      "identifier": "10.1002/edm2.70105",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "内容正确性KPI方法学"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "NMPA2026LabelSJP",
+      "identifier": "NMPA-说明书索引",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "说明书不良反应/注意事项"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Zhao2019EmergencyAngina",
+      "identifier": "期刊索引（哈尔滨医药）",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "中文急诊对照研究（摘要层）"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "CAIM2019SJPConsensus",
+      "identifier": "指南索引",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "专家共识（索引记录）"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "ZCY2021Guideline",
+      "identifier": "指南索引",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "临床应用指南（索引记录）"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "CHD2028RationalUse",
+      "identifier": "指南索引",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "冠心病合理用药指南（索引记录）"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "CSC2019STEMI",
+      "identifier": "指南索引",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "STEMI指南（索引记录）"
+    },
+    {
+      "referenceNumber": 21,
+      "citationKey": "CACM2025JiuxinConsensus",
+      "identifier": "指南索引",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "救心丸专家共识（索引记录）"
+    },
+    {
+      "referenceNumber": 22,
+      "citationKey": "AmJMed2004SJW",
+      "identifier": "PMID:12517364",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "互联网药物信息质量（摘要层）"
+    },
+    {
+      "referenceNumber": 23,
+      "citationKey": "ChinMedJ2016Epilepsy",
+      "identifier": "PMID:26668147",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "互联网健康信息准确性（摘要层）"
+    },
+    {
+      "referenceNumber": 24,
+      "citationKey": "NCT06531161",
+      "identifier": "NCT06531161",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "注册记录（未完成）"
+    },
+    {
+      "referenceNumber": 25,
+      "citationKey": "NCT05466968",
+      "identifier": "NCT05466968",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "注册记录（未完成）"
+    }
+  ]
+}
