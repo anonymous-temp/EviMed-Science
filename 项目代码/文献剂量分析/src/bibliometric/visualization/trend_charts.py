@@ -74,14 +74,34 @@ else:
             if any(k in p.lower() for k in
                    ["cjk", "chinese", "noto", "wqy", "simsun", "simhei", "yahei"])
         ]
-        if _cjk_paths:
-            _fm.fontManager.addfont(_cjk_paths[0])
-            _prop = _fm.FontProperties(fname=_cjk_paths[0])
+        # The first CJK font found is not necessarily one matplotlib can use.
+        #
+        # `addfont` raises `NotImplementedError: Non-scalable fonts are not
+        # supported` on a bitmap face, and this took the head of the list
+        # unconditionally at import time — so on a host whose first matching
+        # font is a bitmap one, importing this module killed the whole run at
+        # the chart step, with a font error where a bibliometric report should
+        # have been. Try each candidate and keep the first that loads.
+        _chosen = None
+        for _candidate in _cjk_paths:
+            try:
+                _fm.fontManager.addfont(_candidate)
+                _chosen = _candidate
+                break
+            except Exception as _error:  # noqa: BLE001 - any unusable face, same answer
+                logger.debug("CJK font unusable, trying the next: %s (%s)", _candidate, _error)
+        if _chosen:
+            _prop = _fm.FontProperties(fname=_chosen)
             plt.rcParams["font.sans-serif"] = [_prop.get_name(), "DejaVu Sans"]
-            logger.info("matplotlib CJK font (scan): %s", _cjk_paths[0])
+            logger.info("matplotlib CJK font (scan): %s", _chosen)
         else:
+            # Boxes instead of Chinese is a degraded chart; a raised exception
+            # here is no charts and no report at all. Say so and carry on.
             plt.rcParams["font.sans-serif"] = ["DejaVu Sans"]
-            logger.warning("No CJK font found; Chinese characters may render as boxes.")
+            logger.warning(
+                "No usable CJK font among %d candidate(s); Chinese characters may render as boxes.",
+                len(_cjk_paths),
+            )
 
 plt.rcParams["axes.unicode_minus"] = False
 
