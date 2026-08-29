@@ -305,3 +305,5 @@ export {
 /** @typedef {import('./src/runTranscript.mjs').TranscriptPart} TranscriptPart */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptTextPart} TranscriptTextPart */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptToolCall} TranscriptToolCall */
+
+export { citedIdentifiers, retractionNotices } from './src/retractionCheck.mjs'
