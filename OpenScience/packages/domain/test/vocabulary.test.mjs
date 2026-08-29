@@ -530,3 +530,44 @@ test("a research tool is recognised in the spelling each kernel publishes it und
   assert.equal(mcpToolBaseName("literature_search"), "literature_search", "the bare name");
   assert.equal(mcpToolBaseName("mcp__evimed__not_a_tool"), null, "an unknown name is still unknown in every spelling");
 });
+
+test("the open-vocabulary prose patterns are frozen at their current count", async () => {
+  // Principle #5, made mechanical: no new open-vocabulary prose regex in this
+  // file. `clinicalEvidence.mjs` grew to ~4.9k lines and a few hundred regex
+  // literals by answering every register complaint with another word list, and
+  // a keyword wall over open language never converges — each addition fixes the
+  // instance in front of it and mis-fires on the next phrasing nobody thought
+  // of. The judgement belongs to the model-judge path (plan C1); the code keeps
+  // the decidable half.
+  //
+  // The proxy is coarse on purpose: a regex literal carrying CJK is a pattern
+  // about Chinese prose. A few of them are closed sets — the 〔推导〕 marker
+  // vocabulary, for one — and freezing those costs nothing, because a closed
+  // set does not need to grow to stay correct.
+  //
+  // A rise means a new prose pattern. The alternatives, in order: put a
+  // medicine or scenario rule in `clinical-safety-rules.json`, write an eval
+  // case (`evals/writing-incidents/`), or hand it to the reviewer. Widening a
+  // pattern here is the one thing this test exists to stop.
+  //
+  // Comments are stripped first. Every scanner written for this repository has
+  // had to learn that its own explanation of a pattern reads as the pattern.
+  const source = await readFile(new URL("../src/clinicalEvidence.mjs", import.meta.url), "utf8");
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  const literals = code.match(/\/(?:[^/\\\n[]|\\.|\[(?:[^\]\\]|\\.)*\])+\/[gimsuyv]*/g) ?? [];
+  // The walk has to prove it walked: a regex that stops matching literals would
+  // otherwise report zero prose patterns and pass forever.
+  assert.ok(literals.length > 200, `only ${literals.length} regex literals found — the scan did not read the file`);
+
+  const prose = literals.filter((literal) => /[\u4e00-\u9fff]/.test(literal));
+  assert.equal(
+    prose.length,
+    117,
+    `open-vocabulary prose patterns moved from 117 to ${prose.length}. `
+      + "Adding one is frozen (principle #5): put medicine/scenario rules in clinical-safety-rules.json, "
+      + "write an eval case, or hand the judgement to the reviewer. "
+      + "Removing them is the direction of travel — lower this number and say which rule moved where.",
+  );
+});

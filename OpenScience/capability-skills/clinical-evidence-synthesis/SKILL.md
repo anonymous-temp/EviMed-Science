@@ -1394,6 +1394,14 @@ The paper describes evidence and reasoning, not itself. Do not write about what
 this report is, what it refuses to do, what role something plays in it, or whom
 it is addressed to.
 
+**Where it goes instead: `revision-notes.md`, beside the report in this
+deliverable's own directory.** Revision notes, what you changed after a
+rejection and why, replies to a reviewer, process diaries and version scars are all
+legitimate writing — they are simply not report prose. That file is not read as
+report prose by any check, so write them there plainly. A prohibition with no
+destination is one a run satisfies by hiding the same sentences inside the
+report, which is worse than either.
+
 - 反例：`本报告检验……的学术化版本`、`……只作为被评价对象出现`、`本报告的判定条件（与任务书一致）`
   正例：`本文的目的是评价……`（其余删去）。
 - 反例（声明读者对象）：`本文以临床医师与药师为读者，系统检索并评价上述问题所依赖的证据……`、`本文面向基层全科医师`、`本文写给临床药师参考`、`本文的受众为……`

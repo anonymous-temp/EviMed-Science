@@ -9,6 +9,7 @@ import {
   numberedReferenceCount,
   validateClinicalEvidencePackage as validatePackage,
 } from "../src/clinicalEvidenceQuality.mjs";
+import { runGate, workspaceLayout } from "@evimed/domain";
 import { deepResearchPackage, questionCoverageLedger, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 
 /** The question-coverage ledger cites report line numbers, and almost every
@@ -290,6 +291,44 @@ test("a matrix written before its sources were preserved is one behaviour, not t
     reportText: report,
   }).issues;
   assert.ok(wrong.some((issue) => /"notes\/source-records\.md", which is not a preserved artifact/.test(issue)));
+});
+
+test("backstage prose has a designated file, and the gate does not read it as report prose", () => {
+  // A ban with nowhere to put the banned thing is a ban a run satisfies by
+  // hiding the sentences inside the report. Revision notes, replies to a
+  // rejection, process diaries and version scars are legitimate writing that is
+  // simply not report prose — `revision-notes.md` is where they go, both skill
+  // copies now say so, and the hygiene scan skips it. An outlet that is itself
+  // scanned is a trap, and runs learn to avoid traps.
+  //
+  // Driven through `research-brief`, one of the fourteen contract kinds that
+  // scan every `.md` in the deliverable. The clinical kinds read only the
+  // report file by name and never saw the outlet either way — writing the case
+  // against one of those made the exemption untestable, and the mutation that
+  // deleted it stayed green.
+  const backstage = "本次修订说明：依据契约完成白名单抓取和落盘核验，并把第 3 节改挂到另一篇来源。";
+  const brief = "# 研究简报\n\n## 结论\n\n证据支持该结论。\n";
+
+  const inReport = runGate({
+    contractKind: "research-brief",
+    files: new Map([["brief.md", `${brief}\n${backstage}\n`]]),
+    expectedOutputs: [{ path: "brief.md", required: true }],
+  });
+  assert.ok(
+    inReport.issues.some((issue) => String(issue.path ?? "") === "brief.md"),
+    `the same sentences in report prose must still be caught: ${JSON.stringify(inReport.issues.slice(0, 2))}`,
+  );
+
+  const inOutlet = runGate({
+    contractKind: "research-brief",
+    files: new Map([
+      ["brief.md", brief],
+      [workspaceLayout.revisionNotesFile, `${backstage}\n`],
+    ]),
+    expectedOutputs: [{ path: "brief.md", required: true }],
+  });
+  const named = inOutlet.issues.filter((issue) => String(issue.path ?? "") === workspaceLayout.revisionNotesFile);
+  assert.deepEqual(named, [], `the outlet must not be judged as report prose: ${JSON.stringify(named)}`);
 });
 
 test("a collapse that groups by one key and removes by another adds findings instead of merging them", () => {

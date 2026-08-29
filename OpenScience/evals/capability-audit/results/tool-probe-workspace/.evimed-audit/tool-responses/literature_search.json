@@ -4,45 +4,45 @@
   "data": {
     "items": [
       {
-        "id": "PMID:30158069",
-        "pmid": "30158069",
-        "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
-        "journal": "Lancet (London, England)",
-        "publicationDate": "2018 Sep 22",
+        "id": "PMID:20856266",
+        "pmid": "20856266",
+        "title": "Aspirin for primary prevention of cardiovascular disease in diabetes mellitus.",
+        "journal": "Nature reviews. Endocrinology",
+        "publicationDate": "2010 Nov",
         "authors": [
-          "Gaziano JM",
-          "Brotons C",
-          "Coppolecchia R",
-          "Cricelli C",
-          "Darius H",
-          "Gorelick PB",
-          "Howard G",
-          "Pearson TA",
-          "Rothwell PM",
-          "Ruilope LM",
-          "Tendera M",
-          "Tognoni G",
-          "ARRIVE Executive Committee"
+          "Pignone M",
+          "Williams CD"
         ],
-        "doi": "10.1016/S0140-6736(18)31924-X",
-        "url": "https://pubmed.ncbi.nlm.nih.gov/30158069/"
+        "doi": "10.1038/nrendo.2010.169",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/20856266/"
       },
       {
-        "id": "PMID:27341534",
-        "pmid": "27341534",
-        "title": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis.",
-        "journal": "Atherosclerosis",
-        "publicationDate": "2016 Aug",
+        "id": "PMID:40902613",
+        "pmid": "40902613",
+        "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis.",
+        "journal": "Lancet (London, England)",
+        "publicationDate": "2025 Sep 13",
         "authors": [
-          "Major RW",
-          "Oozeerally I",
-          "Dawson S",
-          "Riddleston H",
-          "Gray LJ",
-          "Brunskill NJ"
+          "Valgimigli M",
+          "Choi KH",
+          "Giacoppo D",
+          "Gragnano F",
+          "Kimura T",
+          "Watanabe H",
+          "Kim HS",
+          "Kang J",
+          "Park KW",
+          "Pettersen AÅ",
+          "Woodward M",
+          "Bhatt DL",
+          "Calabrò P",
+          "Angiolillo DJ",
+          "Mehran R",
+          "Song YB",
+          "Hahn JY"
         ],
-        "doi": "10.1016/j.atherosclerosis.2016.06.013",
-        "url": "https://pubmed.ncbi.nlm.nih.gov/27341534/"
+        "doi": "10.1016/S0140-6736(25)01562-4",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/40902613/"
       }
     ],
     "provenance": {
@@ -65,18 +65,18 @@
   },
   "sources": [
     {
-      "id": "PMID:30158069",
+      "id": "PMID:20856266",
       "source": "pubmed",
-      "retrievedAt": "2026-08-29T10:05:00.173372Z",
-      "url": "https://pubmed.ncbi.nlm.nih.gov/30158069/",
-      "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial."
+      "retrievedAt": "2026-08-29T11:54:52.588643Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/20856266/",
+      "title": "Aspirin for primary prevention of cardiovascular disease in diabetes mellitus."
     },
     {
-      "id": "PMID:27341534",
+      "id": "PMID:40902613",
       "source": "pubmed",
-      "retrievedAt": "2026-08-29T10:05:00.173394Z",
-      "url": "https://pubmed.ncbi.nlm.nih.gov/27341534/",
-      "title": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis."
+      "retrievedAt": "2026-08-29T11:54:52.588666Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/40902613/",
+      "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis."
     }
   ],
   "warnings": [

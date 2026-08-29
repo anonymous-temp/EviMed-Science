@@ -10,7 +10,7 @@
     "markdownPath": ".evimed-sources/PMC8010506/fulltext.md",
     "xmlPath": ".evimed-sources/PMC8010506/fulltext.xml",
     "artifactSha256s": {
-      ".evimed-sources/PMC8010506/fulltext.md": "4211501cc84a89ebc83861cd2240e92e2ea27908dad545d392c2977277de6f0a",
+      ".evimed-sources/PMC8010506/fulltext.md": "d0e5c235cc4ecea7cfd823a0281b3c5a98fceedc8edd21fcb3c3c90a3d2b4ed1",
       ".evimed-sources/PMC8010506/fulltext.xml": "02aac151853ff9d5bb2ace17f90cf3efb70f30d42d158293659c8cdd9c1abb1b"
     },
     "markdownCharacters": 238730,
@@ -34,7 +34,7 @@
       "title": "Review of deep learning: concepts, CNN architectures, challenges, applications, future directions",
       "url": "https://europepmc.org/articles/PMC8010506",
       "source": "europe-pmc-fulltext",
-      "retrievedAt": "2026-08-29T10:04:57.380809Z"
+      "retrievedAt": "2026-08-29T11:54:49.507783Z"
     }
   ],
   "artifacts": [
