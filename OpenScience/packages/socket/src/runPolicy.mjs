@@ -158,6 +158,20 @@ export function toolPolicy(call, state) {
   return { allow: true }
 }
 
+/** What a caught value says about itself.
+ *
+ *  A `catch` binding is `{}` under checkJs, so `error?.message` does not
+ *  compile even though it is right at runtime. The tempting repair is to drop
+ *  the message and keep `String(error)`, which turns every diagnostic into
+ *  `[object Object]` — and these four call sites are the only places some
+ *  failures are ever described. One narrowing, named once.
+ *  @param {unknown} error @returns {string}
+ */
+export function errorMessage(error) {
+  const named = /** @type {{ message?: unknown }} */ (error ?? {})
+  return typeof named.message === 'string' && named.message ? named.message : String(error)
+}
+
 /**
  * Two subagents writing the same file, which is one of them losing its work.
  *
@@ -280,7 +294,17 @@ export function indexPlan(raw) {
 export function delegatableItems(plan, items) {
   const byId = new Map(items.map((item) => [item.id, item]))
   const ready = readyDeliverables(plan, (id) => byId.get(id)?.status ?? 'planned')
-  return ready.map((deliverable) => byId.get(deliverable.id)).filter(Boolean)
+  // A predicate, not `filter(Boolean)`: the runtime result is the same and the
+  // declared one is not — `filter(Boolean)` leaves `undefined` in the type, so
+  // every caller of this function was reading a possibly-absent item as though
+  // it were present.
+  /** @type {Record<string, any>[]} */
+  const found = []
+  for (const deliverable of ready) {
+    const item = byId.get(deliverable.id)
+    if (item) found.push(item)
+  }
+  return found
 }
 
 /**
@@ -457,7 +481,7 @@ export function renderDeliverySummary(input) {
     '## 澄清与假设',
     '',
     ...(input.plan?.clarifications?.length
-      ? input.plan.clarifications.map((line) => `- ${line}`)
+      ? input.plan.clarifications.map((/** @type {any} */ line) => `- ${line}`)
       : ['- （计划未记录澄清）']),
     '',
     '## 交付物',
@@ -502,7 +526,7 @@ export function renderDeliverySummary(input) {
  * @returns {import('@evimed/harness-port').SubagentRequest}
  */
 export function buildDelegation(input) {
-  const outputs = (input.manifest.produces ?? []).find((entry) => entry.contractKind === input.item.contractKind)?.outputs ?? []
+  const outputs = (input.manifest.produces ?? []).find((/** @type {any} */ entry) => entry.contractKind === input.item.contractKind)?.outputs ?? []
   const prompt = [
     `你负责一件交付物：${input.item.title ?? input.item.id}（契约种类 ${input.item.contractKind}）。`,
     '',
@@ -512,7 +536,7 @@ export function buildDelegation(input) {
     '',
     '## 你要写出的文件',
     '',
-    ...outputs.map((output) => `- \`deliverables/${input.item.id}/${output.path}\`${output.required ? '（必需）' : '（可选）'}`),
+    ...outputs.map((/** @type {any} */ output) => `- \`deliverables/${input.item.id}/${output.path}\`${output.required ? '（必需）' : '（可选）'}`),
     '',
     `全部文件必须写在 \`deliverables/${input.item.id}/\` 下。写完后调用 \`evimed_submit_deliverable{deliverableId:"${input.item.id}"}\`，它会当场返回裁定；未通过就按 issues 修好再提交，直到通过。`,
     '',
@@ -627,7 +651,10 @@ export function evidenceSourceErrorCode(result) {
  * read once the container is gone. That is six links from "an empty map" to a
  * complete package reported as `failed / artifacts 0`.
  *
- * @param {readonly Record<string, any>[]} records evidence rows for this run
+ * @param {readonly Record<string, any>[] | null | undefined} records evidence rows
+ *   for this run. Nullish is accepted and answered with no paths: the body has
+ *   always written `records ?? []`, and a caller reading an empty table before
+ *   the first retrieval passes exactly that.
  * @param {string} runId the run these must belong to; '' accepts all
  * @returns {string[]} distinct artifact paths, in first-seen order
  */

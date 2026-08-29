@@ -14,6 +14,7 @@
  * @module @evimed/dsh-socket/plugins/evidence
  */
 
+import { errorMessage } from '../src/runPolicy.mjs'
 import { mcpToolBaseName } from '@evimed/domain'
 import { configSchema, onToolObserved } from '@evimed/harness-port'
 import { EVIDENCE_TOOL_BASE_NAMES, evidenceFromOutcome, mergeEvidence, sourceProbe } from '../src/evidenceIngest.mjs'
@@ -49,7 +50,7 @@ export async function apply(ctx, config) {
   /** @type {Map<string, any[]>} */
   const bySession = new Map()
 
-  const digest = (value) => {
+  const digest = (/** @type {any} */ value) => {
     // A stable non-cryptographic id is all a table key needs; the receipt's
     // digests are the ones that must be verifiable, and they are sha256.
     let hash = 2166136261
@@ -136,7 +137,7 @@ export async function apply(ctx, config) {
       for (const record of records) void store.evidence.put(record.evidenceId, record)
     } catch (error) {
       failures += 1
-      ctx.get('evimedDiagnostics')?.degrade?.(`evidence ingest failed (${failures}): ${error?.message ?? error}`)
+      ctx.get('evimedDiagnostics')?.degrade?.(`evidence ingest failed (${failures}): ${errorMessage(error)}`)
     }
   }))
 

@@ -121,7 +121,7 @@ test("every service a plugin reads is one somebody provides", async () => {
   // quotes the call it removed, and a scan that reads prose reported the fixed
   // file as still broken. A check that cannot tell code from a comment about
   // code keeps finding the bug it was written to retire.
-  const code = (source) => source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  const code = (/** @type {any} */ source) => source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
   for (const file of files) {
     const source = code(await readFile(new URL(`../plugins/${file}`, import.meta.url), "utf8"));
     for (const [, key] of source.matchAll(/ctx\.provide\('([^']+)'/g)) provided.add(key);
@@ -320,8 +320,13 @@ test("a recoverable source failure is recognized from where its code actually su
   assert.equal(evidenceSourceErrorCode(undefined), "");
   // The reading the code used to do, and the reading the declarations suggest,
   // both return nothing on the real shape — which is why the retry was dead.
-  assert.equal(failure.error.code, undefined);
-  assert.equal(failure.error.info, undefined);
+  // Read through `any` on purpose: the whole point is that these fields are NOT
+  // on the shape, and asserting `undefined` is how the case records it. Spelled
+  // without the cast, the type error would read as a test to fix rather than as
+  // the finding the test exists to keep.
+  const shape = /** @type {any} */ (failure.error);
+  assert.equal(shape.code, undefined);
+  assert.equal(shape.info, undefined);
 });
 
 test("an empty search and an unreadable payload are not the same answer", () => {
@@ -343,7 +348,7 @@ test("an empty search and an unreadable payload are not the same answer", () => 
   assert.deepEqual(sourceProbe({ data: { items: [{ url: "https://x" }] } }).reason, "found");
   assert.deepEqual(sourceProbe({ data: { items: [] } }).reason, "empty-container");
   // Negative control: the old reading cannot tell any of these apart.
-  const old = (v) => sourceProbe(v).sources.length;
+  const old = (/** @type {unknown} */ v) => sourceProbe(v).sources.length;
   assert.equal(old({ status: "warning", sources: [] }), old({ status: "ok", summary: "done" }));
 });
 
@@ -391,7 +396,9 @@ test("two subagents writing one file is one of them losing its work", () => {
   // gone, and the gate reads the survivor — a package that looks whole and is
   // missing a contributor's work, with nothing recording the loss.
   const writers = new Map();
+  /** @param {string} session @param {string} path */
   const child = (session, path) => concurrentWriteNotice(writers, { path, sessionId: session, nested: true });
+  /** @param {string} session @param {string} path */
   const parent = (session, path) => concurrentWriteNotice(writers, { path, sessionId: session, nested: false });
 
   assert.equal(child("s-a", "deliverables/d1/section-a.md"), null, "the first writer is never a conflict");
@@ -541,6 +548,7 @@ test("a file that is not there is one problem, not nine", () => {
     { path: "clinical-evidence-report.md", required: true },
     { path: "clinical-evidence-matrix.json", required: true },
   ];
+  /** @param {Map<string, string>} files */
   const gate = (files) => gateDeliverable({ contractKind: "clinical-evidence-report", files, expectedOutputs: outputs, sourceArtifacts: {} });
 
   const wrongName = gate(new Map([["临床证据综述.md", "# 综述\n\n## 摘要\n\n实质内容。\n"]]));
@@ -656,7 +664,7 @@ test("a preserved full text is ready even though its path lives on the outcome, 
   // for source.artifactPath, found nothing, and two real runs recorded every
   // preserved full text as queued -- 91/91 and 126/126 stale ten minutes
   // later, with the files on disk.
-  const context = { runId: "run-1", now: "2026-08-26T15:00:00Z", digest: (value) => `d:${value}` };
+  const context = { runId: "run-1", now: "2026-08-26T15:00:00Z", digest: (/** @type {string} */ value) => `d:${value}` };
   const outcome = {
     status: "completed",
     structured: {
@@ -808,7 +816,7 @@ test("the delivery summary is written even when the run gave up", () => {
 });
 
 test("evidence records how far a source actually got", () => {
-  const context = { runId: "r1", now: "2026-08-23T00:00:00Z", digest: (value) => String(value.length) };
+  const context = { runId: "r1", now: "2026-08-23T00:00:00Z", digest: (/** @type {string} */ value) => String(value.length) };
   const searched = evidenceFromOutcome(
     { name: "mcp__evimed__literature_search", args: { query: "metformin" } },
     { status: "completed", structured: { results: [{ pmid: "1" }, { pmid: "2" }] }, text: "" },
@@ -827,11 +835,14 @@ test("evidence records how far a source actually got", () => {
 });
 
 test("merging evidence never walks a source backwards", () => {
-  const ready = { evidenceId: "e1", status: "ready" };
-  const queued = { evidenceId: "e1", status: "queued" };
-  assert.equal(mergeEvidence([ready], [queued])[0].status, "ready");
-  assert.equal(mergeEvidence([queued], [ready])[0].status, "ready");
-  assert.equal(mergeEvidence([ready], [{ evidenceId: "e1", status: "verified" }])[0].status, "verified");
+  // The merge is decided by evidenceId and status alone, so the rows here carry
+  // those two fields and nothing else. Spelled as a cast rather than filled out
+  // with six irrelevant fields: padding a fixture to satisfy a type hides which
+  // fields the rule actually reads.
+  const row = (/** @type {string} */ status) => /** @type {any} */ ({ evidenceId: "e1", status });
+  assert.equal(mergeEvidence([row("ready")], [row("queued")])[0].status, "ready");
+  assert.equal(mergeEvidence([row("queued")], [row("ready")])[0].status, "ready");
+  assert.equal(mergeEvidence([row("ready")], [row("verified")])[0].status, "verified");
 });
 
 test("a source that was asked for and never arrived becomes visibly unresolved", () => {
@@ -879,24 +890,30 @@ test("an empty or unconfigured capability catalogue says so instead of disabling
   // resolved to `undefined/…`: nothing loaded, nothing complained, and the model
   // did not know what it was supposed to do.
   const { loadCapabilities } = await import("../plugins/guidance.mjs");
+  /** @type {string[]} */
   const said = [];
-  const ctx = {
-    get: (key) => (key === "evimedDiagnostics" ? { degrade: (line) => said.push(line) } : undefined),
-  };
+  /** @param {string} key */
+  const diagnostics = (key) => (key === "evimedDiagnostics" ? { degrade: (/** @type {string} */ line) => said.push(line) } : undefined);
+  /** @type {Record<string, any>} */
+  const ctx = { get: diagnostics };
   Object.defineProperty(ctx, "fs", { get: () => undefined, configurable: true });
 
   assert.deepEqual(await loadCapabilities(ctx, ""), []);
   assert.ok(said.some((line) => /no capabilities directory is configured/.test(line)), `unset directory said: ${said}`);
 
   said.length = 0;
-  const empty = {
-    get: (key) => (key === "evimedDiagnostics" ? { degrade: (line) => said.push(line) } : undefined),
-    // `listDirAt` calls `fs.listDir`, not `fs.list` — the double has to offer
-    // the method the port actually uses.
-    fs: { resolve: async (relative, options) => `${options?.cwd ?? ""}/${relative}`, listDir: async () => [] },
+  // `listDirAt` calls `fs.listDir`, not `fs.list` — the double has to offer the
+  // method the port actually uses. `fs` is reached as a property rather than
+  // through `ctx.get`, which is why it is defined twice: once in the literal
+  // and once as a getter, the way a real Context exposes it.
+  const workspaceFs = {
+    /** @param {string} relative @param {{ cwd?: string }} [options] */
+    resolve: async (relative, options) => `${options?.cwd ?? ""}/${relative}`,
+    listDir: async () => [],
   };
-  Object.defineProperty(empty, "fs", { get: () => empty._fs, configurable: true });
-  empty._fs = { resolve: async (relative, options) => `${options?.cwd ?? ""}/${relative}`, listDir: async () => [] };
+  /** @type {Record<string, any>} */
+  const empty = { get: diagnostics, fs: workspaceFs };
+  Object.defineProperty(empty, "fs", { get: () => workspaceFs, configurable: true });
   assert.deepEqual(await loadCapabilities(empty, "/opt/evimed/capabilities"), []);
   assert.ok(said.some((line) => /catalogue is empty/.test(line)), `empty directory said: ${said}`);
 });

@@ -118,8 +118,9 @@ test("the scan reaches the places a breach would actually happen", async () => {
 // This lives beside the harness-boundary walk because it is the same kind of
 // rule — one about the repository as a whole that no single module can hold.
 test("no source file reads as binary, because a file that does is a file nobody searches", async () => {
+  /** @type {string[]} */
   const offenders = [];
-  const walk = async (dir) => {
+  const walk = async (/** @type {any} */ dir) => {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       if (SKIP_DIRS.has(entry.name)) continue;
       const full = path.join(dir, entry.name);

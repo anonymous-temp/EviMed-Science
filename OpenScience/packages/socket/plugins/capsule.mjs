@@ -15,6 +15,7 @@
  * @module @evimed/dsh-socket/plugins/capsule
  */
 
+import { errorMessage } from '../src/runPolicy.mjs'
 import { configSchema, defineTool, listDirAt, readFileAt, registerSkill, registerTool, toSkillName } from '@evimed/harness-port'
 
 const Schema = await configSchema()
@@ -175,6 +176,6 @@ async function callControlPlane(ctx, config, action, body) {
     return { ok: true, data: await response.json(), message: '' }
   } catch (error) {
     // Memory is an enhancement: a run continues without it, saying so.
-    return { ok: false, message: `胶囊服务不可用：${error?.message ?? error}` }
+    return { ok: false, message: `胶囊服务不可用：${errorMessage(error)}` }
   }
 }

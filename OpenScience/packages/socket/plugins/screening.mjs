@@ -81,7 +81,7 @@ export async function apply(ctx, config) {
         return { ok: false, code: 'invalid_input', issues: [{ code: 'invalid_input', severity: 'required', message: '没有待筛记录。' }] }
       }
       const batches = chunk(records, config.batchSize)
-      const parent = call.agent ?? ctx.get('agents')?.get?.(call.agentId)
+      const parent = ctx.get('agents')?.get?.(call.agentId)
       /** @type {Record<string, any>[]} */
       const verdicts = []
       /** @type {string[]} */

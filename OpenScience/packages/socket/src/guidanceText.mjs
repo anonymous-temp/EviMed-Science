@@ -28,9 +28,13 @@ export const GUIDANCE_SECTION_NAME = 'evimed:orchestration'
 export function buildGuidanceText(capabilities, options) {
   const catalogue = [...capabilities]
     .sort((left, right) => String(left.id).localeCompare(String(right.id)))
-    .map((manifest) => `- ${capabilityCatalogueLine(manifest)}`)
+    // Cast, because a manifest is JSON read off disk at boot: the shape is
+    // asserted by the capability audit and by `loadCapabilities`, not by this
+    // file, and pretending otherwise here would move the check to the wrong
+    // place. What must not happen is a manifest reaching this line unvalidated.
+    .map((manifest) => `- ${capabilityCatalogueLine(/** @type {any} */ (manifest))}`)
     .join('\n')
-  const kinds = [...new Set(capabilities.flatMap((manifest) => (manifest.produces ?? []).map((item) => item.contractKind)))]
+  const kinds = [...new Set(capabilities.flatMap((manifest) => (manifest.produces ?? []).map((/** @type {any} */ item) => item.contractKind)))]
     .sort()
     .map((kind) => `- \`${kind}\`：${contractKindLabel(kind)}`)
     .join('\n')

@@ -12,6 +12,7 @@
  * @module @evimed/dsh-socket/plugins/evidence-store
  */
 
+import { errorMessage } from '../src/runPolicy.mjs'
 import { workspaceLayout } from '@evimed/domain'
 import { configSchema, onDomainChanged, openDomain, writeWorkspaceFile } from '@evimed/harness-port'
 import { RUN_DOMAIN_NAME, RUN_DOMAIN_SPEC, projectRunState } from '../src/runMirror.mjs'
@@ -96,7 +97,7 @@ export async function apply(ctx, config) {
       // had nothing to project — and the only place the fact survived was a
       // set nothing outside this process reads. Two experiments were spent
       // ruling out causes this line already knew.
-      const reason = `run-state projection unwritable: ${error?.message ?? error}`
+      const reason = `run-state projection unwritable: ${errorMessage(error)}`
       store.degraded.add(reason)
       ctx.get('evimedDiagnostics')?.degrade?.(reason)
     }

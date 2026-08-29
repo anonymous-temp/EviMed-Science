@@ -75,7 +75,44 @@ export async function loadHarnessModule(specifier) {
   return loaded.get(specifier)
 }
 
-/** Test seam: lets the consistency suite install fakes without a harness install. */
+/**
+ * The port's vocabulary, republished from its entry point.
+ *
+ * These typedefs live in `src/types.mjs` and were reachable only by that path.
+ * Consumers wrote `import('@evimed/harness-port').ToolCall` — the shape the
+ * package boundary implies — and got "has no exported member", silently, for as
+ * long as nothing typechecked them. `packages/socket` referenced three of them
+ * and was never in the CI typecheck at all.
+ *
+ * Re-exported rather than moved: `src/types.mjs` is where the conversions that
+ * produce these shapes are documented, and splitting the definition from the
+ * conversion is how the two drift.
+ *
+ * @typedef {import('./src/types.mjs').ToolCall} ToolCall
+ * @typedef {import('./src/types.mjs').ToolOutcome} ToolOutcome
+ * @typedef {import('./src/types.mjs').StepInfo} StepInfo
+ * @typedef {import('./src/types.mjs').SessionRef} SessionRef
+ * @typedef {import('./src/types.mjs').SubagentRequest} SubagentRequest
+ * @typedef {import('./src/types.mjs').SubagentOutcome} SubagentOutcome
+ * @typedef {import('./src/types.mjs').InjectedMessage} InjectedMessage
+ * @typedef {import('./src/types.mjs').PromptSection} PromptSection
+ * @typedef {import('./src/types.mjs').NormalizedSessionEvent} NormalizedSessionEvent
+ */
+
+/** What a caught value says about itself.
+ *
+ *  A `catch` binding is `{}` under checkJs, so `error?.message` does not
+ *  compile even though it is right at runtime — and the tempting repair is to
+ *  drop the message and keep `String(error)`, which turns every probe failure
+ *  into `[object Object]`. One narrowing, used by both probes.
+ *  @param {unknown} error @returns {string} */
+function errorMessage(error) {
+  const named = /** @type {{ message?: unknown }} */ (error ?? {})
+  return typeof named.message === 'string' && named.message ? named.message : String(error)
+}
+
+/** Test seam: lets the consistency suite install fakes without a harness install.
+ *  @param {string} specifier @param {unknown} value */
 export function __setHarnessModule(specifier, value) {
   loaded.set(specifier, Promise.resolve(value))
 }
@@ -122,8 +159,9 @@ export async function defineTool(spec) {
           issues: { type: 'array', items: { type: 'json' } },
         },
       },
-      render: (_args, value) => [{ type: 'text', text: renderEnvelope(value) }],
+      render: (/** @type {unknown} */ _args, /** @type {unknown} */ value) => [{ type: 'text', text: renderEnvelope(value) }],
     },
+    /** @param {Record<string, any>} args @param {Record<string, any>} exec */
     async execute(args, exec) {
       const call = toToolCall(exec)
       const result = await spec.execute(/** @type {Record<string, any>} */ (args ?? {}), call)
@@ -172,7 +210,7 @@ export function registerTool(ctx, tool) {
  * @returns {() => void}
  */
 export function guardTools(ctx, fn) {
-  return ctx.tools.guard((exec) => fn(toToolCall(exec)))
+  return ctx.tools.guard((/** @type {any} */ exec) => fn(toToolCall(exec)))
 }
 
 /* ----------------------------------------------------------------- events */
@@ -186,7 +224,7 @@ export function guardTools(ctx, fn) {
  * @returns {() => void}
  */
 export function onToolPolicy(ctx, fn) {
-  return ctx.on(SEAMS.events.toolPolicy, async (exec, next) => {
+  return ctx.on(SEAMS.events.toolPolicy, async (/** @type {any} */ exec, /** @type {any} */ next) => {
     const decision = await fn(toToolCall(exec))
     if (decision.allow === true) return next()
     // The refusal carries a machine code as well as a sentence: the code is what
@@ -203,7 +241,7 @@ export function onToolPolicy(ctx, fn) {
  * @returns {() => void}
  */
 export function onToolWrap(ctx, fn) {
-  return ctx.on(SEAMS.events.toolWrap, async (exec, next) => fn(toToolCall(exec), next))
+  return ctx.on(SEAMS.events.toolWrap, async (/** @type {any} */ exec, /** @type {any} */ next) => fn(toToolCall(exec), next))
 }
 
 /**
@@ -215,7 +253,7 @@ export function onToolWrap(ctx, fn) {
  * @returns {() => void}
  */
 export function onToolObserved(ctx, fn) {
-  return ctx.on(SEAMS.events.toolObserved, (exec, result) => fn(toToolCall(exec), toToolOutcome(result)))
+  return ctx.on(SEAMS.events.toolObserved, (/** @type {any} */ exec, /** @type {any} */ result) => fn(toToolCall(exec), toToolOutcome(result)))
 }
 
 /**
@@ -225,7 +263,7 @@ export function onToolObserved(ctx, fn) {
  * @returns {() => void}
  */
 export function onSessionEvent(ctx, fn) {
-  return ctx.on(SEAMS.events.sessionEvent, (session, event) => fn(toSessionRef(session), toSessionEvent(event)))
+  return ctx.on(SEAMS.events.sessionEvent, (/** @type {any} */ session, /** @type {any} */ event) => fn(toSessionRef(session), toSessionEvent(event)))
 }
 
 /**
@@ -249,7 +287,7 @@ export function onTurnEnd(ctx, fn) {
  * @returns {() => void}
  */
 export function onSessionStart(ctx, fn) {
-  return ctx.on(SEAMS.events.sessionStart, (payload) => fn(payload?.agent, String(payload?.source ?? '')))
+  return ctx.on(SEAMS.events.sessionStart, (/** @type {any} */ payload) => fn(payload?.agent, String(payload?.source ?? '')))
 }
 
 /**
@@ -262,7 +300,7 @@ export function onSessionStart(ctx, fn) {
  * @returns {() => void}
  */
 export function onPreStep(ctx, fn, classify) {
-  return ctx.on(SEAMS.events.preStep, async (payload, next) => {
+  return ctx.on(SEAMS.events.preStep, async (/** @type {any} */ payload, /** @type {any} */ next) => {
     const decision = await fn(toStepInfo(payload, classify(payload)), payload)
     if (decision.allow) return next()
     return { kind: 'reject' }
@@ -276,7 +314,7 @@ export function onPreStep(ctx, fn, classify) {
  * @returns {() => void}
  */
 export function onTurnStopping(ctx, fn) {
-  return ctx.on(SEAMS.events.turnStopping, async (payload) => fn(payload?.agent, Number(payload?.turn ?? 0)))
+  return ctx.on(SEAMS.events.turnStopping, async (/** @type {any} */ payload) => fn(payload?.agent, Number(payload?.turn ?? 0)))
 }
 
 /**
@@ -286,7 +324,7 @@ export function onTurnStopping(ctx, fn) {
  * @returns {() => void}
  */
 export function onDomainChanged(ctx, fn) {
-  return ctx.on(SEAMS.events.domainChanged, (change) => fn({
+  return ctx.on(SEAMS.events.domainChanged, (/** @type {any} */ change) => fn({
     domain: String(change?.domain ?? ''),
     table: String(change?.table ?? ''),
     key: String(change?.key ?? ''),
@@ -372,7 +410,11 @@ export function toSkillName(raw, prefix) {
   if (SKILL_NAME.test(verbatim)) return verbatim
   const slug = String(raw).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
   let digest = 0
-  for (const ch of String(raw)) digest = (Math.imul(digest, 31) + ch.codePointAt(0)) >>> 0
+  // `?? 0` because `codePointAt` is typed as possibly undefined. `for…of` over a
+  // string never yields an empty element, so it cannot fire — but an unguarded
+  // `undefined` here would poison the digest to NaN silently, and a stable id
+  // that quietly becomes NaN is the worst kind of identifier.
+  for (const ch of String(raw)) digest = (Math.imul(digest, 31) + (ch.codePointAt(0) ?? 0)) >>> 0
   const suffix = digest.toString(16).padStart(8, '0')
   return slug ? `${prefix}-${slug}-${suffix}` : `${prefix}-${suffix}`
 }
@@ -524,10 +566,10 @@ export async function listDirAt(ctx, baseDir, relativePath, signal) {
   try {
     const target = await fs.resolve(relativePath, { cwd: baseDir, signal })
     const entries = await fs.listDir(target, signal)
-    return entries.map((entry) => ({
+    return entries.map((/** @type {any} */ entry) => ({
       name: String(entry?.name ?? ''),
       directory: Boolean(entry?.isDirectory ?? entry?.directory ?? entry?.type === 'directory'),
-    })).filter((entry) => entry.name)
+    })).filter((/** @type {any} */ entry) => entry.name)
   } catch {
     return []
   }
@@ -618,11 +660,11 @@ async function probeToolPipeline(ctx) {
   /** @type {(() => void)[]} */
   const disposers = []
   try {
-    disposers.push(ctx.on(SEAMS.events.toolPolicy, async (exec, next) => {
+    disposers.push(ctx.on(SEAMS.events.toolPolicy, async (/** @type {any} */ exec, /** @type {any} */ next) => {
       if (String(exec?.name) === probeName) policyFired = true
       return next()
     }))
-    disposers.push(ctx.on(SEAMS.events.toolObserved, (exec) => {
+    disposers.push(ctx.on(SEAMS.events.toolObserved, (/** @type {any} */ exec) => {
       if (String(exec?.name) === probeName) observedFired = true
     }))
     const tool = await defineTool({
@@ -635,7 +677,7 @@ async function probeToolPipeline(ctx) {
     await ctx.tools.execute({ callId: `probe-${Date.now()}`, name: probeName, arguments: {}, signal: AbortSignal.timeout(5000) })
     return { policyFired, observedFired, error: null }
   } catch (error) {
-    return { policyFired, observedFired, error: error?.message ?? String(error) }
+    return { policyFired, observedFired, error: errorMessage(error) }
   } finally {
     for (const dispose of disposers.reverse()) {
       try {
@@ -695,6 +737,6 @@ async function probeSandbox(ctx, required) {
     }
     return { error: null, enforcement }
   } catch (error) {
-    return { error: `sandbox probe failed: ${error?.message ?? error}`, enforcement: 'none' }
+    return { error: `sandbox probe failed: ${errorMessage(error)}`, enforcement: 'none' }
   }
 }

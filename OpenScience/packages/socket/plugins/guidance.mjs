@@ -14,6 +14,7 @@
  * @module @evimed/dsh-socket/plugins/guidance
  */
 
+import { errorMessage } from '../src/runPolicy.mjs'
 import { validateCapabilityManifest } from '@evimed/domain'
 import { configSchema, listDirAt, readFileAt, registerSection } from '@evimed/harness-port'
 import { GUIDANCE_SECTION_NAME, GUIDANCE_SECTION_ORDER, buildGuidanceText } from '../src/guidanceText.mjs'
@@ -113,7 +114,7 @@ export async function loadCapabilities(ctx, directory) {
     try {
       raw = JSON.parse(text)
     } catch (error) {
-      ctx.get('evimedDiagnostics')?.degrade?.(`capability manifest is not JSON: ${entry.name} — ${error?.message ?? error}`)
+      ctx.get('evimedDiagnostics')?.degrade?.(`capability manifest is not JSON: ${entry.name} — ${errorMessage(error)}`)
       continue
     }
     const result = validateCapabilityManifest(raw)

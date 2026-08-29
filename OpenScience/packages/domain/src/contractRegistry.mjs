@@ -43,7 +43,11 @@ import { matchedClinicalTriggers } from './safetyRules.mjs'
  * @property {any} [matrix]
  * @property {any} [runReceipt]
  * @property {Record<string, string>} [sourceArtifacts]
- * @property {readonly string[]} [executedSearchQueries]
+ * @property {readonly string[] | null} [executedSearchQueries] null when the run
+ *   executed no searches, which is what `validateClinicalEvidencePackage`
+ *   defaults it to. Declared without the null for a long time, so the socket's
+ *   own declaration of the same input — which does allow it — did not match, and
+ *   nothing noticed because `packages/socket` was never typechecked in CI.
  * @property {number} [staleEvidenceCount]
  * @property {string} [finalReplyText]
  */
@@ -213,6 +217,7 @@ function validateClinicalEvidenceReport(input) {
   // entirely. The gate then passed a package the server would reject, which is
   // the exact drift this change was made to close.
   const blockedOn = new Set(result.blockingIssues ?? []);
+  /** @param {string} relative @returns {boolean} */
   const namedByValidator = (relative) => [...blockedOn].some((message) => String(message).includes(relative));
   // Every required file the validator is not already blocking on, including
   // when the report itself is one of them.
