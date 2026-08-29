@@ -159,6 +159,41 @@ export function toolPolicy(call, state) {
 }
 
 /**
+ * Two subagents writing the same file, which is one of them losing its work.
+ *
+ * Spec V15's second half, and the half that was never built. Delegation is
+ * allowed thirty children; nothing anywhere noticed if two of them wrote the
+ * same deliverable file. The later write wins, the earlier subagent's analysis
+ * is gone, and the gate reads the survivor — a package that looks whole and is
+ * missing a contributor's work, with no record that anything was lost.
+ *
+ * Detection, not refusal, and the distinction is the point. An orchestrator
+ * revising a file its child wrote is the normal shape of delegated work and
+ * must not be blocked; two *children* authoring the same path is the shape
+ * nobody intends. So the writer's identity is what decides, and only a
+ * child-after-a-different-child is reported.
+ *
+ * Pure: the caller owns the map, so the whole rule is testable without a
+ * container. Returns the notice to record, or null.
+ *
+ * @param {Map<string, { sessionId: string, nested: boolean }>} writers
+ * @param {{ path: string, sessionId: string, nested: boolean }} write
+ * @returns {string | null}
+ */
+export function concurrentWriteNotice(writers, write) {
+  const path = String(write?.path ?? '').trim()
+  if (!path) return null
+  const previous = writers.get(path)
+  writers.set(path, { sessionId: String(write.sessionId ?? ''), nested: Boolean(write.nested) })
+  if (!previous) return null
+  if (!previous.nested || !write.nested) return null
+  if (previous.sessionId === String(write.sessionId ?? '')) return null
+  return `${path} 被两个子代理先后写入（${previous.sessionId} 之后是 ${write.sessionId}）：`
+    + '后写的一次覆盖了前一次，前一个子代理的产出已经不在文件里了。'
+    + '把并行的分工写到各自的文件,再由主代理合并。'
+}
+
+/**
  * A crude but honest read of a shell command's write targets. It errs toward
  * refusing: a redirect or a destructive verb aimed at a protected prefix is
  * denied even when the exact path cannot be parsed, because the alternative is

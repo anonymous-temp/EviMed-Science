@@ -1,0 +1,81 @@
+{
+  "status": "success",
+  "summary": "Calculated traceable FAERS disproportionality screening metrics.",
+  "data": {
+    "drug": "aspirin",
+    "adverseEvent": "nausea",
+    "cells": {
+      "a": 31931,
+      "b": 586004,
+      "c": 747456,
+      "d": 19327299
+    },
+    "metrics": {
+      "ror": 1.4089561344712305,
+      "ror95CI": [
+        1.3928487761837356,
+        1.4252497635121897
+      ],
+      "prr": 1.3878238497975983,
+      "prr95CI": [
+        1.3727641890863715,
+        1.4030487197869665
+      ],
+      "chiSquaredYates": 3448.2850010596376,
+      "evansSignal": false,
+      "crudeIc": 0.45621207616718606
+    },
+    "metricStatus": "estimated",
+    "provenance": {
+      "tool": "adr_signal_analysis",
+      "arguments": {
+        "drug": "aspirin",
+        "adverseEvent": "nausea",
+        "metrics": [
+          "ror",
+          "prr",
+          "ic"
+        ]
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "openfda-faers-joint",
+      "source": "openfda-faers",
+      "retrievedAt": "2026-08-29T10:05:11.184714Z",
+      "url": "https://api.fda.gov/drug/event.json?limit=1&search=patient.drug.medicinalproduct%3A%22aspirin%22+AND+patient.reaction.reactionmeddrapt%3A%22nausea%22",
+      "title": "Joint drug-event FAERS count"
+    },
+    {
+      "id": "openfda-faers-drug",
+      "source": "openfda-faers",
+      "retrievedAt": "2026-08-29T10:05:11.184735Z",
+      "url": "https://api.fda.gov/drug/event.json?limit=1&search=patient.drug.medicinalproduct%3A%22aspirin%22",
+      "title": "Drug FAERS count"
+    },
+    {
+      "id": "openfda-faers-event",
+      "source": "openfda-faers",
+      "retrievedAt": "2026-08-29T10:05:11.184737Z",
+      "url": "https://api.fda.gov/drug/event.json?limit=1&search=patient.reaction.reactionmeddrapt%3A%22nausea%22",
+      "title": "Event FAERS count"
+    },
+    {
+      "id": "openfda-faers-total",
+      "source": "openfda-faers",
+      "retrievedAt": "2026-08-29T10:05:11.184739Z",
+      "url": "https://api.fda.gov/drug/event.json?limit=1",
+      "title": "Total FAERS count"
+    }
+  ],
+  "warnings": [
+    "Disproportionality is a screening signal and does not establish causality or incidence."
+  ]
+}

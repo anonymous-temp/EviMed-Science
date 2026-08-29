@@ -63,6 +63,7 @@ import {
   toolPolicy,
 } from '../src/runPolicy.mjs'
 import { advancePlanItem } from '../src/runMirror.mjs'
+import { concurrentWriteNotice } from '../src/runPolicy.mjs'
 
 const Schema = await configSchema()
 
@@ -210,9 +211,31 @@ export async function apply(ctx, config) {
     if (text) entry.finalReply = text
   }))
 
+  // Who last wrote each path, for the whole run rather than one session: the
+  // plugin instance is per-container and a container is one run, so this map is
+  // exactly run-scoped. Spec V15's concurrent-write half.
+  /** @type {Map<string, { sessionId: string, nested: boolean }>} */
+  const writers = new Map()
+
   // ---- policy: path guard, budget, attempt ceiling ------------------------
   ctx.effect(() => onToolPolicy(ctx, (call) => {
     const entry = sessionState(call.sessionId)
+    for (const field of ['path', 'file_path', 'filePath']) {
+      const value = call.args?.[field]
+      if (typeof value !== 'string' || !value) continue
+      if (!['write', 'edit', 'str_replace_editor'].includes(String(call.name ?? ''))) continue
+      const notice = concurrentWriteNotice(writers, {
+        path: value,
+        sessionId: String(call.sessionId ?? ''),
+        nested: Boolean(call.nested),
+      })
+      // Reported, never refused: an orchestrator revising a child's file is the
+      // normal shape of delegated work, and only a second CHILD is the shape
+      // that loses somebody's output. It rides out on the run mirror's degraded
+      // set, which the control plane already carries into the verdict.
+      if (notice) ctx.get('evimedDiagnostics')?.degrade?.(notice)
+      break
+    }
     return toolPolicy(call, {
       budget: entry.budget,
       limits: entry.limits,

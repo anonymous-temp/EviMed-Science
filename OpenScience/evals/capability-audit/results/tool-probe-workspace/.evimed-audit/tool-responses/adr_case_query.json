@@ -1,0 +1,85 @@
+{
+  "status": "success",
+  "summary": "Retrieved 2 de-identified FAERS reports.",
+  "data": {
+    "items": [
+      {
+        "id": "10004085",
+        "receivedDate": "20140312",
+        "serious": "1",
+        "reactions": [
+          "Lower gastrointestinal haemorrhage"
+        ],
+        "drugs": [
+          "BLINDED ALISKIREN",
+          "BLINDED ENALAPRIL",
+          "BLINDED NO TREATMENT RECEIVED",
+          "ASPIRIN",
+          "SIMVASTATIN",
+          "HCT",
+          "BERLTHYROX",
+          "METO TABLINEN"
+        ],
+        "patientSex": "0",
+        "patientAge": null,
+        "patientAgeUnit": null
+      },
+      {
+        "id": "10006272",
+        "receivedDate": "20140313",
+        "serious": "1",
+        "reactions": [
+          "Gastrointestinal haemorrhage",
+          "Drug interaction"
+        ],
+        "drugs": [
+          "DRONEDARONE",
+          "DABIGATRAN",
+          "COLCHICINE",
+          "ASPIRIN",
+          "EPLERENONE",
+          "FUROSEMIDE",
+          "LOVAZA",
+          "TOPROL XL",
+          "CRESTOR"
+        ],
+        "patientSex": "1",
+        "patientAge": "79",
+        "patientAgeUnit": "801"
+      }
+    ],
+    "requestedLimit": 2,
+    "effectiveLimit": 2,
+    "publicConnectorLimit": 25,
+    "provenance": {
+      "tool": "adr_case_query",
+      "arguments": {
+        "drug": "aspirin",
+        "adverseEvent": "haemorrhage",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "FAERS:10004085",
+      "source": "openfda-faers",
+      "retrievedAt": "2026-08-29T10:05:05.084966Z",
+      "url": "https://api.fda.gov/drug/event.json?search=safetyreportid:10004085",
+      "title": "FAERS safety report 10004085"
+    },
+    {
+      "id": "FAERS:10006272",
+      "source": "openfda-faers",
+      "retrievedAt": "2026-08-29T10:05:05.085044Z",
+      "url": "https://api.fda.gov/drug/event.json?search=safetyreportid:10006272",
+      "title": "FAERS safety report 10006272"
+    }
+  ]
+}

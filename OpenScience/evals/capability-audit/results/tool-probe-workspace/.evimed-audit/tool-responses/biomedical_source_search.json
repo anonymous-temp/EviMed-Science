@@ -1,0 +1,61 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 traceable records from pubmed.",
+  "data": {
+    "source": "pubmed",
+    "items": [
+      {
+        "id": "40382433",
+        "title": "Aspirin for the extended prevention of venous thromboembolism: a meta-analysis and trial sequential analysis.",
+        "url": "https://www.ncbi.nlm.nih.gov/pubmed/40382433/",
+        "description": "Aspirin for the extended prevention of venous thromboembolism: a meta-analysis and trial sequential analysis.",
+        "evidenceLevel": "abstract",
+        "abstract": "Venous thromboembolism (VTE), including deep vein thrombosis (DVT) and pulmonary embolism (PE), is a major complication following surgery and in high-risk scenarios. Aspirin may provide an alternative for extended VTE prophylaxis, but its risk-benefit profile remains unclear. We conducted a systematic review and meta-analysis of randomized controlled trials, following PRISMA guidelines, to evaluate aspirin's efficacy and safety for extended VTE prevention. Subgroup analyses included primary and secondary prevention, provoked and unprovoked VTE, and low-dose aspirin. Pooled relative risks (RRs) and 95% confidence intervals (CIs) were calculated using a random-effects model, and trial sequential analysis was used to assess the robustness of the evidence. Five trials including 68,554 patients were analyzed. Aspirin (100-160 mg) significantly reduced the risk of VTE, DVT, PE, and VTE-related mortality compared to placebo, particularly in primary prevention and provoked VTE cases. No benefit was observed in secondary prevention, while some benefit emerged for unprovoked VTE, limited to overall VTE risk. Low-dose aspirin (100 mg) did not significantly reduce the incidence of VTE, DVT, or PE. Aspirin increased the risks of overall and major bleeding but did not elevate blood transfusion requirements or major cardiovascular events. These findings suggest that prolonged aspirin therapy may have a role in extended VTE prevention, particularly in patients at risk for provoked VTE. However, careful patient selection remains crucial, and further studies are needed to refine its indications and optimal dosing strategy."
+      },
+      {
+        "id": "40902613",
+        "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis.",
+        "url": "https://www.ncbi.nlm.nih.gov/pubmed/40902613/",
+        "description": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis.",
+        "evidenceLevel": "abstract",
+        "abstract": "BACKGROUND: Aspirin monotherapy is recommended indefinitely for patients with established coronary artery disease (CAD). The aim of this individual patient level meta-analysis was to provide a comprehensive evaluation of the comparative efficacy and safety of clopidogrel versus aspirin monotherapy in patients with established CAD, most of whom had undergone percutaneous coronary intervention or had acute coronary syndrome. METHODS: We conducted a systematic search in PubMed, Scopus, Web of Science, and Embase to identify randomised trials published from database inception to April 12, 2025, comparing clopidogrel monotherapy with aspirin monotherapy in patients with established CAD who had discontinued or never started dual antiplatelet therapy. Randomised trials featuring an initial phase of dual antiplatelet therapy were eligible for inclusion in this individual patient data meta-analysis. In the main analysis, we used semi-parametric shared log-normal frailty models (one-stage analysis), including a random intercept to account for differences in the baseline hazard across trials, and a random slope to account for between-trial differences in treatment effects. The primary efficacy endpoint was a composite of cardiovascular death, myocardial infarction, or stroke (major adverse cardiovascular or cerebrovascular events [MACCE]); the primary safety endpoint was major bleeding. This study is registered with PROSPERO (CRD42025645594). FINDINGS: Seven randomised trials including 28 982 patients (14 507 assigned to clopidogrel; 14 475 assigned to aspirin) with a median follow-up of 2·3 years (IQR 1·1-4·0) were eligible and included. At 5·5 years, MACCE was less common in patients assigned to clopidogrel than in patients assigned to aspirin (929 events [2·61 per 100 patient-years] vs 1062 events [2·99 per 100 patient-years]; hazard ratio 0·86 [95% CI 0·77-0·96]; p=0·0082). Mortality and major bleeding (256 events [0·71 per 100 patient-years] with clopidogrel vs 279 events [0·77 per 100 patient-years] with aspirin; 0·94 [0·74-1·21]; p=0·64) did not differ. INTERPRETATION: These findings add to the evidence that clopidogrel monotherapy is superior to aspirin monotherapy for MACCE prevention with no increase in the risk of bleeding, and support the preferential use of clopidogrel over aspirin for secondary prevention in patients with established CAD. FUNDING: Cardiocentro Ticino Institute, Ente Ospedaliero Cantonale, Switzerland."
+      }
+    ],
+    "provenance": {
+      "tool": "biomedical_source_search",
+      "arguments": {
+        "source": "pubmed",
+        "query": "aspirin cardiovascular prevention randomized trial",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "40382433",
+      "source": "pubmed",
+      "retrievedAt": "2026-08-29T10:04:52.438002Z",
+      "url": "https://www.ncbi.nlm.nih.gov/pubmed/40382433/",
+      "title": "Aspirin for the extended prevention of venous thromboembolism: a meta-analysis and trial sequential analysis."
+    },
+    {
+      "id": "40902613",
+      "source": "pubmed",
+      "retrievedAt": "2026-08-29T10:04:52.438026Z",
+      "url": "https://www.ncbi.nlm.nih.gov/pubmed/40902613/",
+      "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis."
+    }
+  ],
+  "warnings": [
+    "This connector returns source metadata and selected public fields; verify the primary record before scientific interpretation."
+  ],
+  "next_actions": [
+    "Open and verify the cited primary record before using it in a material claim."
+  ]
+}

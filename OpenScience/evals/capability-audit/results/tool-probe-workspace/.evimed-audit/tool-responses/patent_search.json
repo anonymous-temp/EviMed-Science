@@ -1,0 +1,13 @@
+{
+  "status": "error",
+  "summary": "This connector requires the EviMed server gateway to inject a managed credential.",
+  "next_actions": [
+    "Retry once or configure the corresponding private EviMed adapter."
+  ],
+  "error": {
+    "code": "public_source_managed_credential_required",
+    "message": "This connector requires the EviMed server gateway to inject a managed credential.",
+    "retryable": false,
+    "stopReason": "Stop after one retry if the public source remains unavailable."
+  }
+}

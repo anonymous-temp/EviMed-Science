@@ -1,0 +1,115 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 traceable PubMed records.",
+  "data": {
+    "items": [
+      {
+        "id": "PMID:40811516",
+        "pmid": "40811516",
+        "title": "2025 AHA/ACC/AANP/AAPA/ABC/ACCP/ACPM/AGS/AMA/ASPC/NMA/PCNA/SGIM Guideline for the Prevention, Detection, Evaluation and Management of High Blood Pressure in Adults: A Report of the American College of Cardiology/American Heart Association Joint Committee on Clinical Practice Guidelines.",
+        "journal": "Hypertension (Dallas, Tex. : 1979)",
+        "publicationDate": "2025 Oct",
+        "authors": [
+          "Writing Committee Members*",
+          "Jones DW",
+          "Ferdinand KC",
+          "Taler SJ",
+          "Johnson HM",
+          "Shimbo D",
+          "Abdalla M",
+          "Altieri MM",
+          "Bansal N",
+          "Bello NA",
+          "Bress AP",
+          "Carter J",
+          "Cohen JB",
+          "Collins KJ",
+          "Commodore-Mensah Y",
+          "Davis LL",
+          "Egan B",
+          "Khan SS",
+          "Lloyd-Jones DM",
+          "Melnyk BM",
+          "Mistry EA",
+          "Ogunniyi MO",
+          "Schott SL",
+          "Smith SC Jr",
+          "Talbot AW",
+          "Vongpatanasin W",
+          "Watson KE",
+          "Whelton PK",
+          "Williamson JD"
+        ],
+        "doi": "10.1161/HYP.0000000000000249",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/40811516/"
+      },
+      {
+        "id": "PMID:28827377",
+        "pmid": "28827377",
+        "title": "Clinical Practice Guideline for Screening and Management of High Blood Pressure in Children and Adolescents.",
+        "journal": "Pediatrics",
+        "publicationDate": "2017 Sep",
+        "authors": [
+          "Flynn JT",
+          "Kaelber DC",
+          "Baker-Smith CM",
+          "Blowey D",
+          "Carroll AE",
+          "Daniels SR",
+          "de Ferranti SD",
+          "Dionne JM",
+          "Falkner B",
+          "Flinn SK",
+          "Gidding SS",
+          "Goodwin C",
+          "Leu MG",
+          "Powers ME",
+          "Rea C",
+          "Samuels J",
+          "Simasek M",
+          "Thaker VV",
+          "Urbina EM",
+          "SUBCOMMITTEE ON SCREENING AND MANAGEMENT OF HIGH BLOOD PRESSURE IN CHILDREN"
+        ],
+        "doi": "10.1542/peds.2017-1904",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/28827377/"
+      }
+    ],
+    "provenance": {
+      "tool": "guideline_search",
+      "arguments": {
+        "query": "hypertension clinical practice guideline",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "PMID:40811516",
+      "source": "pubmed-guideline",
+      "retrievedAt": "2026-08-29T10:05:01.652404Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/40811516/",
+      "title": "2025 AHA/ACC/AANP/AAPA/ABC/ACCP/ACPM/AGS/AMA/ASPC/NMA/PCNA/SGIM Guideline for the Prevention, Detection, Evaluation and Management of High Blood Pressure in Adults: A Report of the American College of Cardiology/American Heart Association Joint Committee on Clinical Practice Guidelines."
+    },
+    {
+      "id": "PMID:28827377",
+      "source": "pubmed-guideline",
+      "retrievedAt": "2026-08-29T10:05:01.652431Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/28827377/",
+      "title": "Clinical Practice Guideline for Screening and Management of High Blood Pressure in Children and Adolescents."
+    }
+  ],
+  "warnings": [
+    "EviMed guideline search was unavailable: This connector requires the EviMed server gateway to inject a managed credential.",
+    "Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality."
+  ],
+  "next_actions": [
+    "Retrieve and review the abstract or full text before classifying study design or summarizing findings."
+  ]
+}
