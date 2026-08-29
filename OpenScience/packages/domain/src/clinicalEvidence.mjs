@@ -1687,20 +1687,22 @@ function quoteJoinsUnmarkedPassages(artifact, quote) {
   return haystack.indexOf(rest, resumesAfter) >= 0;
 }
 
-// One empty field is one problem, and one omission across forty claims is one
-// behaviour.
+// One field is one problem, and the same wrong value across forty claims is one
+// decision.
 //
-// A matrix built before its sources were preserved drew two required issues per
-// claim — `claims[3].artifactPath must be a non-empty string.` and
-// `claims[3].artifactPath is "", which is not a preserved artifact. Preserve the
-// source first …` — the same fact said twice, the second saying everything the
-// first does and what to do about it. Forty claims came back as eighty issues,
-// and the run has seven submissions to spend.
+// Two shapes of noise came out of real runs. A matrix built before its sources
+// were preserved drew two required issues per claim — `must be a non-empty
+// string.` and `is "", which is not a preserved artifact. Preserve the source
+// first …` — the second saying everything the first does and what to do about
+// it. Then a matrix rewritten to the right schema cited the run's own notes
+// file on every claim: twenty times `artifactPath is "source-quotes.md"` and
+// twenty times `accessLevel is "regulatory_record"`, 83 required issues for two
+// decisions, on a budget of seven submissions.
 //
-// So: where a field already has a specific finding, the generic shape complaint
-// about it goes; and where the same empty field recurs across three or more
-// claims, the per-claim lines give way to one that names the count and the
-// claims, because they are one omission and one repair.
+// So: the generic shape complaint gives way wherever the field already has a
+// specific finding, and three or more claims failing the same field on the same
+// value collapse into one line that keeps the original guidance verbatim and
+// says how many claims and which. The repair is one edit either way.
 /** @param {string[]} issues @returns {string[]} */
 function collapseClaimFieldIssues(issues) {
   const shape = /^(claims\[\d+\])\.([A-Za-z]+) must be a non-empty string\.$/;
@@ -1714,25 +1716,36 @@ function collapseClaimFieldIssues(issues) {
     return !found || !specific.has(`${found[1]}.${found[2]}`);
   });
 
-  // Which fields are empty on which claims, read from the specific findings
-  // that survived rather than from the matrix — the message is the evidence
-  // that the check fired.
-  const empty = /^(claims\[(\d+)\])\.([A-Za-z]+) is "", which is not a preserved artifact\./;
-  /** @type {Map<string, string[]>} */
-  const byField = new Map();
+  // Grouped by what the message says, not by re-reading the matrix: the message
+  // is the evidence that the check fired on that claim for that value.
+  const valued = /^(claims\[\d+\])\.([A-Za-z]+) is ("(?:[^"\\]|\\.)*")(.*)$/s;
+  /** @type {Map<string, { labels: string[], rest: string, value: string, field: string }>} */
+  const groups = new Map();
   for (const issue of deduped) {
-    const found = empty.exec(String(issue));
-    if (found) byField.set(found[3], [...(byField.get(found[3]) ?? []), found[1]]);
+    const found = valued.exec(String(issue));
+    if (!found) continue;
+    const key = `${found[2]}\u0000${found[3]}`;
+    const group = groups.get(key) ?? { labels: [], rest: found[4], value: found[3], field: found[2] };
+    group.labels.push(found[1]);
+    groups.set(key, group);
   }
   let collapsed = deduped;
-  for (const [field, labels] of byField) {
-    if (labels.length < 3) continue;
-    const listed = labels.length > 6 ? `${labels.slice(0, 6).join("、")} 等 ${labels.length} 条` : labels.join("、");
+  for (const [key, group] of groups) {
+    if (group.labels.length < 3) continue;
+    // The first claim's message, verbatim, and then the scope. Rewriting the
+    // sentence around a count produced 「……不是 20 个错误。, which is not a
+    // preserved artifact.」 — a fragment stitched onto a full stop. The guidance
+    // is the valuable half and it stays exactly as the rule wrote it.
+    const rest = group.labels.slice(1);
+    const listed = rest.length > 5 ? `${rest.slice(0, 5).join("、")} 等` : rest.join("、");
     collapsed = [
-      ...collapsed.filter((issue) => !(empty.exec(String(issue))?.[3] === field)),
-      `${labels.length} 条主张的 ${field} 是空的（${listed}）——这些主张是在保全原文之前写下的。`
-        + "先用 evimed_open_access_full_text（按 DOI/PMCID）或 evimed_official_page_fetch（按 URL）把每一篇取到 .evimed-sources 下，"
-        + "再把它返回的路径填进对应主张；取不到的那几篇，改引你确实保全了的来源，或把该条改写为如实的证据空白。",
+      ...collapsed.filter((issue) => {
+        const found = valued.exec(String(issue));
+        return !found || `${found[2]}\u0000${found[3]}` !== key;
+      }),
+      `${group.labels[0]}.${group.field} is ${group.value}${group.rest}`
+        + ` 另有 ${rest.length} 条主张的 ${group.field} 是同一个值（${listed}）：这是一处决定，改一次就能全部修好。`
+        + (group.value === '""' ? "这些主张写在保全原文之前。" : ""),
     ];
   }
   return collapsed;
