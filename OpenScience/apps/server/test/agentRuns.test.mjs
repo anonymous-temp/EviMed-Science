@@ -661,6 +661,86 @@ async function withAnswerModeRun(fn) {
   }
 }
 
+test("every fact the durable finish path reads, the live one reads too", async () => {
+  // Three asymmetries were found by hand in one day, all the same shape: a fact
+  // the receipt carries, read by `finishFromDurableRecord` and not by the path
+  // that runs every time — the digest verification, the not-accepted verdict,
+  // and the acceptance notices. Each silently changed the ledger depending on
+  // whether the container happened to outlive the run.
+  //
+  // A fourth would be found the same way, by a person reading two functions
+  // side by side, unless something asserts the property. Reading the source is
+  // crude and it is exactly what the last three needed.
+  const source = await readFile(new URL("../src/agentRuns.mjs", import.meta.url), "utf8");
+  const durableStart = source.indexOf("async finishFromDurableRecord(");
+  const durableEnd = source.indexOf("async finishInternal(", durableStart);
+  assert.ok(durableStart > 0 && durableEnd > durableStart, "could not locate finishFromDurableRecord");
+  const durable = source.slice(durableStart, durableEnd);
+  const receiptRead = source.indexOf("const finalReceipt = await readDeliveryReceipt(project);");
+  assert.ok(receiptRead > 0, "the live path no longer reads the receipt at all");
+  const liveStart = source.lastIndexOf("async reconcileSession(", receiptRead);
+  const liveEnd = source.indexOf("/** Append what is observably happening", receiptRead);
+  assert.ok(liveStart > 0 && liveEnd > receiptRead, "could not bound the live path");
+  const live = source.slice(liveStart, liveEnd);
+
+  for (const [fact, marker] of [
+    ["receipt digests", "verifiedReceiptArtifacts"],
+    ["acceptance notices", "entry.notices"],
+    ["nothing accepted", "specialist_deliverable_not_accepted"],
+    ["the run-state projection", "readRunStateProjection"],
+  ]) {
+    assert.ok(durable.includes(marker), `the durable path stopped reading ${fact} (${marker})`);
+    assert.ok(live.includes(marker), `the live path does not read ${fact} (${marker}) — the durable path does, and they must agree`);
+  }
+});
+
+test("the notices a package was accepted with reach the ledger on both paths", async () => {
+  // `finishFromDurableRecord` has carried `receipt.entries[].notices` since it
+  // was written. The live path never opened the receipt, so the advisory
+  // findings the gate recorded at acceptance were reported only when the
+  // container had already died: a package accepted with twenty-five advisory
+  // notes reached the ledger with zero. Third asymmetry of this shape today —
+  // a fact carried on the rare path and dropped on the ordinary one.
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    const deliverableDir = path.join(project.workspaceDir, "deliverables", "d1");
+    await mkdir(deliverableDir, { recursive: true });
+    const body = "# graded and unchanged\n";
+    await writeFile(path.join(deliverableDir, "clinical-evidence-report.md"), body, "utf8");
+    await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_notices",
+      bundleVersion: "0.1.0",
+      domainVersion: "0.1.0",
+      entries: [{
+        deliverableId: "d1",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        files: [{
+          path: "deliverables/d1/clinical-evidence-report.md",
+          sha256: createHash("sha256").update(body).digest("hex"),
+          bytes: Buffer.byteLength(body),
+        }],
+        acceptedAt: "2026-01-01T00:00:00.000Z",
+        attempt: 4,
+        notices: ["资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级", "重复的一条"],
+      }],
+    }, null, 2), "utf8");
+
+    await dispatch("turn_accepted_notices");
+    appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded", (run.qualityNotices ?? []).join(" | "));
+    assert.ok(
+      (run.qualityNotices ?? []).some((line) => /GRADE/.test(String(line))),
+      `the acceptance notices must travel: ${JSON.stringify(run.qualityNotices)}`,
+    );
+    // Deduplicated: a notice already admitted while the run was alive is the
+    // same notice, and reporting it twice is the noise this whole area is about.
+    const repeated = (run.qualityNotices ?? []).filter((line) => String(line) === "重复的一条");
+    assert.equal(repeated.length, 1, "one notice, once");
+  });
+});
+
 test("a deliverable no gate accepted is not a success, receipt or no receipt", async () => {
   // RQ-03 spent all seven attempts and its last submission was still two
   // required issues short. It wrote 「部分交付」 in its own summary and produced

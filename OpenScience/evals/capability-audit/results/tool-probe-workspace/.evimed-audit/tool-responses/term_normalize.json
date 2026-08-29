@@ -1,0 +1,27 @@
+{
+  "status": "success",
+  "summary": "Normalized the supplied term against the curated vocabulary.",
+  "data": {
+    "input": "心肌梗死",
+    "preferred": "myocardial infarction",
+    "synonyms": [
+      "myocardial infarction",
+      "heart attack",
+      "心肌梗死"
+    ],
+    "domain": "disease",
+    "provenance": {
+      "tool": "term_normalize",
+      "arguments": {
+        "term": "心肌梗死",
+        "domain": "disease"
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  }
+}

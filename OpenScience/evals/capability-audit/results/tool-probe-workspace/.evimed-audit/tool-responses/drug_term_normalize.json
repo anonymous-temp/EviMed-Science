@@ -1,0 +1,45 @@
+{
+  "status": "success",
+  "summary": "Normalized the supplied term against the RxNorm vocabulary.",
+  "data": {
+    "input": "acetaminophen",
+    "preferred": "{100 (acetaminophen 250 MG / aspirin 250 MG / caffeine 65 MG Oral Tablet [Excedrin]) / 24 (acetaminophen 250 MG / aspirin 250 MG / diphenhydramine citrate 38 MG Oral Tablet [Excedrin PM Triple Action]) } Pack [Excedrin PM Triple Action Caplets and Excedrin Extra Strength Pain Reliever]",
+    "synonyms": [
+      "{100 (acetaminophen 250 MG / aspirin 250 MG / caffeine 65 MG Oral Tablet [Excedrin]) / 24 (acetaminophen 250 MG / aspirin 250 MG / diphenhydramine citrate 38 MG Oral Tablet [Excedrin PM Triple Action]) } Pack [Excedrin PM Triple Action Caplets and Excedrin Extra Strength Pain Reliever]",
+      "Excedrin PM Triple Action Caplets and Excedrin Extra Strength Pain Reliever Kit",
+      "{1 (acetaminophen 500 MG / chlorpheniramine maleate 2 MG / phenylephrine hydrochloride 5 MG Oral Tablet) / 1 (acetaminophen 500 MG / phenylephrine hydrochloride 5 MG Oral Tablet) } Pack",
+      "1 daytime (acetaminophen 500 MG / phenylephrine HCl 5 MG Oral Tablet) / 1 nighttime (acetaminophen 500 MG / chlorpheniramine maleate 2 MG / phenylephrine HCl 5 MG Oral Tablet) Pack",
+      "{1 (acetaminophen 33.3 MG/ML / dextromethorphan hydrobromide 1 MG/ML / doxylamine succinate 0.417 MG/ML Oral Solution) / 1 (acetaminophen 33.3 MG/ML / dextromethorphan hydrobromide 1 MG/ML Oral Solution) } Pack",
+      "1 nighttime (acetaminophen 500 MG / dextromethorphan hydrobromide 15 MG / doxylamine succinate 6.25 MG per 15 ML Oral Solution) / 1 daytime (acetaminophen 500 MG / dextromethorphan hydrobromide 15 MG per 15 ML Oral Solution) Pack",
+      "{1 (acetaminophen 500 MG / chlorpheniramine maleate 2 MG / dextromethorphan hydrobromide 15 MG Oral Tablet) / 1 (dextromethorphan hydrobromide 10 MG / guaifenesin 200 MG Oral Capsule) } Pack",
+      "1 daytime (dextromethorphan HBr 10 MG / guaiFENesin 200 MG Oral Capsule) / 1 nighttime (acetaminophen 500 MG / chlorpheniramine maleate 2 MG / dextromethorphan HBr 15 MG Oral Tablet) Pack",
+      "{1 (acetaminophen 32.5 MG/ML / dextromethorphan hydrobromide 1 MG/ML / guaifenesin 20 MG/ML / phenylephrine hydrochloride 0.5 MG/ML Oral Solution) / 1 (acetaminophen 32.5 MG/ML / diphenhydramine hydrochloride 1.25 MG/ML / phenylephrine hydrochloride 0.5 MG/ML Oral Solution) } Pack",
+      "1 daytime (acetaminophen 650 MG / dextromethorphan HBr 20 MG / guaifenesin 400 MG / phenylephrine HCl 10 MG per 20 ML Oral Solution) / 1 nighttime (acetaminophen 650 MG / diphenhydramine HCl 25 MG / phenylephrine HCl 10 MG per 20 ML Oral Solution) Pack",
+      "{1 (acetaminophen 650 MG / dextromethorphan hydrobromide 20 MG / phenylephrine hydrochloride 10 MG Granules for Oral Solution) / 1 (acetaminophen 650 MG / diphenhydramine hydrochloride 25 MG / phenylephrine hydrochloride 10 MG Granules for Oral Solution) } Pack",
+      "1 daytime (acetaminophen 650 MG / dextromethorphan HBr 20 MG / phenylephrine HCl 10 MG Packets for Oral Solution) / 1 nighttime (acetaminophen 650 MG / diphenhydramine HCl 25 MG / phenylephrine HCl 10 MG Packets for Oral Solution) Pack",
+      "{1 (acetaminophen 325 MG / dextromethorphan hydrobromide 10 MG / doxylamine succinate 6.25 MG Oral Capsule) / 1 (acetaminophen 325 MG / dextromethorphan hydrobromide 10 MG / phenylephrine hydrochloride 5 MG Oral Capsule) } Pack",
+      "1 daytime (acetaminophen 325 MG / dextromethorphan hydrobromide 10 MG / phenylephrine hydrochloride 5 MG Oral Capsule) / 1 nighttime (acetaminophen 325 MG / dextromethorphan hydrobromide 10 MG / doxylamine succinate 6.25 MG Oral Capsule) Pack",
+      "{1 (acetaminophen 21.7 MG/ML / dextromethorphan hydrobromide 0.667 MG/ML / phenylephrine hydrochloride 0.333 MG/ML Oral Solution) / 1 (acetaminophen 21.7 MG/ML / diphenhydramine hydrochloride 0.833 MG/ML / phenylephrine hydrochloride 0.333 MG/ML Oral Solution) } Pack",
+      "1 daytime (acetaminophen 650 MG / dextromethorphan HBr 20 MG / phenylephrine HCl 10 MG per 30 ML Oral Solution) / 1 nighttime (acetaminophen 650 MG / diphenhydramine HCl 25 MG / phenylephrine HCl 10 MG per 30 ML Oral Solution) Pack",
+      "{1 (acetaminophen 500 MG / dextromethorphan hydrobromide 20 MG / guaifenesin 400 MG / phenylephrine hydrochloride 10 MG Powder for Oral Solution) / 1 (acetaminophen 650 MG / dextromethorphan hydrobromide 20 MG / doxylamine succinate 12.5 MG / phenylephrine hydrochloride 10 MG Powder for Oral Solution) } Pack",
+      "1 daytime (acetaminophen 500 MG / dextromethorphan HBr 20 MG / guaifenesin 400 MG / phenylephrine HCl 10 MG Packet for Oral Solution) / 1 nighttime (acetaminophen 650 MG / dextromethorphan HBr 20 MG / doxylamine succinate 12.5 MG / phenylephrine HCl 10 MG Packet for Oral Solution) Pack",
+      "{1 (acetaminophen 250 MG / dextromethorphan hydrobromide 10 MG / guaifenesin 200 MG / phenylephrine hydrochloride 5 MG Oral Capsule) / 1 (acetaminophen 325 MG / dextromethorphan hydrobromide 10 MG / doxylamine succinate 6.25 MG / phenylephrine hydrochloride 5 MG Oral Capsule) } Pack",
+      "1 daytime (acetaminophen 250 MG / dextromethorphan hydrobromide 10 MG / guaifenesin 200 MG / phenylephrine hydrochloride 5 MG Oral Capsule) / 1 nighttime (acetaminophen 325 MG / dextromethorphan hydrobromide 10 MG / doxylamine succinate 6.25 MG / phenylephrine hydrochloride 5 MG Oral Capsule) Pack"
+    ],
+    "domain": "drug",
+    "vocabulary": "rxnorm",
+    "rxcui": "2047428",
+    "provenance": {
+      "tool": "drug_term_normalize",
+      "arguments": {
+        "term": "acetaminophen"
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  }
+}

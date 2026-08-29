@@ -1,0 +1,13 @@
+{
+  "status": "error",
+  "summary": "The private pharmacy reference database is not configured for this runtime.",
+  "next_actions": [
+    "Retry once or configure the corresponding private EviMed adapter."
+  ],
+  "error": {
+    "code": "pharmacy_reference_unconfigured",
+    "message": "The private pharmacy reference database is not configured for this runtime.",
+    "retryable": false,
+    "stopReason": "Stop after one retry if the public source remains unavailable."
+  }
+}

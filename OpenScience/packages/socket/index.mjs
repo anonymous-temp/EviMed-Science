@@ -52,6 +52,7 @@ export {
   delegatableItems,
   evidenceSourceErrorCode,
   gateDeliverable,
+  concurrentWriteNotice,
   guardedBashTarget,
   indexPlan,
   rejectionEnvelope,

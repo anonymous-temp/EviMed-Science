@@ -1,0 +1,13 @@
+{
+  "status": "error",
+  "summary": "Open-web search is not enabled for this deployment. The bibliographic channels (PubMed, Europe PMC, OpenAlex, Semantic Scholar, Crossref, preprints) remain available.",
+  "next_actions": [
+    "Continue with the bibliographic channels; do not read an unavailable web search as an empty field."
+  ],
+  "error": {
+    "code": "web_search_unconfigured",
+    "message": "Open-web search is not enabled for this deployment. The bibliographic channels (PubMed, Europe PMC, OpenAlex, Semantic Scholar, Crossref, preprints) remain available.",
+    "retryable": false,
+    "stopReason": "unsupported"
+  }
+}

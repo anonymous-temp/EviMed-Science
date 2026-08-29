@@ -1,0 +1,73 @@
+{
+  "status": "warning",
+  "summary": "Retrieved 2 registered clinical trials.",
+  "data": {
+    "items": [
+      {
+        "id": "NCT02503943",
+        "title": "Effects of Incretin on the Blood Pressure and Lipid in Patients With Overweight or Obese Diabetes",
+        "status": "UNKNOWN",
+        "conditions": [
+          "Type 2 Diabetes",
+          "Overweight",
+          "Obesity",
+          "Masked Hypertension"
+        ],
+        "interventions": [
+          "\"Liraglutide\" and \"Mitiglinide\"",
+          "\"Metformin\" and \"Mitiglinide\"",
+          "\"Mitiglinide\""
+        ],
+        "url": "https://clinicaltrials.gov/study/NCT02503943"
+      },
+      {
+        "id": "NCT00997152",
+        "title": "Efficacy and Safety Study of JTT-654 in Type 2 Diabetic Patients",
+        "status": "TERMINATED",
+        "conditions": [
+          "Type II Diabetes Mellitus"
+        ],
+        "interventions": [
+          "JTT-654",
+          "JTT-654 Placebo"
+        ],
+        "url": "https://clinicaltrials.gov/study/NCT00997152"
+      }
+    ],
+    "provenance": {
+      "tool": "clinical_trial_search",
+      "arguments": {
+        "query": "type 2 diabetes metformin",
+        "limit": 2
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "NCT02503943",
+      "source": "clinicaltrials.gov",
+      "retrievedAt": "2026-08-29T10:05:01.955524Z",
+      "url": "https://clinicaltrials.gov/study/NCT02503943",
+      "title": "Effects of Incretin on the Blood Pressure and Lipid in Patients With Overweight or Obese Diabetes"
+    },
+    {
+      "id": "NCT00997152",
+      "source": "clinicaltrials.gov",
+      "retrievedAt": "2026-08-29T10:05:01.955540Z",
+      "url": "https://clinicaltrials.gov/study/NCT00997152",
+      "title": "Efficacy and Safety Study of JTT-654 in Type 2 Diabetic Patients"
+    }
+  ],
+  "warnings": [
+    "EviMed clinical-trial search was unavailable: This connector requires the EviMed server gateway to inject a managed credential."
+  ],
+  "next_actions": [
+    "Verify the current trial record and protocol before using registry fields in an assessment."
+  ]
+}

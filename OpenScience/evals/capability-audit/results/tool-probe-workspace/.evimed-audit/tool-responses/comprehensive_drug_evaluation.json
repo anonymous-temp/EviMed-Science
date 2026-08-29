@@ -1,0 +1,124 @@
+{
+  "status": "warning",
+  "summary": "Compiled a traceable domain-by-domain comprehensive drug assessment.",
+  "data": {
+    "assessmentType": "comprehensive_drug_evaluation",
+    "domainAssessments": [
+      {
+        "domain": "effectiveness",
+        "status": "mixed",
+        "evidenceIds": [
+          "audit-study-1"
+        ],
+        "rationale": "The bounded release fixture exercises a traceable core-domain assessment."
+      },
+      {
+        "domain": "safety",
+        "status": "mixed",
+        "evidenceIds": [
+          "audit-study-1"
+        ],
+        "rationale": "The bounded release fixture exercises a traceable core-domain assessment."
+      },
+      {
+        "domain": "applicability",
+        "status": "mixed",
+        "evidenceIds": [
+          "audit-study-1"
+        ],
+        "rationale": "The bounded release fixture exercises a traceable core-domain assessment."
+      }
+    ],
+    "coreDomainCoverage": {
+      "required": [
+        "applicability",
+        "effectiveness",
+        "safety"
+      ],
+      "missing": [],
+      "unresolved": [],
+      "complete": true
+    },
+    "evaluationDomains": null,
+    "compositeScore": null,
+    "scoreStatus": "not_requested",
+    "scoreWithheldReasons": [],
+    "recommendationStrength": "not_automatically_determined",
+    "audit": {
+      "compiler": "evimed-drug-assessment",
+      "compilerVersion": "1.4.0",
+      "inputSha256": "282448c6c64322e21befe5c3acce24541a641250d005dd6536250c3b27f10d93",
+      "automaticDecision": false,
+      "humanReviewRequired": true
+    },
+    "provenance": {
+      "tool": "comprehensive_drug_evaluation",
+      "arguments": {
+        "action": "compile",
+        "drug": "metformin",
+        "indication": "type 2 diabetes",
+        "comparator": "sulfonylurea",
+        "sourceInventory": [
+          {
+            "id": "audit-study-1",
+            "title": "Audited evidence fixture",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/1/",
+            "source": "release-audit-fixture",
+            "retrievedAt": "2026-07-20T00:00:00Z",
+            "evidenceAccess": "full_text"
+          }
+        ],
+        "domainAssessments": [
+          {
+            "domain": "effectiveness",
+            "status": "mixed",
+            "evidenceIds": [
+              "audit-study-1"
+            ],
+            "rationale": "The bounded release fixture exercises a traceable core-domain assessment."
+          },
+          {
+            "domain": "safety",
+            "status": "mixed",
+            "evidenceIds": [
+              "audit-study-1"
+            ],
+            "rationale": "The bounded release fixture exercises a traceable core-domain assessment."
+          },
+          {
+            "domain": "applicability",
+            "status": "mixed",
+            "evidenceIds": [
+              "audit-study-1"
+            ],
+            "rationale": "The bounded release fixture exercises a traceable core-domain assessment."
+          }
+        ]
+      },
+      "scope": {
+        "tenantId": "",
+        "userId": "",
+        "projectId": "",
+        "workspaceDir": "/home/coder/workspace/EviMedScience/OpenScience/evals/capability-audit/results/tool-probe-workspace"
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "audit-study-1",
+      "title": "Audited evidence fixture",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/1/",
+      "source": "release-audit-fixture",
+      "retrievedAt": "2026-07-20T00:00:00Z",
+      "evidenceAccess": "full_text"
+    }
+  ],
+  "warnings": [
+    "Study design alone does not determine certainty, and certainty does not determine recommendation strength.",
+    "No automatic clinical, HTA, reimbursement, or procurement recommendation was produced."
+  ],
+  "next_actions": [
+    "Complete missing core domains and resolve contradictory evidence.",
+    "Review certainty, benefit-harm balance, economics, equity, and applicability before using the assisted assessment."
+  ]
+}

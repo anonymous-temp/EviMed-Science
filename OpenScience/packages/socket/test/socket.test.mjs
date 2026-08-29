@@ -15,6 +15,7 @@ import {
   buildDelegation,
   buildGuidanceText,
   completionCheck,
+  concurrentWriteNotice,
   delegatableItems,
   evidenceFromOutcome,
   evidenceSourceErrorCode,
@@ -381,6 +382,46 @@ test("the sources a quote is checked against come from the ledger, not from the 
   assert.deepEqual(sourceArtifactPaths(rows, "run_zzz"), [], "another run's rows are not this run's sources");
   // And an unfiltered read must not silently pull in a foreign run.
   assert.equal(sourceArtifactPaths(rows, "").length, 3, "no runId accepts all rows, deduplicated");
+});
+
+test("two subagents writing one file is one of them losing its work", () => {
+  // Spec V15's second half, and the half nobody built. Delegation is allowed
+  // thirty children and nothing noticed if two of them wrote the same
+  // deliverable file: the later write wins, the earlier child's analysis is
+  // gone, and the gate reads the survivor — a package that looks whole and is
+  // missing a contributor's work, with nothing recording the loss.
+  const writers = new Map();
+  const child = (session, path) => concurrentWriteNotice(writers, { path, sessionId: session, nested: true });
+  const parent = (session, path) => concurrentWriteNotice(writers, { path, sessionId: session, nested: false });
+
+  assert.equal(child("s-a", "deliverables/d1/section-a.md"), null, "the first writer is never a conflict");
+  const clash = child("s-b", "deliverables/d1/section-a.md");
+  assert.ok(clash, "a second child writing the same path must be reported");
+  assert.match(clash, /s-a/);
+  assert.match(clash, /s-b/);
+  assert.match(clash, /覆盖/, "the notice has to say what was lost, not just that two writes happened");
+
+  // Negative controls — the three ways this could cry wolf.
+  // 1. An orchestrator revising a child's file is the normal shape of
+  //    delegated work. Refusing or reporting it would fire on every run.
+  const fresh = new Map();
+  assert.equal(child("s-a", "deliverables/d1/report.md"), null);
+  assert.equal(parent("root", "deliverables/d1/report.md"), null, "parent-after-child is ordinary work");
+  // 2. The same child rewriting its own file is one author, however many times.
+  assert.equal(concurrentWriteNotice(fresh, { path: "x.md", sessionId: "s-a", nested: true }), null);
+  assert.equal(concurrentWriteNotice(fresh, { path: "x.md", sessionId: "s-a", nested: true }), null);
+  // 3. Different paths are different work, which is what delegation is for.
+  assert.equal(concurrentWriteNotice(fresh, { path: "y.md", sessionId: "s-b", nested: true }), null);
+
+  // And a child writing after the parent still counts: the parent's edit is the
+  // one being discarded, and that direction loses work just as thoroughly.
+  const after = new Map();
+  assert.equal(concurrentWriteNotice(after, { path: "z.md", sessionId: "root", nested: false }), null);
+  assert.equal(
+    concurrentWriteNotice(after, { path: "z.md", sessionId: "s-c", nested: true }),
+    null,
+    "only child-after-child is the unintended shape; the parent orchestrates on purpose",
+  );
 });
 
 test("an accepted deliverable is finished, and polishing it cannot cost the delivery", () => {

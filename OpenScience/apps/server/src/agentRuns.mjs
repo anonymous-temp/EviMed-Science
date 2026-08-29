@@ -2519,6 +2519,22 @@ export class AgentRunStore {
     }
     const finalReceipt = await readDeliveryReceipt(project);
     if (finalReceipt) {
+      // The advisory findings the gate recorded when it accepted the package
+      // travel with the verdict, on this path too.
+      //
+      // `finishFromDurableRecord` has carried them since it was written; this
+      // path never opened the receipt, so a run whose container outlived it
+      // reported none of them. Same fact, two paths, and the one that runs
+      // every time was the one that dropped it — a package accepted with
+      // twenty-five advisory notes reached the ledger with zero. Deduplicated,
+      // because a notice already admitted while the run was alive is the same
+      // notice.
+      const seen = new Set(terminal.qualityNotices ?? []);
+      const accepted = finalReceipt.entries.flatMap((entry) => entry.notices ?? [])
+        .filter((line) => typeof line === "string" && line && !seen.has(line));
+      if (accepted.length) {
+        terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...accepted].slice(0, 20);
+      }
       const verified = await verifiedReceiptArtifacts(project, finalReceipt);
       if (verified.mismatched.length) {
         return this.finishInternal(project, run.id, {
