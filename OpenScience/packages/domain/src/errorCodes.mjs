@@ -172,6 +172,28 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "public_source_gateway_url_forbidden",
   "public_source_pdf_host_forbidden",
   "public_source_gateway_token_invalid",
+  // The GEO probe. Everything here means "this deployment could not put the
+  // question to the vendor", which is a limitation to state in the report — a
+  // brand's visibility was not measured — and never a reason to discard work
+  // that is otherwise complete. `geo_probe_plaintext_forbidden` and
+  // `geo_probe_unconfigured` are the operator's transport decisions, obeyed by
+  // a run that did nothing wrong; failing over those would repeat the
+  // official_page_url_forbidden incident exactly.
+  "geo_probe_unconfigured",
+  "geo_probe_endpoint_invalid",
+  "geo_probe_plaintext_forbidden",
+  "geo_probe_busy",
+  "geo_probe_rate_limited",
+  "geo_probe_timeout",
+  "geo_probe_unavailable",
+  "geo_probe_upstream_error",
+  "geo_probe_not_found",
+  "geo_probe_response_invalid",
+  "geo_probe_response_too_large",
+  "geo_probe_screenshot_too_large",
+  "geo_probe_gateway_failed",
+  "geo_probe_gateway_token_missing",
+  "geo_probe_gateway_token_invalid",
 ]);
 
 
@@ -297,6 +319,17 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   // Delivering that is exactly what this gate exists to prevent.
   "meta_source_evidence_mismatch",
   "specialist_source_evidence_mismatch",
+  // The GEO probe's own 400s: the run asked for an operation, a vendor, a flag,
+  // or a screenshot name outside the closed vocabulary. Unlike a refusal, that
+  // is the run's own request being wrong, and the caller has to see it rather
+  // than record a vendor as silent.
+  "geo_probe_op_invalid",
+  "geo_probe_question_invalid",
+  "geo_probe_provider_invalid",
+  "geo_probe_flag_invalid",
+  "geo_probe_screenshot_name_invalid",
+  "geo_probe_request_invalid",
+  "geo_probe_request_too_large",
 ]);
 
 /**

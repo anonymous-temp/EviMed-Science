@@ -185,6 +185,12 @@ test("a runtime config the platform wrote survives its own ownership check", asy
       // reproduce and why every deployment that has one was affected.
       webSearchUrl: "http://open-science-web-search:8080/search",
       webSearchGatewayInternalUrl: "https://gateway.internal/internal/search/v1/query",
+      // Every optional channel has to be switched on here or this test does not
+      // cover it: it only proves the writer and the checker agree about the
+      // variables the fixture actually causes to be written. The GEO probe is
+      // the second variable to take this route.
+      geoProbeUrl: "http://geo-probe.internal:9999",
+      geoProbeGatewayInternalUrl: "https://gateway.internal/internal/geo-probe/v1",
       unpaywallEmail: "evimed@example.test",
     };
     const plan = { sandboxMode: "docker", xdgConfigDir, proxyWorkspaceDir: "/workspace" };
@@ -196,6 +202,11 @@ test("a runtime config the platform wrote survives its own ownership check", asy
       written.mcp["evimed-research"].environment.EVIMED_WEB_SEARCH_GATEWAY_URL,
       "https://gateway.internal/internal/search/v1/query",
       "the writer emits the search gateway address",
+    );
+    assert.equal(
+      written.mcp["evimed-research"].environment.EVIMED_GEO_PROBE_GATEWAY_URL,
+      "https://gateway.internal/internal/geo-probe/v1",
+      "the writer emits the probe gateway address",
     );
 
     // The second start is where it broke.

@@ -3138,9 +3138,9 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
     for (const [, code] of text.matchAll(/\bfailure\(\s*\n?\s*"([a-z0-9_]+)"/g)) emitted.add(code);
     for (const [, code] of text.matchAll(/\b[A-Z][A-Za-z]*Error\(\s*\n?\s*"([a-z0-9_]+)"/g)) emitted.add(code);
   }
-  for (const relative of ["../src/publicSourceGateway.mjs", "../src/webSearchGateway.mjs"]) {
+  for (const relative of ["../src/publicSourceGateway.mjs", "../src/webSearchGateway.mjs", "../src/geoProbeGateway.mjs"]) {
     const text = await readFile(new URL(relative, import.meta.url), "utf8");
-    for (const [, code] of text.matchAll(/"((?:public_source|web_search)_[a-z0-9_]+)"/g)) emitted.add(code);
+    for (const [, code] of text.matchAll(/"((?:public_source|web_search|geo_probe)_[a-z0-9_]+)"/g)) emitted.add(code);
   }
   assert.ok(emitted.size > 30, `expected the real code set, found ${emitted.size}`);
 

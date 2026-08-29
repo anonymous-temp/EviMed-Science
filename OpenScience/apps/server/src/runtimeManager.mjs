@@ -2032,6 +2032,30 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
       }
       environment.EVIMED_WEB_SEARCH_GATEWAY_URL = webSearchGatewayUrl;
     }
+    // The GEO probe rides the same runtime token. It is offered only when the
+    // deployment actually runs a probe host, because a runtime that can call
+    // the tool but gets nothing back is worse than one that cannot: a run
+    // reads an unreachable channel as a channel where nobody mentions the
+    // product.
+    if (String(config.geoProbeUrl ?? "").trim()) {
+      const geoProbeGatewayUrl = String(config.geoProbeGatewayInternalUrl ?? "").trim();
+      let parsedProbe;
+      try {
+        parsedProbe = new URL(geoProbeGatewayUrl);
+      } catch {
+        throw runtimeMcpError(
+          "runtime_geo_probe_gateway_url_invalid",
+          "The GEO probe gateway URL must be an absolute HTTP(S) URL.",
+        );
+      }
+      if (!["http:", "https:"].includes(parsedProbe.protocol) || parsedProbe.username || parsedProbe.password) {
+        throw runtimeMcpError(
+          "runtime_geo_probe_gateway_url_invalid",
+          "The GEO probe gateway URL must be an HTTP(S) URL without embedded credentials.",
+        );
+      }
+      environment.EVIMED_GEO_PROBE_GATEWAY_URL = geoProbeGatewayUrl;
+    }
   }
   // Keyless-public Unpaywall tier: when the operator configured an email, the
   // runtime MCP may query Unpaywall anonymously (email param) even without a
@@ -2723,6 +2747,8 @@ function assertReservedMcpOwnership(existing, targetExists, config, project, pla
     // never start a runtime again — the failure surfaced only after a container
     // recreate, because a project starts its runtime once and keeps it.
     "EVIMED_WEB_SEARCH_GATEWAY_URL",
+    // Same reason, same trap: written above when a probe host is configured.
+    "EVIMED_GEO_PROBE_GATEWAY_URL",
     ...Object.values(evimedSpecialistEnvironment).flatMap((specialist) => [specialist.root, specialist.python]),
     ...Object.values(evimedAdapterEnvironment),
   ]);
