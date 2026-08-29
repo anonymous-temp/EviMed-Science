@@ -30,7 +30,7 @@
 - [x] **D2 S174 收尾**：`typecheck:port` / `typecheck:socket` 已接入 `test:web`（工作树），210 条类型错误烧毁进行中（当前 13 个修改文件即此项）；跑绿即提交——含已证实的死回退（`call.agent ?? …`）与活缺陷修复。
 - [x] **D3 `check:dsh-upstream` 补真**：PROGRESS 记载「新增 pnpm check:dsh-upstream」，但全仓查无此脚本（仅 PROGRESS.md 提及）——「现在时的愿望」缺陷族。补实现（pinned/npm/GitHub 三方对比，npm 领先即 exit 1）+ 一条钉住存在性的测试；0.1.2 rc 落 npm 即按 S170/S171 清单 bump（adapter 两处 + golden 从活线重录），之前不动（alpha 仅 GitHub tag，采纳单元是 npm rc）。
 - [ ] **D4 批测前置与批测**：一次新鲜单跑到 `accepted`；核一遍分类器超时/重试参数（S162：链路 ~35KB/s 时 classifier timeout 且正则兜底未接住，临床题面被派去 open-domain——批测会被路由错误污染）；然后 33 篇谷时批测（对照组干净后，生态一期合入镜像）。
-- [ ] **D5 `audit:capabilities` 刷新**：证据 08-14 起过期，在 ci:web 内，发布管线必红（外部探测，需授权执行）。
+- [~] **D5 `audit:capabilities` 刷新**（2026-08-29 推进）：17/26 → **22/26**。五个专家 agent 真跑出新回执（药物安全/文献计量/科研选题/论文审稿 succeeded，meta blocked 但产出完整手稿）；顺带修好文献计量的 CJK 字体崩溃（两份副本）与验证器把 26 个工具硬编码成 25（改为从 `server.list_tools()` 推导）。**剩 4 项全部为凭证阻塞**：web_search / patent_search / pharmacy_reference_search 缺 key；MR 的真实阻塞点实测为 OpenGWAS JWT（HTTP 401）——环境侧已打通（装 R 4.3.3 + 补齐 .r-lib 整条依赖链）。探针按设计拒绝写出部分证据，故仍红；凭证到位后重跑一次即转绿。
 - [ ] **D6 翻默认内核 → 附 B 删除**：四个发布硬门（P0 真跑验收、capabilities 重探、F0 会话页真 RQ 验收、部署宿主 hosted e2e）达成后翻 `runtimeKernel` 默认，同一 PR 删旧 store / `packages/sdk` / `src-tauri` / `runtime/harness` / `deploy/runtime-opencode`。双栈每多活一天，一切改动双倍成本。
 - [ ] **D7 生产 receipt 续期机制**：deepseek release receipt 24h 窗口无续期 = 永远红的告警；随 DSH 版 release-gate 重写解决为「可无人值守续期」，期间手动 mint 保绿。红着的告警教会所有人忽略告警。
 - [ ] **D8 推送积压**：**231 个未推送提交**（08-24 时为 161），单机磁盘风险；需操作者在持有 gitee 凭证处 push。
