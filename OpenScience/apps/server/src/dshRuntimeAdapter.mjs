@@ -180,8 +180,15 @@ export class DshRuntimeAdapter {
    * @returns {Promise<import('@evimed/domain').RunTranscript>}
    */
   async transcript({ sessionId, maxMessages = 200, maxPages = 50, signal }) {
-    /** @type {Record<string, any>[]} */
-    const entries = [];
+    // Pages joined with `flat()`, never spread into `unshift`. A page carries
+    // every assistant/chunk delta between its messages, and a real run produced
+    // one of 130k events; spreading passes each element as a call argument, so
+    // `entries.unshift(...pageEntries)` threw `Maximum call stack size
+    // exceeded`. The control plane's copy of this loop hit it first and left a
+    // finished run reading `running` for an hour, one identical log line per
+    // poll.
+    /** @type {Record<string, any>[][]} */
+    const pages = [];
     /** @type {number | undefined} */
     let beforeSeq;
     for (let page = 0; page < maxPages; page += 1) {
@@ -191,13 +198,13 @@ export class DshRuntimeAdapter {
         { signal },
       );
       const pageEntries = Array.isArray(value?.events) ? value.events : [];
-      entries.unshift(...pageEntries);
+      pages.unshift(pageEntries);
       if (!value?.hasMore || !pageEntries.length) break;
       const firstSeq = Number(pageEntries[0]?.event?.seq ?? NaN);
       if (!Number.isFinite(firstSeq)) break;
       beforeSeq = firstSeq;
     }
-    return normalizeTranscript(sessionId, entries);
+    return normalizeTranscript(sessionId, pages.flat());
   }
 
   /** @param {{ sessionId: string, signal?: AbortSignal }} input @returns {Promise<Record<string, any>[]>} */

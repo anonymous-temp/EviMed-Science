@@ -312,6 +312,30 @@ test("history paging walks back to the first page so the gate reads the whole ru
   assert.equal(tools.length, 3, "a truncated transcript would mark the earliest work as never done");
 });
 
+test("a page bigger than the engine's argument limit still reads", async () => {
+  // Each history page carries every assistant/chunk delta between its messages,
+  // and one real run put 130k of them under a single page. `entries.unshift(
+  // ...pageEntries)` passes every element as a call argument, so that page threw
+  // `Maximum call stack size exceeded` — in the control plane's copy of this
+  // loop, on every monitor poll, leaving a finished run reading `running` for an
+  // hour with one identical log line each time.
+  //
+  // 200k is past every engine's spread limit and cheap to build.
+  const huge = Array.from({ length: 200_000 }, (_, index) => ({
+    event: { seq: index + 1, type: "assistant/chunk" },
+  }));
+  const pages = [
+    { ok: true, value: { events: huge, hasMore: true } },
+    { ok: true, value: { events: golden.history, hasMore: false } },
+  ];
+  let index = 0;
+  const transport = scriptedTransport({ "session.history": () => pages[index++] });
+  const adapter = new DshRuntimeAdapter(transport);
+  const transcript = await adapter.transcript({ sessionId: "s-1", maxMessages: 25 });
+  assert.equal(transport.calls.length, 2, "the walk must reach the second page");
+  assert.ok(transcript.messages.length > 0, "the real messages must survive the oversized page");
+});
+
 test("a kernel failure becomes a named control-plane error, not a thrown wire object", async () => {
   const transport = scriptedTransport({ "session.prompt": { ok: false, error: golden.errors[0] } });
   const adapter = new DshRuntimeAdapter(transport);
