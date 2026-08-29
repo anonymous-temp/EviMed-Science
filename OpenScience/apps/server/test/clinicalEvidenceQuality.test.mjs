@@ -202,7 +202,7 @@ test("a matrix written before its sources were preserved is one behaviour, not t
     reportText: report,
   }).issues.filter((issue) => /artifactPath/.test(issue));
   assert.equal(many.length, 1, `twelve claims, one omission, got ${many.length}: ${many.slice(0, 3).join(" | ")}`);
-  assert.match(many[0], /另有 11 条主张是同一条/);
+  assert.match(many[0], /另有 11 处是同一条/);
   assert.match(many[0], /evimed_open_access_full_text/, "the collapsed message must still say how to repair it");
 
   // The same rule on a value that is wrong rather than absent. RQ-03 rewrote
@@ -224,7 +224,7 @@ test("a matrix written before its sources were preserved is one behaviour, not t
   // The rule's own wording survives intact — it is the half that says what to do.
   assert.ok(wrongValue.some((issue) => /which is not a preserved artifact\. Preserve the source first/.test(issue)));
   assert.ok(wrongValue.some((issue) => /use exactly one of full_text, official_page, abstract, structured_record/.test(issue)));
-  for (const issue of wrongValue) assert.match(issue, /另有 19 条主张是同一条/);
+  for (const issue of wrongValue) assert.match(issue, /另有 19 处是同一条/);
 
   // And the shape that broke both earlier versions of this: a message carrying
   // no value at all. `claims[N].artifactPath is not listed as a successful
@@ -243,7 +243,7 @@ test("a matrix written before its sources were preserved is one behaviour, not t
     reportText: report,
   }).issues.filter((issue) => /not listed as a successful source artifact/.test(issue));
   assert.equal(noValue.length, 1, `nine identical complaints, got ${noValue.length}`);
-  assert.match(noValue[0], /另有 8 条主张是同一条/);
+  assert.match(noValue[0], /另有 8 处是同一条/);
 
   // Negative control: different text about different claims must stay separate,
   // or the collapse would hide distinct findings behind whichever came first.
@@ -290,6 +290,43 @@ test("a matrix written before its sources were preserved is one behaviour, not t
     reportText: report,
   }).issues;
   assert.ok(wrong.some((issue) => /"notes\/source-records\.md", which is not a preserved artifact/.test(issue)));
+});
+
+test("a collapse that groups by one key and removes by another adds findings instead of merging them", () => {
+  // Grouping and removal have to use the same function. When the grouping
+  // learned about `Report line N` and the removal filter still normalised only
+  // `claims[N]`, a report-line group matched nothing on the way out: the
+  // collapsed sentence was appended and not one of its members removed, so a
+  // package came back with MORE findings than before the collapse ran. The
+  // replay caught it on five real packages in three seconds; a live run would
+  // have shown it as "the gate got noisier" an hour later.
+  //
+  // Report lines carrying the same unbound figure are the production shape:
+  // one figure used on four lines without a claim marker is one repair.
+  const input = deepResearchPackage();
+  const lines = input.reportText.split("\n");
+  const marker = lines.findIndex((line) => /^##\s/.test(line));
+  input.reportText = [
+    ...lines.slice(0, marker + 1),
+    "长期用药的疗程为 24 周。",
+    "另一处也写 24 周。",
+    "第三处仍是 24 周。",
+    "第四处照样 24 周。",
+    ...lines.slice(marker + 1),
+  ].join("\n");
+  const issues = validateClinicalEvidencePackage(input).issues.filter((issue) => /^Report line/.test(issue));
+  const shapes = new Map();
+  for (const issue of issues) {
+    const key = String(issue).replace(/^Report line \d+/, "Report line N");
+    shapes.set(key, (shapes.get(key) ?? 0) + 1);
+  }
+  const worst = Math.max(0, ...shapes.values());
+  assert.ok(worst < 3, `one figure on four lines came back ${worst} times: ${[...shapes.keys()][0]?.slice(0, 90)}`);
+  const collapsed = issues.filter((issue) => /另有 \d+ 处是同一条/.test(issue));
+  if (collapsed.length) {
+    assert.equal(collapsed.length, 1, "one repeated figure is one collapsed finding");
+    assert.match(collapsed[0], /Report line \d+/, "the rule's own sentence must survive the collapse");
+  }
 });
 
 test("a search log written to another schema is one problem, not one per gap entry", () => {

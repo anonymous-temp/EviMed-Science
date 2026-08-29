@@ -1716,14 +1716,26 @@ function collapseClaimFieldIssues(issues) {
     return !found || !specific.has(`${found[1]}.${found[2]}`);
   });
 
-  const labelled = /^claims\[\d+\]/;
+  // Which prefixes carry a position rather than a fact. A claim index and a
+  // report line number are both "where", and the sentence after them is the
+  // "what" that decides whether two findings are one.
+  //
+  // Only `claims[N]` was listed here at first. Replaying five real packages
+  // through the gate then showed `Report line N numeric facts 24 have no
+  // evidence-matrix claim reference.` four and five times in single packages —
+  // one unbound figure, reported once per line it appears on. Same family,
+  // seventh location, and found in three seconds by replay rather than by
+  // spending another run on it.
+  const positional = /^(claims\[\d+\]|supportingSources\[\d+\]|Report line \d+)/;
+  /** One function, used to build the group and to find its members again.
+   *  @param {string} text @returns {string} */
+  const keyOf = (text) => text.replace(positional, (found) => found.replace(/\d+/, ""));
   /** @type {Map<string, string[]>} */
   const groups = new Map();
   for (const issue of deduped) {
     const text = String(issue);
-    if (!labelled.test(text)) continue;
-    const key = text.replace(/^claims\[\d+\]/, "claims[]");
-    groups.set(key, [...(groups.get(key) ?? []), text]);
+    if (!positional.test(text)) continue;
+    groups.set(keyOf(text), [...(groups.get(keyOf(text)) ?? []), text]);
   }
   let collapsed = deduped;
   for (const [key, members] of groups) {
@@ -1732,11 +1744,16 @@ function collapseClaimFieldIssues(issues) {
     // a count produced 「……不是 20 个错误。, which is not a preserved artifact.」 —
     // a fragment stitched onto a full stop. The rule's own words are the half
     // that says what to do.
-    const labels = members.slice(1).map((text) => /^claims\[\d+\]/.exec(text)?.[0] ?? "");
+    const labels = members.slice(1).map((text) => positional.exec(text)?.[0] ?? "");
     const listed = labels.length > 5 ? `${labels.slice(0, 5).join("、")} 等` : labels.join("、");
     collapsed = [
-      ...collapsed.filter((issue) => String(issue).replace(/^claims\[\d+\]/, "claims[]") !== key),
-      `${members[0]} 另有 ${labels.length} 条主张是同一条（${listed}）：这是一处决定，改一次就能全部修好。`,
+      // The same key the group was built with. This kept the old
+      // `claims[\d+]`-only replacement after the grouping learned about report
+      // lines, so a report-line group matched nothing here: the collapsed
+      // sentence was appended and not one of its members removed, and the
+      // package came back with MORE findings than before the collapse ran.
+      ...collapsed.filter((issue) => keyOf(String(issue)) !== key),
+      `${members[0]} 另有 ${labels.length} 处是同一条（${listed}）：这是一处决定，改一次就能全部修好。`,
     ];
   }
   return collapsed;

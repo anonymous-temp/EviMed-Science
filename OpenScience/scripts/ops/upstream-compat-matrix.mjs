@@ -73,6 +73,35 @@ function parseArgs(argv) {
  * @param {string} [tagPattern] override for a project whose tags are not plain versions
  * @returns {{ latest: string | null, reason: string }}
  */
+/**
+ * The newest tag upstream has published, prereleases included.
+ *
+ * Deliberately not `selectReleaseVersion`: that one skips prereleases, because
+ * for a dependency polled only through GitHub a prerelease must never be
+ * reported as the version to move to. Here the opposite is wanted — the tag is
+ * advisory precisely when it is ahead of what npm will install.
+ *
+ * @param {Record<string, any>} pin @returns {Promise<string | null>}
+ */
+async function githubTag(pin) {
+  try {
+    const response = await fetch(`https://api.github.com/repos/${pin.githubRepo}/tags?per_page=100`, {
+      headers: { accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!response.ok) return null;
+    const body = await response.json();
+    const pattern = pin.releaseTagPattern ? new RegExp(pin.releaseTagPattern) : /^v?\d+\.\d+/;
+    const match = (Array.isArray(body) ? body : [])
+      .map((entry) => String(entry?.name ?? ""))
+      .find((name) => pattern.test(name));
+    return match ? match.replace(/^dsh-v|^v/, "") : null;
+  } catch {
+    // Advisory only: a matrix that cannot reach GitHub still has its npm verdict.
+    return null;
+  }
+}
+
 export function selectReleaseVersion(releases, tagPattern) {
   const pattern = tagPattern ? new RegExp(tagPattern) : /^v?\d+\.\d+/;
   const match = (Array.isArray(releases) ? releases : [])
@@ -103,7 +132,15 @@ async function latestVersion(name, pin, offline) {
       const { stdout } = await execFileAsync("npm", ["view", pin.npmPackage, "versions", "--json"], { timeout: 60_000 });
       const versions = JSON.parse(stdout);
       const list = Array.isArray(versions) ? versions : [versions];
-      return { latest: list.at(-1) ?? null, reason: "npm" };
+      // npm decides `behind`, because npm is what the Dockerfile installs from
+      // and verifies. But a dependency can be tracked in both places, and dsh
+      // tags prereleases on GitHub that npm never receives — 0.1.2-alpha.1 sat
+      // there for two days with no npm version and no release asset while this
+      // matrix reported `current`, which was true and not the whole truth. The
+      // tag rides along as an advisory field so the notes get read before the
+      // rc lands, not after.
+      const tag = pin.githubRepo ? await githubTag(pin) : null;
+      return { latest: list.at(-1) ?? null, reason: "npm", ...(tag ? { upstreamTag: tag } : {}) };
     }
     if (pin.pipPackage) {
       const response = await fetch(`https://pypi.org/pypi/${pin.pipPackage}/json`, { signal: AbortSignal.timeout(60_000) });
@@ -164,8 +201,12 @@ async function main() {
   const rows = [];
   for (const name of names) {
     const pin = pins[name];
-    const { latest, reason } = await latestVersion(name, pin, offline);
+    const { latest, reason, upstreamTag } = await latestVersion(name, pin, offline);
     const behind = Boolean(latest && latest !== pin.version);
+    // Ahead of the pin AND of what npm carries: upstream has tagged something
+    // nobody can install yet. Not an upgrade candidate — reading it as one
+    // would send someone to build from a tag the Dockerfile cannot verify.
+    const tagAhead = Boolean(upstreamTag && upstreamTag !== pin.version && upstreamTag !== latest);
     const contract = await runContractTests(name, pin);
     rows.push({
       dependency: name,
@@ -173,6 +214,7 @@ async function main() {
       latest,
       latestSource: reason,
       behind,
+      ...(upstreamTag ? { upstreamTag, upstreamTagAhead: tagAhead } : {}),
       // A contract failure at the *pinned* version is a broken build, not an
       // upgrade signal; the two read very differently and must not be merged.
       contractAtPin: contract.ok ? "pass" : "fail",
@@ -191,6 +233,11 @@ async function main() {
     failures: rows.filter((row) => row.verdict === "broken-at-pin").map((row) => row.dependency),
     upgradeCandidates: rows.filter((row) => row.verdict === "upgrade-candidate").map((row) => `${row.dependency} ${row.pinned} → ${row.latest}`),
     unknownUpstream: rows.filter((row) => row.verdict === "unknown-upstream").map((row) => `${row.dependency}: ${row.latestSource}`),
+    // Tagged upstream, not published: read the notes and pre-check the seams.
+    // Separate from `upgradeCandidates` because there is nothing to install.
+    taggedNotPublished: rows
+      .filter((row) => row.upstreamTagAhead)
+      .map((row) => `${row.dependency} ${row.pinned} → tag ${row.upstreamTag} (npm still ${row.latest})`),
   };
 
   const out = String(args.out ?? "");
