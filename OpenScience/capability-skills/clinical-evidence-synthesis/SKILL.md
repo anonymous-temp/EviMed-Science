@@ -1862,3 +1862,24 @@ line it is no longer the default finishing step, because prose written correctly
 does not need rewriting, and rewriting it is where content gets lost.
 
 If these integrity requirements cannot be met, write an honest failed run receipt and do not present the report as publication-grade.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them.

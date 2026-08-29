@@ -1369,13 +1369,28 @@ test("a capability's two skill copies never drift apart by more than their known
   // and moving it is what has to be noticed.
   const { readdir } = await import("node:fs/promises");
   const strip = (text) => text.replaceAll("mcp__evimed__", "");
-  // Measured 2026-08-27 after syncing the artifact-preservation correction.
+  // Measured 2026-08-27 after syncing the artifact-preservation correction, then
+  // raised by 17 on 2026-08-29 when the two fixed pre-delivery steps were added
+  // to the DSH bodies — which is where they had to go, because that is the tree
+  // the image ships and the tree in which capability packages exist at all.
+  // `runtime/skills/evimed/` is the OpenCode rollback kernel and stays untouched
+  // by plan (it is deleted at the kernel flip), so this divergence is deliberate
+  // and one-directional.
+  //
   // Raising an entry means a deliberate kernel-specific edit; a capability
   // absent here must have identical copies.
   const knownDivergence = {
-    "clinical-evidence-synthesis": 13,
-    "dataset-research-scoping": 10,
-    "research-topic-selection": 10,
+    "adr-analysis": 17,
+    "bibliometric-analysis": 17,
+    "clinical-evidence-synthesis": 30,
+    "comprehensive-drug-evaluation": 17,
+    "dataset-research-scoping": 27,
+    "drug-selection": 17,
+    "mendelian-randomization": 17,
+    "meta-analysis": 17,
+    "off-label-analysis": 17,
+    "peer-review": 17,
+    "research-topic-selection": 27,
   };
 
   const dshRoot = path.join(repoRoot, "capability-skills");
@@ -1506,7 +1521,16 @@ test("every capability fixes the two pre-delivery steps instead of leaving them 
   //
   // Asserted on the package the delegated run reads, not on prose anywhere: a
   // capability added next month gets the same two steps or fails here.
+  //
+  // It was asserted on the wrong file for two days. `capabilities/<id>/SKILL.md`
+  // is the authored copy; the image ships `capability-skills/` and the runtime
+  // is pointed at it by EVIMED_CAPABILITY_SKILLS_DIR, so that is what a
+  // delegated child actually reads — and all eleven shipped bodies named
+  // neither step. The test was green the whole time. Both copies are checked
+  // now, because the one that ships is the one that matters and the one that is
+  // authored is the one a person edits.
   const root = new URL("../../../capabilities/", import.meta.url);
+  const shippedRoot = new URL("../../../capability-skills/", import.meta.url);
   const names = (await readdir(root, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
@@ -1519,8 +1543,11 @@ test("every capability fixes the two pre-delivery steps instead of leaving them 
     } catch {
       assert.fail(`${name} has no SKILL.md`);
     }
+    const shipped = await readFile(new URL(`${name}/SKILL.md`, shippedRoot), "utf8").catch(() => null);
+    assert.ok(shipped !== null, `${name} has no shipped body under capability-skills/, so a delegated child reads nothing`);
     for (const step of ["traceability-review", "manuscript-humanize"]) {
       assert.ok(skill.includes(step), `${name}/SKILL.md does not name ${step} as a pre-delivery step`);
+      assert.ok(shipped.includes(step), `capability-skills/${name}/SKILL.md does not name ${step}; the authored copy is not what the run reads`);
     }
     // The outlet has to be pointed at wherever the ban is stated, or the ban is
     // the only thing the run reads.

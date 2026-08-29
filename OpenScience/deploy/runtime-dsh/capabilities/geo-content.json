@@ -1,0 +1,124 @@
+{
+  "id": "geo-content",
+  "version": "1.0.0",
+  "title": "GEO Content",
+  "description": "Measure how the consumer answering engines currently answer a set of real questions, then produce evidence-bound content blocks — conclusion, basis, conditions, resolvable citations, author credential, JSON-LD — that a later measurement can be compared against.",
+  "whenToUse": "需要知道「用户去问 AI 时，我们出不出现、出现得对不对」，或要产出给答案引擎读的内容块时，委派给我——它以一次真实测量开场，不是以文案开场。",
+  "persona": "你是循证内容分析师。你先测量，后写作，两件事之间隔着一份可复算的明细。\n你写下的每个数字都能指回某一次具体的提问——哪个平台、哪种模式、哪个会话、哪一刻。\n你从不把\"没测到\"写成\"没提到\"：探测失败、未登录、服务繁忙都是测量失败，它们不进分母，\n也不会被当成竞品缺席的证据。你写的内容块是给人看的，同时也要经得起药师逐条核对。",
+  "skills": [
+    "geo-content",
+    "citation-integrity",
+    "manuscript-humanize",
+    "deep-research",
+    "biomedical-database-search"
+  ],
+  "tools": [
+    "mcp__evimed__geo_visibility_probe",
+    "mcp__evimed__literature_search",
+    "mcp__evimed__biomedical_source_search",
+    "mcp__evimed__open_access_full_text",
+    "mcp__evimed__official_page_fetch",
+    "mcp__evimed__drug_label_search",
+    "mcp__evimed__guideline_search",
+    "mcp__evimed__clinical_trial_search",
+    "mcp__evimed__web_search",
+    "mcp__evimed__term_normalize",
+    "mcp__evimed__drug_term_normalize",
+    "mcp__evimed__evidence_deduplicate",
+    "mcp__evimed__pharmacy_reference_search"
+  ],
+  "produces": [
+    {
+      "contractKind": "geo-content-pack",
+      "outputs": [
+        {
+          "path": "geo-measurement.md",
+          "required": true
+        },
+        {
+          "path": "geo-monitor.csv",
+          "required": true
+        },
+        {
+          "path": "geo-probe-log.jsonl",
+          "required": true
+        },
+        {
+          "path": "geo-content-pack.json",
+          "required": true
+        },
+        {
+          "path": "geo-content-pack.md",
+          "required": true
+        },
+        {
+          "path": "llms.txt",
+          "required": true
+        },
+        {
+          "path": "citation-ledger.csv",
+          "required": true
+        },
+        {
+          "path": "brand-entity.json",
+          "required": true
+        },
+        {
+          "path": "delivery-summary.md",
+          "required": true
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "citationsResolvable",
+        "skillsLoaded"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "brandEntity",
+      "questionSet"
+    ],
+    "optional": [
+      "competitors",
+      "platforms",
+      "deepMode",
+      "outputLanguage"
+    ]
+  },
+  "safetyClass": "clinical",
+  "autopilot": {
+    "taskTypes": [
+      "signal-monitoring"
+    ],
+    "costClass": "high",
+    "unattendedInputs": [
+      "brandEntity",
+      "questionSet"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    40,
+    180
+  ],
+  "category": "Content Production",
+  "dataSources": [
+    "answering-engines",
+    "drug-labels",
+    "literature",
+    "guidelines"
+  ],
+  "starterPrompts": [
+    "用这十个真实问法测一下五个平台现在怎么回答，然后把能站住的结论写成内容块。"
+  ]
+}

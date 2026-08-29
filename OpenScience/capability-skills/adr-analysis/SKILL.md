@@ -79,3 +79,24 @@ reporting, or concomitant medicine can materially change interpretation. Do not
 convert any disproportionality metric into incidence, relative risk, or causal
 probability, and do not combine metrics from incompatible databases as though
 they shared one denominator.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them.

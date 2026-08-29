@@ -1,0 +1,103 @@
+# Capability manifest — the only definition of this capability.
+#
+# GEO is not a mode and not a router entry (spec D5): a request that starts as
+# "what is the evidence on X" can end as "now turn that into content the
+# assistants will cite", in the same session, with nothing switched. The
+# orchestrator composes this capability when the deliverable is content meant to
+# be read by an answering engine, and the contract — not the question — decides
+# how it is graded.
+id: geo-content
+version: 1.0.0
+title: GEO Content
+category: Content Production
+description: Measure how the consumer answering engines currently answer a set of real questions, then
+  produce evidence-bound content blocks — conclusion, basis, conditions, resolvable citations, author
+  credential, JSON-LD — that a later measurement can be compared against.
+whenToUse: 需要知道「用户去问 AI 时，我们出不出现、出现得对不对」，或要产出给答案引擎读的内容块时，委派给我——它以一次真实测量开场，不是以文案开场。
+persona: |
+  你是循证内容分析师。你先测量，后写作，两件事之间隔着一份可复算的明细。
+  你写下的每个数字都能指回某一次具体的提问——哪个平台、哪种模式、哪个会话、哪一刻。
+  你从不把"没测到"写成"没提到"：探测失败、未登录、服务繁忙都是测量失败，它们不进分母，
+  也不会被当成竞品缺席的证据。你写的内容块是给人看的，同时也要经得起药师逐条核对。
+safetyClass: clinical
+skills:
+- geo-content
+- citation-integrity
+- manuscript-humanize
+- deep-research
+- biomedical-database-search
+tools:
+- mcp__evimed__geo_visibility_probe
+- mcp__evimed__literature_search
+- mcp__evimed__biomedical_source_search
+- mcp__evimed__open_access_full_text
+- mcp__evimed__official_page_fetch
+- mcp__evimed__drug_label_search
+- mcp__evimed__guideline_search
+- mcp__evimed__clinical_trial_search
+- mcp__evimed__web_search
+- mcp__evimed__term_normalize
+- mcp__evimed__drug_term_normalize
+- mcp__evimed__evidence_deduplicate
+- mcp__evimed__pharmacy_reference_search
+produces:
+- contractKind: geo-content-pack
+  outputs:
+  # The measurement, before any content exists. Written first on purpose: a pack
+  # assembled before anyone looked is a brochure with citations.
+  - path: geo-measurement.md
+    required: true
+  - path: geo-monitor.csv
+    required: true
+  - path: geo-probe-log.jsonl
+    required: true
+  # The content itself.
+  - path: geo-content-pack.json
+    required: true
+  - path: geo-content-pack.md
+    required: true
+  - path: llms.txt
+    required: true
+  # The reachback.
+  - path: citation-ledger.csv
+    required: true
+  - path: brand-entity.json
+    required: true
+  - path: delivery-summary.md
+    required: true
+  - path: revision-notes.md
+    required: false
+  checks:
+  - requiredOutputsExist
+  - citationsResolvable
+  - skillsLoaded
+inputs:
+  required:
+  - brandEntity
+  - questionSet
+  optional:
+  - competitors
+  - platforms
+  - deepMode
+  - outputLanguage
+autopilot:
+  # signal-monitoring, not a new task type: the spec's own framing is "citation
+  # rate per engine x query set x week", tracked over 60-90 days. That is the
+  # same shape the allocator already schedules, and widening a closed vocabulary
+  # to say "GEO" instead of what it does would buy nothing.
+  taskTypes:
+  - signal-monitoring
+  costClass: high
+  unattendedInputs:
+  - brandEntity
+  - questionSet
+estimatedMinutes:
+- 40
+- 180
+dataSources:
+- answering-engines
+- drug-labels
+- literature
+- guidelines
+starterPrompts:
+- 用这十个真实问法测一下五个平台现在怎么回答，然后把能站住的结论写成内容块。
