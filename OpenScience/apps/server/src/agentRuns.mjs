@@ -2176,12 +2176,28 @@ export class AgentRunStore {
       // a deliverable was planned and never attempted, and the files it names
       // have to actually be there.
       const unsubmitted = await unsubmittedDeliverables(project, projection);
+      // A third cause ends here, and it is neither of the two above: a run that
+      // submitted its package again and again and was rejected every time. Its
+      // items are `submitted` with a positive attempt count, so
+      // `unsubmittedDeliverables` does not see them, and it was reported
+      // `runtime_stopped` — which reads as infrastructure trouble for a run that
+      // worked for an hour and did not meet the contract. The live path already
+      // says this; the durable path has to say the same thing about the same
+      // fact.
+      const rejected = projection.state === "read" && Array.isArray(projection.projection?.plan?.items)
+        ? projection.projection.plan.items.filter((item) => item?.status !== "accepted" && Number(item?.attempts ?? 0) > 0)
+        : [];
       return this.finishInternal(project, run.id, {
         status: "failed",
-        errorCode: unsubmitted.length ? "runtime_deliverable_never_submitted" : "runtime_stopped",
+        errorCode: unsubmitted.length
+          ? "runtime_deliverable_never_submitted"
+          : rejected.length ? "specialist_deliverable_not_accepted" : "runtime_stopped",
         artifacts: [],
         qualityNotices: [
           ...unsubmitted.map((entry) => `交付物「${entry.id}」的文件已经写好（${entry.files} 个），但从未提交校验，因此没有通过质量门。`),
+          ...(unsubmitted.length ? [] : rejected.map((entry) => (
+            `交付物「${entry.id}」提交了 ${Number(entry.attempts ?? 0)} 次，每次都被契约校验拒绝，因此产物未经质量门。`
+          ))),
           ...notices,
         ].slice(0, 20),
       });

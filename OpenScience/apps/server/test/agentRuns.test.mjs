@@ -4658,9 +4658,19 @@ test("a package written and never submitted is not reported as a stopped runtime
 
     // Negative controls — the three ways this could lie.
     // 1. An item that was submitted and rejected wrote files too; that is a
-    //    graded failure, not an abandoned one.
+    //    graded failure, not an abandoned one, and not infrastructure trouble
+    //    either. This asserted `runtime_stopped` when those were the only two
+    //    codes; a run that worked for an hour and did not meet the contract now
+    //    says so. What the control is for — it must never read as abandoned —
+    //    is unchanged.
     await writeState([{ id: "d1", status: "rejected", attempts: 2 }]);
-    assert.equal((await finish())?.errorCode, "runtime_stopped");
+    const graded = await finish();
+    assert.equal(graded?.errorCode, "specialist_deliverable_not_accepted");
+    assert.notEqual(graded?.errorCode, "runtime_deliverable_never_submitted");
+    assert.ok(
+      graded?.qualityNotices?.some((line) => line.includes("d1") && line.includes("2")),
+      `the verdict must name the deliverable and how many times it was rejected: ${JSON.stringify(graded?.qualityNotices)}`,
+    );
     // 2. An item never started is a run that stopped, not a package left
     //    ungraded. The directory must EXIST and be EMPTY: a missing directory
     //    is rejected one line earlier, so using one proves nothing about the
