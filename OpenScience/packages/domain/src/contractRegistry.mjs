@@ -14,6 +14,7 @@
 import { clinicalEvidenceAdvisoryNotes, clinicalEvidencePackageErrorCode, reportSectionShares, validateClinicalEvidencePackage, citationIntegrityIssues, runtimeLeakageLine, verificationGateMetrics } from './clinicalEvidence.mjs'
 import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contractKinds.mjs'
 import { matchedClinicalTriggers } from './safetyRules.mjs'
+import { workspaceLayout } from './workspaceLayout.mjs'
 
 /**
  * @typedef {object} GateIssue
@@ -295,7 +296,13 @@ function validateReportShaped(input, proseFiles) {
 /** Markdown files inside a deliverable, which is what "prose" means here.
  *  @param {{ files: Map<string, any> }} input @returns {string[]} */
 function proseFilesOf(input) {
-  return [...input.files.keys()].filter((path) => path.endsWith('.md'))
+  // Everything markdown except the designated backstage file. Report prose is
+  // held to a register the notes deliberately are not: the notes exist to say
+  // what changed and why, in exactly the voice the report may not use. Scanning
+  // them would make the outlet a trap, and an outlet that is a trap is one runs
+  // learn to avoid by hiding backstage prose in the report instead.
+  return [...input.files.keys()]
+    .filter((path) => path.endsWith('.md') && path !== workspaceLayout.revisionNotesFile)
 }
 
 /**

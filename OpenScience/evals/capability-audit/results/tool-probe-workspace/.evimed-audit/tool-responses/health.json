@@ -104,48 +104,48 @@
       },
       {
         "tool": "meta_analysis",
-        "configured": false,
-        "connector": "none",
+        "configured": true,
+        "connector": "managed-local",
         "state": "unconfigured",
         "failures": 0,
         "retryAfterSeconds": 0
       },
       {
         "tool": "mendelian_randomization",
-        "configured": false,
-        "connector": "none",
+        "configured": true,
+        "connector": "managed-local",
         "state": "unconfigured",
         "failures": 0,
         "retryAfterSeconds": 0
       },
       {
         "tool": "bibliometric_analysis",
-        "configured": false,
-        "connector": "none",
+        "configured": true,
+        "connector": "managed-local",
         "state": "unconfigured",
         "failures": 0,
         "retryAfterSeconds": 0
       },
       {
         "tool": "research_topic_selection",
-        "configured": false,
-        "connector": "none",
+        "configured": true,
+        "connector": "managed-local",
         "state": "unconfigured",
         "failures": 0,
         "retryAfterSeconds": 0
       },
       {
         "tool": "peer_review",
-        "configured": false,
-        "connector": "none",
+        "configured": true,
+        "connector": "managed-local",
         "state": "unconfigured",
         "failures": 0,
         "retryAfterSeconds": 0
       },
       {
         "tool": "drug_safety_analysis",
-        "configured": false,
-        "connector": "none",
+        "configured": true,
+        "connector": "managed-local",
         "state": "unconfigured",
         "failures": 0,
         "retryAfterSeconds": 0

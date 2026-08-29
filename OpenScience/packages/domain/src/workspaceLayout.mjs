@@ -40,6 +40,15 @@ export const workspaceLayout = Object.freeze({
   receiptFile: 'delivery-receipt.json',
   /** Always produced, even for a partial delivery (Apodex report node). */
   deliverySummaryFile: 'delivery-summary.md',
+  /** Where backstage prose belongs, relative to a deliverable's own directory.
+   *
+   *  Report prose may not carry revision notes, reviewer replies, process
+   *  diaries or version scars — and a ban with nowhere to put the banned thing
+   *  is a ban a run works around by hiding it in the report. This is the
+   *  designated outlet: the run writes what it changed and why here, the gate
+   *  never reads it as report prose, and the rule in the skill can point at a
+   *  destination instead of only a prohibition. */
+  revisionNotesFile: 'revision-notes.md',
   /** Projection of the run mirror the control plane and UI read. */
   runStateFile: `${RUN_STATE_DIR}/state.json`,
   /** Resident capsule profile block, <= 1500 tokens. */

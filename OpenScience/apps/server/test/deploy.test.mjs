@@ -1458,3 +1458,42 @@ test("a package that can be typechecked is typechecked by the pipeline", async (
   }
   assert.ok(checked >= 3, `only ${checked} packages declare a typecheck script — the scan found too few to be meaningful`);
 });
+
+test("a command the record says we have is a command that exists", async () => {
+  // PROGRESS.md said "新增 pnpm check:dsh-upstream" on the day the script was
+  // written AND removed — it turned out to duplicate `matrix:upstream`, the
+  // removal was right, and the line stayed. A record that names a command
+  // nobody can run is worse than no record: the next reader budgets for a tool
+  // that is not there, and finds out at the moment they need it.
+  //
+  // The same shape as the rest of this family, one layer up: a present-tense
+  // claim nothing checks. Scripts are a closed set, so this is code's job.
+  const root = new URL("../../../", import.meta.url);
+  const rootPackage = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+  const declared = new Set(Object.keys(rootPackage.scripts ?? {}));
+  assert.ok(declared.size > 20, `only ${declared.size} scripts declared — the manifest did not load`);
+
+  const documents = ["PROGRESS.md", "AGENTS.md", "README.md"];
+  let scanned = 0;
+  let mentions = 0;
+  for (const name of documents) {
+    let text;
+    try {
+      text = await readFile(new URL(name, root), "utf8");
+    } catch {
+      continue;
+    }
+    scanned += 1;
+    // `pnpm <script>` only. Bare `pnpm install`, `pnpm --filter …` and shell
+    // pipelines are not claims about this manifest.
+    for (const [, script] of text.matchAll(/(?:^|[\s`(])pnpm ([a-z][a-z0-9]*(?::[a-z0-9-]+)+)/g)) {
+      mentions += 1;
+      assert.ok(
+        declared.has(script),
+        `${name} tells a reader to run \`pnpm ${script}\`, and package.json has no such script`,
+      );
+    }
+  }
+  assert.equal(scanned, documents.length, "a document in the list could not be read");
+  assert.ok(mentions >= 5, `only ${mentions} pnpm commands found across the docs — the scan did not read them`);
+});
